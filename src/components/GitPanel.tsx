@@ -123,7 +123,7 @@ export function GitPanel({
           {repo.error}
         </div>
       )}
-      {repo.success && (
+      {repo.success && !repo.busy && (
         <div className="git-success" role="status">
           <CheckCircle2 size={14} />
           {repo.success}

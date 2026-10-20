@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-latest]
+        os: [ubuntu-24.04, macos-26-intel]
     steps:
       - uses: actions/checkout@v4
       - name: Install image formatters
@@ -71,7 +71,7 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             bundles: app,dmg
-          - os: macos-latest
+          - os: macos-26-intel
             target: x86_64-apple-darwin
             bundles: app,dmg
           - os: windows-latest
@@ -208,9 +208,9 @@ jobs:
             valid users = fiex
             force user = fiex
           EOF
-            printf 'Zebra!2026#Quartz\nZebra!2026#Quartz\n' | sudo /opt/homebrew/bin/pdbedit -a -u fiex -s /tmp/fiex-smb.conf
+            printf 'Zebra!2026#Quartz\nZebra!2026#Quartz\n' | sudo "$(brew --prefix)/bin/pdbedit" -a -u fiex -s /tmp/fiex-smb.conf
             sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
-            sudo /opt/homebrew/sbin/samba-dot-org-smbd -s /tmp/fiex-smb.conf --foreground --no-process-group --debug-stdout -d 2 > /tmp/fiex-smbd.log 2>&1 &
+            sudo "$(brew --prefix)/sbin/samba-dot-org-smbd" -s /tmp/fiex-smb.conf --foreground --no-process-group --debug-stdout -d 2 > /tmp/fiex-smbd.log 2>&1 &
             for i in $(seq 1 30); do
               (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 && break
               sleep 1
@@ -310,18 +310,18 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
       - name: Download filesystem images
-        if: matrix.target != 'x86_64-apple-darwin'
+        if: matrix.target != 'aarch64-apple-darwin'
         uses: actions/download-artifact@v4
         with:
           pattern: filesystem-images-*
           path: .ci/filesystems
           merge-multiple: true
       - uses: actions/setup-python@v5
-        if: matrix.target != 'x86_64-apple-darwin'
+        if: matrix.target != 'aarch64-apple-darwin'
         with:
           python-version: '3.12'
       - name: Install native recording tools
-        if: matrix.target != 'x86_64-apple-darwin'
+        if: matrix.target != 'aarch64-apple-darwin'
         shell: bash
         run: |
           set -euo pipefail
@@ -337,10 +337,10 @@ jobs:
             choco install ffmpeg -y --no-progress
           fi
       - name: Build separate native UI test binary
-        if: matrix.target != 'x86_64-apple-darwin'
+        if: matrix.target != 'aarch64-apple-darwin'
         run: cargo build --locked --release --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --features ci-driver
       - name: Record and verify native integrations
-        if: matrix.target != 'x86_64-apple-darwin'
+        if: matrix.target != 'aarch64-apple-darwin'
         timeout-minutes: 15
         shell: bash
         env:
@@ -360,7 +360,7 @@ jobs:
             python scripts/native-ci.py "$binary"
           fi
       - name: Native integration videos and verification
-        if: always() && matrix.target != 'x86_64-apple-darwin'
+        if: always() && matrix.target != 'aarch64-apple-darwin'
         uses: actions/upload-artifact@v4
         with:
           name: native-integrations-${{ matrix.target }}

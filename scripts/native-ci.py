@@ -74,13 +74,13 @@ def press_element(expression, window='main'):
 
 def click(selector, window='main'):
     expression = f'document.querySelector({json.dumps(selector)})'
-    wait(lambda: js(f'return !!({expression})', window))
+    wait(lambda: js(f'const e={expression}; return !!e && !e.disabled', window))
     press_element(expression, window)
 
 
 def button(text, window='main', scope='document'):
-    expression = f'Array.from({scope}.querySelectorAll("button,[role=menuitem]")).find(e=>e.textContent.trim()==={json.dumps(text)})'
-    wait(lambda: js(f'return !!({expression})', window))
+    expression = f'Array.from({scope}.querySelectorAll("button,[role=menuitem]")).find(e=>{{const label=e.cloneNode(true);label.querySelectorAll(".shortcut").forEach(n=>n.remove());return label.textContent.trim()==={json.dumps(text)}}})'
+    wait(lambda: js(f'const e={expression}; return !!e && !e.disabled', window))
     press_element(expression, window)
 
 

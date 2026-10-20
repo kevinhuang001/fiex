@@ -458,9 +458,9 @@ test('remote settings and push pull remain in the Git panel', async ({ page }) =
   await dialog.getByRole('button', { name: '保存', exact: true }).click()
   await expect(dialog).toHaveCount(0)
   await panel.getByRole('button', { name: '推送', exact: true }).click()
-  await expect(panel.getByRole('status')).toContainText('推送完成')
+  await expect(panel.getByRole('status').filter({ hasText: '推送完成' })).toBeVisible()
   await panel.getByRole('button', { name: '拉取', exact: true }).click()
-  await expect(panel.getByRole('status')).toContainText('拉取完成')
+  await expect(panel.getByRole('status').filter({ hasText: '拉取完成' })).toBeVisible()
 })
 
 test('non Git welcome contains only its icon and action', async ({ page }) => {
