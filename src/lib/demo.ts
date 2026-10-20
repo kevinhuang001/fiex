@@ -30,6 +30,8 @@ function ignored(name: string, patterns: unknown): boolean {
   })
 }
 
+let demoBranch = 'main'
+
 let entries = [
   ...['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Movies'].map((x) =>
     item(join(root, x), true),
@@ -200,10 +202,15 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           base: '',
         },
       ]
+    case 'git_refs':
+      return { current: demoBranch, branches: ['main', 'dev'], tags: ['v0.2.4'] }
+    case 'git_checkout':
+      demoBranch = String(a.reference)
+      return null
     case 'git_status':
       return {
         root,
-        branch: 'main',
+        branch: demoBranch,
         entries: { [root + '/Documents/Notes.md']: ' M' },
       }
     case 'set_tags': {

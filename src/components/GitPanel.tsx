@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { GitBranch, RefreshCw, X } from 'lucide-react'
+import { call } from '@/lib/api'
 import { basename } from '@/lib/files'
 import { gitState } from '@/lib/git'
-import type { GitStatus } from '@/lib/types'
+import type { GitRefs, GitStatus } from '@/lib/types'
 
 interface Change {
   path: string
@@ -44,13 +45,36 @@ export function GitPanel({
   onClose,
   onRefresh,
   onOpen,
+  readOnly,
 }: {
   open: boolean
   git: GitStatus | null
   onClose: () => void
   onRefresh: () => void
   onOpen: (path: string) => void
+  readOnly?: boolean
 }) {
+  const [refs, setRefs] = useState<GitRefs | null>(null)
+  const [selected, setSelected] = useState('')
+  const [switching, setSwitching] = useState(false)
+  const [branchError, setBranchError] = useState('')
+
+  useEffect(() => {
+    if (!open || !git) return
+    let active = true
+    void call<GitRefs>('git_refs', { root: git.root })
+      .then((next) => {
+        if (active) {
+          setRefs(next)
+          setSelected(next.current)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [open, git?.root])
+
   useEffect(() => {
     if (!open) return
     const close = (event: KeyboardEvent) => {
@@ -62,7 +86,7 @@ export function GitPanel({
 
   if (!open) return null
 
-  const changes = git ? toChanges(git) : []
+  const changes = git && !readOnly ? toChanges(git) : []
   const staged = changes.filter((change) => change.staged)
   const unstaged = changes.filter((change) => change.code !== '??' && change.unstaged)
   const untracked = changes.filter((change) => change.code === '??')
@@ -103,11 +127,53 @@ export function GitPanel({
       ) : (
         <>
           <div className="git-panel-branch">
-            <span>{git.branch}</span>
-            <small>{changes.length} 个更改</small>
+            <select
+              className="git-branch-select"
+              value={selected}
+              disabled={switching}
+              aria-label="切换分支或版本"
+              onChange={async (event) => {
+                const next = event.target.value
+                setSelected(next)
+                setSwitching(true)
+                setBranchError('')
+                try {
+                  await call('git_checkout', { root: git.root, reference: next })
+                  onRefresh()
+                  const fresh = await call<GitRefs>('git_refs', { root: git.root })
+                  setRefs(fresh)
+                  setSelected(fresh.current)
+                } catch (error) {
+                  setBranchError(String(error))
+                  setSelected(git.branch)
+                } finally {
+                  setSwitching(false)
+                }
+              }}
+            >
+              {refs?.branches.map((branch) => (
+                <option key={`branch:${branch}`} value={branch}>
+                  {branch}
+                </option>
+              ))}
+              {refs?.tags.map((tag) => (
+                <option key={`tag:${tag}`} value={tag}>
+                  标签 · {tag}
+                </option>
+              ))}
+              {!refs?.branches.includes(selected) && !refs?.tags.includes(selected) && (
+                <option value={selected}>{selected || git.branch}</option>
+              )}
+            </select>
+            <small>{readOnly ? '只读' : `${changes.length} 个更改`}</small>
           </div>
+          {branchError && <p className="git-panel-error">{branchError}</p>}
           <div className="git-panel-scroll">
-            {changes.length === 0 && <p className="git-panel-empty">没有更改。</p>}
+            {readOnly ? (
+              <p className="git-readonly-note">只读查看分支或版本，不显示工作区更改</p>
+            ) : (
+              changes.length === 0 && <p className="git-panel-empty">没有更改。</p>
+            )}
             {staged.length > 0 && (
               <section>
                 <h2>

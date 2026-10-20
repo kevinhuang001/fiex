@@ -137,6 +137,7 @@ export default function App() {
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
+  const gitBase = useRef<{ root: string; branch: string } | null>(null)
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
@@ -164,6 +165,26 @@ export default function App() {
       .then(setTrashPath)
       .catch(() => {})
   }, [])
+  useEffect(() => {
+    if (!x.git) {
+      gitBase.current = null
+      return
+    }
+    if (gitBase.current?.root !== x.git.root) {
+      gitBase.current = { root: x.git.root, branch: x.git.branch }
+    }
+  }, [x.git?.root])
+
+  const gitSwitched = Boolean(x.git && gitBase.current && x.git.branch !== gitBase.current.branch)
+  useEffect(() => {
+    x.setReadOnly(gitSwitched)
+  }, [gitSwitched])
+  const writable = () => {
+    if (!gitSwitched) return true
+    x.setError('当前是只读分支或版本，切换回工作区分支后才能修改')
+    return false
+  }
+
   // Opening a folder puts the cursor in search so typing immediately scopes
   // the new location, while Escape clears the query and leaves the field.
   useEffect(() => {
@@ -210,7 +231,13 @@ export default function App() {
     if (e.isDir && e.extension !== 'app') {
       setPreview(null)
       x.navigate(e.path)
-    } else void run('正在打开…', () => call('open_path', { path: e.path }))
+      return
+    }
+    if (gitSwitched) {
+      previewEntry(e)
+      return
+    }
+    void run('正在打开…', () => call('open_path', { path: e.path }))
   }
   const previewEntry = (entry: Entry) => {
     if (!isRemotePath(entry.path)) {
@@ -274,6 +301,7 @@ export default function App() {
     })
   }
   const create = async (folder: boolean) => {
+    if (!writable()) return
     const preferred = folder ? '未命名文件夹' : '未命名.txt'
     const name = uniqueName(
       x.entries.map((e) => e.name),
@@ -353,6 +381,7 @@ export default function App() {
     x.reload()
   }
   const recycle = (confirm = true) => {
+    if (!writable()) return
     if (!x.selected.length) return
     const paths = [...x.selected]
     if (!confirm) {
@@ -368,6 +397,7 @@ export default function App() {
     })
   }
   const transfer = (paths: string[], destination: string, moving: boolean) => {
+    if (!writable()) return
     if (!paths.length) return
     setDialog({
       title: moving ? '移动项目' : '复制项目',
@@ -389,12 +419,14 @@ export default function App() {
     })
   }
   const copy = (moving: boolean) => {
+    if (moving && !writable()) return
     if (x.selected.length) {
       setClipboard({ paths: [...x.selected], moving })
       notify(moving ? '已剪切，选择目标文件夹后粘贴' : '已复制，选择目标文件夹后粘贴')
     }
   }
-  const duplicate = () =>
+  const duplicate = () => {
+    if (!writable()) return
     void run('正在创建副本…', async () => {
       handleResult(
         await call<OperationResult>('transfer', {
@@ -406,7 +438,9 @@ export default function App() {
         }),
       )
     })
+  }
   const compress = (format: ArchiveFormat) => {
+    if (!writable()) return
     if (!first) return
     setDialog({
       title: `压缩为 ${format.name}`,
@@ -430,17 +464,21 @@ export default function App() {
     })
   }
   const extract = () => {
+    if (!writable()) return
     if (first)
       void run('正在解压…', async () => {
         const path = await call<string>('extract_archive', { path: first.path })
         notify(`已解压到 ${basename(path)}`)
       })
   }
-  const terminal = (id = prefs.terminal) =>
+  const terminal = (id = prefs.terminal) => {
+    if (!writable()) return
     void run('正在打开终端…', () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),
     )
+  }
   const openIde = (path = first?.path || x.path) => {
+    if (!writable()) return
     if (!path) return
     const ide = ides.find((item) => item.id === prefs.ide) || ides[0]
     if (!ide) {
@@ -455,6 +493,7 @@ export default function App() {
       notify('已撤销上一次文件操作')
     })
   const openTags = (paths: string[]) => {
+    if (!writable()) return
     const wanted = new Set(paths)
     const initial = new Map<string, Tag>()
     for (const entry of x.entries) {
@@ -466,6 +505,7 @@ export default function App() {
     setTagOpen(true)
   }
   const applyTags = async (tags: Tag[]) => {
+    if (!writable()) return
     try {
       await call('set_tags', { paths: tagPaths, tags })
       setTagOpen(false)
@@ -816,8 +856,9 @@ export default function App() {
           <Button
             variant="ghost"
             size="icon"
-            title={`新建文件夹 ${hint('newFolder')}`}
+            title={gitSwitched ? '只读分支/版本' : `新建文件夹 ${hint('newFolder')}`}
             aria-label="新建文件夹"
+            disabled={gitSwitched}
             onClick={() => create(true)}
           >
             <FolderPlus />
@@ -825,19 +866,25 @@ export default function App() {
           <Button
             variant="ghost"
             size="icon"
-            className={`git-toolbar-button ${gitOpen ? 'active' : ''}`}
-            title="源代码管理"
+            className={`git-toolbar-button ${gitOpen ? 'active' : ''} ${gitSwitched ? 'switched' : ''}`}
+            title={gitSwitched ? `源代码管理 · ${x.git?.branch}` : '源代码管理'}
             aria-label="源代码管理"
             aria-pressed={gitOpen}
             onClick={() => setGitOpen((value) => !value)}
           >
             <GitBranch />
+            {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            title={`在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`}
+            title={
+              gitSwitched
+                ? '只读分支/版本'
+                : `在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`
+            }
             aria-label="在 IDE 中打开"
+            disabled={gitSwitched}
             onClick={() => openIde()}
           >
             <Code2 />
@@ -847,8 +894,9 @@ export default function App() {
             <Button
               variant="ghost"
               size="icon"
-              title="Open in Terminal"
+              title={gitSwitched ? '只读分支/版本' : 'Open in Terminal'}
               aria-label="Open in Terminal"
+              disabled={gitSwitched}
               onClick={() => terminal()}
             >
               <TerminalSquare />
@@ -988,6 +1036,7 @@ export default function App() {
           </div>
         ) : (
           <FileViews
+            readOnly={gitSwitched}
             explorer={x}
             prefs={prefs}
             onOpen={open}
@@ -1002,6 +1051,7 @@ export default function App() {
           git={x.git}
           onClose={() => setGitOpen(false)}
           onRefresh={x.reload}
+          readOnly={gitSwitched}
           onOpen={(path) => x.navigate(parent(path))}
         />
         <footer className="statusbar">
@@ -1030,7 +1080,8 @@ export default function App() {
             <span className="git-status" title={x.git.root}>
               <GitBranch size={12} />
               {x.git.branch}
-              {Object.keys(x.git.entries).length > 0 &&
+              {!gitSwitched &&
+                Object.keys(x.git.entries).length > 0 &&
                 ` · ${Object.keys(x.git.entries).length} 更改`}
             </span>
           )}
@@ -1087,6 +1138,7 @@ export default function App() {
                 ? [
                     {
                       label: '标签…',
+                      disabled: gitSwitched,
                       icon: <Tags />,
                       hint: '',
                       action: () =>
@@ -1120,27 +1172,50 @@ export default function App() {
                 label: '重新命名',
                 icon: <Pencil />,
                 hint: hint('rename'),
+                disabled: gitSwitched,
                 action: () => x.beginRename(menu.entry.path),
               },
               { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
-              { label: '剪切', icon: <Scissors />, hint: hint('cut'), action: () => copy(true) },
-              { label: '创建副本', icon: <Copy />, hint: hint('duplicate'), action: duplicate },
+              {
+                label: '剪切',
+                icon: <Scissors />,
+                hint: hint('cut'),
+                disabled: gitSwitched,
+                action: () => copy(true),
+              },
+              {
+                label: '创建副本',
+                icon: <Copy />,
+                hint: hint('duplicate'),
+                disabled: gitSwitched,
+                action: duplicate,
+              },
               {
                 label: '压缩为…',
                 icon: <Archive />,
                 hint: '',
+                disabled: gitSwitched,
                 submenu: archiveFormats.map((format) => ({
                   label: format.name,
                   action: () => compress(format),
                 })),
               },
               ...(isArchive(menu.entry)
-                ? [{ label: '解压缩', icon: <Archive />, hint: '', action: extract }]
+                ? [
+                    {
+                      label: '解压缩',
+                      icon: <Archive />,
+                      hint: '',
+                      disabled: gitSwitched,
+                      action: extract,
+                    },
+                  ]
                 : []),
               {
                 label: 'Open in Terminal',
                 icon: <TerminalSquare />,
                 hint: '',
+                disabled: gitSwitched,
                 action: () => terminal(),
               },
               {
@@ -1153,7 +1228,13 @@ export default function App() {
                     .then(() => notify('路径已复制'))
                     .catch((e) => x.setError(String(e))),
               },
-              { label: '移到废纸篓', icon: <Trash2 />, hint: hint('trash'), action: recycle },
+              {
+                label: '移到废纸篓',
+                icon: <Trash2 />,
+                hint: hint('trash'),
+                disabled: gitSwitched,
+                action: recycle,
+              },
             ] as ContextItem[]
           ).map((a) =>
             'submenu' in a ? (

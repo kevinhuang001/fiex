@@ -66,3 +66,55 @@ pub fn status(path: &str) -> Option<GitStatus> {
         entries,
     })
 }
+
+#[derive(Serialize)]
+pub struct GitRefs {
+    pub current: String,
+    pub branches: Vec<String>,
+    pub tags: Vec<String>,
+}
+
+pub fn refs(root: &str) -> Result<GitRefs, String> {
+    let current = output(Path::new(root), &["rev-parse", "--abbrev-ref", "HEAD"])
+        .unwrap_or_else(|| "HEAD".into());
+    let branches = output(
+        Path::new(root),
+        &["for-each-ref", "--format=%(refname:short)", "refs/heads"],
+    )
+    .unwrap_or_default()
+    .lines()
+    .map(str::to_string)
+    .filter(|value| !value.is_empty())
+    .collect::<Vec<_>>();
+    let tags = output(
+        Path::new(root),
+        &["for-each-ref", "--format=%(refname:short)", "refs/tags"],
+    )
+    .unwrap_or_default()
+    .lines()
+    .map(str::to_string)
+    .filter(|value| !value.is_empty())
+    .collect::<Vec<_>>();
+    Ok(GitRefs {
+        current,
+        branches,
+        tags,
+    })
+}
+
+pub fn checkout(root: &str, reference: &str) -> Result<(), String> {
+    if reference.trim().is_empty() {
+        return Err("请选择分支或版本".into());
+    }
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["checkout", reference])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().into())
+    }
+}

@@ -247,3 +247,16 @@ test('multi-select and select all', async ({ page }) => {
   await page.keyboard.press('Control+a')
   await expect(page.locator('.statusbar')).toContainText('已选择 10 项')
 })
+
+test('switched branch is read-only and hides worktree changes', async ({ page }) => {
+  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await page.getByRole('combobox', { name: '切换分支或版本' }).selectOption('dev')
+  await expect(page.locator('.git-branch-hint')).toHaveText('dev')
+  await expect(page.locator('.git-readonly-note')).toContainText('不显示工作区更改')
+  await expect(page.getByRole('button', { name: '新建文件夹', exact: true })).toBeDisabled()
+  await expect(page.locator('.git-status')).toContainText('dev')
+  await expect(page.locator('.git-status')).not.toContainText('更改')
+  await page.getByRole('combobox', { name: '切换分支或版本' }).selectOption('main')
+  await expect(page.getByRole('button', { name: '新建文件夹', exact: true })).toBeEnabled()
+  await expect(page.locator('.git-branch-hint')).toHaveCount(0)
+})

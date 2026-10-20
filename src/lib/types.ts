@@ -98,3 +98,9 @@ export interface RemoteConnection {
   share: string
   base: string
 }
+
+export interface GitRefs {
+  current: string
+  branches: string[]
+  tags: string[]
+}

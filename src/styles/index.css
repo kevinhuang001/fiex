@@ -2666,3 +2666,42 @@ body.dragging-file * {
   color: var(--muted);
   font-size: 9px;
 }
+.git-branch-select {
+  max-width: 190px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--accent);
+  font-size: 10px;
+  outline: none;
+}
+.git-branch-select:focus {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+.git-toolbar-button.switched {
+  width: auto;
+  padding: 0 8px;
+  gap: 4px;
+  color: #c05050;
+  background: color-mix(in srgb, #c05050 11%, transparent);
+}
+.git-branch-hint {
+  max-width: 76px;
+  overflow: hidden;
+  color: #c05050;
+  font-size: 9px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-readonly-note {
+  margin: 8px 10px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}

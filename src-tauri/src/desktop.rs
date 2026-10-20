@@ -10,6 +10,18 @@ use std::sync::Mutex;
 use tauri::{ipc::Channel, Emitter, Manager};
 type Watch = Mutex<Option<notify::RecommendedWatcher>>;
 #[tauri::command]
+async fn git_refs(root: String) -> Result<git::GitRefs, String> {
+    tauri::async_runtime::spawn_blocking(move || git::refs(&root))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn git_checkout(root: String, reference: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git::checkout(&root, &reference))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 async fn git_status(path: String) -> Option<git::GitStatus> {
     tauri::async_runtime::spawn_blocking(move || git::status(&path))
         .await
@@ -487,6 +499,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             git_status,
+            git_refs,
+            git_checkout,
             locations,
             list_directory,
             file_info,

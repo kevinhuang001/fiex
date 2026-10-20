@@ -21,6 +21,7 @@ interface Props {
   onMenu: (e: Entry, x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
   onBookmark: (paths: string[]) => void
+  readOnly?: boolean
 }
 
 type DropTarget =
@@ -90,6 +91,7 @@ function NameCell({
 
 export function FileViews(props: Props) {
   const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark } = props
+  const readOnly = Boolean(props.readOnly)
   const entries = useMemo(
     () => sortEntries(x.entries, prefs.sort, prefs.descending),
     [x.entries, prefs.sort, prefs.descending],
@@ -100,7 +102,7 @@ export function FileViews(props: Props) {
   const container = useRef<HTMLDivElement>(null)
   const [ghost, setGhost] = useState<{ paths: string[]; x: number; y: number } | null>(null)
   const beginPointerDrag = (event: React.PointerEvent, entry: Entry) => {
-    if (event.button !== 0 || x.renaming) return
+    if (event.button !== 0 || x.renaming || readOnly) return
     if ((event.target as Element).closest('input,button,a')) return
     const paths = x.selected.includes(entry.path) ? [...x.selected] : [entry.path]
     if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !x.selected.includes(entry.path)) {

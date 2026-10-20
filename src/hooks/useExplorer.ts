@@ -15,6 +15,7 @@ export function useExplorer(prefs: Preferences) {
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
+  const [readOnly, setReadOnly] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -240,24 +241,35 @@ export function useExplorer(prefs: Preferences) {
     setSelected([])
     setRenaming(null)
   }
-  const beginRename = useCallback((target: string) => {
-    setSelected([target])
-    setRenaming(target)
-  }, [])
+  const beginRename = useCallback(
+    (target: string) => {
+      if (readOnly) return
+      setSelected([target])
+      setRenaming(target)
+    },
+    [readOnly],
+  )
   const cancelRename = useCallback(() => setRenaming(null), [])
-  const renameTo = useCallback(async (target: string, name: string) => {
-    setError('')
-    try {
-      const next = await call<string>('rename_entry', { path: target, name })
-      setRenaming(null)
-      setSelected([next])
-      setRefresh((v) => v + 1)
-      return true
-    } catch (e) {
-      setError(String(e))
-      return false
-    }
-  }, [])
+  const renameTo = useCallback(
+    async (target: string, name: string) => {
+      if (readOnly) {
+        setError('当前是只读分支或版本，不能修改文件')
+        return false
+      }
+      setError('')
+      try {
+        const next = await call<string>('rename_entry', { path: target, name })
+        setRenaming(null)
+        setSelected([next])
+        setRefresh((v) => v + 1)
+        return true
+      } catch (e) {
+        setError(String(e))
+        return false
+      }
+    },
+    [readOnly],
+  )
   const visibleEntries = tagFilter
     ? entries.filter((entry) => entry.tags.some((tag) => tag.name === tagFilter))
     : entries
@@ -283,6 +295,8 @@ export function useExplorer(prefs: Preferences) {
     refreshConnections,
     tagFilter,
     setTagFilter,
+    readOnly,
+    setReadOnly,
     locations,
     refreshLocations,
     git,
