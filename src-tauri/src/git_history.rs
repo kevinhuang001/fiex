@@ -25,7 +25,12 @@ pub fn route(path: &str) -> Option<Route> {
     }
     let root = String::from_utf8(URL_SAFE_NO_PAD.decode(encoded).ok()?).ok()?;
     let relative = parts.next().unwrap_or("").to_string();
-    if relative.split('/').any(|s| s == ".." || s == ".") || relative.contains('\0') {
+    if relative.split('/').any(|s| s == ".." || s == ".")
+        || relative.contains('\0')
+        || Path::new(&relative)
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
         return None;
     }
     Some(Route {
@@ -283,6 +288,7 @@ mod tests {
         );
         assert_eq!(super::history(root, 0).unwrap().len(), 1);
         assert!(super::route(&format!("{path}/../escape")).is_none());
+        assert!(super::route(&format!("{path}//absolute")).is_none());
         assert_eq!(crate::git::status(root).unwrap().branch, "main");
     }
 }

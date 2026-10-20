@@ -30,7 +30,7 @@ export function useAppController() {
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
-  const workspace = useRef<string | null>(null)
+  const workspaces = useRef(new Map<string, string>())
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
@@ -50,12 +50,12 @@ export function useAppController() {
   const viewRevision = async (reference: string) => {
     if (!x.git) return
     const path = await call<string>('git_browse', { root: x.git.root, reference })
-    if (!gitSwitched) workspace.current = x.path
+    if (!gitSwitched) workspaces.current.set(x.git.root, x.path)
     setPreview(null)
     x.navigate(path)
   }
   const returnToWorktree = () => {
-    const path = workspace.current || x.git?.root
+    const path = x.git && (workspaces.current.get(x.git.root) || x.git.root)
     if (path) x.navigate(path)
   }
   const writable = () => {

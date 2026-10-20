@@ -17,7 +17,7 @@ export function useExplorerShortcuts({ shortcuts, blocked, handlers, onEscape }:
         blocked ||
         event.defaultPrevented ||
         event.isComposing ||
-        target?.closest('input,textarea,select,[contenteditable=true],[role=dialog],[role=menu]')
+        target?.closest('[role=dialog],[role=menu]')
       )
         return
       if (
@@ -26,6 +26,17 @@ export function useExplorerShortcuts({ shortcuts, blocked, handlers, onEscape }:
       )
         return
       const action = matchShortcut(event, shortcuts)
+      if (
+        target?.closest('input,textarea,select,[contenteditable=true]') &&
+        !(
+          (event.ctrlKey || event.metaKey) &&
+          (action === 'goToFolder' ||
+            action === 'search' ||
+            action === 'settings' ||
+            action === 'newTab')
+        )
+      )
+        return
       if (action) {
         event.preventDefault()
         handlers[action](event)

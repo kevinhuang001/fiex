@@ -83,6 +83,7 @@ try:
     command('xdotool', 'windowsize', fiex, 1200, 850)
     command('xdotool', 'windowactivate', '--sync', fiex)
     time.sleep(2)
+    key('Escape')
     key('ctrl+l')
     command('xdotool', 'type', '--clearmodifiers', '--delay', 8, source)
     key('Return')

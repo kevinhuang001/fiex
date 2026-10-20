@@ -403,3 +403,10 @@ test('complete a move into a folder and bookmark the folder', async ({ page }) =
   await expect(page.locator('.favorite-row').filter({ hasText: 'Research' })).toBeVisible()
   await expect(folder).toBeVisible()
 })
+
+test('go to folder shortcut works while search is focused', async ({ page }) => {
+  await page.getByRole('textbox', { name: '搜索文件' }).focus()
+  await page.keyboard.press('Control+l')
+  await expect(page.getByRole('textbox', { name: '文件夹路径' })).toBeFocused()
+  await page.keyboard.press('Escape')
+})
