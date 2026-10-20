@@ -34,6 +34,8 @@ struct StoredConnection {
     password: String,
     #[serde(default)]
     allow_invalid_certs: bool,
+    #[serde(default)]
+    port: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -230,6 +232,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             username: input.username.trim().into(),
             password: input.password,
             allow_invalid_certs: input.allow_invalid_certs,
+            port: None,
         });
         id
     };
@@ -656,7 +659,11 @@ async fn webdav_get(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u
 }
 
 async fn smb_client(conn: &StoredConnection) -> Result<(smb::Client, smb::UncPath), String> {
-    let client = smb::Client::new(smb::ClientConfig::default());
+    let mut config = smb::ClientConfig::default();
+    if let Some(port) = conn.port {
+        config.connection.port = Some(port);
+    }
+    let client = smb::Client::new(config);
     let unc = smb::UncPath::from_str(&format!("\\\\{}\\{}", conn.host, conn.share))
         .map_err(|e| e.to_string())?;
     client
@@ -883,6 +890,9 @@ mod tests {
                 String::new()
             },
             allow_invalid_certs: false,
+            port: std::env::var("FIEX_SMB_PORT")
+                .ok()
+                .and_then(|value| value.parse().ok()),
         }
     }
 

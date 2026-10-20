@@ -112,7 +112,7 @@ jobs:
             printf 'hello smb\n' > /tmp/fiex-smb/hello.txt
             chmod 777 /tmp/fiex-smb
             sudo useradd -M -s /usr/sbin/nologin fiex 2>/dev/null || true
-            printf 'FiexTest123!\nFiexTest123!\n' | sudo smbpasswd -a fiex -s
+            printf 'FiexTest123456789!\nFiexTest123456789!\n' | sudo smbpasswd -a fiex -s
             cat > /tmp/fiex-smb.conf <<'EOF'
           [global]
             workgroup = WORKGROUP
@@ -132,17 +132,16 @@ jobs:
             sudo systemctl stop smbd 2>/dev/null || true
             sudo smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/fiex-smbd.log 2>&1 &
             for i in $(seq 1 20); do
-              smbclient //127.0.0.1/fiex -U fiex%FiexTest123! -c 'ls' >/dev/null 2>&1 && break
+              smbclient //127.0.0.1/fiex -U fiex%FiexTest123456789! -c 'ls' >/dev/null 2>&1 && break
               sleep 1
             done
-            smbclient //127.0.0.1/fiex -U fiex%FiexTest123! -c 'ls' || (cat /tmp/fiex-smbd.log; exit 1)
+            smbclient //127.0.0.1/fiex -U fiex%FiexTest123456789! -c 'ls' || (cat /tmp/fiex-smbd.log; exit 1)
           elif [ "$RUNNER_OS" = "Windows" ]; then
             powershell.exe -NoProfile -Command "
               \$ErrorActionPreference = 'Stop';
               net accounts /minpwlen:0 | Out-Null;
               if (Get-LocalUser -Name fiex -ErrorAction SilentlyContinue) { Remove-LocalUser -Name fiex };
-              net user fiex 'FiexTest123!' /add | Out-Null;
-              Get-LocalUser -Name fiex | Set-LocalUser -PasswordNeverExpires \$true;
+              New-LocalUser -Name fiex -Password (ConvertTo-SecureString 'FiexTest123456789!' -AsPlainText -Force) -PasswordNeverExpires | Out-Null;
               New-Item -ItemType Directory -Force C:\fiex-smb | Out-Null;
               Set-Content C:\fiex-smb\hello.txt 'hello smb';
               if (Get-SmbShare -Name fiex -ErrorAction SilentlyContinue) { Remove-SmbShare -Name fiex -Force };
@@ -152,7 +151,7 @@ jobs:
               Start-Service LanmanServer
             "
             for i in $(seq 1 30); do
-              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
+              (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 && break
               sleep 1
             done
             (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || exit 1
@@ -169,7 +168,7 @@ jobs:
             map to guest = Bad User
             guest account = nobody
             server min protocol = SMB2
-            smb ports = 445
+            smb ports = 10445
           [fiex]
             path = /Users/Shared/fiex-smb
             browseable = yes
@@ -181,12 +180,13 @@ jobs:
             sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
             sudo /opt/homebrew/sbin/samba-dot-org-smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/fiex-smbd.log 2>&1 &
             for i in $(seq 1 30); do
-              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
+              (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 && break
               sleep 1
             done
-            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || (cat /tmp/fiex-smbd.log; exit 1)
+            (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 || (cat /tmp/fiex-smbd.log; exit 1)
             echo "FIEX_SMB_USER=" >> "$GITHUB_ENV"
             echo "FIEX_SMB_PASSWORD=" >> "$GITHUB_ENV"
+            echo "FIEX_SMB_PORT=10445" >> "$GITHUB_ENV"
           fi
       - run: npm ci
       - run: npm ci
@@ -216,7 +216,7 @@ jobs:
           FIEX_SMB_HOST: 127.0.0.1
           FIEX_SMB_SHARE: fiex
           FIEX_SMB_USER: fiex
-          FIEX_SMB_PASSWORD: FiexTest123!
+          FIEX_SMB_PASSWORD: FiexTest123456789!
         run: |
           set +e
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 | tee integration-test.log
