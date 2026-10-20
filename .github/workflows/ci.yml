@@ -143,7 +143,7 @@ jobs:
               if (Get-LocalUser -Name fiex -ErrorAction SilentlyContinue) { Remove-LocalUser -Name fiex };
               New-LocalUser -Name fiex -Password (ConvertTo-SecureString 'Zebra!2026#Quartz' -AsPlainText -Force) -PasswordNeverExpires | Out-Null;
               New-Item -ItemType Directory -Force C:\fiex-smb | Out-Null;
-              [IO.File]::WriteAllText('C:\fiex-smb\hello.txt', "hello smb`n");
+              [IO.File]::WriteAllText('C:\fiex-smb\hello.txt', 'hello smb' + [char]10);
               if (Get-SmbShare -Name fiex -ErrorAction SilentlyContinue) { Remove-SmbShare -Name fiex -Force };
               New-SmbShare -Name fiex -Path C:\fiex-smb -FullAccess (\$env:COMPUTERNAME + '\fiex') | Out-Null;
               icacls C:\fiex-smb /grant 'fiex:(OI)(CI)F' | Out-Null;
@@ -151,7 +151,7 @@ jobs:
               Start-Service LanmanServer
             "
             for i in $(seq 1 30); do
-              (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 && break
+              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
               sleep 1
             done
             (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || exit 1
