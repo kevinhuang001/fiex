@@ -525,6 +525,7 @@ fn authorized() -> &'static std::sync::Mutex<std::collections::HashSet<String>> 
     SET.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
+#[allow(dead_code)]
 fn can_open(device: &str) -> bool {
     std::fs::OpenOptions::new()
         .read(true)
@@ -582,13 +583,17 @@ pub fn ensure_access(route: &Route) -> Result<(), String> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
+        let _ = route;
         return Err("当前系统需要通过管理员权限访问原始设备".into());
     }
-    if !can_open(&route.driver_device) {
-        return Err("无法获得设备读写权限".into());
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        if !can_open(&route.driver_device) {
+            return Err("无法获得设备读写权限".into());
+        }
+        authorized().lock().unwrap().insert(route.device.clone());
+        Ok(())
     }
-    authorized().lock().unwrap().insert(route.device.clone());
-    Ok(())
 }
 
 fn join_rel(rel: &str, name: &str) -> String {
@@ -1019,7 +1024,7 @@ pub fn eject(device: &str) -> Result<(), String> {
         if output.status.success() {
             return Ok(());
         }
-        return Err(String::from_utf8_lossy(&output.stderr).trim().into());
+        Err(String::from_utf8_lossy(&output.stderr).trim().into())
     }
     #[cfg(target_os = "linux")]
     {

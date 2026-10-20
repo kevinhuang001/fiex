@@ -360,6 +360,7 @@ fn int_field(info: &plist::Dictionary, key: &str) -> u64 {
         .unwrap_or_default()
 }
 
+#[allow(dead_code)]
 fn virtual_path(device: &str, filesystem: &str) -> Option<String> {
     #[cfg(feature = "usbfs")]
     {
