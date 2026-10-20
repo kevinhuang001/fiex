@@ -12,6 +12,8 @@ import {
   ArrowUp,
   ChevronDown,
   Code2,
+  CloudCheck,
+  CloudDownload,
   ChevronLeft,
   ChevronRight,
   Columns3,
@@ -1096,6 +1098,26 @@ export default function App() {
                         openTags(
                           x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
                         ),
+                    },
+                  ]
+                : []),
+              ...(isRemotePath(menu.entry.path)
+                ? [
+                    {
+                      label: menu.entry.sync === 'synced' ? '取消同步' : '同步',
+                      icon: menu.entry.sync === 'synced' ? <CloudCheck /> : <CloudDownload />,
+                      hint: '',
+                      action: () =>
+                        void run('正在同步…', async () => {
+                          const paths = x.selected.includes(menu.entry.path)
+                            ? x.selected
+                            : [menu.entry.path]
+                          await call(
+                            menu.entry.sync === 'synced' ? 'remote_unsync' : 'remote_sync',
+                            { paths },
+                          )
+                          x.reload()
+                        }),
                     },
                   ]
                 : []),

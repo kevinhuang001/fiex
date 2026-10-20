@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronRight, Files, FolderOpen, SearchX } from 'lucide-react'
+import { ChevronRight, CloudCheck, CloudDownload, Files, FolderOpen, SearchX } from 'lucide-react'
 import { FileIcon } from '../FileIcon'
 import { InlineRename } from './InlineRename'
 import { TagDots } from '../TagDots'
@@ -44,6 +44,19 @@ function clearDropHighlight() {
   document
     .querySelectorAll('.bookmark-drop')
     .forEach((element) => element.classList.remove('bookmark-drop'))
+}
+
+function SyncBadge({ sync }: { sync: Entry['sync'] }) {
+  if (!sync) return null
+  return sync === 'synced' ? (
+    <span className="sync-badge synced" title="已同步">
+      <CloudCheck size={12} />
+    </span>
+  ) : (
+    <span className="sync-badge cloud" title="仅云端，需要连接">
+      <CloudDownload size={12} />
+    </span>
+  )
 }
 
 function NameCell({
@@ -311,6 +324,7 @@ export function FileViews(props: Props) {
                         <FileIcon entry={item.entry} size={25} />
                         <NameCell explorer={x} entry={item.entry} className="file-label" />
                         <TagDots tags={item.entry.tags} />
+                        <SyncBadge sync={item.entry.sync} />
                         {item.entry.readonly && x.renaming !== item.entry.path && (
                           <small>只读</small>
                         )}
@@ -379,6 +393,7 @@ export function FileViews(props: Props) {
                     </span>
                     <NameCell explorer={x} entry={e} className="tile-label" />
                     <TagDots tags={e.tags} />
+                    <SyncBadge sync={e.sync} />
                   </div>
                 ))}
               </div>
@@ -481,6 +496,7 @@ function Columns({
           <FileIcon entry={e} size={24} />
           <NameCell explorer={x} entry={e} className="column-label" />
           <TagDots tags={e.tags} size={6} />
+          <SyncBadge sync={e.sync} />
           {e.isDir && <ChevronRight size={13} />}
         </div>
       ))}

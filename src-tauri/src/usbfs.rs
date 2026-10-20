@@ -625,6 +625,7 @@ pub fn listing(route: &Route) -> Result<Vec<crate::files::Entry>, String> {
                 readonly: file.readonly,
                 link_target: None,
                 tags: vec![],
+                sync: None,
             }
         })
         .collect())

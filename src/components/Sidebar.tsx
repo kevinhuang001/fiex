@@ -92,11 +92,18 @@ export function Sidebar({
       <div className="sidebar-content">
         {prefs.sidebarOrder.map((section) => {
           if (section === 'places') {
-            const places = x.locations.filter(
-              (location) =>
-                (location.kind === 'favorite' || location.kind === 'applications') &&
-                !prefs.hiddenPlaces.includes(location.path || location.name),
-            )
+            const order = new Map(prefs.placeOrder.map((key, index) => [key, index]))
+            const places = x.locations
+              .filter(
+                (location) =>
+                  (location.kind === 'favorite' || location.kind === 'applications') &&
+                  !prefs.hiddenPlaces.includes(location.path || location.name),
+              )
+              .sort(
+                (left, right) =>
+                  (order.get(left.path || left.name) ?? Number.MAX_SAFE_INTEGER) -
+                  (order.get(right.path || right.name) ?? Number.MAX_SAFE_INTEGER),
+              )
             if (!places.length) return null
             return (
               <Fragment key="places">

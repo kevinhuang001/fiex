@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AppWindow,
-  ArrowDown,
-  ArrowUp,
   Check,
   Download,
   ExternalLink,
@@ -10,6 +8,7 @@ import {
   FileText,
   Film,
   Folder,
+  GripVertical,
   Filter,
   Home,
   Image,
@@ -207,6 +206,8 @@ export function PreferencesDialog({
   const [query, setQuery] = useState('')
   const [recording, setRecording] = useState<{ action: ShortcutAction; index: number } | null>(null)
   const [note, setNote] = useState('')
+  const [draggingRow, setDraggingRow] = useState<string | null>(null)
+  const [dropRow, setDropRow] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -307,6 +308,67 @@ export function PreferencesDialog({
     void call('open_path', { path: url }).catch((error) => onError(String(error)))
 
   const styleName = SHORTCUT_STYLES.find((item) => item.id === prefs.shortcutStyle)?.name
+
+  const reorder = <T,>(items: T[], from: number, to: number) => {
+    const next = [...items]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    return next
+  }
+  const beginReorder = (event: React.PointerEvent, kind: 'section' | 'place', index: number) => {
+    if ((event.target as Element).closest('input,button')) return
+    const startX = event.clientX
+    const startY = event.clientY
+    let active = false
+    let target = index
+    const move = (moveEvent: PointerEvent) => {
+      if (!active) {
+        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
+        active = true
+        setDraggingRow(`${kind}:${index}`)
+      }
+      moveEvent.preventDefault()
+      const row = document
+        .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
+        ?.closest<HTMLElement>(`[data-reorder="${kind}"]`)
+      if (row) {
+        const next = Number(row.dataset.reorderIndex)
+        if (Number.isFinite(next)) {
+          target = next
+          setDropRow(`${kind}:${next}`)
+        }
+      }
+    }
+    const finish = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      setDraggingRow(null)
+      setDropRow(null)
+      if (!active || target === index) return
+      if (kind === 'section') {
+        update({ sidebarOrder: reorder(prefs.sidebarOrder, index, target) })
+      } else {
+        const keys = orderedPlaces.map((location) => location.path || location.name)
+        update({ placeOrder: reorder(keys, index, target) })
+      }
+    }
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+  }
+
+  const commonPlaces = locations.filter(
+    (location) => location.kind === 'favorite' || location.kind === 'applications',
+  )
+  const placeKeys = commonPlaces.map((location) => location.path || location.name)
+  const orderedKeys = [
+    ...prefs.placeOrder.filter((key) => placeKeys.includes(key)),
+    ...placeKeys.filter((key) => !prefs.placeOrder.includes(key)),
+  ]
+  const orderedPlaces = orderedKeys
+    .map((key) => commonPlaces.find((location) => (location.path || location.name) === key))
+    .filter((location): location is Location => Boolean(location))
 
   return (
     <Modal open={open} onClose={onClose} title="设置" className="settings-modal" bare>
@@ -546,6 +608,8 @@ export function PreferencesDialog({
                     onClick={() =>
                       update({
                         sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
+                        placeOrder: [],
+                        hiddenPlaces: [],
                       })
                     }
                   >
@@ -555,30 +619,15 @@ export function PreferencesDialog({
                 </div>
                 <div className="sidebar-order">
                   {prefs.sidebarOrder.map((id, index) => (
-                    <div className="sidebar-order-row" key={id}>
+                    <div
+                      className={`sidebar-order-row ${draggingRow === `section:${index}` ? 'dragging' : ''} ${dropRow === `section:${index}` ? 'reorder-target' : ''}`}
+                      key={id}
+                      data-reorder="section"
+                      data-reorder-index={index}
+                      onPointerDown={(event) => beginReorder(event, 'section', index)}
+                    >
+                      <GripVertical size={13} className="drag-handle" />
                       <span>{SIDEBAR_LABELS[id]}</span>
-                      <button
-                        aria-label={`上移${SIDEBAR_LABELS[id]}`}
-                        disabled={index === 0}
-                        onClick={() => {
-                          const next = [...prefs.sidebarOrder]
-                          ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
-                          update({ sidebarOrder: next })
-                        }}
-                      >
-                        <ArrowUp size={12} />
-                      </button>
-                      <button
-                        aria-label={`下移${SIDEBAR_LABELS[id]}`}
-                        disabled={index === prefs.sidebarOrder.length - 1}
-                        onClick={() => {
-                          const next = [...prefs.sidebarOrder]
-                          ;[next[index + 1], next[index]] = [next[index], next[index + 1]]
-                          update({ sidebarOrder: next })
-                        }}
-                      >
-                        <ArrowDown size={12} />
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -587,32 +636,39 @@ export function PreferencesDialog({
                 <div className="settings-card-header">
                   <span>常用位置</span>
                 </div>
-                {locations
-                  .filter(
-                    (location) => location.kind === 'favorite' || location.kind === 'applications',
-                  )
-                  .map((location) => {
+                <div className="place-order">
+                  {orderedPlaces.map((location, index) => {
                     const key = location.path || location.name
                     const hidden = prefs.hiddenPlaces.includes(key)
                     return (
-                      <button
+                      <div
+                        className={`place-row ${draggingRow === `place:${index}` ? 'dragging' : ''} ${dropRow === `place:${index}` ? 'reorder-target' : ''}`}
                         key={key}
-                        className={`settings-choice ${hidden ? '' : 'selected'}`}
-                        aria-pressed={!hidden}
-                        onClick={() =>
-                          update({
-                            hiddenPlaces: hidden
-                              ? prefs.hiddenPlaces.filter((item) => item !== key)
-                              : [...prefs.hiddenPlaces, key],
-                          })
-                        }
+                        data-reorder="place"
+                        data-reorder-index={index}
+                        onPointerDown={(event) => beginReorder(event, 'place', index)}
                       >
-                        <span className="settings-choice-icon">{placeIcon(location.name)}</span>
-                        <span>{location.name}</span>
-                        {hidden ? <Eye size={14} /> : <Check size={15} />}
-                      </button>
+                        <GripVertical size={13} className="drag-handle" />
+                        <span className="settings-choice-icon place-icon">
+                          {placeIcon(location.name)}
+                        </span>
+                        <span className="place-name">{location.name}</span>
+                        <input
+                          type="checkbox"
+                          checked={!hidden}
+                          aria-label={`显示${location.name}`}
+                          onChange={() =>
+                            update({
+                              hiddenPlaces: hidden
+                                ? prefs.hiddenPlaces.filter((item) => item !== key)
+                                : [...prefs.hiddenPlaces, key],
+                            })
+                          }
+                        />
+                      </div>
                     )
                   })}
+                </div>
               </div>
             </>
           )}

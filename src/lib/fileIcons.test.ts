@@ -16,6 +16,7 @@ function entry(name: string, isDir = false): Entry {
     readonly: false,
     linkTarget: null,
     tags: [],
+    sync: null,
   }
 }
 

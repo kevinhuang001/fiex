@@ -358,6 +358,7 @@ pub fn apply_meta(entries: &mut [crate::files::Entry]) {
             entry.size = file.size;
             entry.modified = file.modified;
             entry.readonly = true;
+            entry.sync = Some(if file.downloaded { "synced" } else { "cloud" }.into());
         }
     }
 }
@@ -422,6 +423,15 @@ pub async fn download_dir(path: &str) -> Result<(), String> {
     let mut meta = load_meta(&conn);
     let mut pending = vec![rel];
     while let Some(current) = pending.pop() {
+        meta.files.insert(
+            current.clone(),
+            RemoteMetaFile {
+                size: 0,
+                modified: 0,
+                is_dir: true,
+                downloaded: true,
+            },
+        );
         let files = list_remote(&conn, &current).await?;
         let mut dirs = Vec::new();
         for file in files {
@@ -789,6 +799,64 @@ pub fn eject(path: &str) -> Result<(), String> {
     }
     #[allow(unreachable_code)]
     Err("当前平台不支持弹出设备".into())
+}
+
+pub async fn sync(paths: &[String]) -> Result<(), String> {
+    for path in paths {
+        let Some((conn, rel)) = connection_for_path(path) else {
+            continue;
+        };
+        let rel = rel_string(&rel);
+        let meta = load_meta(&conn);
+        if meta.files.get(&rel).is_some_and(|file| file.is_dir) {
+            download_dir(path).await?;
+        } else {
+            download(path).await?;
+        }
+    }
+    Ok(())
+}
+
+pub fn unsync(paths: &[String]) -> Result<(), String> {
+    for path in paths {
+        let Some((conn, rel)) = connection_for_path(path) else {
+            continue;
+        };
+        let rel = rel_string(&rel);
+        let mut meta = load_meta(&conn);
+        let local = local_for(&conn, &rel);
+        if local.is_dir() {
+            let prefix = format!("{rel}/");
+            let keys = meta
+                .files
+                .iter()
+                .filter(|(key, _)| key.as_str() == rel || key.starts_with(&prefix))
+                .map(|(key, _)| key.clone())
+                .collect::<Vec<_>>();
+            for key in keys {
+                let child = local_for(&conn, &key);
+                if meta.files.get(&key).is_some_and(|file| !file.is_dir) {
+                    let _ = fs::remove_file(&child);
+                    let _ = fs::OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(&child);
+                }
+                if let Some(file) = meta.files.get_mut(&key) {
+                    file.downloaded = false;
+                }
+            }
+        } else {
+            let _ = fs::remove_file(&local);
+            fs::File::create(&local).map_err(|error| error.to_string())?;
+            if let Some(file) = meta.files.get_mut(&rel) {
+                file.downloaded = false;
+            }
+        }
+        save_meta(&conn, &meta)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

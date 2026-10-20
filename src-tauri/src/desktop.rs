@@ -48,6 +48,9 @@ async fn list_directory(
         let mut listing = files::list(&path, hidden, &ignores)?;
         remote::apply_meta(&mut listing.entries);
         if let Some(warning) = warning {
+            listing
+                .entries
+                .retain(|entry| entry.sync.as_deref() != Some("cloud"));
             listing.warnings.push(format!("远程刷新失败：{warning}"));
         }
         Ok(listing)
@@ -76,6 +79,16 @@ async fn remote_download(path: String) -> Result<String, String> {
 #[tauri::command]
 async fn remote_download_dir(path: String) -> Result<(), String> {
     remote::download_dir(&path).await
+}
+#[tauri::command]
+async fn remote_sync(paths: Vec<String>) -> Result<(), String> {
+    remote::sync(&paths).await
+}
+#[tauri::command]
+async fn remote_unsync(paths: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || remote::unsync(&paths))
+        .await
+        .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 fn eject_device(path: String) -> Result<(), String> {
@@ -471,6 +484,8 @@ pub fn run() {
             remove_remote_connection,
             remote_download,
             remote_download_dir,
+            remote_sync,
+            remote_unsync,
             eject_device,
             eject_usb,
             mount_device,

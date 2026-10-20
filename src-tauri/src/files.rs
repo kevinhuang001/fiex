@@ -28,6 +28,7 @@ pub struct Entry {
     pub readonly: bool,
     pub link_target: Option<String>,
     pub tags: Vec<Tag>,
+    pub sync: Option<String>,
 }
 
 #[cfg(target_os = "macos")]
@@ -183,6 +184,7 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
         readonly: meta.permissions().readonly(),
         link_target,
         tags: read_tags(path),
+        sync: None,
     })
 }
 #[derive(Serialize)]

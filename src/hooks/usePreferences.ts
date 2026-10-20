@@ -24,6 +24,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     compressIgnore: defaultOperationIgnore(),
     copyIgnore: defaultOperationIgnore(),
     sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
+    placeOrder: [],
     hiddenPlaces: [],
     favorites: [],
     shortcutStyle: style,

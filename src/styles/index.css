@@ -2561,3 +2561,59 @@ body.dragging-file * {
 .sidebar-order-row button:disabled {
   opacity: 0.25;
 }
+.sidebar-order-row {
+  cursor: grab;
+}
+.sidebar-order-row:active {
+  cursor: grabbing;
+}
+.drag-handle {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.place-order {
+  padding: 4px 8px 8px;
+}
+.place-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  cursor: grab;
+}
+.place-row:active {
+  cursor: grabbing;
+}
+.place-row:hover {
+  background: var(--hover);
+}
+.place-icon {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  color: var(--accent);
+}
+.place-name {
+  flex: 1;
+  font-size: 11px;
+}
+.place-row input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.sync-badge {
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+}
+.sync-badge.synced {
+  color: #3d9a63;
+}
+.sync-badge.cloud {
+  color: var(--accent);
+  opacity: 0.75;
+}

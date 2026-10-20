@@ -14,6 +14,7 @@ const e = (name: string, isDir = false): Entry => ({
   readonly: false,
   linkTarget: null,
   tags: [],
+  sync: null,
 })
 describe('file models', () => {
   it('handles roots and Windows paths', () => {

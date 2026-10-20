@@ -17,6 +17,7 @@ export interface Entry {
   readonly: boolean
   linkTarget: string | null
   tags: Tag[]
+  sync: 'synced' | 'cloud' | null
 }
 export interface Listing {
   path: string
@@ -69,6 +70,7 @@ export interface Preferences {
   compressIgnore: string[]
   copyIgnore: string[]
   sidebarOrder: SidebarSection[]
+  placeOrder: string[]
   hiddenPlaces: string[]
   favorites: Location[]
   shortcutStyle: ShortcutStyle

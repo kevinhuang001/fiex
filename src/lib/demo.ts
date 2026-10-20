@@ -17,6 +17,7 @@ function item(path: string, isDir = false, mime = 'application/octet-stream', by
     readonly: false,
     linkTarget: null,
     tags: [],
+    sync: null,
   }
 }
 function ignored(name: string, patterns: unknown): boolean {
