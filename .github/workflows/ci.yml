@@ -142,7 +142,7 @@ jobs:
               net accounts /minpwlen:0 | Out-Null;
               if (Get-LocalUser -Name fiex -ErrorAction SilentlyContinue) { Remove-LocalUser -Name fiex };
               net user fiex 'FiexTest123!' /add | Out-Null;
-              wmic useraccount where name='fiex' set PasswordExpires=false | Out-Null;
+              Get-LocalUser -Name fiex | Set-LocalUser -PasswordNeverExpires \$true;
               New-Item -ItemType Directory -Force C:\fiex-smb | Out-Null;
               Set-Content C:\fiex-smb\hello.txt 'hello smb';
               if (Get-SmbShare -Name fiex -ErrorAction SilentlyContinue) { Remove-SmbShare -Name fiex -Force };
@@ -158,26 +158,16 @@ jobs:
             (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || exit 1
           else
             brew install samba
-            if ! id fiex >/dev/null 2>&1; then
-              sudo sysadminctl -addUser fiex -password 'FiexTest123!' -fullName fiex 2>/dev/null ||
-                (sudo dscl . -create /Users/fiex &&
-                 sudo dscl . -create /Users/fiex UserShell /usr/bin/false &&
-                 sudo dscl . -create /Users/fiex RealName fiex &&
-                 sudo dscl . -create /Users/fiex UniqueID 601 &&
-                 sudo dscl . -create /Users/fiex PrimaryGroupID 20 &&
-                 sudo dscl . -create /Users/fiex NFSHomeDirectory /var/empty &&
-                 sudo dscl . -passwd /Users/fiex 'FiexTest123!')
-            fi
             sudo mkdir -p /Users/Shared/fiex-smb
             printf 'hello smb\n' | sudo tee /Users/Shared/fiex-smb/hello.txt >/dev/null
             sudo chmod 777 /Users/Shared/fiex-smb
-            printf 'FiexTest123!\nFiexTest123!\n' | sudo /opt/homebrew/bin/smbpasswd -L -a fiex -s
             cat > /tmp/fiex-smb.conf <<'EOF'
           [global]
             workgroup = WORKGROUP
             server role = standalone server
             security = user
             map to guest = Bad User
+            guest account = nobody
             server min protocol = SMB2
             smb ports = 445
           [fiex]
@@ -185,8 +175,8 @@ jobs:
             browseable = yes
             read only = no
             guest ok = yes
-            valid users = fiex
-            force user = fiex
+            guest only = yes
+            force user = nobody
           EOF
             sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
             sudo /opt/homebrew/sbin/samba-dot-org-smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/fiex-smbd.log 2>&1 &
@@ -195,6 +185,8 @@ jobs:
               sleep 1
             done
             (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || (cat /tmp/fiex-smbd.log; exit 1)
+            echo "FIEX_SMB_USER=" >> "$GITHUB_ENV"
+            echo "FIEX_SMB_PASSWORD=" >> "$GITHUB_ENV"
           fi
       - run: npm ci
       - run: npm ci
