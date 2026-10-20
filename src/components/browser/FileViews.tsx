@@ -44,16 +44,6 @@ function clearDropHighlight() {
     .forEach((element) => element.classList.remove('bookmark-drop'))
 }
 
-function GitBadge({ status }: { status?: string }) {
-  const state = gitState(status)
-  if (!state) return null
-  return (
-    <span className={`git-badge git-${state.letter.toLowerCase()}`} title={state.label}>
-      {state.letter}
-    </span>
-  )
-}
-
 function NameCell({
   explorer,
   entry,
@@ -286,7 +276,6 @@ export function FileViews(props: Props) {
                         <FileIcon entry={item.entry} size={25} />
                         <NameCell explorer={x} entry={item.entry} className="file-label" />
                         <TagDots tags={item.entry.tags} />
-                        <GitBadge status={x.git?.entries[item.entry.path]} />
                         {item.entry.readonly && x.renaming !== item.entry.path && (
                           <small>只读</small>
                         )}
@@ -355,7 +344,6 @@ export function FileViews(props: Props) {
                     </span>
                     <NameCell explorer={x} entry={e} className="tile-label" />
                     <TagDots tags={e.tags} />
-                    <GitBadge status={x.git?.entries[e.path]} />
                   </div>
                 ))}
               </div>
@@ -458,7 +446,6 @@ function Columns({
           <FileIcon entry={e} size={24} />
           <NameCell explorer={x} entry={e} className="column-label" />
           <TagDots tags={e.tags} size={6} />
-          <GitBadge status={x.git?.entries[e.path]} />
           {e.isDir && <ChevronRight size={13} />}
         </div>
       ))}

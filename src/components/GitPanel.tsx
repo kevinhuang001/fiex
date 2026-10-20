@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Check, GitBranch, LoaderCircle, Minus, Plus, RefreshCw, X } from 'lucide-react'
-import { call } from '@/lib/api'
+import { useEffect } from 'react'
+import { GitBranch, RefreshCw, X } from 'lucide-react'
 import { basename } from '@/lib/files'
 import { gitState } from '@/lib/git'
 import type { GitStatus } from '@/lib/types'
@@ -52,10 +51,6 @@ export function GitPanel({
   onRefresh: () => void
   onOpen: (path: string) => void
 }) {
-  const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState('')
-  const [error, setError] = useState('')
-
   useEffect(() => {
     if (!open) return
     const close = (event: KeyboardEvent) => {
@@ -72,56 +67,21 @@ export function GitPanel({
   const unstaged = changes.filter((change) => change.code !== '??' && change.unstaged)
   const untracked = changes.filter((change) => change.code === '??')
 
-  const run = async (label: string, fn: () => Promise<unknown>) => {
-    setBusy(label)
-    setError('')
-    try {
-      await fn()
-      onRefresh()
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setBusy('')
-    }
-  }
-
-  const stage = (path: string, unstage = false) => {
-    if (!git) return
-    void run(path, () =>
-      call(unstage ? 'git_unstage' : 'git_stage', { root: git.root, paths: [path] }),
-    )
-  }
-
-  const commit = () => {
-    if (!git || !message.trim() || !staged.length) return
-    void run('commit', async () => {
-      await call('git_commit', { root: git.root, message })
-      setMessage('')
-    })
-  }
-
-  const row = (change: Change, canStage: boolean) => (
-    <div className="git-change-row" key={`${change.code}:${change.path}`}>
-      <button className="git-change-open" title={change.path} onClick={() => onOpen(change.path)}>
-        <span className={`git-badge git-${change.letter.toLowerCase()}`}>{change.letter}</span>
-        <span className="git-change-name">
-          <span className={`git-file git-file-${change.letter.toLowerCase()}`}>
-            {basename(change.path)}
-          </span>
-          <small>{dirOf(change.path, git?.root || '')}</small>
+  const row = (change: Change) => (
+    <button
+      className="git-change-row"
+      key={`${change.code}:${change.path}`}
+      title={change.path}
+      onClick={() => onOpen(change.path)}
+    >
+      <span className="git-change-name">
+        <span className={`git-file git-file-${change.letter.toLowerCase()}`}>
+          {basename(change.path)}
         </span>
-        <span className="git-change-label">{change.label}</span>
-      </button>
-      <button
-        className="git-change-action"
-        title={canStage ? '暂存' : '取消暂存'}
-        aria-label={canStage ? '暂存' : '取消暂存'}
-        disabled={Boolean(busy)}
-        onClick={() => stage(change.path, !canStage)}
-      >
-        {canStage ? <Plus size={12} /> : <Minus size={12} />}
-      </button>
-    </div>
+        <small>{dirOf(change.path, git?.root || '')}</small>
+      </span>
+      <span className="git-change-label">{change.label}</span>
+    </button>
   )
 
   return (
@@ -146,30 +106,6 @@ export function GitPanel({
             <span>{git.branch}</span>
             <small>{changes.length} 个更改</small>
           </div>
-          <div className="git-commit-box">
-            <input
-              value={message}
-              placeholder="提交信息"
-              onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') commit()
-              }}
-            />
-            <button
-              className="git-commit-button"
-              disabled={!message.trim() || !staged.length || Boolean(busy)}
-              onClick={commit}
-              title="提交暂存的更改"
-            >
-              {busy === 'commit' ? (
-                <LoaderCircle className="spin" size={13} />
-              ) : (
-                <Check size={13} />
-              )}
-              提交
-            </button>
-          </div>
-          {error && <p className="git-panel-error">{error}</p>}
           <div className="git-panel-scroll">
             {changes.length === 0 && <p className="git-panel-empty">没有更改。</p>}
             {staged.length > 0 && (
@@ -177,7 +113,7 @@ export function GitPanel({
                 <h2>
                   暂存的更改 <small>{staged.length}</small>
                 </h2>
-                {staged.map((change) => row(change, false))}
+                {staged.map((change) => row(change))}
               </section>
             )}
             {unstaged.length > 0 && (
@@ -185,7 +121,7 @@ export function GitPanel({
                 <h2>
                   更改 <small>{unstaged.length}</small>
                 </h2>
-                {unstaged.map((change) => row(change, true))}
+                {unstaged.map((change) => row(change))}
               </section>
             )}
             {untracked.length > 0 && (
@@ -193,7 +129,7 @@ export function GitPanel({
                 <h2>
                   未跟踪 <small>{untracked.length}</small>
                 </h2>
-                {untracked.map((change) => row(change, true))}
+                {untracked.map((change) => row(change))}
               </section>
             )}
           </div>

@@ -2297,47 +2297,6 @@ body.dragging-file * {
   color: var(--muted);
   opacity: 0.5;
 }
-.git-badge {
-  display: inline-grid;
-  place-items: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 4px;
-  font:
-    700 8px/1 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-  letter-spacing: 0;
-  vertical-align: middle;
-}
-.git-m {
-  color: #a06a16;
-  background: #e8b34a26;
-}
-.git-a {
-  color: #2d7d46;
-  background: #52b56b26;
-}
-.git-u {
-  color: #3d7f9e;
-  background: #58a6c926;
-}
-.git-d {
-  color: #a94b4b;
-  background: #d75c5c26;
-}
-.git-r,
-.git-c {
-  color: #7b57a8;
-  background: #9a6bc926;
-}
-.git-t,
-.git-x {
-  color: var(--muted);
-  background: var(--hover);
-}
 .git-status {
   display: inline-flex;
   align-items: center;
@@ -2428,21 +2387,6 @@ body.dragging-file * {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
-.git-toolbar-count {
-  position: absolute;
-  top: 2px;
-  right: 1px;
-  min-width: 13px;
-  height: 13px;
-  padding: 0 3px;
-  border-radius: 7px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 7px;
-  font-weight: 700;
-  line-height: 13px;
-  text-align: center;
-}
 .git-panel {
   position: fixed;
   top: 56px;
@@ -2483,41 +2427,6 @@ body.dragging-file * {
 }
 .git-panel-branch small {
   color: var(--muted);
-}
-.git-commit-box {
-  display: flex;
-  gap: 5px;
-  padding: 0 10px 9px;
-}
-.git-commit-box input {
-  min-width: 0;
-  flex: 1;
-  height: 27px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--canvas);
-  color: var(--text);
-  font-size: 10px;
-  outline: none;
-}
-.git-commit-box input:focus {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
-}
-.git-commit-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 27px;
-  padding: 0 8px;
-  border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 600;
-}
-.git-commit-button:disabled {
-  opacity: 0.45;
 }
 .git-panel-error {
   padding: 0 12px 8px;
@@ -2562,19 +2471,13 @@ body.dragging-file * {
   display: flex;
   align-items: center;
   gap: 2px;
+  width: 100%;
+  padding: 6px 7px;
   border-radius: 6px;
+  text-align: left;
 }
 .git-change-row:hover {
   background: var(--hover);
-}
-.git-change-open {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  flex: 1;
-  padding: 6px 7px;
-  text-align: left;
 }
 .git-change-name {
   display: flex;
@@ -2600,21 +2503,4 @@ body.dragging-file * {
   color: var(--muted);
   font-size: 8px;
   white-space: nowrap;
-}
-.git-change-action {
-  display: grid;
-  place-items: center;
-  width: 23px;
-  height: 23px;
-  margin-right: 3px;
-  border-radius: 5px;
-  color: var(--muted);
-  opacity: 0;
-}
-.git-change-row:hover .git-change-action {
-  opacity: 1;
-}
-.git-change-action:hover {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  color: var(--accent);
 }

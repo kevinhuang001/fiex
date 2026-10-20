@@ -766,9 +766,6 @@ export default function App() {
             onClick={() => setGitOpen((value) => !value)}
           >
             <GitBranch />
-            {x.git && Object.keys(x.git.entries).length > 0 && (
-              <span className="git-toolbar-count">{Object.keys(x.git.entries).length}</span>
-            )}
           </Button>
           <Button
             variant="ghost"

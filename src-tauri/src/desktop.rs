@@ -17,24 +17,6 @@ async fn git_status(path: String) -> Option<git::GitStatus> {
         .flatten()
 }
 #[tauri::command]
-async fn git_stage(root: String, paths: Vec<String>) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || git::stage(&root, &paths))
-        .await
-        .map_err(|error| error.to_string())?
-}
-#[tauri::command]
-async fn git_unstage(root: String, paths: Vec<String>) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || git::unstage(&root, &paths))
-        .await
-        .map_err(|error| error.to_string())?
-}
-#[tauri::command]
-async fn git_commit(root: String, message: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || git::commit(&root, &message))
-        .await
-        .map_err(|error| error.to_string())?
-}
-#[tauri::command]
 fn platform() -> &'static str {
     std::env::consts::OS
 }
@@ -305,9 +287,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             git_status,
-            git_stage,
-            git_unstage,
-            git_commit,
             locations,
             list_directory,
             file_info,

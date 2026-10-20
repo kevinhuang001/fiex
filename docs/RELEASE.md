@@ -27,7 +27,7 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 - ZIP/7Z/TAR/TAR.GZ/TAR.BZ2/TAR.XZ creation from a context-menu submenu, with editable compression ignore rules; extraction covers ZIP/7z/TAR/GZ/BZ2/XZ.
 - Detected terminal picker and a configurable default terminal.
 - Self-contained native codecs and network clients: liblzma is static, WebDAV uses rustls, SMB is pure Rust, and release builds are audited for Homebrew/build-machine library paths.
-- Git branch, staged/unstaged/untracked status, colored filenames, and a toolbar Source Control panel with stage, unstage and commit actions.
+- Git branch, staged/unstaged/untracked status, colored filenames, and a read-only toolbar Source Control panel grouped by staged, modified and untracked changes.
 - WebDAV (HTTP/HTTPS) and SMB virtual drives under `~/.fiex/drives`, with on-demand placeholders, offline cache, whole-folder offline downloads and no OS mount.
 - Editable display, compression and copy/move ignore lists with presets for system files and mainstream toolchains.
 - Finder-style tag list in the sidebar with click-to-filter.
