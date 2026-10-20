@@ -16,7 +16,8 @@ import {
   Server,
   Unplug,
 } from 'lucide-react'
-import { size } from '@/lib/files'
+import { basename, parent, size } from '@/lib/files'
+import { gitState } from '@/lib/git'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
 import { TAG_PRESETS } from '@/lib/tags'
@@ -134,6 +135,38 @@ export function Sidebar({
             <p className="sidebar-hint">将常用文件夹拖到这里收藏</p>
           )}
         </div>
+        {x.git && Object.keys(x.git.entries).length > 0 && (
+          <>
+            <div className="sidebar-label git-label">
+              <span>Git</span>
+              <small>{x.git.branch}</small>
+            </div>
+            <div className="git-changes">
+              {Object.entries(x.git.entries)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([path, code]) => {
+                  const state = gitState(code)
+                  if (!state) return null
+                  return (
+                    <button
+                      key={path}
+                      className="git-change"
+                      title={path}
+                      onClick={() => x.navigate(parent(path))}
+                    >
+                      <span className={`git-badge git-${state.letter.toLowerCase()}`}>
+                        {state.letter}
+                      </span>
+                      <span className={`git-file git-file-${state.letter.toLowerCase()}`}>
+                        {basename(path)}
+                      </span>
+                      <small>{state.label}</small>
+                    </button>
+                  )
+                })}
+            </div>
+          </>
+        )}
         <div className="sidebar-label tags-label">标签</div>
         {TAG_PRESETS.map((tag) => (
           <button

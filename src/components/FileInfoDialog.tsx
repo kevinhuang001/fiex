@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
+import { gitState } from '@/lib/git'
 import { FileIcon } from './FileIcon'
 import { date, parent, kind, size } from '@/lib/files'
 import { tagColor } from '@/lib/tags'
@@ -40,7 +41,7 @@ export function FileInfoDialog({
               ['权限', info.readonly ? '只读' : '可读写'],
               ['符号链接', info.isSymlink ? '是' : '否'],
               ...(info.linkTarget ? [['链接到', info.linkTarget]] : []),
-              ...(gitStatus ? [['Git', gitStatus]] : []),
+              ...(gitStatus ? [['Git', gitState(gitStatus)?.label || gitStatus]] : []),
             ].map(([k, v]) => (
               <div key={k}>
                 <dt>{k}</dt>

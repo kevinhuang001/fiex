@@ -795,6 +795,70 @@ pub fn eject(path: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn live_conn(kind: &str, host: &str, share: &str, url: &str) -> StoredConnection {
+        StoredConnection {
+            id: "ci".into(),
+            name: "CI".into(),
+            kind: kind.into(),
+            url: url.into(),
+            host: host.into(),
+            share: share.into(),
+            base: String::new(),
+            username: if kind == "smb" {
+                std::env::var("FIEX_SMB_USER").unwrap_or_default()
+            } else {
+                String::new()
+            },
+            password: if kind == "smb" {
+                std::env::var("FIEX_SMB_PASSWORD").unwrap_or_default()
+            } else {
+                String::new()
+            },
+            allow_invalid_certs: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn webdav_live_lists_and_downloads() {
+        let Ok(url) = std::env::var("FIEX_WEBDAV_URL") else {
+            return;
+        };
+        let conn = live_conn("webdav", "", "", &url);
+        let files = webdav_list(&conn, "").await.unwrap();
+        assert!(
+            files
+                .iter()
+                .any(|file| file.name == "hello.txt" && !file.is_dir),
+            "missing hello.txt in {:?}",
+            files.iter().map(|file| &file.name).collect::<Vec<_>>()
+        );
+        let temp = tempfile::tempdir().unwrap();
+        let dest = temp.path().join("hello.txt");
+        webdav_get(&conn, "hello.txt", &dest).await.unwrap();
+        assert_eq!(std::fs::read_to_string(dest).unwrap(), "hello webdav\n");
+    }
+
+    #[tokio::test]
+    async fn smb_live_lists_and_downloads() {
+        let Ok(host) = std::env::var("FIEX_SMB_HOST") else {
+            return;
+        };
+        let share = std::env::var("FIEX_SMB_SHARE").unwrap_or_else(|_| "fiex".into());
+        let conn = live_conn("smb", &host, &share, "");
+        let files = smb_list(&conn, "").await.unwrap();
+        assert!(
+            files
+                .iter()
+                .any(|file| file.name == "hello.txt" && !file.is_dir),
+            "missing hello.txt in {:?}",
+            files.iter().map(|file| &file.name).collect::<Vec<_>>()
+        );
+        let temp = tempfile::tempdir().unwrap();
+        let dest = temp.path().join("hello.txt");
+        smb_get(&conn, "hello.txt", &dest).await.unwrap();
+        assert_eq!(std::fs::read_to_string(dest).unwrap(), "hello smb\n");
+    }
+
     #[test]
     fn parses_webdav_multistatus() {
         let xml = r#"<?xml version="1.0"?>

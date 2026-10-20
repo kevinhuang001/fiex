@@ -312,7 +312,7 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
           </nav>
           <div className="settings-sidebar-footer">
             <span>Fiex</span>
-            <span>0.2.3</span>
+            <span>0.2.4</span>
           </div>
         </aside>
 
@@ -572,7 +572,7 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                     </span>
                     版本
                   </div>
-                  <span className="settings-value">0.2.3</span>
+                  <span className="settings-value">0.2.4</span>
                 </div>
                 <button
                   className="settings-row settings-row-button"

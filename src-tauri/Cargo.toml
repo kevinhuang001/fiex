@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.2.3"
+version = "0.2.4"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -69,3 +69,6 @@ lnk = "0.5"
 [profile.release]
 strip = true
 opt-level = 2
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

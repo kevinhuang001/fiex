@@ -123,7 +123,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       return {
         root,
         branch: 'main',
-        entries: { [root + '/Documents/Notes.md']: 'M' },
+        entries: { [root + '/Documents/Notes.md']: ' M' },
       }
     case 'set_tags': {
       const tags = a.tags as { name: string; color: number }[]

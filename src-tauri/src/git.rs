@@ -55,25 +55,10 @@ pub fn status(path: &str) -> Option<GitStatus> {
         }
         let xy = &field[..2];
         let relative = String::from_utf8_lossy(&field[3..]).replace('\\', "/");
-        let code = if xy == b"??" {
-            'U'
-        } else if xy.contains(&b'R') {
-            'R'
-        } else if xy.contains(&b'D') {
-            'D'
-        } else if xy.contains(&b'A') {
-            'A'
-        } else if xy.contains(&b'M') {
-            'M'
-        } else if xy.contains(&b'T') {
-            'T'
-        } else if xy.contains(&b'U') {
-            'U'
-        } else {
-            '?'
-        };
+        let code = String::from_utf8_lossy(xy).into_owned();
         let absolute = root.join(relative).to_string_lossy().into_owned();
-        entries.insert(absolute, code.to_string());
+        entries.insert(absolute, code);
+
         if xy.contains(&b'R') || xy.contains(&b'C') {
             // Rename/copy records are followed by the original path.
             let _ = fields.next();

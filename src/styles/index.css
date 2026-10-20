@@ -2297,3 +2297,127 @@ body.dragging-file * {
   color: var(--muted);
   opacity: 0.5;
 }
+.git-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 4px;
+  font:
+    700 8px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+.git-m {
+  color: #a06a16;
+  background: #e8b34a26;
+}
+.git-a {
+  color: #2d7d46;
+  background: #52b56b26;
+}
+.git-u {
+  color: #3d7f9e;
+  background: #58a6c926;
+}
+.git-d {
+  color: #a94b4b;
+  background: #d75c5c26;
+}
+.git-r,
+.git-c {
+  color: #7b57a8;
+  background: #9a6bc926;
+}
+.git-t,
+.git-x {
+  color: var(--muted);
+  background: var(--hover);
+}
+.git-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.git-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 12px;
+}
+.git-label small {
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.git-changes {
+  max-height: 148px;
+  overflow-y: auto;
+  margin: 0 5px;
+  scrollbar-width: thin;
+}
+.git-change {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 7px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text);
+  font-size: 11px;
+}
+.git-change:hover {
+  background: #8ba8bd16;
+}
+.git-change > span:nth-child(2) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-change small {
+  color: var(--muted);
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.git-file-m {
+  color: #a06a16;
+}
+.git-file-a {
+  color: #2d7d46;
+}
+.git-file-u {
+  color: #3d7f9e;
+}
+.git-file-d {
+  color: #a94b4b;
+}
+.git-file-r,
+.git-file-c {
+  color: #7b57a8;
+}
+.dark .git-file-m {
+  color: #e0b25b;
+}
+.dark .git-file-a {
+  color: #79c98c;
+}
+.dark .git-file-u {
+  color: #7bc1df;
+}
+.dark .git-file-d {
+  color: #e58f8f;
+}
+.dark .git-file-r,
+.dark .git-file-c {
+  color: #c3a1ea;
+}

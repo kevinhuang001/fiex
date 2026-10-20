@@ -8,6 +8,7 @@ import { asset, call } from '@/lib/api'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type { Entry, Listing, Preferences } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
+import { gitState } from '@/lib/git'
 import type { CSSProperties } from 'react'
 
 interface Props {
@@ -43,20 +44,12 @@ function clearDropHighlight() {
     .forEach((element) => element.classList.remove('bookmark-drop'))
 }
 
-const GIT_LABELS: Record<string, string> = {
-  M: '已修改',
-  A: '已添加',
-  U: '未跟踪',
-  D: '已删除',
-  R: '已重命名',
-  T: '类型变更',
-}
-
 function GitBadge({ status }: { status?: string }) {
-  if (!status) return null
+  const state = gitState(status)
+  if (!state) return null
   return (
-    <span className={`git-badge git-${status.toLowerCase()}`} title={GIT_LABELS[status] || status}>
-      {status}
+    <span className={`git-badge git-${state.letter.toLowerCase()}`} title={state.label}>
+      {state.letter}
     </span>
   )
 }
@@ -70,17 +63,19 @@ function NameCell({
   entry: Entry
   className: string
 }) {
+  const state = gitState(explorer.git?.entries[entry.path])
+  const gitClass = state ? ` git-file git-file-${state.letter.toLowerCase()}` : ''
   if (explorer.renaming === entry.path)
     return (
       <InlineRename
         entry={entry}
-        className={className}
+        className={`${className}${gitClass}`}
         onCommit={(name) => explorer.renameTo(entry.path, name)}
         onCancel={explorer.cancelRename}
       />
     )
   return (
-    <span className={className} title={entry.name}>
+    <span className={`${className}${gitClass}`} title={entry.name}>
       {entry.name}
     </span>
   )

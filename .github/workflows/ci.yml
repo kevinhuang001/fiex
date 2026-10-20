@@ -82,10 +82,61 @@ jobs:
           key: ${{ matrix.target }}
           cache-all-crates: true
           cache-on-failure: true
+      - name: Start WebDAV and SMB test servers
+        if: runner.os == 'Linux'
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba
+          python3 -m pip install --user wsgidav cheroot
+          mkdir -p /tmp/fiex-dav /tmp/fiex-smb
+          printf 'hello webdav\n' > /tmp/fiex-dav/hello.txt
+          printf 'hello smb\n' > /tmp/fiex-smb/hello.txt
+          chmod 777 /tmp/fiex-smb
+          sudo useradd -M -s /usr/sbin/nologin fiex 2>/dev/null || true
+          printf 'fiex\nfiex\n' | sudo smbpasswd -a fiex -s
+          cat > /tmp/fiex-smb.conf <<'EOF'
+          [global]
+            workgroup = WORKGROUP
+            server role = standalone server
+            security = user
+            map to guest = Bad User
+            server min protocol = SMB2
+            smb ports = 445
+          [fiex]
+            path = /tmp/fiex-smb
+            browseable = yes
+            read only = no
+            guest ok = yes
+            valid users = fiex
+            force user = fiex
+          EOF
+          sudo systemctl stop smbd 2>/dev/null || true
+          sudo smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/smbd.log 2>&1 &
+          "$HOME/.local/bin/wsgidav" --host=127.0.0.1 --port=8080 --root=/tmp/fiex-dav --auth=anonymous > /tmp/wsgidav.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null || (cat /tmp/wsgidav.log; exit 1)
+          for i in $(seq 1 20); do
+            smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' >/dev/null 2>&1 && break
+            sleep 1
+          done
+          smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' || (cat /tmp/smbd.log; exit 1)
       - run: npm ci
       - run: npm run icons
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib
+      - name: Real WebDAV and SMB tests
+        if: runner.os == 'Linux'
+        env:
+          FIEX_WEBDAV_URL: http://127.0.0.1:8080/
+          FIEX_SMB_HOST: 127.0.0.1
+          FIEX_SMB_SHARE: fiex
+          FIEX_SMB_USER: fiex
+          FIEX_SMB_PASSWORD: fiex
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib remote::tests -- --nocapture
       - name: Clippy
         shell: bash
         env:
@@ -108,6 +159,11 @@ jobs:
             done
           fi
           exit "$status"
+      - name: Remote test server logs
+        if: failure() && runner.os == 'Linux'
+        run: |
+          cat /tmp/smbd.log || true
+          cat /tmp/wsgidav.log || true
       - uses: tauri-apps/tauri-action@v0
         with:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
