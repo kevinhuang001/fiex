@@ -70,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
-          packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev
+          packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev python3-venv
           version: 1.0
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -88,12 +88,14 @@ jobs:
           set -euo pipefail
           PY=python3
           if [ "$RUNNER_OS" = "Windows" ]; then PY=python; fi
-          "$PY" -m pip install --user wsgidav cheroot
+          "$PY" -m venv .ci/venv
+          if [ "$RUNNER_OS" = "Windows" ]; then VPY=.ci/venv/Scripts/python.exe; else VPY=.ci/venv/bin/python; fi
+          "$VPY" -m pip install -q --upgrade pip wsgidav cheroot impacket
           mkdir -p .ci/webdav
           printf 'hello webdav\n' > .ci/webdav/hello.txt
           ROOT="$PWD/.ci/webdav"
           if command -v cygpath >/dev/null 2>&1; then ROOT=$(cygpath -w "$ROOT"); fi
-          "$PY" -c 'from wsgidav.server.server_cli import run; run()' --host=127.0.0.1 --port=8080 --root="$ROOT" --auth=anonymous > .ci/wsgidav.log 2>&1 &
+          "$VPY" -c 'from wsgidav.server.server_cli import run; run()' --host=127.0.0.1 --port=8080 --root="$ROOT" --auth=anonymous > .ci/wsgidav.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null 2>&1 && break
             sleep 1
@@ -105,67 +107,24 @@ jobs:
           set -euo pipefail
           mkdir -p .ci/smb
           printf 'hello smb\n' > .ci/smb/hello.txt
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba smbclient
-            chmod 777 .ci/smb
-            sudo useradd -M -s /usr/sbin/nologin fiex 2>/dev/null || true
-            printf 'fiex\nfiex\n' | sudo smbpasswd -a fiex -s
-            CONF="$PWD/.ci/smb.conf"
-            cat > "$CONF" <<EOF
-          [global]
-            workgroup = WORKGROUP
-            server role = standalone server
-            security = user
-            map to guest = Bad User
-            server min protocol = SMB2
-            smb ports = 445
-          [fiex]
-            path = $PWD/.ci/smb
-            browseable = yes
-            read only = no
-            guest ok = yes
-            valid users = fiex
-            force user = fiex
-          EOF
-            sudo systemctl stop smbd 2>/dev/null || true
-            sudo smbd -s "$CONF" -F --no-process-group > .ci/smbd.log 2>&1 &
-            for i in $(seq 1 20); do
-              smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' >/dev/null 2>&1 && break
-              sleep 1
-            done
-            smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' || (cat .ci/smbd.log; exit 1)
+          if [ "$RUNNER_OS" = "Windows" ]; then VPY=.ci/venv/Scripts/python.exe; else VPY=.ci/venv/bin/python; fi
+          SMB_SHARE="$PWD/.ci/smb"
+          if command -v cygpath >/dev/null 2>&1; then SMB_SHARE=$(cygpath -w "$SMB_SHARE"); fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            powershell.exe -NoProfile -Command "Stop-Service LanmanServer -Force" || true
+            SMB_BIN=.ci/venv/Scripts/smbserver.py
+            "$VPY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
           else
-            PY=python3
-            if [ "$RUNNER_OS" = "Windows" ]; then PY=python; fi
-            "$PY" -m pip install --user impacket
-            SMB_SHARE="$PWD/.ci/smb"
-            if command -v cygpath >/dev/null 2>&1; then SMB_SHARE=$(cygpath -w "$SMB_SHARE"); fi
-            if [ "$RUNNER_OS" = "Windows" ]; then
-              powershell.exe -NoProfile -Command "Stop-Service LanmanServer -Force" || true
-            else
-              sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
-            fi
-            USER_SITE=$("$PY" -c 'import site; print(site.getusersitepackages())')
-            SMB_BIN=$(command -v smbserver.py 2>/dev/null || true)
-            if [ -z "$SMB_BIN" ]; then
-              SMB_BIN=$(find "$HOME/.local" "$HOME/Library" "$HOME/AppData" "$LOCALAPPDATA" -name smbserver.py 2>/dev/null | head -1)
-            fi
-            if [ -z "$SMB_BIN" ]; then
-              echo "impacket smbserver.py not found"; exit 1
-            fi
-            if command -v cygpath >/dev/null 2>&1; then SMB_BIN=$(cygpath -w "$SMB_BIN"); fi
-            if [ "$RUNNER_OS" = "Windows" ]; then
-              "$PY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
-            else
-              sudo env PYTHONPATH="$USER_SITE" "$PY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
-            fi
-            for i in $(seq 1 30); do
-              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
-              sleep 1
-            done
-            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || (cat .ci/smb.log; exit 1)
+            sudo systemctl stop smbd 2>/dev/null || true
+            sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
+            SMB_BIN=.ci/venv/bin/smbserver.py
+            sudo "$VPY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
           fi
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
+            sleep 1
+          done
+          (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || (cat .ci/smb.log; exit 1)
       - run: npm ci
       - run: npm run icons
       - run: npm run build
