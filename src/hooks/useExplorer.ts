@@ -2,11 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { parent } from '@/lib/files'
-import type { Entry, Listing, Location, Preferences } from '@/lib/types'
+import type {
+  Entry,
+  GitStatus,
+  Listing,
+  Location,
+  Preferences,
+  RemoteConnection,
+} from '@/lib/types'
 export function useExplorer(prefs: Preferences) {
   const [locations, setLocations] = useState<Location[]>([])
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
+  const [tagFilter, setTagFilterState] = useState<string | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -19,6 +27,8 @@ export function useExplorer(prefs: Preferences) {
   const [tabs, setTabs] = useState<string[]>([])
   const [tab, setTab] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
+  const [git, setGit] = useState<GitStatus | null>(null)
+  const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [renaming, setRenaming] = useState<string | null>(null)
   const request = useRef(0)
   const searchRequest = useRef(0)
@@ -56,7 +66,11 @@ export function useExplorer(prefs: Preferences) {
     const id = ++request.current
     setLoading(true)
     setError('')
-    void call<Listing>('list_directory', { path, hidden: prefs.hidden })
+    void call<Listing>('list_directory', {
+      path,
+      hidden: prefs.hidden,
+      ignores: prefs.displayIgnore,
+    })
       .then((l) => {
         if (active && id === request.current) {
           setEntries(l.entries)
@@ -97,6 +111,35 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [path, reload])
   useEffect(() => {
+    if (!path) return
+    if (path.startsWith('remote://')) {
+      setGit(null)
+      return
+    }
+    let active = true
+    void call<GitStatus | null>('git_status', { path })
+      .then((value) => {
+        if (active) setGit(value)
+      })
+      .catch(() => {
+        if (active) setGit(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [path, refresh])
+  useEffect(() => {
+    if (!path || path.startsWith('remote://')) return
+    const timer = setTimeout(() => {
+      void call('warm_index', {
+        path,
+        hidden: prefs.hidden,
+        ignores: prefs.displayIgnore,
+      }).catch(() => {})
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [path, prefs.hidden, prefs.displayIgnore, refresh])
+  useEffect(() => {
     const generation = ++searchRequest.current
     void call('cancel_search').catch(() => {})
     if (!query.trim()) {
@@ -110,7 +153,7 @@ export function useExplorer(prefs: Preferences) {
     setSelected([])
     setError('')
     const timer = setTimeout(() => {
-      void search(path, query, prefs.hidden, prefs.respectIgnore, (b) => {
+      void search(path, query, prefs.hidden, prefs.displayIgnore, (b) => {
         if (generation !== searchRequest.current) return
         setEntries((v) => [...v, ...b.entries])
         if (b.done) {
@@ -131,7 +174,10 @@ export function useExplorer(prefs: Preferences) {
       ++searchRequest.current
       void call('cancel_search').catch(() => {})
     }
-  }, [query, path, prefs.hidden, prefs.respectIgnore, refresh])
+  }, [query, path, prefs.hidden, prefs.displayIgnore, refresh])
+  useEffect(() => {
+    setTagFilterState(null)
+  }, [path])
   const back = () => {
     if (cursor > 0) {
       setCursor(cursor - 1)
@@ -202,10 +248,33 @@ export function useExplorer(prefs: Preferences) {
       return false
     }
   }, [])
+  const visibleEntries = tagFilter
+    ? entries.filter((entry) => entry.tags.some((tag) => tag.name === tagFilter))
+    : entries
+  const setTagFilter = (tag: string | null) => {
+    setTagFilterState(tag)
+    setSelected([])
+  }
+  const refreshConnections = useCallback(async () => {
+    try {
+      const list = await call<RemoteConnection[]>('remote_connections')
+      setConnections(Array.isArray(list) ? list : [])
+    } catch {
+      setConnections([])
+    }
+  }, [])
+  useEffect(() => {
+    void refreshConnections()
+  }, [refreshConnections])
   return {
     path,
-    entries,
+    entries: visibleEntries,
+    connections,
+    refreshConnections,
+    tagFilter,
+    setTagFilter,
     locations,
+    git,
     selected,
     setSelected,
     loading,

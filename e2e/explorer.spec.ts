@@ -220,3 +220,16 @@ test('PDF preview renders a real document', async ({ page }) => {
     )
     .toBeGreaterThan(50)
 })
+
+test('git status, tags and connection dialog', async ({ page }) => {
+  await expect(page.locator('.git-badge.git-m')).toHaveText('M')
+  await expect(page.getByText('main', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: '添加 WebDAV 或 SMB 连接' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('WebDAV')
+  await expect(dialog).toContainText('SMB')
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '压缩为…' }).hover()
+  await expect(page.getByRole('menuitem', { name: 'TAR.GZ' })).toBeVisible()
+})

@@ -1,14 +1,367 @@
-use crate::files::{entry, Entry};
-use ignore::{WalkBuilder, WalkState};
+use crate::{
+    files::{entry, Entry},
+    ignores::IgnoreSet,
+};
+use ignore::WalkBuilder;
+use notify::Watcher;
 use serde::Serialize;
 use std::{
-    path::Path,
+    collections::hash_map::DefaultHasher,
+    fs,
+    hash::{Hash, Hasher},
+    path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
     time::Instant,
 };
+use tantivy::tokenizer::{LowerCaser, RawTokenizer, TextAnalyzer};
+use tantivy::{
+    collector::TopDocs,
+    query::RegexQuery,
+    schema::{
+        Field, IndexRecordOption, Schema, TantivyDocument, TextFieldIndexing, TextOptions, Value,
+    },
+    Index, IndexReader, ReloadPolicy,
+};
+
+const RESULT_LIMIT: usize = 500;
+const INDEX_LIMIT: usize = 1_000_000;
+const INDEX_VERSION: u32 = 1;
+
+#[derive(Serialize, serde::Deserialize)]
+struct IndexMeta {
+    version: u32,
+    root: String,
+    signature: String,
+}
+
+struct IndexHandle {
+    root: String,
+    signature: String,
+    _index: Index,
+    reader: IndexReader,
+    name: Field,
+    path: Field,
+    skipped: usize,
+    dirty: Arc<AtomicBool>,
+    _watcher: Option<notify::RecommendedWatcher>,
+}
+
+#[derive(Clone, Default)]
+pub struct SearchState {
+    generation: Arc<AtomicU64>,
+    index: Arc<Mutex<Option<IndexHandle>>>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchBatch {
+    pub entries: Vec<Entry>,
+    pub done: bool,
+    pub elapsed_ms: u128,
+    pub truncated: bool,
+    pub skipped: usize,
+}
+
+fn signature(hidden: bool, ignores: &[String]) -> String {
+    format!(
+        "v{INDEX_VERSION}:hidden={hidden}:{}",
+        ignores.join("\u{1f}")
+    )
+}
+
+fn index_dir(root: &str, signature: &str) -> PathBuf {
+    let mut hasher = DefaultHasher::new();
+    root.hash(&mut hasher);
+    signature.hash(&mut hasher);
+    let base = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".fiex")
+        .join("index");
+    base.join(format!("{:016x}", hasher.finish()))
+}
+
+fn index_base() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".fiex")
+        .join("index")
+}
+
+fn open_index(dir: &Path, root: &str, signature: &str) -> Option<IndexHandle> {
+    let meta: IndexMeta =
+        serde_json::from_slice(&fs::read(dir.join("fiex-meta.json")).ok()?).ok()?;
+    if meta.version != INDEX_VERSION || meta.root != root || meta.signature != signature {
+        return None;
+    }
+    let index = Index::open_in_dir(dir).ok()?;
+    index.tokenizers().register(
+        "filename",
+        TextAnalyzer::builder(RawTokenizer::default())
+            .filter(LowerCaser)
+            .build(),
+    );
+    let reader: IndexReader = index
+        .reader_builder()
+        .reload_policy(ReloadPolicy::Manual)
+        .try_into()
+        .ok()?;
+    reader.reload().ok()?;
+    let schema = index.schema();
+    let name = schema.get_field("name").ok()?;
+    let path = schema.get_field("path").ok()?;
+    let dirty = Arc::new(AtomicBool::new(false));
+    let watcher = watch_root(root, dirty.clone());
+    Some(IndexHandle {
+        root: root.into(),
+        signature: signature.into(),
+        _index: index,
+        reader,
+        name,
+        path,
+        skipped: 0,
+        dirty,
+        _watcher: watcher,
+    })
+}
+
+fn watch_root(root: &str, dirty: Arc<AtomicBool>) -> Option<notify::RecommendedWatcher> {
+    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        if let Ok(event) = event {
+            if matches!(
+                event.kind,
+                notify::EventKind::Create(_)
+                    | notify::EventKind::Modify(_)
+                    | notify::EventKind::Remove(_)
+            ) {
+                dirty.store(true, Ordering::SeqCst);
+            }
+        }
+    })
+    .ok()?;
+    watcher
+        .watch(Path::new(root), notify::RecursiveMode::Recursive)
+        .ok()?;
+    Some(watcher)
+}
+
+fn build_index(
+    dir: &Path,
+    root: &str,
+    signature: &str,
+    hidden: bool,
+    ignores: &[String],
+) -> Result<IndexHandle, String> {
+    if dir.exists() {
+        fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+
+    let mut schema_builder = Schema::builder();
+    let name = schema_builder.add_text_field(
+        "name",
+        TextOptions::default()
+            .set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_tokenizer("filename")
+                    .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+            )
+            .set_stored(),
+    );
+    let path = schema_builder.add_text_field("path", TextOptions::default().set_stored());
+    let schema = schema_builder.build();
+    let index = Index::create_in_dir(dir, schema).map_err(|e| e.to_string())?;
+    index.tokenizers().register(
+        "filename",
+        TextAnalyzer::builder(RawTokenizer::default())
+            .filter(LowerCaser)
+            .build(),
+    );
+    let mut writer = index
+        .writer_with_num_threads::<TantivyDocument>(1, 50_000_000)
+        .map_err(|e| e.to_string())?;
+
+    let root_path = PathBuf::from(root);
+    let filter_root = root_path.clone();
+    let filter_ignore = Arc::new(IgnoreSet::new(ignores));
+    let filter_index = index_base();
+    let mut skipped = 0usize;
+    let mut added = 0usize;
+    let walker = WalkBuilder::new(root)
+        .hidden(!hidden)
+        .ignore(false)
+        .git_ignore(false)
+        .git_global(false)
+        .git_exclude(false)
+        .parents(false)
+        .follow_links(false)
+        .threads(1)
+        .filter_entry(move |item| {
+            if item.depth() == 0 {
+                return true;
+            }
+            let relative = item
+                .path()
+                .strip_prefix(&filter_root)
+                .unwrap_or(item.path());
+            !item.path().starts_with(&filter_index)
+                && !inside_bundle(item.path())
+                && !filter_ignore.is_ignored(relative)
+        })
+        .build();
+    for result in walker {
+        match result {
+            Ok(item) if item.depth() > 0 => {
+                if added >= INDEX_LIMIT {
+                    break;
+                }
+                let mut doc = TantivyDocument::new();
+                doc.add_text(name, item.file_name().to_string_lossy().to_lowercase());
+                doc.add_text(path, item.path().to_string_lossy());
+                if writer.add_document(doc).is_err() {
+                    skipped += 1;
+                } else {
+                    added += 1;
+                }
+            }
+            Err(_) => skipped += 1,
+            _ => {}
+        }
+    }
+    writer.commit().map_err(|e| e.to_string())?;
+    drop(writer);
+    fs::write(
+        dir.join("fiex-meta.json"),
+        serde_json::to_vec(&IndexMeta {
+            version: INDEX_VERSION,
+            root: root.into(),
+            signature: signature.into(),
+        })
+        .map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let reader: IndexReader = index
+        .reader_builder()
+        .reload_policy(ReloadPolicy::Manual)
+        .try_into()
+        .map_err(|e: tantivy::TantivyError| e.to_string())?;
+    reader.reload().map_err(|e| e.to_string())?;
+    let dirty = Arc::new(AtomicBool::new(false));
+    let watcher = watch_root(root, dirty.clone());
+    Ok(IndexHandle {
+        root: root.into(),
+        signature: signature.into(),
+        _index: index,
+        reader,
+        name,
+        path,
+        skipped,
+        dirty,
+        _watcher: watcher,
+    })
+}
+
+fn ensure_index(
+    handle: &mut Option<IndexHandle>,
+    root: &str,
+    hidden: bool,
+    ignores: &[String],
+) -> Result<(), String> {
+    let signature = signature(hidden, ignores);
+    let rebuild = match handle.as_ref() {
+        Some(current) => current.root != root || current.signature != signature,
+        None => true,
+    };
+    if !rebuild && !handle.as_ref().unwrap().dirty.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let dir = index_dir(root, &signature);
+    fs::create_dir_all(dir.parent().ok_or("无效索引目录")?).map_err(|e| e.to_string())?;
+    let opened = if handle.is_some() {
+        // A dirty index is rebuilt from scratch; a different root may reuse its
+        // persisted index if the metadata matches.
+        if handle
+            .as_ref()
+            .is_some_and(|current| current.root == root && current.signature == signature)
+        {
+            None
+        } else {
+            open_index(&dir, root, &signature)
+        }
+    } else {
+        open_index(&dir, root, &signature)
+    };
+    if rebuild {
+        if let Some(opened) = opened {
+            *handle = Some(opened);
+        } else {
+            *handle = Some(build_index(&dir, root, &signature, hidden, ignores)?);
+        }
+    }
+    Ok(())
+}
+
+impl SearchState {
+    pub fn cancel(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn warm(&self, root: &str, hidden: bool, ignores: &[String]) -> Result<(), String> {
+        let mut guard = self.index.lock().unwrap();
+        ensure_index(&mut guard, root, hidden, ignores)
+    }
+
+    pub fn run(
+        &self,
+        root: &str,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        emit: impl Fn(SearchBatch) + Send + Sync,
+    ) -> Result<(), String> {
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let started = Instant::now();
+        let query = query.to_lowercase();
+        let mut guard = self.index.lock().unwrap();
+        ensure_index(&mut guard, root, hidden, ignores)?;
+        let handle = guard.as_ref().ok_or("索引不可用")?;
+        let searcher = handle.reader.searcher();
+        let pattern = format!(".*{}.*", regex::escape(&query));
+        let regex_query =
+            RegexQuery::from_pattern(&pattern, handle.name).map_err(|e| e.to_string())?;
+        let top = searcher
+            .search(
+                &regex_query,
+                &TopDocs::with_limit(RESULT_LIMIT).order_by_score(),
+            )
+            .map_err(|e| e.to_string())?;
+        let mut entries = Vec::new();
+        for (_score, address) in &top {
+            if self.generation.load(Ordering::Relaxed) != generation {
+                return Ok(());
+            }
+            if let Ok(doc) = searcher.doc::<TantivyDocument>(*address) {
+                if let Some(path) = doc.get_first(handle.path).and_then(|value| value.as_str()) {
+                    if let Ok(entry) = entry(Path::new(path)) {
+                        entries.push(entry);
+                    }
+                }
+            }
+        }
+        let truncated = top.len() >= RESULT_LIMIT;
+        emit(SearchBatch {
+            entries,
+            done: true,
+            elapsed_ms: started.elapsed().as_millis(),
+            truncated,
+            skipped: handle.skipped,
+        });
+        Ok(())
+    }
+}
+
 const BUNDLE_EXTENSIONS: [&str; 5] = ["app", "bundle", "framework", "plugin", "xpc"];
 
 fn is_bundle(path: &Path) -> bool {
@@ -19,110 +372,15 @@ fn is_bundle(path: &Path) -> bool {
         })
 }
 
-/// True for entries below a macOS application/framework bundle. The bundle
-/// itself is still returned (so searching /Applications finds "Safari.app"),
-/// but its Contents directory is never traversed.
 fn inside_bundle(path: &Path) -> bool {
     path.ancestors().skip(1).any(is_bundle)
 }
 
-#[derive(Default, Clone)]
-pub struct SearchState(pub Arc<AtomicU64>);
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchBatch {
-    pub entries: Vec<Entry>,
-    pub done: bool,
-    pub elapsed_ms: u128,
-    pub truncated: bool,
-    pub skipped: usize,
-}
-impl SearchState {
-    pub fn cancel(&self) {
-        self.0.fetch_add(1, Ordering::SeqCst);
-    }
-    pub fn run(
-        &self,
-        root: &str,
-        query: &str,
-        hidden: bool,
-        respect_ignore: bool,
-        emit: impl Fn(SearchBatch) + Send + Sync,
-    ) {
-        let generation = self.0.fetch_add(1, Ordering::SeqCst) + 1;
-        let started = Instant::now();
-        let query = query.to_lowercase();
-        let buffer = Mutex::new(Vec::new());
-        let count = AtomicUsize::new(0);
-        let skipped = AtomicUsize::new(0);
-        let threads = std::thread::available_parallelism()
-            .map_or(4, |n| n.get())
-            .clamp(2, 12);
-        WalkBuilder::new(root)
-            .filter_entry(|entry| !inside_bundle(entry.path()))
-            .hidden(!hidden)
-            .ignore(respect_ignore)
-            .git_ignore(respect_ignore)
-            .git_global(respect_ignore)
-            .git_exclude(respect_ignore)
-            .parents(respect_ignore)
-            .follow_links(false)
-            .threads(threads)
-            .build_parallel()
-            .run(|| {
-                Box::new(|item| {
-                    if self.0.load(Ordering::Relaxed) != generation
-                        || count.load(Ordering::Relaxed) >= 10000
-                    {
-                        return WalkState::Quit;
-                    }
-                    match item {
-                        Ok(item)
-                            if item.depth() > 0
-                                && item
-                                    .file_name()
-                                    .to_string_lossy()
-                                    .to_lowercase()
-                                    .contains(&query) =>
-                        {
-                            if let Ok(e) = entry(item.path()) {
-                                let mut buf = buffer.lock().unwrap();
-                                if count.fetch_add(1, Ordering::Relaxed) < 10000 {
-                                    buf.push(e);
-                                }
-                                if buf.len() >= 40 || count.load(Ordering::Relaxed) == 1 {
-                                    emit(SearchBatch {
-                                        entries: std::mem::take(&mut *buf),
-                                        done: false,
-                                        elapsed_ms: started.elapsed().as_millis(),
-                                        truncated: false,
-                                        skipped: skipped.load(Ordering::Relaxed),
-                                    });
-                                }
-                            }
-                        }
-                        Err(_) => {
-                            skipped.fetch_add(1, Ordering::Relaxed);
-                        }
-                        _ => {}
-                    }
-                    WalkState::Continue
-                })
-            });
-        if self.0.load(Ordering::Relaxed) == generation {
-            emit(SearchBatch {
-                entries: std::mem::take(&mut *buffer.lock().unwrap()),
-                done: true,
-                elapsed_ms: started.elapsed().as_millis(),
-                truncated: count.load(Ordering::Relaxed) >= 10000,
-                skipped: skipped.load(Ordering::Relaxed),
-            });
-        }
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
     #[test]
     fn finds_app_bundles_without_entering_them() {
         let t = tempfile::tempdir().unwrap();
@@ -133,38 +391,58 @@ mod tests {
 
         let state = SearchState::default();
         let found = Mutex::new(Vec::new());
-        state.run(
-            t.path().to_str().unwrap(),
-            "needle",
-            false,
-            false,
-            |batch| found.lock().unwrap().extend(batch.entries),
-        );
+        state
+            .run(t.path().to_str().unwrap(), "needle", false, &[], |batch| {
+                found.lock().unwrap().extend(batch.entries)
+            })
+            .unwrap();
         assert_eq!(found.lock().unwrap().len(), 1);
         assert_eq!(found.lock().unwrap()[0].name, "Needle.txt");
 
         let apps = Mutex::new(Vec::new());
-        state.run(
-            t.path().to_str().unwrap(),
-            "safari",
-            false,
-            false,
-            |batch| apps.lock().unwrap().extend(batch.entries),
-        );
+        state
+            .run(t.path().to_str().unwrap(), "safari", false, &[], |batch| {
+                apps.lock().unwrap().extend(batch.entries)
+            })
+            .unwrap();
         let apps = apps.lock().unwrap();
         assert_eq!(apps.len(), 1);
         assert_eq!(apps[0].name, "Safari.app");
         assert!(apps[0].is_dir);
     }
+
     #[test]
     fn finds_hidden_when_requested() {
         let t = tempfile::tempdir().unwrap();
         std::fs::write(t.path().join(".Needle.txt"), "x").unwrap();
         let state = SearchState::default();
         let out = Mutex::new(Vec::new());
-        state.run(t.path().to_str().unwrap(), "needle", true, false, |b| {
-            out.lock().unwrap().extend(b.entries)
-        });
+        state
+            .run(t.path().to_str().unwrap(), "needle", true, &[], |b| {
+                out.lock().unwrap().extend(b.entries)
+            })
+            .unwrap();
         assert_eq!(out.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn display_ignores_filter_results() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir(t.path().join("node_modules")).unwrap();
+        std::fs::write(t.path().join("node_modules").join("Needle.js"), "x").unwrap();
+        std::fs::write(t.path().join("Needle.txt"), "x").unwrap();
+        let state = SearchState::default();
+        let out = Mutex::new(Vec::new());
+        state
+            .run(
+                t.path().to_str().unwrap(),
+                "needle",
+                false,
+                &["node_modules".into()],
+                |b| out.lock().unwrap().extend(b.entries),
+            )
+            .unwrap();
+        assert_eq!(out.lock().unwrap().len(), 1);
+        assert_eq!(out.lock().unwrap()[0].name, "Needle.txt");
     }
 }

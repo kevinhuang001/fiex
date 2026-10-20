@@ -44,6 +44,7 @@ export interface Batch {
 export interface OperationResult {
   paths: string[]
   errors: string[]
+  skipped: number
 }
 export type View = 'list' | 'gallery' | 'columns' | 'icons'
 export type Group = 'none' | 'kind' | 'modified' | 'extension' | 'size'
@@ -54,11 +55,30 @@ export interface Preferences {
   sort: Sort
   descending: boolean
   hidden: boolean
-  respectIgnore: boolean
   terminal: string
   theme: 'system' | 'light' | 'dark'
   fontSize: number
+  displayIgnore: string[]
+  compressIgnore: string[]
+  copyIgnore: string[]
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap
+}
+
+export interface GitStatus {
+  root: string
+  branch: string
+  entries: Record<string, string>
+}
+
+export interface RemoteConnection {
+  id: string
+  name: string
+  kind: 'webdav' | 'smb'
+  mountPath: string
+  host: string
+  url: string
+  share: string
+  base: string
 }

@@ -119,12 +119,12 @@ fn shortcut_target(path: &Path) -> Option<String> {
             .local_base_path_unicode()
             .as_ref()
             .or_else(|| info.local_base_path().as_ref())?;
-        let suffix = info.common_path_suffix_unicode();
-        let suffix = if suffix.is_empty() {
-            info.common_path_suffix().as_str()
-        } else {
-            suffix.as_str()
-        };
+        let suffix = info
+            .common_path_suffix_unicode()
+            .as_ref()
+            .map(String::as_str)
+            .filter(|suffix| !suffix.is_empty())
+            .unwrap_or_else(|| info.common_path_suffix().as_str());
         return Some(format!("{base}{suffix}"));
     }
     link.relative_path().clone()
@@ -191,14 +191,18 @@ pub struct Listing {
     pub entries: Vec<Entry>,
     pub warnings: Vec<String>,
 }
-pub fn list(path: &str, hidden: bool) -> Result<Listing, String> {
+pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, String> {
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
+    let ignore = crate::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
     let mut warnings = Vec::new();
     for item in fs::read_dir(&path).map_err(|e| e.to_string())? {
         match item {
             Ok(item) => {
                 if !hidden && item.file_name().to_string_lossy().starts_with('.') {
+                    continue;
+                }
+                if ignore.is_ignored(std::path::Path::new(&item.file_name())) {
                     continue;
                 }
                 match entry(&item.path()) {

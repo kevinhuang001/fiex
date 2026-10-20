@@ -43,6 +43,24 @@ function clearDropHighlight() {
     .forEach((element) => element.classList.remove('bookmark-drop'))
 }
 
+const GIT_LABELS: Record<string, string> = {
+  M: '已修改',
+  A: '已添加',
+  U: '未跟踪',
+  D: '已删除',
+  R: '已重命名',
+  T: '类型变更',
+}
+
+function GitBadge({ status }: { status?: string }) {
+  if (!status) return null
+  return (
+    <span className={`git-badge git-${status.toLowerCase()}`} title={GIT_LABELS[status] || status}>
+      {status}
+    </span>
+  )
+}
+
 function NameCell({
   explorer,
   entry,
@@ -273,6 +291,7 @@ export function FileViews(props: Props) {
                         <FileIcon entry={item.entry} size={25} />
                         <NameCell explorer={x} entry={item.entry} className="file-label" />
                         <TagDots tags={item.entry.tags} />
+                        <GitBadge status={x.git?.entries[item.entry.path]} />
                         {item.entry.readonly && x.renaming !== item.entry.path && (
                           <small>只读</small>
                         )}
@@ -341,6 +360,7 @@ export function FileViews(props: Props) {
                     </span>
                     <NameCell explorer={x} entry={e} className="tile-label" />
                     <TagDots tags={e.tags} />
+                    <GitBadge status={x.git?.entries[e.path]} />
                   </div>
                 ))}
               </div>
@@ -393,7 +413,11 @@ function Columns({
   const selected = x.entries.find((e) => e.path === x.selected[0])
   useEffect(() => {
     let active = true
-    void call<Listing>('list_directory', { path: parent(x.path), hidden: prefs.hidden })
+    void call<Listing>('list_directory', {
+      path: parent(x.path),
+      hidden: prefs.hidden,
+      ignores: prefs.displayIgnore,
+    })
       .then((l) => {
         if (active) setLeft(l.entries)
       })
@@ -407,7 +431,11 @@ function Columns({
     setRight([])
     setError('')
     if (selected?.isDir)
-      void call<Listing>('list_directory', { path: selected.path, hidden: prefs.hidden })
+      void call<Listing>('list_directory', {
+        path: selected.path,
+        hidden: prefs.hidden,
+        ignores: prefs.displayIgnore,
+      })
         .then((l) => {
           if (active) setRight(l.entries)
         })
@@ -435,6 +463,7 @@ function Columns({
           <FileIcon entry={e} size={24} />
           <NameCell explorer={x} entry={e} className="column-label" />
           <TagDots tags={e.tags} size={6} />
+          <GitBadge status={x.git?.entries[e.path]} />
           {e.isDir && <ChevronRight size={13} />}
         </div>
       ))}

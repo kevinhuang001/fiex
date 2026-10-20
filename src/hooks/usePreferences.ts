@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
 import {
   SHORTCUT_ACTIONS,
   defaultShortcuts,
@@ -15,10 +16,12 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     sort: 'name',
     descending: false,
     hidden: false,
-    respectIgnore: false,
     terminal: 'default',
     theme: 'system',
     fontSize: 11,
+    displayIgnore: defaultDisplayIgnore(),
+    compressIgnore: defaultOperationIgnore(),
+    copyIgnore: defaultOperationIgnore(),
     favorites: [],
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
@@ -53,7 +56,20 @@ function load(): Preferences {
           )
       }
     }
-    return { ...fallback, ...stored, fontSize, shortcutStyle: style, shortcuts }
+    return {
+      ...fallback,
+      ...stored,
+      fontSize,
+      displayIgnore: Array.isArray(stored.displayIgnore)
+        ? stored.displayIgnore
+        : fallback.displayIgnore,
+      compressIgnore: Array.isArray(stored.compressIgnore)
+        ? stored.compressIgnore
+        : fallback.compressIgnore,
+      copyIgnore: Array.isArray(stored.copyIgnore) ? stored.copyIgnore : fallback.copyIgnore,
+      shortcutStyle: style,
+      shortcuts,
+    }
   } catch {
     return fallback
   }

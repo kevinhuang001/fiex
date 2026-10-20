@@ -3,9 +3,11 @@ import {
   Check,
   ExternalLink,
   Eye,
+  Filter,
   Info,
   Keyboard,
   Palette,
+  Plus,
   RotateCcw,
   Scale,
   Search,
@@ -18,6 +20,7 @@ import {
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call } from '@/lib/api'
+import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
 import {
   SHORTCUT_ACTIONS,
   SHORTCUT_GROUPS,
@@ -40,7 +43,7 @@ interface Props {
   onError: (s: string) => void
 }
 
-type SectionId = 'appearance' | 'shortcuts' | 'terminal' | 'about'
+type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'terminal' | 'about'
 
 interface Section {
   id: SectionId
@@ -66,6 +69,13 @@ const sections: Section[] = [
     keywords: ['keyboard', 'shortcut', '快捷键', '按键'],
   },
   {
+    id: 'ignore',
+    label: '忽略',
+    icon: Filter,
+    color: '#f59e0b',
+    keywords: ['ignore', '忽略', 'node_modules', '.ds_store', '压缩', '复制'],
+  },
+  {
     id: 'terminal',
     label: '终端',
     icon: TerminalSquare,
@@ -80,6 +90,70 @@ const sections: Section[] = [
     keywords: ['about', 'version', 'license', '关于', '版本', '许可'],
   },
 ]
+
+function IgnoreEditor({
+  title,
+  patterns,
+  onChange,
+  onReset,
+}: {
+  title: string
+  patterns: string[]
+  onChange: (patterns: string[]) => void
+  onReset: () => void
+}) {
+  const [draft, setDraft] = useState('')
+  const add = () => {
+    const pattern = draft.trim()
+    if (!pattern) return
+    if (!patterns.includes(pattern)) onChange([...patterns, pattern])
+    setDraft('')
+  }
+  return (
+    <div className="settings-card ignore-card">
+      <div className="settings-card-header">
+        <span>
+          {title}
+          <small className="ignore-count">{patterns.length}</small>
+        </span>
+        <button className="settings-reset" onClick={onReset}>
+          <RotateCcw size={11} />
+          恢复预设
+        </button>
+      </div>
+      <div className="ignore-chips">
+        {patterns.map((pattern) => (
+          <span className="ignore-chip" key={pattern}>
+            <code>{pattern}</code>
+            <button
+              aria-label={`删除 ${pattern}`}
+              onClick={() => onChange(patterns.filter((item) => item !== pattern))}
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="ignore-add">
+        <input
+          value={draft}
+          placeholder="添加规则，例如 node_modules 或 build/*"
+          aria-label={`添加${title}规则`}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              add()
+            }
+          }}
+        />
+        <button aria-label={`添加${title}规则`} disabled={!draft.trim()} onClick={add}>
+          <Plus size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export function PreferencesDialog({ open, onClose, prefs, update, terminals, onError }: Props) {
   const [section, setSection] = useState<SectionId>('appearance')
@@ -238,7 +312,7 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
           </nav>
           <div className="settings-sidebar-footer">
             <span>Fiex</span>
-            <span>0.2.2</span>
+            <span>0.2.3</span>
           </div>
         </aside>
 
@@ -415,6 +489,38 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
             </>
           )}
 
+          {section === 'ignore' && (
+            <>
+              {(
+                [
+                  {
+                    key: 'displayIgnore',
+                    title: '显示忽略',
+                    reset: defaultDisplayIgnore,
+                  },
+                  {
+                    key: 'compressIgnore',
+                    title: '压缩忽略',
+                    reset: defaultOperationIgnore,
+                  },
+                  {
+                    key: 'copyIgnore',
+                    title: '复制 / 移动忽略',
+                    reset: defaultOperationIgnore,
+                  },
+                ] as const
+              ).map(({ key, title, reset }) => (
+                <IgnoreEditor
+                  key={key}
+                  title={title}
+                  patterns={prefs[key]}
+                  onChange={(patterns) => update({ [key]: patterns } as Partial<Preferences>)}
+                  onReset={() => update({ [key]: reset() } as Partial<Preferences>)}
+                />
+              ))}
+            </>
+          )}
+
           {section === 'terminal' && (
             <>
               <div className="settings-card">
@@ -466,7 +572,7 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                     </span>
                     版本
                   </div>
-                  <span className="settings-value">0.2.2</span>
+                  <span className="settings-value">0.2.3</span>
                 </div>
                 <button
                   className="settings-row settings-row-button"

@@ -13,21 +13,23 @@ macOS Finder tags appear as colored dots in list, icon and column views. Tags ca
 
 ### Find it quickly
 
-Built-in parallel filename search uses the `ignore` engine from ripgrep. Results stream as they are found. New queries cancel old searches. Entering a folder focuses the search field, so typing immediately searches that location. Hidden files and `.gitignore` filtering are configurable. Application bundles (`.app`, `.framework` and friends) are returned as results but never traversed, so searching `/Applications` finds the app instead of files inside it. The list virtualizes its rows, including search results. Searches are scoped to the current folder and its descendants; there is no persistent whole-disk index.
+Search is backed by a persistent [Tantivy](https://github.com/quickwit-oss/tantivy) index under `~/.fiex/index`. The current folder is indexed in the background as you browse, and changes are picked up by a recursive watcher; queries then read the index instead of walking the filesystem. Search uses the **display-ignore** rules from Settings, so hidden system files stay out of results. Entering a folder focuses the search field. Application bundles (`.app`, `.framework` and friends) are returned as results but never traversed. Searches are scoped to the current folder and its descendants; the index is per folder, not a whole-disk index.
 
 ### Work with your files
 
 Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Renaming happens inline on the item, Finder-style; a new folder is created immediately with a unique name and its name is selected for editing. Drag between Fiex folders to move; hold Option/Alt (or Ctrl) to copy. Drop a folder on the Favorites section to bookmark it. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
 
-Open the selected file or folder in VS Code from the toolbar or the context menu; Tabby is detected alongside the other terminals. The sidebar has one **Applications** entry on every platform. macOS browses `/Applications` directly; Windows and Linux have no equivalent folder, so the entry only opens the platform app list. The **Trash** opens inside Fiex on macOS and Linux, so deleted files can be browsed and moved back without launching Finder. macOS protects `~/.Trash`; if access is denied, Fiex offers to open Full Disk Access settings or Finder.
+If Git is installed, the status bar shows the current branch and number of changes, and changed files carry a status badge; Show Info includes the file's Git state. Open the selected file or folder in VS Code from the toolbar or the context menu; Tabby is detected alongside the other terminals. The sidebar has one **Applications** entry on every platform. macOS browses `/Applications` directly; Windows and Linux have no equivalent folder, so the entry only opens the platform app list. The **Trash** opens inside Fiex on macOS and Linux, so deleted files can be browsed and moved back without launching Finder. macOS protects `~/.Trash`; if access is denied, Fiex offers to open Full Disk Access settings or Finder.
+
+WebDAV (HTTP/HTTPS) and SMB connections appear under **Devices** and live in `~/.fiex/drives`. Adding a connection creates a Google Drive-style virtual folder: directory listings are synchronized into it and remote files appear as placeholders, downloaded on first open. Downloaded files stay available offline, and **Download for offline use** fetches a whole folder. Connections are read-only; closing one from Devices leaves its cache in place. Drives have an eject button, and virtual connections close with the same control.
 
 Press **Space** for Quick Look. Preview images, video, audio, UTF-8 text/code and PDF through the built-in PDF.js renderer. Applications show their native logos. **Open in Terminal** detects installed terminals and lets you choose a default.
 
-ZIP creation and ZIP, 7z, TAR, GZ, BZ2 and XZ extraction are built in; no command-line tools need to be installed. Extraction is staged, rejects links and unsafe paths, and has entry/size limits.
+Compression supports ZIP, 7Z, TAR, TAR.GZ, TAR.BZ2 and TAR.XZ from a context-menu submenu. Extraction covers ZIP, 7z, TAR, GZ, BZ2 and XZ. Everything is built in; no command-line tools are needed. Extraction is staged, rejects links and unsafe paths, and has entry/size limits. Settings has three editable ignore lists: display, compression and copy/move. Display presets hide other-platform metadata such as `.DS_Store`, `Thumbs.db` and `desktop.ini`; compression and copy/move presets also skip build output for JavaScript, Rust, Python, Java, C/C++, Dart, iOS, Go and other common toolchains (`node_modules`, `target`, `__pycache__`, `.gradle`, `Pods`, `vendor` and more).
 
 ### Keyboard
 
-Settings use a System Settings-style window with a searchable category sidebar and grouped cards. The font-size slider scales both labels and icon-view icons. Shortcuts are editable under **Settings → Shortcuts**. Fiex ships with macOS, Windows and Linux presets; picking a style rewrites every binding, and any individual shortcut can be re-recorded. Defaults for the macOS style:
+Settings use a System Settings-style window with a searchable category sidebar and grouped cards. The font-size slider scales both labels and icon-view icons. Finder-style tags are listed in the sidebar; selecting one filters the current folder, and selecting it again clears the filter. Shortcuts are editable under **Settings → Shortcuts**. Fiex ships with macOS, Windows and Linux presets; picking a style rewrites every binding, and any individual shortcut can be re-recorded. Defaults for the macOS style:
 
 | Action                | Shortcut                   |
 | --------------------- | -------------------------- |
@@ -64,14 +66,14 @@ npm run desktop:build
 
 `npm run dev` with `/?demo` runs an isolated UI fixture for browser testing. The desktop app always uses the real Rust filesystem backend.
 
-Modules: `src/components/browser` (views), `src/hooks` (navigation/preferences), `src/lib` (models/IPC), `src-tauri/src/files.rs` (listing/metadata), `operations.rs` (mutations/undo), `search.rs` (parallel search), `archives.rs` (archives), `terminals.rs` (OS integration), `desktop.rs` (Tauri commands).
+Modules: `src/components/browser` (views), `src/hooks` (navigation/preferences), `src/lib` (models/IPC), `src-tauri/src/files.rs` (listing/metadata), `operations.rs` (mutations/undo), `search.rs` (Tantivy index/search), `archives.rs` (archives), `remote.rs` (WebDAV/SMB virtual drives), `ignores.rs` (ignore matching), `git.rs` (Git status), `terminals.rs` (OS integration), `desktop.rs` (Tauri commands).
 
-Native compression codecs are bundled: liblzma is compiled statically instead of linking Homebrew's `xz`, and the release pipeline runs `npm run audit:native` to reject any app binary that still points at `/opt/homebrew`, `/usr/local` or a build-machine path.
+Native codecs and network clients are bundled: liblzma is compiled statically, WebDAV uses rustls instead of system OpenSSL, and SMB is implemented by the pure-Rust `smb` crate. The release pipeline runs `npm run audit:native` to reject any app binary that still points at `/opt/homebrew`, `/usr/local` or a build-machine path. Credentials for remote connections are stored in `~/.fiex/connections.json` with owner-only permissions.
 
 GitHub Actions runs UI workflows, model tests, Rust tests, formatting, Clippy, the native dependency audit and native builds for macOS arm64/x64, Windows x64 and Linux x64. Releases publish only after every check and build passes.
 
 ### First-release scope
 
-Fiex is not yet a complete Finder replacement. RAR/encrypted archives, share mounting, permissions editing, Quick Look plugins and whole-disk indexing are not included. Cross-volume moves currently ask you to copy first; verify the copy before trashing the original. Clipboard and undo are internal to the session. Trash opens in Fiex where the OS allows it, with Finder and Full Disk Access shortcuts when macOS blocks access. Linux blur requires compositor support. Media preview depends on WebView codecs; other types open with the default application. Builds are not signed with commercial code-signing certificates.
+Fiex is not yet a complete Finder replacement. RAR/encrypted archives, OS-level network mounts, permissions editing, Quick Look plugins and whole-disk indexing are not included. WebDAV/SMB are read-only virtual mirrors under `~/.fiex`, not operating-system mounts. Cross-volume moves currently ask you to copy first; verify the copy before trashing the original. Clipboard and undo are internal to the session. Trash opens in Fiex where the OS allows it, with Finder and Full Disk Access shortcuts when macOS blocks access. Linux blur requires compositor support. Media preview depends on WebView codecs; other types open with the default application. Builds are not signed with commercial code-signing certificates.
 
 MIT. See [third-party notices](THIRD-PARTY.md).

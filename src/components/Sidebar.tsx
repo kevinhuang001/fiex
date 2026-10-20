@@ -13,10 +13,13 @@ import {
   X,
   Trash2,
   AppWindow,
+  Server,
+  Unplug,
 } from 'lucide-react'
 import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
+import { TAG_PRESETS } from '@/lib/tags'
 interface Props {
   x: Explorer
   prefs: Preferences
@@ -25,6 +28,9 @@ interface Props {
   control: (action: 'close' | 'minimize' | 'toggleMaximize') => void
   onTrash: () => void
   onApplications: () => void
+  onAddConnection: () => void
+  onRemoveConnection: (id: string) => void
+  onEject: (path: string) => void
   trashPath: string | null
 }
 export function Sidebar({
@@ -35,6 +41,9 @@ export function Sidebar({
   control,
   onTrash,
   onApplications,
+  onAddConnection,
+  onRemoveConnection,
+  onEject,
   trashPath,
 }: Props) {
   const iconFor = (name: string) =>
@@ -125,27 +134,74 @@ export function Sidebar({
             <p className="sidebar-hint">将常用文件夹拖到这里收藏</p>
           )}
         </div>
-        <div className="sidebar-label devices-label">设备</div>
+        <div className="sidebar-label tags-label">标签</div>
+        {TAG_PRESETS.map((tag) => (
+          <button
+            key={tag.name}
+            className={`nav-item tag-nav ${x.tagFilter === tag.name ? 'active' : ''}`}
+            onClick={() => x.setTagFilter(x.tagFilter === tag.name ? null : tag.name)}
+          >
+            <span className="tag-dot" style={{ background: tag.hex }} />
+            <span>{tag.name}</span>
+          </button>
+        ))}
+        <div className="sidebar-section-title devices-title">
+          <span className="sidebar-label">设备</span>
+          <button className="icon-button" title="添加 WebDAV 或 SMB 连接" onClick={onAddConnection}>
+            <Plus size={14} />
+          </button>
+        </div>
         {x.locations
           .filter((l) => l.kind === 'disk')
           .map((l) => (
+            <div className="device-row" key={l.path}>
+              <button
+                className={`nav-item disk-item ${x.path === l.path ? 'active' : ''}`}
+                onClick={() => x.navigate(l.path)}
+              >
+                <HardDrive />
+                <span>
+                  <span>{l.name || l.path}</span>
+                  <small>{size(l.available)} 可用</small>
+                  {l.total > 0 && (
+                    <i>
+                      <i style={{ width: `${(1 - l.available / l.total) * 100}%` }} />
+                    </i>
+                  )}
+                </span>
+              </button>
+              {l.path !== '/' && !/^[A-Za-z]:[\\/]?$/.test(l.path) && (
+                <button
+                  className="device-eject icon-button"
+                  title="弹出设备"
+                  onClick={() => onEject(l.path)}
+                >
+                  <Unplug size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+        {x.connections.map((connection) => (
+          <div className="device-row" key={connection.id}>
             <button
-              className={`nav-item disk-item ${x.path === l.path ? 'active' : ''}`}
-              key={l.path}
-              onClick={() => x.navigate(l.path)}
+              className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath + '/') ? 'active' : ''}`}
+              onClick={() => x.navigate(connection.mountPath)}
             >
-              <HardDrive />
+              <Server />
               <span>
-                <span>{l.name || l.path}</span>
-                <small>{size(l.available)} 可用</small>
-                {l.total > 0 && (
-                  <i>
-                    <i style={{ width: `${(1 - l.available / l.total) * 100}%` }} />
-                  </i>
-                )}
+                <span>{connection.name}</span>
+                <small>{connection.kind === 'webdav' ? 'WebDAV' : 'SMB'}</small>
               </span>
             </button>
-          ))}
+            <button
+              className="device-eject icon-button"
+              title="关闭连接"
+              onClick={() => onRemoveConnection(connection.id)}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        ))}
       </div>
       <div className="sidebar-bottom">
         <button

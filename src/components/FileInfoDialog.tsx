@@ -8,10 +8,12 @@ import { call } from '@/lib/api'
 import type { Entry } from '@/lib/types'
 export function FileInfoDialog({
   info,
+  gitStatus,
   onClose,
   onError,
 }: {
   info: Entry | null
+  gitStatus?: string
   onClose: () => void
   onError: (s: string) => void
 }) {
@@ -38,6 +40,7 @@ export function FileInfoDialog({
               ['权限', info.readonly ? '只读' : '可读写'],
               ['符号链接', info.isSymlink ? '是' : '否'],
               ...(info.linkTarget ? [['链接到', info.linkTarget]] : []),
+              ...(gitStatus ? [['Git', gitStatus]] : []),
             ].map(([k, v]) => (
               <div key={k}>
                 <dt>{k}</dt>

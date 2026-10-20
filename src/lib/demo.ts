@@ -19,6 +19,16 @@ function item(path: string, isDir = false, mime = 'application/octet-stream', by
     tags: [],
   }
 }
+function ignored(name: string, patterns: unknown): boolean {
+  if (!Array.isArray(patterns)) return false
+  return patterns.some((pattern) => {
+    if (typeof pattern !== 'string') return false
+    if (pattern.endsWith('*')) return name.startsWith(pattern.slice(0, -1))
+    if (pattern.startsWith('*.')) return name.endsWith(pattern.slice(1))
+    return name === pattern
+  })
+}
+
 let entries = [
   ...['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Movies'].map((x) =>
     item(join(root, x), true),
@@ -107,6 +117,14 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       return null
     case 'open_in_vscode':
       return null
+    case 'remote_connections':
+      return []
+    case 'git_status':
+      return {
+        root,
+        branch: 'main',
+        entries: { [root + '/Documents/Notes.md']: 'M' },
+      }
     case 'set_tags': {
       const tags = a.tags as { name: string; color: number }[]
       entries = entries.map((entry) =>
@@ -119,7 +137,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         entries: entries.filter(
           (e) =>
             e.path.startsWith(a.root as string) &&
-            e.name.toLowerCase().includes((a.query as string).toLowerCase()),
+            e.name.toLowerCase().includes((a.query as string).toLowerCase()) &&
+            !ignored(e.name, a.ignores),
         ),
         done: true,
         elapsedMs: 12,
@@ -139,9 +158,9 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
     }
     case 'recycle':
       entries = entries.filter((e) => !(a.paths as string[]).includes(e.path))
-      return { paths: a.paths, errors: [] }
+      return { paths: a.paths, errors: [], skipped: 0 }
     case 'transfer':
-      return { paths: [], errors: [] }
+      return { paths: [], errors: [], skipped: 0 }
     default:
       return null
   }

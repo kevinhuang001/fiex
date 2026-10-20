@@ -1,8 +1,9 @@
+use crate::ignores::IgnoreSet;
 use crate::operations::unique;
 use std::{
     fs,
     io::{self, Read, Write},
-    path::{Component, Path, PathBuf},
+    path::{Component, Path},
 };
 const MAX_TOTAL: u64 = 20 * 1024 * 1024 * 1024;
 const MAX_ENTRIES: usize = 100_000;
@@ -146,7 +147,12 @@ pub fn extract(source: &str) -> Result<String, String> {
     fs::rename(root, &dest).map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
 }
-pub fn compress(paths: &[String], destination: &str) -> Result<String, String> {
+pub fn compress(
+    paths: &[String],
+    destination: &str,
+    format: &str,
+    ignores: &[String],
+) -> Result<String, String> {
     if paths.is_empty() {
         return Err("请先选择文件".into());
     }
@@ -154,17 +160,71 @@ pub fn compress(paths: &[String], destination: &str) -> Result<String, String> {
     if fs::symlink_metadata(dest).is_ok() {
         return Err("压缩包已存在".into());
     }
-    let temp = tempfile::NamedTempFile::new_in(dest.parent().ok_or("无效目标")?)
-        .map_err(|e| e.to_string())?;
-    let mut zip = zip::ZipWriter::new(temp.reopen().map_err(|e| e.to_string())?);
+    let parent = dest.parent().ok_or("无效目标")?;
+    for item in paths {
+        let src = Path::new(item);
+        let real = fs::canonicalize(src).map_err(|e| e.to_string())?;
+        let real_parent = fs::canonicalize(parent).map_err(|e| e.to_string())?;
+        if real.is_dir() && real_parent.starts_with(&real) {
+            return Err("压缩包不能创建在选中的文件夹内部".into());
+        }
+    }
+    let ignore = IgnoreSet::new(ignores);
+    let temp = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    match format {
+        "zip" => {
+            let file = temp.reopen().map_err(|e| e.to_string())?;
+            write_zip(file, paths, &ignore)?;
+        }
+        "7z" => {
+            let file = temp.reopen().map_err(|e| e.to_string())?;
+            write_7z(file, paths, &ignore)?;
+        }
+        "tar" => {
+            let file = temp.reopen().map_err(|e| e.to_string())?;
+            write_tar(file, paths, &ignore)?;
+        }
+        "tar.gz" => {
+            let file = temp.reopen().map_err(|e| e.to_string())?;
+            let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+            write_tar(encoder, paths, &ignore)?
+                .finish()
+                .map_err(|e| e.to_string())?;
+        }
+        "tar.bz2" => {
+            let file = temp.reopen().map_err(|e| e.to_string())?;
+            let encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::default());
+            write_tar(encoder, paths, &ignore)?
+                .finish()
+                .map_err(|e| e.to_string())?;
+        }
+        "tar.xz" => {
+            let file = temp.reopen().map_err(|e| e.to_string())?;
+            let encoder = xz2::write::XzEncoder::new(file, 6);
+            write_tar(encoder, paths, &ignore)?
+                .finish()
+                .map_err(|e| e.to_string())?;
+        }
+        _ => return Err("不支持的压缩格式".into()),
+    }
+    temp.persist_noclobber(dest).map_err(|e| e.to_string())?;
+    Ok(destination.into())
+}
+
+fn write_zip(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(), String> {
+    let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
     fn append(
         zip: &mut zip::ZipWriter<fs::File>,
         src: &Path,
-        name: PathBuf,
+        name: &Path,
         options: zip::write::SimpleFileOptions,
+        ignore: &IgnoreSet,
     ) -> Result<(), String> {
+        if ignore.is_ignored(name) {
+            return Ok(());
+        }
         let meta = fs::symlink_metadata(src).map_err(|e| e.to_string())?;
         if meta.file_type().is_symlink() {
             return Err("压缩时不跟随符号链接".into());
@@ -175,7 +235,13 @@ pub fn compress(paths: &[String], destination: &str) -> Result<String, String> {
                 .map_err(|e| e.to_string())?;
             for child in fs::read_dir(src).map_err(|e| e.to_string())? {
                 let child = child.map_err(|e| e.to_string())?;
-                append(zip, &child.path(), name.join(child.file_name()), options)?;
+                append(
+                    zip,
+                    &child.path(),
+                    &name.join(child.file_name()),
+                    options,
+                    ignore,
+                )?;
             }
         } else if meta.is_file() {
             zip.start_file(key, options).map_err(|e| e.to_string())?;
@@ -186,24 +252,104 @@ pub fn compress(paths: &[String], destination: &str) -> Result<String, String> {
         }
         Ok(())
     }
-    for p in paths {
-        let src = Path::new(p);
-        let real = fs::canonicalize(src).map_err(|e| e.to_string())?;
-        let parent = fs::canonicalize(dest.parent().unwrap()).map_err(|e| e.to_string())?;
-        if real.is_dir() && parent.starts_with(&real) {
-            return Err("压缩包不能创建在选中的文件夹内部".into());
-        }
-        append(
-            &mut zip,
-            src,
-            PathBuf::from(src.file_name().ok_or("不能压缩根目录")?),
-            options,
-        )?;
+    for item in paths {
+        let src = Path::new(item);
+        let name = src.file_name().ok_or("不能压缩根目录")?;
+        append(&mut zip, src, Path::new(name), options, ignore)?;
     }
     zip.finish().map_err(|e| e.to_string())?;
-    temp.persist_noclobber(dest).map_err(|e| e.to_string())?;
-    Ok(destination.into())
+    Ok(())
 }
+
+fn write_tar<W: Write>(writer: W, paths: &[String], ignore: &IgnoreSet) -> Result<W, String> {
+    fn append<W: Write>(
+        builder: &mut tar::Builder<W>,
+        src: &Path,
+        name: &Path,
+        ignore: &IgnoreSet,
+    ) -> Result<(), String> {
+        if ignore.is_ignored(name) {
+            return Ok(());
+        }
+        let meta = fs::symlink_metadata(src).map_err(|e| e.to_string())?;
+        if meta.file_type().is_symlink() {
+            return Err("压缩时不跟随符号链接".into());
+        }
+        if meta.is_dir() {
+            builder.append_dir(name, src).map_err(|e| e.to_string())?;
+            for child in fs::read_dir(src).map_err(|e| e.to_string())? {
+                let child = child.map_err(|e| e.to_string())?;
+                append(
+                    builder,
+                    &child.path(),
+                    &name.join(child.file_name()),
+                    ignore,
+                )?;
+            }
+        } else if meta.is_file() {
+            builder
+                .append_path_with_name(src, name)
+                .map_err(|e| e.to_string())?;
+        } else {
+            return Err("不能压缩特殊文件".into());
+        }
+        Ok(())
+    }
+    let mut builder = tar::Builder::new(writer);
+    for item in paths {
+        let src = Path::new(item);
+        let name = src.file_name().ok_or("不能压缩根目录")?;
+        append(&mut builder, src, Path::new(name), ignore)?;
+    }
+    builder.into_inner().map_err(|e| e.to_string())
+}
+
+fn write_7z(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(), String> {
+    use sevenz_rust2::{ArchiveEntry, ArchiveWriter};
+    fn append<W: Write + std::io::Seek>(
+        writer: &mut ArchiveWriter<W>,
+        src: &Path,
+        name: &Path,
+        ignore: &IgnoreSet,
+    ) -> Result<(), String> {
+        if ignore.is_ignored(name) {
+            return Ok(());
+        }
+        let meta = fs::symlink_metadata(src).map_err(|e| e.to_string())?;
+        if meta.file_type().is_symlink() {
+            return Err("压缩时不跟随符号链接".into());
+        }
+        let archive_name = name.to_string_lossy().replace('\\', "/");
+        if meta.is_dir() {
+            writer
+                .push_archive_entry::<fs::File>(ArchiveEntry::from_path(src, archive_name), None)
+                .map_err(|e| e.to_string())?;
+            for child in fs::read_dir(src).map_err(|e| e.to_string())? {
+                let child = child.map_err(|e| e.to_string())?;
+                append(writer, &child.path(), &name.join(child.file_name()), ignore)?;
+            }
+        } else if meta.is_file() {
+            writer
+                .push_archive_entry(
+                    ArchiveEntry::from_path(src, archive_name),
+                    Some(fs::File::open(src).map_err(|e| e.to_string())?),
+                )
+                .map_err(|e| e.to_string())?;
+        } else {
+            return Err("不能压缩特殊文件".into());
+        }
+        Ok(())
+    }
+    let mut writer = ArchiveWriter::new(file).map_err(|e| e.to_string())?;
+    for item in paths {
+        let src = Path::new(item);
+        let name = src.file_name().ok_or("不能压缩根目录")?;
+        append(&mut writer, src, Path::new(name), ignore)?;
+    }
+    writer.finish().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +361,8 @@ mod tests {
         compress(
             &[t.path().join("hello.txt").to_string_lossy().into()],
             zip.to_str().unwrap(),
+            "zip",
+            &[],
         )
         .unwrap();
         let out = extract(zip.to_str().unwrap()).unwrap();
@@ -222,6 +370,34 @@ mod tests {
             fs::read_to_string(Path::new(&out).join("hello.txt")).unwrap(),
             "hello"
         );
+    }
+    #[test]
+    fn archive_formats_and_ignores() {
+        let t = tempfile::tempdir().unwrap();
+        let src = t.path().join("bundle");
+        fs::create_dir_all(src.join("node_modules")).unwrap();
+        fs::write(src.join("keep.txt"), "keep").unwrap();
+        fs::write(src.join("node_modules").join("drop.js"), "drop").unwrap();
+        for (format, ext) in [
+            ("zip", "zip"),
+            ("7z", "7z"),
+            ("tar", "tar"),
+            ("tar.gz", "tar.gz"),
+            ("tar.bz2", "tar.bz2"),
+            ("tar.xz", "tar.xz"),
+        ] {
+            let archive = t.path().join(format!("out.{ext}"));
+            compress(
+                &[src.to_string_lossy().into()],
+                archive.to_str().unwrap(),
+                format,
+                &["node_modules".into()],
+            )
+            .unwrap();
+            let out = extract(archive.to_str().unwrap()).unwrap();
+            assert!(Path::new(&out).join("bundle").join("keep.txt").exists());
+            assert!(!Path::new(&out).join("bundle").join("node_modules").exists());
+        }
     }
     #[test]
     fn traversal_rejected() {

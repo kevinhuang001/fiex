@@ -1,6 +1,7 @@
 use crate::{
-    archives, files,
+    archives, files, git,
     operations::{self, OperationResult, Operations},
+    remote,
     search::{SearchBatch, SearchState},
     terminals,
 };
@@ -8,6 +9,13 @@ use notify::Watcher;
 use std::sync::Mutex;
 use tauri::{ipc::Channel, Emitter, Manager};
 type Watch = Mutex<Option<notify::RecommendedWatcher>>;
+#[tauri::command]
+async fn git_status(path: String) -> Option<git::GitStatus> {
+    tauri::async_runtime::spawn_blocking(move || git::status(&path))
+        .await
+        .ok()
+        .flatten()
+}
 #[tauri::command]
 fn platform() -> &'static str {
     std::env::consts::OS
@@ -17,10 +25,48 @@ fn locations() -> Vec<files::Location> {
     files::locations()
 }
 #[tauri::command]
-async fn list_directory(path: String, hidden: bool) -> Result<files::Listing, String> {
-    tauri::async_runtime::spawn_blocking(move || files::list(&path, hidden))
-        .await
-        .map_err(|e| e.to_string())?
+async fn list_directory(
+    path: String,
+    hidden: bool,
+    ignores: Vec<String>,
+) -> Result<files::Listing, String> {
+    let warning = remote::sync_dir(&path).await.err();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut listing = files::list(&path, hidden, &ignores)?;
+        remote::apply_meta(&mut listing.entries);
+        if let Some(warning) = warning {
+            listing.warnings.push(format!("远程刷新失败：{warning}"));
+        }
+        Ok(listing)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn remote_connections() -> Vec<remote::ConnectionInfo> {
+    remote::list_connections()
+}
+#[tauri::command]
+fn save_remote_connection(
+    input: remote::ConnectionInput,
+) -> Result<remote::ConnectionInfo, String> {
+    remote::save_connection(input)
+}
+#[tauri::command]
+fn remove_remote_connection(id: String) -> Result<(), String> {
+    remote::remove_connection(&id)
+}
+#[tauri::command]
+async fn remote_download(path: String) -> Result<String, String> {
+    remote::download(&path).await
+}
+#[tauri::command]
+async fn remote_download_dir(path: String) -> Result<(), String> {
+    remote::download_dir(&path).await
+}
+#[tauri::command]
+fn eject_device(path: String) -> Result<(), String> {
+    remote::eject(&path)
 }
 #[tauri::command]
 fn file_info(path: String) -> Result<files::Entry, String> {
@@ -56,10 +102,11 @@ async fn transfer(
     destination: String,
     moving: bool,
     keep_both: bool,
+    ignores: Vec<String>,
 ) -> Result<OperationResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<Operations>()
-            .transfer(&paths, &destination, moving, keep_both)
+            .transfer(&paths, &destination, moving, keep_both, &ignores)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -87,18 +134,32 @@ async fn search_files(
     root: String,
     query: String,
     hidden: bool,
-    respect_ignore: bool,
+    ignores: Vec<String>,
     on_batch: Channel<SearchBatch>,
     state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        state.run(&root, &query, hidden, respect_ignore, |b| {
+        state.run(&root, &query, hidden, &ignores, |b| {
             let _ = on_batch.send(b);
         })
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())??;
+    Ok(())
+}
+#[tauri::command]
+async fn warm_index(
+    root: String,
+    hidden: bool,
+    ignores: Vec<String>,
+    state: tauri::State<'_, SearchState>,
+) -> Result<(), String> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.warm(&root, hidden, &ignores))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(())
 }
 #[tauri::command]
 fn cancel_search(state: tauri::State<'_, SearchState>) {
@@ -120,9 +181,11 @@ async fn compress_archive(
     app: tauri::AppHandle,
     paths: Vec<String>,
     destination: String,
+    format: String,
+    ignores: Vec<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let result = archives::compress(&paths, &destination)?;
+        let result = archives::compress(&paths, &destination, &format, &ignores)?;
         app.state::<Operations>()
             .record_created(std::path::PathBuf::from(&result));
         Ok(result)
@@ -139,8 +202,11 @@ fn open_terminal(path: String, id: String) -> Result<(), String> {
     terminals::launch(&path, &id)
 }
 #[tauri::command]
-fn open_path(path: String) -> Result<(), String> {
-    terminals::open_path(&path)
+async fn open_path(path: String) -> Result<(), String> {
+    let path = remote::ensure_downloaded(&path).await?;
+    tauri::async_runtime::spawn_blocking(move || terminals::open_path(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn reveal_path(path: String) -> Result<(), String> {
@@ -220,6 +286,7 @@ pub fn run() {
         .manage(Mutex::new(None::<notify::RecommendedWatcher>))
         .invoke_handler(tauri::generate_handler![
             platform,
+            git_status,
             locations,
             list_directory,
             file_info,
@@ -230,12 +297,19 @@ pub fn run() {
             recycle,
             undo,
             search_files,
+            warm_index,
             cancel_search,
             extract_archive,
             compress_archive,
             detect_terminals,
             open_terminal,
             open_path,
+            remote_connections,
+            save_remote_connection,
+            remove_remote_connection,
+            remote_download,
+            remote_download_dir,
+            eject_device,
             reveal_path,
             trash_path,
             open_applications,

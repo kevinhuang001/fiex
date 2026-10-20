@@ -2,6 +2,7 @@ import { Sidebar } from './components/Sidebar'
 import { PreferencesDialog } from './components/PreferencesDialog'
 import { FileInfoDialog } from './components/FileInfoDialog'
 import { TagDialog } from './components/TagDialog'
+import { ConnectionDialog } from './components/ConnectionDialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -19,6 +20,7 @@ import {
   Folder,
   FolderPlus,
   FolderTree,
+  GitBranch,
   Settings2,
   Grid2X2,
   HardDrive,
@@ -80,6 +82,28 @@ const sortOptions: [Sort, string][] = [
   ['size', '大小'],
   ['kind', '种类'],
 ]
+const archiveFormats = [
+  { id: 'zip', name: 'ZIP', ext: '.zip' },
+  { id: '7z', name: '7Z', ext: '.7z' },
+  { id: 'tar.gz', name: 'TAR.GZ', ext: '.tar.gz' },
+  { id: 'tar', name: 'TAR', ext: '.tar' },
+  { id: 'tar.bz2', name: 'TAR.BZ2', ext: '.tar.bz2' },
+  { id: 'tar.xz', name: 'TAR.XZ', ext: '.tar.xz' },
+] as const
+type ArchiveFormat = (typeof archiveFormats)[number]
+interface ContextAction {
+  label: string
+  icon: ReactNode
+  hint: string
+  action: () => void
+}
+interface ContextSubmenu {
+  label: string
+  icon: ReactNode
+  hint: string
+  submenu: { label: string; action: () => void }[]
+}
+type ContextItem = ContextAction | ContextSubmenu
 interface DialogState {
   title: string
   label?: string
@@ -107,10 +131,12 @@ export default function App() {
   const [trashPath, setTrashPath] = useState<string | null>(null)
   const [trashIssue, setTrashIssue] = useState(false)
   const [tagOpen, setTagOpen] = useState(false)
+  const [connectionOpen, setConnectionOpen] = useState(false)
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
+  const [compressOpen, setCompressOpen] = useState(false)
   const [editingPath, setEditingPath] = useState(false)
   const [pathDraft, setPathDraft] = useState('')
   const [dragging, setDragging] = useState(false)
@@ -166,13 +192,54 @@ export default function App() {
   const handleResult = (result: OperationResult) => {
     if (result.errors.length)
       throw new Error(`${result.paths.length} 项已完成。${result.errors.join('\n')}`)
-    notify(`${result.paths.length} 项操作完成`)
+    notify(
+      result.skipped
+        ? `${result.paths.length} 项操作完成，已按忽略规则跳过 ${result.skipped} 项`
+        : `${result.paths.length} 项操作完成`,
+    )
   }
   const open = (e: Entry) => {
     if (e.isDir && e.extension !== 'app') {
       setPreview(null)
       x.navigate(e.path)
     } else void run('正在打开…', () => call('open_path', { path: e.path }))
+  }
+  const previewEntry = (entry: Entry) => {
+    if (!isRemotePath(entry.path)) {
+      setPreview(entry)
+      return
+    }
+    void run('正在下载…', async () => {
+      await call('remote_download', { path: entry.path })
+      setPreview(entry)
+      x.reload()
+    })
+  }
+  const ejectDevice = (path: string) =>
+    setDialog({
+      title: '弹出设备',
+      description: '确认弹出这个磁盘？',
+      submit: '弹出',
+      danger: true,
+      action: () => call('eject_device', { path }),
+    })
+  const removeConnection = (id: string) => {
+    const connection = x.connections.find((item) => item.id === id)
+    if (!connection) return
+    setDialog({
+      title: '关闭连接',
+      description: `关闭“${connection.name}”？已下载的文件会保留在 ~/.fiex。`,
+      submit: '关闭连接',
+      danger: true,
+      action: async () => {
+        await call('remove_remote_connection', { id })
+        await x.refreshConnections()
+        if (x.path === connection.mountPath || x.path.startsWith(connection.mountPath + '/')) {
+          const home = x.locations.find((location) => location.kind === 'favorite')?.path
+          x.navigate(home || '/')
+        }
+      },
+    })
   }
   const create = async (folder: boolean) => {
     const preferred = folder ? '未命名文件夹' : '未命名.txt'
@@ -193,7 +260,11 @@ export default function App() {
       return
     }
     try {
-      await call('list_directory', { path: trashPath, hidden: prefs.hidden })
+      await call('list_directory', {
+        path: trashPath,
+        hidden: prefs.hidden,
+        ignores: prefs.displayIgnore,
+      })
       setPreview(null)
       x.navigate(trashPath)
     } catch (error) {
@@ -203,8 +274,17 @@ export default function App() {
     }
   }
   const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
-  const displayName = (path: string) =>
-    trashPath && path === trashPath ? '废纸篓' : basename(path)
+  const remoteConnection = (path: string) =>
+    x.connections.find(
+      (connection) => path === connection.mountPath || path.startsWith(connection.mountPath + '/'),
+    )
+  const isRemotePath = (path: string) => Boolean(remoteConnection(path))
+  const displayName = (path: string) => {
+    if (trashPath && path === trashPath) return '废纸篓'
+    const connection = remoteConnection(path)
+    if (connection && path === connection.mountPath) return connection.name
+    return basename(path)
+  }
   const startPathEdit = () => {
     setPathDraft(x.path)
     setEditingPath(true)
@@ -223,6 +303,7 @@ export default function App() {
       const { path } = await call<{ path: string }>('list_directory', {
         path: target,
         hidden: prefs.hidden,
+        ignores: prefs.displayIgnore,
       })
       setEditingPath(false)
       x.navigate(path)
@@ -255,7 +336,13 @@ export default function App() {
       submit: moving ? '移动（保留两者）' : '复制（保留两者）',
       action: async () => {
         handleResult(
-          await call<OperationResult>('transfer', { paths, destination, moving, keepBoth: true }),
+          await call<OperationResult>('transfer', {
+            paths,
+            destination,
+            moving,
+            keepBoth: true,
+            ignores: prefs.copyIgnore,
+          }),
         )
         if (moving) setClipboard(null)
         x.reload()
@@ -276,21 +363,28 @@ export default function App() {
           destination: x.path,
           moving: false,
           keepBoth: true,
+          ignores: prefs.copyIgnore,
         }),
       )
     })
-  const compress = () => {
+  const compress = (format: ArchiveFormat) => {
     if (!first) return
     setDialog({
-      title: '压缩为 ZIP',
+      title: `压缩为 ${format.name}`,
       label: '压缩包名称',
-      value: chosen.length === 1 ? first.name + '.zip' : 'Archive.zip',
+      value: (chosen.length === 1 ? first.name : 'Archive') + format.ext,
       submit: '压缩',
-      description: '内置 ZIP 压缩，支持文件和文件夹。',
-      action: async (name) => {
-        if (!name.toLowerCase().endsWith('.zip') || /[\\/]/.test(name) || name === '..')
-          throw new Error('请输入以 .zip 结尾的文件名')
-        await call('compress_archive', { paths: x.selected, destination: join(x.path, name) })
+      description: '已按设置中的压缩忽略规则过滤。',
+      action: async (value) => {
+        let name = value.trim()
+        if (!name.toLowerCase().endsWith(format.ext)) name += format.ext
+        if (!name || name === '..' || /[\\/]/.test(name)) throw new Error('请输入有效的文件名')
+        await call('compress_archive', {
+          paths: x.selected,
+          destination: join(x.path, name),
+          format: format.id,
+          ignores: prefs.compressIgnore,
+        })
         notify('压缩完成')
         x.reload()
       },
@@ -468,7 +562,7 @@ export default function App() {
           x.up()
           break
         case 'quickLook':
-          if (first && !event.repeat) setPreview(first)
+          if (first && !event.repeat) previewEntry(first)
           break
         case 'rename':
           if (first) x.beginRename(first.path)
@@ -518,7 +612,10 @@ export default function App() {
     }
   }, [x.path])
   useEffect(() => {
-    if (!menu) return
+    if (!menu) {
+      setCompressOpen(false)
+      return
+    }
     const close = () => setMenu(null)
     document.addEventListener('click', close)
     document.addEventListener('keydown', close)
@@ -556,6 +653,9 @@ export default function App() {
         control={control}
         onTrash={openTrash}
         onApplications={openApplications}
+        onAddConnection={() => setConnectionOpen(true)}
+        onRemoveConnection={removeConnection}
+        onEject={ejectDevice}
         trashPath={trashPath}
       />
       <main className="main">
@@ -801,23 +901,6 @@ export default function App() {
           </div>
         </div>
         {demo && <div className="demo-note">界面演示 · 桌面应用连接真实文件系统</div>}
-        {x.query && (
-          <div className="search-scope">
-            <Search size={13} />
-            <span>在“{displayName(x.path)}”及子文件夹中搜索</span>
-            <label>
-              <input
-                type="checkbox"
-                checked={prefs.respectIgnore}
-                onChange={(e) => update({ respectIgnore: e.target.checked })}
-              />
-              遵循 .gitignore
-            </label>
-            <button onClick={() => update({ hidden: !prefs.hidden })}>
-              {prefs.hidden ? '包含隐藏文件' : '不含隐藏文件'}
-            </button>
-          </div>
-        )}
         {x.error && (
           <div className="error-banner" role="alert">
             <Info size={16} />
@@ -843,7 +926,7 @@ export default function App() {
             explorer={x}
             prefs={prefs}
             onOpen={open}
-            onPreview={setPreview}
+            onPreview={previewEntry}
             onMenu={(entry, mx, my) => setMenu({ entry, x: mx, y: my })}
             onDrop={transfer}
             onBookmark={bookmarkPaths}
@@ -871,6 +954,15 @@ export default function App() {
               </>
             )}
           </span>
+          {x.git && (
+            <span className="git-status" title={x.git.root}>
+              <GitBranch size={12} />
+              {x.git.branch}
+              {Object.keys(x.git.entries).length > 0 &&
+                ` · ${Object.keys(x.git.entries).length} 更改`}
+            </span>
+          )}
+          {x.tagFilter && <span>标签：{x.tagFilter}</span>}
           <span>{x.searchStats}</span>
           <div className="toolbar-spacer" />
           {clipboard && (
@@ -895,86 +987,135 @@ export default function App() {
           aria-label="文件操作"
           className="context-menu"
           style={{
-            left: Math.min(menu.x, innerWidth - 220),
+            left: Math.min(menu.x, innerWidth - 360),
             top: Math.max(8, Math.min(menu.y, innerHeight - 380)),
           }}
         >
-          {[
-            {
-              label: '打开',
-              icon: <ExternalLink />,
-              hint: hint('open'),
-              action: () => open(menu.entry),
-            },
-            {
-              label: '快速查看',
-              icon: <Eye />,
-              hint: hint('quickLook'),
-              action: () => setPreview(menu.entry),
-            },
-            {
-              label: '显示简介',
-              icon: <Info />,
-              hint: hint('info'),
-              action: () => setInfo(menu.entry),
-            },
-            ...(platform === 'macos'
-              ? [
-                  {
-                    label: '标签…',
-                    icon: <Tags />,
-                    hint: '',
-                    action: () =>
-                      openTags(
-                        x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
-                      ),
-                  },
-                ]
-              : []),
-            {
-              label: '重新命名',
-              icon: <Pencil />,
-              hint: hint('rename'),
-              action: () => x.beginRename(menu.entry.path),
-            },
-            { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
-            { label: '剪切', icon: <Scissors />, hint: hint('cut'), action: () => copy(true) },
-            { label: '创建副本', icon: <Copy />, hint: hint('duplicate'), action: duplicate },
-            { label: '压缩为 ZIP', icon: <Archive />, hint: '', action: compress },
-            ...(isArchive(menu.entry)
-              ? [{ label: '解压缩', icon: <Archive />, hint: '', action: extract }]
-              : []),
-            {
-              label: 'Open in Terminal',
-              icon: <TerminalSquare />,
-              hint: '',
-              action: () => terminal(),
-            },
-            {
-              label: '复制路径',
-              icon: <Copy />,
-              hint: '',
-              action: () =>
-                void navigator.clipboard
-                  .writeText(menu.entry.path)
-                  .then(() => notify('路径已复制'))
-                  .catch((e) => x.setError(String(e))),
-            },
-            { label: '移到废纸篓', icon: <Trash2 />, hint: hint('trash'), action: recycle },
-          ].map((a) => (
-            <button
-              role="menuitem"
-              key={a.label}
-              onClick={() => {
-                a.action()
-                setMenu(null)
-              }}
-            >
-              {a.icon}
-              {a.label}
-              {a.hint && <span className="shortcut">{a.hint}</span>}
-            </button>
-          ))}
+          {(
+            [
+              {
+                label: '打开',
+                icon: <ExternalLink />,
+                hint: hint('open'),
+                action: () => open(menu.entry),
+              },
+              {
+                label: '快速查看',
+                icon: <Eye />,
+                hint: hint('quickLook'),
+                action: () => previewEntry(menu.entry),
+              },
+              {
+                label: '显示简介',
+                icon: <Info />,
+                hint: hint('info'),
+                action: () => setInfo(menu.entry),
+              },
+              ...(platform === 'macos'
+                ? [
+                    {
+                      label: '标签…',
+                      icon: <Tags />,
+                      hint: '',
+                      action: () =>
+                        openTags(
+                          x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
+                        ),
+                    },
+                  ]
+                : []),
+              {
+                label: '重新命名',
+                icon: <Pencil />,
+                hint: hint('rename'),
+                action: () => x.beginRename(menu.entry.path),
+              },
+              { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
+              { label: '剪切', icon: <Scissors />, hint: hint('cut'), action: () => copy(true) },
+              { label: '创建副本', icon: <Copy />, hint: hint('duplicate'), action: duplicate },
+              {
+                label: '压缩为…',
+                icon: <Archive />,
+                hint: '',
+                submenu: archiveFormats.map((format) => ({
+                  label: format.name,
+                  action: () => compress(format),
+                })),
+              },
+              ...(isArchive(menu.entry)
+                ? [{ label: '解压缩', icon: <Archive />, hint: '', action: extract }]
+                : []),
+              {
+                label: 'Open in Terminal',
+                icon: <TerminalSquare />,
+                hint: '',
+                action: () => terminal(),
+              },
+              {
+                label: '复制路径',
+                icon: <Copy />,
+                hint: '',
+                action: () =>
+                  void navigator.clipboard
+                    .writeText(menu.entry.path)
+                    .then(() => notify('路径已复制'))
+                    .catch((e) => x.setError(String(e))),
+              },
+              { label: '移到废纸篓', icon: <Trash2 />, hint: hint('trash'), action: recycle },
+            ] as ContextItem[]
+          ).map((a) =>
+            'submenu' in a ? (
+              <div
+                className="context-submenu-wrap"
+                key={a.label}
+                onMouseEnter={() => setCompressOpen(true)}
+                onMouseLeave={() => setCompressOpen(false)}
+              >
+                <button
+                  role="menuitem"
+                  aria-haspopup="menu"
+                  aria-expanded={compressOpen}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setCompressOpen((value) => !value)
+                  }}
+                >
+                  {a.icon}
+                  {a.label}
+                  <ChevronRight className="submenu-arrow" size={13} />
+                </button>
+                {compressOpen && (
+                  <div className="context-submenu" role="menu">
+                    {a.submenu.map((item) => (
+                      <button
+                        role="menuitem"
+                        key={item.label}
+                        onClick={() => {
+                          item.action()
+                          setMenu(null)
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                role="menuitem"
+                key={a.label}
+                onClick={() => {
+                  a.action()
+                  setMenu(null)
+                }}
+              >
+                {a.icon}
+                {a.label}
+                {a.hint && <span className="shortcut">{a.hint}</span>}
+              </button>
+            ),
+          )}
         </div>
       )}
       <Preview
@@ -1074,12 +1215,27 @@ export default function App() {
           </Button>
         </div>
       </Modal>
-      <FileInfoDialog info={info} onClose={() => setInfo(null)} onError={x.setError} />
+      <FileInfoDialog
+        info={info}
+        gitStatus={info ? x.git?.entries[info.path] : undefined}
+        onClose={() => setInfo(null)}
+        onError={x.setError}
+      />
       <TagDialog
         open={tagOpen}
         initial={tagInitial}
         onClose={() => setTagOpen(false)}
         onApply={applyTags}
+      />
+      <ConnectionDialog
+        open={connectionOpen}
+        onClose={() => setConnectionOpen(false)}
+        onSaved={(connection) => {
+          setConnectionOpen(false)
+          void x.refreshConnections()
+          x.navigate(connection.mountPath)
+          notify(`已连接 ${connection.name}`)
+        }}
       />
       <PreferencesDialog
         open={settings}

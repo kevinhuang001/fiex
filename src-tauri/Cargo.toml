@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.2.2"
+version = "0.2.3"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -30,6 +30,15 @@ serde_json = "1"
 dirs = "6"
 dunce = "1"
 ignore = "0.4"
+globset = "0.4"
+tantivy = "0.27"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+quick-xml = "0.37"
+urlencoding = "2"
+httpdate = "1"
+smb = "0.12"
+futures-util = "0.3"
 notify = "8"
 trash = "5"
 open = "5"
