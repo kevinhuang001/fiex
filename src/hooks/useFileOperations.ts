@@ -2,7 +2,13 @@ import { call } from '@/lib/api'
 import type { ArchiveFormat } from '@/lib/archives'
 import type { DialogState } from '@/lib/dialogs'
 import { basename, join, uniqueName } from '@/lib/files'
-import type { Entry, OperationResult, Preferences } from '@/lib/types'
+import type {
+  Entry,
+  OperationResult,
+  Preferences,
+  TransferConflict,
+  ConflictResolution,
+} from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 import { useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
@@ -25,6 +31,12 @@ export function useFileOperations({
   first: Entry | undefined
 }) {
   const [busy, setBusy] = useState('')
+  const [conflict, setConflict] = useState<{
+    paths: string[]
+    destination: string
+    moving: boolean
+    items: TransferConflict[]
+  } | null>(null)
   const running = useRef(false)
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
   const run = async <T>(label: string, fn: () => Promise<T>): Promise<T | undefined> => {
@@ -49,7 +61,7 @@ export function useFileOperations({
       throw new Error(`${result.paths.length} 项已完成。${result.errors.join('\n')}`)
     notify(
       result.skipped
-        ? `${result.paths.length} 项操作完成，已按忽略规则跳过 ${result.skipped} 项`
+        ? `${result.paths.length} 项操作完成，已跳过 ${result.skipped} 项`
         : `${result.paths.length} 项操作完成`,
     )
   }
@@ -82,39 +94,53 @@ export function useFileOperations({
     }
     setDialog({
       title: `将 ${paths.length} 个项目移到废纸篓？`,
-      description: '项目将移入系统废纸篓，可在系统文件管理器中恢复。',
       submit: '移到废纸篓',
       danger: true,
       action: () => moveToTrash(paths),
     })
   }
+  const executeTransfer = async (
+    paths: string[],
+    destination: string,
+    moving: boolean,
+    resolutions: ConflictResolution[] = [],
+  ) => {
+    const result = await run(moving ? '正在移动…' : '正在复制…', () =>
+      call<OperationResult>('transfer', {
+        paths,
+        destination,
+        moving,
+        keepBoth: false,
+        ignores: prefs.copyIgnore,
+        resolutions,
+      }),
+    )
+    if (!result) return
+    if (result.conflicts?.length) {
+      setConflict({ paths, destination, moving, items: result.conflicts })
+      return
+    }
+    setConflict(null)
+    if (moving) setClipboard(null)
+    try {
+      handleResult(result)
+    } catch (error) {
+      x.setError(String(error))
+    }
+  }
   const transfer = (paths: string[], destination: string, moving: boolean) => {
-    if (!writable()) return
-    if (!paths.length) return
-    setDialog({
-      title: moving ? '移动项目' : '复制项目',
-      description: `${paths.length} 个项目 → ${destination}\n遇到同名项目时自动保留两者，不替换已有文件。`,
-      submit: moving ? '移动（保留两者）' : '复制（保留两者）',
-      action: async () => {
-        handleResult(
-          await call<OperationResult>('transfer', {
-            paths,
-            destination,
-            moving,
-            keepBoth: true,
-            ignores: prefs.copyIgnore,
-          }),
-        )
-        if (moving) setClipboard(null)
-        x.reload()
-      },
-    })
+    if (!writable() || !paths.length || conflict) return
+    void executeTransfer(paths, destination, moving)
+  }
+  const resolveConflict = async (resolutions: ConflictResolution[]) => {
+    if (conflict)
+      await executeTransfer(conflict.paths, conflict.destination, conflict.moving, resolutions)
   }
   const copy = (moving: boolean) => {
     if (moving && !writable()) return
     if (x.selected.length) {
       setClipboard({ paths: [...x.selected], moving })
-      notify(moving ? '已剪切，选择目标文件夹后粘贴' : '已复制，选择目标文件夹后粘贴')
+      notify(moving ? '已剪切' : '已复制')
     }
   }
   const duplicate = () => {
@@ -139,7 +165,6 @@ export function useFileOperations({
       label: '压缩包名称',
       value: (chosen.length === 1 ? first.name : 'Archive') + format.ext,
       submit: '压缩',
-      description: '已按设置中的压缩忽略规则过滤。',
       action: async (value) => {
         let name = value.trim()
         if (!name.toLowerCase().endsWith(format.ext)) name += format.ext
@@ -172,6 +197,9 @@ export function useFileOperations({
   }
   return {
     busy,
+    conflict,
+    setConflict,
+    resolveConflict,
     clipboard,
     setClipboard,
     run,

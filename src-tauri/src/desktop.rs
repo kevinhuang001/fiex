@@ -1,14 +1,142 @@
 use crate::{
-    archives, files, git, git_history,
+    archives,
+    drag_session::{DragSessions, DropPlan},
+    files, git, git_history, git_remote,
     operations::{self, OperationResult, Operations},
     remote,
     search::{SearchBatch, SearchState},
-    tags, terminals, volumes,
+    tags, terminals,
+    transfers::Resolution,
+    volumes,
 };
 use notify::Watcher;
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 use tauri::{ipc::Channel, Emitter, Manager};
-type Watch = Mutex<Option<notify::RecommendedWatcher>>;
+type Watch = Mutex<HashMap<String, notify::RecommendedWatcher>>;
+#[derive(Default)]
+struct WindowPaths(Mutex<HashMap<String, String>>);
+#[tauri::command]
+fn ci_reply(app: tauri::AppHandle, id: u64, value: String) {
+    #[cfg(feature = "ci-driver")]
+    crate::ci_driver::reply(&app, id, value);
+    #[cfg(not(feature = "ci-driver"))]
+    let _ = (app, id, value);
+}
+#[tauri::command]
+async fn register_drag(
+    window: tauri::Window,
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    copy_requested: bool,
+) -> Result<Vec<String>, String> {
+    let mut moving = !copy_requested && !paths.iter().any(|p| remote::is_remote(p));
+    for path in &paths {
+        if remote::is_remote(path) {
+            if std::path::Path::new(path).is_dir() {
+                remote::download_dir(path).await?;
+            } else {
+                remote::ensure_downloaded(path).await?;
+            }
+        }
+    }
+    let label = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut exported = Vec::new();
+        for path in &paths {
+            if let Some(route) = crate::usbfs::route(path) {
+                let entry = crate::usbfs::entry(&route)?;
+                if entry.is_dir {
+                    return Err("虚拟卷文件夹请使用复制和粘贴".into());
+                }
+                moving &= !entry.readonly;
+                exported.push(crate::usbfs::open_cached(&route)?);
+            } else {
+                exported.push(path.clone());
+            }
+        }
+        app.state::<DragSessions>()
+            .begin(&label, &paths, &exported, moving)?;
+        Ok(exported)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn finish_drag(window: tauri::Window, state: tauri::State<DragSessions>) {
+    state.end(window.label());
+}
+#[tauri::command]
+async fn internal_drop(app: tauri::AppHandle, paths: Vec<String>) -> Result<DropPlan, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<DragSessions>()
+            .take_internal(&paths)
+            .unwrap_or(DropPlan {
+                paths,
+                moving: false,
+            })
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn initial_path(window: tauri::Window, paths: tauri::State<WindowPaths>) -> Option<String> {
+    paths
+        .0
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .cloned()
+        .or_else(|| {
+            std::env::args()
+                .nth(1)
+                .filter(|p| std::path::Path::new(p).is_dir())
+        })
+}
+#[tauri::command]
+async fn new_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(1);
+    let mut config = app.config().app.windows[0].clone();
+    config.label = format!("explorer-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+    config.title = format!(
+        "Fiex · {}",
+        std::path::Path::new(&path)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+    );
+    app.state::<WindowPaths>()
+        .0
+        .lock()
+        .unwrap()
+        .insert(config.label.clone(), path);
+    let window = tauri::WebviewWindowBuilder::from_config(&app, &config)
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    super::macos_material::configure(&window);
+    let _ = window;
+    Ok(())
+}
+#[tauri::command]
+async fn git_remote_status(root: String) -> Result<git_remote::RemoteStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git_remote::status(&root))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_remote_save(root: String, name: String, url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git_remote::save(&root, &name, &url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_sync(root: String, remote: String, push: bool) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git_remote::sync(&root, &remote, push))
+        .await
+        .map_err(|e| e.to_string())?
+}
 #[tauri::command]
 async fn drag_files(
     window: tauri::Window,
@@ -116,8 +244,20 @@ async fn list_directory(
     if let Some(route) = crate::usbfs::route(&path) {
         let listing_path = path.clone();
         return tauri::async_runtime::spawn_blocking(move || {
-            let entries = crate::usbfs::listing(&route)?;
+            let mut entries = crate::usbfs::listing(&route)?;
+            let filter = crate::ignores::IgnoreSet::new(&ignores);
+            entries.retain(|entry| {
+                (hidden || !entry.name.starts_with('.'))
+                    && !filter.is_ignored(std::path::Path::new(&entry.name))
+            });
             Ok(files::Listing {
+                read_only: matches!(
+                    route.kind,
+                    crate::usbfs::FsKind::Apfs
+                        | crate::usbfs::FsKind::Hfs
+                        | crate::usbfs::FsKind::Btrfs
+                ),
+                virtual_volume: true,
                 path: listing_path,
                 entries,
                 warnings: vec![],
@@ -129,6 +269,7 @@ async fn list_directory(
     let warning = remote::sync_dir(&path).await.err();
     tauri::async_runtime::spawn_blocking(move || {
         let mut listing = files::list(&path, hidden, &ignores)?;
+        listing.read_only = remote::is_remote(&path);
         remote::apply_meta(&mut listing.entries);
         if let Some(warning) = warning {
             listing
@@ -281,82 +422,61 @@ async fn transfer(
     moving: bool,
     keep_both: bool,
     ignores: Vec<String>,
+    resolutions: Option<Vec<Resolution>>,
 ) -> Result<OperationResult, String> {
-    if let Some(route) = crate::usbfs::route(&destination) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let mut result = OperationResult {
-                paths: vec![],
-                errors: vec![],
-                skipped: 0,
-            };
-            for source in &paths {
-                if crate::usbfs::route(source).is_some() {
-                    result
-                        .errors
-                        .push(format!("{source}: 暂不支持从 U 盘虚拟卷复制"));
-                    continue;
-                }
-                match crate::usbfs::copy_local_into(
-                    &route,
-                    std::path::Path::new(source),
-                    keep_both,
-                    moving,
-                ) {
-                    Ok(path) => result.paths.push(path),
-                    Err(error) => result.errors.push(format!("{source}: {error}")),
-                }
+    if remote::is_remote(&destination) {
+        return Err("远程连接只读".into());
+    }
+    for source in &paths {
+        if remote::is_remote(source) {
+            if moving {
+                return Err("远程连接只读，请复制文件".into());
             }
-            Ok(result)
+            if std::path::Path::new(source).is_dir() {
+                remote::download_dir(source).await?;
+            } else {
+                remote::ensure_downloaded(source).await?;
+            }
+        }
+    }
+    if crate::usbfs::route(&destination).is_some()
+        || paths.iter().any(|p| crate::usbfs::route(p).is_some())
+    {
+        let events = app.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            crate::virtual_transfers::transfer(
+                &paths,
+                &destination,
+                moving,
+                keep_both,
+                &ignores,
+                &resolutions.unwrap_or_default(),
+            )
         })
         .await
         .map_err(|e| e.to_string())?;
+        if result.as_ref().is_ok_and(|r| !r.paths.is_empty()) {
+            let _ = events.emit("directory-changed", ());
+        }
+        return result;
     }
-    if paths.iter().any(|path| crate::usbfs::route(path).is_some()) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let mut result = OperationResult {
-                paths: vec![],
-                errors: vec![],
-                skipped: 0,
-            };
-            for source in &paths {
-                if let Some(route) = crate::usbfs::route(source) {
-                    match crate::usbfs::copy_to_local(
-                        &route,
-                        std::path::Path::new(&destination),
-                        keep_both,
-                        moving,
-                    ) {
-                        Ok(path) => result.paths.push(path),
-                        Err(error) => result.errors.push(format!("{source}: {error}")),
-                    }
-                } else {
-                    match app.state::<Operations>().transfer(
-                        std::slice::from_ref(source),
-                        &destination,
-                        moving,
-                        keep_both,
-                        &ignores,
-                    ) {
-                        Ok(mut single) => {
-                            result.paths.append(&mut single.paths);
-                            result.errors.append(&mut single.errors);
-                            result.skipped += single.skipped;
-                        }
-                        Err(error) => result.errors.push(format!("{source}: {error}")),
-                    }
-                }
-            }
-            Ok(result)
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        app.state::<Operations>()
-            .transfer(&paths, &destination, moving, keep_both, &ignores)
+    let events = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        app.state::<Operations>().transfer_resolved(
+            &paths,
+            &destination,
+            moving,
+            keep_both,
+            &ignores,
+            &resolutions.unwrap_or_default(),
+        )
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    if result.as_ref().is_ok_and(|r| !r.paths.is_empty()) {
+        let _ = events.emit("directory-changed", ());
+    }
+    result
 }
 #[tauri::command]
 async fn recycle(app: tauri::AppHandle, paths: Vec<String>) -> Result<OperationResult, String> {
@@ -365,6 +485,7 @@ async fn recycle(app: tauri::AppHandle, paths: Vec<String>) -> Result<OperationR
             paths: vec![],
             errors: vec![],
             skipped: 0,
+            conflicts: vec![],
         };
         for path in paths {
             if let Some(route) = crate::usbfs::route(&path) {
@@ -568,6 +689,7 @@ fn open_trash() -> Result<(), String> {
 }
 #[tauri::command]
 fn watch_directory(
+    window: tauri::Window,
     app: tauri::AppHandle,
     path: String,
     state: tauri::State<'_, Watch>,
@@ -587,7 +709,10 @@ fn watch_directory(
             notify::RecursiveMode::NonRecursive,
         )
         .map_err(|e| e.to_string())?;
-    *state.lock().unwrap() = Some(watcher);
+    state
+        .lock()
+        .unwrap()
+        .insert(window.label().to_string(), watcher);
     Ok(())
 }
 // Synchronous Tauri commands execute on the main thread, as required by GTK's icon provider.
@@ -614,9 +739,20 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init())
         .manage(Operations::default())
         .manage(SearchState::default())
-        .manage(Mutex::new(None::<notify::RecommendedWatcher>))
+        .manage(Watch::default())
+        .manage(WindowPaths::default())
+        .manage(DragSessions::default())
         .invoke_handler(tauri::generate_handler![
             platform,
+            ci_reply,
+            register_drag,
+            finish_drag,
+            internal_drop,
+            initial_path,
+            new_window,
+            git_remote_status,
+            git_remote_save,
+            git_sync,
             drag_files,
             git_init,
             git_stage,
@@ -667,7 +803,25 @@ pub fn run() {
             watch_directory,
             native_icon
         ])
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window
+                    .state::<Watch>()
+                    .lock()
+                    .unwrap()
+                    .remove(window.label());
+                window
+                    .state::<WindowPaths>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .remove(window.label());
+                window.state::<DragSessions>().end(window.label());
+            }
+        })
         .setup(|app| {
+            #[cfg(feature = "ci-driver")]
+            crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
                 super::macos_material::configure(&window);

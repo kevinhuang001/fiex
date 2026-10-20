@@ -126,7 +126,7 @@ export function Preview({
               <div className="preview-fallback">
                 <FileIcon entry={entry} size={120} />
                 <h3>{entry.name}</h3>
-                <p>{kind(entry)} · 使用默认应用查看</p>
+                <p>{kind(entry)}</p>
               </div>
             )}
           </div>

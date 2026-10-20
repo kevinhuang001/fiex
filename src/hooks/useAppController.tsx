@@ -45,8 +45,8 @@ export function useAppController() {
   const notify = useCallback((s: string) => setToast(s), [])
   const gitSwitched = x.path.startsWith('history://')
   useEffect(() => {
-    x.setReadOnly(gitSwitched)
-  }, [gitSwitched])
+    x.setReadOnly(gitSwitched || x.directoryReadOnly)
+  }, [gitSwitched, x.directoryReadOnly])
   const viewRevision = async (reference: string) => {
     if (!x.git) return
     const path = await call<string>('git_browse', { root: x.git.root, reference })
@@ -59,7 +59,11 @@ export function useAppController() {
     if (path) x.navigate(path)
   }
   const writable = () => {
-    if (!gitSwitched) return true
+    if (!gitSwitched && !x.directoryReadOnly) return true
+    if (x.directoryReadOnly && !gitSwitched) {
+      x.setError('此文件系统只读')
+      return false
+    }
     x.setError('历史版本只读，请返回工作区后再修改')
     return false
   }
@@ -82,6 +86,9 @@ export function useAppController() {
 
   const {
     busy,
+    conflict,
+    setConflict,
+    resolveConflict,
     clipboard,
     setClipboard,
     run,
@@ -121,7 +128,6 @@ export function useAppController() {
   const ejectDevice = (path: string) =>
     setDialog({
       title: '弹出设备',
-      description: '确认弹出这个磁盘？',
       submit: '弹出',
       danger: true,
       action: () => call('eject_device', { path }),
@@ -137,7 +143,6 @@ export function useAppController() {
   const ejectUsb = (device: string) =>
     setDialog({
       title: '弹出 U 盘',
-      description: '确认弹出这个 U 盘？请先等待写入完成。',
       submit: '弹出',
       danger: true,
       action: async () => {
@@ -154,8 +159,7 @@ export function useAppController() {
     const connection = x.connections.find((item) => item.id === id)
     if (!connection) return
     setDialog({
-      title: '关闭连接',
-      description: `关闭“${connection.name}”？已下载的文件会保留在 ~/.fiex。`,
+      title: `关闭“${connection.name}”？`,
       submit: '关闭连接',
       danger: true,
       action: async () => {
@@ -332,7 +336,7 @@ export function useAppController() {
   useExplorerShortcuts({
     shortcuts: prefs.shortcuts,
     blocked: Boolean(
-      dialog || settings || preview || info || tagOpen || connectionOpen || trashIssue,
+      dialog || conflict || settings || preview || info || tagOpen || connectionOpen || trashIssue,
     ),
     handlers: {
       settings: () => setSettings(true),
@@ -391,7 +395,20 @@ export function useAppController() {
           setDragging(false)
         } else if (event.payload.type === 'drop') {
           setDragging(false)
-          transfer(event.payload.paths, x.path, false)
+          const { paths, position } = event.payload
+          void (async () => {
+            const drop = await call<{ paths: string[]; moving: boolean }>('internal_drop', {
+              paths,
+            })
+            const scale = await getCurrentWindow().scaleFactor()
+            const element = document.elementFromPoint(position.x / scale, position.y / scale)
+            if (element?.closest('[data-bookmark-drop]')) {
+              await bookmarkPaths(drop.paths)
+              return
+            }
+            const folder = element?.closest<HTMLElement>('[data-drop-folder]')?.dataset.dropFolder
+            transfer(drop.paths, folder || x.path, drop.moving)
+          })().catch((error) => x.setError(String(error)))
         }
       })
       .then((fn) => {
@@ -402,7 +419,7 @@ export function useAppController() {
       active = false
       dispose?.()
     }
-  }, [x.path])
+  }, [x.path, prefs.copyIgnore, conflict, x.directoryReadOnly])
   useEffect(() => {
     if (!menu) {
       setCompressOpen(false)
@@ -451,6 +468,8 @@ export function useAppController() {
     openIde,
     terminal,
     setSettings,
+    newWindow: () =>
+      void call('new_window', { path: x.path }).catch((error) => x.setError(String(error))),
     startPathEdit,
     editingPath,
     submitPath,
@@ -466,6 +485,9 @@ export function useAppController() {
     transfer,
     bookmarkPaths,
     busy,
+    conflict,
+    setConflict,
+    resolveConflict,
     chosen,
     clipboard,
     setClipboard,

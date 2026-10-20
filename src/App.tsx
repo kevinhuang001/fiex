@@ -8,7 +8,7 @@ import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { GitPanel } from '@/components/GitPanel'
 import { Sidebar } from '@/components/Sidebar'
 import { useAppController } from '@/hooks/useAppController'
-import { call, demo } from '@/lib/api'
+import { call } from '@/lib/api'
 import { parent } from '@/lib/files'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
 import type { CSSProperties } from 'react'
@@ -46,7 +46,6 @@ export default function App() {
             <button onClick={app.returnToWorktree}>返回工作区</button>
           </div>
         )}
-        {demo && <div className="demo-note">界面演示 · 桌面应用连接真实文件系统</div>}
         {app.x.error && (
           <div className="error-banner" role="alert">
             <Info size={16} />
@@ -97,7 +96,7 @@ export default function App() {
           git={app.x.git}
           path={app.x.path}
           loading={app.x.gitLoading}
-          allowInit={!app.isRemotePath(app.x.path) && !app.x.path.startsWith('usbfs://')}
+          allowInit={!app.isRemotePath(app.x.path) && !app.x.virtualVolume}
           onClose={() => app.setGitOpen(false)}
           onRefresh={app.x.refreshGit}
           onViewRevision={app.viewRevision}

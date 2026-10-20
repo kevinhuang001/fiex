@@ -26,13 +26,7 @@ export function CommitPicker({
     `${c.id} ${c.subject} ${c.author} ${c.refs}`.toLocaleLowerCase().includes(search),
   )
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="选择 commit"
-      description="所有分支 · 按提交时间从新到旧 · 历史版本只读"
-      className="git-picker-modal"
-    >
+    <Modal open={open} onClose={onClose} title="选择 commit" className="git-picker-modal">
       <label className="git-commit-search">
         <Search size={15} />
         <input

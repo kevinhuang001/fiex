@@ -530,3 +530,44 @@
   box-shadow: none;
   opacity: 1;
 }
+.git-remote {
+  margin: 2px 16px 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.git-remote-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.git-remote-heading > .git-remote-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+}
+.git-remote-heading button > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.git-remote-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.git-remote > button {
+  width: 100%;
+}
+.git-remote .button {
+  font-size: 12px;
+  min-height: 32px;
+}
+.git-remote-modal input {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}

@@ -111,13 +111,14 @@ pub fn refs(root: &str) -> Result<GitRefs, String> {
     })
 }
 
-fn run(root: &Path, args: &[&str]) -> Result<String, String> {
+pub(crate) fn run(root: &Path, args: &[&str]) -> Result<String, String> {
     let out = Command::new("git")
         .arg("--literal-pathspecs")
         .arg("-C")
         .arg(root)
         .args(args)
         .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "Never")
         .output()
         .map_err(|error| format!("无法运行 Git，请确认已安装 Git：{error}"))?;
     if out.status.success() {
@@ -144,7 +145,7 @@ pub fn init(path: &str) -> Result<GitStatus, String> {
     status(&path.to_string_lossy()).ok_or_else(|| "仓库已创建，但无法读取状态".into())
 }
 
-fn repository(root: &str) -> Result<std::path::PathBuf, String> {
+pub(crate) fn repository(root: &str) -> Result<std::path::PathBuf, String> {
     let root = dunce::canonicalize(root).map_err(|error| error.to_string())?;
     let found = run(&root, &["rev-parse", "--show-toplevel"])?;
     dunce::canonicalize(found).map_err(|error| error.to_string())

@@ -181,6 +181,8 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         });
     }
     Ok(Listing {
+        read_only: true,
+        virtual_volume: false,
         path: path.into(),
         entries,
         warnings: vec![],

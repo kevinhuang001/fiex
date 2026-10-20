@@ -3,10 +3,9 @@ let window
 app.disableHardwareAcceleration()
 app.whenReady().then(() => {
   window = new BrowserWindow({
-    width: 500,
-    height: 850,
-    x: 1200,
-    y: 0,
+    ...(process.env.FIEX_CI_RECEIVER_BOUNDS
+      ? JSON.parse(process.env.FIEX_CI_RECEIVER_BOUNDS)
+      : { width: 500, height: 850, x: 1200, y: 0 }),
     title: 'Browser Upload',
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   })

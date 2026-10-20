@@ -1,3 +1,4 @@
+import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
 import { FileInfoDialog } from '@/components/FileInfoDialog'
 import { lazy, Suspense } from 'react'
@@ -18,6 +19,10 @@ export function ExplorerDialogs({
   open,
   dialog,
   dialogBusy,
+  conflict,
+  setConflict,
+  resolveConflict,
+  busy,
   setDialog,
   setDialogBusy,
   setDialogError,
@@ -53,6 +58,10 @@ export function ExplorerDialogs({
   | 'open'
   | 'dialog'
   | 'dialogBusy'
+  | 'conflict'
+  | 'setConflict'
+  | 'resolveConflict'
+  | 'busy'
   | 'setDialog'
   | 'setDialogBusy'
   | 'setDialogError'
@@ -83,6 +92,12 @@ export function ExplorerDialogs({
 >) {
   return (
     <>
+      <ConflictDialog
+        request={conflict}
+        busy={Boolean(busy)}
+        onClose={() => setConflict(null)}
+        onResolve={resolveConflict}
+      />
       <Preview
         entry={preview}
         onClose={() => setPreview(null)}
@@ -96,7 +111,6 @@ export function ExplorerDialogs({
           if (!dialogBusy) setDialog(null)
         }}
         title={dialog?.title || ''}
-        description={dialog?.description}
       >
         <form
           onSubmit={async (e) => {
@@ -153,12 +167,7 @@ export function ExplorerDialogs({
         </form>
       </Modal>
 
-      <Modal
-        open={trashIssue}
-        onClose={() => setTrashIssue(false)}
-        title="无法浏览废纸篓"
-        description="macOS 不允许应用直接读取 ~/.Trash。请在“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中允许 Fiex；授权后如仍无法打开，请重启 Fiex。也可以现在用 Finder 打开。"
-      >
+      <Modal open={trashIssue} onClose={() => setTrashIssue(false)} title="无法浏览废纸篓">
         <div className="dialog-actions">
           <Button variant="ghost" onClick={() => setTrashIssue(false)}>
             取消

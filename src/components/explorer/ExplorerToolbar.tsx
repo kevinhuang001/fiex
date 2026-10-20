@@ -2,28 +2,27 @@ import { Choice, Label, Menu } from '@/components/Menus'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
 import type { Group, Sort, View } from '@/lib/types'
-import {
-  ArrowDownUp,
-  ChevronLeft,
-  ChevronRight,
-  Code2,
-  Columns3,
-  FolderPlus,
-  FolderTree,
-  GitBranch,
-  Grid2X2,
-  Image,
-  List,
-  PanelLeft,
-  Settings2,
-  TerminalSquare,
-} from 'lucide-react'
+import { SortAscendingIcon as ArrowDownUp } from '@phosphor-icons/react/dist/csr/SortAscending'
+import { CaretLeftIcon as ChevronLeft } from '@phosphor-icons/react/dist/csr/CaretLeft'
+import { CaretRightIcon as ChevronRight } from '@phosphor-icons/react/dist/csr/CaretRight'
+import { CodeIcon as Code2 } from '@phosphor-icons/react/dist/csr/Code'
+import { ColumnsIcon as Columns3 } from '@phosphor-icons/react/dist/csr/Columns'
+import { FolderPlusIcon as FolderPlus } from '@phosphor-icons/react/dist/csr/FolderPlus'
+import { TreeStructureIcon as FolderTree } from '@phosphor-icons/react/dist/csr/TreeStructure'
+import { GitBranchIcon as GitBranch } from '@phosphor-icons/react/dist/csr/GitBranch'
+import { SquaresFourIcon as Grid2X2 } from '@phosphor-icons/react/dist/csr/SquaresFour'
+import { ImagesIcon as Image } from '@phosphor-icons/react/dist/csr/Images'
+import { RowsIcon as List } from '@phosphor-icons/react/dist/csr/Rows'
+import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/SidebarSimple'
+import { AppWindowIcon as PanelsTopLeft } from '@phosphor-icons/react/dist/csr/AppWindow'
+import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
+import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
 import type { ReactNode } from 'react'
 const views: { id: View; name: string; icon: ReactNode }[] = [
-  { id: 'icons', name: '图标', icon: <Grid2X2 /> },
-  { id: 'list', name: '列表', icon: <List /> },
-  { id: 'columns', name: '分栏', icon: <Columns3 /> },
-  { id: 'gallery', name: '画廊', icon: <Image /> },
+  { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
+  { id: 'list', name: '列表', icon: <List weight="duotone" size={20} /> },
+  { id: 'columns', name: '分栏', icon: <Columns3 weight="duotone" size={20} /> },
+  { id: 'gallery', name: '画廊', icon: <Image weight="duotone" size={20} /> },
 ]
 const groupOptions: [Group, string][] = [
   ['none', '无'],
@@ -55,6 +54,7 @@ export function ExplorerToolbar({
   openIde,
   terminal,
   setSettings,
+  newWindow,
 }: Pick<
   AppController,
   | 'sidebar'
@@ -73,6 +73,7 @@ export function ExplorerToolbar({
   | 'openIde'
   | 'terminal'
   | 'setSettings'
+  | 'newWindow'
 >) {
   return (
     <>
@@ -95,11 +96,20 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
+          aria-label="新建窗口"
+          title="新建窗口"
+          onClick={newWindow}
+        >
+          <PanelsTopLeft weight="duotone" size={20} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           aria-label="切换侧栏"
           title="切换侧栏"
           onClick={() => setSidebar(!sidebar)}
         >
-          <PanelLeft />
+          <PanelLeft weight="duotone" size={20} />
         </Button>
         <div className="navigation-controls">
           <Button
@@ -110,7 +120,7 @@ export function ExplorerToolbar({
             aria-label="后退"
             onClick={x.back}
           >
-            <ChevronLeft />
+            <ChevronLeft weight="duotone" size={20} />
           </Button>
           <Button
             variant="ghost"
@@ -120,7 +130,7 @@ export function ExplorerToolbar({
             aria-label="前进"
             onClick={x.forward}
           >
-            <ChevronRight />
+            <ChevronRight weight="duotone" size={20} />
           </Button>
         </div>
         <h1 data-tauri-drag-region>{x.query ? '搜索' : displayName(x.path) || 'Fiex'}</h1>
@@ -140,7 +150,7 @@ export function ExplorerToolbar({
             </Button>
           ))}
         </div>
-        <Menu label="分组方式" icon={<FolderTree />}>
+        <Menu label="分组方式" icon={<FolderTree weight="duotone" size={20} />}>
           <Label>分组方式</Label>
           {groupOptions.map(([id, name]) => (
             <Choice key={id} checked={prefs.group === id} onClick={() => update({ group: id })}>
@@ -148,7 +158,7 @@ export function ExplorerToolbar({
             </Choice>
           ))}
         </Menu>
-        <Menu label="排序方式" icon={<ArrowDownUp />}>
+        <Menu label="排序方式" icon={<ArrowDownUp weight="duotone" size={20} />}>
           <Label>排序方式</Label>
           {sortOptions.map(([id, name]) => (
             <Choice key={id} checked={prefs.sort === id} onClick={() => update({ sort: id })}>
@@ -167,10 +177,10 @@ export function ExplorerToolbar({
           size="icon"
           title={gitSwitched ? '历史版本只读' : `新建文件夹 ${hint('newFolder')}`}
           aria-label="新建文件夹"
-          disabled={gitSwitched}
+          disabled={gitSwitched || x.directoryReadOnly}
           onClick={() => create(true)}
         >
-          <FolderPlus />
+          <FolderPlus weight="duotone" size={20} />
         </Button>
         <Button
           variant="ghost"
@@ -181,7 +191,7 @@ export function ExplorerToolbar({
           aria-pressed={gitOpen}
           onClick={() => setGitOpen((value) => !value)}
         >
-          <GitBranch />
+          <GitBranch weight="duotone" size={20} />
           {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}
         </Button>
         <Button
@@ -193,10 +203,10 @@ export function ExplorerToolbar({
               : `在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`
           }
           aria-label="在 IDE 中打开"
-          disabled={gitSwitched}
+          disabled={gitSwitched || x.directoryReadOnly}
           onClick={() => openIde()}
         >
-          <Code2 />
+          <Code2 weight="duotone" size={20} />
         </Button>
         <div className="toolbar-divider" />
         <div className="terminal-control">
@@ -205,10 +215,10 @@ export function ExplorerToolbar({
             size="icon"
             title={gitSwitched ? '历史版本只读' : 'Open in Terminal'}
             aria-label="Open in Terminal"
-            disabled={gitSwitched}
+            disabled={gitSwitched || x.directoryReadOnly}
             onClick={() => terminal()}
           >
-            <TerminalSquare />
+            <TerminalSquare weight="duotone" size={20} />
           </Button>
         </div>
         <Button
@@ -218,7 +228,7 @@ export function ExplorerToolbar({
           aria-label="设置"
           onClick={() => setSettings(true)}
         >
-          <Settings2 />
+          <Settings2 weight="duotone" size={20} />
         </Button>
       </header>
     </>

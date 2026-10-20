@@ -96,7 +96,10 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
     })
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Listing {
+    pub read_only: bool,
+    pub virtual_volume: bool,
     pub path: String,
     pub entries: Vec<Entry>,
     pub warnings: Vec<String>,
@@ -129,6 +132,8 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     Ok(Listing {
+        read_only: false,
+        virtual_volume: false,
         path: path.to_string_lossy().into_owned(),
         entries,
         warnings,

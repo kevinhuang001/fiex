@@ -12,6 +12,25 @@ concurrency:
   group: ci-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 jobs:
+  filesystem-fixtures:
+    name: Disk images (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image formatters
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ntfs-3g e2fsprogs btrfs-progs
+      - run: python3 scripts/ci-filesystems.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filesystem-images-${{ runner.os }}
+          path: .ci/filesystems/*.img
+          if-no-files-found: error
+          retention-days: 3
   checks:
     name: Frontend and UI tests
     runs-on: ubuntu-latest
@@ -41,6 +60,7 @@ jobs:
             playwright-report/
             test-results/
   desktop:
+    needs: [filesystem-fixtures]
     name: Desktop (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -289,6 +309,64 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
             src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+      - name: Download filesystem images
+        if: matrix.target != 'x86_64-apple-darwin'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: filesystem-images-*
+          path: .ci/filesystems
+          merge-multiple: true
+      - uses: actions/setup-python@v5
+        if: matrix.target != 'x86_64-apple-darwin'
+        with:
+          python-version: '3.12'
+      - name: Install native recording tools
+        if: matrix.target != 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install pyautogui pillow mss
+          npm install --prefix .ci/browser --no-package-lock electron@44.9.2
+          node -e "console.log('FIEX_UPLOAD_ELECTRON=' + require('./.ci/browser/node_modules/electron'))" >> "$GITHUB_ENV"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb dbus-x11 openbox thunar ffmpeg python3-tk scrot
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ffmpeg
+          else
+            choco install ffmpeg -y --no-progress
+          fi
+      - name: Build separate native UI test binary
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: cargo build --locked --release --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --features ci-driver
+      - name: Record and verify native integrations
+        if: matrix.target != 'x86_64-apple-darwin'
+        timeout-minutes: 15
+        shell: bash
+        env:
+          FIEX_WEBDAV_URL: http://127.0.0.1:8080/
+          FIEX_SMB_HOST: 127.0.0.1
+          FIEX_SMB_SHARE: fiex
+          FIEX_SMB_USER: fiex
+          FIEX_SMB_PASSWORD: Zebra!2026#Quartz
+          FIEX_CI_IMAGES: ${{ github.workspace }}/.ci/filesystems
+        run: |
+          set -euo pipefail
+          binary="$PWD/src-tauri/target/${{ matrix.target }}/release/fiex"
+          if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a -s '-screen 0 1920x1080x24' dbus-run-session -- bash -c 'openbox > /tmp/fiex-openbox.log 2>&1 & python scripts/native-ci.py "$1"' bash "$binary"
+          else
+            python scripts/native-ci.py "$binary"
+          fi
+      - name: Native integration videos and verification
+        if: always() && matrix.target != 'x86_64-apple-darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-integrations-${{ matrix.target }}
+          path: artifacts/native/
+          if-no-files-found: error
+
   release:
     name: Publish tested installers
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

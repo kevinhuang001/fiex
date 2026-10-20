@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
-import type { GitCommit, GitRefs } from '@/lib/types'
+import type { GitCommit, GitRefs, GitRemoteStatus } from '@/lib/types'
 
 export function useGitRepository(
   root: string | undefined,
@@ -9,6 +9,8 @@ export function useGitRepository(
   refresh: () => Promise<void>,
   viewRevision: (reference: string) => Promise<void>,
 ) {
+  const [remoteStatus, setRemoteStatus] = useState<GitRemoteStatus | null>(null)
+  const [remote, setRemote] = useState('')
   const [commits, setCommits] = useState<GitCommit[]>([])
   const [refs, setRefs] = useState<GitRefs | null>(null)
   const [identity, setIdentity] = useState({ name: '', email: '' })
@@ -21,6 +23,8 @@ export function useGitRepository(
   latest.current = scope
   const running = useRef(false)
   useEffect(() => {
+    setRemoteStatus(null)
+    setRemote('')
     setRefs(null)
     setCommits([])
     setIdentity({ name: '', email: '' })
@@ -33,6 +37,21 @@ export function useGitRepository(
     const next = await call<GitRefs>('git_refs', { root })
     if (latest.current === root) setRefs(next)
   }, [root])
+  const loadRemote = useCallback(async () => {
+    if (!root) return
+    const next = await call<GitRemoteStatus>('git_remote_status', { root })
+    if (latest.current === root) {
+      setRemoteStatus(next)
+      setRemote((old) =>
+        next.remotes.some((r) => r.name === old)
+          ? old
+          : next.remotes.find((r) => r.name === next.upstream.split('/')[0])?.name ||
+            next.remotes.find((r) => r.name === 'origin')?.name ||
+            next.remotes[0]?.name ||
+            '',
+      )
+    }
+  }, [root])
   useEffect(() => {
     if (!open || !root) return
     let active = true
@@ -43,6 +62,9 @@ export function useGitRepository(
       .catch((e) => {
         if (active) setError(String(e))
       })
+    void loadRemote().catch((e) => {
+      if (active) setError(String(e))
+    })
     void loadRefs().catch((e) => {
       if (active) setError(String(e))
     })
@@ -56,7 +78,7 @@ export function useGitRepository(
     return () => {
       active = false
     }
-  }, [open, root, loadRefs])
+  }, [open, root, loadRefs, loadRemote])
   useEffect(() => {
     if (!open || !root) return
     const timer = window.setInterval(() => {
@@ -85,6 +107,25 @@ export function useGitRepository(
   }
   return {
     refs,
+    remoteStatus,
+    remote,
+    setRemote,
+    saveRemote: (name: string, url: string) =>
+      run('正在保存远程仓库', async () => {
+        await call('git_remote_save', { root, name, url })
+        await loadRemote()
+        setRemote(name)
+      }),
+    sync: (push: boolean) =>
+      run(push ? '正在推送' : '正在拉取', async () => {
+        await call('git_sync', { root, remote, push })
+        await Promise.all([loadRefs(), loadRemote()])
+        const items = await call<GitCommit[]>('git_history', { root, skip: 0 })
+        if (latest.current === scope) {
+          setCommits(items)
+          setSuccess(push ? '推送完成' : '拉取完成')
+        }
+      }),
     commits,
     moreHistory: () =>
       run('正在读取历史', async () => {
@@ -104,6 +145,7 @@ export function useGitRepository(
         const [items] = await Promise.all([
           call<GitCommit[]>('git_history', { root, skip: 0 }),
           loadRefs(),
+          loadRemote(),
         ])
         if (latest.current === scope) setCommits(items)
       }),
@@ -119,7 +161,7 @@ export function useGitRepository(
         if (latest.current === scope) {
           setMessage('')
           setSuccess(`提交成功 · ${hash}`)
-          await loadRefs()
+          await Promise.all([loadRefs(), loadRemote()])
           const items = await call<GitCommit[]>('git_history', { root, skip: 0 })
           if (latest.current === scope) setCommits(items)
         }

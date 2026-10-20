@@ -19,6 +19,7 @@ import { useGitRepository } from '@/hooks/useGitRepository'
 import type { GitStatus } from '@/lib/types'
 import { Button } from './ui/button'
 import { CommitPicker } from './git/CommitPicker'
+import { GitRemote } from './git/GitRemote'
 import { CommitDialog } from './git/CommitDialog'
 
 interface Change {
@@ -139,16 +140,9 @@ export function GitPanel({
           <span className="git-welcome-icon">
             <FolderGit2 size={32} />
           </span>
-          <h2>{loading ? '正在检查仓库' : '为这个文件夹记录每一次改变'}</h2>
-          <p>
-            {allowInit
-              ? '创建 Git 仓库，暂存文件并保存提交。文件内容会保留在原处。'
-              : '请选择本地文件夹来使用 Git。'}
-          </p>
-          <code title={path}>{path}</code>
           <Button disabled={disabled || !path || !allowInit} onClick={() => void repo.initialize()}>
             <Plus size={14} />
-            初始化 Git 仓库
+            {loading ? '正在检查仓库' : allowInit ? '初始化 Git 仓库' : '请选择本地文件夹'}
           </Button>
         </div>
       ) : (
@@ -201,6 +195,7 @@ export function GitPanel({
           )}
           {!readOnly ? (
             <>
+              <GitRemote repo={repo} disabled={disabled} />
               <div className="git-commit-action">
                 <Button disabled={disabled || !staged.length} onClick={() => setCommitOpen(true)}>
                   <GitCommitHorizontal size={15} />
@@ -212,7 +207,6 @@ export function GitPanel({
                   <div className="git-clean">
                     <CheckCircle2 size={28} />
                     <strong>工作区干净</strong>
-                    <span>所有改动都已保存到提交。</span>
                   </div>
                 )}
                 {sections

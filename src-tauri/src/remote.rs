@@ -49,6 +49,8 @@ pub struct ConnectionInput {
     #[serde(default)]
     pub host: String,
     #[serde(default)]
+    pub port: Option<u16>,
+    #[serde(default)]
     pub share: String,
     #[serde(default)]
     pub base: String,
@@ -197,6 +199,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     } else if input.host.trim().is_empty() || input.share.trim().is_empty() {
         return Err("请填写 SMB 主机和共享名".into());
     }
+    if input.port == Some(0) {
+        return Err("请输入有效的端口".into());
+    }
     let mut items = load_stored();
     let existing = input
         .id
@@ -207,6 +212,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         items[index].kind = kind.into();
         items[index].url = input.url.trim().into();
         items[index].host = input.host.trim().into();
+        items[index].port = input.port;
         items[index].share = input.share.trim().into();
         items[index].base = input.base.trim().into();
         items[index].username = input.username.trim().into();
@@ -232,7 +238,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             username: input.username.trim().into(),
             password: input.password,
             allow_invalid_certs: input.allow_invalid_certs,
-            port: None,
+            port: input.port,
         });
         id
     };
@@ -246,6 +252,10 @@ pub fn remove_connection(id: &str) -> Result<(), String> {
     let mut items = load_stored();
     items.retain(|c| c.id != id);
     save_stored(&items)
+}
+
+pub fn is_remote(path: &str) -> bool {
+    connection_for_path(path).is_some()
 }
 
 fn connection_for_path(path: &str) -> Option<(StoredConnection, PathBuf)> {

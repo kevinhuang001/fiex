@@ -15,6 +15,8 @@ export function useExplorer(prefs: Preferences) {
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
+  const [directoryReadOnly, setDirectoryReadOnly] = useState(false)
+  const [virtualVolume, setVirtualVolume] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -64,13 +66,15 @@ export function useExplorer(prefs: Preferences) {
   }, [refreshLocations])
   useEffect(() => {
     void refreshLocations()
-      .then((next) => {
+      .then(async (next) => {
+        const initial = native ? await call<string | null>('initial_path') : null
         const home = next.find((x) => x.name === '文稿') || next[0]
         if (home) {
-          setPath(home.path)
-          setHistory([home.path])
+          const start = initial || home.path
+          setPath(start)
+          setHistory([start])
           setCursor(0)
-          setTabs([home.path])
+          setTabs([start])
         }
       })
       .catch((e) => setError(String(e)))
@@ -88,6 +92,8 @@ export function useExplorer(prefs: Preferences) {
     })
       .then((l) => {
         if (active && id === request.current) {
+          setDirectoryReadOnly(Boolean(l.readOnly))
+          setVirtualVolume(Boolean(l.virtualVolume))
           setListedPath(path)
           setEntries(l.entries)
           setWarnings(l.warnings)
@@ -109,7 +115,7 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (!path || !native || path.startsWith('history://')) return
+    if (!path || !native || virtualVolume || path.startsWith('history://')) return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
@@ -126,7 +132,7 @@ export function useExplorer(prefs: Preferences) {
       clearTimeout(timer)
       cleanup?.()
     }
-  }, [path, reload])
+  }, [path, reload, virtualVolume])
   const refreshGit = useCallback(async () => {
     const id = ++gitRequest.current
     if (!path || path.startsWith('remote://') || path.startsWith('usbfs://')) {
@@ -155,7 +161,8 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [refresh, refreshGit])
   useEffect(() => {
-    if (!path || path.startsWith('remote://') || path.startsWith('history://')) return
+    if (!path || virtualVolume || path.startsWith('remote://') || path.startsWith('history://'))
+      return
     const timer = setTimeout(() => {
       void call('warm_index', {
         path,
@@ -164,7 +171,7 @@ export function useExplorer(prefs: Preferences) {
       }).catch(() => {})
     }, 250)
     return () => clearTimeout(timer)
-  }, [path, prefs.hidden, prefs.displayIgnore, refresh])
+  }, [path, prefs.hidden, prefs.displayIgnore, refresh, virtualVolume])
   useEffect(() => {
     const generation = ++searchRequest.current
     void call('cancel_search').catch(() => {})
@@ -311,6 +318,8 @@ export function useExplorer(prefs: Preferences) {
     tagFilter,
     setTagFilter,
     readOnly,
+    directoryReadOnly,
+    virtualVolume,
     setReadOnly,
     locations,
     refreshLocations,

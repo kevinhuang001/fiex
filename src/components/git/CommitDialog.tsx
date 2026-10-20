@@ -31,7 +31,6 @@ export function CommitDialog({
         if (!repo.busy) onClose()
       }}
       title="提交修改"
-      description={`将 ${count} 个已暂存文件保存到当前分支。`}
       className="git-commit-modal"
     >
       <form
@@ -46,7 +45,7 @@ export function CommitDialog({
         <textarea
           id="git-message"
           aria-label="提交说明"
-          placeholder="这次做了哪些改动？"
+          placeholder="提交说明"
           value={repo.message}
           required
           disabled={Boolean(repo.busy)}
@@ -84,10 +83,6 @@ export function CommitDialog({
               />
             </label>
           </div>
-          <small>
-            {missing ? '缺少 Git 身份，请填写姓名和邮箱。' : '默认使用当前项目 / 全局 Git 配置。'}
-            提交时将保存到此项目的 Git 配置。
-          </small>
         </fieldset>
         {repo.error && (
           <p className="git-panel-error" role="alert">

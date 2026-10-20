@@ -129,7 +129,6 @@ export function PreferencesDialog({
               <img src="/fiex.png" alt="" />
               <div>
                 <strong>Fiex</strong>
-                <span>文件浏览器</span>
               </div>
             </div>
             <label className="settings-search">

@@ -115,7 +115,7 @@ export function FileContextMenu({
                 ? [
                     {
                       label: '标签…',
-                      disabled: gitSwitched,
+                      disabled: gitSwitched || x.directoryReadOnly,
                       icon: <Tags />,
                       hint: '',
                       action: () =>
@@ -149,7 +149,7 @@ export function FileContextMenu({
                 label: '重新命名',
                 icon: <Pencil />,
                 hint: hint('rename'),
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: () => x.beginRename(menu.entry.path),
               },
               { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
@@ -157,21 +157,21 @@ export function FileContextMenu({
                 label: '剪切',
                 icon: <Scissors />,
                 hint: hint('cut'),
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: () => copy(true),
               },
               {
                 label: '创建副本',
                 icon: <Copy />,
                 hint: hint('duplicate'),
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: duplicate,
               },
               {
                 label: '压缩为…',
                 icon: <Archive />,
                 hint: '',
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 submenu: archiveFormats.map((format) => ({
                   label: format.name,
                   action: () => compress(format),
@@ -183,7 +183,7 @@ export function FileContextMenu({
                       label: '解压缩',
                       icon: <Archive />,
                       hint: '',
-                      disabled: gitSwitched,
+                      disabled: gitSwitched || x.directoryReadOnly,
                       action: extract,
                     },
                   ]
@@ -192,7 +192,7 @@ export function FileContextMenu({
                 label: 'Open in Terminal',
                 icon: <TerminalSquare />,
                 hint: '',
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: () => terminal(),
               },
               {
@@ -209,7 +209,7 @@ export function FileContextMenu({
                 label: '移到废纸篓',
                 icon: <Trash2 />,
                 hint: hint('trash'),
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: recycle,
               },
             ] as ContextItem[]

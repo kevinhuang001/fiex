@@ -40,12 +40,7 @@ export function TagDialog({ open, initial, onClose, onApply }: Props) {
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="标签"
-      description="为所选项目设置 Finder 标签；同一标签会显示在列表和图标视图中。"
-    >
+    <Modal open={open} onClose={onClose} title="标签">
       <div className="tag-dialog">
         <div className="tag-presets">
           {TAG_PRESETS.map((preset) => {

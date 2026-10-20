@@ -124,19 +124,23 @@ export function FileViews(props: Props) {
       clearDropHighlight()
       setGhost(null)
     }
-    const startNative = () => {
+    const startNative = (copyRequested = false) => {
       if (!active || nativeStarted) return
       nativeStarted = true
       cleanup()
       if (!native) return
-      void startFileDrag(paths, (result) => {
-        props.onExternalDrag?.(result)
-        if (result === 'Dropped') x.reload()
-      }).catch((error) => {
+      void startFileDrag(
+        paths,
+        (result) => {
+          props.onExternalDrag?.(result)
+          if (result === 'Dropped') x.reload()
+        },
+        copyRequested,
+      ).catch((error) => {
         x.setError(String(error))
       })
     }
-    const leave = () => startNative()
+    const leave = (event: MouseEvent) => startNative(event.altKey || event.ctrlKey)
     const move = (moveEvent: PointerEvent) => {
       if (!active) {
         if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
@@ -150,7 +154,7 @@ export function FileViews(props: Props) {
           moveEvent.clientX >= window.innerWidth - 1 ||
           moveEvent.clientY >= window.innerHeight - 1)
       ) {
-        startNative()
+        startNative(moveEvent.altKey || moveEvent.ctrlKey)
         return
       }
       moveEvent.preventDefault()
@@ -298,7 +302,6 @@ export function FileViews(props: Props) {
         <div className="empty-state">
           {x.query ? <SearchX /> : <FolderOpen />}
           <h3>{x.query ? '没有找到匹配的文件' : '文件夹是空的'}</h3>
-          <p>{x.query ? '试试其他名称，或调整搜索范围。' : '拖入文件，或新建文件夹。'}</p>
         </div>
       )}
       {prefs.view === 'list' && entries.length > 0 ? (
@@ -561,7 +564,7 @@ function Columns({
           <button onClick={() => onPreview(selected)}>快速查看</button>
         </div>
       ) : (
-        <div className="column-detail muted">选择文件查看预览</div>
+        <div className="column-detail muted" />
       )}
     </div>
   )

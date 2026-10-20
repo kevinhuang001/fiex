@@ -131,11 +131,7 @@ export function Sidebar({
               <div className="favorites-section" data-bookmark-drop="true" key="favorites">
                 <div className="sidebar-section-title">
                   <span className="sidebar-label">收藏</span>
-                  <button
-                    className="icon-button"
-                    title="收藏当前文件夹；也可以把文件夹拖到这里"
-                    onClick={favorite}
-                  >
+                  <button className="icon-button" title="收藏当前文件夹" onClick={favorite}>
                     <Plus size={14} />
                   </button>
                 </div>
@@ -169,7 +165,7 @@ export function Sidebar({
                     </div>
                   ))
                 ) : (
-                  <p className="sidebar-hint">将常用文件夹拖到这里收藏</p>
+                  <></>
                 )}
               </div>
             )

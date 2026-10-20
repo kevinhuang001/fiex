@@ -9,15 +9,21 @@ let platform: Promise<string> | undefined
 export async function startFileDrag(
   paths: string[],
   onResult: (result: 'Dropped' | 'Cancelled') => void,
+  copyRequested = false,
 ) {
+  const exported = await call<string[]>('register_drag', { paths, copyRequested })
+  const completed = (result: 'Dropped' | 'Cancelled') => {
+    void call('finish_drag').catch(() => {})
+    onResult(result)
+  }
   platform ??= call<string>('platform')
   if ((await platform) === 'linux') {
     const onEvent = new Channel<string>()
-    onEvent.onmessage = (result) => onResult(result === 'Dropped' ? 'Dropped' : 'Cancelled')
-    await call('drag_files', { paths, onEvent })
+    onEvent.onmessage = (result) => completed(result === 'Dropped' ? 'Dropped' : 'Cancelled')
+    await call('drag_files', { paths: exported, onEvent })
   } else {
-    await startDrag({ item: paths, icon: DRAG_ICON, mode: 'copy' }, (event) =>
-      onResult(event.result),
+    await startDrag({ item: exported, icon: DRAG_ICON, mode: 'copy' }, (event) =>
+      completed(event.result),
     )
   }
 }

@@ -19,6 +19,7 @@ required-features = ["desktop"]
 [features]
 default = ["desktop", "usbfs"]
 desktop = ["dep:gtk", "dep:tauri", "dep:tauri-build", "dep:objc2", "dep:file_icon_provider", "dep:image", "dep:tauri-plugin-drag"]
+ci-driver = ["desktop", "usbfs"]
 usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]
 
 [build-dependencies]

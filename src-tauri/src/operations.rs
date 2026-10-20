@@ -8,30 +8,39 @@ use std::{
 };
 
 #[derive(Debug)]
-enum Undo {
+pub(crate) enum Undo {
     Rename(PathBuf, PathBuf),
     Created(PathBuf),
+    Replaced(PathBuf, tempfile::TempDir),
 }
 #[derive(Default)]
 pub struct Operations {
     undo: Mutex<Vec<Vec<Undo>>>,
 }
-#[derive(Serialize)]
+#[derive(Default, Serialize)]
 pub struct OperationResult {
     pub paths: Vec<String>,
     pub errors: Vec<String>,
     pub skipped: usize,
+    pub conflicts: Vec<crate::transfers::Conflict>,
 }
-fn exists(path: &Path) -> bool {
+pub(crate) fn exists(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok()
 }
 pub fn unique(path: &Path) -> PathBuf {
     if !exists(path) {
         return path.into();
     }
-    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let ext = path
-        .extension()
+    let stem = if path.is_dir() {
+        path.file_name()
+    } else {
+        path.file_stem()
+    }
+    .unwrap_or_default()
+    .to_string_lossy();
+    let ext = (!path.is_dir())
+        .then(|| path.extension())
+        .flatten()
         .map(|s| format!(".{}", s.to_string_lossy()))
         .unwrap_or_default();
     for i in 2.. {
@@ -42,7 +51,7 @@ pub fn unique(path: &Path) -> PathBuf {
     }
     unreachable!()
 }
-fn copy_tree(
+pub(crate) fn copy_tree(
     src: &Path,
     dest: &Path,
     ignore: &IgnoreSet,
@@ -132,86 +141,34 @@ impl Operations {
         keep_both: bool,
         ignores: &[String],
     ) -> Result<OperationResult, String> {
-        let dest_dir = dunce::canonicalize(destination).map_err(|e| e.to_string())?;
-        if !dest_dir.is_dir() {
-            return Err("目标不是文件夹".into());
-        }
-        let ignore = IgnoreSet::new(ignores);
-        let mut skipped = 0;
-        // Validate every destination before any mutation.
-        let mut plan = Vec::new();
-        for source in sources {
-            let src = PathBuf::from(source);
-            let name = src.file_name().ok_or("不能操作根目录")?;
-            if ignore.is_ignored(Path::new(name)) {
-                skipped += 1;
-                continue;
-            }
-            let real = dunce::canonicalize(&src).map_err(|e| e.to_string())?;
-            if dest_dir.starts_with(&real) {
-                return Err("不能把文件夹复制或移动到其自身内部".into());
-            }
-            let mut dest = dest_dir.join(name);
-            if moving && dest == src {
-                continue;
-            }
-            if exists(&dest) {
-                if keep_both {
-                    dest = unique(&dest);
-                } else {
-                    return Err(format!(
-                        "{} 已存在。请选择“保留两者”或取消。",
-                        dest.display()
-                    ));
-                }
-            }
-            if plan.iter().any(|(_, p): &(PathBuf, PathBuf)| p == &dest) {
-                return Err("所选项目具有重复文件名，请分别操作".into());
-            }
-            plan.push((src, dest));
-        }
-        let mut undo = Vec::new();
-        let mut paths = Vec::new();
-        let mut errors = Vec::new();
-        for (src, dest) in plan {
-            let result: Result<usize, String> = if moving {
-                fs::rename(&src, &dest)
-                    .map(|_| 0)
-                    .map_err(|e| format!("{e}。跨磁盘移动请先复制，核对后移到废纸篓。"))
-            } else {
-                copy_tree(
-                    &src,
-                    &dest,
-                    &ignore,
-                    Path::new(src.file_name().unwrap_or_default()),
-                )
-            };
-            match result {
-                Ok(skipped_children) => {
-                    skipped += skipped_children;
-                    paths.push(dest.to_string_lossy().into_owned());
-                    undo.push(if moving {
-                        Undo::Rename(dest, src)
-                    } else {
-                        Undo::Created(dest)
-                    });
-                }
-                Err(e) => {
-                    errors.push(format!("{}: {e}", src.display()));
-                    if !moving && exists(&dest) {
-                        undo.push(Undo::Created(dest));
-                    }
-                }
-            }
-        }
+        let (result, undo) =
+            crate::transfers::execute(sources, destination, moving, keep_both, ignores, &[])?;
         if !undo.is_empty() {
             self.undo.lock().unwrap().push(undo);
         }
-        Ok(OperationResult {
-            paths,
-            errors,
-            skipped,
-        })
+        Ok(result)
+    }
+    pub fn transfer_resolved(
+        &self,
+        sources: &[String],
+        destination: &str,
+        moving: bool,
+        keep_both: bool,
+        ignores: &[String],
+        resolutions: &[crate::transfers::Resolution],
+    ) -> Result<OperationResult, String> {
+        let (result, undo) = crate::transfers::execute(
+            sources,
+            destination,
+            moving,
+            keep_both,
+            ignores,
+            resolutions,
+        )?;
+        if !undo.is_empty() {
+            self.undo.lock().unwrap().push(undo);
+        }
+        Ok(result)
     }
     pub fn undo(&self) -> Result<(), String> {
         let mut stack = self.undo.lock().unwrap();
@@ -222,10 +179,19 @@ impl Operations {
                     if exists(dest) {
                         Err("原位置已有同名项目，无法撤销".into())
                     } else {
-                        fs::rename(src, dest).map_err(|e| e.to_string())
+                        fs::create_dir_all(dest.parent().ok_or("原路径无效")?)
+                            .map_err(|e| e.to_string())?;
+                        crate::transfers::move_tree(src, dest).map(|_| ())
                     }
                 }
                 // Put copies/new files in Trash on undo, preserving any intervening edits.
+                Undo::Replaced(path, backup) => {
+                    if exists(path) {
+                        Err("目标已改变，无法恢复被替换文件".into())
+                    } else {
+                        fs::rename(backup.path().join("original"), path).map_err(|e| e.to_string())
+                    }
+                }
                 Undo::Created(path) => trash::delete(path).map_err(|e| e.to_string()),
             };
             if let Err(e) = result {
@@ -242,6 +208,7 @@ pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
         paths: vec![],
         errors: vec![],
         skipped: 0,
+        conflicts: vec![],
     };
     for path in paths {
         match trash::delete(path) {
@@ -264,15 +231,19 @@ mod tests {
         fs::write(a.join("x"), "source").unwrap();
         fs::write(b.join("x"), "existing").unwrap();
         let op = Operations::default();
-        assert!(op
-            .transfer(
+        assert_eq!(
+            op.transfer(
                 &[a.join("x").to_string_lossy().into()],
                 b.to_str().unwrap(),
                 false,
                 false,
                 &[]
             )
-            .is_err());
+            .unwrap()
+            .conflicts
+            .len(),
+            1
+        );
         op.transfer(
             &[a.join("x").to_string_lossy().into()],
             b.to_str().unwrap(),

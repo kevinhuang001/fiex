@@ -20,6 +20,8 @@ export interface Entry {
   sync: 'synced' | 'cloud' | null
 }
 export interface Listing {
+  readOnly?: boolean
+  virtualVolume?: boolean
   path: string
   entries: Entry[]
   warnings: string[]
@@ -57,6 +59,30 @@ export interface OperationResult {
   paths: string[]
   errors: string[]
   skipped: number
+  conflicts?: TransferConflict[]
+}
+export interface FileVersion {
+  path: string
+  size: number
+  modified: number
+  isDir: boolean
+}
+export interface TransferConflict {
+  key: string
+  source: FileVersion
+  destination: FileVersion
+}
+export type ConflictAction = 'replace' | 'skip' | 'keepBoth'
+export interface ConflictResolution {
+  key: string
+  action: ConflictAction
+}
+export interface GitRemoteStatus {
+  remotes: { name: string; url: string }[]
+  branch: string
+  upstream: string
+  ahead: number
+  behind: number
 }
 export type View = 'list' | 'gallery' | 'columns' | 'icons'
 export type Group = 'none' | 'kind' | 'modified' | 'extension' | 'size'

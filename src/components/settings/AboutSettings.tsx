@@ -11,7 +11,6 @@ export function AboutSettings({ onError }: { onError: (s: string) => void }) {
       <div className="settings-about">
         <img src="/fiex.png" alt="" />
         <h3>Fiex</h3>
-        <p>File explorer, with room to breathe.</p>
         <Button
           variant="secondary"
           onClick={() => openLink('https://github.com/kevinhuang001/fiex')}

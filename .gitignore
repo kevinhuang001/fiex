@@ -9,3 +9,6 @@ test-results/
 
 src-tauri/icons/
 public/file-icons/
+
+.ci/
+__pycache__/

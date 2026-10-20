@@ -2505,3 +2505,108 @@ body.dragging-file * {
   font-size: 10px;
   white-space: nowrap;
 }
+
+.conflict-modal {
+  width: min(780px, calc(100vw - 48px));
+}
+.conflict-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 0 18px;
+  color: var(--muted);
+}
+.conflict-actions {
+  display: grid;
+  gap: 8px;
+}
+.conflict-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  padding: 18px;
+  border-radius: 12px;
+  text-align: left;
+  background: var(--surface);
+}
+.conflict-actions > button:hover {
+  background: var(--accent-soft);
+}
+.conflict-actions > button > svg {
+  width: 20px;
+  color: var(--accent);
+}
+.conflict-actions > button > span {
+  flex: 1;
+}
+.conflict-comparison {
+  max-height: 50vh;
+  overflow: auto;
+}
+.conflict-head,
+.conflict-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 1.6fr;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.conflict-head {
+  color: var(--muted);
+  font-size: 12px;
+}
+.conflict-row > strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.conflict-row label {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.conflict-row label span {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.conflict-row small {
+  grid-column: 2;
+  font-size: 10px;
+  color: var(--muted);
+}
+.toolbar {
+  gap: 4px;
+}
+.toolbar > button[data-slot='button'],
+.toolbar .navigation-controls button,
+.toolbar .terminal-control button {
+  width: 32px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--text);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.toolbar button[data-slot='button'] > svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.toolbar button[data-slot='button']:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--accent);
+}
+.toolbar .navigation-controls button > svg {
+  width: 16px;
+  height: 16px;
+}
+.toolbar button[data-slot='button']:disabled {
+  opacity: 0.35;
+}
+.toolbar .view-switch button[aria-pressed='true'],
+.toolbar button[aria-pressed='true'] {
+  color: var(--accent);
+}

@@ -30,6 +30,7 @@ function ignored(name: string, patterns: unknown): boolean {
   })
 }
 
+const remoteConfigs = new Map<string, { name: string; url: string }[]>()
 const demoBranch = 'main'
 const firstCommit = 'a'.repeat(40),
   secondCommit = 'b'.repeat(40)
@@ -268,6 +269,24 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       ]
     case 'git_refs':
       return { head: 'aaaaaaaa', current: demoBranch, branches: ['main', 'dev'], tags: ['v0.2.4'] }
+    case 'git_remote_status':
+      return {
+        remotes: remoteConfigs.get(String(a.root)) || [],
+        branch: demoBranch,
+        upstream: '',
+        ahead: 0,
+        behind: 0,
+      }
+    case 'git_remote_save': {
+      const previous = remoteConfigs.get(String(a.root)) || []
+      remoteConfigs.set(String(a.root), [
+        ...previous.filter((r) => r.name !== a.name),
+        { name: String(a.name), url: String(a.url) },
+      ])
+      return null
+    }
+    case 'git_sync':
+      return a.push ? 'Pushed' : 'Already up to date'
     case 'git_identity':
       return { name: 'Kevin Huang', email: 'kevin@example.com' }
     case 'git_init': {
@@ -385,21 +404,57 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       entries = entries.filter((e) => !(a.paths as string[]).includes(e.path))
       return { paths: a.paths, errors: [], skipped: 0 }
     case 'transfer': {
-      const paths: string[] = []
+      const planned: { source: string; destination: string; action: string }[] = []
+      const conflicts = []
       for (const source of a.paths as string[]) {
+        let destination = join(String(a.destination), basename(source))
+        if (destination.startsWith(source + '/') || (a.moving && destination === source)) continue
+        const incoming = entries.find((e) => e.path === source)
+        const existing = entries.find((e) => e.path === destination)
+        const key = source + '\0' + destination
+        let action =
+          (a.resolutions as { key: string; action: string }[] | undefined)?.find(
+            (r) => r.key === key,
+          )?.action || ''
+        if (a.keepBoth) action = 'keepBoth'
+        if (existing && incoming && !action) {
+          conflicts.push({ key, source: incoming, destination: existing })
+          continue
+        }
+        if (action === 'skip') continue
+        if (existing && action === 'keepBoth') {
+          const name = basename(source),
+            dot = name.lastIndexOf('.')
+          const stem = dot > 0 && !incoming?.isDir ? name.slice(0, dot) : name
+          const ext = dot > 0 && !incoming?.isDir ? name.slice(dot) : ''
+          for (let index = 2; ; index++) {
+            const candidate = join(String(a.destination), `${stem} (${index})${ext}`)
+            if (!entries.some((e) => e.path === candidate)) {
+              destination = candidate
+              break
+            }
+          }
+        }
+        planned.push({ source, destination, action })
+      }
+      if (conflicts.length) return { paths: [], errors: [], skipped: 0, conflicts }
+      const paths: string[] = []
+      for (const { source, destination, action } of planned) {
         const selected = entries.filter((e) => e.path === source || e.path.startsWith(source + '/'))
-        const destination = join(String(a.destination), basename(source))
-        if (destination === source || destination.startsWith(source + '/')) continue
         const transferred = selected.map((e) => ({
           ...e,
           path: destination + e.path.slice(source.length),
           name: e.path === source ? basename(destination) : e.name,
         }))
+        if (action === 'replace')
+          entries = entries.filter(
+            (e) => e.path !== destination && !e.path.startsWith(destination + '/'),
+          )
         if (a.moving) entries = entries.filter((e) => !selected.includes(e))
         entries.push(...transferred)
         paths.push(destination)
       }
-      return { paths, errors: [], skipped: 0 }
+      return { paths, errors: [], skipped: 0, conflicts: [] }
     }
 
     default:
