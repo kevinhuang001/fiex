@@ -75,7 +75,9 @@ pub fn history(root: &str, skip: usize) -> Result<Vec<Commit>, String> {
     )?;
     let fields = raw.split(|b| *b == 0).collect::<Vec<_>>();
     Ok(fields
-        .chunks_exact(5)
+        .as_chunks::<5>()
+        .0
+        .iter()
         .map(|f| Commit {
             id: String::from_utf8_lossy(f[0]).into(),
             short_id: String::from_utf8_lossy(f[1]).into(),
