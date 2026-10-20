@@ -1,3 +1,5 @@
+import type { ShortcutMap, ShortcutStyle } from './shortcuts'
+
 export interface Entry {
   path: string
   name: string
@@ -51,4 +53,6 @@ export interface Preferences {
   theme: 'system' | 'light' | 'dark'
   iconSize: number
   favorites: Location[]
+  shortcutStyle: ShortcutStyle
+  shortcuts: ShortcutMap
 }

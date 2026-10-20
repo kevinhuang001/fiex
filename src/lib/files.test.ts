@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parent, join, sortEntries, groupKey } from './files'
+import { parent, join, sortEntries, groupKey, uniqueName } from './files'
 import type { Entry } from './types'
 const e = (name: string, isDir = false): Entry => ({
   name,
@@ -25,6 +25,12 @@ describe('file models', () => {
       sortEntries([e('10'), e('2'), e('folder', true)], 'name', false).map((e) => e.name),
     ).toEqual(['folder', '2', '10'])
     expect(sortEntries([e('a'), e('z', true)], 'name', true)[0].isDir).toBe(true)
+  })
+  it('makes Finder-style unique names', () => {
+    expect(uniqueName([], '未命名文件夹')).toBe('未命名文件夹')
+    expect(uniqueName(['未命名文件夹'], '未命名文件夹')).toBe('未命名文件夹 2')
+    expect(uniqueName(['未命名文件夹', '未命名文件夹 2'], '未命名文件夹')).toBe('未命名文件夹 3')
+    expect(uniqueName(['未命名.txt'], '未命名.txt')).toBe('未命名 2.txt')
   })
   it('groups dates at local midnight', () => {
     const now = new Date(2026, 9, 20, 12).getTime()

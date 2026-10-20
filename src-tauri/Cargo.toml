@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.1.0"
+version = "0.2.0"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -21,7 +21,7 @@ default = ["desktop"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:objc2", "dep:file_icon_provider", "dep:image"]
 
 [build-dependencies]
-tauri-build = { version = "2", optional = true }
+tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api"], optional = true }
@@ -40,7 +40,9 @@ zip = { version = "4", default-features = false, features = ["deflate", "bzip2",
 tar = "0.4"
 flate2 = "1"
 bzip2 = "0.6"
-xz2 = "0.1"
+# Static liblzma: the default build probes pkg-config and can link Homebrew's
+# xz dylib, which dyld rejects because a release app is ad-hoc signed.
+xz2 = { version = "0.1", features = ["static"] }
 sevenz-rust2 = "0.20"
 tempfile = "3"
 sysinfo = { version = "0.37", default-features = false, features = ["disk"] }

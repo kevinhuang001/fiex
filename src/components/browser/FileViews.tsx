@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronRight, FolderOpen, SearchX } from 'lucide-react'
 import { FileIcon } from '../FileIcon'
+import { InlineRename } from './InlineRename'
 import { asset, call } from '@/lib/api'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type { Entry, Listing, Preferences } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
+import type { CSSProperties } from 'react'
+
 interface Props {
   explorer: Explorer
   prefs: Preferences
@@ -14,6 +17,32 @@ interface Props {
   onMenu: (e: Entry, x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
 }
+
+function NameCell({
+  explorer,
+  entry,
+  className,
+}: {
+  explorer: Explorer
+  entry: Entry
+  className: string
+}) {
+  if (explorer.renaming === entry.path)
+    return (
+      <InlineRename
+        entry={entry}
+        className={className}
+        onCommit={(name) => explorer.renameTo(entry.path, name)}
+        onCancel={explorer.cancelRename}
+      />
+    )
+  return (
+    <span className={className} title={entry.name}>
+      {entry.name}
+    </span>
+  )
+}
+
 export function FileViews(props: Props) {
   const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop } = props
   const entries = useMemo(
@@ -38,49 +67,54 @@ export function FileViews(props: Props) {
       anchor.current = e.path
     }
   }
-  const shared = (e: Entry) => ({
-    onClick: (event: React.MouseEvent) => select(e, event),
-    onDoubleClick: () => onOpen(e),
-    onContextMenu: (event: React.MouseEvent) => {
-      event.preventDefault()
-      if (!x.selected.includes(e.path)) x.setSelected([e.path])
-      onMenu(e, event.clientX, event.clientY)
-    },
-    draggable: true,
-    onDragStart: (event: React.DragEvent) => {
-      event.dataTransfer.setData(
-        'application/x-fiex',
-        JSON.stringify(x.selected.includes(e.path) ? x.selected : [e.path]),
-      )
-      event.dataTransfer.effectAllowed = 'copyMove'
-    },
-    onDragOver: (event: React.DragEvent) => {
-      if (e.isDir) {
+  const shared = (e: Entry) => {
+    const renaming = x.renaming === e.path
+    return {
+      onClick: (event: React.MouseEvent) => select(e, event),
+      onDoubleClick: () => {
+        if (!renaming) onOpen(e)
+      },
+      onContextMenu: (event: React.MouseEvent) => {
         event.preventDefault()
-        event.currentTarget.classList.add('drop-target')
-      }
-    },
-    onDragLeave: (event: React.DragEvent) => event.currentTarget.classList.remove('drop-target'),
-    onDrop: (event: React.DragEvent) => {
-      if (e.isDir) {
-        event.preventDefault()
-        event.stopPropagation()
-        event.currentTarget.classList.remove('drop-target')
-        try {
-          onDrop(
-            JSON.parse(event.dataTransfer.getData('application/x-fiex')),
-            e.path,
-            event.shiftKey,
-          )
-        } catch {
-          /* Native OS drop is handled by Tauri. */
+        if (!x.selected.includes(e.path)) x.setSelected([e.path])
+        onMenu(e, event.clientX, event.clientY)
+      },
+      draggable: !renaming,
+      onDragStart: (event: React.DragEvent) => {
+        event.dataTransfer.setData(
+          'application/x-fiex',
+          JSON.stringify(x.selected.includes(e.path) ? x.selected : [e.path]),
+        )
+        event.dataTransfer.effectAllowed = 'copyMove'
+      },
+      onDragOver: (event: React.DragEvent) => {
+        if (e.isDir) {
+          event.preventDefault()
+          event.currentTarget.classList.add('drop-target')
         }
-      }
-    },
-    'data-path': e.path,
-    'aria-selected': x.selected.includes(e.path),
-    tabIndex: -1,
-  })
+      },
+      onDragLeave: (event: React.DragEvent) => event.currentTarget.classList.remove('drop-target'),
+      onDrop: (event: React.DragEvent) => {
+        if (e.isDir) {
+          event.preventDefault()
+          event.stopPropagation()
+          event.currentTarget.classList.remove('drop-target')
+          try {
+            onDrop(
+              JSON.parse(event.dataTransfer.getData('application/x-fiex')),
+              e.path,
+              event.shiftKey,
+            )
+          } catch {
+            /* Native OS drop is handled by Tauri. */
+          }
+        }
+      },
+      'data-path': e.path,
+      'aria-selected': x.selected.includes(e.path),
+      tabIndex: -1,
+    }
+  }
   const flat = useMemo(
     () =>
       groups(entries, prefs.group).flatMap(([heading, files]) => [
@@ -95,7 +129,19 @@ export function FileViews(props: Props) {
     estimateSize: () => 38,
     overscan: 12,
   })
+  useEffect(() => {
+    if (!x.renaming) return
+    const index = flat.findIndex((row) => row.entry?.path === x.renaming)
+    if (prefs.view === 'list' && index >= 0) virtual.scrollToIndex(index)
+    const frame = requestAnimationFrame(() =>
+      container.current
+        ?.querySelector(`[data-path="${CSS.escape(x.renaming!)}"]`)
+        ?.scrollIntoView({ block: 'nearest' }),
+    )
+    return () => cancelAnimationFrame(frame)
+  }, [x.renaming, flat, prefs.view, virtual])
   const onKeyDown = (event: React.KeyboardEvent) => {
+    if (x.renaming || event.metaKey || event.ctrlKey || event.altKey) return
     if (
       !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) ||
       !entries.length
@@ -189,8 +235,10 @@ export function FileViews(props: Props) {
                     >
                       <span className="file-name">
                         <FileIcon entry={item.entry} size={25} />
-                        <span>{item.entry.name}</span>
-                        {item.entry.readonly && <small>只读</small>}
+                        <NameCell explorer={x} entry={item.entry} className="file-label" />
+                        {item.entry.readonly && x.renaming !== item.entry.path && (
+                          <small>只读</small>
+                        )}
                       </span>
                       <span>{date(item.entry.modified)}</span>
                       <span>{item.entry.isDir ? '—' : size(item.entry.size)}</span>
@@ -231,11 +279,16 @@ export function FileViews(props: Props) {
               {heading && <div className="group-heading">{heading}</div>}
               <div
                 className={prefs.view === 'gallery' ? 'gallery-strip' : 'icon-grid'}
-                style={{
-                  gridTemplateColumns:
-                    prefs.view !== 'gallery'
-                      ? `repeat(auto-fill,minmax(${prefs.iconSize + 34}px,1fr))`
-                      : undefined,
+                style={
+                  prefs.view !== 'gallery'
+                    ? ({
+                        '--tile-size': `${Math.max(96, prefs.iconSize + 38)}px`,
+                        '--icon-size': `${prefs.iconSize}px`,
+                      } as CSSProperties)
+                    : undefined
+                }
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) x.setSelected([])
                 }}
               >
                 {files.map((e) => (
@@ -245,8 +298,10 @@ export function FileViews(props: Props) {
                     key={e.path}
                     {...shared(e)}
                   >
-                    <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : prefs.iconSize} />
-                    <span>{e.name}</span>
+                    <span className="tile-icon">
+                      <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : prefs.iconSize} />
+                    </span>
+                    <NameCell explorer={x} entry={e} className="tile-label" />
                   </div>
                 ))}
               </div>
@@ -257,6 +312,7 @@ export function FileViews(props: Props) {
     </div>
   )
 }
+
 function Thumbnail({ entry: e, size: s }: { entry: Entry; size: number }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [e.path])
@@ -274,6 +330,7 @@ function Thumbnail({ entry: e, size: s }: { entry: Entry; size: number }) {
     )
   return <FileIcon entry={e} size={s} />
 }
+
 function Columns({
   explorer: x,
   prefs,
@@ -330,7 +387,7 @@ function Columns({
               })}
         >
           <FileIcon entry={e} size={24} />
-          <span>{e.name}</span>
+          <NameCell explorer={x} entry={e} className="column-label" />
           {e.isDir && <ChevronRight size={13} />}
         </div>
       ))}

@@ -16,6 +16,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { size } from '@/lib/files'
+import { shortcutLabel } from '@/lib/shortcuts'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
 interface Props {
@@ -154,10 +155,10 @@ export function Sidebar({
           <span>废纸篓</span>
           <ExternalLink size={12} />
         </button>
-        <button className="nav-item" onClick={onSettings}>
+        <button className="nav-item" aria-label="设置" onClick={onSettings}>
           <Settings2 />
           <span>设置</span>
-          <small>⌘ ,</small>
+          <small>{shortcutLabel(prefs.shortcuts, 'settings', prefs.shortcutStyle)}</small>
         </button>
       </div>
     </aside>

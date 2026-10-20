@@ -37,6 +37,14 @@ let entries = [
     42771,
   ),
   item(root + '/Documents/Research/InSb.pdf', false, 'application/pdf', 2000000),
+  item(root + '/Documents/Projects/fiex', true),
+  item(root + '/Documents/Projects/App.tsx', false, 'text/plain', 18342),
+  item(root + '/Documents/Projects/main.rs', false, 'text/plain', 4210),
+  item(root + '/Documents/Projects/server.py', false, 'text/plain', 9120),
+  item(root + '/Documents/Projects/theme.css', false, 'text/css', 3301),
+  item(root + '/Documents/Projects/docker-compose.yml', false, 'text/yaml', 782),
+  item(root + '/Documents/Projects/README.md', false, 'text/markdown', 2401),
+  item(root + '/Documents/Projects/logo.png', false, 'image/png', 48211),
 ]
 export async function mock(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {

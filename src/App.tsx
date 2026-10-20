@@ -50,7 +50,8 @@ import { Menu, Choice, Action, Separator, Label } from './components/Menus'
 import { useExplorer } from './hooks/useExplorer'
 import { usePreferences } from './hooks/usePreferences'
 import { call, native, demo } from './lib/api'
-import { basename, isArchive, join, size } from './lib/files'
+import { basename, isArchive, join, size, uniqueName } from './lib/files'
+import { matchShortcut, shortcutLabel } from './lib/shortcuts'
 import type { Entry, Group, OperationResult, Sort, Terminal, View } from './lib/types'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 /> },
@@ -83,7 +84,6 @@ interface DialogState {
 export default function App() {
   const [prefs, update] = usePreferences()
   const x = useExplorer(prefs)
-  const [platform, setPlatform] = useState('')
   const [sidebar, setSidebar] = useState(true)
   const [preview, setPreview] = useState<Entry | null>(null)
   const [settings, setSettings] = useState(false)
@@ -105,9 +105,6 @@ export default function App() {
   const first = chosen[0]
   const notify = useCallback((s: string) => setToast(s), [])
   useEffect(() => {
-    void call<string>('platform')
-      .then(setPlatform)
-      .catch(() => {})
     void call<Terminal[]>('detect_terminals')
       .then(setTerminals)
       .catch(() => {})
@@ -149,30 +146,24 @@ export default function App() {
       x.navigate(e.path)
     } else void run('正在打开…', () => call('open_path', { path: e.path }))
   }
-  const create = (folder: boolean) =>
-    setDialog({
-      title: folder ? '新建文件夹' : '新建文件',
-      label: '名称',
-      value: folder ? '未命名文件夹' : '未命名.txt',
-      submit: '创建',
-      action: async (name) => {
-        await call('create_entry', { path: x.path, name, folder })
-        x.reload()
-      },
-    })
-  const rename = () => {
-    if (first)
-      setDialog({
-        title: '重新命名',
-        label: '名称',
-        value: first.name,
-        submit: '存储',
-        action: async (name) => {
-          await call('rename_entry', { path: first.path, name })
-          x.reload()
-        },
-      })
+  const create = async (folder: boolean) => {
+    const preferred = folder ? '未命名文件夹' : '未命名.txt'
+    const name = uniqueName(
+      x.entries.map((e) => e.name),
+      preferred,
+    )
+    const path = await run(folder ? '正在新建文件夹…' : '正在新建文件…', () =>
+      call<string>('create_entry', { path: x.path, name, folder }),
+    )
+    if (!path) return
+    if (x.query) x.setQuery('')
+    x.beginRename(path)
   }
+  const rename = () => {
+    if (first) x.beginRename(first.path)
+  }
+  const hint = (action: Parameters<typeof shortcutLabel>[1]) =>
+    shortcutLabel(prefs.shortcuts, action, prefs.shortcutStyle)
   const recycle = () => {
     if (!x.selected.length) return
     const paths = [...x.selected]
@@ -279,9 +270,11 @@ export default function App() {
   }
   useEffect(() => {
     const fn = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement
+      const target = event.target instanceof Element ? event.target : null
       if (
-        target.closest('input,textarea,[contenteditable=true],[role=dialog],[role=menu]') ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        target?.closest('input,textarea,select,[contenteditable=true],[role=dialog],[role=menu]') ||
         dialog ||
         settings ||
         preview ||
@@ -289,115 +282,94 @@ export default function App() {
         go
       )
         return
-      const mod = event.metaKey || event.ctrlKey
-      if (mod && event.key === ',') {
-        event.preventDefault()
-        setSettings(true)
-        return
-      }
-      if (mod && event.key.toLowerCase() === 'f') {
-        event.preventDefault()
-        searchInput.current?.focus()
-        return
-      }
+      // Let a focused control handle Space/Return itself; modifier shortcuts
+      // still work while a toolbar button has focus.
       if (
-        (mod && event.key.toLowerCase() === 'l') ||
-        (mod && event.shiftKey && event.key.toLowerCase() === 'g')
-      ) {
-        event.preventDefault()
-        setGoValue(x.path)
-        setGo(true)
+        (event.key === 'Enter' || event.key === ' ') &&
+        target?.closest('button,a,select,[role=button],[role=tab]')
+      )
+        return
+      const action = matchShortcut(event, prefs.shortcuts)
+      if (!action) {
+        if (event.key === 'Escape') {
+          setMenu(null)
+          x.setSelected([])
+          x.setQuery('')
+        }
         return
       }
-      if (mod && event.key === 'a') {
-        event.preventDefault()
-        x.setSelected(x.entries.map((e) => e.path))
-        return
-      }
-      if (mod && event.key === 'c') {
-        event.preventDefault()
-        copy(false)
-        return
-      }
-      if (mod && event.key === 'x') {
-        event.preventDefault()
-        copy(true)
-        return
-      }
-      if (mod && event.key === 'v') {
-        event.preventDefault()
-        if (clipboard) transfer(clipboard.paths, x.path, clipboard.moving)
-        return
-      }
-      if (mod && event.key === 'z') {
-        event.preventDefault()
-        undo()
-        return
-      }
-      if (mod && event.shiftKey && event.key.toLowerCase() === 'n') {
-        event.preventDefault()
-        create(true)
-        return
-      }
-      if (mod && event.key.toLowerCase() === 't') {
-        event.preventDefault()
-        x.newTab()
-        return
-      }
-      if (mod && event.key.toLowerCase() === 'w') {
-        event.preventDefault()
-        x.closeTab(x.tab)
-        return
-      }
-      if (mod && event.key.toLowerCase() === 'd') {
-        event.preventDefault()
-        duplicate()
-        return
-      }
-      if (event.altKey && event.key === 'ArrowLeft') {
-        event.preventDefault()
-        x.back()
-        return
-      }
-      if (event.altKey && event.key === 'ArrowRight') {
-        event.preventDefault()
-        x.forward()
-        return
-      }
-      if ((mod || event.altKey) && event.key === 'ArrowUp') {
-        event.preventDefault()
-        x.up()
-        return
-      }
-      if (event.code === 'Space' && first) {
-        event.preventDefault()
-        setPreview(first)
-        return
-      }
-      if (event.key === 'F2' || (event.key === 'Enter' && platform === 'macos')) {
-        event.preventDefault()
-        rename()
-        return
-      }
-      if (event.key === 'Enter' && first) {
-        event.preventDefault()
-        open(first)
-        return
-      }
-      if (event.key === 'Delete' || (mod && event.key === 'Backspace')) {
-        event.preventDefault()
-        recycle()
-        return
-      }
-      if (event.key === 'F5' || (mod && event.key === 'r')) {
-        event.preventDefault()
-        x.reload()
-        return
-      }
-      if (event.key === 'Escape') {
-        setMenu(null)
-        x.setSelected([])
-        x.setQuery('')
+      event.preventDefault()
+      switch (action) {
+        case 'settings':
+          setSettings(true)
+          break
+        case 'search':
+          searchInput.current?.focus()
+          break
+        case 'goToFolder':
+          setGoValue(x.path)
+          setGo(true)
+          break
+        case 'selectAll':
+          x.setSelected(x.entries.map((e) => e.path))
+          break
+        case 'copy':
+          copy(false)
+          break
+        case 'cut':
+          copy(true)
+          break
+        case 'paste':
+          if (clipboard) transfer(clipboard.paths, x.path, clipboard.moving)
+          break
+        case 'undo':
+          undo()
+          break
+        case 'newFolder':
+          void create(true)
+          break
+        case 'newFile':
+          void create(false)
+          break
+        case 'newTab':
+          x.newTab()
+          break
+        case 'closeTab':
+          x.closeTab(x.tab)
+          break
+        case 'duplicate':
+          duplicate()
+          break
+        case 'back':
+          x.back()
+          break
+        case 'forward':
+          x.forward()
+          break
+        case 'up':
+          x.up()
+          break
+        case 'quickLook':
+          if (first && !event.repeat) setPreview(first)
+          break
+        case 'rename':
+          if (first) x.beginRename(first.path)
+          break
+        case 'open':
+          if (first) open(first)
+          break
+        case 'trash':
+          recycle()
+          break
+        case 'refresh':
+          x.reload()
+          break
+        case 'toggleSidebar':
+          setSidebar((value) => !value)
+          break
+        case 'info':
+          if (first) setInfo(first)
+          break
       }
     }
     document.addEventListener('keydown', fn)
@@ -580,39 +552,39 @@ export default function App() {
           <Menu label="更多操作" icon={<MoreHorizontal />}>
             <Action onClick={() => create(true)}>
               <FolderPlus />
-              新建文件夹<span className="shortcut">⇧⌘N</span>
+              新建文件夹<span className="shortcut">{hint('newFolder')}</span>
             </Action>
             <Action onClick={() => create(false)}>
               <FilePlus2 />
-              新建文件
+              新建文件<span className="shortcut">{hint('newFile')}</span>
             </Action>
             <Separator />
             <Action disabled={!first} onClick={rename}>
               <Pencil />
-              重新命名
+              重新命名<span className="shortcut">{hint('rename')}</span>
             </Action>
             <Action disabled={!first} onClick={() => copy(false)}>
               <Copy />
-              复制
+              复制<span className="shortcut">{hint('copy')}</span>
             </Action>
             <Action disabled={!first} onClick={() => copy(true)}>
               <Scissors />
-              剪切
+              剪切<span className="shortcut">{hint('cut')}</span>
             </Action>
             <Action
               disabled={!clipboard}
               onClick={() => clipboard && transfer(clipboard.paths, x.path, clipboard.moving)}
             >
               <ClipboardPaste />
-              粘贴
+              粘贴<span className="shortcut">{hint('paste')}</span>
             </Action>
             <Action disabled={!first} onClick={duplicate}>
               <Copy />
-              创建副本
+              创建副本<span className="shortcut">{hint('duplicate')}</span>
             </Action>
             <Action onClick={undo}>
               <Undo2 />
-              撤销
+              撤销<span className="shortcut">{hint('undo')}</span>
             </Action>
             <Separator />
             <Action disabled={!first} onClick={compress}>
@@ -629,11 +601,11 @@ export default function App() {
             </Action>
             <Action disabled={!first} onClick={() => first && setInfo(first)}>
               <Info />
-              显示简介
+              显示简介<span className="shortcut">{hint('info')}</span>
             </Action>
             <Action disabled={!first} onClick={recycle}>
               <Trash2 />
-              移到废纸篓
+              移到废纸篓<span className="shortcut">{hint('trash')}</span>
             </Action>
             <Separator />
             <Choice checked={prefs.hidden} onClick={() => update({ hidden: !prefs.hidden })}>
@@ -702,6 +674,12 @@ export default function App() {
               placeholder="搜索此文件夹"
               value={x.query}
               onChange={(e) => x.setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape') return
+                e.stopPropagation()
+                x.setQuery('')
+                e.currentTarget.blur()
+              }}
             />
             {x.searching ? (
               <LoaderCircle className="spin" size={14} />
@@ -710,7 +688,7 @@ export default function App() {
                 <X size={13} />
               </button>
             ) : (
-              <kbd>⌘ F</kbd>
+              <kbd>{hint('search')}</kbd>
             )}
           </div>
         </div>
@@ -813,28 +791,54 @@ export default function App() {
           }}
         >
           {[
-            { label: '打开', icon: <ExternalLink />, action: () => open(menu.entry) },
-            { label: '快速查看', icon: <Eye />, action: () => setPreview(menu.entry) },
-            { label: '显示简介', icon: <Info />, action: () => setInfo(menu.entry) },
-            { label: '重新命名', icon: <Pencil />, action: rename },
-            { label: '复制', icon: <Copy />, action: () => copy(false) },
-            { label: '剪切', icon: <Scissors />, action: () => copy(true) },
-            { label: '创建副本', icon: <Copy />, action: duplicate },
-            { label: '压缩为 ZIP', icon: <Archive />, action: compress },
+            {
+              label: '打开',
+              icon: <ExternalLink />,
+              hint: hint('open'),
+              action: () => open(menu.entry),
+            },
+            {
+              label: '快速查看',
+              icon: <Eye />,
+              hint: hint('quickLook'),
+              action: () => setPreview(menu.entry),
+            },
+            {
+              label: '显示简介',
+              icon: <Info />,
+              hint: hint('info'),
+              action: () => setInfo(menu.entry),
+            },
+            {
+              label: '重新命名',
+              icon: <Pencil />,
+              hint: hint('rename'),
+              action: () => x.beginRename(menu.entry.path),
+            },
+            { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
+            { label: '剪切', icon: <Scissors />, hint: hint('cut'), action: () => copy(true) },
+            { label: '创建副本', icon: <Copy />, hint: hint('duplicate'), action: duplicate },
+            { label: '压缩为 ZIP', icon: <Archive />, hint: '', action: compress },
             ...(isArchive(menu.entry)
-              ? [{ label: '解压缩', icon: <Archive />, action: extract }]
+              ? [{ label: '解压缩', icon: <Archive />, hint: '', action: extract }]
               : []),
-            { label: 'Open in Terminal', icon: <TerminalSquare />, action: () => terminal() },
+            {
+              label: 'Open in Terminal',
+              icon: <TerminalSquare />,
+              hint: '',
+              action: () => terminal(),
+            },
             {
               label: '复制路径',
               icon: <Copy />,
+              hint: '',
               action: () =>
                 void navigator.clipboard
                   .writeText(menu.entry.path)
                   .then(() => notify('路径已复制'))
                   .catch((e) => x.setError(String(e))),
             },
-            { label: '移到废纸篓', icon: <Trash2 />, action: recycle },
+            { label: '移到废纸篓', icon: <Trash2 />, hint: hint('trash'), action: recycle },
           ].map((a) => (
             <button
               role="menuitem"
@@ -846,6 +850,7 @@ export default function App() {
             >
               {a.icon}
               {a.label}
+              {a.hint && <span className="shortcut">{a.hint}</span>}
             </button>
           ))}
         </div>

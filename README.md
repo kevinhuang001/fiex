@@ -3,11 +3,13 @@
 <p align="center">A calm, fast file explorer for macOS, Windows and Linux.</p>
 <p align="center"><a href="https://github.com/kevinhuang001/fiex/releases/latest">Download</a> · <a href="README.zh-CN.md">简体中文</a></p>
 
-Fiex gives your files room to breathe: a translucent sidebar, compact controls, native icons, and four ways to explore.
+Fiex gives your files room to breathe: a translucent sidebar, compact controls, colored file-type icons, and four ways to explore.
 
 ### Find your way
 
-List, icons, columns and gallery views. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
+List, icons, columns and gallery views. The icon view uses a Finder-style fixed grid with two-line labels and snap-to-grid cells. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
+
+File icons are colored by type and language using the MIT-licensed [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme), with dedicated icons for 1,300+ extensions and 2,100+ filenames. Application bundles still use their native system logos.
 
 ### Find it quickly
 
@@ -15,7 +17,7 @@ Built-in parallel filename search uses the `ignore` engine from ripgrep. Results
 
 ### Work with your files
 
-Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Drag between Fiex folders to copy; hold Shift to move. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
+Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Renaming happens inline on the item, Finder-style; a new folder is created immediately with a unique name and its name is selected for editing. Drag between Fiex folders to copy; hold Shift to move. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
 
 Press **Space** for Quick Look. Preview images, video, audio, UTF-8 text/code and PDF through the built-in PDF.js renderer. Applications show their native logos. **Open in Terminal** detects installed terminals and lets you choose a default.
 
@@ -23,18 +25,23 @@ ZIP creation and ZIP, 7z, TAR, GZ, BZ2 and XZ extraction are built in; no comman
 
 ### Keyboard
 
-| Action                | Shortcut                  |
-| --------------------- | ------------------------- |
-| Quick Look            | Space                     |
-| Search / Go to folder | Cmd/Ctrl+F / Cmd/Ctrl+L   |
-| Copy / Cut / Paste    | Cmd/Ctrl+C / X / V        |
-| Undo / Duplicate      | Cmd/Ctrl+Z / D            |
-| New / Close tab       | Cmd/Ctrl+T / W            |
-| New folder            | Cmd/Ctrl+Shift+N          |
-| Rename                | F2 (or Return on macOS)   |
-| Trash                 | Delete (or Cmd+Backspace) |
-| Back / Forward / Up   | Alt+Left / Right / Up     |
-| Refresh               | F5                        |
+Shortcuts are editable in **Settings → Shortcuts**. Fiex ships with macOS, Windows and Linux presets; picking a style rewrites every binding, and any individual shortcut can be re-recorded. Defaults for the macOS style:
+
+| Action                | Shortcut                   |
+| --------------------- | -------------------------- |
+| Quick Look            | Space                      |
+| Search / Go to folder | Cmd+F / Cmd+Shift+G        |
+| Copy / Cut / Paste    | Cmd+C / X / V              |
+| Undo / Duplicate      | Cmd+Z / D                  |
+| New / Close tab       | Cmd+T / W                  |
+| New folder / file     | Cmd+Shift+N / Cmd+Option+N |
+| Rename / Open         | Return or F2 / Cmd+Down    |
+| Trash                 | Cmd+Backspace              |
+| Back / Forward / Up   | Cmd+[ / ] / Up             |
+| Refresh               | Cmd+R or F5                |
+| Settings              | Cmd+,                      |
+
+Windows and Linux presets use Ctrl/Alt with Explorer/Nautilus-style Rename (F2), Open (Enter), Trash (Delete) and Back/Forward (Alt+Left/Right).
 
 ### Development
 
@@ -57,7 +64,9 @@ npm run desktop:build
 
 Modules: `src/components/browser` (views), `src/hooks` (navigation/preferences), `src/lib` (models/IPC), `src-tauri/src/files.rs` (listing/metadata), `operations.rs` (mutations/undo), `search.rs` (parallel search), `archives.rs` (archives), `terminals.rs` (OS integration), `desktop.rs` (Tauri commands).
 
-GitHub Actions runs UI workflows, model tests, Rust tests, formatting, Clippy and native builds for macOS arm64/x64, Windows x64 and Linux x64. Releases publish only after every check and build passes.
+Native compression codecs are bundled: liblzma is compiled statically instead of linking Homebrew's `xz`, and the release pipeline runs `npm run audit:native` to reject any app binary that still points at `/opt/homebrew`, `/usr/local` or a build-machine path.
+
+GitHub Actions runs UI workflows, model tests, Rust tests, formatting, Clippy, the native dependency audit and native builds for macOS arm64/x64, Windows x64 and Linux x64. Releases publish only after every check and build passes.
 
 ### First-release scope
 

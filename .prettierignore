@@ -8,3 +8,4 @@ Cargo.lock
 artifacts
 playwright-report
 test-results
+public/file-icons/

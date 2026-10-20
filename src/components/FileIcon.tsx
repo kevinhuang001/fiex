@@ -1,25 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  AppWindow,
-  Archive,
-  File,
-  FileCode2,
-  FileImage,
-  FileMusic,
-  FileSpreadsheet,
-  FileText,
-  FileVideo,
-  Folder,
-  Link2,
-  Presentation,
-  Type,
-} from 'lucide-react'
+import { Link2 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { kind } from '@/lib/files'
+import { fileVisual } from '@/lib/fileIcons'
 import type { Entry } from '@/lib/types'
+
 const cache = new Map<string, Promise<string | null>>()
 const visibleCallbacks = new Map<Element, () => void>()
 let observer: IntersectionObserver | undefined
+
 function whenVisible(element: Element, callback: () => void) {
   observer ??= new IntersectionObserver(
     (entries) => {
@@ -40,13 +29,20 @@ function whenVisible(element: Element, callback: () => void) {
     observer!.unobserve(element)
   }
 }
+
+/**
+ * File-type icons come from the MIT-licensed Material Icon Theme. Native
+ * application logos are still used for `.app`/`.exe`/`.desktop` bundles so
+ * Fiex matches Finder where it matters.
+ */
 export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number }) {
-  const [url, setUrl] = useState<string | null>(null)
+  const isApplication = kind(e) === '应用程序'
+  const [native, setNative] = useState<string | null>(null)
   const ref = useRef<HTMLSpanElement>(null)
   useEffect(() => {
+    setNative(null)
+    if (!isApplication || !ref.current) return
     let active = true
-    setUrl(null)
-    if (!ref.current) return
     const stop = whenVisible(ref.current, () => {
       const key = e.path + ':' + e.modified
       if (!cache.has(key)) {
@@ -56,55 +52,24 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
           call<string>('native_icon', { path: e.path }).catch(() => null),
         )
       }
-      void cache.get(key)!.then((v) => {
-        if (active) setUrl(v)
+      void cache.get(key)!.then((url) => {
+        if (active) setNative(url)
       })
     })
     return () => {
       active = false
       stop()
     }
-  }, [e.path, e.modified])
-  const k = kind(e)
-  const Icon =
-    k === '应用程序'
-      ? AppWindow
-      : e.isDir
-        ? Folder
-        : k === '图片'
-          ? FileImage
-          : k === '归档'
-            ? Archive
-            : k === '视频'
-              ? FileVideo
-              : k === '音频'
-                ? FileMusic
-                : k === '表格'
-                  ? FileSpreadsheet
-                  : k === '文档'
-                    ? FileText
-                    : k === '演示文稿'
-                      ? Presentation
-                      : k === '字体'
-                        ? Type
-                        : k === '文本与代码'
-                          ? FileCode2
-                          : File
+  }, [e.path, e.modified, isApplication])
+
+  const visual = fileVisual(e)
+  const generic = visual.generic ? (visual.folder ? 'generic-folder' : 'generic-file') : ''
   return (
-    <span
-      ref={ref}
-      className={`file-icon ${e.isDir ? 'folder-icon' : ''}`}
-      style={{ width: size, height: size }}
-    >
-      {url ? (
-        <img src={url} alt="" draggable={false} />
+    <span ref={ref} className="file-icon" style={{ width: size, height: size }}>
+      {isApplication && native ? (
+        <img src={native} alt="" draggable={false} onError={() => setNative(null)} />
       ) : (
-        <Icon
-          size={size}
-          strokeWidth={1.3}
-          fill={e.isDir ? 'currentColor' : 'none'}
-          fillOpacity={e.isDir ? 0.2 : 0}
-        />
+        <img className={generic} src={visual.url} alt="" draggable={false} />
       )}
       {e.isSymlink && <Link2 className="symlink" size={12} />}
     </span>

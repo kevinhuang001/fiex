@@ -8,6 +8,7 @@ export function Modal({
   description,
   children,
   wide = false,
+  className,
 }: {
   open: boolean
   onClose: () => void
@@ -15,13 +16,14 @@ export function Modal({
   description?: string
   children: ReactNode
   wide?: boolean
+  className?: string
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="modal-overlay" />
         <Dialog.Content
-          className={`modal ${wide ? 'modal-wide' : ''}`}
+          className={`modal ${wide ? 'modal-wide' : ''} ${className || ''}`}
           onOpenAutoFocus={(e) => {
             if (wide) e.preventDefault()
           }}

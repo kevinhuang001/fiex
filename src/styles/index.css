@@ -587,6 +587,41 @@ button[data-slot='button'][data-variant='default'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.file-label {
+  min-width: 0;
+}
+.inline-rename {
+  min-width: 0;
+  font: inherit;
+  color: var(--text);
+  background: var(--canvas);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 1px 5px;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.inline-rename:focus-visible {
+  outline: none;
+}
+.inline-rename:disabled {
+  opacity: 0.6;
+}
+.file-name .inline-rename {
+  flex: 1;
+  width: 100%;
+  font-size: 11px;
+}
+.file-tile .inline-rename {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+.column-row .inline-rename {
+  flex: 1;
+  font-size: 11px;
+}
 .file-name small {
   color: var(--muted);
   font-size: 9px;
@@ -609,6 +644,7 @@ button[data-slot='button'][data-variant='default'] {
   object-fit: contain;
   filter: drop-shadow(0 1px 1px #1e49680b);
 }
+/* Material's default folder is grey-blue; lift it to Finder-like blue. */
 .file-icon .symlink {
   position: absolute;
   bottom: 0;
@@ -632,29 +668,35 @@ button[data-slot='button'][data-variant='default'] {
   padding: 0 12px;
   letter-spacing: 0.4px;
 }
+/* Finder-style icon grid: fixed cells, left aligned, no stretched columns. */
 .icon-grid {
   display: grid;
-  gap: 10px 8px;
-  padding: 22px 7px;
+  grid-template-columns: repeat(auto-fill, var(--tile-size, 126px));
+  justify-content: start;
+  align-content: start;
+  gap: 4px;
+  padding: 18px 4px 26px;
 }
 .file-tile {
   display: flex;
   align-items: center;
   flex-direction: column;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 7px;
+  width: 100%;
   min-width: 0;
-  border-radius: 12px;
-  padding: 12px 7px;
+  min-height: calc(var(--icon-size, 88px) + 48px);
+  border-radius: 10px;
+  padding: 10px 6px 8px;
   border: 1px solid transparent;
 }
-.file-tile:hover {
-  background: color-mix(in srgb, var(--hover) 50%, transparent);
+.tile-icon {
+  height: var(--icon-size, 88px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.file-tile.selected {
-  background: var(--selected);
-  border-color: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.file-tile > span:last-child {
+.tile-label {
   font-size: 11px;
   max-width: 100%;
   text-align: center;
@@ -664,7 +706,15 @@ button[data-slot='button'][data-variant='default'] {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-word;
-  line-height: 1.5;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+.file-tile:hover {
+  background: color-mix(in srgb, var(--hover) 50%, transparent);
+}
+.file-tile.selected {
+  background: var(--selected);
+  border-color: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .gallery-preview {
   height: calc(100% - 170px);
@@ -699,8 +749,12 @@ button[data-slot='button'][data-variant='default'] {
   min-width: 100px;
   max-width: 120px;
 }
-.gallery-strip .file-tile > span:last-child {
+.gallery-strip .file-tile > span:last-child,
+.gallery-strip .tile-label {
   font-size: 10px;
+}
+.gallery-strip .tile-icon {
+  height: auto;
 }
 .columns-view {
   flex: 1;
@@ -733,6 +787,9 @@ button[data-slot='button'][data-variant='default'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.column-label {
+  min-width: 0;
 }
 .column-row > svg {
   color: var(--muted);
@@ -1031,6 +1088,9 @@ button[data-slot='button'][data-variant='default'] {
 .dialog-actions button[disabled] {
   opacity: 0.6;
 }
+.settings-modal {
+  width: 620px;
+}
 .modal-wide {
   width: 850px;
   padding: 0;
@@ -1245,18 +1305,105 @@ button[data-slot='button'][data-variant='default'] {
 .about > button {
   font-size: 11px;
 }
-.shortcuts {
+.shortcut-editor {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.shortcut-group {
+  margin-top: 14px;
+}
+.shortcut-group h4 {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 30px;
+  padding: 4px 0;
+  font-size: 11px;
+}
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.shortcut-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--text);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.shortcut-pill > button:first-child {
+  font-size: 10px;
+  color: var(--text);
+  padding: 1px 2px;
+}
+.shortcut-pill.recording {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--canvas);
+}
+.shortcut-pill.recording > button:first-child {
+  color: var(--canvas);
+}
+.shortcut-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.shortcut-remove:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.shortcut-add {
+  width: 21px;
+  height: 21px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+}
+.shortcut-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.shortcut-help {
   font-size: 10px;
   color: var(--muted);
-  line-height: 1.8;
+  line-height: 1.7;
+  margin: 6px 0 2px;
 }
-.shortcuts summary {
-  cursor: default;
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
+.shortcut-help.error {
+  color: #c34d4d;
 }
-.shortcuts p {
-  padding: 6px 0;
+.shortcut-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.shortcut-footer button {
+  font-size: 10px;
+  color: var(--accent);
 }
 .toast {
   position: fixed;

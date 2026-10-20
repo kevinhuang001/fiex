@@ -19,6 +19,7 @@ export function useExplorer(prefs: Preferences) {
   const [tabs, setTabs] = useState<string[]>([])
   const [tab, setTab] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
+  const [renaming, setRenaming] = useState<string | null>(null)
   const request = useRef(0)
   const searchRequest = useRef(0)
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
@@ -27,6 +28,7 @@ export function useExplorer(prefs: Preferences) {
       setQuery('')
       setPath(next)
       setSelected([])
+      setRenaming(null)
       setError('')
       setHistory((h) => [...h.slice(0, cursor + 1), next])
       setCursor((c) => c + 1)
@@ -137,6 +139,7 @@ export function useExplorer(prefs: Preferences) {
       setTabs((t) => t.map((p, i) => (i === tab ? history[cursor - 1] : p)))
       setQuery('')
       setSelected([])
+      setRenaming(null)
     }
   }
   const forward = () => {
@@ -146,6 +149,7 @@ export function useExplorer(prefs: Preferences) {
       setTabs((t) => t.map((p, i) => (i === tab ? history[cursor + 1] : p)))
       setQuery('')
       setSelected([])
+      setRenaming(null)
     }
   }
   const newTab = (next = path) => {
@@ -156,6 +160,7 @@ export function useExplorer(prefs: Preferences) {
     setCursor(0)
     setQuery('')
     setSelected([])
+    setRenaming(null)
   }
   const switchTab = (i: number) => {
     setTab(i)
@@ -164,6 +169,7 @@ export function useExplorer(prefs: Preferences) {
     setCursor(0)
     setQuery('')
     setSelected([])
+    setRenaming(null)
   }
   const closeTab = (i: number) => {
     if (tabs.length === 1) return
@@ -176,7 +182,26 @@ export function useExplorer(prefs: Preferences) {
     setCursor(0)
     setQuery('')
     setSelected([])
+    setRenaming(null)
   }
+  const beginRename = useCallback((target: string) => {
+    setSelected([target])
+    setRenaming(target)
+  }, [])
+  const cancelRename = useCallback(() => setRenaming(null), [])
+  const renameTo = useCallback(async (target: string, name: string) => {
+    setError('')
+    try {
+      const next = await call<string>('rename_entry', { path: target, name })
+      setRenaming(null)
+      setSelected([next])
+      setRefresh((v) => v + 1)
+      return true
+    } catch (e) {
+      setError(String(e))
+      return false
+    }
+  }, [])
   return {
     path,
     entries,
@@ -203,6 +228,10 @@ export function useExplorer(prefs: Preferences) {
     newTab,
     switchTab,
     closeTab,
+    renaming,
+    beginRename,
+    cancelRename,
+    renameTo,
   }
 }
 export type Explorer = ReturnType<typeof useExplorer>
