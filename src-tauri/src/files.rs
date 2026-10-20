@@ -148,15 +148,8 @@ pub fn locations() -> Vec<Location> {
     for disk in sysinfo::Disks::new_with_refreshed_list().list() {
         let path = disk.mount_point().to_string_lossy().into_owned();
         #[cfg(target_os = "macos")]
-        {
-            // APFS exposes the data volume (and several synthetic volumes) from
-            // the same container. Showing "/" plus "/System/Volumes/Data" made
-            // two "Macintosh HD" entries with identical capacity.
-            if path.starts_with("/System/Volumes/")
-                || (path != "/" && !path.starts_with("/Volumes/"))
-            {
-                continue;
-            }
+        if !visible_mount(&path) {
+            continue;
         }
         let mut name = disk.name().to_string_lossy().into_owned();
         if name.is_empty() {
