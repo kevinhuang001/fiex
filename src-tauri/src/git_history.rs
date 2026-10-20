@@ -61,26 +61,42 @@ pub struct Commit {
     pub subject: String,
     pub author: String,
     pub timestamp: u64,
+    pub refs: String,
 }
 pub fn history(root: &str, skip: usize) -> Result<Vec<Commit>, String> {
-    if output(Path::new(root), &["rev-parse", "--verify", "HEAD"]).is_err() {
+    // Sort lightweight IDs first so pagination is strictly chronological across
+    // every branch, even when a child has an earlier timestamp than its parent.
+    let ids = output(Path::new(root), &["rev-list", "--all", "--timestamp"])?;
+    let text = String::from_utf8_lossy(&ids);
+    let mut ids = text
+        .lines()
+        .filter_map(|line| {
+            let (stamp, id) = line.split_once(' ')?;
+            Some((stamp.parse::<u64>().ok()?, id))
+        })
+        .collect::<Vec<_>>();
+    ids.sort_unstable_by(|a, b| b.cmp(a));
+    let selected = ids
+        .iter()
+        .skip(skip)
+        .take(50)
+        .map(|(_, id)| *id)
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
         return Ok(vec![]);
     }
-    let raw = output(
-        Path::new(root),
-        &[
-            "log",
-            "--all",
-            "-z",
-            "--format=%H%x00%h%x00%s%x00%an%x00%at",
-            "-n",
-            "50",
-            &format!("--skip={skip}"),
-        ],
-    )?;
+    let mut args = vec![
+        "log",
+        "--no-walk=unsorted",
+        "--decorate=short",
+        "-z",
+        "--format=%H%x00%h%x00%s%x00%an%x00%ct%x00%D",
+    ];
+    args.extend(selected);
+    let raw = output(Path::new(root), &args)?;
     let fields = raw.split(|b| *b == 0).collect::<Vec<_>>();
     Ok(fields
-        .as_chunks::<5>()
+        .as_chunks::<6>()
         .0
         .iter()
         .map(|f| Commit {
@@ -89,6 +105,7 @@ pub fn history(root: &str, skip: usize) -> Result<Vec<Commit>, String> {
             subject: String::from_utf8_lossy(f[2]).into(),
             author: String::from_utf8_lossy(f[3]).into(),
             timestamp: String::from_utf8_lossy(f[4]).parse().unwrap_or(0),
+            refs: String::from_utf8_lossy(f[5]).into(),
         })
         .collect())
 }
@@ -266,6 +283,54 @@ pub fn search(
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn history_merges_branches_in_timestamp_order_even_with_skewed_dates() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().to_str().unwrap();
+        crate::git::init(root).unwrap();
+        assert!(super::history(root, 0).unwrap().is_empty());
+        let commit = |message: &str, timestamp: &str| {
+            let result = std::process::Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args([
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@example.com",
+                    "commit",
+                    "--allow-empty",
+                    "-m",
+                    message,
+                ])
+                .env("GIT_AUTHOR_DATE", timestamp)
+                .env("GIT_COMMITTER_DATE", timestamp)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        };
+        commit("Base", "2001-09-09T01:46:40+0000");
+        let base = super::output(temp.path(), &["rev-parse", "HEAD"]).unwrap();
+        let base = String::from_utf8_lossy(&base).trim().to_owned();
+        commit("Older child on main", "2000-09-09T01:46:40+0000");
+        super::output(temp.path(), &["checkout", "-b", "dev", &base]).unwrap();
+        commit("Newer commit on dev", "2002-09-09T01:46:40+0000");
+        let history = super::history(root, 0).unwrap();
+        assert_eq!(
+            history
+                .iter()
+                .map(|c| c.subject.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Newer commit on dev", "Base", "Older child on main"]
+        );
+        assert!(history[0].refs.contains("dev"));
+        assert!(history[2].refs.contains("main"));
+        assert!(super::history(root, 50).unwrap().is_empty());
+    }
     #[test]
     fn browses_old_bytes_without_checking_out_or_modifying_worktree() {
         let temp = tempfile::tempdir().unwrap();

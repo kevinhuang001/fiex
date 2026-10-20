@@ -11,7 +11,6 @@ import {
   Minus,
   Plus,
   RefreshCw,
-  UserRound,
   X,
 } from 'lucide-react'
 import { basename } from '@/lib/files'
@@ -19,7 +18,8 @@ import { gitState } from '@/lib/git'
 import { useGitRepository } from '@/hooks/useGitRepository'
 import type { GitStatus } from '@/lib/types'
 import { Button } from './ui/button'
-import * as D from './ui/dropdown-menu'
+import { CommitPicker } from './git/CommitPicker'
+import { CommitDialog } from './git/CommitDialog'
 
 interface Change {
   path: string
@@ -56,8 +56,12 @@ export function GitPanel({
   readOnly,
 }: Props) {
   const repo = useGitRepository(git?.root, path, open, onRefresh, onViewRevision)
-  const [section, setSection] = useState<'changes' | 'history'>('changes')
-  const [identityOpen, setIdentityOpen] = useState(true)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [commitOpen, setCommitOpen] = useState(false)
+  useEffect(() => {
+    setPickerOpen(false)
+    setCommitOpen(false)
+  }, [git?.root])
   const changes = useMemo<Change[]>(
     () =>
       git && !readOnly
@@ -73,11 +77,11 @@ export function GitPanel({
   useEffect(() => {
     if (!open) return
     const handle = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented) onClose()
+      if (event.key === 'Escape' && !event.defaultPrevented && !pickerOpen && !commitOpen) onClose()
     }
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
-  }, [open, onClose])
+  }, [open, onClose, pickerOpen, commitOpen])
   if (!open) return null
   const disabled = Boolean(repo.busy || loading)
   const sections = [
@@ -148,181 +152,59 @@ export function GitPanel({
               <strong>{basename(git.root)}</strong>
               <small title={git.root}>{git.root}</small>
             </span>
-            <D.DropdownMenu>
-              <D.DropdownMenuTrigger asChild>
-                <button
-                  className="git-branch-trigger"
-                  aria-label="切换分支或版本"
-                  disabled={disabled}
-                >
-                  <GitBranch size={13} />
-                  <span>{git.branch}</span>
-                  <ChevronDown size={12} />
-                </button>
-              </D.DropdownMenuTrigger>
-              <D.DropdownMenuContent align="end" className="fiex-menu git-ref-menu">
-                <D.DropdownMenuLabel>分支</D.DropdownMenuLabel>
-                <D.DropdownMenuRadioGroup
-                  value={git.branch}
-                  onValueChange={(ref) => {
-                    setSection('history')
-                    void repo.browse(ref)
-                  }}
-                >
-                  {(repo.refs?.branches.length ? repo.refs.branches : [git.branch]).map(
-                    (branch) => (
-                      <D.DropdownMenuRadioItem value={branch} key={branch}>
-                        {branch}
-                      </D.DropdownMenuRadioItem>
-                    ),
-                  )}
-                  {!!repo.refs?.tags.length && <D.DropdownMenuLabel>标签</D.DropdownMenuLabel>}
-                  {repo.refs?.tags.map((tag) => (
-                    <D.DropdownMenuRadioItem value={tag} key={'tag:' + tag}>
-                      {tag}
-                    </D.DropdownMenuRadioItem>
-                  ))}
-                </D.DropdownMenuRadioGroup>
-              </D.DropdownMenuContent>
-            </D.DropdownMenu>
-          </div>
-          <div className="git-section-tabs">
             <button
-              aria-pressed={!readOnly && section === 'changes'}
-              disabled={readOnly}
-              onClick={() => setSection('changes')}
+              className="git-branch-trigger"
+              aria-label="选择 commit"
+              disabled={disabled}
+              onClick={() => setPickerOpen(true)}
             >
-              更改
-            </button>
-            <button
-              aria-pressed={readOnly || section === 'history'}
-              onClick={() => setSection('history')}
-            >
-              提交历史
+              <GitBranch size={13} />
+              <span>
+                {repo.refs?.current || git.branch} ·{' '}
+                {readOnly ? git.branch : repo.refs?.head || '尚无 commit'}
+              </span>
+              <ChevronDown size={12} />
             </button>
           </div>
+          <CommitPicker
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            commits={repo.commits}
+            path={path}
+            busy={disabled}
+            onSelect={async (id) => {
+              await repo.browse(id)
+              setPickerOpen(false)
+            }}
+            onMore={repo.moreHistory}
+          />
+          <CommitDialog
+            open={commitOpen}
+            onClose={() => setCommitOpen(false)}
+            repo={repo}
+            count={staged.length}
+          />
           {readOnly && (
             <div className="git-history-return">
               <span>历史版本只读 · {git.branch}</span>
               <button onClick={onReturnToWorktree}>返回工作区</button>
             </div>
           )}
-          {(readOnly || section === 'history') && (
-            <div className="git-history-list">
-              {!repo.commits.length && (
-                <p className="git-panel-empty">暂无提交记录，完成首次提交后会显示在这里。</p>
-              )}
-              {repo.commits.map((commit) => (
-                <button
-                  key={commit.id}
-                  className={`git-history-item ${path.includes(commit.id) ? 'active' : ''}`}
-                  aria-label={`查看提交 ${commit.shortId}`}
-                  disabled={disabled}
-                  onClick={() => void repo.browse(commit.id)}
-                >
-                  <span className="git-history-marker">
-                    <GitCommitHorizontal size={16} />
-                  </span>
-                  <span>
-                    <strong>{commit.subject}</strong>
-                    <small>
-                      {commit.author} ·{' '}
-                      {new Date(commit.timestamp * 1000).toLocaleDateString('zh-CN')}
-                    </small>
-                    <code>{commit.shortId}</code>
-                  </span>
-                </button>
-              ))}
-              {!!repo.commits.length && repo.commits.length % 50 === 0 && (
-                <button
-                  className="git-load-more"
-                  disabled={disabled}
-                  onClick={() => void repo.moreHistory()}
-                >
-                  加载更早的提交
-                </button>
-              )}
-            </div>
-          )}
-          {!readOnly && section === 'changes' ? (
+          {!readOnly ? (
             <>
-              <form
-                className="git-commit-form"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  if (!disabled && staged.length && repo.message.trim()) void repo.commit()
-                }}
-              >
-                <label className="visually-hidden" htmlFor="git-message">
-                  提交说明
-                </label>
-                <textarea
-                  id="git-message"
-                  aria-label="提交说明"
-                  placeholder="这次做了哪些改动？"
-                  value={repo.message}
-                  disabled={disabled}
-                  onChange={(e) => repo.setMessage(e.target.value)}
-                  rows={3}
-                  onKeyDown={(event) => {
-                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                      event.preventDefault()
-                      event.currentTarget.form?.requestSubmit()
-                    }
-                  }}
-                />
-                <details
-                  className="git-identity"
-                  open={identityOpen}
-                  onToggle={(e) => setIdentityOpen(e.currentTarget.open)}
-                >
-                  <summary>
-                    <UserRound size={12} />
-                    {repo.identity.name || '设置提交身份'}
-                    <ChevronDown size={12} />
-                  </summary>
-                  <div>
-                    <input
-                      aria-label="提交者姓名"
-                      placeholder="姓名"
-                      value={repo.identity.name}
-                      disabled={disabled}
-                      onChange={(e) => repo.setIdentity({ ...repo.identity, name: e.target.value })}
-                    />
-                    <input
-                      aria-label="提交者邮箱"
-                      placeholder="邮箱"
-                      type="email"
-                      value={repo.identity.email}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        repo.setIdentity({ ...repo.identity, email: e.target.value })
-                      }
-                    />
-                  </div>
-                  <small>仅用于此提交，不修改全局 Git 配置。</small>
-                </details>
-                <Button
-                  type="submit"
-                  disabled={
-                    disabled ||
-                    !staged.length ||
-                    !repo.message.trim() ||
-                    !repo.identity.name.trim() ||
-                    !repo.identity.email.trim()
-                  }
-                >
+              <div className="git-commit-action">
+                <Button disabled={disabled || !staged.length} onClick={() => setCommitOpen(true)}>
                   <GitCommitHorizontal size={15} />
-                  {staged.length ? `提交 ${staged.length} 个文件` : '提交更改'}
+                  提交修改{staged.length ? ` · ${staged.length}` : ''}
                 </Button>
                 <span className="git-commit-hint">
                   {staged.length
-                    ? 'Ctrl / ⌘ + Enter 提交'
+                    ? '提交已暂存的修改'
                     : changes.length
                       ? '先暂存要提交的文件'
                       : '工作区没有待提交的更改'}
                 </span>
-              </form>
+              </div>
               <div className="git-panel-scroll">
                 {!changes.length && (
                   <div className="git-clean">

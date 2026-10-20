@@ -66,7 +66,7 @@ export function useGitRepository(
     return () => window.clearInterval(timer)
   }, [open, root, refresh])
   const run = async (label: string, action: () => Promise<unknown>) => {
-    if (running.current) return
+    if (running.current) return false
     running.current = true
     setBusy(label)
     setError('')
@@ -74,8 +74,10 @@ export function useGitRepository(
     try {
       await action()
       if (latest.current === scope) await refresh()
+      return true
     } catch (e) {
       if (latest.current === scope) setError(String(e))
+      return false
     } finally {
       running.current = false
       setBusy('')
@@ -98,7 +100,12 @@ export function useGitRepository(
     success,
     refresh: () =>
       run('正在刷新', async () => {
-        await loadRefs()
+        if (!root) return
+        const [items] = await Promise.all([
+          call<GitCommit[]>('git_history', { root, skip: 0 }),
+          loadRefs(),
+        ])
+        if (latest.current === scope) setCommits(items)
       }),
     initialize: () => run('正在初始化', () => call('git_init', { path })),
     stage: (paths: string[], all = false) =>

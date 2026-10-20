@@ -100,12 +100,14 @@ export interface RemoteConnection {
 }
 
 export interface GitRefs {
+  head: string
   current: string
   branches: string[]
   tags: string[]
 }
 
 export interface GitCommit {
+  refs: string
   id: string
   shortId: string
   subject: string

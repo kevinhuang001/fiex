@@ -37,6 +37,7 @@ const demoHistory = [
   {
     id: secondCommit,
     shortId: 'bbbbbbbb',
+    refs: 'dev',
     subject: '完善文件浏览与拖拽',
     author: 'Kevin Huang',
     timestamp: now - 3600,
@@ -44,6 +45,7 @@ const demoHistory = [
   {
     id: firstCommit,
     shortId: 'aaaaaaaa',
+    refs: 'main',
     subject: '初始版本',
     author: 'Kevin Huang',
     timestamp: now - 86400,
@@ -265,7 +267,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         },
       ]
     case 'git_refs':
-      return { current: demoBranch, branches: ['main', 'dev'], tags: ['v0.2.4'] }
+      return { head: 'aaaaaaaa', current: demoBranch, branches: ['main', 'dev'], tags: ['v0.2.4'] }
     case 'git_identity':
       return { name: 'Kevin Huang', email: 'kevin@example.com' }
     case 'git_init': {

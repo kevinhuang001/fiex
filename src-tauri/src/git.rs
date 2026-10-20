@@ -76,6 +76,7 @@ pub fn status(path: &str) -> Option<GitStatus> {
 
 #[derive(Serialize)]
 pub struct GitRefs {
+    pub head: String,
     pub current: String,
     pub branches: Vec<String>,
     pub tags: Vec<String>,
@@ -103,6 +104,7 @@ pub fn refs(root: &str) -> Result<GitRefs, String> {
     .filter(|value| !value.is_empty())
     .collect::<Vec<_>>();
     Ok(GitRefs {
+        head: output(Path::new(root), &["rev-parse", "--short", "HEAD"]).unwrap_or_default(),
         current,
         branches,
         tags,
@@ -243,9 +245,9 @@ pub fn commit(root: &str, message: &str, name: &str, email: &str) -> Result<Stri
     if name.trim().is_empty() || email.trim().is_empty() {
         return Err("请填写提交者姓名和邮箱".into());
     }
-    let name = format!("user.name={}", name.trim());
-    let email = format!("user.email={}", email.trim());
-    run(&root, &["-c", &name, "-c", &email, "commit", "-m", message])?;
+    run(&root, &["config", "--local", "user.name", name.trim()])?;
+    run(&root, &["config", "--local", "user.email", email.trim()])?;
+    run(&root, &["commit", "-m", message])?;
     run(&root, &["rev-parse", "--short", "HEAD"])
 }
 
@@ -271,6 +273,14 @@ mod tests {
             !commit(root, "First commit", "Fiex Test", "fiex@example.com")
                 .unwrap()
                 .is_empty()
+        );
+        assert_eq!(
+            output(temp.path(), &["config", "--local", "user.name"]).unwrap(),
+            "Fiex Test"
+        );
+        assert_eq!(
+            output(temp.path(), &["config", "--local", "user.email"]).unwrap(),
+            "fiex@example.com"
         );
         assert!(status(root).unwrap().entries.is_empty());
         std::fs::write(temp.path().join("notes.txt"), "second").unwrap();
