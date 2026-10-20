@@ -17,7 +17,7 @@ source, target = base / 'source', base / 'other-app'
 source.mkdir(); target.mkdir()
 (source / 'MOVE_TARGET').mkdir()
 (source / 'MOVE_INSIDE.txt').write_text('internal file move verified\n')
-(source / 'MOVE_OUTSIDE.txt').write_text('native external file move verified\n')
+(source / 'MOVE_OUTSIDE.txt').write_text('native external file copy verified\n')
 processes = []
 
 def command(*args):
@@ -136,7 +136,7 @@ try:
     wait_for(lambda: text_points('MOVE_INSIDE'))
     screenshot('internal-move.png')
     time.sleep(2)
-    key('alt+Left')
+    command('xdotool', 'mousemove', 293, 36, 'click', '1')
     wait_for(lambda: text_points('MOVE_OUTSIDE'))
     time.sleep(2)
     # A favorite is an entry pointing at a folder, not a destructive move.
@@ -152,22 +152,38 @@ try:
     command('xdotool', 'windowsize', thunar, 500, 850)
     command('xdotool', 'windowactivate', '--sync', fiex)
     time.sleep(1)
-    start = text_points('MOVE_OUTSIDE')[0]
-    command('xdotool', 'mousemove', *start, 'mousedown', '1')
-    for x in range(start[0], 1199, 15):
-        command('xdotool', 'mousemove', x, start[1]); time.sleep(.025)
-    command('xdotool', 'mousemove', 1199, start[1]); time.sleep(1.2)
-    for x in range(1200, 1461, 10):
-        command('xdotool', 'mousemove', x, 350); time.sleep(.035)
-    time.sleep(1)
-    command('xdotool', 'mouseup', '1')
+    def drag_outside():
+        start = text_points('MOVE_OUTSIDE')[0]
+        command('xdotool', 'mousemove', *start, 'mousedown', '1')
+        for x in range(start[0], 1199, 15):
+            command('xdotool', 'mousemove', x, start[1]); time.sleep(.025)
+        command('xdotool', 'mousemove', 1199, start[1]); time.sleep(1.2)
+        for x in range(1200, 1461, 10):
+            command('xdotool', 'mousemove', x, 350); time.sleep(.035)
+        time.sleep(1)
+        command('xdotool', 'mouseup', '1')
+    drag_outside()
     wait_for(lambda: (target/'MOVE_OUTSIDE.txt').is_file())
-    assert (target/'MOVE_OUTSIDE.txt').read_text() == 'native external file move verified\n'
-    result = {'internal_move': True, 'favorite_added_without_moving_folder': True, 'external_drop_received': True, 'external_source_removed': not (source/'MOVE_OUTSIDE.txt').exists()}
+    assert (target/'MOVE_OUTSIDE.txt').read_text() == 'native external file copy verified\n'
+    result = {'internal_move': True, 'favorite_added_without_moving_folder': True, 'external_drop_received': True, 'external_source_preserved': (source/'MOVE_OUTSIDE.txt').exists()}
     import json
     (out/'verified-results.json').write_text(json.dumps(result, indent=2))
-    assert result['external_source_removed'], 'Target received a copy instead of a completed move'
+    assert result['external_source_preserved'], 'External drag must preserve the source file'
     screenshot('external-drop.png')
+    time.sleep(2)
+    processes.append(subprocess.Popen(['python3', str(Path(__file__).with_name('upload-target.py')), str(target/'browser-uploaded.txt')], env=app_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    browser = wait_for(lambda: window('Browser Upload'))
+    command('xdotool', 'windowmove', browser, 1200, 0)
+    command('xdotool', 'windowsize', browser, 500, 850)
+    time.sleep(3)
+    command('xdotool', 'windowactivate', '--sync', fiex)
+    drag_outside()
+    wait_for(lambda: (target/'browser-uploaded.txt').is_file())
+    assert (target/'browser-uploaded.txt').read_bytes() == (source/'MOVE_OUTSIDE.txt').read_bytes()
+    result['browser_upload_received'] = True
+    (out/'verified-results.json').write_text(json.dumps(result, indent=2))
+    screenshot('browser-upload.png')
+
     time.sleep(4)
 finally:
     screenshot('final.png')

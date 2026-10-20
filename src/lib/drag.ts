@@ -8,16 +8,15 @@ export const DRAG_ICON =
 let platform: Promise<string> | undefined
 export async function startFileDrag(
   paths: string[],
-  copying: boolean,
   onResult: (result: 'Dropped' | 'Cancelled') => void,
 ) {
   platform ??= call<string>('platform')
   if ((await platform) === 'linux') {
     const onEvent = new Channel<string>()
     onEvent.onmessage = (result) => onResult(result === 'Dropped' ? 'Dropped' : 'Cancelled')
-    await call('drag_files', { paths, copy: copying, onEvent })
+    await call('drag_files', { paths, onEvent })
   } else {
-    await startDrag({ item: paths, icon: DRAG_ICON, mode: copying ? 'copy' : 'move' }, (event) =>
+    await startDrag({ item: paths, icon: DRAG_ICON, mode: 'copy' }, (event) =>
       onResult(event.result),
     )
   }

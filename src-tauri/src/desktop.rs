@@ -13,16 +13,15 @@ type Watch = Mutex<Option<notify::RecommendedWatcher>>;
 async fn drag_files(
     window: tauri::Window,
     paths: Vec<String>,
-    copy: bool,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        crate::native_drag::start(window, paths, copy, on_event).await
+        crate::native_drag::start(window, paths, on_event).await
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (window, paths, copy, on_event);
+        let _ = (window, paths, on_event);
         Err("此命令仅用于 GTK 文件拖动".into())
     }
 }

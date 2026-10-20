@@ -10,7 +10,6 @@ use tauri::{ipc::Channel, Window};
 pub async fn start(
     window: Window,
     paths: Vec<String>,
-    copy: bool,
     on_event: Channel<String>,
 ) -> Result<(), String> {
     if paths.is_empty() {
@@ -28,7 +27,7 @@ pub async fn start(
     let main = window.clone();
     window
         .run_on_main_thread(move || {
-            let result = begin(&main, uris, copy, on_event);
+            let result = begin(&main, uris, on_event);
             let _ = send.send(result);
         })
         .map_err(|e| e.to_string())?;
@@ -37,18 +36,9 @@ pub async fn start(
         .map_err(|e| e.to_string())??
 }
 
-fn begin(
-    window: &Window,
-    uris: Vec<String>,
-    copy: bool,
-    on_event: Channel<String>,
-) -> Result<(), String> {
+fn begin(window: &Window, uris: Vec<String>, on_event: Channel<String>) -> Result<(), String> {
     let window = window.gtk_window().map_err(|e| e.to_string())?;
-    let action = if copy {
-        gdk::DragAction::COPY
-    } else {
-        gdk::DragAction::MOVE
-    };
+    let action = gdk::DragAction::COPY;
     window.drag_source_set(gdk::ModifierType::BUTTON1_MASK, &[], action);
     window.drag_source_add_uri_targets();
     let targets = window
@@ -58,11 +48,18 @@ fn begin(
     let provided = Rc::new(Cell::new(false));
     let failed = Rc::new(Cell::new(false));
     let performed = Rc::new(Cell::new(false));
+    let diagnostic = std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some();
+    if diagnostic {
+        eprintln!("GTK drag: start");
+    }
     let sent = provided.clone();
     handlers
         .borrow_mut()
         .push(window.connect_drag_data_get(move |_, _, data, _, _| {
             let refs = uris.iter().map(String::as_str).collect::<Vec<_>>();
+            if diagnostic {
+                eprintln!("GTK drag: data requested");
+            }
             data.set_uris(&refs);
             sent.set(true);
         }));
@@ -70,6 +67,9 @@ fn begin(
     handlers
         .borrow_mut()
         .push(window.connect_drag_failed(move |_, _, _| {
+            if diagnostic {
+                eprintln!("GTK drag: failed");
+            }
             failure.set(true);
             glib::Propagation::Proceed
         }));
@@ -83,6 +83,14 @@ fn begin(
             } else {
                 "Cancelled"
             };
+            if diagnostic {
+                eprintln!(
+                    "GTK drag: end provided={} performed={} failed={}",
+                    provided.get(),
+                    ended.get(),
+                    failed.get()
+                );
+            }
             let _ = on_event.send(result.to_string());
             for handler in cleanup.borrow_mut().drain(..) {
                 widget.disconnect(handler);
@@ -90,7 +98,12 @@ fn begin(
             widget.drag_source_unset();
         }));
     if let Some(context) = window.drag_begin_with_coordinates(&targets, action, 1, None, -1, -1) {
-        context.connect_drop_performed(move |_, _| performed.set(true));
+        context.connect_drop_performed(move |_, _| {
+            if diagnostic {
+                eprintln!("GTK drag: drop performed");
+            }
+            performed.set(true)
+        });
         context.drag_set_icon_name("text-x-generic", 0, 0);
         Ok(())
     } else {

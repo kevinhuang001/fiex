@@ -115,7 +115,6 @@ export function FileViews(props: Props) {
     const startY = event.clientY
     let active = false
     let nativeStarted = false
-    let copying = event.altKey || event.ctrlKey
     const cleanup = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', finish)
@@ -130,7 +129,7 @@ export function FileViews(props: Props) {
       nativeStarted = true
       cleanup()
       if (!native) return
-      void startFileDrag(paths, copying, (result) => {
+      void startFileDrag(paths, (result) => {
         props.onExternalDrag?.(result)
         if (result === 'Dropped') x.reload()
       }).catch((error) => {
@@ -139,7 +138,6 @@ export function FileViews(props: Props) {
     }
     const leave = () => startNative()
     const move = (moveEvent: PointerEvent) => {
-      copying = moveEvent.altKey || moveEvent.ctrlKey
       if (!active) {
         if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
         active = true

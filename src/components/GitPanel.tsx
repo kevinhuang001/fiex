@@ -84,6 +84,15 @@ export function GitPanel({
   }, [open, onClose, pickerOpen, commitOpen])
   if (!open) return null
   const disabled = Boolean(repo.busy || loading)
+  const commitReason =
+    repo.busy ||
+    (loading
+      ? '正在读取修改'
+      : !staged.length
+        ? changes.length
+          ? '先暂存要提交的文件'
+          : '没有待提交的修改'
+        : '')
   const sections = [
     { title: '已暂存', items: staged, staged: true },
     { title: '更改', items: unstaged, staged: false },
@@ -195,15 +204,8 @@ export function GitPanel({
               <div className="git-commit-action">
                 <Button disabled={disabled || !staged.length} onClick={() => setCommitOpen(true)}>
                   <GitCommitHorizontal size={15} />
-                  提交修改{staged.length ? ` · ${staged.length}` : ''}
+                  {commitReason || `提交修改 · ${staged.length}`}
                 </Button>
-                <span className="git-commit-hint">
-                  {staged.length
-                    ? '提交已暂存的修改'
-                    : changes.length
-                      ? '先暂存要提交的文件'
-                      : '工作区没有待提交的更改'}
-                </span>
               </div>
               <div className="git-panel-scroll">
                 {!changes.length && (

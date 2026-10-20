@@ -15,6 +15,15 @@ export function CommitDialog({
   count: number
 }) {
   const missing = !repo.identity.name.trim() || !repo.identity.email.trim()
+  const reason =
+    repo.busy ||
+    (!count
+      ? '没有已暂存的文件'
+      : missing
+        ? '请填写姓名和邮箱'
+        : !repo.message.trim()
+          ? '请填写提交说明'
+          : '')
   return (
     <Modal
       open={open}
@@ -87,12 +96,12 @@ export function CommitDialog({
         )}
         <Button
           type="submit"
+          title="Ctrl / ⌘ + Enter 提交"
           disabled={Boolean(repo.busy) || !count || missing || !repo.message.trim()}
         >
           <GitCommitHorizontal size={15} />
-          {repo.busy || `提交 ${count} 个文件`}
+          {reason || `提交 ${count} 个文件`}
         </Button>
-        <span className="git-commit-hint">Ctrl / ⌘ + Enter 提交</span>
       </form>
     </Modal>
   )

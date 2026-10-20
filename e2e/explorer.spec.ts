@@ -308,7 +308,9 @@ test('read-only commit disables destructive context actions and archive submenu'
 test('stage, unstage and commit only staged changes', async ({ page }) => {
   await page.getByRole('button', { name: '源代码管理', exact: true }).click()
   const panel = page.getByRole('complementary', { name: '源代码管理' })
-  await expect(panel.getByRole('button', { name: '提交修改', exact: true })).toBeDisabled()
+  await expect(
+    panel.getByRole('button', { name: '先暂存要提交的文件', exact: true }),
+  ).toBeDisabled()
   await panel.getByRole('button', { name: '暂存 Notes.md', exact: true }).click()
   await expect(panel.getByRole('button', { name: '取消暂存 Notes.md', exact: true })).toBeVisible()
   await panel.getByRole('button', { name: '取消暂存 Notes.md', exact: true }).click()
@@ -320,7 +322,7 @@ test('stage, unstage and commit only staged changes', async ({ page }) => {
   await expect(dialog.getByRole('textbox', { name: '提交者邮箱' })).toHaveValue('kevin@example.com')
   await dialog.getByRole('textbox', { name: '提交者姓名' }).fill('')
   await expect(dialog.getByText('缺少 Git 身份', { exact: false })).toBeVisible()
-  await expect(dialog.getByRole('button', { name: '提交 1 个文件' })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: '请填写姓名和邮箱' })).toBeDisabled()
   await dialog.getByRole('textbox', { name: '提交者姓名' }).fill('Kevin Huang')
   await dialog.getByRole('textbox', { name: '提交说明' }).fill('Update project notes')
   await dialog.getByRole('textbox', { name: '提交说明' }).press('Control+Enter')
@@ -418,6 +420,9 @@ test('complete a move into a folder and bookmark the folder', async ({ page }) =
   await page.mouse.up()
   await expect(page.locator('.favorite-row').filter({ hasText: 'Research' })).toBeVisible()
   await expect(folder).toBeVisible()
+  await expect(
+    page.locator('.favorite-row').filter({ hasText: 'Research' }).locator('img'),
+  ).toHaveAttribute('src', (await folder.locator('.file-icon img').getAttribute('src'))!)
 })
 
 test('go to folder shortcut works while search is focused', async ({ page }) => {

@@ -8,7 +8,6 @@ import {
   FileText,
   Folder,
   Plus,
-  Star,
   HardDrive,
   X,
   Trash2,
@@ -21,6 +20,7 @@ import { Fragment } from 'react'
 import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
+import { fileVisual } from '@/lib/fileIcons'
 import { TAG_PRESETS } from '@/lib/tags'
 interface Props {
   x: Explorer
@@ -150,7 +150,7 @@ export function Sidebar({
                         className={`nav-item ${x.path === location.path ? 'active' : ''}`}
                         onClick={() => x.navigate(location.path)}
                       >
-                        <Star />
+                        <FavoriteIcon name={location.name} />
                         <span>{location.name}</span>
                       </button>
                       <button
@@ -311,5 +311,23 @@ export function Sidebar({
         </button>
       </div>
     </aside>
+  )
+}
+
+function FavoriteIcon({ name }: { name: string }) {
+  const visual = fileVisual({
+    name,
+    isDir: true,
+    extension: name.split('.').pop()?.toLowerCase() || '',
+  })
+  return (
+    <span className="file-icon" style={{ width: 18, height: 18 }}>
+      <img
+        src={visual.url}
+        className={visual.generic ? 'generic-folder' : ''}
+        alt=""
+        draggable={false}
+      />
+    </span>
   )
 }
