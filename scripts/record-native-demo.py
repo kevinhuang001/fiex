@@ -55,7 +55,7 @@ def text_points(text, max_x=1200):
     desired = normalize(text)
     lines = {}
     for row in csv.DictReader(io.StringIO(tsv), delimiter='\t'):
-        if not row.get('text', '').strip():
+        if not (row.get('text') or '').strip():
             continue
         identity = (row['block_num'], row['par_num'], row['line_num'])
         lines.setdefault(identity, []).append(row)
@@ -85,7 +85,8 @@ def drag(start, end):
 recorder = None
 try:
     processes.append(subprocess.Popen(['openbox'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-    app_env = dict(os.environ, WEBKIT_DISABLE_COMPOSITING_MODE='1')
+    processes.append(subprocess.Popen(['xcompmgr'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    app_env = dict(os.environ, WEBKIT_DISABLE_COMPOSITING_MODE='1', WEBKIT_DISABLE_DMABUF_RENDERER='1', LIBGL_ALWAYS_SOFTWARE='1')
     app_log = (out / 'fiex.log').open('w')
     processes.append(subprocess.Popen([str(Path(sys.argv[1]).resolve())], env=app_env, stdout=app_log, stderr=subprocess.STDOUT))
     fiex = wait_for(lambda: window('^Fiex$'))
