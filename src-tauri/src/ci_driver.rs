@@ -89,9 +89,6 @@ fn handle(app: &tauri::AppHandle, req: Value) -> Result<Value, String> {
     let window = app.get_webview_window(label).ok_or("window missing")?;
     if action == "layout" {
         window
-            .set_min_size(None::<tauri::LogicalSize<f64>>)
-            .map_err(|e| e.to_string())?;
-        window
             .set_size(tauri::LogicalSize::new(
                 req["width"].as_f64().unwrap_or(900.0),
                 req["height"].as_f64().unwrap_or(800.0),

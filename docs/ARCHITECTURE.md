@@ -30,7 +30,7 @@ The obsolete icon-size preference migration has been removed. PDF.js's `legacy/b
 
 Run `npm run format:check`, `npm test`, `npm run build` and `npm run e2e`. CI additionally formats, tests, lints and packages the native library on Windows, Linux and both macOS architectures, including WebDAV/SMB and filesystem-driver tests.
 
-Native videos are recorded only in GitHub CI. A separate test binary built with `ci-driver` exposes a token-protected loopback control locator; real OS mouse input performs drag-and-drop. Production installers are built and uploaded first, without that feature. `native-integrations-*` artifacts include videos, screenshots, logs and verified filesystem outcomes.
+Native videos are recorded only by the independent `.github/workflows/recording.yml` workflow on Windows, Linux and Intel macOS. It runs on pull requests, main pushes and manual dispatch. A separate test binary built with `ci-driver,tauri/custom-protocol` embeds the frontend and exposes a token-protected loopback control locator; real OS mouse input performs drag-and-drop. `.github/workflows/ci.yml` owns tests, production installer builds and releases, without the driver feature or a dependency on recording jobs. `native-integrations-*` artifacts include videos, screenshots, logs and verified filesystem outcomes.
 
 ## Git workflow and responsiveness
 

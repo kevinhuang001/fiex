@@ -15,6 +15,7 @@ import threading
 import time
 import traceback
 import urllib.request
+import urllib.error
 
 import pyautogui as mouse
 from PIL import Image, ImageDraw
@@ -32,6 +33,8 @@ processes = []
 results = {}
 stage = 'Starting Fiex'
 mouse.PAUSE = .12
+# Dedicated CI desktop; the workflow timeout bounds unattended input.
+mouse.FAILSAFE = False
 
 
 def wait(check, timeout=40):
@@ -51,8 +54,11 @@ def wait(check, timeout=40):
 def request(action='script', window='main', **kwargs):
     data = json.dumps(dict(action=action, window=window, **kwargs)).encode()
     req = urllib.request.Request(URL, data=data, headers={'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=25) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(req, timeout=25) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise AssertionError(f'UI driver {action}: {exc.read().decode()}') from exc
 
 
 def js(script, window='main'):
@@ -228,14 +234,14 @@ def arrange_file_manager(path, x, y, width, height):
 
 
 def configure_display():
-    if mouse.size().width < 1400:
+    if mouse.size().width < 1680:
         if SYSTEM == 'Windows':
             subprocess.run(['powershell.exe', '-NoProfile', '-Command', 'Set-DisplayResolution -Width 1920 -Height 1080 -Force'], check=True)
         elif SYSTEM == 'Darwin':
             import Quartz
             display = Quartz.CGMainDisplayID()
             modes = Quartz.CGDisplayCopyAllDisplayModes(display, {Quartz.kCGDisplayShowDuplicateLowResolutionModes: True})
-            choices = [mode for mode in modes if Quartz.CGDisplayModeGetWidth(mode) >= 1600 and Quartz.CGDisplayModeGetHeight(mode) >= 900]
+            choices = [mode for mode in modes if Quartz.CGDisplayModeGetWidth(mode) >= 1680 and Quartz.CGDisplayModeGetHeight(mode) >= 900]
             if not choices:
                 raise AssertionError('No suitable CI display mode: ' + str(sorted({(Quartz.CGDisplayModeGetWidth(m), Quartz.CGDisplayModeGetHeight(m)) for m in modes})))
             choice = min(choices, key=lambda m: abs(Quartz.CGDisplayModeGetWidth(m)-1920)+abs(Quartz.CGDisplayModeGetHeight(m)-1080))
@@ -243,7 +249,7 @@ def configure_display():
                 raise AssertionError('Cannot configure the CI display')
         time.sleep(1)
     print('CI display:', mouse.size(), flush=True)
-    assert mouse.size().width >= 1340 and mouse.size().height >= 700, 'CI needs room for two visible application windows'
+    assert mouse.size().width >= 1680 and mouse.size().height >= 700, 'CI needs room for two visible application windows'
 
 
 recorder = None
@@ -261,7 +267,7 @@ try:
     wait(lambda: request(action='windows'))
     wait(lambda: js(f'return !!document.querySelector({json.dumps(row("01-internal.txt"))})'))
     screen_width, screen_height = mouse.size()
-    sw, sh = max(820, min(1000, screen_width - 520)), min(820, screen_height - 90)
+    sw, sh = max(820, min(1000, screen_width - 840)), min(820, screen_height - 90)
     tx, ty, tw, th = sw+10, 35, max(500, screen_width-sw-20), sh
     request(action='layout', x=0, y=35, width=sw, height=sh)
     click('[aria-label="列表视图"]')
