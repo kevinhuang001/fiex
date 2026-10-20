@@ -33,6 +33,7 @@ interface Props {
   onAddConnection: () => void
   onRemoveConnection: (id: string) => void
   onEject: (path: string) => void
+  onEjectDevice: (device: string) => void
   onMount: (device: string) => void
   trashPath: string | null
 }
@@ -49,6 +50,7 @@ export function Sidebar({
   onAddConnection,
   onRemoveConnection,
   onEject,
+  onEjectDevice,
   onMount,
   trashPath,
 }: Props) {
@@ -244,7 +246,16 @@ export function Sidebar({
                         )}
                       </span>
                     </button>
-                    {location.mounted &&
+                    {location.usbfs ? (
+                      <button
+                        className="device-eject icon-button"
+                        title="弹出 U 盘"
+                        onClick={() => onEjectDevice(location.device)}
+                      >
+                        <Unplug size={13} />
+                      </button>
+                    ) : (
+                      location.mounted &&
                       location.path !== '/' &&
                       !/^[A-Za-z]:[\\/]?$/.test(location.path) && (
                         <button
@@ -254,7 +265,8 @@ export function Sidebar({
                         >
                           <Unplug size={13} />
                         </button>
-                      )}
+                      )
+                    )}
                   </div>
                 ))}
               {x.connections.map((connection) => (

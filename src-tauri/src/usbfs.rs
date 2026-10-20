@@ -329,6 +329,30 @@ mod tests {
     }
 
     #[test]
+    fn btrfs_image_lists_readonly() {
+        use fs_ext4::block_io::FileDevice;
+        use std::fs::File;
+        let temp = tempfile::tempdir().unwrap();
+        let image = temp.path().join("usb-btrfs.img");
+        let file = File::create(&image).unwrap();
+        file.set_len(256 * 1024 * 1024).unwrap();
+        drop(file);
+        let device = image.to_string_lossy().into_owned();
+        {
+            let dev = FileDevice::open_rw(&device).unwrap();
+            fs_btrfs::mkfs::format(&dev, &fs_btrfs::mkfs::Options::default()).unwrap();
+        }
+        let route = Route {
+            device: device.clone(),
+            driver_device: device.clone(),
+            kind: FsKind::Btrfs,
+            rel: String::new(),
+            root: virtual_root(&device, FsKind::Btrfs),
+        };
+        assert!(listing(&route).is_ok());
+    }
+
+    #[test]
     fn ext4_image_roundtrip() {
         use fs_ext4::block_io::FileDevice;
         use std::fs::File;
@@ -918,8 +942,17 @@ pub fn open_cached(route: &Route) -> Result<String, String> {
     if matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs) {
         return Ok(cache.to_string_lossy().into_owned());
     }
+    fn digest(data: &[u8]) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        data.hash(&mut hasher);
+        hasher.finish()
+    }
     let watched = route.clone();
     let watched_file = cache.clone();
+    let original = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(digest(&read_path(
+        route,
+    )?)));
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         let Ok(event) = event else { return };
         if !matches!(
@@ -932,8 +965,36 @@ pub fn open_cached(route: &Route) -> Result<String, String> {
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(220));
-        if let Ok(data) = std::fs::read(&watched_file) {
-            let _ = write_path(&watched, &data);
+        let Ok(data) = std::fs::read(&watched_file) else {
+            return;
+        };
+        let Ok(current) = read_path(&watched) else {
+            return;
+        };
+        if digest(&current) != original.load(std::sync::atomic::Ordering::SeqCst) {
+            let conflict = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".fiex")
+                .join("usbfs-conflicts")
+                .join(format!(
+                    "{}-{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|value| value.as_millis())
+                        .unwrap_or_default(),
+                    watched_file
+                        .file_name()
+                        .map(|value| value.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "file".into())
+                ));
+            if let Some(parent) = conflict.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(conflict, &data);
+            return;
+        }
+        if write_path(&watched, &data).is_ok() {
+            original.store(digest(&data), std::sync::atomic::Ordering::SeqCst);
         }
     })
     .map_err(|error| error.to_string())?;
@@ -944,4 +1005,42 @@ pub fn open_cached(route: &Route) -> Result<String, String> {
     }
     watchers().lock().unwrap().push(watcher);
     Ok(cache.to_string_lossy().into_owned())
+}
+
+pub fn eject(device: &str) -> Result<(), String> {
+    authorized().lock().unwrap().remove(device);
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("diskutil")
+            .args(["eject", device])
+            .output()
+            .map_err(|error| error.to_string())?;
+        if output.status.success() {
+            return Ok(());
+        }
+        return Err(String::from_utf8_lossy(&output.stderr).trim().into());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("udisksctl")
+            .args(["power-off", "-b", device])
+            .output()
+            .map_err(|error| error.to_string())?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let output = std::process::Command::new("eject")
+            .arg(device)
+            .output()
+            .map_err(|error| error.to_string())?;
+        if output.status.success() {
+            return Ok(());
+        }
+        Err("无法弹出设备".into())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = device;
+        Err("当前系统请通过系统托盘弹出设备".into())
+    }
 }

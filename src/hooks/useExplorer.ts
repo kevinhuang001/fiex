@@ -52,6 +52,12 @@ export function useExplorer(prefs: Preferences) {
     return next
   }, [])
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshLocations().catch(() => {})
+    }, 15000)
+    return () => window.clearInterval(timer)
+  }, [refreshLocations])
+  useEffect(() => {
     void refreshLocations()
       .then((next) => {
         const home = next.find((x) => x.name === '文稿') || next[0]

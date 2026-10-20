@@ -233,6 +233,22 @@ export default function App() {
       notify('设备已挂载')
     })
   }
+  const ejectUsb = (device: string) =>
+    setDialog({
+      title: '弹出 U 盘',
+      description: '确认弹出这个 U 盘？请先等待写入完成。',
+      submit: '弹出',
+      danger: true,
+      action: async () => {
+        const volume = x.locations.find((location) => location.usbfs && location.device === device)
+        await call('eject_usb', { device })
+        await x.refreshLocations()
+        if (volume && x.path.startsWith(volume.path)) {
+          const home = x.locations.find((location) => location.kind === 'favorite')?.path
+          x.navigate(home || '/')
+        }
+      },
+    })
   const removeConnection = (id: string) => {
     const connection = x.connections.find((item) => item.id === id)
     if (!connection) return
@@ -695,6 +711,7 @@ export default function App() {
         onAddConnection={() => setConnectionOpen(true)}
         onRemoveConnection={removeConnection}
         onEject={ejectDevice}
+        onEjectDevice={ejectUsb}
         onMount={mountDevice}
         trashPath={trashPath}
       />

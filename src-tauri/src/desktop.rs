@@ -82,6 +82,12 @@ fn eject_device(path: String) -> Result<(), String> {
     remote::eject(&path)
 }
 #[tauri::command]
+async fn eject_usb(device: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::usbfs::eject(&device))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 async fn mount_device(device: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || files::mount_device(&device))
         .await
@@ -466,6 +472,7 @@ pub fn run() {
             remote_download,
             remote_download_dir,
             eject_device,
+            eject_usb,
             mount_device,
             reveal_path,
             trash_path,
