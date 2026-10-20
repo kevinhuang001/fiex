@@ -1,6 +1,15 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
 import { execFileSync } from 'node:child_process'
+const currentHead = execFileSync(
+  'gh',
+  ['api', `repos/${process.env.GITHUB_REPOSITORY}/commits/main`, '--jq', '.sha'],
+  { encoding: 'utf8' },
+).trim()
+if (currentHead !== process.env.GITHUB_SHA) {
+  console.log('A newer commit is waiting for checks; do not publish this build.')
+  process.exit(0)
+}
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
 const tag = `v${version}`
 function walk(dir) {

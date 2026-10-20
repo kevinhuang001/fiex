@@ -79,11 +79,33 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let app = if id == "default" { "Terminal" } else { id };
-        Command::new("open")
-            .args(["-a", app])
-            .arg(&dir)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut command = Command::new("open");
+        match app {
+            "Ghostty" => {
+                command
+                    .args(["-na", app, "--args"])
+                    .arg(format!("--working-directory={}", dir.display()));
+            }
+            "Alacritty" => {
+                command
+                    .args(["-na", app, "--args", "--working-directory"])
+                    .arg(&dir);
+            }
+            "kitty" => {
+                command
+                    .args(["-na", app, "--args", "--directory"])
+                    .arg(&dir);
+            }
+            "WezTerm" => {
+                command
+                    .args(["-na", app, "--args", "start", "--cwd"])
+                    .arg(&dir);
+            }
+            _ => {
+                command.args(["-a", app]).arg(&dir);
+            }
+        }
+        command.spawn().map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "windows")]
     {
@@ -173,7 +195,7 @@ pub fn open_trash() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         Command::new("open")
-            .arg("trash://")
+            .arg(dirs::home_dir().ok_or("无法获取个人文件夹")?.join(".Trash"))
             .spawn()
             .map_err(|e| e.to_string())?;
     }
