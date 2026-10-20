@@ -192,10 +192,9 @@ jobs:
               sleep 1
             done
             (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 || (cat /tmp/fiex-smbd.log; exit 1)
-            echo "FIEX_SMB_USER=" >> "$GITHUB_ENV"
-            echo "FIEX_SMB_PASSWORD=" >> "$GITHUB_ENV"
+            echo "FIEX_SMB_USER=guest" >> "$GITHUB_ENV"
+            echo "FIEX_SMB_PASSWORD=guest" >> "$GITHUB_ENV"
             echo "FIEX_SMB_PORT=10445" >> "$GITHUB_ENV"
-            echo "FIEX_SMB_GUEST=1" >> "$GITHUB_ENV"
           fi
       - run: npm ci
       - run: npm ci
