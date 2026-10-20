@@ -564,8 +564,12 @@ pub fn route(path: &str) -> Option<Route> {
         .join("usbfs")
         .to_string_lossy()
         .into_owned();
-    let relative = path.strip_prefix(&base)?.trim_start_matches('/');
-    let (id, rel) = relative.split_once('/').unwrap_or((relative, ""));
+    let relative = path.strip_prefix(&base)?.trim_start_matches(['/', '\\']);
+    let (id, rel) = relative
+        .split_once('/')
+        .or_else(|| relative.split_once('\\'))
+        .unwrap_or((relative, ""));
+    let rel = rel.replace('\\', "/");
     let (encoded, kind) = id.rsplit_once('-')?;
     let device = hex_decode(encoded)?;
     let kind = match kind {
@@ -585,7 +589,7 @@ pub fn route(path: &str) -> Option<Route> {
         device,
         driver_device,
         kind,
-        rel: rel.into(),
+        rel,
         root: Path::new(&base).join(id).to_string_lossy().into_owned(),
     })
 }

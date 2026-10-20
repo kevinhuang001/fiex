@@ -105,7 +105,7 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
                     .arg(&dir);
             }
             _ => {
-                command.args(["-a", _app]).arg(&dir);
+                command.args(["-a", app]).arg(&dir);
             }
         }
         command.spawn().map_err(|e| e.to_string())?;

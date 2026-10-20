@@ -105,26 +105,87 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .ci/smb
-          printf 'hello smb\n' > .ci/smb/hello.txt
-          if [ "$RUNNER_OS" = "Windows" ]; then VPY=.ci/venv/Scripts/python.exe; else VPY=.ci/venv/bin/python; fi
-          SMB_SHARE="$PWD/.ci/smb"
-          if command -v cygpath >/dev/null 2>&1; then SMB_SHARE=$(cygpath -w "$SMB_SHARE"); fi
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            powershell.exe -NoProfile -Command "Stop-Service LanmanServer -Force" || true
-            SMB_BIN=.ci/venv/Scripts/smbserver.py
-            "$VPY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
-          else
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba smbclient
+            mkdir -p /tmp/fiex-smb
+            printf 'hello smb\n' > /tmp/fiex-smb/hello.txt
+            chmod 777 /tmp/fiex-smb
+            sudo useradd -M -s /usr/sbin/nologin fiex 2>/dev/null || true
+            printf 'FiexTest123!\nFiexTest123!\n' | sudo smbpasswd -a fiex -s
+            cat > /tmp/fiex-smb.conf <<'EOF'
+          [global]
+            workgroup = WORKGROUP
+            server role = standalone server
+            security = user
+            map to guest = Bad User
+            server min protocol = SMB2
+            smb ports = 445
+          [fiex]
+            path = /tmp/fiex-smb
+            browseable = yes
+            read only = no
+            guest ok = yes
+            valid users = fiex
+            force user = fiex
+          EOF
             sudo systemctl stop smbd 2>/dev/null || true
+            sudo smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/fiex-smbd.log 2>&1 &
+            for i in $(seq 1 20); do
+              smbclient //127.0.0.1/fiex -U fiex%FiexTest123! -c 'ls' >/dev/null 2>&1 && break
+              sleep 1
+            done
+            smbclient //127.0.0.1/fiex -U fiex%FiexTest123! -c 'ls' || (cat /tmp/fiex-smbd.log; exit 1)
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            powershell.exe -NoProfile -Command "
+              \$ErrorActionPreference = 'Stop';
+              if (Get-LocalUser -Name fiex -ErrorAction SilentlyContinue) { Remove-LocalUser -Name fiex };
+              New-LocalUser -Name fiex -Password (ConvertTo-SecureString 'FiexTest123!' -AsPlainText -Force) -PasswordNeverExpires | Out-Null;
+              New-Item -ItemType Directory -Force C:\fiex-smb | Out-Null;
+              Set-Content C:\fiex-smb\hello.txt 'hello smb';
+              if (Get-SmbShare -Name fiex -ErrorAction SilentlyContinue) { Remove-SmbShare -Name fiex -Force };
+              New-SmbShare -Name fiex -Path C:\fiex-smb -FullAccess (\$env:COMPUTERNAME + '\fiex') | Out-Null;
+              icacls C:\fiex-smb /grant 'fiex:(OI)(CI)F' | Out-Null;
+              New-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa -Name LocalAccountTokenFilterPolicy -Value 1 -PropertyType DWord -Force | Out-Null;
+              Start-Service LanmanServer
+            "
+            for i in $(seq 1 30); do
+              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
+              sleep 1
+            done
+            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || exit 1
+          else
+            brew install samba
+            sudo sysadminctl -addUser fiex -password 'FiexTest123!' -fullName fiex 2>/dev/null || true
+            sudo mkdir -p /Users/Shared/fiex-smb
+            printf 'hello smb\n' | sudo tee /Users/Shared/fiex-smb/hello.txt >/dev/null
+            sudo chmod 777 /Users/Shared/fiex-smb
+            printf 'FiexTest123!\nFiexTest123!\n' | sudo /opt/homebrew/bin/smbpasswd -a fiex -s
+            cat > /tmp/fiex-smb.conf <<'EOF'
+          [global]
+            workgroup = WORKGROUP
+            server role = standalone server
+            security = user
+            map to guest = Bad User
+            server min protocol = SMB2
+            smb ports = 445
+          [fiex]
+            path = /Users/Shared/fiex-smb
+            browseable = yes
+            read only = no
+            guest ok = yes
+            valid users = fiex
+            force user = fiex
+          EOF
             sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
-            SMB_BIN=.ci/venv/bin/smbserver.py
-            sudo "$VPY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
+            sudo /opt/homebrew/sbin/smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/fiex-smbd.log 2>&1 &
+            for i in $(seq 1 30); do
+              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
+              sleep 1
+            done
+            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || (cat /tmp/fiex-smbd.log; exit 1)
           fi
-          for i in $(seq 1 30); do
-            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
-            sleep 1
-          done
-          (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || (cat .ci/smb.log; exit 1)
+      - run: npm ci
       - run: npm ci
       - run: npm run icons
       - run: npm run build
@@ -152,7 +213,7 @@ jobs:
           FIEX_SMB_HOST: 127.0.0.1
           FIEX_SMB_SHARE: fiex
           FIEX_SMB_USER: fiex
-          FIEX_SMB_PASSWORD: fiex
+          FIEX_SMB_PASSWORD: FiexTest123!
         run: |
           set +e
           cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 | tee integration-test.log
@@ -193,7 +254,7 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          cat .ci/smbd.log 2>/dev/null || true
+          cat /tmp/fiex-smbd.log 2>/dev/null || true
           cat .ci/smb.log 2>/dev/null || true
           cat .ci/wsgidav.log 2>/dev/null || true
       - uses: tauri-apps/tauri-action@v0
