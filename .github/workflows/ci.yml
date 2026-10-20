@@ -23,6 +23,11 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-${{ runner.os }}-
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
       - uses: actions/upload-artifact@v4
@@ -59,10 +64,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        with:
+          packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev
+          version: 1.0
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -71,6 +78,7 @@ jobs:
         with:
           workspaces: src-tauri -> target
           key: ${{ matrix.target }}
+          cache-all-crates: true
           cache-on-failure: true
       - run: npm ci
       - run: npm run icons
@@ -86,6 +94,9 @@ jobs:
         with:
           name: installers-${{ matrix.target }}
           if-no-files-found: error
+          # Installers are already compressed; skip another zip pass so large
+          # AppImage/DMG uploads do not stall on the runner.
+          compression-level: 0
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
