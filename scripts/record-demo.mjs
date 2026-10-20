@@ -8,7 +8,14 @@ const output = resolve('artifacts/demo')
 await mkdir(output, { recursive: true })
 const server = process.env.FIEX_DEMO_URL
   ? undefined
-  : await createServer({ server: { host: '127.0.0.1', port: 1420, strictPort: true } })
+  : await createServer({
+      server: {
+        host: '127.0.0.1',
+        port: 1420,
+        strictPort: true,
+        watch: { ignored: ['**/artifacts/**', '**/playwright-report/**', '**/test-results/**'] },
+      },
+    })
 await server?.listen()
 const browser = await chromium.launch({
   executablePath: process.env.FIEX_TEST_CHROMIUM || undefined,
@@ -66,7 +73,22 @@ try {
   await page.keyboard.press('Escape')
   await button('源代码管理').click()
   await pause()
+  await button('暂存 Notes.md').click()
+  await pause()
+  await page.getByRole('textbox', { name: '提交说明' }).fill('整理项目说明与文件结构')
+  await pause()
+  await button('提交 1 个文件').click()
+  await expect(page.getByText('工作区干净', { exact: true })).toBeVisible()
+  await pause()
   await button('关闭源代码管理').click()
+  await page.locator('.sidebar').getByRole('button', { name: '下载', exact: true }).click()
+  await button('源代码管理').click()
+  await pause()
+  await button('初始化 Git 仓库').click()
+  await expect(button('切换分支或版本')).toContainText('main')
+  await pause()
+  await button('关闭源代码管理').click()
+  await page.locator('.sidebar').getByRole('button', { name: '文稿', exact: true }).click()
   await button('添加 WebDAV 或 SMB 连接').click()
   await pause()
   await button('SMB').click()
@@ -81,6 +103,16 @@ try {
   await button('深色').click()
   await pause()
   await button('关闭').click()
+  await pause()
+  await page.goto('http://127.0.0.1:1420/?demo&count=10000')
+  await expect(page.locator('.statusbar')).toContainText('10,010')
+  await button('图标视图').click()
+  await pause()
+  await page.getByRole('grid', { name: '文件', exact: true }).focus()
+  await page.keyboard.press('End')
+  await expect(page.locator('[data-path="/Users/kevin/Documents/zz-file-09999.txt"]')).toBeVisible()
+  await pause()
+  await page.keyboard.press('Home')
   await pause()
   if (errors.length) throw new Error(errors.join('\n'))
 } catch (error) {

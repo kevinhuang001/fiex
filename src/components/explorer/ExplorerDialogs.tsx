@@ -1,6 +1,9 @@
 import { ConnectionDialog } from '@/components/ConnectionDialog'
 import { FileInfoDialog } from '@/components/FileInfoDialog'
-import { PreferencesDialog } from '@/components/PreferencesDialog'
+import { lazy, Suspense } from 'react'
+const PreferencesDialog = lazy(() =>
+  import('@/components/PreferencesDialog').then((m) => ({ default: m.PreferencesDialog })),
+)
 import { Preview } from '@/components/Preview'
 import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/components/ui/button'
@@ -214,17 +217,20 @@ export function ExplorerDialogs({
         }}
       />
 
-      <PreferencesDialog
-        open={settings}
-        onClose={() => setSettings(false)}
-        prefs={prefs}
-        locations={x.locations}
-        update={update}
-        terminals={terminals}
-        ides={ides}
-        onError={x.setError}
-      />
-
+      {settings && (
+        <Suspense fallback={null}>
+          <PreferencesDialog
+            open={settings}
+            onClose={() => setSettings(false)}
+            prefs={prefs}
+            locations={x.locations}
+            update={update}
+            terminals={terminals}
+            ides={ides}
+            onError={x.setError}
+          />
+        </Suspense>
+      )}
       {toast && (
         <div className="toast" role="status">
           <CheckCircle2 size={16} />

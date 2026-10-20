@@ -56,7 +56,7 @@ export function fileVisual(entry: Entry): FileVisual {
     const id = nameId || extensionId || manifest.fileExtensions.txt || 'document'
     result = visual(id, false, !nameId && !extensionId)
   }
-  if (cache.size > 4000) cache.clear()
+  if (cache.size >= 4000) cache.delete(cache.keys().next().value!)
   cache.set(key, result)
   return result
 }

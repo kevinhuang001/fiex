@@ -165,7 +165,7 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={gitSwitched ? '只读分支/版本' : `新建文件夹 ${hint('newFolder')}`}
+          title={gitSwitched ? '历史版本只读' : `新建文件夹 ${hint('newFolder')}`}
           aria-label="新建文件夹"
           disabled={gitSwitched}
           onClick={() => create(true)}
@@ -189,7 +189,7 @@ export function ExplorerToolbar({
           size="icon"
           title={
             gitSwitched
-              ? '只读分支/版本'
+              ? '历史版本只读'
               : `在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`
           }
           aria-label="在 IDE 中打开"
@@ -203,7 +203,7 @@ export function ExplorerToolbar({
           <Button
             variant="ghost"
             size="icon"
-            title={gitSwitched ? '只读分支/版本' : 'Open in Terminal'}
+            title={gitSwitched ? '历史版本只读' : 'Open in Terminal'}
             aria-label="Open in Terminal"
             disabled={gitSwitched}
             onClick={() => terminal()}

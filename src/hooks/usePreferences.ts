@@ -87,6 +87,8 @@ export function usePreferences() {
   const [prefs, setPrefs] = useState<Preferences>(load)
   useEffect(() => {
     localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
+  }, [prefs])
+  useEffect(() => {
     const apply = () =>
       document.documentElement.classList.toggle(
         'dark',
@@ -97,6 +99,6 @@ export function usePreferences() {
     const media = matchMedia('(prefers-color-scheme: dark)')
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
-  }, [prefs])
+  }, [prefs.theme])
   return [prefs, (p: Partial<Preferences>) => setPrefs((v) => ({ ...v, ...p }))] as const
 }

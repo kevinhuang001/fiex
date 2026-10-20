@@ -38,6 +38,14 @@ export default function App() {
         <ExplorerToolbar {...app} />
         <ExplorerTabs {...app} />
         <ExplorerPathBar {...app} />
+        {app.gitSwitched && (
+          <div className="history-banner">
+            <span>
+              历史版本 · {app.x.git?.branch || app.x.path.split('/')[3]?.slice(0, 8)} · 只读
+            </span>
+            <button onClick={app.returnToWorktree}>返回工作区</button>
+          </div>
+        )}
         {demo && <div className="demo-note">界面演示 · 桌面应用连接真实文件系统</div>}
         {app.x.error && (
           <div className="error-banner" role="alert">
@@ -64,7 +72,7 @@ export default function App() {
             {app.x.warnings.join('\n')}
           </details>
         )}
-        {app.x.loading ? (
+        {app.x.loading && !app.x.hasListing ? (
           <div className="loading">
             <LoaderCircle className="spin" />
             正在读取文件夹…
@@ -79,13 +87,21 @@ export default function App() {
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
             onDrop={app.transfer}
             onBookmark={app.bookmarkPaths}
+            onExternalDrag={(result) =>
+              app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
+            }
           />
         )}
         <GitPanel
           open={app.gitOpen}
           git={app.x.git}
+          path={app.x.path}
+          loading={app.x.gitLoading}
+          allowInit={!app.isRemotePath(app.x.path) && !app.x.path.startsWith('usbfs://')}
           onClose={() => app.setGitOpen(false)}
-          onRefresh={app.x.reload}
+          onRefresh={app.x.refreshGit}
+          onViewRevision={app.viewRevision}
+          onReturnToWorktree={app.returnToWorktree}
           readOnly={app.gitSwitched}
           onOpen={(path) => app.x.navigate(parent(path))}
         />

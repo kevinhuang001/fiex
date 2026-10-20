@@ -42,8 +42,12 @@ export function usePathEditor({
       x.setError(String(error))
     }
   }
-  const pathParts = x.path.split(/[\\/]/).filter(Boolean)
-  let accumulated = x.path.startsWith('/') ? '' : x.path.startsWith('\\') ? '\\\\' : ''
+  const historyRoot = x.path.match(/^history:\/\/[^/]+\/[^/]+/)?.[0]
+  const pathParts = (historyRoot ? x.path.slice(historyRoot.length) : x.path)
+    .split(/[\\/]/)
+    .filter(Boolean)
+  let accumulated =
+    historyRoot || (x.path.startsWith('/') ? '' : x.path.startsWith('\\') ? '\\\\' : '')
   const crumbs = pathParts.map((name) => {
     accumulated = accumulated
       ? join(accumulated, name)
@@ -60,6 +64,6 @@ export function usePathEditor({
     setEditingPath,
     startPathEdit,
     submitPath,
-    crumbs,
+    crumbs: historyRoot ? [{ name: '历史版本', path: historyRoot }, ...crumbs] : crumbs,
   }
 }

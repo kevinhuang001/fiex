@@ -2,7 +2,8 @@ import { invoke, isTauri, convertFileSrc, Channel } from '@tauri-apps/api/core'
 import type { Batch } from './types'
 export const native = isTauri()
 export const demo = !native && new URLSearchParams(location.search).has('demo')
-export const asset = (path: string) => (native ? convertFileSrc(path) : '')
+export const asset = (path: string) =>
+  native && !path.startsWith('history://') ? convertFileSrc(path) : ''
 export async function call<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   if (native) return invoke<T>(command, args)
   if (demo) {

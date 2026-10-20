@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { parent } from '@/lib/files'
@@ -29,8 +29,12 @@ export function useExplorer(prefs: Preferences) {
   const [tab, setTab] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
   const [git, setGit] = useState<GitStatus | null>(null)
+  const [gitPath, setGitPath] = useState('')
+  const [gitLoading, setGitLoading] = useState(false)
+  const gitRequest = useRef(0)
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
   const searchRequest = useRef(0)
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
@@ -84,9 +88,11 @@ export function useExplorer(prefs: Preferences) {
     })
       .then((l) => {
         if (active && id === request.current) {
+          setListedPath(path)
           setEntries(l.entries)
           setWarnings(l.warnings)
-          setSelected((s) => s.filter((p) => l.entries.some((e) => e.path === p)))
+          const paths = new Set(l.entries.map((entry) => entry.path))
+          setSelected((selected) => selected.filter((path) => paths.has(path)))
         }
       })
       .catch((e) => {
@@ -103,7 +109,7 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (!path || !native) return
+    if (!path || !native || path.startsWith('history://')) return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
@@ -121,26 +127,35 @@ export function useExplorer(prefs: Preferences) {
       cleanup?.()
     }
   }, [path, reload])
-  useEffect(() => {
-    if (!path) return
-    if (path.startsWith('remote://')) {
+  const refreshGit = useCallback(async () => {
+    const id = ++gitRequest.current
+    if (!path || path.startsWith('remote://') || path.startsWith('usbfs://')) {
       setGit(null)
+      setGitLoading(false)
+      setGitPath(path)
       return
     }
-    let active = true
-    void call<GitStatus | null>('git_status', { path })
-      .then((value) => {
-        if (active) setGit(value)
-      })
-      .catch(() => {
-        if (active) setGit(null)
-      })
-    return () => {
-      active = false
+    setGitLoading(true)
+    try {
+      const value = await call<GitStatus | null>('git_status', { path })
+      if (id === gitRequest.current) setGit(value)
+    } catch {
+      if (id === gitRequest.current) setGit(null)
+    } finally {
+      if (id === gitRequest.current) {
+        setGitPath(path)
+        setGitLoading(false)
+      }
     }
-  }, [path, refresh])
+  }, [path])
   useEffect(() => {
-    if (!path || path.startsWith('remote://')) return
+    void refreshGit()
+    return () => {
+      ++gitRequest.current
+    }
+  }, [refresh, refreshGit])
+  useEffect(() => {
+    if (!path || path.startsWith('remote://') || path.startsWith('history://')) return
     const timer = setTimeout(() => {
       void call('warm_index', {
         path,
@@ -166,11 +181,11 @@ export function useExplorer(prefs: Preferences) {
     const timer = setTimeout(() => {
       void search(path, query, prefs.hidden, prefs.displayIgnore, (b) => {
         if (generation !== searchRequest.current) return
-        setEntries((v) => [...v, ...b.entries])
+        startTransition(() => setEntries((v) => [...v, ...b.entries]))
         if (b.done) {
           setSearching(false)
           setSearchStats(
-            `${b.elapsedMs} ms${b.truncated ? ' · 已达到 10,000 项上限，请缩小范围' : ''}${b.skipped ? ` · ${b.skipped} 个位置无法访问` : ''}`,
+            `${b.elapsedMs} ms${b.truncated ? ' · 已达到 500 项上限，请缩小范围' : ''}${b.skipped ? ` · ${b.skipped} 个位置无法访问` : ''}`,
           )
         }
       }).catch((e) => {
@@ -299,10 +314,13 @@ export function useExplorer(prefs: Preferences) {
     setReadOnly,
     locations,
     refreshLocations,
-    git,
+    git: gitPath === path ? git : null,
+    gitLoading: gitLoading || (!!path && gitPath !== path),
+    refreshGit,
     selected,
     setSelected,
-    loading,
+    loading: loading || (!query && listedPath !== path && !error),
+    hasListing: listedPath === path,
     error,
     setError,
     warnings,

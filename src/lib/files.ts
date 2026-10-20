@@ -1,5 +1,6 @@
 import type { Entry, Group, Sort } from './types'
 export function parent(path: string): string {
+  if (/^history:\/\/[^/]+\/[^/]+\/?$/.test(path)) return path.replace(/\/$/, '')
   const p = path.replace(/[\\/]+$/, '')
   const sep = p.includes('\\') ? '\\' : '/'
   const i = p.lastIndexOf(sep)

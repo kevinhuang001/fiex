@@ -8,7 +8,7 @@ import { shortcutLabel } from '@/lib/shortcuts'
 import type { Entry, Location, Tag } from '@/lib/types'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
 import { useFileOperations } from './useFileOperations'
 import { usePathEditor } from './usePathEditor'
@@ -30,32 +30,37 @@ export function useAppController() {
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
-  const gitBase = useRef<{ root: string; branch: string } | null>(null)
+  const workspace = useRef<string | null>(null)
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
   const [compressOpen, setCompressOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
-  const chosen = x.entries.filter((e) => x.selected.includes(e.path))
+  const chosen = useMemo(() => {
+    const selected = new Set(x.selected)
+    return x.entries.filter((entry) => selected.has(entry.path))
+  }, [x.entries, x.selected])
   const first = chosen[0]
   const notify = useCallback((s: string) => setToast(s), [])
-  useEffect(() => {
-    if (!x.git) {
-      gitBase.current = null
-      return
-    }
-    if (gitBase.current?.root !== x.git.root) {
-      gitBase.current = { root: x.git.root, branch: x.git.branch }
-    }
-  }, [x.git?.root])
-  const gitSwitched = Boolean(x.git && gitBase.current && x.git.branch !== gitBase.current.branch)
+  const gitSwitched = x.path.startsWith('history://')
   useEffect(() => {
     x.setReadOnly(gitSwitched)
   }, [gitSwitched])
+  const viewRevision = async (reference: string) => {
+    if (!x.git) return
+    const path = await call<string>('git_browse', { root: x.git.root, reference })
+    if (!gitSwitched) workspace.current = x.path
+    setPreview(null)
+    x.navigate(path)
+  }
+  const returnToWorktree = () => {
+    const path = workspace.current || x.git?.root
+    if (path) x.navigate(path)
+  }
   const writable = () => {
     if (!gitSwitched) return true
-    x.setError('当前是只读分支或版本，切换回工作区分支后才能修改')
+    x.setError('历史版本只读，请返回工作区后再修改')
     return false
   }
   useEffect(() => {
@@ -189,6 +194,8 @@ export function useAppController() {
     )
   const isRemotePath = (path: string) => Boolean(remoteConnection(path))
   const displayName = (path: string) => {
+    if (/^history:\/\/[^/]+\/[^/]+\/?$/.test(path))
+      return '历史版本 · ' + path.split('/')[3].slice(0, 8)
     if (trashPath && path === trashPath) return '废纸篓'
     const volume = x.locations.find((location) => location.usbfs && location.path === path)
     if (volume) return volume.name
@@ -434,6 +441,8 @@ export function useAppController() {
     setSidebar,
     displayName,
     gitSwitched,
+    viewRevision,
+    returnToWorktree,
     hint,
     create,
     gitOpen,

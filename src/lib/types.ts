@@ -104,3 +104,11 @@ export interface GitRefs {
   branches: string[]
   tags: string[]
 }
+
+export interface GitCommit {
+  id: string
+  shortId: string
+  subject: string
+  author: string
+  timestamp: number
+}

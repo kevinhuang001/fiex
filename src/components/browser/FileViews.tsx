@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronRight, CloudCheck, CloudDownload, Files, FolderOpen, SearchX } from 'lucide-react'
 import { FileIcon } from '../FileIcon'
+import { BrowserColumn } from './BrowserColumn'
+import { VirtualFileGrid } from './VirtualFileGrid'
 import { InlineRename } from './InlineRename'
 import { TagDots } from '../TagDots'
 import { asset, call, native } from '@/lib/api'
@@ -21,6 +23,7 @@ interface Props {
   onMenu: (e: Entry, x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
   onBookmark: (paths: string[]) => void
+  onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
   readOnly?: boolean
 }
 
@@ -96,6 +99,7 @@ export function FileViews(props: Props) {
     () => sortEntries(x.entries, prefs.sort, prefs.descending),
     [x.entries, prefs.sort, prefs.descending],
   )
+  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
   const iconSize = Math.round(prefs.fontSize * 8)
   const anchor = useRef<string | null>(null)
   const suppressClick = useRef(false)
@@ -104,14 +108,15 @@ export function FileViews(props: Props) {
   const beginPointerDrag = (event: React.PointerEvent, entry: Entry) => {
     if (event.button !== 0 || x.renaming || readOnly) return
     if ((event.target as Element).closest('input,button,a')) return
-    const paths = x.selected.includes(entry.path) ? [...x.selected] : [entry.path]
-    if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !x.selected.includes(entry.path)) {
+    const paths = selectedPaths.has(entry.path) ? [...x.selected] : [entry.path]
+    if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !selectedPaths.has(entry.path)) {
       x.setSelected([entry.path])
     }
     const startX = event.clientX
     const startY = event.clientY
     let active = false
     let nativeStarted = false
+    let copying = event.altKey || event.ctrlKey
     const cleanup = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', finish)
@@ -126,12 +131,19 @@ export function FileViews(props: Props) {
       nativeStarted = true
       cleanup()
       if (!native) return
-      void startDrag({ item: paths, icon: DRAG_ICON, mode: 'copy' }).catch((error) => {
+      void startDrag(
+        { item: paths, icon: DRAG_ICON, mode: copying ? 'copy' : 'move' },
+        (result) => {
+          props.onExternalDrag?.(result.result)
+          if (result.result === 'Dropped') x.reload()
+        },
+      ).catch((error) => {
         x.setError(String(error))
       })
     }
     const leave = () => startNative()
     const move = (moveEvent: PointerEvent) => {
+      copying = moveEvent.altKey || moveEvent.ctrlKey
       if (!active) {
         if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
         active = true
@@ -201,13 +213,13 @@ export function FileViews(props: Props) {
       },
       onContextMenu: (event: React.MouseEvent) => {
         event.preventDefault()
-        if (!x.selected.includes(e.path)) x.setSelected([e.path])
+        if (!selectedPaths.has(e.path)) x.setSelected([e.path])
         onMenu(e, event.clientX, event.clientY)
       },
       onPointerDown: (event: React.PointerEvent) => beginPointerDrag(event, e),
       'data-path': e.path,
       'data-drop-folder': e.isDir ? e.path : undefined,
-      'aria-selected': x.selected.includes(e.path),
+      'aria-selected': selectedPaths.has(e.path),
       tabIndex: -1,
     }
   }
@@ -262,7 +274,7 @@ export function FileViews(props: Props) {
                 last + (event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1),
               ),
             )
-    if (last < 0) next = 0
+    if (last < 0 && event.key !== 'End' && event.key !== 'Home') next = 0
     const e = entries[next]
     x.setSelected(event.shiftKey ? [...new Set([...x.selected, e.path])] : [e.path])
     const row = flat.findIndex((r) => r.entry?.path === e.path)
@@ -321,7 +333,7 @@ export function FileViews(props: Props) {
                   {item.entry ? (
                     <div
                       role="row"
-                      className={`file-row ${x.selected.includes(item.entry.path) ? 'selected' : ''}`}
+                      className={`file-row ${selectedPaths.has(item.entry.path) ? 'selected' : ''}`}
                       {...shared(item.entry)}
                     >
                       <span className="file-name">
@@ -367,42 +379,68 @@ export function FileViews(props: Props) {
               })()}
             </div>
           )}
-          {groups(entries, prefs.group).map(([heading, files]) => (
-            <section key={heading}>
-              {heading && <div className="group-heading">{heading}</div>}
-              <div
-                className={prefs.view === 'gallery' ? 'gallery-strip' : 'icon-grid'}
-                style={
-                  prefs.view !== 'gallery'
-                    ? ({
-                        '--tile-size': `${Math.max(96, iconSize + 38)}px`,
-                        '--icon-size': `${iconSize}px`,
-                        '--label-size': `${prefs.fontSize}px`,
-                      } as CSSProperties)
-                    : undefined
-                }
-                onClick={(event) => {
-                  if (event.target === event.currentTarget) x.setSelected([])
-                }}
-              >
-                {files.map((e) => (
-                  <div
-                    role="gridcell"
-                    className={`file-tile ${x.selected.includes(e.path) ? 'selected' : ''}`}
-                    key={e.path}
-                    {...shared(e)}
-                  >
-                    <span className="tile-icon">
-                      <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
-                    </span>
-                    <NameCell explorer={x} entry={e} className="tile-label" />
-                    <TagDots tags={e.tags} />
-                    <SyncBadge sync={e.sync} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+          {prefs.view === 'icons' && entries.length > 200 ? (
+            <VirtualFileGrid
+              entries={entries}
+              group={prefs.group}
+              tileSize={Math.max(96, iconSize + 38)}
+              rowHeight={iconSize + 76}
+              scrollRef={container}
+              target={x.renaming || x.selected.at(-1) || null}
+              render={(e) => (
+                <div
+                  role="gridcell"
+                  className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}`}
+                  key={e.path}
+                  {...shared(e)}
+                >
+                  <span className="tile-icon">
+                    <Thumbnail entry={e} size={iconSize} />
+                  </span>
+                  <NameCell explorer={x} entry={e} className="tile-label" />
+                  <TagDots tags={e.tags} />
+                  <SyncBadge sync={e.sync} />
+                </div>
+              )}
+            />
+          ) : (
+            groups(entries, prefs.group).map(([heading, files]) => (
+              <section key={heading}>
+                {heading && <div className="group-heading">{heading}</div>}
+                <div
+                  className={prefs.view === 'gallery' ? 'gallery-strip' : 'icon-grid'}
+                  style={
+                    prefs.view !== 'gallery'
+                      ? ({
+                          '--tile-size': `${Math.max(96, iconSize + 38)}px`,
+                          '--icon-size': `${iconSize}px`,
+                          '--label-size': `${prefs.fontSize}px`,
+                        } as CSSProperties)
+                      : undefined
+                  }
+                  onClick={(event) => {
+                    if (event.target === event.currentTarget) x.setSelected([])
+                  }}
+                >
+                  {files.map((e) => (
+                    <div
+                      role="gridcell"
+                      className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}`}
+                      key={e.path}
+                      {...shared(e)}
+                    >
+                      <span className="tile-icon">
+                        <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
+                      </span>
+                      <NameCell explorer={x} entry={e} className="tile-label" />
+                      <TagDots tags={e.tags} />
+                      <SyncBadge sync={e.sync} />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
         </>
       )}
       {ghost && (
@@ -444,6 +482,7 @@ function Columns({
   shared: (e: Entry) => Record<string, unknown>
   onKeyDown: (e: React.KeyboardEvent) => void
 }) {
+  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
   const [left, setLeft] = useState<Entry[]>([])
   const [right, setRight] = useState<Entry[]>([])
   const [error, setError] = useState('')
@@ -462,7 +501,7 @@ function Columns({
     return () => {
       active = false
     }
-  }, [x.path, prefs.hidden])
+  }, [x.path, prefs.hidden, prefs.displayIgnore])
   useEffect(() => {
     let active = true
     setRight([])
@@ -482,13 +521,16 @@ function Columns({
     return () => {
       active = false
     }
-  }, [selected?.path, selected?.isDir, prefs.hidden])
+  }, [selected?.path, selected?.isDir, prefs.hidden, prefs.displayIgnore])
   const column = (files: Entry[], current: boolean) => (
-    <div className="browser-column">
-      {sortEntries(files, prefs.sort, prefs.descending).map((e) => (
+    <BrowserColumn
+      entries={files}
+      prefs={prefs}
+      target={current ? x.selected.at(-1) : x.path}
+      render={(e) => (
         <div
           key={e.path}
-          className={`column-row ${x.selected.includes(e.path) || e.path === x.path ? 'selected' : ''}`}
+          className={`column-row ${selectedPaths.has(e.path) || e.path === x.path ? 'selected' : ''}`}
           data-drop-folder={e.isDir ? e.path : undefined}
           {...(current
             ? shared(e)
@@ -503,8 +545,8 @@ function Columns({
           <SyncBadge sync={e.sync} />
           {e.isDir && <ChevronRight size={13} />}
         </div>
-      ))}
-    </div>
+      )}
+    />
   )
   return (
     <div className="columns-view" role="grid" aria-label="文件" tabIndex={0} onKeyDown={onKeyDown}>

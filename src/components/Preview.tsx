@@ -20,10 +20,28 @@ export function Preview({
 }) {
   const [text, setText] = useState('')
   const [error, setError] = useState('')
+  const [source, setSource] = useState('')
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    setSource(entry ? asset(entry.path) : '')
+    if (!entry || !entry.path.startsWith('history://') || entry.isDir || isText(entry)) return
+    let active = true
+    void call<string>('git_history_asset', { path: entry.path })
+      .then((path) => {
+        if (active) setSource(asset(path))
+      })
+      .catch((e) => {
+        if (active) setError(String(e))
+      })
+    return () => {
+      active = false
+    }
+  }, [entry?.path])
   useEffect(() => {
     setText('')
     setError('')
     let active = true
+    setLoading(Boolean(entry && isText(entry)))
     if (entry && isText(entry))
       void call<string>('read_preview', { path: entry.path })
         .then((t) => {
@@ -31,6 +49,9 @@ export function Preview({
         })
         .catch((e) => {
           if (active) setError(String(e))
+        })
+        .finally(() => {
+          if (active) setLoading(false)
         })
     return () => {
       active = false
@@ -69,12 +90,14 @@ export function Preview({
               </div>
             ) : isText(entry) ? (
               <pre>
-                {text || '正在读取…'}
+                {loading ? '正在读取…' : text || '（空文件）'}
                 {entry.size > 256 * 1024 && '\n\n…仅预览前 256 KiB'}
               </pre>
+            ) : entry.path.startsWith('history://') && !source ? (
+              <p>正在读取历史文件…</p>
             ) : isImage(entry) && native ? (
               <img
-                src={asset(entry.path)}
+                src={source}
                 alt={entry.name}
                 onError={() => setError('此图片格式无法预览，可用默认应用打开。')}
               />
@@ -82,7 +105,7 @@ export function Preview({
               <video
                 controls
                 autoPlay
-                src={asset(entry.path)}
+                src={source}
                 onError={() => setError('系统不支持此视频编码，可用默认应用打开。')}
               />
             ) : entry.mime.startsWith('audio/') && native ? (
@@ -91,13 +114,13 @@ export function Preview({
                 <audio
                   controls
                   autoPlay
-                  src={asset(entry.path)}
+                  src={source}
                   onError={() => setError('系统不支持此音频编码，可用默认应用打开。')}
                 />
               </div>
             ) : entry.extension === 'pdf' && native ? (
               <Suspense fallback={<p>正在加载 PDF…</p>}>
-                <PdfPreview url={asset(entry.path)} />
+                <PdfPreview url={source} />
               </Suspense>
             ) : (
               <div className="preview-fallback">

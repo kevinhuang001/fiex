@@ -1,5 +1,5 @@
 use crate::{
-    archives, files, git,
+    archives, files, git, git_history,
     operations::{self, OperationResult, Operations},
     remote,
     search::{SearchBatch, SearchState},
@@ -10,16 +10,63 @@ use std::sync::Mutex;
 use tauri::{ipc::Channel, Emitter, Manager};
 type Watch = Mutex<Option<notify::RecommendedWatcher>>;
 #[tauri::command]
+async fn git_init(path: String) -> Result<git::GitStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git::init(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_stage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git::stage(&root, &paths, all))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_unstage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git::unstage(&root, &paths, all))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_identity(root: String) -> Result<git::GitIdentity, String> {
+    tauri::async_runtime::spawn_blocking(move || git::identity(&root))
+        .await
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+async fn git_commit(
+    root: String,
+    message: String,
+    name: String,
+    email: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::commit(&root, &message, &name, &email))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
 async fn git_refs(root: String) -> Result<git::GitRefs, String> {
     tauri::async_runtime::spawn_blocking(move || git::refs(&root))
         .await
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
-async fn git_checkout(root: String, reference: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || git::checkout(&root, &reference))
+async fn git_history(root: String, skip: usize) -> Result<Vec<git_history::Commit>, String> {
+    tauri::async_runtime::spawn_blocking(move || git_history::history(&root, skip))
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_browse(root: String, reference: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git_history::browse(&root, &reference))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_history_asset(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git_history::asset(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_status(path: String) -> Option<git::GitStatus> {
@@ -42,6 +89,14 @@ async fn list_directory(
     hidden: bool,
     ignores: Vec<String>,
 ) -> Result<files::Listing, String> {
+    if path.starts_with("history://") {
+        return tauri::async_runtime::spawn_blocking(move || {
+            git_history::list(&path, hidden, &ignores)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
     if let Some(route) = crate::usbfs::route(&path) {
         let listing_path = path.clone();
         return tauri::async_runtime::spawn_blocking(move || {
@@ -144,6 +199,9 @@ async fn mount_device(device: String) -> Result<String, String> {
 }
 #[tauri::command]
 fn file_info(path: String) -> Result<files::Entry, String> {
+    if path.starts_with("history://") {
+        return git_history::info(&path);
+    }
     if let Some(route) = crate::usbfs::route(&path) {
         return crate::usbfs::entry(&route);
     }
@@ -151,6 +209,11 @@ fn file_info(path: String) -> Result<files::Entry, String> {
 }
 #[tauri::command]
 async fn read_preview(path: String) -> Result<String, String> {
+    if path.starts_with("history://") {
+        return tauri::async_runtime::spawn_blocking(move || git_history::preview(&path))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     if let Some(route) = crate::usbfs::route(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
             let bytes = crate::usbfs::read_path(&route)?;
@@ -326,6 +389,22 @@ async fn search_files(
     on_batch: Channel<SearchBatch>,
     state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
+    if root.starts_with("history://") {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let started = std::time::Instant::now();
+            let entries = git_history::search(&root, &query, hidden, &ignores)?;
+            let _ = on_batch.send(SearchBatch {
+                truncated: entries.len() >= 500,
+                entries,
+                done: true,
+                elapsed_ms: started.elapsed().as_millis(),
+                skipped: 0,
+            });
+            Ok(())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     if let Some(route) = crate::usbfs::route(&root) {
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
@@ -522,9 +601,16 @@ pub fn run() {
         .manage(Mutex::new(None::<notify::RecommendedWatcher>))
         .invoke_handler(tauri::generate_handler![
             platform,
+            git_init,
+            git_stage,
+            git_unstage,
+            git_commit,
+            git_identity,
             git_status,
             git_refs,
-            git_checkout,
+            git_history,
+            git_browse,
+            git_history_asset,
             locations,
             list_directory,
             file_info,

@@ -163,11 +163,13 @@ export function useFileOperations({
         notify(`已解压到 ${basename(path)}`)
       })
   }
-  const undo = () =>
+  const undo = () => {
+    if (!writable()) return
     void run('正在撤销…', async () => {
       await call('undo')
       notify('已撤销上一次文件操作')
     })
+  }
   return {
     busy,
     clipboard,

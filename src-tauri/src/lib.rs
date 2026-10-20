@@ -3,6 +3,7 @@ pub mod archives;
 mod desktop;
 pub mod files;
 pub mod git;
+pub mod git_history;
 pub mod ignores;
 #[cfg(all(feature = "desktop", target_os = "macos"))]
 mod macos_material;

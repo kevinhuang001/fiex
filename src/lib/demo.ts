@@ -30,7 +30,31 @@ function ignored(name: string, patterns: unknown): boolean {
   })
 }
 
-let demoBranch = 'main'
+const demoBranch = 'main'
+const firstCommit = 'a'.repeat(40),
+  secondCommit = 'b'.repeat(40)
+const demoHistory = [
+  {
+    id: secondCommit,
+    shortId: 'bbbbbbbb',
+    subject: '完善文件浏览与拖拽',
+    author: 'Kevin Huang',
+    timestamp: now - 3600,
+  },
+  {
+    id: firstCommit,
+    shortId: 'aaaaaaaa',
+    subject: '初始版本',
+    author: 'Kevin Huang',
+    timestamp: now - 86400,
+  },
+]
+const demoRoots = new Set([root + '/Documents'])
+const demoChanges: Record<string, string> = { [root + '/Documents/Notes.md']: ' M' }
+const repoFor = (path: string) =>
+  [...demoRoots]
+    .sort((a, b) => b.length - a.length)
+    .find((r) => path === r || path.startsWith(r + '/'))
 
 let entries = [
   ...['Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Movies'].map((x) =>
@@ -76,6 +100,21 @@ entries = entries.map((entry) =>
       }
     : entry,
 )
+// Large-directory fixture for UI responsiveness regression tests and recording.
+const bulkCount = Math.min(
+  20000,
+  Math.max(0, Number(new URLSearchParams(location.search).get('count')) || 0),
+)
+for (let i = 0; i < bulkCount; i++)
+  entries.push(
+    item(
+      root + '/Documents/zz-file-' + String(i).padStart(5, '0') + '.txt',
+      false,
+      'text/plain',
+      120,
+    ),
+  )
+const snapshotEntries = structuredClone(entries)
 export async function mock(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
     case 'platform':
@@ -132,6 +171,27 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         },
       ]
     case 'list_directory': {
+      if (String(a.path).startsWith('history://')) {
+        const base = String(a.path).match(/^history:\/\/[^/]+\/[^/]+/)![0]
+        const original = atob(base.split('/')[2]) + String(a.path).slice(base.length)
+        return {
+          path: a.path,
+          entries: snapshotEntries
+            .filter(
+              (e) =>
+                parent(e.path) === original &&
+                (a.hidden || !e.name.startsWith('.')) &&
+                !ignored(e.name, a.ignores),
+            )
+            .map((e) => ({
+              ...e,
+              path: base + e.path.slice(atob(base.split('/')[2]).length),
+              readonly: true,
+            })),
+          warnings: [],
+        }
+      }
+
       const remoteRoot = root + '/.fiex/drives/demo-webdav'
       if ((a.path as string).startsWith(remoteRoot)) {
         return {
@@ -168,6 +228,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
     case 'file_info':
       return entries.find((e) => e.path === a.path)
     case 'read_preview':
+      if (String(a.path).startsWith('history://'))
+        return '# Fiex · 历史版本\n\n这是提交时保存的内容，当前工作区没有改变。'
       return '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
     case 'detect_terminals':
       return [
@@ -204,15 +266,82 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       ]
     case 'git_refs':
       return { current: demoBranch, branches: ['main', 'dev'], tags: ['v0.2.4'] }
-    case 'git_checkout':
-      demoBranch = String(a.reference)
-      return null
-    case 'git_status':
+    case 'git_identity':
+      return { name: 'Kevin Huang', email: 'kevin@example.com' }
+    case 'git_init': {
+      const path = String(a.path)
+      demoRoots.add(path)
+      for (const entry of entries)
+        if (!entry.isDir && entry.path.startsWith(path + '/')) demoChanges[entry.path] = '??'
       return {
-        root,
-        branch: demoBranch,
-        entries: { [root + '/Documents/Notes.md']: ' M' },
+        root: path,
+        branch: 'main',
+        entries: Object.fromEntries(
+          Object.entries(demoChanges).filter(([p]) => p.startsWith(path + '/')),
+        ),
       }
+    }
+    case 'git_stage':
+    case 'git_unstage': {
+      for (const path of Object.keys(demoChanges)) {
+        if (
+          !path.startsWith(String(a.root) + '/') ||
+          (!a.all && !(a.paths as string[]).includes(path))
+        )
+          continue
+        const code = demoChanges[path]
+        demoChanges[path] =
+          command === 'git_stage'
+            ? code === '??'
+              ? 'A '
+              : `${code[1] === ' ' ? code[0] : code[1]} `
+            : code[0] === 'A'
+              ? '??'
+              : ` ${code[0]}`
+      }
+      return null
+    }
+    case 'git_commit': {
+      if (!String(a.message).trim()) throw new Error('请填写提交说明')
+      const staged = Object.keys(demoChanges).filter(
+        (path) =>
+          path.startsWith(String(a.root) + '/') && ![' ', '?'].includes(demoChanges[path][0]),
+      )
+      if (!staged.length) throw new Error('没有暂存的更改')
+      for (const path of staged) delete demoChanges[path]
+      return '8e4a9c2'
+    }
+    case 'git_history':
+      return demoHistory.slice(Number(a.skip) || 0, (Number(a.skip) || 0) + 50)
+    case 'git_browse':
+      return (
+        'history://' +
+        btoa(String(a.root)) +
+        '/' +
+        (String(a.reference) === 'dev'
+          ? secondCommit
+          : String(a.reference).length === 40
+            ? String(a.reference)
+            : firstCommit)
+      )
+    case 'git_status': {
+      if (String(a.path).startsWith('history://'))
+        return {
+          root: atob(String(a.path).split('/')[2]),
+          branch: String(a.path).split('/')[3].slice(0, 8),
+          entries: {},
+        }
+      const repo = repoFor(String(a.path))
+      return repo
+        ? {
+            root: repo,
+            branch: demoBranch,
+            entries: Object.fromEntries(
+              Object.entries(demoChanges).filter(([p]) => p.startsWith(repo + '/')),
+            ),
+          }
+        : null
+    }
     case 'set_tags': {
       const tags = a.tags as { name: string; color: number }[]
       entries = entries.map((entry) =>
@@ -237,18 +366,40 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       const path = join(a.path as string, a.name as string)
       if (entries.some((e) => e.path === path)) throw new Error('同名项目已存在')
       entries.push(item(path, a.folder as boolean))
+      if (!a.folder && repoFor(path)) demoChanges[path] = '??'
       return path
     }
     case 'rename_entry': {
       const path = join(parent(a.path as string), a.name as string)
       entries = entries.map((e) => (e.path === a.path ? { ...e, path, name: a.name as string } : e))
+      const previous = String(a.path)
+      if (demoChanges[previous]) {
+        demoChanges[path] = demoChanges[previous]
+        delete demoChanges[previous]
+      }
       return path
     }
     case 'recycle':
       entries = entries.filter((e) => !(a.paths as string[]).includes(e.path))
       return { paths: a.paths, errors: [], skipped: 0 }
-    case 'transfer':
-      return { paths: [], errors: [], skipped: 0 }
+    case 'transfer': {
+      const paths: string[] = []
+      for (const source of a.paths as string[]) {
+        const selected = entries.filter((e) => e.path === source || e.path.startsWith(source + '/'))
+        const destination = join(String(a.destination), basename(source))
+        if (destination === source || destination.startsWith(source + '/')) continue
+        const transferred = selected.map((e) => ({
+          ...e,
+          path: destination + e.path.slice(source.length),
+          name: e.path === source ? basename(destination) : e.name,
+        }))
+        if (a.moving) entries = entries.filter((e) => !selected.includes(e))
+        entries.push(...transferred)
+        paths.push(destination)
+      }
+      return { paths, errors: [], skipped: 0 }
+    }
+
     default:
       return null
   }
