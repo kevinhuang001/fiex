@@ -18,6 +18,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     descending: false,
     hidden: false,
     terminal: 'default',
+    ide: 'vscode',
     theme: 'system',
     fontSize: 11,
     displayIgnore: defaultDisplayIgnore(),

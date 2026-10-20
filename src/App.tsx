@@ -10,7 +10,6 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import {
   ArrowDownUp,
   ArrowUp,
-  ChevronDown,
   Code2,
   CloudCheck,
   CloudDownload,
@@ -64,6 +63,7 @@ import type {
   Sort,
   Tag,
   Terminal,
+  Ide,
   View,
 } from './lib/types'
 const views: { id: View; name: string; icon: ReactNode }[] = [
@@ -130,6 +130,7 @@ export default function App() {
   const [busy, setBusy] = useState('')
   const [toast, setToast] = useState('')
   const [terminals, setTerminals] = useState<Terminal[]>([])
+  const [ides, setIdes] = useState<Ide[]>([])
   const [platform, setPlatform] = useState('')
   const [trashPath, setTrashPath] = useState<string | null>(null)
   const [trashIssue, setTrashIssue] = useState(false)
@@ -154,7 +155,10 @@ export default function App() {
       .then(setPlatform)
       .catch(() => {})
     void call<Terminal[]>('detect_terminals')
-      .then(setTerminals)
+      .then((list) => setTerminals(Array.isArray(list) ? list : []))
+      .catch(() => {})
+    void call<Ide[]>('detect_ides')
+      .then((list) => setIdes(Array.isArray(list) ? list : []))
       .catch(() => {})
     void call<string | null>('trash_path')
       .then(setTrashPath)
@@ -436,9 +440,14 @@ export default function App() {
     void run('正在打开终端…', () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),
     )
-  const openVSCode = (path = first?.path || x.path) => {
+  const openIde = (path = first?.path || x.path) => {
     if (!path) return
-    void run('正在用 VS Code 打开…', () => call('open_in_vscode', { path }))
+    const ide = ides.find((item) => item.id === prefs.ide) || ides[0]
+    if (!ide) {
+      x.setError('没有检测到可用的 IDE')
+      return
+    }
+    void run(`正在用 ${ide.name} 打开…`, () => call('open_in_ide', { path, id: ide.id }))
   }
   const undo = () =>
     void run('正在撤销…', async () => {
@@ -827,9 +836,9 @@ export default function App() {
           <Button
             variant="ghost"
             size="icon"
-            title="在 VS Code 中打开"
-            aria-label="在 VS Code 中打开"
-            onClick={() => openVSCode()}
+            title={`在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`}
+            aria-label="在 IDE 中打开"
+            onClick={() => openIde()}
           >
             <Code2 />
           </Button>
@@ -844,20 +853,6 @@ export default function App() {
             >
               <TerminalSquare />
             </Button>
-            <Menu label="选择终端" icon={<ChevronDown />}>
-              {terminals.map((t) => (
-                <Choice
-                  key={t.id}
-                  checked={prefs.terminal === t.id}
-                  onClick={() => {
-                    update({ terminal: t.id })
-                    terminal(t.id)
-                  }}
-                >
-                  {t.name}
-                </Choice>
-              ))}
-            </Menu>
           </div>
           <Button
             variant="ghost"
@@ -1350,6 +1345,7 @@ export default function App() {
         locations={x.locations}
         update={update}
         terminals={terminals}
+        ides={ides}
         onError={x.setError}
       />
       {toast && (

@@ -1045,3 +1045,30 @@ pub fn eject(device: &str) -> Result<(), String> {
         Err("当前系统请通过系统托盘弹出设备".into())
     }
 }
+
+pub fn search(
+    route: &Route,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<crate::files::Entry>, String> {
+    let needle = query.to_lowercase();
+    let mut out = Vec::new();
+    let mut pending = vec![route.clone()];
+    while let Some(directory) = pending.pop() {
+        for entry in listing(&directory)? {
+            if entry.name.to_lowercase().contains(&needle) {
+                out.push(entry.clone());
+                if out.len() >= limit {
+                    return Ok(out);
+                }
+            }
+            if entry.is_dir {
+                pending.push(Route {
+                    rel: join_rel(&directory.rel, &entry.name),
+                    ..directory.clone()
+                });
+            }
+        }
+    }
+    Ok(out)
+}

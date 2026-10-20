@@ -290,6 +290,22 @@ async fn search_files(
     on_batch: Channel<SearchBatch>,
     state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
+    if let Some(route) = crate::usbfs::route(&root) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let started = std::time::Instant::now();
+            let entries = crate::usbfs::search(&route, &query, 500)?;
+            let _ = on_batch.send(SearchBatch {
+                entries,
+                done: true,
+                elapsed_ms: started.elapsed().as_millis(),
+                truncated: false,
+                skipped: 0,
+            });
+            Ok(())
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         state.run(&root, &query, hidden, &ignores, |b| {
@@ -307,6 +323,9 @@ async fn warm_index(
     ignores: Vec<String>,
     state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
+    if crate::usbfs::route(&root).is_some() {
+        return Ok(());
+    }
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.warm(&root, hidden, &ignores))
         .await
@@ -348,6 +367,16 @@ async fn compress_archive(
 #[tauri::command]
 fn detect_terminals() -> Vec<terminals::Terminal> {
     terminals::detect()
+}
+#[tauri::command]
+fn detect_ides() -> Vec<terminals::Ide> {
+    terminals::detect_ides()
+}
+#[tauri::command]
+async fn open_in_ide(path: String, id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || terminals::launch_ide(&path, &id))
+        .await
+        .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 fn open_terminal(path: String, id: String) -> Result<(), String> {
@@ -397,10 +426,6 @@ fn open_applications() -> Result<(), String> {
 #[tauri::command]
 fn set_tags(paths: Vec<String>, tags: Vec<files::Tag>) -> Result<(), String> {
     files::set_tags(&paths, &tags)
-}
-#[tauri::command]
-fn open_in_vscode(path: String) -> Result<(), String> {
-    terminals::open_in_vscode(&path)
 }
 #[tauri::command]
 fn open_full_disk_access() -> Result<(), String> {
@@ -477,6 +502,8 @@ pub fn run() {
             extract_archive,
             compress_archive,
             detect_terminals,
+            detect_ides,
+            open_in_ide,
             open_terminal,
             open_path,
             remote_connections,
@@ -493,7 +520,6 @@ pub fn run() {
             trash_path,
             open_applications,
             set_tags,
-            open_in_vscode,
             open_full_disk_access,
             open_trash,
             watch_directory,

@@ -50,11 +50,13 @@ function SyncBadge({ sync }: { sync: Entry['sync'] }) {
   if (!sync) return null
   return sync === 'synced' ? (
     <span className="sync-badge synced" title="已同步">
-      <CloudCheck size={12} />
+      <CloudCheck size={11} />
+      <span>已同步</span>
     </span>
   ) : (
     <span className="sync-badge cloud" title="仅云端，需要连接">
-      <CloudDownload size={12} />
+      <CloudDownload size={11} />
+      <span>仅云端</span>
     </span>
   )
 }

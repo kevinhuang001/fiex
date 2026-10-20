@@ -42,6 +42,10 @@ export interface Terminal {
   id: string
   name: string
 }
+export interface Ide {
+  id: string
+  name: string
+}
 export interface Batch {
   entries: Entry[]
   done: boolean
@@ -64,6 +68,7 @@ export interface Preferences {
   descending: boolean
   hidden: boolean
   terminal: string
+  ide: string
   theme: 'system' | 'light' | 'dark'
   fontSize: number
   displayIgnore: string[]

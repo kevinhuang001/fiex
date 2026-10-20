@@ -129,7 +129,30 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           usbfs: false,
         },
       ]
-    case 'list_directory':
+    case 'list_directory': {
+      const remoteRoot = root + '/.fiex/drives/demo-webdav'
+      if ((a.path as string).startsWith(remoteRoot)) {
+        return {
+          path: a.path,
+          entries: [
+            {
+              ...item(remoteRoot + '/产品截图.png', false, 'image/png', 2_400_000),
+              sync: 'synced',
+            },
+            {
+              ...item(remoteRoot + '/会议记录.md', false, 'text/markdown', 18_000),
+              sync: 'synced',
+            },
+            {
+              ...item(remoteRoot + '/素材.zip', false, 'application/zip', 45_000_000),
+              sync: 'cloud',
+            },
+            { ...item(remoteRoot + '/2026 规划', true), sync: 'cloud' },
+          ],
+          warnings: [],
+        }
+      }
+
       if (!entries.some((e) => e.path === a.path && e.isDir) && a.path !== root && a.path !== '/')
         throw new Error('文件夹不存在')
       return {
@@ -139,6 +162,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         ),
         warnings: [],
       } satisfies Listing
+    }
     case 'file_info':
       return entries.find((e) => e.path === a.path)
     case 'read_preview':
@@ -158,8 +182,24 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       return null
     case 'open_in_vscode':
       return null
+    case 'detect_ides':
+      return [
+        { id: 'vscode', name: 'VS Code' },
+        { id: 'cursor', name: 'Cursor' },
+      ]
     case 'remote_connections':
-      return []
+      return [
+        {
+          id: 'demo-webdav',
+          name: '团队 WebDAV',
+          kind: 'webdav',
+          mountPath: root + '/.fiex/drives/demo-webdav',
+          host: '',
+          url: 'https://dav.example.com',
+          share: '',
+          base: '',
+        },
+      ]
     case 'git_status':
       return {
         root,

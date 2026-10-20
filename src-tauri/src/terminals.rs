@@ -105,7 +105,7 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
                     .arg(&dir);
             }
             _ => {
-                command.args(["-a", app]).arg(&dir);
+                command.args(["-a", _app]).arg(&dir);
             }
         }
         command.spawn().map_err(|e| e.to_string())?;
@@ -240,62 +240,6 @@ pub fn open_applications() -> Result<(), String> {
     Ok(())
 }
 
-pub fn open_in_vscode(path: &str) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        if which::which("code").is_ok() {
-            Command::new("code")
-                .arg(path)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-            return Ok(());
-        }
-        let app = std::path::Path::new("/Applications/Visual Studio Code.app");
-        let local_app = dirs::home_dir()
-            .map(|home| home.join("Applications/Visual Studio Code.app"))
-            .unwrap_or_default();
-        if app.exists() || local_app.exists() {
-            Command::new("open")
-                .args(["-a", "Visual Studio Code"])
-                .arg(path)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-            return Ok(());
-        }
-        Err("未检测到 Visual Studio Code，请先安装并启用 code 命令".into())
-    }
-    #[cfg(target_os = "windows")]
-    {
-        if which::which("code.cmd").is_ok() || which::which("code.exe").is_ok() {
-            Command::new("cmd")
-                .args(["/C", "code"])
-                .arg(path)
-                .spawn()
-                .map_err(|e| e.to_string())?;
-            return Ok(());
-        }
-        Err("未检测到 Visual Studio Code，请先安装并启用 code 命令".into())
-    }
-    #[cfg(target_os = "linux")]
-    {
-        for editor in ["code", "code-insiders"] {
-            if which::which(editor).is_ok() {
-                Command::new(editor)
-                    .arg(path)
-                    .spawn()
-                    .map_err(|e| e.to_string())?;
-                return Ok(());
-            }
-        }
-        Err("未检测到 Visual Studio Code，请先安装并启用 code 命令".into())
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    {
-        let _ = path;
-        Err("当前平台不支持 VS Code 集成".into())
-    }
-}
-
 pub fn open_full_disk_access() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -338,6 +282,111 @@ pub fn open_trash() -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         open::that_detached("trash:///").map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct Ide {
+    pub id: String,
+    pub name: String,
+}
+
+const IDES: &[(&str, &str, &str, &str)] = &[
+    ("vscode", "VS Code", "code", "Visual Studio Code"),
+    (
+        "vscode-insiders",
+        "VS Code Insiders",
+        "code-insiders",
+        "Visual Studio Code - Insiders",
+    ),
+    ("cursor", "Cursor", "cursor", "Cursor"),
+    ("windsurf", "Windsurf", "windsurf", "Windsurf"),
+    ("zed", "Zed", "zed", "Zed"),
+    ("sublime", "Sublime Text", "subl", "Sublime Text"),
+    ("idea", "IntelliJ IDEA", "idea", "IntelliJ IDEA"),
+    ("webstorm", "WebStorm", "webstorm", "WebStorm"),
+    ("pycharm", "PyCharm", "pycharm", "PyCharm"),
+    (
+        "android-studio",
+        "Android Studio",
+        "studio",
+        "Android Studio",
+    ),
+    ("xcode", "Xcode", "xed", "Xcode"),
+];
+
+pub fn detect_ides() -> Vec<Ide> {
+    let mut out = Vec::new();
+    for (id, name, cli, _app) in IDES {
+        #[allow(unused_mut)]
+        let mut installed = which::which(cli).is_ok();
+        #[cfg(target_os = "macos")]
+        {
+            installed = installed
+                || std::path::Path::new(&format!("/Applications/{_app}.app")).exists()
+                || dirs::home_dir()
+                    .is_some_and(|home| home.join(format!("Applications/{_app}.app")).exists());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            installed = installed
+                || which::which(format!("{cli}.cmd")).is_ok()
+                || which::which(format!("{cli}.exe")).is_ok();
+        }
+        if installed {
+            out.push(Ide {
+                id: (*id).into(),
+                name: (*name).into(),
+            });
+        }
+    }
+    out
+}
+
+pub fn launch_ide(path: &str, id: &str) -> Result<(), String> {
+    let path = dunce::canonicalize(path).map_err(|error| error.to_string())?;
+    let (id, _app) = IDES
+        .iter()
+        .find(|(candidate, _, _, _)| *candidate == id)
+        .map(|(id, _, _, _app)| (*id, *_app))
+        .unwrap_or(("vscode", "Visual Studio Code"));
+    let (_, _, cli, _) = IDES
+        .iter()
+        .find(|(candidate, _, _, _)| *candidate == id)
+        .copied()
+        .unwrap_or(("vscode", "VS Code", "code", "Visual Studio Code"));
+    #[cfg(target_os = "macos")]
+    {
+        if which::which(cli).is_ok() {
+            Command::new(cli)
+                .arg(&path)
+                .spawn()
+                .map_err(|error| error.to_string())?;
+        } else {
+            Command::new("open")
+                .args(["-a", _app])
+                .arg(&path)
+                .spawn()
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        Command::new("cmd")
+            .args(["/C", cli])
+            .arg(&path)
+            .creation_flags(0x00000010)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new(cli)
+            .arg(&path)
+            .spawn()
+            .map_err(|error| error.to_string())?;
     }
     Ok(())
 }
