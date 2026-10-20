@@ -82,20 +82,37 @@ jobs:
           key: ${{ matrix.target }}
           cache-all-crates: true
           cache-on-failure: true
-      - name: Start WebDAV and SMB test servers
-        if: runner.os == 'Linux'
+      - name: Start WebDAV test server
+        shell: bash
         run: |
-          set -eux
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba smbclient
-          python3 -m pip install --user wsgidav cheroot
-          mkdir -p /tmp/fiex-dav /tmp/fiex-smb
-          printf 'hello webdav\n' > /tmp/fiex-dav/hello.txt
-          printf 'hello smb\n' > /tmp/fiex-smb/hello.txt
-          chmod 777 /tmp/fiex-smb
-          sudo useradd -M -s /usr/sbin/nologin fiex 2>/dev/null || true
-          printf 'fiex\nfiex\n' | sudo smbpasswd -a fiex -s
-          cat > /tmp/fiex-smb.conf <<'EOF'
+          set -euo pipefail
+          PY=python3
+          if [ "$RUNNER_OS" = "Windows" ]; then PY=python; fi
+          "$PY" -m pip install --user wsgidav cheroot
+          mkdir -p .ci/webdav
+          printf 'hello webdav\n' > .ci/webdav/hello.txt
+          ROOT="$PWD/.ci/webdav"
+          if command -v cygpath >/dev/null 2>&1; then ROOT=$(cygpath -w "$ROOT"); fi
+          "$PY" -c 'from wsgidav.server.server_cli import run; run()' --host=127.0.0.1 --port=8080 --root="$ROOT" --auth=anonymous > .ci/wsgidav.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null || (cat .ci/wsgidav.log; exit 1)
+      - name: Start SMB test server
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci/smb
+          printf 'hello smb\n' > .ci/smb/hello.txt
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba smbclient
+            chmod 777 .ci/smb
+            sudo useradd -M -s /usr/sbin/nologin fiex 2>/dev/null || true
+            printf 'fiex\nfiex\n' | sudo smbpasswd -a fiex -s
+            CONF="$PWD/.ci/smb.conf"
+            cat > "$CONF" <<EOF
           [global]
             workgroup = WORKGROUP
             server role = standalone server
@@ -104,41 +121,65 @@ jobs:
             server min protocol = SMB2
             smb ports = 445
           [fiex]
-            path = /tmp/fiex-smb
+            path = $PWD/.ci/smb
             browseable = yes
             read only = no
             guest ok = yes
             valid users = fiex
             force user = fiex
           EOF
-          sudo systemctl stop smbd 2>/dev/null || true
-          sudo smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/smbd.log 2>&1 &
-          WSGIDAV="$HOME/.local/bin/wsgidav"
-          if [ ! -x "$WSGIDAV" ]; then WSGIDAV="$(command -v wsgidav || true)"; fi
-          "$WSGIDAV" --host=127.0.0.1 --port=8080 --root=/tmp/fiex-dav --auth=anonymous > /tmp/wsgidav.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null 2>&1 && break
-            sleep 1
-          done
-          curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null || (cat /tmp/wsgidav.log; exit 1)
-          for i in $(seq 1 20); do
-            smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' >/dev/null 2>&1 && break
-            sleep 1
-          done
-          smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' || (cat /tmp/smbd.log; exit 1)
+            sudo systemctl stop smbd 2>/dev/null || true
+            sudo smbd -s "$CONF" -F --no-process-group > .ci/smbd.log 2>&1 &
+            for i in $(seq 1 20); do
+              smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' >/dev/null 2>&1 && break
+              sleep 1
+            done
+            smbclient //127.0.0.1/fiex -U fiex%fiex -c 'ls' || (cat .ci/smbd.log; exit 1)
+          else
+            PY=python3
+            if [ "$RUNNER_OS" = "Windows" ]; then PY=python; fi
+            "$PY" -m pip install --user impacket
+            SMB_SHARE="$PWD/.ci/smb"
+            if command -v cygpath >/dev/null 2>&1; then SMB_SHARE=$(cygpath -w "$SMB_SHARE"); fi
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              powershell.exe -NoProfile -Command "Stop-Service LanmanServer -Force" || true
+            else
+              sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
+            fi
+            USER_SITE=$("$PY" -c 'import site; print(site.getusersitepackages())')
+            SMB_BIN=$(command -v smbserver.py 2>/dev/null || true)
+            if [ -z "$SMB_BIN" ]; then
+              SMB_BIN=$(find "$HOME/.local" "$HOME/Library" "$HOME/AppData" "$LOCALAPPDATA" -name smbserver.py 2>/dev/null | head -1)
+            fi
+            if [ -z "$SMB_BIN" ]; then
+              echo "impacket smbserver.py not found"; exit 1
+            fi
+            if command -v cygpath >/dev/null 2>&1; then SMB_BIN=$(cygpath -w "$SMB_BIN"); fi
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              "$PY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
+            else
+              sudo env PYTHONPATH="$USER_SITE" "$PY" "$SMB_BIN" -smb2support -username fiex -password fiex fiex "$SMB_SHARE" > .ci/smb.log 2>&1 &
+            fi
+            for i in $(seq 1 30); do
+              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
+              sleep 1
+            done
+            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || (cat .ci/smb.log; exit 1)
+          fi
       - run: npm ci
       - run: npm run icons
+      - run: npm run build
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib
-      - name: Real WebDAV and SMB tests
-        if: runner.os == 'Linux'
+      - name: Driver, WebDAV and SMB tests
+        shell: bash
         env:
           FIEX_WEBDAV_URL: http://127.0.0.1:8080/
           FIEX_SMB_HOST: 127.0.0.1
           FIEX_SMB_SHARE: fiex
           FIEX_SMB_USER: fiex
           FIEX_SMB_PASSWORD: fiex
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib remote::tests -- --nocapture
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --nocapture
       - name: Clippy
         shell: bash
         env:
@@ -162,10 +203,12 @@ jobs:
           fi
           exit "$status"
       - name: Remote test server logs
-        if: failure() && runner.os == 'Linux'
+        if: failure()
+        shell: bash
         run: |
-          cat /tmp/smbd.log || true
-          cat /tmp/wsgidav.log || true
+          cat .ci/smbd.log 2>/dev/null || true
+          cat .ci/smb.log 2>/dev/null || true
+          cat .ci/wsgidav.log 2>/dev/null || true
       - uses: tauri-apps/tauri-action@v0
         with:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
