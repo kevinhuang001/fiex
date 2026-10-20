@@ -231,6 +231,8 @@ pub struct Location {
     pub kind: String,
     pub available: u64,
     pub total: u64,
+    pub removable: bool,
+    pub filesystem: String,
 }
 #[cfg(target_os = "macos")]
 fn visible_mount(path: &str) -> bool {
@@ -258,6 +260,8 @@ pub fn locations() -> Vec<Location> {
                 kind: "favorite".into(),
                 available: 0,
                 total: 0,
+                removable: false,
+                filesystem: String::new(),
             });
         }
     }
@@ -278,6 +282,8 @@ pub fn locations() -> Vec<Location> {
         kind: "applications".into(),
         available: 0,
         total: 0,
+        removable: false,
+        filesystem: String::new(),
     });
     let mut seen = HashSet::new();
     for disk in sysinfo::Disks::new_with_refreshed_list().list() {
@@ -299,6 +305,8 @@ pub fn locations() -> Vec<Location> {
             kind: "disk".into(),
             available: disk.available_space(),
             total: disk.total_space(),
+            removable: disk.is_removable(),
+            filesystem: disk.file_system().to_string_lossy().into_owned(),
         });
     }
     out

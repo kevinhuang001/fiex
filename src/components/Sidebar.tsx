@@ -15,6 +15,7 @@ import {
   AppWindow,
   Server,
   Unplug,
+  Usb,
 } from 'lucide-react'
 import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
@@ -161,7 +162,7 @@ export function Sidebar({
                 className={`nav-item disk-item ${x.path === l.path ? 'active' : ''}`}
                 onClick={() => x.navigate(l.path)}
               >
-                <HardDrive />
+                {l.removable ? <Usb /> : <HardDrive />}
                 <span>
                   <span>{l.name || l.path}</span>
                   <small
@@ -169,6 +170,7 @@ export function Sidebar({
                     title={`可用 ${size(l.available)} / 总计 ${size(l.total)}`}
                   >
                     {l.total > 0 ? `${size(l.available)} / ${size(l.total)}` : size(l.available)}
+                    {l.filesystem && <span className="disk-fs">{l.filesystem.toUpperCase()}</span>}
                   </small>
                   {l.total > 0 && (
                     <i className="disk-meter">

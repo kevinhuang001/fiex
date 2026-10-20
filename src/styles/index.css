@@ -274,8 +274,18 @@ button[data-slot='button'][data-variant='default'] {
   margin-top: 2px;
 }
 .disk-item .disk-capacity {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
   font-variant-numeric: tabular-nums;
+}
+.disk-fs {
+  color: var(--muted);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  opacity: 0.75;
 }
 .disk-meter > i {
   border-radius: 3px;

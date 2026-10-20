@@ -79,14 +79,42 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       return 'macos'
     case 'locations':
       return [
-        { name: '个人文件夹', path: root, kind: 'favorite' },
+        {
+          name: '个人文件夹',
+          path: root,
+          kind: 'favorite',
+          available: 0,
+          total: 0,
+          removable: false,
+          filesystem: '',
+        },
         ...['Desktop', 'Downloads', 'Documents', 'Pictures', 'Music', 'Movies'].map((name, i) => ({
           name: ['桌面', '下载', '文稿', '图片', '音乐', '视频'][i],
           path: root + '/' + name,
           kind: 'favorite',
+          available: 0,
+          total: 0,
+          removable: false,
+          filesystem: '',
         })),
-        { name: '应用程序', path: root + '/Applications', kind: 'applications' },
-        { name: 'Macintosh HD', path: '/', kind: 'disk', available: 240e9, total: 500e9 },
+        {
+          name: '应用程序',
+          path: root + '/Applications',
+          kind: 'applications',
+          available: 0,
+          total: 0,
+          removable: false,
+          filesystem: '',
+        },
+        {
+          name: 'Macintosh HD',
+          path: '/',
+          kind: 'disk',
+          available: 240e9,
+          total: 500e9,
+          removable: false,
+          filesystem: 'APFS',
+        },
       ]
     case 'list_directory':
       if (!entries.some((e) => e.path === a.path && e.isDir) && a.path !== root && a.path !== '/')

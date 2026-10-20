@@ -29,6 +29,8 @@ export interface Location {
   kind: string
   available: number
   total: number
+  removable: boolean
+  filesystem: string
 }
 export interface Terminal {
   id: string

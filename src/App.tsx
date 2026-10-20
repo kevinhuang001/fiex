@@ -451,7 +451,15 @@ export default function App() {
           continue
         }
         existing.add(path)
-        additions.push({ name: info.name, path, kind: 'favorite', available: 0, total: 0 })
+        additions.push({
+          name: info.name,
+          path,
+          kind: 'favorite',
+          available: 0,
+          total: 0,
+          removable: false,
+          filesystem: '',
+        })
       } catch {
         /* The item may have disappeared while dragging. */
       }
@@ -474,7 +482,15 @@ export default function App() {
       update({
         favorites: [
           ...prefs.favorites,
-          { name: basename(path), path, kind: 'favorite', available: 0, total: 0 },
+          {
+            name: basename(path),
+            path,
+            kind: 'favorite',
+            available: 0,
+            total: 0,
+            removable: false,
+            filesystem: '',
+          },
         ],
       })
       notify('已添加到收藏')
