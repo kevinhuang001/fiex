@@ -879,12 +879,12 @@ mod tests {
             host: host.into(),
             share: share.into(),
             base: String::new(),
-            username: if kind == "smb" {
+            username: if kind == "smb" && std::env::var("FIEX_SMB_GUEST").is_err() {
                 std::env::var("FIEX_SMB_USER").unwrap_or_default()
             } else {
                 String::new()
             },
-            password: if kind == "smb" {
+            password: if kind == "smb" && std::env::var("FIEX_SMB_GUEST").is_err() {
                 std::env::var("FIEX_SMB_PASSWORD").unwrap_or_default()
             } else {
                 String::new()

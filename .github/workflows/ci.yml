@@ -143,7 +143,7 @@ jobs:
               if (Get-LocalUser -Name fiex -ErrorAction SilentlyContinue) { Remove-LocalUser -Name fiex };
               New-LocalUser -Name fiex -Password (ConvertTo-SecureString 'Zebra!2026#Quartz' -AsPlainText -Force) -PasswordNeverExpires | Out-Null;
               New-Item -ItemType Directory -Force C:\fiex-smb | Out-Null;
-              Set-Content C:\fiex-smb\hello.txt 'hello smb';
+              [IO.File]::WriteAllText('C:\fiex-smb\hello.txt', "hello smb`n");
               if (Get-SmbShare -Name fiex -ErrorAction SilentlyContinue) { Remove-SmbShare -Name fiex -Force };
               New-SmbShare -Name fiex -Path C:\fiex-smb -FullAccess (\$env:COMPUTERNAME + '\fiex') | Out-Null;
               icacls C:\fiex-smb /grant 'fiex:(OI)(CI)F' | Out-Null;
@@ -195,6 +195,7 @@ jobs:
             echo "FIEX_SMB_USER=" >> "$GITHUB_ENV"
             echo "FIEX_SMB_PASSWORD=" >> "$GITHUB_ENV"
             echo "FIEX_SMB_PORT=10445" >> "$GITHUB_ENV"
+            echo "FIEX_SMB_GUEST=1" >> "$GITHUB_ENV"
           fi
       - run: npm ci
       - run: npm ci
