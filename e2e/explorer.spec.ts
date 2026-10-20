@@ -23,6 +23,7 @@ test('four views, grouping, and keyboard preview', async ({ page }) => {
 test('folder navigation, tabs and fast search', async ({ page }) => {
   await page.getByText('Research', { exact: true }).dblclick()
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeFocused()
   await page.getByRole('button', { name: '后退', exact: true }).click()
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
   await page.getByRole('button', { name: '新建标签页', exact: true }).click()
@@ -72,6 +73,7 @@ test('inline rename works in icon and column views', async ({ page }) => {
 })
 test('shortcut preset and custom binding', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByRole('button', { name: '快捷键', exact: true }).click()
   await page.getByRole('button', { name: 'macOS', exact: true }).click()
   const copy = page.locator('.shortcut-row').filter({ hasText: '复制' }).locator('.shortcut-keys')
   await expect(copy).toContainText('⌘C')
@@ -81,6 +83,31 @@ test('shortcut preset and custom binding', async ({ page }) => {
   await page.locator('.shortcut-footer button').click()
   await expect(copy).toContainText('⌘C')
   await page.getByRole('button', { name: '关闭', exact: true }).click()
+})
+test('address bar edits and copies the current path', async ({ page }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.getByText('Research', { exact: true }).dblclick()
+  await page.getByRole('button', { name: '编辑路径', exact: true }).click()
+  const input = page.getByRole('textbox', { name: '文件夹路径' })
+  await expect(input).toHaveValue('/Users/kevin/Documents/Research')
+  await expect(input).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(input).toHaveCount(0)
+  await page.getByRole('button', { name: '复制路径', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('路径已复制')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    '/Users/kevin/Documents/Research',
+  )
+})
+test('Applications entry and search focus', async ({ page }) => {
+  await page.getByRole('button', { name: '应用程序', exact: true }).click()
+  await expect(page.getByText('Fiex.app', { exact: true })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeFocused()
+})
+test('opens the Trash inside Fiex', async ({ page }) => {
+  await page.getByRole('button', { name: '废纸篓', exact: true }).click()
+  await expect(page.getByText('Old draft.txt', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible()
 })
 test('settings are custom controls and theme persists', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).click()

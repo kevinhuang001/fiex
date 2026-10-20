@@ -147,6 +147,14 @@ fn reveal_path(path: String) -> Result<(), String> {
     terminals::reveal(&path)
 }
 #[tauri::command]
+fn trash_path() -> Option<String> {
+    files::trash_path().map(|path| path.to_string_lossy().into_owned())
+}
+#[tauri::command]
+fn open_applications() -> Result<(), String> {
+    terminals::open_applications()
+}
+#[tauri::command]
 fn open_trash() -> Result<(), String> {
     terminals::open_trash()
 }
@@ -176,9 +184,12 @@ fn watch_directory(
 }
 // Synchronous Tauri commands execute on the main thread, as required by GTK's icon provider.
 #[tauri::command]
-fn native_icon(path: String) -> Result<String, String> {
+fn native_icon(path: String, size: Option<u16>) -> Result<String, String> {
     use base64::Engine;
-    let icon = file_icon_provider::get_file_icon(path, 64).map_err(|e| e.to_string())?;
+    // Ask for pixels, not CSS points: the UI requests a size already scaled by
+    // the display pixel ratio so application logos stay sharp in icon view.
+    let pixels = size.unwrap_or(128).clamp(16, 512);
+    let icon = file_icon_provider::get_file_icon(path, pixels).map_err(|e| e.to_string())?;
     let image =
         image::RgbaImage::from_raw(icon.width, icon.height, icon.pixels).ok_or("无效图标")?;
     let mut out = std::io::Cursor::new(Vec::new());
@@ -214,6 +225,8 @@ pub fn run() {
             open_terminal,
             open_path,
             reveal_path,
+            trash_path,
+            open_applications,
             open_trash,
             watch_directory,
             native_icon

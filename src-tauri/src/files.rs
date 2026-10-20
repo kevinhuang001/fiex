@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
@@ -96,9 +97,16 @@ pub struct Location {
     pub available: u64,
     pub total: u64,
 }
+#[cfg(target_os = "macos")]
+fn visible_mount(path: &str) -> bool {
+    // APFS exposes the data volume and several synthetic volumes from the same
+    // container. Only the root and user-mounted volumes should be listed.
+    !path.starts_with("/System/Volumes/") && (path == "/" || path.starts_with("/Volumes/"))
+}
+
 pub fn locations() -> Vec<Location> {
     let mut out = Vec::new();
-    let named: [(&str, Option<PathBuf>); 8] = [
+    let named: [(&str, Option<PathBuf>); 7] = [
         ("个人文件夹", dirs::home_dir()),
         ("桌面", dirs::desktop_dir()),
         ("下载", dirs::download_dir()),
@@ -106,14 +114,6 @@ pub fn locations() -> Vec<Location> {
         ("图片", dirs::picture_dir()),
         ("音乐", dirs::audio_dir()),
         ("视频", dirs::video_dir()),
-        (
-            "应用程序",
-            if cfg!(target_os = "macos") {
-                Some(PathBuf::from("/Applications"))
-            } else {
-                None
-            },
-        ),
     ];
     for (name, path) in named {
         if let Some(path) = path.filter(|p| p.exists()) {
@@ -126,16 +126,76 @@ pub fn locations() -> Vec<Location> {
             });
         }
     }
+    // macOS has a real Applications folder. Windows and Linux expose installed
+    // applications through shell/desktop services, so those entries only open
+    // the platform UI instead of pretending to be a browsable directory.
+    let applications = if cfg!(target_os = "macos") {
+        let path = PathBuf::from("/Applications");
+        path.exists().then_some(path)
+    } else {
+        None
+    };
+    out.push(Location {
+        name: "应用程序".into(),
+        path: applications
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        kind: "applications".into(),
+        available: 0,
+        total: 0,
+    });
+    let mut seen = HashSet::new();
     for disk in sysinfo::Disks::new_with_refreshed_list().list() {
+        let path = disk.mount_point().to_string_lossy().into_owned();
+        #[cfg(target_os = "macos")]
+        {
+            // APFS exposes the data volume (and several synthetic volumes) from
+            // the same container. Showing "/" plus "/System/Volumes/Data" made
+            // two "Macintosh HD" entries with identical capacity.
+            if path.starts_with("/System/Volumes/")
+                || (path != "/" && !path.starts_with("/Volumes/"))
+            {
+                continue;
+            }
+        }
+        let mut name = disk.name().to_string_lossy().into_owned();
+        if name.is_empty() {
+            name = path.clone();
+        }
+        if !seen.insert((name.clone(), disk.total_space())) {
+            continue;
+        }
         out.push(Location {
-            name: disk.name().to_string_lossy().into_owned(),
-            path: disk.mount_point().to_string_lossy().into_owned(),
+            name,
+            path,
             kind: "disk".into(),
             available: disk.available_space(),
             total: disk.total_space(),
         });
     }
     out
+}
+
+/// The user's Trash can be browsed like any other folder. Windows exposes the
+/// Recycle Bin through a shell namespace instead of a directory, so it keeps
+/// the system opener as a fallback.
+pub fn trash_path() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        dirs::home_dir()
+            .map(|home| home.join(".Trash"))
+            .filter(|path| path.is_dir())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        dirs::data_dir()
+            .map(|data| data.join("Trash/files"))
+            .filter(|path| path.is_dir())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        None
+    }
 }
 pub fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\', '\0']) {
@@ -169,4 +229,16 @@ pub fn text_preview(path: &str) -> Result<String, String> {
         return Err("此文件为二进制格式，请使用默认应用打开".into());
     }
     String::from_utf8(bytes).map_err(|_| "文本不是 UTF-8 编码，请使用默认应用打开".into())
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_hides_synthetic_apfs_volumes() {
+        assert!(super::visible_mount("/"));
+        assert!(super::visible_mount("/Volumes/External"));
+        assert!(!super::visible_mount("/System/Volumes/Data"));
+        assert!(!super::visible_mount("/System/Volumes/VM"));
+    }
 }

@@ -1,18 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  Sun,
-  Eye,
-  SlidersHorizontal,
-  TerminalSquare,
-  ChevronDown,
+  Check,
   ExternalLink,
+  Eye,
+  Info,
   Keyboard,
+  Palette,
   RotateCcw,
+  Scale,
+  Search,
+  SlidersHorizontal,
+  Sun,
+  TerminalSquare,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
-import { Menu, Choice } from './Menus'
 import { call } from '@/lib/api'
 import {
   SHORTCUT_ACTIONS,
@@ -37,7 +41,55 @@ interface Props {
   onError: (s: string) => void
 }
 
+type SectionId = 'appearance' | 'shortcuts' | 'terminal' | 'about'
+
+interface Section {
+  id: SectionId
+  label: string
+  icon: LucideIcon
+  color: string
+  description: string
+  keywords: string[]
+}
+
+const sections: Section[] = [
+  {
+    id: 'appearance',
+    label: '外观',
+    icon: Palette,
+    color: '#3b82f6',
+    description: '选择浅色或深色外观，控制隐藏文件与图标视图的大小。',
+    keywords: ['theme', 'dark', 'light', '主题', '深色', '浅色', '图标'],
+  },
+  {
+    id: 'shortcuts',
+    label: '快捷键',
+    icon: Keyboard,
+    color: '#8b5cf6',
+    description: '使用 macOS、Windows 或 Linux 预设，也可以为每个操作单独录制快捷键。',
+    keywords: ['keyboard', 'shortcut', '快捷键', '按键'],
+  },
+  {
+    id: 'terminal',
+    label: '终端',
+    icon: TerminalSquare,
+    color: '#10b981',
+    description: '选择在工具栏中点击 Open in Terminal 时使用的终端应用。',
+    keywords: ['terminal', 'shell', '终端', '命令行'],
+  },
+  {
+    id: 'about',
+    label: '关于',
+    icon: Info,
+    color: '#64748b',
+    description: 'Fiex 版本、项目主页与开源许可信息。',
+    keywords: ['about', 'version', 'license', '关于', '版本', '许可'],
+  },
+]
+
 export function PreferencesDialog({ open, onClose, prefs, update, terminals, onError }: Props) {
+  const [section, setSection] = useState<SectionId>('appearance')
+  const [query, setQuery] = useState('')
   const [recording, setRecording] = useState<{ action: ShortcutAction; index: number } | null>(null)
   const [note, setNote] = useState('')
 
@@ -45,8 +97,28 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
     if (!open) {
       setRecording(null)
       setNote('')
+      setQuery('')
+      setSection('appearance')
     }
   }, [open])
+
+  const visible = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (!term) return sections
+    return sections.filter(
+      (item) =>
+        item.label.toLowerCase().includes(term) ||
+        item.keywords.some((keyword) => keyword.toLowerCase().includes(term)),
+    )
+  }, [query])
+
+  useEffect(() => {
+    if (query && visible.length && !visible.some((item) => item.id === section))
+      setSection(visible[0].id)
+  }, [query, visible, section])
+
+  const active = sections.find((item) => item.id === section) || sections[0]
+  const ActiveIcon = active.icon
 
   const assign = (action: ShortcutAction, index: number, combo: string) => {
     const next = Object.fromEntries(
@@ -119,196 +191,337 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
     setNote('')
   }
 
+  const openLink = (url: string) =>
+    void call('open_path', { path: url }).catch((error) => onError(String(error)))
+
   const custom = !sameShortcuts(prefs.shortcuts, defaultShortcuts(prefs.shortcutStyle))
+  const styleName = SHORTCUT_STYLES.find((item) => item.id === prefs.shortcutStyle)?.name
 
   return (
-    <Modal open={open} onClose={onClose} title="设置" className="settings-modal">
+    <Modal open={open} onClose={onClose} title="设置" className="settings-modal" bare>
       <div className="settings">
-        <div className="setting-row">
-          <span>
-            <Sun size={17} />
-            外观
-          </span>
-          <div className="segmented">
-            {(['system', 'light', 'dark'] as const).map((t, i) => (
-              <button key={t} aria-pressed={prefs.theme === t} onClick={() => update({ theme: t })}>
-                {['跟随系统', '浅色', '深色'][i]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="setting-row">
-          <span>
-            <Eye size={17} />
-            显示隐藏文件
-          </span>
-          <button
-            role="switch"
-            aria-checked={prefs.hidden}
-            className="switch"
-            onClick={() => update({ hidden: !prefs.hidden })}
-          >
-            <i />
-          </button>
-        </div>
-        <div className="setting-row">
-          <span>
-            <SlidersHorizontal size={17} />
-            图标大小
-          </span>
-          <input
-            aria-label="图标大小"
-            type="range"
-            min="48"
-            max="136"
-            step="8"
-            value={prefs.iconSize}
-            onChange={(e) => update({ iconSize: +e.target.value })}
-          />
-        </div>
-        <div className="setting-row">
-          <span>
-            <TerminalSquare size={17} />
-            默认终端
-          </span>
-          <Menu label="默认终端" icon={<ChevronDown />}>
-            {terminals.map((t) => (
-              <Choice
-                key={t.id}
-                checked={prefs.terminal === t.id}
-                onClick={() => update({ terminal: t.id })}
-              >
-                {t.name}
-              </Choice>
-            ))}
-          </Menu>
-        </div>
-        <p className="settings-note">
-          {terminals.find((t) => t.id === prefs.terminal)?.name || '系统默认终端'}
-        </p>
-
-        <div className="shortcut-editor">
-          <div className="setting-row">
-            <span>
-              <Keyboard size={17} />
-              快捷键风格
-            </span>
-            <div className="segmented">
-              {SHORTCUT_STYLES.map((style) => (
-                <button
-                  key={style.id}
-                  aria-pressed={prefs.shortcutStyle === style.id}
-                  onClick={() => chooseStyle(style.id)}
-                >
-                  {style.name}
-                </button>
-              ))}
+        <aside className="settings-sidebar">
+          <div className="settings-profile">
+            <img src="/fiex.svg" alt="" />
+            <div>
+              <strong>Fiex</strong>
+              <span>文件浏览器</span>
             </div>
           </div>
-          <p className="settings-note">切换风格会重置全部快捷键，也可以在下方单独修改。</p>
-          {note && (
-            <p className="shortcut-help error" role="status">
-              {note}
-            </p>
-          )}
-          {SHORTCUT_GROUPS.map((group) => (
-            <div className="shortcut-group" key={group.title}>
-              <h4>{group.title}</h4>
-              {group.actions.map((action) => {
-                const bindings = prefs.shortcuts[action] || []
-                const adding = recording?.action === action && recording.index >= bindings.length
-                return (
-                  <div className="shortcut-row" key={action}>
-                    <span>{SHORTCUT_LABELS[action]}</span>
-                    <div className="shortcut-keys">
-                      {bindings.map((combo, index) => {
-                        const active = recording?.action === action && recording.index === index
-                        return (
-                          <span
-                            className={`shortcut-pill ${active ? 'recording' : ''}`}
-                            key={index}
-                          >
-                            <button
-                              aria-label={`设置 ${SHORTCUT_LABELS[action]} 快捷键`}
-                              onClick={() => {
-                                setRecording({ action, index })
-                                setNote('')
-                              }}
-                            >
-                              {active
-                                ? '按下快捷键…'
-                                : combo
-                                  ? formatShortcut(combo, prefs.shortcutStyle)
-                                  : '未设置'}
-                            </button>
-                            <button
-                              className="shortcut-remove"
-                              aria-label={`移除 ${SHORTCUT_LABELS[action]} 快捷键`}
-                              onClick={() => remove(action, index)}
-                            >
-                              <X size={10} />
-                            </button>
-                          </span>
-                        )
-                      })}
-                      {adding && (
-                        <span className="shortcut-pill recording">
-                          <button>按下快捷键…</button>
-                        </span>
-                      )}
-                      <button
-                        className="shortcut-add"
-                        title="添加快捷键"
-                        aria-label={`添加 ${SHORTCUT_LABELS[action]} 快捷键`}
-                        onClick={() => {
-                          setRecording({ action, index: bindings.length })
-                          setNote('')
-                        }}
-                      >
-                        +
-                      </button>
+          <label className="settings-search">
+            <Search size={13} />
+            <input
+              aria-label="搜索设置"
+              placeholder="搜索设置"
+              value={query}
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation()
+                  setQuery('')
+                }
+              }}
+            />
+          </label>
+          <nav className="settings-nav-list" aria-label="设置分类">
+            {visible.map((item) => {
+              const Icon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  className={`settings-nav ${section === item.id ? 'active' : ''}`}
+                  aria-current={section === item.id ? 'page' : undefined}
+                  onClick={() => setSection(item.id)}
+                >
+                  <span
+                    className="settings-nav-icon"
+                    style={{ background: section === item.id ? '#ffffff2e' : item.color }}
+                  >
+                    <Icon size={15} />
+                  </span>
+                  <span className="settings-nav-label">{item.label}</span>
+                </button>
+              )
+            })}
+            {visible.length === 0 && <p className="settings-empty">没有匹配的设置</p>}
+          </nav>
+          <div className="settings-sidebar-footer">
+            <span>Fiex</span>
+            <span>0.2.1</span>
+          </div>
+        </aside>
+
+        <section className="settings-content">
+          <div className="settings-hero">
+            <span className="settings-hero-icon" style={{ background: active.color }}>
+              <ActiveIcon size={30} />
+            </span>
+            <h2>{active.label}</h2>
+            <p>{active.description}</p>
+          </div>
+
+          {section === 'appearance' && (
+            <>
+              <div className="settings-card">
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-icon" style={{ background: '#3b82f6' }}>
+                      <Sun size={15} />
+                    </span>
+                    外观
+                  </div>
+                  <div className="settings-row-control">
+                    <div className="segmented">
+                      {(['system', 'light', 'dark'] as const).map((theme, index) => (
+                        <button
+                          key={theme}
+                          aria-pressed={prefs.theme === theme}
+                          onClick={() => update({ theme })}
+                        >
+                          {['跟随系统', '浅色', '深色'][index]}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          ))}
-          <p className="shortcut-help">
-            点击快捷键后按下新的组合键；Backspace 清除，Escape 取消。多个快捷键会依次显示在菜单中。
-          </p>
-          <div className="shortcut-footer">
-            <button
-              onClick={() => {
-                update({ shortcuts: defaultShortcuts(prefs.shortcutStyle) })
-                setRecording(null)
-                setNote('')
-              }}
-            >
-              <RotateCcw size={11} /> 恢复{' '}
-              {SHORTCUT_STYLES.find((s) => s.id === prefs.shortcutStyle)?.name} 预设
-              {custom ? '（当前已自定义）' : ''}
-            </button>
-          </div>
-        </div>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-icon" style={{ background: '#64748b' }}>
+                      <Eye size={15} />
+                    </span>
+                    显示隐藏文件
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={prefs.hidden}
+                    className="switch"
+                    onClick={() => update({ hidden: !prefs.hidden })}
+                  >
+                    <i />
+                  </button>
+                </div>
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-icon" style={{ background: '#6366f1' }}>
+                      <SlidersHorizontal size={15} />
+                    </span>
+                    图标大小
+                  </div>
+                  <div className="settings-row-control settings-slider">
+                    <input
+                      aria-label="图标大小"
+                      type="range"
+                      min="48"
+                      max="136"
+                      step="8"
+                      value={prefs.iconSize}
+                      onChange={(event) => update({ iconSize: +event.target.value })}
+                    />
+                    <span>{prefs.iconSize}px</span>
+                  </div>
+                </div>
+              </div>
+              <p className="settings-page-note">
+                图标视图采用类似 Finder 的固定网格；调整大小后列数和间距会同步变化。
+              </p>
+            </>
+          )}
 
-        <div className="about">
-          <img src="/fiex.svg" alt="" />
-          <strong>
-            Fiex <small>0.2.0</small>
-          </strong>
-          <span>File explorer, with room to breathe.</span>
-          <Button
-            variant="secondary"
-            onClick={() =>
-              void call('open_path', { path: 'https://github.com/kevinhuang001/fiex' }).catch((e) =>
-                onError(String(e)),
-              )
-            }
-          >
-            GitHub
-            <ExternalLink />
-          </Button>
-        </div>
+          {section === 'shortcuts' && (
+            <>
+              <div className="settings-card">
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-icon" style={{ background: '#8b5cf6' }}>
+                      <Keyboard size={15} />
+                    </span>
+                    快捷键风格
+                  </div>
+                  <div className="settings-row-control">
+                    <div className="segmented">
+                      {SHORTCUT_STYLES.map((style) => (
+                        <button
+                          key={style.id}
+                          aria-pressed={prefs.shortcutStyle === style.id}
+                          onClick={() => chooseStyle(style.id)}
+                        >
+                          {style.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="settings-page-note">
+                切换风格会重置全部快捷键，也可以在下方单独修改。当前预设：{styleName}
+                {custom ? '（已自定义）' : ''}。
+              </p>
+              {note && (
+                <p className="settings-inline-error" role="status">
+                  {note}
+                </p>
+              )}
+              {SHORTCUT_GROUPS.map((group) => (
+                <div className="settings-card settings-shortcut-group" key={group.title}>
+                  <div className="settings-card-header">{group.title}</div>
+                  {group.actions.map((action) => {
+                    const bindings = prefs.shortcuts[action] || []
+                    const adding =
+                      recording?.action === action && recording.index >= bindings.length
+                    return (
+                      <div className="shortcut-row" key={action}>
+                        <span>{SHORTCUT_LABELS[action]}</span>
+                        <div className="shortcut-keys">
+                          {bindings.map((combo, index) => {
+                            const activeRecording =
+                              recording?.action === action && recording.index === index
+                            return (
+                              <span
+                                className={`shortcut-pill ${activeRecording ? 'recording' : ''}`}
+                                key={index}
+                              >
+                                <button
+                                  aria-label={`设置 ${SHORTCUT_LABELS[action]} 快捷键`}
+                                  onClick={() => {
+                                    setRecording({ action, index })
+                                    setNote('')
+                                  }}
+                                >
+                                  {activeRecording
+                                    ? '按下快捷键…'
+                                    : combo
+                                      ? formatShortcut(combo, prefs.shortcutStyle)
+                                      : '未设置'}
+                                </button>
+                                <button
+                                  className="shortcut-remove"
+                                  aria-label={`移除 ${SHORTCUT_LABELS[action]} 快捷键`}
+                                  onClick={() => remove(action, index)}
+                                >
+                                  <X size={10} />
+                                </button>
+                              </span>
+                            )
+                          })}
+                          {adding && (
+                            <span className="shortcut-pill recording">
+                              <button>按下快捷键…</button>
+                            </span>
+                          )}
+                          <button
+                            className="shortcut-add"
+                            title="添加快捷键"
+                            aria-label={`添加 ${SHORTCUT_LABELS[action]} 快捷键`}
+                            onClick={() => {
+                              setRecording({ action, index: bindings.length })
+                              setNote('')
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+              <p className="settings-page-note">
+                点击快捷键后按下新的组合键；Backspace 清除，Escape
+                取消。多个快捷键会依次显示在菜单中。
+              </p>
+              <div className="shortcut-footer">
+                <button
+                  onClick={() => {
+                    update({ shortcuts: defaultShortcuts(prefs.shortcutStyle) })
+                    setRecording(null)
+                    setNote('')
+                  }}
+                >
+                  <RotateCcw size={11} /> 恢复 {styleName} 预设
+                  {custom ? '（当前已自定义）' : ''}
+                </button>
+              </div>
+            </>
+          )}
+
+          {section === 'terminal' && (
+            <>
+              <div className="settings-card">
+                {terminals.length ? (
+                  terminals.map((terminal) => (
+                    <button
+                      key={terminal.id}
+                      className={`settings-choice ${
+                        prefs.terminal === terminal.id ? 'selected' : ''
+                      }`}
+                      aria-pressed={prefs.terminal === terminal.id}
+                      onClick={() => update({ terminal: terminal.id })}
+                    >
+                      <span className="settings-choice-icon">
+                        <TerminalSquare size={15} />
+                      </span>
+                      <span>{terminal.name}</span>
+                      {prefs.terminal === terminal.id && <Check size={15} />}
+                    </button>
+                  ))
+                ) : (
+                  <div className="settings-row">
+                    <div className="settings-row-label">没有检测到可用的终端应用</div>
+                  </div>
+                )}
+              </div>
+              <p className="settings-page-note">
+                工具栏中的 Open in Terminal 会使用选中的终端；如果检测不到，会退回系统默认终端。
+              </p>
+            </>
+          )}
+
+          {section === 'about' && (
+            <>
+              <div className="settings-about">
+                <img src="/fiex.svg" alt="" />
+                <h3>Fiex</h3>
+                <p>File explorer, with room to breathe.</p>
+                <Button
+                  variant="secondary"
+                  onClick={() => openLink('https://github.com/kevinhuang001/fiex')}
+                >
+                  GitHub
+                  <ExternalLink />
+                </Button>
+              </div>
+              <div className="settings-card">
+                <div className="settings-row">
+                  <div className="settings-row-label">
+                    <span className="settings-row-icon" style={{ background: '#64748b' }}>
+                      <Info size={15} />
+                    </span>
+                    版本
+                  </div>
+                  <span className="settings-value">0.2.1</span>
+                </div>
+                <button
+                  className="settings-row settings-row-button"
+                  onClick={() =>
+                    openLink('https://github.com/kevinhuang001/fiex/blob/main/THIRD-PARTY.md')
+                  }
+                >
+                  <div className="settings-row-label">
+                    <span className="settings-row-icon" style={{ background: '#10b981' }}>
+                      <Scale size={15} />
+                    </span>
+                    开源许可
+                  </div>
+                  <ExternalLink size={14} />
+                </button>
+              </div>
+              <p className="settings-page-note">
+                文件类型图标来自 Material Icon Theme（MIT）；应用图标显示系统原生 Logo。
+              </p>
+            </>
+          )}
+        </section>
       </div>
     </Modal>
   )

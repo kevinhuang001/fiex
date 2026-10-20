@@ -9,6 +9,7 @@ export function Modal({
   children,
   wide = false,
   className,
+  bare = false,
 }: {
   open: boolean
   onClose: () => void
@@ -17,6 +18,7 @@ export function Modal({
   children: ReactNode
   wide?: boolean
   className?: string
+  bare?: boolean
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
@@ -25,16 +27,25 @@ export function Modal({
         <Dialog.Content
           className={`modal ${wide ? 'modal-wide' : ''} ${className || ''}`}
           onOpenAutoFocus={(e) => {
-            if (wide) e.preventDefault()
+            if (wide || bare) e.preventDefault()
           }}
           aria-describedby={description ? 'modal-description' : undefined}
         >
-          <header>
-            <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close className="icon-button" aria-label="关闭">
-              <X size={17} />
-            </Dialog.Close>
-          </header>
+          {bare ? (
+            <>
+              <Dialog.Title className="visually-hidden">{title}</Dialog.Title>
+              <Dialog.Close className="icon-button modal-close" aria-label="关闭">
+                <X size={16} />
+              </Dialog.Close>
+            </>
+          ) : (
+            <header>
+              <Dialog.Title>{title}</Dialog.Title>
+              <Dialog.Close className="icon-button" aria-label="关闭">
+                <X size={17} />
+              </Dialog.Close>
+            </header>
+          )}
           {description && (
             <Dialog.Description id="modal-description">{description}</Dialog.Description>
           )}

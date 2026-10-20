@@ -45,6 +45,10 @@ let entries = [
   item(root + '/Documents/Projects/docker-compose.yml', false, 'text/yaml', 782),
   item(root + '/Documents/Projects/README.md', false, 'text/markdown', 2401),
   item(root + '/Documents/Projects/logo.png', false, 'image/png', 48211),
+  item(root + '/Applications', true),
+  item(root + '/Applications/Fiex.app', true),
+  item(root + '/.Trash', true),
+  item(root + '/.Trash/Old draft.txt', false, 'text/plain', 1200),
 ]
 export async function mock(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
@@ -58,6 +62,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           path: root + '/' + name,
           kind: 'favorite',
         })),
+        { name: '应用程序', path: root + '/Applications', kind: 'applications' },
         { name: 'Macintosh HD', path: '/', kind: 'disk', available: 240e9, total: 500e9 },
       ]
     case 'list_directory':
@@ -65,7 +70,9 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         throw new Error('文件夹不存在')
       return {
         path: a.path as string,
-        entries: entries.filter((e) => parent(e.path) === a.path),
+        entries: entries.filter(
+          (e) => parent(e.path) === a.path && (Boolean(a.hidden) || !e.name.startsWith('.')),
+        ),
         warnings: [],
       } satisfies Listing
     case 'file_info':
@@ -80,6 +87,10 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       ]
     case 'native_icon':
       throw new Error('UI fixture')
+    case 'trash_path':
+      return root + '/.Trash'
+    case 'open_applications':
+      return null
     case 'search_files':
       return {
         entries: entries.filter(

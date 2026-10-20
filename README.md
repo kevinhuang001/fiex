@@ -7,17 +7,19 @@ Fiex gives your files room to breathe: a translucent sidebar, compact controls, 
 
 ### Find your way
 
-List, icons, columns and gallery views. The icon view uses a Finder-style fixed grid with two-line labels and snap-to-grid cells. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
+The path bar edits the current location inline and copies it with one click. Explore with list, icon, column and gallery views. The icon view uses a Finder-style fixed grid with two-line labels and snap-to-grid cells. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
 
 File icons are colored by type and language using the MIT-licensed [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme), with dedicated icons for 1,300+ extensions and 2,100+ filenames. Application bundles still use their native system logos.
 
 ### Find it quickly
 
-Built-in parallel filename search uses the `ignore` engine from ripgrep. Results stream as they are found. New queries cancel old searches. Hidden files and `.gitignore` filtering are configurable. The list virtualizes its rows, including search results. Searches are scoped to the current folder and its descendants; there is no persistent whole-disk index.
+Built-in parallel filename search uses the `ignore` engine from ripgrep. Results stream as they are found. New queries cancel old searches. Entering a folder focuses the search field, so typing immediately searches that location. Hidden files and `.gitignore` filtering are configurable. Application bundles (`.app`, `.framework` and friends) are returned as results but never traversed, so searching `/Applications` finds the app instead of files inside it. The list virtualizes its rows, including search results. Searches are scoped to the current folder and its descendants; there is no persistent whole-disk index.
 
 ### Work with your files
 
 Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Renaming happens inline on the item, Finder-style; a new folder is created immediately with a unique name and its name is selected for editing. Drag between Fiex folders to copy; hold Shift to move. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
+
+The sidebar has one **Applications** entry on every platform. macOS browses `/Applications` directly; Windows and Linux have no equivalent folder, so the entry only opens the platform app list. The **Trash** opens inside Fiex on macOS and Linux, so deleted files can be browsed and moved back without launching Finder.
 
 Press **Space** for Quick Look. Preview images, video, audio, UTF-8 text/code and PDF through the built-in PDF.js renderer. Applications show their native logos. **Open in Terminal** detects installed terminals and lets you choose a default.
 
@@ -25,7 +27,7 @@ ZIP creation and ZIP, 7z, TAR, GZ, BZ2 and XZ extraction are built in; no comman
 
 ### Keyboard
 
-Shortcuts are editable in **Settings → Shortcuts**. Fiex ships with macOS, Windows and Linux presets; picking a style rewrites every binding, and any individual shortcut can be re-recorded. Defaults for the macOS style:
+Settings use a System Settings-style window with a searchable category sidebar and grouped cards. Shortcuts are editable under **Settings → Shortcuts**. Fiex ships with macOS, Windows and Linux presets; picking a style rewrites every binding, and any individual shortcut can be re-recorded. Defaults for the macOS style:
 
 | Action                | Shortcut                   |
 | --------------------- | -------------------------- |

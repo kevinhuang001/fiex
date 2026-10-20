@@ -2,12 +2,30 @@ use crate::files::{entry, Entry};
 use ignore::{WalkBuilder, WalkState};
 use serde::Serialize;
 use std::{
+    path::Path,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     time::Instant,
 };
+const BUNDLE_EXTENSIONS: [&str; 5] = ["app", "bundle", "framework", "plugin", "xpc"];
+
+fn is_bundle(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            BUNDLE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+        })
+}
+
+/// True for entries below a macOS application/framework bundle. The bundle
+/// itself is still returned (so searching /Applications finds "Safari.app"),
+/// but its Contents directory is never traversed.
+fn inside_bundle(path: &Path) -> bool {
+    path.ancestors().skip(1).any(is_bundle)
+}
+
 #[derive(Default, Clone)]
 pub struct SearchState(pub Arc<AtomicU64>);
 #[derive(Clone, Serialize)]
@@ -41,6 +59,7 @@ impl SearchState {
             .map_or(4, |n| n.get())
             .clamp(2, 12);
         WalkBuilder::new(root)
+            .filter_entry(|entry| !inside_bundle(entry.path()))
             .hidden(!hidden)
             .ignore(respect_ignore)
             .git_ignore(respect_ignore)
@@ -104,6 +123,39 @@ impl SearchState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn finds_app_bundles_without_entering_them() {
+        let t = tempfile::tempdir().unwrap();
+        let bundle = t.path().join("Safari.app");
+        std::fs::create_dir_all(bundle.join("Contents")).unwrap();
+        std::fs::write(bundle.join("Contents").join("Needle.plist"), "x").unwrap();
+        std::fs::write(t.path().join("Needle.txt"), "x").unwrap();
+
+        let state = SearchState::default();
+        let found = Mutex::new(Vec::new());
+        state.run(
+            t.path().to_str().unwrap(),
+            "needle",
+            false,
+            false,
+            |batch| found.lock().unwrap().extend(batch.entries),
+        );
+        assert_eq!(found.lock().unwrap().len(), 1);
+        assert_eq!(found.lock().unwrap()[0].name, "Needle.txt");
+
+        let apps = Mutex::new(Vec::new());
+        state.run(
+            t.path().to_str().unwrap(),
+            "safari",
+            false,
+            false,
+            |batch| apps.lock().unwrap().extend(batch.entries),
+        );
+        let apps = apps.lock().unwrap();
+        assert_eq!(apps.len(), 1);
+        assert_eq!(apps[0].name, "Safari.app");
+        assert!(apps[0].is_dir);
+    }
     #[test]
     fn finds_hidden_when_requested() {
         let t = tempfile::tempdir().unwrap();

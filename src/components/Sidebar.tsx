@@ -13,7 +13,7 @@ import {
   X,
   Trash2,
   Settings2,
-  ExternalLink,
+  AppWindow,
 } from 'lucide-react'
 import { size } from '@/lib/files'
 import { shortcutLabel } from '@/lib/shortcuts'
@@ -28,6 +28,8 @@ interface Props {
   control: (action: 'close' | 'minimize' | 'toggleMaximize') => void
   onSettings: () => void
   onTrash: () => void
+  onApplications: () => void
+  trashPath: string | null
 }
 export function Sidebar({
   x,
@@ -38,6 +40,8 @@ export function Sidebar({
   control,
   onSettings,
   onTrash,
+  onApplications,
+  trashPath,
 }: Props) {
   const iconFor = (name: string) =>
     name === '个人文件夹' ? (
@@ -54,6 +58,8 @@ export function Sidebar({
       <Film />
     ) : name === '文稿' ? (
       <FileText />
+    ) : name === '应用程序' ? (
+      <AppWindow />
     ) : (
       <Folder />
     )
@@ -75,14 +81,19 @@ export function Sidebar({
       <div className="sidebar-content">
         <div className="sidebar-label">常用位置</div>
         {x.locations
-          .filter((l) => l.kind === 'favorite')
+          .filter((l) => l.kind === 'favorite' || l.kind === 'applications')
           .map((l) => (
             <button
-              className={`nav-item ${x.path === l.path ? 'active' : ''}`}
-              key={l.path}
-              onClick={() => x.navigate(l.path)}
-              onDragOver={(e) => e.preventDefault()}
+              className={`nav-item ${l.path && x.path === l.path ? 'active' : ''}`}
+              key={`${l.kind}:${l.path || l.name}`}
+              onClick={() =>
+                l.kind === 'applications' && !l.path ? onApplications() : x.navigate(l.path)
+              }
+              onDragOver={(e) => {
+                if (l.path) e.preventDefault()
+              }}
               onDrop={(e) => {
+                if (!l.path) return
                 e.preventDefault()
                 try {
                   transfer(
@@ -150,10 +161,12 @@ export function Sidebar({
           ))}
       </div>
       <div className="sidebar-bottom">
-        <button className="nav-item" onClick={onTrash}>
+        <button
+          className={`nav-item ${trashPath && x.path === trashPath ? 'active' : ''}`}
+          onClick={onTrash}
+        >
           <Trash2 />
           <span>废纸篓</span>
-          <ExternalLink size={12} />
         </button>
         <button className="nav-item" aria-label="设置" onClick={onSettings}>
           <Settings2 />

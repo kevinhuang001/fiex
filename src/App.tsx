@@ -34,7 +34,6 @@ import {
   X,
   CheckCircle2,
   Archive,
-  ArrowRight,
   ExternalLink,
   ClipboardPaste,
   Scissors,
@@ -95,12 +94,14 @@ export default function App() {
   const [busy, setBusy] = useState('')
   const [toast, setToast] = useState('')
   const [terminals, setTerminals] = useState<Terminal[]>([])
+  const [trashPath, setTrashPath] = useState<string | null>(null)
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
-  const [go, setGo] = useState(false)
-  const [goValue, setGoValue] = useState('')
+  const [editingPath, setEditingPath] = useState(false)
+  const [pathDraft, setPathDraft] = useState('')
   const [dragging, setDragging] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
+  const pathInput = useRef<HTMLInputElement>(null)
   const chosen = x.entries.filter((e) => x.selected.includes(e.path))
   const first = chosen[0]
   const notify = useCallback((s: string) => setToast(s), [])
@@ -108,7 +109,17 @@ export default function App() {
     void call<Terminal[]>('detect_terminals')
       .then(setTerminals)
       .catch(() => {})
+    void call<string | null>('trash_path')
+      .then(setTrashPath)
+      .catch(() => {})
   }, [])
+  // Opening a folder puts the cursor in search so typing immediately scopes
+  // the new location, while Escape clears the query and leaves the field.
+  useEffect(() => {
+    if (!x.path || settings || dialog || preview || info) return
+    const frame = requestAnimationFrame(() => searchInput.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [x.path])
   useEffect(() => {
     if (!toast) return
     const timer = setTimeout(() => setToast(''), 5000)
@@ -161,6 +172,49 @@ export default function App() {
   }
   const rename = () => {
     if (first) x.beginRename(first.path)
+  }
+  const openTrash = () => {
+    if (trashPath) {
+      setPreview(null)
+      x.navigate(trashPath)
+    } else {
+      void run('正在打开废纸篓…', () => call('open_trash'))
+    }
+  }
+  const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
+  const displayName = (path: string) =>
+    trashPath && path === trashPath ? '废纸篓' : basename(path)
+  const copyPath = (value = editingPath ? pathDraft : x.path) => {
+    if (!value) return
+    void navigator.clipboard
+      .writeText(value)
+      .then(() => notify('路径已复制'))
+      .catch((error) => x.setError(String(error)))
+  }
+  const startPathEdit = () => {
+    setPathDraft(x.path)
+    setEditingPath(true)
+  }
+  useEffect(() => {
+    if (!editingPath) return
+    const input = pathInput.current
+    input?.focus()
+    input?.select()
+  }, [editingPath])
+  const submitPath = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const target = pathDraft.trim()
+    if (!target) return
+    try {
+      const { path } = await call<{ path: string }>('list_directory', {
+        path: target,
+        hidden: prefs.hidden,
+      })
+      setEditingPath(false)
+      x.navigate(path)
+    } catch (error) {
+      x.setError(String(error))
+    }
   }
   const hint = (action: Parameters<typeof shortcutLabel>[1]) =>
     shortcutLabel(prefs.shortcuts, action, prefs.shortcutStyle)
@@ -278,8 +332,7 @@ export default function App() {
         dialog ||
         settings ||
         preview ||
-        info ||
-        go
+        info
       )
         return
       // Let a focused control handle Space/Return itself; modifier shortcuts
@@ -307,8 +360,7 @@ export default function App() {
           searchInput.current?.focus()
           break
         case 'goToFolder':
-          setGoValue(x.path)
-          setGo(true)
+          startPathEdit()
           break
         case 'selectAll':
           x.setSelected(x.entries.map((e) => e.path))
@@ -423,7 +475,7 @@ export default function App() {
       : x.path.startsWith('/')
         ? '/' + name
         : name + '\\'
-    return { name, path: accumulated }
+    return { name: displayName(accumulated) || name, path: accumulated }
   })
   return (
     <div className={`app ${sidebar ? '' : 'sidebar-hidden'} ${dragging ? 'dragging' : ''}`}>
@@ -435,7 +487,9 @@ export default function App() {
         transfer={transfer}
         control={control}
         onSettings={() => setSettings(true)}
-        onTrash={() => void run('正在打开废纸篓…', () => call('open_trash'))}
+        onTrash={openTrash}
+        onApplications={openApplications}
+        trashPath={trashPath}
       />
       <main className="main">
         <header className="toolbar" data-tauri-drag-region>
@@ -485,7 +539,7 @@ export default function App() {
               <ChevronRight />
             </Button>
           </div>
-          <h1 data-tauri-drag-region>{x.query ? '搜索' : basename(x.path) || 'Fiex'}</h1>
+          <h1 data-tauri-drag-region>{x.query ? '搜索' : displayName(x.path) || 'Fiex'}</h1>
           <div className="toolbar-spacer" data-tauri-drag-region />
           <div className="view-switch">
             {views.map((v) => (
@@ -611,14 +665,7 @@ export default function App() {
             <Choice checked={prefs.hidden} onClick={() => update({ hidden: !prefs.hidden })}>
               显示隐藏文件
             </Choice>
-            <Action
-              onClick={() => {
-                setGoValue(x.path)
-                setGo(true)
-              }}
-            >
-              前往文件夹…
-            </Action>
+            <Action onClick={startPathEdit}>前往文件夹…</Action>
           </Menu>
         </header>
         <div className="tabs" role="tablist" aria-label="标签页">
@@ -626,7 +673,7 @@ export default function App() {
             <div className={`tab ${i === x.tab ? 'active' : ''}`} key={i}>
               <button role="tab" aria-selected={i === x.tab} onClick={() => x.switchTab(i)}>
                 <Folder size={13} />
-                <span>{basename(path)}</span>
+                <span>{displayName(path)}</span>
               </button>
               {x.tabs.length > 1 && (
                 <button aria-label="关闭标签页" onClick={() => x.closeTab(i)}>
@@ -650,22 +697,49 @@ export default function App() {
             <ArrowUp />
           </Button>
           <nav className="breadcrumbs" aria-label="当前位置">
-            <button
-              onClick={() => {
-                setGoValue(x.path)
-                setGo(true)
-              }}
-              title="输入路径"
-            >
+            <button onClick={startPathEdit} title="编辑或复制路径" aria-label="编辑路径">
               <HardDrive size={13} />
             </button>
-            {crumbs.map((p, i) => (
-              <span key={i}>
-                <ChevronRight size={11} />
-                <button onClick={() => x.navigate(p.path)}>{p.name}</button>
-              </span>
-            ))}
+            {editingPath ? (
+              <form className="path-editor" onSubmit={submitPath}>
+                <input
+                  ref={pathInput}
+                  className="path-input"
+                  aria-label="文件夹路径"
+                  value={pathDraft}
+                  spellCheck={false}
+                  onChange={(event) => setPathDraft(event.target.value)}
+                  onBlur={() => setEditingPath(false)}
+                  onKeyDown={(event) => {
+                    event.stopPropagation()
+                    if (event.key === 'Escape') {
+                      event.preventDefault()
+                      setEditingPath(false)
+                      searchInput.current?.focus()
+                    }
+                  }}
+                />
+              </form>
+            ) : (
+              <>
+                {crumbs.map((p, i) => (
+                  <span key={i}>
+                    <ChevronRight size={11} />
+                    <button onClick={() => x.navigate(p.path)}>{p.name}</button>
+                  </span>
+                ))}
+              </>
+            )}
           </nav>
+          <button
+            className="icon-button path-copy"
+            title="复制路径"
+            aria-label="复制路径"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => copyPath()}
+          >
+            <Copy size={13} />
+          </button>
           <div className="search-box">
             <Search size={15} />
             <input
@@ -696,7 +770,7 @@ export default function App() {
         {x.query && (
           <div className="search-scope">
             <Search size={13} />
-            <span>在“{basename(x.path)}”及子文件夹中搜索</span>
+            <span>在“{displayName(x.path)}”及子文件夹中搜索</span>
             <label>
               <input
                 type="checkbox"
@@ -777,7 +851,7 @@ export default function App() {
       {dragging && (
         <div className="drop-overlay">
           <Download />
-          <strong>复制到 {basename(x.path)}</strong>
+          <strong>复制到 {displayName(x.path)}</strong>
         </div>
       )}
       {menu && (
@@ -919,39 +993,6 @@ export default function App() {
             >
               {dialogBusy && <LoaderCircle className="spin" />}
               {dialogBusy ? '正在处理…' : dialog?.submit}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-      <Modal open={go} onClose={() => setGo(false)} title="前往文件夹">
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault()
-            try {
-              const { path } = await call<{ path: string }>('list_directory', {
-                path: goValue,
-                hidden: prefs.hidden,
-              })
-              x.navigate(path)
-              setGo(false)
-            } catch (err) {
-              x.setError(String(err))
-              setGo(false)
-            }
-          }}
-        >
-          <input
-            className="text-field"
-            aria-label="文件夹路径"
-            autoFocus
-            placeholder="输入绝对路径…"
-            value={goValue}
-            onChange={(e) => setGoValue(e.target.value)}
-          />
-          <div className="dialog-actions">
-            <Button type="submit">
-              前往
-              <ArrowRight />
             </Button>
           </div>
         </form>

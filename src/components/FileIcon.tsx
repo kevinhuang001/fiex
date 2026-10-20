@@ -39,17 +39,21 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
   const isApplication = kind(e) === '应用程序'
   const [native, setNative] = useState<string | null>(null)
   const ref = useRef<HTMLSpanElement>(null)
+  const pixels = Math.min(
+    512,
+    Math.max(32, Math.ceil((size * (window.devicePixelRatio || 1)) / 32) * 32),
+  )
   useEffect(() => {
     setNative(null)
     if (!isApplication || !ref.current) return
     let active = true
     const stop = whenVisible(ref.current, () => {
-      const key = e.path + ':' + e.modified
+      const key = `${e.path}:${e.modified}:${pixels}`
       if (!cache.has(key)) {
-        if (cache.size > 2000) cache.clear()
+        if (cache.size > 600) cache.clear()
         cache.set(
           key,
-          call<string>('native_icon', { path: e.path }).catch(() => null),
+          call<string>('native_icon', { path: e.path, size: pixels }).catch(() => null),
         )
       }
       void cache.get(key)!.then((url) => {
@@ -60,7 +64,7 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
       active = false
       stop()
     }
-  }, [e.path, e.modified, isApplication])
+  }, [e.path, e.modified, isApplication, pixels])
 
   const visual = fileVisual(e)
   const generic = visual.generic ? (visual.folder ? 'generic-folder' : 'generic-file') : ''

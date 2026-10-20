@@ -191,6 +191,52 @@ pub fn reveal(path: &str) -> Result<(), String> {
     }
     Ok(())
 }
+/// Opens the platform's installed-applications UI. macOS has a real folder and
+/// is handled in-app; Windows/Linux use this command because there is no folder
+/// with the same semantics.
+pub fn open_applications() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("/Applications")
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer.exe")
+            .arg("shell:AppsFolder")
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        for app in [
+            "gnome-software",
+            "plasma-discover",
+            "pamac-manager",
+            "mintinstall",
+            "bauh",
+            "octopi",
+        ] {
+            if which::which(app).is_ok() {
+                Command::new(app).spawn().map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+        }
+        let applications = PathBuf::from("/usr/share/applications");
+        let fallback = if applications.is_dir() {
+            applications
+        } else {
+            dirs::data_dir()
+                .map(|dir| dir.join("applications"))
+                .unwrap_or(applications)
+        };
+        open::that_detached(fallback).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub fn open_trash() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
