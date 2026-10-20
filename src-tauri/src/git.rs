@@ -170,12 +170,29 @@ fn relative_paths(root: &Path, paths: &[String]) -> Result<Vec<String>, String> 
         .iter()
         .map(|value| {
             let path = Path::new(value);
-            let relative = path.strip_prefix(root).map_err(|_| "文件不在当前仓库中")?;
-            if relative.as_os_str().is_empty()
-                || relative
+            if !path.is_absolute()
+                || path
                     .components()
-                    .any(|c| !matches!(c, std::path::Component::Normal(_)))
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
             {
+                return Err("文件路径无效".into());
+            }
+            // Resolve parent aliases (/var -> /private/var on macOS), while
+            // preserving the final filename and paths of deleted tracked files.
+            let mut ancestor = path.parent().ok_or("文件路径无效")?;
+            let mut tail = vec![path.file_name().ok_or("文件路径无效")?.to_os_string()];
+            while !ancestor.exists() {
+                tail.push(ancestor.file_name().ok_or("文件路径无效")?.to_os_string());
+                ancestor = ancestor.parent().ok_or("文件路径无效")?;
+            }
+            let mut resolved = dunce::canonicalize(ancestor).map_err(|e| e.to_string())?;
+            for part in tail.into_iter().rev() {
+                resolved.push(part);
+            }
+            let relative = resolved
+                .strip_prefix(root)
+                .map_err(|_| "文件不在当前仓库中")?;
+            if relative.as_os_str().is_empty() {
                 return Err("文件路径无效".into());
             }
             Ok(relative.to_string_lossy().into_owned())
@@ -280,16 +297,13 @@ mod tests {
         )
         .unwrap();
         let state = status(root).unwrap();
+        let canonical = dunce::canonicalize(temp.path()).unwrap();
         assert_eq!(
-            state.entries[&temp
-                .path()
-                .join("[draft].txt")
-                .to_string_lossy()
-                .into_owned()],
+            state.entries[&canonical.join("[draft].txt").to_string_lossy().into_owned()],
             "A "
         );
         assert_eq!(
-            state.entries[&temp.path().join("draft.txt").to_string_lossy().into_owned()],
+            state.entries[&canonical.join("draft.txt").to_string_lossy().into_owned()],
             "??"
         );
         assert!(stage(
