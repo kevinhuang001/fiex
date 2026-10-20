@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AppWindow,
   Archive,
@@ -18,23 +18,51 @@ import { call } from '@/lib/api'
 import { kind } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 const cache = new Map<string, Promise<string | null>>()
+const visibleCallbacks = new Map<Element, () => void>()
+let observer: IntersectionObserver | undefined
+function whenVisible(element: Element, callback: () => void) {
+  observer ??= new IntersectionObserver(
+    (entries) => {
+      for (const item of entries)
+        if (item.isIntersecting) {
+          const run = visibleCallbacks.get(item.target)
+          visibleCallbacks.delete(item.target)
+          observer!.unobserve(item.target)
+          run?.()
+        }
+    },
+    { rootMargin: '150px' },
+  )
+  visibleCallbacks.set(element, callback)
+  observer.observe(element)
+  return () => {
+    visibleCallbacks.delete(element)
+    observer!.unobserve(element)
+  }
+}
 export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number }) {
   const [url, setUrl] = useState<string | null>(null)
+  const ref = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     let active = true
-    const key = e.path + ':' + e.modified
-    if (!cache.has(key)) {
-      if (cache.size > 2000) cache.clear()
-      cache.set(
-        key,
-        call<string>('native_icon', { path: e.path }).catch(() => null),
-      )
-    }
-    void cache.get(key)!.then((v) => {
-      if (active) setUrl(v)
+    setUrl(null)
+    if (!ref.current) return
+    const stop = whenVisible(ref.current, () => {
+      const key = e.path + ':' + e.modified
+      if (!cache.has(key)) {
+        if (cache.size > 2000) cache.clear()
+        cache.set(
+          key,
+          call<string>('native_icon', { path: e.path }).catch(() => null),
+        )
+      }
+      void cache.get(key)!.then((v) => {
+        if (active) setUrl(v)
+      })
     })
     return () => {
       active = false
+      stop()
     }
   }, [e.path, e.modified])
   const k = kind(e)
@@ -64,6 +92,7 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
                           : File
   return (
     <span
+      ref={ref}
       className={`file-icon ${e.isDir ? 'folder-icon' : ''}`}
       style={{ width: size, height: size }}
     >
