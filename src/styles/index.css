@@ -2705,3 +2705,12 @@ body.dragging-file * {
   font-size: 10px;
   line-height: 1.6;
 }
+.error-action {
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--accent);
+  font-size: 10px;
+  white-space: nowrap;
+}

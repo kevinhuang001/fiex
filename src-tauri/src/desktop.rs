@@ -107,6 +107,30 @@ fn eject_device(path: String) -> Result<(), String> {
     remote::eject(&path)
 }
 #[tauri::command]
+fn relaunch_elevated(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let exe = std::env::current_exe().map_err(|error| error.to_string())?;
+        let script = format!(
+            "Start-Process -FilePath '{}' -Verb RunAs",
+            exe.to_string_lossy().replace('\'', "''")
+        );
+        std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .creation_flags(0x00000010)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        app.exit(0);
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("当前系统不需要管理员重启".into())
+    }
+}
+#[tauri::command]
 async fn eject_usb(device: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || crate::usbfs::eject(&device))
         .await
@@ -529,6 +553,7 @@ pub fn run() {
             remote_unsync,
             eject_device,
             eject_usb,
+            relaunch_elevated,
             mount_device,
             reveal_path,
             trash_path,

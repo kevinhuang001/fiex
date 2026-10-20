@@ -567,7 +567,81 @@ fn unmounted_removable() -> Vec<Location> {
     out
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(all(windows, feature = "usbfs"))]
+fn unmounted_removable() -> Vec<Location> {
+    let script = r#"
+$usb = @(Get-Disk | Where-Object { $_.BusType -eq 'USB' } | Select-Object -ExpandProperty Number)
+Get-Partition | Where-Object { $usb -contains $_.DiskNumber -and -not $_.DriveLetter } | ForEach-Object {
+  $v = Get-Volume -Partition $_ -ErrorAction SilentlyContinue
+  [pscustomobject]@{
+    Name = if ($v.FileSystemLabel) { $v.FileSystemLabel } else { 'USB ' + $_.PartitionNumber }
+    Path = ($_.AccessPaths | Select-Object -First 1)
+    FileSystem = $v.FileSystem
+    GptType = $_.GptType
+    Size = [uint64]$_.Size
+    Remaining = [uint64]$v.SizeRemaining
+  }
+} | ConvertTo-Json -Compress
+"#;
+    let Ok(output) = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", script])
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        return Vec::new();
+    };
+    let items = match value {
+        serde_json::Value::Array(items) => items,
+        serde_json::Value::Object(_) => vec![value],
+        _ => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    for item in items {
+        let Some(device) = item
+            .get("Path")
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.is_empty())
+        else {
+            continue;
+        };
+        let filesystem = item
+            .get("FileSystem")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let Some(kind) = crate::usbfs::detect(&filesystem).or_else(|| crate::usbfs::probe(device))
+        else {
+            continue;
+        };
+        out.push(Location {
+            name: item
+                .get("Name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("USB")
+                .into(),
+            path: crate::usbfs::virtual_root(device, kind),
+            kind: "disk".into(),
+            available: item.get("Remaining").and_then(|v| v.as_u64()).unwrap_or(0),
+            total: item.get("Size").and_then(|v| v.as_u64()).unwrap_or(0),
+            removable: true,
+            filesystem,
+            device: device.into(),
+            mounted: false,
+            usbfs: true,
+        });
+    }
+    out
+}
+
+#[cfg(any(
+    not(any(target_os = "macos", target_os = "linux", windows)),
+    all(windows, not(feature = "usbfs"))
+))]
 fn unmounted_removable() -> Vec<Location> {
     Vec::new()
 }

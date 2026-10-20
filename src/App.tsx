@@ -1018,6 +1018,16 @@ export default function App() {
           <div className="error-banner" role="alert">
             <Info size={16} />
             <span>{x.error}</span>
+            {navigator.userAgent.includes('Windows') && /管理员/.test(x.error) && (
+              <button
+                className="error-action"
+                onClick={() =>
+                  void call('relaunch_elevated').catch((error) => x.setError(String(error)))
+                }
+              >
+                以管理员身份重启
+              </button>
+            )}
             <button className="icon-button" title="关闭提示" onClick={() => x.setError('')}>
               <X size={15} />
             </button>
