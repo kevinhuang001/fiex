@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronRight, FolderOpen, SearchX } from 'lucide-react'
+import { ChevronRight, Files, FolderOpen, SearchX } from 'lucide-react'
 import { FileIcon } from '../FileIcon'
 import { InlineRename } from './InlineRename'
+import { TagDots } from '../TagDots'
 import { asset, call } from '@/lib/api'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type { Entry, Listing, Preferences } from '@/lib/types'
@@ -16,6 +17,30 @@ interface Props {
   onPreview: (e: Entry) => void
   onMenu: (e: Entry, x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
+  onBookmark: (paths: string[]) => void
+}
+
+type DropTarget =
+  | { kind: 'folder'; path: string; element: HTMLElement }
+  | { kind: 'bookmark'; element: HTMLElement }
+
+function dropTargetAt(x: number, y: number): DropTarget | null {
+  const element = document.elementFromPoint(x, y)
+  const folder = element?.closest('[data-drop-folder]') as HTMLElement | null
+  if (folder?.dataset.dropFolder)
+    return { kind: 'folder', path: folder.dataset.dropFolder, element: folder }
+  const bookmark = element?.closest('[data-bookmark-drop]') as HTMLElement | null
+  if (bookmark) return { kind: 'bookmark', element: bookmark }
+  return null
+}
+
+function clearDropHighlight() {
+  document
+    .querySelectorAll('.drop-target')
+    .forEach((element) => element.classList.remove('drop-target'))
+  document
+    .querySelectorAll('.bookmark-drop')
+    .forEach((element) => element.classList.remove('bookmark-drop'))
 }
 
 function NameCell({
@@ -44,14 +69,64 @@ function NameCell({
 }
 
 export function FileViews(props: Props) {
-  const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop } = props
+  const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark } = props
   const entries = useMemo(
     () => sortEntries(x.entries, prefs.sort, prefs.descending),
     [x.entries, prefs.sort, prefs.descending],
   )
+  const iconSize = Math.round(prefs.fontSize * 8)
   const anchor = useRef<string | null>(null)
+  const suppressClick = useRef(false)
   const container = useRef<HTMLDivElement>(null)
+  const [ghost, setGhost] = useState<{ paths: string[]; x: number; y: number } | null>(null)
+  const beginPointerDrag = (event: React.PointerEvent, entry: Entry) => {
+    if (event.button !== 0 || x.renaming) return
+    if ((event.target as Element).closest('input,button,a')) return
+    const paths = x.selected.includes(entry.path) ? [...x.selected] : [entry.path]
+    if (!x.selected.includes(entry.path)) x.setSelected([entry.path])
+    const startX = event.clientX
+    const startY = event.clientY
+    let active = false
+    const move = (moveEvent: PointerEvent) => {
+      if (!active) {
+        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
+        active = true
+        document.body.classList.add('dragging-file')
+      }
+      moveEvent.preventDefault()
+      setGhost({ paths, x: moveEvent.clientX, y: moveEvent.clientY })
+      clearDropHighlight()
+      const target = dropTargetAt(moveEvent.clientX, moveEvent.clientY)
+      if (target?.kind === 'folder') target.element.classList.add('drop-target')
+      else if (target?.kind === 'bookmark') target.element.classList.add('bookmark-drop')
+    }
+    const finish = (upEvent: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      document.body.classList.remove('dragging-file')
+      clearDropHighlight()
+      setGhost(null)
+      if (!active) return
+      suppressClick.current = true
+      setTimeout(() => {
+        suppressClick.current = false
+      }, 0)
+      const target = dropTargetAt(upEvent.clientX, upEvent.clientY)
+      if (target?.kind === 'folder' && !paths.includes(target.path))
+        onDrop(paths, target.path, !(upEvent.altKey || upEvent.ctrlKey))
+      else if (target?.kind === 'bookmark') onBookmark(paths)
+    }
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+  }
   const select = (e: Entry, event: React.MouseEvent) => {
+    if (suppressClick.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
     ;(event.currentTarget.closest('[role="grid"]') as HTMLElement | null)?.focus({
       preventScroll: true,
     })
@@ -79,39 +154,9 @@ export function FileViews(props: Props) {
         if (!x.selected.includes(e.path)) x.setSelected([e.path])
         onMenu(e, event.clientX, event.clientY)
       },
-      draggable: !renaming,
-      onDragStart: (event: React.DragEvent) => {
-        event.dataTransfer.setData(
-          'application/x-fiex',
-          JSON.stringify(x.selected.includes(e.path) ? x.selected : [e.path]),
-        )
-        event.dataTransfer.effectAllowed = 'copyMove'
-      },
-      onDragOver: (event: React.DragEvent) => {
-        if (e.isDir) {
-          event.preventDefault()
-          event.dataTransfer.dropEffect = event.altKey || event.ctrlKey ? 'copy' : 'move'
-          event.currentTarget.classList.add('drop-target')
-        }
-      },
-      onDragLeave: (event: React.DragEvent) => event.currentTarget.classList.remove('drop-target'),
-      onDrop: (event: React.DragEvent) => {
-        if (e.isDir) {
-          event.preventDefault()
-          event.stopPropagation()
-          event.currentTarget.classList.remove('drop-target')
-          try {
-            onDrop(
-              JSON.parse(event.dataTransfer.getData('application/x-fiex')),
-              e.path,
-              !(event.altKey || event.ctrlKey),
-            )
-          } catch {
-            /* Native OS drop is handled by Tauri. */
-          }
-        }
-      },
+      onPointerDown: (event: React.PointerEvent) => beginPointerDrag(event, e),
       'data-path': e.path,
+      'data-drop-folder': e.isDir ? e.path : undefined,
       'aria-selected': x.selected.includes(e.path),
       tabIndex: -1,
     }
@@ -174,18 +219,6 @@ export function FileViews(props: Props) {
           ?.scrollIntoView({ block: 'nearest' }),
       )
   }
-  const dropBackground = (event: React.DragEvent) => {
-    event.preventDefault()
-    try {
-      onDrop(
-        JSON.parse(event.dataTransfer.getData('application/x-fiex')),
-        x.path,
-        !(event.altKey || event.ctrlKey),
-      )
-    } catch {
-      /* Ignore unrelated browser drags. */
-    }
-  }
   if (prefs.view === 'columns' && !x.query)
     return <Columns {...props} shared={shared} onKeyDown={onKeyDown} />
   return (
@@ -196,8 +229,6 @@ export function FileViews(props: Props) {
       aria-label="文件"
       tabIndex={0}
       onKeyDown={onKeyDown}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={dropBackground}
       onClick={(e) => {
         if (e.target === e.currentTarget) x.setSelected([])
       }}
@@ -241,6 +272,7 @@ export function FileViews(props: Props) {
                       <span className="file-name">
                         <FileIcon entry={item.entry} size={25} />
                         <NameCell explorer={x} entry={item.entry} className="file-label" />
+                        <TagDots tags={item.entry.tags} />
                         {item.entry.readonly && x.renaming !== item.entry.path && (
                           <small>只读</small>
                         )}
@@ -287,8 +319,9 @@ export function FileViews(props: Props) {
                 style={
                   prefs.view !== 'gallery'
                     ? ({
-                        '--tile-size': `${Math.max(96, prefs.iconSize + 38)}px`,
-                        '--icon-size': `${prefs.iconSize}px`,
+                        '--tile-size': `${Math.max(96, iconSize + 38)}px`,
+                        '--icon-size': `${iconSize}px`,
+                        '--label-size': `${prefs.fontSize}px`,
                       } as CSSProperties)
                     : undefined
                 }
@@ -304,15 +337,22 @@ export function FileViews(props: Props) {
                     {...shared(e)}
                   >
                     <span className="tile-icon">
-                      <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : prefs.iconSize} />
+                      <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
                     </span>
                     <NameCell explorer={x} entry={e} className="tile-label" />
+                    <TagDots tags={e.tags} />
                   </div>
                 ))}
               </div>
             </section>
           ))}
         </>
+      )}
+      {ghost && (
+        <div className="drag-ghost" style={{ left: ghost.x + 14, top: ghost.y + 14 }}>
+          <Files size={14} />
+          {ghost.paths.length} 个项目
+        </div>
       )}
     </div>
   )
@@ -384,6 +424,7 @@ function Columns({
         <div
           key={e.path}
           className={`column-row ${x.selected.includes(e.path) || e.path === x.path ? 'selected' : ''}`}
+          data-drop-folder={e.isDir ? e.path : undefined}
           {...(current
             ? shared(e)
             : {
@@ -393,6 +434,7 @@ function Columns({
         >
           <FileIcon entry={e} size={24} />
           <NameCell explorer={x} entry={e} className="column-label" />
+          <TagDots tags={e.tags} size={6} />
           {e.isDir && <ChevronRight size={13} />}
         </div>
       ))}

@@ -15,6 +15,8 @@ function item(path: string, isDir = false, mime = 'application/octet-stream', by
     extension: isDir ? '' : path.split('.').pop()!,
     mime,
     readonly: false,
+    linkTarget: null,
+    tags: [],
   }
 }
 let entries = [
@@ -50,6 +52,17 @@ let entries = [
   item(root + '/.Trash', true),
   item(root + '/.Trash/Old draft.txt', false, 'text/plain', 1200),
 ]
+entries = entries.map((entry) =>
+  entry.name === 'Notes.md'
+    ? {
+        ...entry,
+        tags: [
+          { name: '重要', color: 6 },
+          { name: '工作', color: 4 },
+        ],
+      }
+    : entry,
+)
 export async function mock(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
     case 'platform':
@@ -84,6 +97,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         { id: 'default', name: '系统默认终端' },
         { id: 'Terminal', name: 'Terminal' },
         { id: 'iTerm', name: 'iTerm2' },
+        { id: 'Tabby', name: 'Tabby' },
       ]
     case 'native_icon':
       throw new Error('UI fixture')
@@ -91,6 +105,15 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       return root + '/.Trash'
     case 'open_applications':
       return null
+    case 'open_in_vscode':
+      return null
+    case 'set_tags': {
+      const tags = a.tags as { name: string; color: number }[]
+      entries = entries.map((entry) =>
+        (a.paths as string[]).includes(entry.path) ? { ...entry, tags } : entry,
+      )
+      return null
+    }
     case 'search_files':
       return {
         entries: entries.filter(

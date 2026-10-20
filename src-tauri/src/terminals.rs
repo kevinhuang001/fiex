@@ -19,6 +19,7 @@ pub fn detect() -> Vec<Terminal> {
         ("kitty", "kitty"),
         ("Ghostty", "Ghostty"),
         ("WezTerm", "WezTerm"),
+        ("Tabby", "Tabby"),
     ] {
         if std::path::Path::new(&format!("/Applications/{id}.app")).exists()
             || std::path::Path::new(&format!("/System/Applications/Utilities/{id}.app")).exists()
@@ -36,6 +37,7 @@ pub fn detect() -> Vec<Terminal> {
         ("pwsh.exe", "PowerShell 7"),
         ("powershell.exe", "Windows PowerShell"),
         ("cmd.exe", "Command Prompt"),
+        ("tabby.exe", "Tabby"),
     ] {
         if which::which(id).is_ok() {
             out.push(Terminal {
@@ -55,6 +57,7 @@ pub fn detect() -> Vec<Terminal> {
         ("kitty", "kitty"),
         ("ghostty", "Ghostty"),
         ("wezterm", "WezTerm"),
+        ("tabby", "Tabby"),
         ("xterm", "XTerm"),
     ] {
         if which::which(id).is_ok() {
@@ -235,6 +238,77 @@ pub fn open_applications() -> Result<(), String> {
         open::that_detached(fallback).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+pub fn open_in_vscode(path: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if which::which("code").is_ok() {
+            Command::new("code")
+                .arg(path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+        let app = std::path::Path::new("/Applications/Visual Studio Code.app");
+        let local_app = dirs::home_dir()
+            .map(|home| home.join("Applications/Visual Studio Code.app"))
+            .unwrap_or_default();
+        if app.exists() || local_app.exists() {
+            Command::new("open")
+                .args(["-a", "Visual Studio Code"])
+                .arg(path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+        Err("未检测到 Visual Studio Code，请先安装并启用 code 命令".into())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if which::which("code.cmd").is_ok() || which::which("code.exe").is_ok() {
+            Command::new("cmd")
+                .args(["/C", "code"])
+                .arg(path)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+        Err("未检测到 Visual Studio Code，请先安装并启用 code 命令".into())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        for editor in ["code", "code-insiders"] {
+            if which::which(editor).is_ok() {
+                Command::new(editor)
+                    .arg(path)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+        }
+        Err("未检测到 Visual Studio Code，请先安装并启用 code 命令".into())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = path;
+        Err("当前平台不支持 VS Code 集成".into())
+    }
+}
+
+pub fn open_full_disk_access() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("完全磁盘访问权限设置仅在 macOS 上提供".into())
+    }
 }
 
 pub fn open_trash() -> Result<(), String> {

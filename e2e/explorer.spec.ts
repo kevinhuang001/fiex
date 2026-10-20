@@ -15,7 +15,7 @@ test('four views, grouping, and keyboard preview', async ({ page }) => {
     await page.getByRole('button', { name: view + '视图', exact: true }).click()
     await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
   }
-  await page.getByRole('button', { name: '分组和排序', exact: true }).click()
+  await page.getByRole('button', { name: '分组方式', exact: true }).click()
   await page.getByRole('menuitem', { name: '种类', exact: true }).first().click()
   await expect(page.locator('.group-heading').filter({ hasText: '文件夹' })).toBeVisible()
   await page.screenshot({ path: 'artifacts/list.png' })
@@ -37,8 +37,7 @@ test('folder navigation, tabs and fast search', async ({ page }) => {
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
 })
 test('create, rename, recycle and terminal selection', async ({ page }) => {
-  await page.getByRole('button', { name: '更多操作', exact: true }).click()
-  await page.getByRole('menuitem', { name: '新建文件夹' }).click()
+  await page.getByRole('button', { name: '新建文件夹', exact: true }).click()
   const created = page.getByRole('textbox', { name: /重命名 未命名文件夹/ })
   await expect(created).toBeVisible()
   await created.fill('Test folder')
@@ -72,7 +71,7 @@ test('inline rename works in icon and column views', async ({ page }) => {
   await page.keyboard.press('Escape')
 })
 test('shortcut preset and custom binding', async ({ page }) => {
-  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '快捷键', exact: true }).click()
   await page.getByRole('button', { name: 'macOS', exact: true }).click()
   const copy = page.locator('.shortcut-row').filter({ hasText: '复制' }).locator('.shortcut-keys')
@@ -87,7 +86,8 @@ test('shortcut preset and custom binding', async ({ page }) => {
 test('address bar selects the whole path for copying', async ({ page }) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.getByText('Research', { exact: true }).dblclick()
-  await page.getByRole('button', { name: '编辑路径', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: '文件夹路径' })).toHaveCount(0)
+  await page.locator('.breadcrumbs > span:last-child button').click()
   const input = page.getByRole('textbox', { name: '文件夹路径' })
   await expect(input).toHaveValue('/Users/kevin/Documents/Research')
   await expect(input).toBeFocused()
@@ -105,24 +105,43 @@ test('address bar selects the whole path for copying', async ({ page }) => {
   await expect(input).toHaveCount(0)
 })
 test('dragging moves files and bookmarks folders', async ({ page }) => {
-  const data = await page.evaluateHandle(() => new DataTransfer())
-  await page
-    .locator('[data-path="/Users/kevin/Documents/Notes.md"]')
-    .dispatchEvent('dragstart', { dataTransfer: data })
+  const source = page.locator('[data-path="/Users/kevin/Documents/Notes.md"]')
   const research = page.locator('[data-path="/Users/kevin/Documents/Research"]')
-  await research.dispatchEvent('dragover', { dataTransfer: data })
-  await research.dispatchEvent('drop', { dataTransfer: data })
+  const sourceBox = await source.boundingBox()
+  const researchBox = await research.boundingBox()
+  if (!sourceBox || !researchBox) throw new Error('missing drag geometry')
+  await page.mouse.move(sourceBox.x + 30, sourceBox.y + sourceBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(researchBox.x + 30, researchBox.y + researchBox.height / 2, { steps: 8 })
+  await page.mouse.up()
   await expect(page.getByRole('dialog')).toContainText('移动项目')
   await page.getByRole('button', { name: '取消', exact: true }).click()
 
-  const folder = await page.evaluateHandle(() => new DataTransfer())
-  await research.dispatchEvent('dragstart', { dataTransfer: folder })
-  const bookmarks = page.locator('.favorites-section')
-  await bookmarks.dispatchEvent('dragover', { dataTransfer: folder })
-  await bookmarks.dispatchEvent('drop', { dataTransfer: folder })
+  const folderBox = await research.boundingBox()
+  const bookmarksBox = await page.locator('.favorites-section').boundingBox()
+  if (!folderBox || !bookmarksBox) throw new Error('missing bookmark geometry')
+  await page.mouse.move(folderBox.x + 30, folderBox.y + folderBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bookmarksBox.x + bookmarksBox.width / 2, bookmarksBox.y + 18, { steps: 8 })
+  await page.mouse.up()
   await expect(
     page.locator('.favorite-row .nav-item').filter({ hasText: 'Research' }),
   ).toBeVisible()
+})
+test('Finder tags can be applied to a file', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '标签…', exact: true }).click()
+  await expect(page.getByRole('dialog')).toContainText('标签')
+  await page.getByRole('textbox', { name: '自定义标签名称' }).fill('验收')
+  await page.getByRole('button', { name: '添加', exact: true }).click()
+  await page.getByRole('button', { name: '应用标签', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.locator('[data-path="/Users/kevin/Documents/Notes.md"] .tag-dots'),
+  ).toBeVisible()
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '显示简介' }).click()
+  await expect(page.getByRole('dialog')).toContainText('验收')
 })
 test('Applications entry and search focus', async ({ page }) => {
   await page.getByRole('button', { name: '应用程序', exact: true }).click()
@@ -135,7 +154,7 @@ test('opens the Trash inside Fiex', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible()
 })
 test('settings are custom controls and theme persists', async ({ page }) => {
-  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '深色', exact: true }).click()
   await expect(page.locator('html')).toHaveClass('dark')
   await page.getByRole('switch').click()

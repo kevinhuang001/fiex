@@ -18,7 +18,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     respectIgnore: false,
     terminal: 'default',
     theme: 'system',
-    iconSize: 88,
+    fontSize: 11,
     favorites: [],
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
@@ -35,8 +35,14 @@ function load(): Preferences {
   try {
     const stored = JSON.parse(
       localStorage.getItem('fiex:preferences') || '{}',
-    ) as Partial<Preferences>
+    ) as Partial<Preferences> & { iconSize?: number }
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
+    const fontSize =
+      typeof stored.fontSize === 'number'
+        ? Math.min(18, Math.max(8, stored.fontSize))
+        : typeof stored.iconSize === 'number'
+          ? Math.min(18, Math.max(8, Math.round(stored.iconSize / 8)))
+          : 11
     const shortcuts: ShortcutMap = defaultShortcuts(style)
     if (stored.shortcuts && typeof stored.shortcuts === 'object') {
       for (const action of SHORTCUT_ACTIONS) {
@@ -47,7 +53,7 @@ function load(): Preferences {
           )
       }
     }
-    return { ...fallback, ...stored, shortcutStyle: style, shortcuts }
+    return { ...fallback, ...stored, fontSize, shortcutStyle: style, shortcuts }
   } catch {
     return fallback
   }

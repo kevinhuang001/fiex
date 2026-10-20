@@ -3,6 +3,7 @@ import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
 import { date, parent, kind, size } from '@/lib/files'
+import { tagColor } from '@/lib/tags'
 import { call } from '@/lib/api'
 import type { Entry } from '@/lib/types'
 export function FileInfoDialog({
@@ -36,6 +37,7 @@ export function FileInfoDialog({
               ['修改时间', date(info.modified)],
               ['权限', info.readonly ? '只读' : '可读写'],
               ['符号链接', info.isSymlink ? '是' : '否'],
+              ...(info.linkTarget ? [['链接到', info.linkTarget]] : []),
             ].map(([k, v]) => (
               <div key={k}>
                 <dt>{k}</dt>
@@ -43,6 +45,16 @@ export function FileInfoDialog({
               </div>
             ))}
           </dl>
+          {info.tags.length > 0 && (
+            <div className="file-info-tags">
+              {info.tags.map((tag) => (
+                <span className="tag-chip" key={`${tag.name}:${tag.color}`}>
+                  <i style={{ background: tagColor(tag.color) }} />
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          )}
           <Button
             variant="secondary"
             onClick={() => void run('正在显示…', () => call('reveal_path', { path: info.path }))}

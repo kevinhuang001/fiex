@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.2.1"
+version = "0.2.2"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -51,6 +51,11 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }
+plist = "1"
+xattr = "1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+lnk = "0.5"
 
 [profile.release]
 strip = true

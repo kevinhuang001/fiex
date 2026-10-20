@@ -1,10 +1,17 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
 };
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tag {
+    pub name: String,
+    pub color: u8,
+}
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,10 +26,136 @@ pub struct Entry {
     pub extension: String,
     pub mime: String,
     pub readonly: bool,
+    pub link_target: Option<String>,
+    pub tags: Vec<Tag>,
 }
+
+#[cfg(target_os = "macos")]
+const TAG_XATTR: &str = "com.apple.metadata:_kMDItemUserTags";
+
+#[cfg(target_os = "macos")]
+fn parse_tag(value: &str) -> Option<Tag> {
+    let (name, color) = match value.rsplit_once('\n') {
+        Some((name, color)) => (name, color.parse::<u8>().ok()?.min(7)),
+        None => (value, 0),
+    };
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+    Some(Tag {
+        name: name.to_string(),
+        color,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn read_tags(path: &Path) -> Vec<Tag> {
+    let Some(bytes) = xattr::get(path, TAG_XATTR).ok().flatten() else {
+        return Vec::new();
+    };
+    let Ok(value) = plist::Value::from_reader(std::io::Cursor::new(bytes)) else {
+        return Vec::new();
+    };
+    match value.as_array() {
+        Some(items) => items
+            .iter()
+            .filter_map(|item| item.as_string())
+            .filter_map(parse_tag)
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn read_tags(_path: &Path) -> Vec<Tag> {
+    Vec::new()
+}
+
+#[cfg(target_os = "macos")]
+pub fn set_tags(paths: &[String], tags: &[Tag]) -> Result<(), String> {
+    let mut values = Vec::new();
+    for tag in tags {
+        let name = tag.name.trim();
+        if name.is_empty() || name.contains('\n') {
+            continue;
+        }
+        values.push(plist::Value::String(format!(
+            "{name}\n{}",
+            tag.color.min(7)
+        )));
+    }
+    let mut bytes = Vec::new();
+    plist::Value::Array(values)
+        .to_writer_binary(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    for path in paths {
+        let path = Path::new(path);
+        if !path.exists() {
+            continue;
+        }
+        if tags.is_empty() {
+            match xattr::remove(path, TAG_XATTR) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        } else {
+            xattr::set(path, TAG_XATTR, &bytes).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn set_tags(_paths: &[String], _tags: &[Tag]) -> Result<(), String> {
+    Err("Finder 标签仅在 macOS 上可用".into())
+}
+#[cfg(target_os = "windows")]
+fn shortcut_target(path: &Path) -> Option<String> {
+    let link = lnk::ShellLink::open(path).ok()?;
+    if let Some(info) = link.link_info() {
+        let base = info
+            .local_base_path_unicode()
+            .as_ref()
+            .or_else(|| info.local_base_path().as_ref())?;
+        let suffix = info.common_path_suffix_unicode();
+        let suffix = if suffix.is_empty() {
+            info.common_path_suffix().as_str()
+        } else {
+            suffix.as_str()
+        };
+        return Some(format!("{base}{suffix}"));
+    }
+    link.relative_path().clone()
+}
+
 pub fn entry(path: &Path) -> Result<Entry, String> {
     let link = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let meta = fs::metadata(path).unwrap_or(link.clone());
+    let extension = path
+        .extension()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_lowercase();
+    let link_target = if link.file_type().is_symlink() {
+        fs::read_link(path)
+            .ok()
+            .map(|target| target.to_string_lossy().into_owned())
+    } else {
+        #[cfg(target_os = "windows")]
+        {
+            if extension == "lnk" {
+                shortcut_target(path)
+            } else {
+                None
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            None
+        }
+    };
     Ok(Entry {
         path: path.to_string_lossy().into_owned(),
         name: path
@@ -43,15 +176,13 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
             .ok()
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map_or(0, |t| t.as_secs()),
-        extension: path
-            .extension()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_lowercase(),
+        extension,
         mime: mime_guess::from_path(path)
             .first_or_octet_stream()
             .to_string(),
         readonly: meta.permissions().readonly(),
+        link_target,
+        tags: read_tags(path),
     })
 }
 #[derive(Serialize)]
@@ -226,6 +357,40 @@ pub fn text_preview(path: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_report_their_target() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("Target.txt");
+        std::fs::write(&target, "x").unwrap();
+        let link = temp.path().join("Link.txt");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let entry = super::entry(&link).unwrap();
+        assert!(entry.is_symlink);
+        assert_eq!(
+            entry.link_target.as_deref(),
+            Some(target.to_string_lossy().as_ref())
+        );
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_tags_roundtrip() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("Tagged.txt");
+        std::fs::write(&file, "x").unwrap();
+        let tags = vec![super::Tag {
+            name: "TestTag".into(),
+            color: 6,
+        }];
+        super::set_tags(&[file.to_string_lossy().into_owned()], &tags).unwrap();
+        let entry = super::entry(&file).unwrap();
+        assert!(entry
+            .tags
+            .iter()
+            .any(|tag| tag.name == "TestTag" && tag.color == 6));
+        super::set_tags(&[file.to_string_lossy().into_owned()], &[]).unwrap();
+        assert!(super::entry(&file).unwrap().tags.is_empty());
+    }
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_hides_synthetic_apfs_volumes() {

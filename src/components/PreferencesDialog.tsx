@@ -26,7 +26,6 @@ import {
   comboFromEvent,
   defaultShortcuts,
   formatShortcut,
-  sameShortcuts,
   type ShortcutAction,
   type ShortcutMap,
 } from '@/lib/shortcuts'
@@ -48,7 +47,6 @@ interface Section {
   label: string
   icon: LucideIcon
   color: string
-  description: string
   keywords: string[]
 }
 
@@ -58,7 +56,6 @@ const sections: Section[] = [
     label: '外观',
     icon: Palette,
     color: '#3b82f6',
-    description: '选择浅色或深色外观，控制隐藏文件与图标视图的大小。',
     keywords: ['theme', 'dark', 'light', '主题', '深色', '浅色', '图标'],
   },
   {
@@ -66,7 +63,6 @@ const sections: Section[] = [
     label: '快捷键',
     icon: Keyboard,
     color: '#8b5cf6',
-    description: '使用 macOS、Windows 或 Linux 预设，也可以为每个操作单独录制快捷键。',
     keywords: ['keyboard', 'shortcut', '快捷键', '按键'],
   },
   {
@@ -74,7 +70,6 @@ const sections: Section[] = [
     label: '终端',
     icon: TerminalSquare,
     color: '#10b981',
-    description: '选择在工具栏中点击 Open in Terminal 时使用的终端应用。',
     keywords: ['terminal', 'shell', '终端', '命令行'],
   },
   {
@@ -82,7 +77,6 @@ const sections: Section[] = [
     label: '关于',
     icon: Info,
     color: '#64748b',
-    description: 'Fiex 版本、项目主页与开源许可信息。',
     keywords: ['about', 'version', 'license', '关于', '版本', '许可'],
   },
 ]
@@ -116,9 +110,6 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
     if (query && visible.length && !visible.some((item) => item.id === section))
       setSection(visible[0].id)
   }, [query, visible, section])
-
-  const active = sections.find((item) => item.id === section) || sections[0]
-  const ActiveIcon = active.icon
 
   const assign = (action: ShortcutAction, index: number, combo: string) => {
     const next = Object.fromEntries(
@@ -194,7 +185,6 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
   const openLink = (url: string) =>
     void call('open_path', { path: url }).catch((error) => onError(String(error)))
 
-  const custom = !sameShortcuts(prefs.shortcuts, defaultShortcuts(prefs.shortcutStyle))
   const styleName = SHORTCUT_STYLES.find((item) => item.id === prefs.shortcutStyle)?.name
 
   return (
@@ -202,7 +192,7 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
       <div className="settings">
         <aside className="settings-sidebar">
           <div className="settings-profile">
-            <img src="/fiex.svg" alt="" />
+            <img src="/fiex.png" alt="" />
             <div>
               <strong>Fiex</strong>
               <span>文件浏览器</span>
@@ -248,19 +238,11 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
           </nav>
           <div className="settings-sidebar-footer">
             <span>Fiex</span>
-            <span>0.2.1</span>
+            <span>0.2.2</span>
           </div>
         </aside>
 
         <section className="settings-content">
-          <div className="settings-hero">
-            <span className="settings-hero-icon" style={{ background: active.color }}>
-              <ActiveIcon size={30} />
-            </span>
-            <h2>{active.label}</h2>
-            <p>{active.description}</p>
-          </div>
-
           {section === 'appearance' && (
             <>
               <div className="settings-card">
@@ -306,25 +288,22 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                     <span className="settings-row-icon" style={{ background: '#6366f1' }}>
                       <SlidersHorizontal size={15} />
                     </span>
-                    图标大小
+                    字体大小
                   </div>
                   <div className="settings-row-control settings-slider">
                     <input
-                      aria-label="图标大小"
+                      aria-label="字体大小"
                       type="range"
-                      min="48"
-                      max="136"
-                      step="8"
-                      value={prefs.iconSize}
-                      onChange={(event) => update({ iconSize: +event.target.value })}
+                      min="8"
+                      max="18"
+                      step="1"
+                      value={prefs.fontSize}
+                      onChange={(event) => update({ fontSize: +event.target.value })}
                     />
-                    <span>{prefs.iconSize}px</span>
+                    <span>{prefs.fontSize}px</span>
                   </div>
                 </div>
               </div>
-              <p className="settings-page-note">
-                图标视图采用类似 Finder 的固定网格；调整大小后列数和间距会同步变化。
-              </p>
             </>
           )}
 
@@ -353,10 +332,6 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                   </div>
                 </div>
               </div>
-              <p className="settings-page-note">
-                切换风格会重置全部快捷键，也可以在下方单独修改。当前预设：{styleName}
-                {custom ? '（已自定义）' : ''}。
-              </p>
               {note && (
                 <p className="settings-inline-error" role="status">
                   {note}
@@ -426,10 +401,6 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                   })}
                 </div>
               ))}
-              <p className="settings-page-note">
-                点击快捷键后按下新的组合键；Backspace 清除，Escape
-                取消。多个快捷键会依次显示在菜单中。
-              </p>
               <div className="shortcut-footer">
                 <button
                   onClick={() => {
@@ -439,7 +410,6 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                   }}
                 >
                   <RotateCcw size={11} /> 恢复 {styleName} 预设
-                  {custom ? '（当前已自定义）' : ''}
                 </button>
               </div>
             </>
@@ -471,16 +441,13 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                   </div>
                 )}
               </div>
-              <p className="settings-page-note">
-                工具栏中的 Open in Terminal 会使用选中的终端；如果检测不到，会退回系统默认终端。
-              </p>
             </>
           )}
 
           {section === 'about' && (
             <>
               <div className="settings-about">
-                <img src="/fiex.svg" alt="" />
+                <img src="/fiex.png" alt="" />
                 <h3>Fiex</h3>
                 <p>File explorer, with room to breathe.</p>
                 <Button
@@ -499,7 +466,7 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                     </span>
                     版本
                   </div>
-                  <span className="settings-value">0.2.1</span>
+                  <span className="settings-value">0.2.2</span>
                 </div>
                 <button
                   className="settings-row settings-row-button"
@@ -516,9 +483,6 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                   <ExternalLink size={14} />
                 </button>
               </div>
-              <p className="settings-page-note">
-                文件类型图标来自 Material Icon Theme（MIT）；应用图标显示系统原生 Logo。
-              </p>
             </>
           )}
         </section>

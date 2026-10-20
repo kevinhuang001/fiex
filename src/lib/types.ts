@@ -1,5 +1,9 @@
 import type { ShortcutMap, ShortcutStyle } from './shortcuts'
 
+export interface Tag {
+  name: string
+  color: number
+}
 export interface Entry {
   path: string
   name: string
@@ -11,6 +15,8 @@ export interface Entry {
   extension: string
   mime: string
   readonly: boolean
+  linkTarget: string | null
+  tags: Tag[]
 }
 export interface Listing {
   path: string
@@ -51,7 +57,7 @@ export interface Preferences {
   respectIgnore: boolean
   terminal: string
   theme: 'system' | 'light' | 'dark'
-  iconSize: number
+  fontSize: number
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap

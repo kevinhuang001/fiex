@@ -155,6 +155,18 @@ fn open_applications() -> Result<(), String> {
     terminals::open_applications()
 }
 #[tauri::command]
+fn set_tags(paths: Vec<String>, tags: Vec<files::Tag>) -> Result<(), String> {
+    files::set_tags(&paths, &tags)
+}
+#[tauri::command]
+fn open_in_vscode(path: String) -> Result<(), String> {
+    terminals::open_in_vscode(&path)
+}
+#[tauri::command]
+fn open_full_disk_access() -> Result<(), String> {
+    terminals::open_full_disk_access()
+}
+#[tauri::command]
 fn open_trash() -> Result<(), String> {
     terminals::open_trash()
 }
@@ -227,6 +239,9 @@ pub fn run() {
             reveal_path,
             trash_path,
             open_applications,
+            set_tags,
+            open_in_vscode,
+            open_full_disk_access,
             open_trash,
             watch_directory,
             native_icon

@@ -1,6 +1,7 @@
 import { Sidebar } from './components/Sidebar'
 import { PreferencesDialog } from './components/PreferencesDialog'
 import { FileInfoDialog } from './components/FileInfoDialog'
+import { TagDialog } from './components/TagDialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -8,50 +9,58 @@ import {
   ArrowDownUp,
   ArrowUp,
   ChevronDown,
+  Code2,
   ChevronLeft,
   ChevronRight,
   Columns3,
   Copy,
   Download,
   Eye,
-  FilePlus2,
   Folder,
   FolderPlus,
+  FolderTree,
+  Settings2,
   Grid2X2,
   HardDrive,
   Image,
   Info,
   List,
   LoaderCircle,
-  MoreHorizontal,
   PanelLeft,
   Plus,
   RefreshCw,
   Search,
-  Star,
   TerminalSquare,
   Trash2,
   X,
   CheckCircle2,
   Archive,
   ExternalLink,
-  ClipboardPaste,
   Scissors,
-  Undo2,
   Pencil,
+  Tags,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { FileViews } from './components/browser/FileViews'
 import { Preview } from './components/Preview'
 import { Button } from './components/ui/button'
 import { Modal } from './components/ui/Modal'
-import { Menu, Choice, Action, Separator, Label } from './components/Menus'
+import { Menu, Choice, Label } from './components/Menus'
 import { useExplorer } from './hooks/useExplorer'
 import { usePreferences } from './hooks/usePreferences'
 import { call, native, demo } from './lib/api'
 import { basename, isArchive, join, size, uniqueName } from './lib/files'
 import { matchShortcut, shortcutLabel } from './lib/shortcuts'
-import type { Entry, Group, Location, OperationResult, Sort, Terminal, View } from './lib/types'
+import type {
+  Entry,
+  Group,
+  Location,
+  OperationResult,
+  Sort,
+  Tag,
+  Terminal,
+  View,
+} from './lib/types'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 /> },
   { id: 'list', name: '列表', icon: <List /> },
@@ -94,7 +103,12 @@ export default function App() {
   const [busy, setBusy] = useState('')
   const [toast, setToast] = useState('')
   const [terminals, setTerminals] = useState<Terminal[]>([])
+  const [platform, setPlatform] = useState('')
   const [trashPath, setTrashPath] = useState<string | null>(null)
+  const [trashIssue, setTrashIssue] = useState(false)
+  const [tagOpen, setTagOpen] = useState(false)
+  const [tagPaths, setTagPaths] = useState<string[]>([])
+  const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
   const [editingPath, setEditingPath] = useState(false)
@@ -106,6 +120,9 @@ export default function App() {
   const first = chosen[0]
   const notify = useCallback((s: string) => setToast(s), [])
   useEffect(() => {
+    void call<string>('platform')
+      .then(setPlatform)
+      .catch(() => {})
     void call<Terminal[]>('detect_terminals')
       .then(setTerminals)
       .catch(() => {})
@@ -170,15 +187,19 @@ export default function App() {
     if (x.query) x.setQuery('')
     x.beginRename(path)
   }
-  const rename = () => {
-    if (first) x.beginRename(first.path)
-  }
-  const openTrash = () => {
-    if (trashPath) {
+  const openTrash = async () => {
+    if (!trashPath) {
+      void run('正在打开废纸篓…', () => call('open_trash'))
+      return
+    }
+    try {
+      await call('list_directory', { path: trashPath, hidden: prefs.hidden })
       setPreview(null)
       x.navigate(trashPath)
-    } else {
-      void run('正在打开废纸篓…', () => call('open_trash'))
+    } catch (error) {
+      const message = String(error)
+      if (/permitted|permission|权限/i.test(message)) setTrashIssue(true)
+      else x.setError(message)
     }
   }
   const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
@@ -286,11 +307,36 @@ export default function App() {
     void run('正在打开终端…', () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),
     )
+  const openVSCode = (path = first?.path || x.path) => {
+    if (!path) return
+    void run('正在用 VS Code 打开…', () => call('open_in_vscode', { path }))
+  }
   const undo = () =>
     void run('正在撤销…', async () => {
       await call('undo')
       notify('已撤销上一次文件操作')
     })
+  const openTags = (paths: string[]) => {
+    const wanted = new Set(paths)
+    const initial = new Map<string, Tag>()
+    for (const entry of x.entries) {
+      if (!wanted.has(entry.path)) continue
+      for (const tag of entry.tags) initial.set(`${tag.name}\u0000${tag.color}`, tag)
+    }
+    setTagPaths(paths)
+    setTagInitial([...initial.values()])
+    setTagOpen(true)
+  }
+  const applyTags = async (tags: Tag[]) => {
+    try {
+      await call('set_tags', { paths: tagPaths, tags })
+      setTagOpen(false)
+      x.reload()
+      notify('标签已更新')
+    } catch (error) {
+      x.setError(String(error))
+    }
+  }
   const bookmarkPaths = async (paths: string[]) => {
     const existing = new Set(prefs.favorites.map((item) => item.path))
     const additions: Location[] = []
@@ -498,18 +544,18 @@ export default function App() {
     return { name: displayName(accumulated) || name, path: accumulated }
   })
   return (
-    <div className={`app ${sidebar ? '' : 'sidebar-hidden'} ${dragging ? 'dragging' : ''}`}>
+    <div
+      className={`app ${sidebar ? '' : 'sidebar-hidden'} ${dragging ? 'dragging' : ''}`}
+      style={{ '--label-size': `${prefs.fontSize}px` } as CSSProperties}
+    >
       <Sidebar
         x={x}
         prefs={prefs}
         update={update}
         favorite={favorite}
-        transfer={transfer}
         control={control}
-        onSettings={() => setSettings(true)}
         onTrash={openTrash}
         onApplications={openApplications}
-        onBookmark={bookmarkPaths}
         trashPath={trashPath}
       />
       <main className="main">
@@ -577,14 +623,15 @@ export default function App() {
               </Button>
             ))}
           </div>
-          <Menu label="分组和排序" icon={<ArrowDownUp />}>
+          <Menu label="分组方式" icon={<FolderTree />}>
             <Label>分组方式</Label>
             {groupOptions.map(([id, name]) => (
               <Choice key={id} checked={prefs.group === id} onClick={() => update({ group: id })}>
                 {name}
               </Choice>
             ))}
-            <Separator />
+          </Menu>
+          <Menu label="排序方式" icon={<ArrowDownUp />}>
             <Label>排序方式</Label>
             {sortOptions.map(([id, name]) => (
               <Choice key={id} checked={prefs.sort === id} onClick={() => update({ sort: id })}>
@@ -598,6 +645,24 @@ export default function App() {
               降序
             </Choice>
           </Menu>
+          <Button
+            variant="ghost"
+            size="icon"
+            title={`新建文件夹 ${hint('newFolder')}`}
+            aria-label="新建文件夹"
+            onClick={() => create(true)}
+          >
+            <FolderPlus />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            title="在 VS Code 中打开"
+            aria-label="在 VS Code 中打开"
+            onClick={() => openVSCode()}
+          >
+            <Code2 />
+          </Button>
           <div className="toolbar-divider" />
           <div className="terminal-control">
             <Button
@@ -624,70 +689,15 @@ export default function App() {
               ))}
             </Menu>
           </div>
-          <Menu label="更多操作" icon={<MoreHorizontal />}>
-            <Action onClick={() => create(true)}>
-              <FolderPlus />
-              新建文件夹<span className="shortcut">{hint('newFolder')}</span>
-            </Action>
-            <Action onClick={() => create(false)}>
-              <FilePlus2 />
-              新建文件<span className="shortcut">{hint('newFile')}</span>
-            </Action>
-            <Separator />
-            <Action disabled={!first} onClick={rename}>
-              <Pencil />
-              重新命名<span className="shortcut">{hint('rename')}</span>
-            </Action>
-            <Action disabled={!first} onClick={() => copy(false)}>
-              <Copy />
-              复制<span className="shortcut">{hint('copy')}</span>
-            </Action>
-            <Action disabled={!first} onClick={() => copy(true)}>
-              <Scissors />
-              剪切<span className="shortcut">{hint('cut')}</span>
-            </Action>
-            <Action
-              disabled={!clipboard}
-              onClick={() => clipboard && transfer(clipboard.paths, x.path, clipboard.moving)}
-            >
-              <ClipboardPaste />
-              粘贴<span className="shortcut">{hint('paste')}</span>
-            </Action>
-            <Action disabled={!first} onClick={duplicate}>
-              <Copy />
-              创建副本<span className="shortcut">{hint('duplicate')}</span>
-            </Action>
-            <Action onClick={undo}>
-              <Undo2 />
-              撤销<span className="shortcut">{hint('undo')}</span>
-            </Action>
-            <Separator />
-            <Action disabled={!first} onClick={compress}>
-              <Archive />
-              压缩为 ZIP
-            </Action>
-            <Action disabled={!first || !isArchive(first)} onClick={extract}>
-              <Archive />
-              解压缩
-            </Action>
-            <Action onClick={favorite}>
-              <Star />
-              收藏文件夹
-            </Action>
-            <Action disabled={!first} onClick={() => first && setInfo(first)}>
-              <Info />
-              显示简介<span className="shortcut">{hint('info')}</span>
-            </Action>
-            <Action disabled={!first} onClick={recycle}>
-              <Trash2 />
-              移到废纸篓<span className="shortcut">{hint('trash')}</span>
-            </Action>
-            <Separator />
-            <Choice checked={prefs.hidden} onClick={() => update({ hidden: !prefs.hidden })}>
-              显示隐藏文件
-            </Choice>
-            <Action onClick={startPathEdit}>前往文件夹…</Action>
-          </Menu>
+          <Button
+            variant="ghost"
+            size="icon"
+            title="设置"
+            aria-label="设置"
+            onClick={() => setSettings(true)}
+          >
+            <Settings2 />
+          </Button>
         </header>
         <div className="tabs" role="tablist" aria-label="标签页">
           {x.tabs.map((path, i) => (
@@ -717,7 +727,13 @@ export default function App() {
           <Button variant="ghost" size="icon" title="上一级" aria-label="上一级" onClick={x.up}>
             <ArrowUp />
           </Button>
-          <nav className="breadcrumbs" aria-label="当前位置">
+          <nav
+            className="breadcrumbs"
+            aria-label="当前位置"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) startPathEdit()
+            }}
+          >
             <button onClick={startPathEdit} title="编辑或复制路径" aria-label="编辑路径">
               <HardDrive size={13} />
             </button>
@@ -746,7 +762,13 @@ export default function App() {
                 {crumbs.map((p, i) => (
                   <span key={i}>
                     <ChevronRight size={11} />
-                    <button onClick={() => x.navigate(p.path)}>{p.name}</button>
+                    <button
+                      onClick={() =>
+                        i === crumbs.length - 1 ? startPathEdit() : x.navigate(p.path)
+                      }
+                    >
+                      {p.name}
+                    </button>
                   </span>
                 ))}
               </>
@@ -824,6 +846,7 @@ export default function App() {
             onPreview={setPreview}
             onMenu={(entry, mx, my) => setMenu({ entry, x: mx, y: my })}
             onDrop={transfer}
+            onBookmark={bookmarkPaths}
           />
         )}
         <footer className="statusbar">
@@ -895,6 +918,19 @@ export default function App() {
               hint: hint('info'),
               action: () => setInfo(menu.entry),
             },
+            ...(platform === 'macos'
+              ? [
+                  {
+                    label: '标签…',
+                    icon: <Tags />,
+                    hint: '',
+                    action: () =>
+                      openTags(
+                        x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
+                      ),
+                  },
+                ]
+              : []),
             {
               label: '重新命名',
               icon: <Pencil />,
@@ -1009,7 +1045,42 @@ export default function App() {
           </div>
         </form>
       </Modal>
+      <Modal
+        open={trashIssue}
+        onClose={() => setTrashIssue(false)}
+        title="无法浏览废纸篓"
+        description="macOS 不允许应用直接读取 ~/.Trash。请在“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中允许 Fiex，随后即可在应用内浏览废纸篓；也可以现在用 Finder 打开。"
+      >
+        <div className="dialog-actions">
+          <Button variant="ghost" onClick={() => setTrashIssue(false)}>
+            取消
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setTrashIssue(false)
+              void call('open_trash').catch((error) => x.setError(String(error)))
+            }}
+          >
+            在 Finder 中打开
+          </Button>
+          <Button
+            onClick={() => {
+              setTrashIssue(false)
+              void call('open_full_disk_access').catch((error) => x.setError(String(error)))
+            }}
+          >
+            打开权限设置
+          </Button>
+        </div>
+      </Modal>
       <FileInfoDialog info={info} onClose={() => setInfo(null)} onError={x.setError} />
+      <TagDialog
+        open={tagOpen}
+        initial={tagInitial}
+        onClose={() => setTagOpen(false)}
+        onApply={applyTags}
+      />
       <PreferencesDialog
         open={settings}
         onClose={() => setSettings(false)}

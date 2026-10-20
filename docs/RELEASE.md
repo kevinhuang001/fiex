@@ -1,9 +1,14 @@
 Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 
 - Frosted sidebar inspired by Pantodo, with light and dark appearances.
-- System Settings-style preferences with a searchable sidebar, grouped cards and per-page navigation.
-- The current path can be edited inline with the whole address selected for copying.
-- Drag between folders moves by default; Option/Alt or Ctrl copies. Drop a folder on Favorites to bookmark it.
+- System Settings-style preferences with a searchable sidebar and grouped cards.
+- macOS Finder tags with color dots in every view, preset colors and custom tag names.
+- Move files and folders by dragging; hold Option/Alt or Ctrl to copy. Drop folders on Favorites to bookmark them.
+- Open the selected file or folder in VS Code from the toolbar or context menu.
+- Tabby is detected alongside Terminal, iTerm2, Warp, Alacritty, kitty, Ghostty and WezTerm.
+- The whole address bar opens an inline path field with all text selected; no separate copy button is needed.
+- Link targets are shown for symlinks and Windows shortcuts in Show Info.
+- Adjustable font size scales both filenames and icon-view icons.
 - A unified Applications entry on macOS, Windows and Linux: macOS browses /Applications, while Windows and Linux open the platform app list.
 - The Trash opens inside Fiex on macOS and Linux; Windows keeps the system Recycle Bin.
 - Crisp native application logos rendered at the display's pixel ratio, including large icon view.
@@ -21,7 +26,9 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 - Detected terminal picker and a configurable default terminal.
 - Self-contained native codecs: liblzma is linked statically, and release builds are audited for Homebrew/build-machine library paths.
 - Fixed startup on macOS causing `Library not loaded: /opt/homebrew/opt/xz/lib/liblzma.5.dylib`.
+- Group headings are bold and use the primary text color.
+- The app icon is the cropped Glass Blue Folder artwork.
 
 Downloads: macOS Apple Silicon / Intel DMG, Windows EXE / MSI, Linux DEB / RPM / AppImage.
 
-The app is unsigned by an Apple Developer / Microsoft signing certificate. macOS uses ad-hoc signing. Linux background translucency depends on the compositor. RAR, encrypted archives, network-share mounting and Finder tags are not included in this release. File clipboard and undo are currently within the Fiex session; restore deleted files from the system Trash. Cross-volume moves report an error and direct you to copy first. Archive extraction limits: 100,000 entries / 20 GiB; links and unsafe paths are rejected.
+The app is unsigned by an Apple Developer / Microsoft signing certificate. macOS uses ad-hoc signing. Linux background translucency depends on the compositor. RAR, encrypted archives and network-share mounting are not included in this release. Clipboard and undo are within the Fiex session; Trash opens in Fiex when permitted, otherwise Fiex offers Finder or Full Disk Access settings. Cross-volume moves report an error and direct you to copy first. Archive extraction limits: 100,000 entries / 20 GiB; links and unsafe paths are rejected.

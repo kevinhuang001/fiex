@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon.svg" width="88" alt="Fiex"></p>
+<p align="center"><img src="assets/icon.png" width="88" alt="Fiex"></p>
 <h1 align="center">Fiex</h1>
 <p align="center">A calm, fast file explorer for macOS, Windows and Linux.</p>
 <p align="center"><a href="https://github.com/kevinhuang001/fiex/releases/latest">Download</a> · <a href="README.zh-CN.md">简体中文</a></p>
@@ -7,9 +7,9 @@ Fiex gives your files room to breathe: a translucent sidebar, compact controls, 
 
 ### Find your way
 
-The path bar edits the current location inline with the full path selected for copying. Explore with list, icon, column and gallery views. The icon view uses a Finder-style fixed grid with two-line labels and snap-to-grid cells. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
+The address bar opens an inline path field with the full path selected for copying. Explore with list, icon, column and gallery views. The icon view uses a Finder-style fixed grid with two-line labels and snap-to-grid cells. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
 
-File icons are colored by type and language using the MIT-licensed [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme), with dedicated icons for 1,300+ extensions and 2,100+ filenames. Application bundles still use their native system logos.
+macOS Finder tags appear as colored dots in list, icon and column views. Tags can be applied from the context menu, using the standard colors or custom names. File icons are colored by type and language using the MIT-licensed [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme), with dedicated icons for 1,300+ extensions and 2,100+ filenames. Application bundles still use their native system logos.
 
 ### Find it quickly
 
@@ -19,7 +19,7 @@ Built-in parallel filename search uses the `ignore` engine from ripgrep. Results
 
 Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Renaming happens inline on the item, Finder-style; a new folder is created immediately with a unique name and its name is selected for editing. Drag between Fiex folders to move; hold Option/Alt (or Ctrl) to copy. Drop a folder on the Favorites section to bookmark it. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
 
-The sidebar has one **Applications** entry on every platform. macOS browses `/Applications` directly; Windows and Linux have no equivalent folder, so the entry only opens the platform app list. The **Trash** opens inside Fiex on macOS and Linux, so deleted files can be browsed and moved back without launching Finder.
+Open the selected file or folder in VS Code from the toolbar or the context menu; Tabby is detected alongside the other terminals. The sidebar has one **Applications** entry on every platform. macOS browses `/Applications` directly; Windows and Linux have no equivalent folder, so the entry only opens the platform app list. The **Trash** opens inside Fiex on macOS and Linux, so deleted files can be browsed and moved back without launching Finder. macOS protects `~/.Trash`; if access is denied, Fiex offers to open Full Disk Access settings or Finder.
 
 Press **Space** for Quick Look. Preview images, video, audio, UTF-8 text/code and PDF through the built-in PDF.js renderer. Applications show their native logos. **Open in Terminal** detects installed terminals and lets you choose a default.
 
@@ -27,7 +27,7 @@ ZIP creation and ZIP, 7z, TAR, GZ, BZ2 and XZ extraction are built in; no comman
 
 ### Keyboard
 
-Settings use a System Settings-style window with a searchable category sidebar and grouped cards. Shortcuts are editable under **Settings → Shortcuts**. Fiex ships with macOS, Windows and Linux presets; picking a style rewrites every binding, and any individual shortcut can be re-recorded. Defaults for the macOS style:
+Settings use a System Settings-style window with a searchable category sidebar and grouped cards. The font-size slider scales both labels and icon-view icons. Shortcuts are editable under **Settings → Shortcuts**. Fiex ships with macOS, Windows and Linux presets; picking a style rewrites every binding, and any individual shortcut can be re-recorded. Defaults for the macOS style:
 
 | Action                | Shortcut                   |
 | --------------------- | -------------------------- |
@@ -72,6 +72,6 @@ GitHub Actions runs UI workflows, model tests, Rust tests, formatting, Clippy, t
 
 ### First-release scope
 
-Fiex is not yet a complete Finder replacement. RAR/encrypted archives, Finder tags, share mounting, permissions editing, Quick Look plugins and whole-disk indexing are not included. Cross-volume moves currently ask you to copy first; verify the copy before trashing the original. Clipboard and undo are internal to the session. Trash is opened in the system file manager for restore. Linux blur requires compositor support. Media preview depends on WebView codecs; other types open with the default application. Builds are not signed with commercial code-signing certificates.
+Fiex is not yet a complete Finder replacement. RAR/encrypted archives, share mounting, permissions editing, Quick Look plugins and whole-disk indexing are not included. Cross-volume moves currently ask you to copy first; verify the copy before trashing the original. Clipboard and undo are internal to the session. Trash opens in Fiex where the OS allows it, with Finder and Full Disk Access shortcuts when macOS blocks access. Linux blur requires compositor support. Media preview depends on WebView codecs; other types open with the default application. Builds are not signed with commercial code-signing certificates.
 
 MIT. See [third-party notices](THIRD-PARTY.md).

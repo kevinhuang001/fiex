@@ -12,6 +12,8 @@ const e = (name: string, isDir = false): Entry => ({
   mime: 'text/plain',
   extension: 'txt',
   readonly: false,
+  linkTarget: null,
+  tags: [],
 })
 describe('file models', () => {
   it('handles roots and Windows paths', () => {

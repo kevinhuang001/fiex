@@ -1,6 +1,6 @@
 {
   "name": "fiex",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "A calm, fast file explorer for macOS, Windows and Linux.",
@@ -18,7 +18,7 @@
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "icons": "tauri icon assets/icon.svg --output src-tauri/icons"
+    "icons": "tauri icon assets/icon.png --output src-tauri/icons"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
