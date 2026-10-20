@@ -16,14 +16,20 @@ export async function startFileDrag(
     void call('finish_drag').catch(() => {})
     onResult(result)
   }
-  platform ??= call<string>('platform')
-  if ((await platform) === 'linux') {
-    const onEvent = new Channel<string>()
-    onEvent.onmessage = (result) => completed(result === 'Dropped' ? 'Dropped' : 'Cancelled')
-    await call('drag_files', { paths: exported, onEvent })
-  } else {
-    await startDrag({ item: exported, icon: DRAG_ICON, mode: 'copy' }, (event) =>
-      completed(event.result),
-    )
+  try {
+    platform ??= call<string>('platform')
+    if ((await platform) === 'linux') {
+      const onEvent = new Channel<string>()
+      onEvent.onmessage = (result) => completed(result === 'Dropped' ? 'Dropped' : 'Cancelled')
+      await call('drag_files', { paths: exported, onEvent })
+    } else {
+      await startDrag({ item: exported, icon: DRAG_ICON, mode: 'copy' }, (event) =>
+        completed(event.result),
+      )
+    }
+  } catch (error) {
+    platform = undefined
+    await call('finish_drag').catch(() => {})
+    throw error
   }
 }

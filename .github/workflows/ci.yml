@@ -327,7 +327,11 @@ jobs:
           set -euo pipefail
           python -m pip install pyautogui pillow mss
           npm install --prefix .ci/browser --no-package-lock electron@44.9.2
-          node -e "console.log('FIEX_UPLOAD_ELECTRON=' + require('./.ci/browser/node_modules/electron'))" >> "$GITHUB_ENV"
+          node <<'JS'
+          const fs = require('node:fs')
+          const electron = require('./.ci/browser/node_modules/electron')
+          fs.appendFileSync(process.env.GITHUB_ENV, `FIEX_UPLOAD_ELECTRON=${electron}\n`)
+          JS
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get update
             sudo apt-get install -y xvfb dbus-x11 openbox thunar ffmpeg python3-tk scrot

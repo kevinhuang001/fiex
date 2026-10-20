@@ -12,11 +12,10 @@ struct Session {
     window: String,
     paths: Vec<PathBuf>,
     started: Instant,
-    ended: Option<Instant>,
     moving: bool,
     originals: Vec<String>,
 }
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct DropPlan {
     pub paths: Vec<String>,
     pub moving: bool,
@@ -45,42 +44,36 @@ impl DragSessions {
             window: window.into(),
             paths: normalized(paths)?,
             started: Instant::now(),
-            ended: None,
             moving,
             originals: originals.to_vec(),
         });
         Ok(())
     }
     pub fn end(&self, window: &str) {
-        if let Some(s) = self
-            .0
-            .lock()
-            .unwrap()
-            .as_mut()
-            .filter(|s| s.window == window)
-        {
-            s.ended = Some(Instant::now());
+        let mut slot = self.0.lock().unwrap();
+        if slot.as_ref().is_some_and(|s| s.window == window) {
+            slot.take();
         }
     }
-    pub fn take_internal(&self, paths: &[String]) -> Option<DropPlan> {
+    pub fn resolve(&self, paths: &[String], consume: bool) -> Option<DropPlan> {
         let Ok(paths) = normalized(paths) else {
             return None;
         };
         let mut slot = self.0.lock().unwrap();
-        let internal = slot.as_ref().is_some_and(|s| {
-            s.paths == paths
-                && s.started.elapsed() < Duration::from_secs(600)
-                && s.ended
-                    .is_none_or(|end| end.elapsed() < Duration::from_secs(3))
-        });
-        if internal {
-            slot.take().map(|s| DropPlan {
-                paths: s.originals,
-                moving: s.moving,
-            })
-        } else {
-            None
+        let internal = slot
+            .as_ref()
+            .is_some_and(|s| s.paths == paths && s.started.elapsed() < Duration::from_secs(600));
+        if !internal {
+            return None;
         }
+        let result = slot.as_ref().map(|s| DropPlan {
+            paths: s.originals.clone(),
+            moving: s.moving,
+        });
+        if consume {
+            slot.take();
+        }
+        result
     }
 }
 #[cfg(test)]
@@ -93,14 +86,33 @@ mod tests {
         std::fs::write(&path, "a").unwrap();
         let paths = vec![path.to_string_lossy().into_owned()];
         let sessions = DragSessions::default();
-        assert!(sessions.take_internal(&paths).is_none());
+        assert!(sessions.resolve(&paths, true).is_none());
         sessions.begin("source", &paths, &paths, true).unwrap();
         sessions.end("other");
         assert!(sessions
-            .take_internal(&[t.path().to_string_lossy().into_owned()])
+            .resolve(&[t.path().to_string_lossy().into_owned()], true)
             .is_none());
+        assert!(sessions.resolve(&paths, false).unwrap().moving);
+        assert!(sessions.resolve(&paths, true).unwrap().moving);
+        assert!(sessions.resolve(&paths, true).is_none());
+    }
+    #[test]
+    fn completed_or_cancelled_drag_cannot_turn_an_external_copy_into_a_move() {
+        let t = tempfile::tempdir().unwrap();
+        let file = t.path().join("export.txt");
+        std::fs::write(&file, "data").unwrap();
+        let exported = vec![file.to_string_lossy().into_owned()];
+        let original = vec!["raw-volume/hello.txt".to_string()];
+        let sessions = DragSessions::default();
+        sessions
+            .begin("source", &original, &exported, false)
+            .unwrap();
+        let captured = sessions.resolve(&exported, false).unwrap();
+        assert_eq!(captured.paths, original);
+        assert!(!captured.moving);
         sessions.end("source");
-        assert!(sessions.take_internal(&paths).unwrap().moving);
-        assert!(sessions.take_internal(&paths).is_none());
+        assert!(sessions.resolve(&exported, true).is_none());
+        // A receiving Fiex window retains only the provenance captured on enter.
+        assert_eq!(captured.paths, original);
     }
 }

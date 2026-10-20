@@ -227,8 +227,28 @@ def arrange_file_manager(path, x, y, width, height):
     time.sleep(1)
 
 
+def configure_display():
+    if mouse.size().width < 1400:
+        if SYSTEM == 'Windows':
+            subprocess.run(['powershell.exe', '-NoProfile', '-Command', 'Set-DisplayResolution -Width 1920 -Height 1080 -Force'], check=True)
+        elif SYSTEM == 'Darwin':
+            import Quartz
+            display = Quartz.CGMainDisplayID()
+            modes = Quartz.CGDisplayCopyAllDisplayModes(display, {Quartz.kCGDisplayShowDuplicateLowResolutionModes: True})
+            choices = [mode for mode in modes if Quartz.CGDisplayModeGetWidth(mode) >= 1600 and Quartz.CGDisplayModeGetHeight(mode) >= 900]
+            if not choices:
+                raise AssertionError('No suitable CI display mode: ' + str(sorted({(Quartz.CGDisplayModeGetWidth(m), Quartz.CGDisplayModeGetHeight(m)) for m in modes})))
+            choice = min(choices, key=lambda m: abs(Quartz.CGDisplayModeGetWidth(m)-1920)+abs(Quartz.CGDisplayModeGetHeight(m)-1080))
+            if Quartz.CGDisplaySetDisplayMode(display, choice, None) != 0:
+                raise AssertionError('Cannot configure the CI display')
+        time.sleep(1)
+    print('CI display:', mouse.size(), flush=True)
+    assert mouse.size().width >= 1340 and mouse.size().height >= 700, 'CI needs room for two visible application windows'
+
+
 recorder = None
 try:
+    configure_display()
     root = Path(tempfile.mkdtemp(prefix='fiex-ci-'))
     source, target, external = root/'source', root/'window-target', root/'external-target'
     for folder in (source, target, external): folder.mkdir()

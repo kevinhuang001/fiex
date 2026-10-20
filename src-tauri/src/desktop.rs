@@ -66,14 +66,13 @@ fn finish_drag(window: tauri::Window, state: tauri::State<DragSessions>) {
     state.end(window.label());
 }
 #[tauri::command]
-async fn internal_drop(app: tauri::AppHandle, paths: Vec<String>) -> Result<DropPlan, String> {
+async fn internal_drop(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    consume: bool,
+) -> Result<Option<DropPlan>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<DragSessions>()
-            .take_internal(&paths)
-            .unwrap_or(DropPlan {
-                paths,
-                moving: false,
-            })
+        app.state::<DragSessions>().resolve(&paths, consume)
     })
     .await
     .map_err(|e| e.to_string())

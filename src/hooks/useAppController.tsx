@@ -387,19 +387,31 @@ export function useAppController() {
     if (!native) return
     let active = true
     let dispose: (() => void) | undefined
+    type DropPlan = { paths: string[]; moving: boolean }
+    let origin: { key: string; pending: Promise<DropPlan | null> } | null = null
+    const key = (paths: string[]) => [...paths].sort().join('\0')
     void getCurrentWebviewWindow()
       .onDragDropEvent((event) => {
         if (event.payload.type === 'enter') {
+          const paths = event.payload.paths
+          origin = {
+            key: key(paths),
+            pending: call<DropPlan | null>('internal_drop', { paths, consume: false }).catch(
+              () => null,
+            ),
+          }
           setDragging(true)
         } else if (event.payload.type === 'leave') {
+          origin = null
           setDragging(false)
         } else if (event.payload.type === 'drop') {
           setDragging(false)
           const { paths, position } = event.payload
+          const captured = origin?.key === key(paths) ? origin.pending : null
+          origin = null
           void (async () => {
-            const drop = await call<{ paths: string[]; moving: boolean }>('internal_drop', {
-              paths,
-            })
+            const current = await call<DropPlan | null>('internal_drop', { paths, consume: true })
+            const drop = (await captured) || current || { paths, moving: false }
             const scale = await getCurrentWindow().scaleFactor()
             const element = document.elementFromPoint(position.x / scale, position.y / scale)
             if (element?.closest('[data-bookmark-drop]')) {
