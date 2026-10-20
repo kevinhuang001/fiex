@@ -160,6 +160,8 @@ jobs:
             sudo mkdir -p /Users/Shared/fiex-smb
             printf 'hello smb\n' | sudo tee /Users/Shared/fiex-smb/hello.txt >/dev/null
             sudo chmod 777 /Users/Shared/fiex-smb
+            sudo mkdir -p /tmp/fiex-samba/private /tmp/fiex-samba/state /tmp/fiex-samba/cache /tmp/fiex-samba/lock /tmp/fiex-samba/pid
+            sudo chmod -R 777 /tmp/fiex-samba
             cat > /tmp/fiex-smb.conf <<'EOF'
           [global]
             workgroup = WORKGROUP
@@ -169,6 +171,12 @@ jobs:
             guest account = nobody
             server min protocol = SMB2
             smb ports = 10445
+            private dir = /tmp/fiex-samba/private
+            state directory = /tmp/fiex-samba/state
+            cache directory = /tmp/fiex-samba/cache
+            lock directory = /tmp/fiex-samba/lock
+            pid directory = /tmp/fiex-samba/pid
+            ncalrpc dir = /tmp/fiex-samba/private
           [fiex]
             path = /Users/Shared/fiex-smb
             browseable = yes
