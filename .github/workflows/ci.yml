@@ -87,7 +87,7 @@ jobs:
         run: |
           set -eux
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba smbclient
           python3 -m pip install --user wsgidav cheroot
           mkdir -p /tmp/fiex-dav /tmp/fiex-smb
           printf 'hello webdav\n' > /tmp/fiex-dav/hello.txt
@@ -113,7 +113,9 @@ jobs:
           EOF
           sudo systemctl stop smbd 2>/dev/null || true
           sudo smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/smbd.log 2>&1 &
-          "$HOME/.local/bin/wsgidav" --host=127.0.0.1 --port=8080 --root=/tmp/fiex-dav --auth=anonymous > /tmp/wsgidav.log 2>&1 &
+          WSGIDAV="$HOME/.local/bin/wsgidav"
+          if [ ! -x "$WSGIDAV" ]; then WSGIDAV="$(command -v wsgidav || true)"; fi
+          "$WSGIDAV" --host=127.0.0.1 --port=8080 --root=/tmp/fiex-dav --auth=anonymous > /tmp/wsgidav.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null 2>&1 && break
             sleep 1

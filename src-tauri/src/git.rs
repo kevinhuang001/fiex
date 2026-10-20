@@ -1,9 +1,5 @@
 use serde::Serialize;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{collections::HashMap, path::Path, process::Command};
 
 #[derive(Serialize)]
 pub struct GitStatus {
@@ -71,10 +67,55 @@ pub fn status(path: &str) -> Option<GitStatus> {
     })
 }
 
-pub fn repo_root(path: &str) -> Option<PathBuf> {
-    if which::which("git").is_err() {
-        return None;
+fn run(root: &str, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
     }
-    let root = output(Path::new(path), &["rev-parse", "--show-toplevel"])?;
-    dunce::canonicalize(root).ok()
+    Err(String::from_utf8_lossy(&output.stderr).trim().into())
+}
+
+fn relative_paths(root: &str, paths: &[String]) -> Result<Vec<String>, String> {
+    let base = Path::new(root);
+    paths
+        .iter()
+        .map(|path| {
+            Path::new(path)
+                .strip_prefix(base)
+                .map(|relative| relative.to_string_lossy().into_owned())
+                .map_err(|_| "路径不在 Git 仓库内".to_string())
+        })
+        .collect()
+}
+
+pub fn stage(root: &str, paths: &[String]) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let relative = relative_paths(root, paths)?;
+    let mut args = vec!["add", "--"];
+    args.extend(relative.iter().map(String::as_str));
+    run(root, &args).map(|_| ())
+}
+
+pub fn unstage(root: &str, paths: &[String]) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let relative = relative_paths(root, paths)?;
+    let mut args = vec!["restore", "--staged", "--"];
+    args.extend(relative.iter().map(String::as_str));
+    run(root, &args).map(|_| ())
+}
+
+pub fn commit(root: &str, message: &str) -> Result<(), String> {
+    if message.trim().is_empty() {
+        return Err("请输入提交信息".into());
+    }
+    run(root, &["commit", "-m", message]).map(|_| ())
 }

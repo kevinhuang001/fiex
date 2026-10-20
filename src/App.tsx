@@ -3,6 +3,7 @@ import { PreferencesDialog } from './components/PreferencesDialog'
 import { FileInfoDialog } from './components/FileInfoDialog'
 import { TagDialog } from './components/TagDialog'
 import { ConnectionDialog } from './components/ConnectionDialog'
+import { GitPanel } from './components/GitPanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -51,7 +52,7 @@ import { Menu, Choice, Label } from './components/Menus'
 import { useExplorer } from './hooks/useExplorer'
 import { usePreferences } from './hooks/usePreferences'
 import { call, native, demo } from './lib/api'
-import { basename, isArchive, join, size, uniqueName } from './lib/files'
+import { basename, isArchive, join, parent, size, uniqueName } from './lib/files'
 import { matchShortcut, shortcutLabel } from './lib/shortcuts'
 import type {
   Entry,
@@ -132,6 +133,7 @@ export default function App() {
   const [trashIssue, setTrashIssue] = useState(false)
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
+  const [gitOpen, setGitOpen] = useState(false)
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
@@ -757,6 +759,20 @@ export default function App() {
           <Button
             variant="ghost"
             size="icon"
+            className={`git-toolbar-button ${gitOpen ? 'active' : ''}`}
+            title="源代码管理"
+            aria-label="源代码管理"
+            aria-pressed={gitOpen}
+            onClick={() => setGitOpen((value) => !value)}
+          >
+            <GitBranch />
+            {x.git && Object.keys(x.git.entries).length > 0 && (
+              <span className="git-toolbar-count">{Object.keys(x.git.entries).length}</span>
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             title="在 VS Code 中打开"
             aria-label="在 VS Code 中打开"
             onClick={() => openVSCode()}
@@ -932,6 +948,13 @@ export default function App() {
             onBookmark={bookmarkPaths}
           />
         )}
+        <GitPanel
+          open={gitOpen}
+          git={x.git}
+          onClose={() => setGitOpen(false)}
+          onRefresh={x.reload}
+          onOpen={(path) => x.navigate(parent(path))}
+        />
         <footer className="statusbar">
           <span>
             {busy ? (

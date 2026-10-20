@@ -224,6 +224,9 @@ test('PDF preview renders a real document', async ({ page }) => {
 test('git status, tags and connection dialog', async ({ page }) => {
   await expect(page.locator('.git-badge.git-m')).toHaveText('M')
   await expect(page.getByText('main', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: '源代码管理' }).click()
+  await expect(page.getByRole('complementary', { name: '源代码管理' })).toContainText('Notes.md')
+  await page.getByRole('button', { name: '关闭源代码管理' }).click()
   await page.getByRole('button', { name: '添加 WebDAV 或 SMB 连接' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText('WebDAV')
