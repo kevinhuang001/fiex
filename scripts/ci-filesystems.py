@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='fiex-images-') as work:
             image = work/(name+'.dmg')
             mount = work/('mount-'+name)
             mount.mkdir()
-            run('hdiutil', 'create', '-size', '96m', '-fs', fs, '-type', 'UDRW', '-layout', 'NONE', '-volname', 'Fiex-'+name, image)
+            run('hdiutil', 'create', '-size', '96m', '-fs', fs, '-type', 'UDIF', '-layout', 'NONE', '-volname', 'Fiex-'+name, image)
             run('hdiutil', 'attach', '-nobrowse', '-mountpoint', mount, image)
             try:
                 (mount/'hello.txt').write_text('hello '+name+'\n')
