@@ -6,5 +6,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: { strictPort: true },
+  optimizeDeps: { include: ['pdfjs-dist/legacy/build/pdf.mjs'] },
   clearScreen: false,
 })

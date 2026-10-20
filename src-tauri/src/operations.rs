@@ -66,6 +66,13 @@ fn copy_tree(src: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 impl Operations {
+    pub fn record_created(&self, path: PathBuf) {
+        self.undo.lock().unwrap().push(vec![Undo::Created(path)]);
+    }
+    pub fn clear_undo(&self) {
+        self.undo.lock().unwrap().clear();
+    }
+
     pub fn create(&self, dir: &str, name: &str, folder: bool) -> Result<String, String> {
         validate_name(name)?;
         let path = Path::new(dir).join(name);
@@ -108,7 +115,7 @@ impl Operations {
         moving: bool,
         keep_both: bool,
     ) -> Result<OperationResult, String> {
-        let dest_dir = fs::canonicalize(destination).map_err(|e| e.to_string())?;
+        let dest_dir = dunce::canonicalize(destination).map_err(|e| e.to_string())?;
         if !dest_dir.is_dir() {
             return Err("目标不是文件夹".into());
         }
@@ -116,7 +123,7 @@ impl Operations {
         let mut plan = Vec::new();
         for source in sources {
             let src = PathBuf::from(source);
-            let real = fs::canonicalize(&src).map_err(|e| e.to_string())?;
+            let real = dunce::canonicalize(&src).map_err(|e| e.to_string())?;
             if dest_dir.starts_with(&real) {
                 return Err("不能把文件夹复制或移动到其自身内部".into());
             }

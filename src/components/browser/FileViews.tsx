@@ -23,6 +23,9 @@ export function FileViews(props: Props) {
   const anchor = useRef<string | null>(null)
   const container = useRef<HTMLDivElement>(null)
   const select = (e: Entry, event: React.MouseEvent) => {
+    ;(event.currentTarget.closest('[role="grid"]') as HTMLElement | null)?.focus({
+      preventScroll: true,
+    })
     if (event.shiftKey && anchor.current) {
       const a = entries.findIndex((x) => x.path === anchor.current)
       const b = entries.indexOf(e)
@@ -132,7 +135,8 @@ export function FileViews(props: Props) {
       /* Ignore unrelated browser drags. */
     }
   }
-  if (prefs.view === 'columns' && !x.query) return <Columns {...props} shared={shared} />
+  if (prefs.view === 'columns' && !x.query)
+    return <Columns {...props} shared={shared} onKeyDown={onKeyDown} />
   return (
     <div
       className="file-area"
@@ -276,7 +280,11 @@ function Columns({
   onOpen,
   onPreview,
   shared,
-}: Props & { shared: (e: Entry) => Record<string, unknown> }) {
+  onKeyDown,
+}: Props & {
+  shared: (e: Entry) => Record<string, unknown>
+  onKeyDown: (e: React.KeyboardEvent) => void
+}) {
   const [left, setLeft] = useState<Entry[]>([])
   const [right, setRight] = useState<Entry[]>([])
   const [error, setError] = useState('')
@@ -317,7 +325,7 @@ function Columns({
           {...(current
             ? shared(e)
             : {
-                onClick: () => (e.isDir ? x.navigate(e.path) : x.setSelected([e.path])),
+                onClick: () => (e.isDir ? x.navigate(e.path) : onPreview(e)),
                 onDoubleClick: () => onOpen(e),
               })}
         >
@@ -329,7 +337,7 @@ function Columns({
     </div>
   )
   return (
-    <div className="columns-view" role="grid" aria-label="文件" tabIndex={0}>
+    <div className="columns-view" role="grid" aria-label="文件" tabIndex={0} onKeyDown={onKeyDown}>
       {column(left, false)}
       {column(x.entries, true)}
       {selected?.isDir ? (

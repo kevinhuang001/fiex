@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { ExternalLink, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
@@ -6,6 +6,7 @@ import { FileIcon } from './FileIcon'
 import { call, asset, native } from '@/lib/api'
 import { date, isImage, isText, kind, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
+const PdfPreview = lazy(() => import('./PdfPreview'))
 export function Preview({
   entry,
   onClose,
@@ -95,7 +96,9 @@ export function Preview({
                 />
               </div>
             ) : entry.extension === 'pdf' && native ? (
-              <iframe title={entry.name} src={asset(entry.path)} sandbox="allow-same-origin" />
+              <Suspense fallback={<p>正在加载 PDF…</p>}>
+                <PdfPreview url={asset(entry.path)} />
+              </Suspense>
             ) : (
               <div className="preview-fallback">
                 <FileIcon entry={entry} size={120} />

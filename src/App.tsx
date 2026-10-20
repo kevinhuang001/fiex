@@ -1,3 +1,6 @@
+import { Sidebar } from './components/Sidebar'
+import { PreferencesDialog } from './components/PreferencesDialog'
+import { FileInfoDialog } from './components/FileInfoDialog'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -16,7 +19,6 @@ import {
   FolderPlus,
   Grid2X2,
   HardDrive,
-  Home,
   Image,
   Info,
   List,
@@ -26,20 +28,13 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Settings2,
   Star,
   TerminalSquare,
   Trash2,
   X,
   CheckCircle2,
-  SlidersHorizontal,
   Archive,
   ArrowRight,
-  Music,
-  Film,
-  Monitor,
-  FileText,
-  Sun,
   ExternalLink,
   ClipboardPaste,
   Scissors,
@@ -49,14 +44,13 @@ import {
 import type { ReactNode } from 'react'
 import { FileViews } from './components/browser/FileViews'
 import { Preview } from './components/Preview'
-import { FileIcon } from './components/FileIcon'
 import { Button } from './components/ui/button'
 import { Modal } from './components/ui/Modal'
 import { Menu, Choice, Action, Separator, Label } from './components/Menus'
 import { useExplorer } from './hooks/useExplorer'
 import { usePreferences } from './hooks/usePreferences'
 import { call, native, demo } from './lib/api'
-import { basename, date, isArchive, join, kind, parent, size } from './lib/files'
+import { basename, isArchive, join, size } from './lib/files'
 import type { Entry, Group, OperationResult, Sort, Terminal, View } from './lib/types'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 /> },
@@ -296,6 +290,11 @@ export default function App() {
       )
         return
       const mod = event.metaKey || event.ctrlKey
+      if (mod && event.key === ',') {
+        event.preventDefault()
+        setSettings(true)
+        return
+      }
       if (mod && event.key.toLowerCase() === 'f') {
         event.preventDefault()
         searchInput.current?.focus()
@@ -444,24 +443,6 @@ export default function App() {
         [action]()
         .catch((e) => x.setError(String(e)))
   }
-  const iconFor = (name: string) =>
-    name === '个人文件夹' ? (
-      <Home />
-    ) : name === '桌面' ? (
-      <Monitor />
-    ) : name === '下载' ? (
-      <Download />
-    ) : name === '图片' ? (
-      <Image />
-    ) : name === '音乐' ? (
-      <Music />
-    ) : name === '视频' ? (
-      <Film />
-    ) : name === '文稿' ? (
-      <FileText />
-    ) : (
-      <Folder />
-    )
   const pathParts = x.path.split(/[\\/]/).filter(Boolean)
   let accumulated = x.path.startsWith('/') ? '' : x.path.startsWith('\\') ? '\\\\' : ''
   const crumbs = pathParts.map((name) => {
@@ -474,116 +455,16 @@ export default function App() {
   })
   return (
     <div className={`app ${sidebar ? '' : 'sidebar-hidden'} ${dragging ? 'dragging' : ''}`}>
-      <aside className="sidebar">
-        <div className="sidebar-title" data-tauri-drag-region>
-          <div className="traffic">
-            <button title="关闭窗口" className="traffic-close" onClick={() => control('close')} />
-            <button
-              title="最小化"
-              className="traffic-minimize"
-              onClick={() => control('minimize')}
-            />
-            <button
-              title="最大化"
-              className="traffic-maximize"
-              onClick={() => control('toggleMaximize')}
-            />
-          </div>
-          <span data-tauri-drag-region>Fiex</span>
-        </div>
-        <div className="sidebar-content">
-          <div className="sidebar-label">常用位置</div>
-          {x.locations
-            .filter((l) => l.kind === 'favorite')
-            .map((l) => (
-              <button
-                className={`nav-item ${x.path === l.path ? 'active' : ''}`}
-                key={l.path}
-                onClick={() => x.navigate(l.path)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  try {
-                    transfer(
-                      JSON.parse(e.dataTransfer.getData('application/x-fiex')),
-                      l.path,
-                      e.shiftKey,
-                    )
-                  } catch {}
-                }}
-              >
-                {iconFor(l.name)}
-                <span>{l.name}</span>
-              </button>
-            ))}
-          <div className="sidebar-section-title">
-            <span className="sidebar-label">收藏</span>
-            <button className="icon-button" title="收藏当前文件夹" onClick={favorite}>
-              <Plus size={14} />
-            </button>
-          </div>
-          {prefs.favorites.length ? (
-            prefs.favorites.map((l) => (
-              <div className="favorite-row" key={l.path}>
-                <button
-                  className={`nav-item ${x.path === l.path ? 'active' : ''}`}
-                  onClick={() => x.navigate(l.path)}
-                >
-                  <Star />
-                  <span>{l.name}</span>
-                </button>
-                <button
-                  className="favorite-remove icon-button"
-                  title="移除收藏"
-                  onClick={() =>
-                    update({ favorites: prefs.favorites.filter((f) => f.path !== l.path) })
-                  }
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))
-          ) : (
-            <p className="sidebar-hint">将常用文件夹留在这里</p>
-          )}
-          <div className="sidebar-label devices-label">设备</div>
-          {x.locations
-            .filter((l) => l.kind === 'disk')
-            .map((l) => (
-              <button
-                className={`nav-item disk-item ${x.path === l.path ? 'active' : ''}`}
-                key={l.path}
-                onClick={() => x.navigate(l.path)}
-              >
-                <HardDrive />
-                <span>
-                  <span>{l.name || l.path}</span>
-                  <small>{size(l.available)} 可用</small>
-                  {l.total > 0 && (
-                    <i>
-                      <i style={{ width: `${(1 - l.available / l.total) * 100}%` }} />
-                    </i>
-                  )}
-                </span>
-              </button>
-            ))}
-        </div>
-        <div className="sidebar-bottom">
-          <button
-            className="nav-item"
-            onClick={() => void run('正在打开废纸篓…', () => call('open_trash'))}
-          >
-            <Trash2 />
-            <span>废纸篓</span>
-            <ExternalLink size={12} />
-          </button>
-          <button className="nav-item" onClick={() => setSettings(true)}>
-            <Settings2 />
-            <span>设置</span>
-            <small>⌘ ,</small>
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        x={x}
+        prefs={prefs}
+        update={update}
+        favorite={favorite}
+        transfer={transfer}
+        control={control}
+        onSettings={() => setSettings(true)}
+        onTrash={() => void run('正在打开废纸篓…', () => call('open_trash'))}
+      />
       <main className="main">
         <header className="toolbar" data-tauri-drag-region>
           {!sidebar && (
@@ -1070,141 +951,15 @@ export default function App() {
           </div>
         </form>
       </Modal>
-      <Modal open={!!info} onClose={() => setInfo(null)} title="显示简介">
-        {info && (
-          <div className="file-info">
-            <FileIcon entry={info} size={72} />
-            <h3>{info.name}</h3>
-            <dl>
-              {[
-                ['种类', kind(info)],
-                ['大小', info.isDir ? '文件夹' : size(info.size)],
-                ['位置', parent(info.path)],
-                ['创建时间', date(info.created)],
-                ['修改时间', date(info.modified)],
-                ['权限', info.readonly ? '只读' : '可读写'],
-                ['符号链接', info.isSymlink ? '是' : '否'],
-              ].map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k}</dt>
-                  <dd>{v}</dd>
-                </div>
-              ))}
-            </dl>
-            <Button
-              variant="secondary"
-              onClick={() => void run('正在显示…', () => call('reveal_path', { path: info.path }))}
-            >
-              在系统文件管理器中显示
-              <ExternalLink />
-            </Button>
-          </div>
-        )}
-      </Modal>
-      <Modal open={settings} onClose={() => setSettings(false)} title="设置">
-        <div className="settings">
-          <div className="setting-row">
-            <span>
-              <Sun size={17} />
-              外观
-            </span>
-            <div className="segmented">
-              {(['system', 'light', 'dark'] as const).map((t, i) => (
-                <button
-                  key={t}
-                  aria-pressed={prefs.theme === t}
-                  onClick={() => update({ theme: t })}
-                >
-                  {['跟随系统', '浅色', '深色'][i]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="setting-row">
-            <span>
-              <Eye size={17} />
-              显示隐藏文件
-            </span>
-            <button
-              role="switch"
-              aria-checked={prefs.hidden}
-              className="switch"
-              onClick={() => update({ hidden: !prefs.hidden })}
-            >
-              <i />
-            </button>
-          </div>
-          <div className="setting-row">
-            <span>
-              <SlidersHorizontal size={17} />
-              图标大小
-            </span>
-            <input
-              aria-label="图标大小"
-              type="range"
-              min="48"
-              max="136"
-              step="8"
-              value={prefs.iconSize}
-              onChange={(e) => update({ iconSize: +e.target.value })}
-            />
-          </div>
-          <div className="setting-row">
-            <span>
-              <TerminalSquare size={17} />
-              默认终端
-            </span>
-            <Menu label="默认终端" icon={<ChevronDown />}>
-              {terminals.map((t) => (
-                <Choice
-                  key={t.id}
-                  checked={prefs.terminal === t.id}
-                  onClick={() => update({ terminal: t.id })}
-                >
-                  {t.name}
-                </Choice>
-              ))}
-            </Menu>
-          </div>
-          <p className="settings-note">
-            {terminals.find((t) => t.id === prefs.terminal)?.name || '系统默认终端'}
-          </p>
-          <div className="about">
-            <img src="/fiex.svg" alt="" />
-            <strong>
-              Fiex <small>0.1.0</small>
-            </strong>
-            <span>File explorer, with room to breathe.</span>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                void call('open_path', { path: 'https://github.com/kevinhuang001/fiex' }).catch(
-                  (e) => x.setError(String(e)),
-                )
-              }
-            >
-              GitHub
-              <ExternalLink />
-            </Button>
-          </div>
-          <details className="shortcuts">
-            <summary>键盘快捷键</summary>
-            <p>
-              空格：快速查看 · 方向键：选择文件
-              <br />⌘ / Ctrl + F：查找 · ⌘ / Ctrl + L：前往文件夹
-              <br />⌘ / Ctrl + C / X / V：复制 / 剪切 / 粘贴
-              <br />⌘ / Ctrl + Z：撤销 · ⌘ / Ctrl + D：创建副本
-              <br />⌘ / Ctrl + T / W：新建 / 关闭标签页
-              <br />
-              ⇧⌘ / Ctrl + Shift + N：新建文件夹
-              <br />
-              F2：重新命名 · Delete / ⌘⌫：移到废纸篓
-              <br />
-              Alt + ← / →：前进后退 · F5：刷新
-            </p>
-          </details>
-        </div>
-      </Modal>
+      <FileInfoDialog info={info} onClose={() => setInfo(null)} onError={x.setError} />
+      <PreferencesDialog
+        open={settings}
+        onClose={() => setSettings(false)}
+        prefs={prefs}
+        update={update}
+        terminals={terminals}
+        onError={x.setError}
+      />
       {toast && (
         <div className="toast" role="status">
           <CheckCircle2 size={16} />

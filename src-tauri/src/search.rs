@@ -71,7 +71,7 @@ impl SearchState {
                                 if count.fetch_add(1, Ordering::Relaxed) < 10000 {
                                     buf.push(e);
                                 }
-                                if buf.len() >= 40 {
+                                if buf.len() >= 40 || count.load(Ordering::Relaxed) == 1 {
                                     emit(SearchBatch {
                                         entries: std::mem::take(&mut *buf),
                                         done: false,

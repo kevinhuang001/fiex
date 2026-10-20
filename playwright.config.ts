@@ -6,6 +6,12 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:1420',
     viewport: { width: 1200, height: 780 },
     trace: 'retain-on-failure',
+    launchOptions: process.env.FIEX_TEST_CHROMIUM
+      ? {
+          executablePath: process.env.FIEX_TEST_CHROMIUM,
+          args: ['--no-sandbox', '--disable-dev-shm-usage'],
+        }
+      : {},
   },
   webServer: {
     command: 'npm run dev',

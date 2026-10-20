@@ -60,7 +60,7 @@ pub struct Listing {
     pub warnings: Vec<String>,
 }
 pub fn list(path: &str, hidden: bool) -> Result<Listing, String> {
-    let path = fs::canonicalize(path).map_err(|e| e.to_string())?;
+    let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
     let mut entries = Vec::new();
     let mut warnings = Vec::new();
     for item in fs::read_dir(&path).map_err(|e| e.to_string())? {

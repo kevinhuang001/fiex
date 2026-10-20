@@ -17,7 +17,7 @@ Built-in parallel filename search uses the `ignore` engine from ripgrep. Results
 
 Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Drag between Fiex folders to copy; hold Shift to move. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
 
-Press **Space** for Quick Look. Preview images, video, audio, UTF-8 text/code and PDF where supported by the OS WebView. Applications show their native logos. **Open in Terminal** detects installed terminals and lets you choose a default.
+Press **Space** for Quick Look. Preview images, video, audio, UTF-8 text/code and PDF through the built-in PDF.js renderer. Applications show their native logos. **Open in Terminal** detects installed terminals and lets you choose a default.
 
 ZIP creation and ZIP, 7z, TAR, GZ, BZ2 and XZ extraction are built in; no command-line tools need to be installed. Extraction is staged, rejects links and unsafe paths, and has entry/size limits.
 
@@ -61,6 +61,6 @@ GitHub Actions runs UI workflows, model tests, Rust tests, formatting, Clippy an
 
 ### First-release scope
 
-Fiex is not yet a complete Finder replacement. RAR/encrypted archives, Finder tags, share mounting, permissions editing, Quick Look plugins and whole-disk indexing are not included. Cross-volume moves currently ask you to copy first; verify the copy before trashing the original. Clipboard and undo are internal to the session. Trash is opened in the system file manager for restore. Linux blur requires compositor support. Media/PDF preview depends on WebView codecs and PDF support; other types open with the default application. Builds are not signed with commercial code-signing certificates.
+Fiex is not yet a complete Finder replacement. RAR/encrypted archives, Finder tags, share mounting, permissions editing, Quick Look plugins and whole-disk indexing are not included. Cross-volume moves currently ask you to copy first; verify the copy before trashing the original. Clipboard and undo are internal to the session. Trash is opened in the system file manager for restore. Linux blur requires compositor support. Media preview depends on WebView codecs; other types open with the default application. Builds are not signed with commercial code-signing certificates.
 
 MIT. See [third-party notices](THIRD-PARTY.md).

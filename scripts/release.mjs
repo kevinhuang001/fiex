@@ -16,25 +16,36 @@ if (files.filter((p) => p.endsWith('.dmg')).length < 2)
   throw new Error('Missing macOS architecture')
 if (files.some((p) => statSync(p).size < 100000))
   throw new Error('An installer is unexpectedly small')
-const names = files.map(basename)
+const names = files.map((p) => basename(p))
 if (new Set(names).size !== names.length) throw new Error('Duplicate installer names')
 const gh = (...args) => execFileSync('gh', args, { stdio: 'inherit' })
+let existing
 try {
-  execFileSync('gh', ['release', 'view', tag], { stdio: 'ignore' })
-  console.log(`${tag} is already published; bump version for another release.`)
-} catch {
-  gh(
-    'release',
-    'create',
-    tag,
-    '--target',
-    process.env.GITHUB_SHA,
-    '--title',
-    `Fiex ${version}`,
-    '--notes-file',
-    'docs/RELEASE.md',
-    '--draft',
-    ...files,
+  existing = JSON.parse(
+    execFileSync('gh', ['release', 'view', tag, '--json', 'isDraft'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }),
   )
+} catch {
+  /* The release does not exist yet. */
+}
+if (existing && !existing.isDraft) {
+  console.log(`${tag} is already published; bump version for another release.`)
+} else {
+  if (!existing)
+    gh(
+      'release',
+      'create',
+      tag,
+      '--target',
+      process.env.GITHUB_SHA,
+      '--title',
+      `Fiex ${version}`,
+      '--notes-file',
+      'docs/RELEASE.md',
+      '--draft',
+    )
+  gh('release', 'upload', tag, '--clobber', ...files)
   gh('release', 'edit', tag, '--draft=false', '--latest')
 }

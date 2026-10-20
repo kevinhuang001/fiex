@@ -129,7 +129,7 @@ export function useExplorer(prefs: Preferences) {
       ++searchRequest.current
       void call('cancel_search').catch(() => {})
     }
-  }, [query, path, prefs.hidden, prefs.respectIgnore])
+  }, [query, path, prefs.hidden, prefs.respectIgnore, refresh])
   const back = () => {
     if (cursor > 0) {
       setCursor(cursor - 1)

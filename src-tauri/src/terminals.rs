@@ -1,8 +1,5 @@
 use serde::Serialize;
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{path::PathBuf, process::Command};
 #[derive(Serialize)]
 pub struct Terminal {
     pub id: String,
@@ -23,8 +20,8 @@ pub fn detect() -> Vec<Terminal> {
         ("Ghostty", "Ghostty"),
         ("WezTerm", "WezTerm"),
     ] {
-        if Path::new(&format!("/Applications/{id}.app")).exists()
-            || Path::new(&format!("/System/Applications/Utilities/{id}.app")).exists()
+        if std::path::Path::new(&format!("/Applications/{id}.app")).exists()
+            || std::path::Path::new(&format!("/System/Applications/Utilities/{id}.app")).exists()
             || dirs::home_dir().is_some_and(|p| p.join(format!("Applications/{id}.app")).exists())
         {
             out.push(Terminal {
@@ -70,7 +67,7 @@ pub fn detect() -> Vec<Terminal> {
     out
 }
 pub fn launch(path: &str, id: &str) -> Result<(), String> {
-    let path = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
+    let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
     let dir: PathBuf = if path.is_dir() {
         path
     } else {
@@ -167,7 +164,7 @@ pub fn reveal(path: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "linux")]
     {
-        open::that_detached(Path::new(path).parent().ok_or("没有父目录")?)
+        open::that_detached(std::path::Path::new(path).parent().ok_or("没有父目录")?)
             .map_err(|e| e.to_string())?;
     }
     Ok(())

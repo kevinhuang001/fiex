@@ -18,9 +18,8 @@ export function search(
   respectIgnore: boolean,
   onBatch: (b: Batch) => void,
 ): Promise<void> {
+  if (!native) return call<Batch>('search_files', { root, query, hidden }).then(onBatch)
   const onBatchChannel = new Channel<Batch>()
   onBatchChannel.onmessage = onBatch
-  return native
-    ? invoke('search_files', { root, query, hidden, respectIgnore, onBatch: onBatchChannel })
-    : call<Batch>('search_files', { root, query, hidden }).then(onBatch)
+  return invoke('search_files', { root, query, hidden, respectIgnore, onBatch: onBatchChannel })
 }

@@ -65,10 +65,16 @@ async fn transfer(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn recycle(paths: Vec<String>) -> Result<OperationResult, String> {
-    tauri::async_runtime::spawn_blocking(move || operations::recycle(&paths))
-        .await
-        .map_err(|e| e.to_string())?
+async fn recycle(app: tauri::AppHandle, paths: Vec<String>) -> Result<OperationResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = operations::recycle(&paths)?;
+        if !result.paths.is_empty() {
+            app.state::<Operations>().clear_undo();
+        }
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn undo(app: tauri::AppHandle) -> Result<(), String> {
@@ -99,16 +105,30 @@ fn cancel_search(state: tauri::State<'_, SearchState>) {
     state.cancel();
 }
 #[tauri::command]
-async fn extract_archive(path: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || archives::extract(&path))
-        .await
-        .map_err(|e| e.to_string())?
+async fn extract_archive(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = archives::extract(&path)?;
+        app.state::<Operations>()
+            .record_created(std::path::PathBuf::from(&result));
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn compress_archive(paths: Vec<String>, destination: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || archives::compress(&paths, &destination))
-        .await
-        .map_err(|e| e.to_string())?
+async fn compress_archive(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    destination: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = archives::compress(&paths, &destination)?;
+        app.state::<Operations>()
+            .record_created(std::path::PathBuf::from(&result));
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn detect_terminals() -> Vec<terminals::Terminal> {
@@ -218,12 +238,7 @@ pub fn run() {
                 if let Ok(hwnd) = window.hwnd() {
                     let rounded = 2_u32;
                     unsafe {
-                        DwmSetWindowAttribute(
-                            hwnd.0 as *mut c_void,
-                            33,
-                            &rounded as *const _ as *const c_void,
-                            4,
-                        );
+                        DwmSetWindowAttribute(hwnd.0, 33, &rounded as *const _ as *const c_void, 4);
                     }
                 }
             }

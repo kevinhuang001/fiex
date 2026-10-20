@@ -35,8 +35,11 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; frame-src 'self' asset: http://asset.localhost blob:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'",
-      "assetProtocol": { "enable": true, "scope": ["/**"] }
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; frame-src 'self' asset: http://asset.localhost blob:; connect-src ipc: http://ipc.localhost asset: http://asset.localhost; worker-src 'self' blob:; object-src 'none'; base-uri 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["/**"]
+      }
     }
   },
   "bundle": {
@@ -51,9 +54,15 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "macOS": { "minimumSystemVersion": "12.0", "signingIdentity": "-" },
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
+    },
     "windows": {
-      "nsis": { "displayLanguageSelector": true, "languages": ["English", "SimpChinese"] }
+      "nsis": {
+        "displayLanguageSelector": true,
+        "languages": ["English", "SimpChinese"]
+      }
     }
   }
 }

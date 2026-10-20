@@ -20,7 +20,7 @@ pub fn configure(window: &tauri::WebviewWindow) {
             msg_send![class!(NSString), stringWithUTF8String: c"drawsBackground".as_ptr()];
         let no: *mut AnyObject = msg_send![class!(NSNumber), numberWithBool: false];
         let wk_view = webview.inner() as *mut AnyObject;
-        let _: () = msg_send![wk_view, setValue: no forKey: key];
+        let _: () = msg_send![wk_view, setValue: no, forKey: key];
 
         // This is window-vibrancy's tagged NSVisualEffectView (the material used by Tauri).
         // Keep its blur behind the window and retain its full blur instead of blending sharp desktop details through it.

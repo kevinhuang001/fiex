@@ -22,7 +22,8 @@
 }
 :root {
   font-family:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Noto Sans CJK SC', sans-serif;
+    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Noto Sans CJK SC',
+    'Noto Sans SC', sans-serif;
   font-size: 13px;
   color: var(--text);
   --text: #304252;
@@ -1350,4 +1351,35 @@ button[data-slot='button'][data-variant='default'] {
     animation-duration: 0.01ms !important;
     transition: none !important;
   }
+}
+
+.pdf-preview {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  background: var(--hover);
+  position: relative;
+  text-align: center;
+  padding: 0 0 22px;
+}
+.pdf-controls {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--surface);
+  z-index: 1;
+  border-bottom: 1px solid var(--line);
+  padding: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.pdf-preview canvas {
+  display: block;
+  margin: 0 auto;
+  box-shadow: 0 2px 12px #0002;
+  background: white;
 }

@@ -229,4 +229,30 @@ mod tests {
             assert!(safe_name(Path::new(name)).is_err());
         }
     }
+    #[test]
+    fn malicious_zip_is_rejected_without_writing_outside() {
+        let t = tempfile::tempdir().unwrap();
+        let archive = t.path().join("malicious.zip");
+        let mut zip = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+        zip.start_file("../escaped.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"do not extract").unwrap();
+        zip.finish().unwrap();
+        assert!(extract(archive.to_str().unwrap()).is_err());
+        assert!(!t.path().join("escaped.txt").exists());
+        assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
+    }
+    #[test]
+    fn sevenz_roundtrip() {
+        let t = tempfile::tempdir().unwrap();
+        let src = t.path().join("hello.txt");
+        fs::write(&src, "hello 7z").unwrap();
+        let archive = t.path().join("test.7z");
+        sevenz_rust2::compress_to_path(&src, &archive).unwrap();
+        let out = extract(archive.to_str().unwrap()).unwrap();
+        assert_eq!(
+            fs::read_to_string(Path::new(&out).join("hello.txt")).unwrap(),
+            "hello 7z"
+        );
+    }
 }

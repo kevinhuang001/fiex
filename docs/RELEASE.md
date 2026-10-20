@@ -5,7 +5,7 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 - Parallel, cancellable filename search powered by ripgrep's `ignore` library.
 - Tabs, favorites, mounted volumes, breadcrumbs and directory watching.
 - Copy, cut, paste, duplicate, rename, create, Trash and session undo.
-- Space to preview images, audio, video, UTF-8 text/code and PDF (system WebView support applies).
+- Space to preview images, audio, video, UTF-8 text/code and PDF with built-in PDF.js rendering.
 - Native file and application icons, including application logos.
 - Built-in ZIP creation and ZIP/7z/TAR/GZ/BZ2/XZ extraction.
 - Detected terminal picker and a configurable default terminal.
