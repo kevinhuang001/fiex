@@ -33,6 +33,8 @@ interface Props {
   onEject: (path: string) => void
   trashPath: string | null
 }
+const DISK_COLORS = ['#5b9cf8', '#55b98a', '#e0a44a', '#b47ad6', '#e06c75', '#56b6c9']
+
 export function Sidebar({
   x,
   prefs,
@@ -153,7 +155,7 @@ export function Sidebar({
         </div>
         {x.locations
           .filter((l) => l.kind === 'disk')
-          .map((l) => (
+          .map((l, index) => (
             <div className="device-row" key={l.path}>
               <button
                 className={`nav-item disk-item ${x.path === l.path ? 'active' : ''}`}
@@ -162,10 +164,20 @@ export function Sidebar({
                 <HardDrive />
                 <span>
                   <span>{l.name || l.path}</span>
-                  <small>{size(l.available)} 可用</small>
+                  <small
+                    className="disk-capacity"
+                    title={`可用 ${size(l.available)} / 总计 ${size(l.total)}`}
+                  >
+                    {l.total > 0 ? `${size(l.available)} / ${size(l.total)}` : size(l.available)}
+                  </small>
                   {l.total > 0 && (
-                    <i>
-                      <i style={{ width: `${(1 - l.available / l.total) * 100}%` }} />
+                    <i className="disk-meter">
+                      <i
+                        style={{
+                          width: `${(1 - l.available / l.total) * 100}%`,
+                          background: DISK_COLORS[index % DISK_COLORS.length],
+                        }}
+                      />
                     </i>
                   )}
                 </span>

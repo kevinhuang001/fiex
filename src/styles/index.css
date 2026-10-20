@@ -273,6 +273,13 @@ button[data-slot='button'][data-variant='default'] {
 .disk-item > svg {
   margin-top: 2px;
 }
+.disk-item .disk-capacity {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+.disk-meter > i {
+  border-radius: 3px;
+}
 .disk-item small {
   display: block;
   margin: 5px 0 7px;

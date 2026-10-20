@@ -18,13 +18,14 @@ required-features = ["desktop"]
 
 [features]
 default = ["desktop"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:objc2", "dep:file_icon_provider", "dep:image"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:objc2", "dep:file_icon_provider", "dep:image", "dep:tauri-plugin-drag"]
 
 [build-dependencies]
 tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api"], optional = true }
+tauri-plugin-drag = { version = "2.1.1", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"

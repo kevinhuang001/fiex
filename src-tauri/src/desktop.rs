@@ -281,6 +281,7 @@ fn native_icon(path: String, size: Option<u16>) -> Result<String, String> {
 }
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_drag::init())
         .manage(Operations::default())
         .manage(SearchState::default())
         .manage(Mutex::new(None::<notify::RecommendedWatcher>))

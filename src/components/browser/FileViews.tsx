@@ -4,7 +4,9 @@ import { ChevronRight, Files, FolderOpen, SearchX } from 'lucide-react'
 import { FileIcon } from '../FileIcon'
 import { InlineRename } from './InlineRename'
 import { TagDots } from '../TagDots'
-import { asset, call } from '@/lib/api'
+import { asset, call, native } from '@/lib/api'
+import { DRAG_ICON } from '@/lib/drag'
+import { startDrag } from '@crabnebula/tauri-plugin-drag'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type { Entry, Listing, Preferences } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
@@ -90,11 +92,41 @@ export function FileViews(props: Props) {
     const startX = event.clientX
     const startY = event.clientY
     let active = false
+    let nativeStarted = false
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      document.removeEventListener('mouseleave', leave)
+      document.body.classList.remove('dragging-file')
+      clearDropHighlight()
+      setGhost(null)
+    }
+    const startNative = () => {
+      if (!active || nativeStarted) return
+      nativeStarted = true
+      cleanup()
+      if (!native) return
+      void startDrag({ item: paths, icon: DRAG_ICON, mode: 'copy' }).catch((error) => {
+        x.setError(String(error))
+      })
+    }
+    const leave = () => startNative()
     const move = (moveEvent: PointerEvent) => {
       if (!active) {
         if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
         active = true
         document.body.classList.add('dragging-file')
+      }
+      if (
+        native &&
+        (moveEvent.clientX <= 1 ||
+          moveEvent.clientY <= 1 ||
+          moveEvent.clientX >= window.innerWidth - 1 ||
+          moveEvent.clientY >= window.innerHeight - 1)
+      ) {
+        startNative()
+        return
       }
       moveEvent.preventDefault()
       setGhost({ paths, x: moveEvent.clientX, y: moveEvent.clientY })
@@ -104,13 +136,8 @@ export function FileViews(props: Props) {
       else if (target?.kind === 'bookmark') target.element.classList.add('bookmark-drop')
     }
     const finish = (upEvent: PointerEvent) => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', finish)
-      window.removeEventListener('pointercancel', finish)
-      document.body.classList.remove('dragging-file')
-      clearDropHighlight()
-      setGhost(null)
-      if (!active) return
+      cleanup()
+      if (!active || nativeStarted) return
       suppressClick.current = true
       setTimeout(() => {
         suppressClick.current = false
@@ -123,6 +150,7 @@ export function FileViews(props: Props) {
     window.addEventListener('pointermove', move, { passive: false })
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
+    document.addEventListener('mouseleave', leave)
   }
   const select = (e: Entry, event: React.MouseEvent) => {
     if (suppressClick.current) {

@@ -5,7 +5,7 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 - Frosted sidebar inspired by Pantodo, with light and dark appearances.
 - System Settings-style preferences with a searchable sidebar and grouped cards.
 - macOS Finder tags with color dots in every view, preset colors, custom tag names, and a Finder-style sidebar tag list.
-- Move files and folders by dragging; hold Option/Alt or Ctrl to copy. Drop folders on Favorites to bookmark them.
+- Move files and folders by dragging; hold Option/Alt or Ctrl to copy. Drop folders on Favorites to bookmark them, and drag files out of Fiex to Finder/Explorer/the desktop.
 - Open the selected file or folder in VS Code from the toolbar or context menu.
 - Tabby is detected alongside Terminal, iTerm2, Warp, Alacritty, kitty, Ghostty and WezTerm.
 - The whole address bar opens an inline path field with all text selected; no separate copy button is needed.
@@ -22,7 +22,7 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 - Editable keyboard shortcuts with macOS, Windows and Linux presets, per-action recording and conflict handling.
 - Persistent Tantivy search index under `~/.fiex/index`, built in the background per folder and kept fresh with a recursive watcher; queries use display-ignore rules and never descend into app bundles.
 - Tabs, favorites, mounted volumes, breadcrumbs and directory watching.
-- Copy, cut, paste, duplicate, create, Trash and session undo.
+- Copy, cut, paste, duplicate, create, Trash and session undo; the Trash shortcut deletes without a confirmation dialog.
 - Space to preview images, audio, video, UTF-8 text/code and PDF with built-in PDF.js rendering.
 - ZIP/7Z/TAR/TAR.GZ/TAR.BZ2/TAR.XZ creation from a context-menu submenu, with editable compression ignore rules; extraction covers ZIP/7z/TAR/GZ/BZ2/XZ.
 - Detected terminal picker and a configurable default terminal.

@@ -315,19 +315,24 @@ export default function App() {
   }
   const hint = (action: Parameters<typeof shortcutLabel>[1]) =>
     shortcutLabel(prefs.shortcuts, action, prefs.shortcutStyle)
-  const recycle = () => {
+  const moveToTrash = async (paths: string[]) => {
+    handleResult(await call<OperationResult>('recycle', { paths }))
+    x.setSelected([])
+    x.reload()
+  }
+  const recycle = (confirm = true) => {
     if (!x.selected.length) return
     const paths = [...x.selected]
+    if (!confirm) {
+      void run('正在移到废纸篓…', () => moveToTrash(paths))
+      return
+    }
     setDialog({
       title: `将 ${paths.length} 个项目移到废纸篓？`,
       description: '项目将移入系统废纸篓，可在系统文件管理器中恢复。',
       submit: '移到废纸篓',
       danger: true,
-      action: async () => {
-        handleResult(await call<OperationResult>('recycle', { paths }))
-        x.setSelected([])
-        x.reload()
-      },
+      action: () => moveToTrash(paths),
     })
   }
   const transfer = (paths: string[], destination: string, moving: boolean) => {
@@ -573,7 +578,7 @@ export default function App() {
           if (first) open(first)
           break
         case 'trash':
-          recycle()
+          recycle(false)
           break
         case 'refresh':
           x.reload()

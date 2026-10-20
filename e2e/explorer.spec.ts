@@ -52,7 +52,6 @@ test('create, rename, recycle and terminal selection', async ({ page }) => {
   await expect(page.getByText('Renamed folder', { exact: true })).toBeVisible()
   await page.getByText('Renamed folder', { exact: true }).click()
   await page.keyboard.press('Delete')
-  await page.getByRole('button', { name: '移到废纸篓', exact: true }).click()
   await expect(page.getByText('Renamed folder', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '选择终端', exact: true }).click()
   await expect(page.getByRole('menuitem', { name: 'iTerm2' })).toBeVisible()
