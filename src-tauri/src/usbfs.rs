@@ -659,7 +659,7 @@ pub fn ensure_access(route: &Route) -> Result<(), String> {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = route;
-        return Err("当前系统需要通过管理员权限访问原始设备".into());
+        Err("当前系统需要通过管理员权限访问原始设备".into())
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
