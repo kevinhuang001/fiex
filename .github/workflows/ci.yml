@@ -88,6 +88,8 @@ jobs:
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib
       - name: Clippy
         shell: bash
+        env:
+          CARGO_TERM_COLOR: never
         run: |
           set +e
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} -- -D warnings 2>&1 | tee clippy.log
@@ -99,7 +101,9 @@ jobs:
               sed -n '1,220p' clippy.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            grep -E -A6 '^(error|warning)' clippy.log | while IFS= read -r line; do
+            echo "::error title=CLIPPY-LINES::$(wc -l < clippy.log) lines"
+            base64 < clippy.log | tr -d '\n' | head -c 30000 | sed 's/^/::error title=CLIPPY-B64::/'
+            grep -a -E -A6 'error(\[|:)|warning:' clippy.log | while IFS= read -r line; do
               [ -n "$line" ] && echo "::error title=CLIPPY-DIAG::$line"
             done
           fi
