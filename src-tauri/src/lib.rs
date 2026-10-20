@@ -10,5 +10,7 @@ pub mod operations;
 pub mod remote;
 pub mod search;
 pub mod terminals;
+#[cfg(feature = "usbfs")]
+pub mod usbfs;
 #[cfg(feature = "desktop")]
 pub use desktop::run;
