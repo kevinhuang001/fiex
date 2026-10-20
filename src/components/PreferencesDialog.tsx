@@ -1,13 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AppWindow,
   ArrowDown,
   ArrowUp,
   Check,
+  Download,
   ExternalLink,
   Eye,
+  FileText,
+  Film,
+  Folder,
   Filter,
+  Home,
+  Image,
   Info,
   Keyboard,
+  Monitor,
+  Music,
   Palette,
   PanelLeft,
   Plus,
@@ -164,6 +173,18 @@ function IgnoreEditor({
       </div>
     </div>
   )
+}
+
+function placeIcon(name: string) {
+  if (name === '个人文件夹') return <Home size={14} />
+  if (name === '桌面') return <Monitor size={14} />
+  if (name === '下载') return <Download size={14} />
+  if (name === '图片') return <Image size={14} />
+  if (name === '音乐') return <Music size={14} />
+  if (name === '视频') return <Film size={14} />
+  if (name === '文稿') return <FileText size={14} />
+  if (name === '应用程序') return <AppWindow size={14} />
+  return <Folder size={14} />
 }
 
 const SIDEBAR_LABELS: Record<SidebarSection, string> = {
@@ -586,6 +607,7 @@ export function PreferencesDialog({
                           })
                         }
                       >
+                        <span className="settings-choice-icon">{placeIcon(location.name)}</span>
                         <span>{location.name}</span>
                         {hidden ? <Eye size={14} /> : <Check size={15} />}
                       </button>

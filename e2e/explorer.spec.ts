@@ -235,3 +235,13 @@ test('git status, tags and connection dialog', async ({ page }) => {
   await page.getByRole('menuitem', { name: '压缩为…' }).hover()
   await expect(page.getByRole('menuitem', { name: 'TAR.GZ' })).toBeVisible()
 })
+
+test('multi-select and select all', async ({ page }) => {
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click()
+  await page
+    .locator('[data-path="/Users/kevin/Documents/Meeting.txt"]')
+    .click({ modifiers: ['Control'] })
+  await expect(page.locator('.statusbar')).toContainText('已选择 2 项')
+  await page.keyboard.press('Control+a')
+  await expect(page.locator('.statusbar')).toContainText('已选择 10 项')
+})

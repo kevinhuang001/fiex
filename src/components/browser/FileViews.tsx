@@ -88,7 +88,9 @@ export function FileViews(props: Props) {
     if (event.button !== 0 || x.renaming) return
     if ((event.target as Element).closest('input,button,a')) return
     const paths = x.selected.includes(entry.path) ? [...x.selected] : [entry.path]
-    if (!x.selected.includes(entry.path)) x.setSelected([entry.path])
+    if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !x.selected.includes(entry.path)) {
+      x.setSelected([entry.path])
+    }
     const startX = event.clientX
     const startY = event.clientY
     let active = false
@@ -218,6 +220,11 @@ export function FileViews(props: Props) {
     return () => cancelAnimationFrame(frame)
   }, [x.renaming, flat, prefs.view, virtual])
   const onKeyDown = (event: React.KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+      event.preventDefault()
+      x.setSelected(entries.map((entry) => entry.path))
+      return
+    }
     if (x.renaming || event.metaKey || event.ctrlKey || event.altKey) return
     if (
       !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) ||
