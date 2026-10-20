@@ -599,8 +599,26 @@ pub fn mount_device(device: &str) -> Result<String, String> {
             .nth(1)
             .map(|value| value.trim().to_string())
     };
+    let filesystem = std::process::Command::new("lsblk")
+        .args(["-no", "FSTYPE", device])
+        .output()
+        .ok()
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .to_lowercase()
+        })
+        .unwrap_or_default();
+    let writable = matches!(
+        filesystem.as_str(),
+        "ext2" | "ext3" | "ext4" | "ntfs" | "ntfs3"
+    );
+    let mut args = vec!["mount", "-b", device];
+    if !writable {
+        args.extend(["-o", "ro"]);
+    }
     let output = std::process::Command::new("udisksctl")
-        .args(["mount", "-b", device, "-o", "ro"])
+        .args(&args)
         .output()
         .map_err(|error| error.to_string())?;
     if output.status.success() {
@@ -608,8 +626,10 @@ pub fn mount_device(device: &str) -> Result<String, String> {
             return Ok(path);
         }
     }
+    let mut pkexec_args = vec!["udisksctl"];
+    pkexec_args.extend(args);
     let output = std::process::Command::new("pkexec")
-        .args(["udisksctl", "mount", "-b", device, "-o", "ro"])
+        .args(&pkexec_args)
         .output()
         .map_err(|error| error.to_string())?;
     if output.status.success() {
