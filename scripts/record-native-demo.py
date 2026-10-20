@@ -12,6 +12,9 @@ import time
 
 out = Path('artifacts/native').resolve()
 out.mkdir(parents=True, exist_ok=True)
+(out / 'verified-results.json').unlink(missing_ok=True)
+if not os.environ.get('FIEX_UPLOAD_ELECTRON'):
+    raise SystemExit('Set FIEX_UPLOAD_ELECTRON to an Electron executable for browser upload verification.')
 base = Path(tempfile.mkdtemp(prefix='fiex-native-'))
 source, target = base / 'source', base / 'other-app'
 source.mkdir(); target.mkdir()
@@ -131,6 +134,7 @@ try:
     key('Tab', 'Tab', 'Return')
     wait_for(lambda: (source/'MOVE_TARGET'/'MOVE_INSIDE.txt').is_file())
     assert not (source/'MOVE_INSIDE.txt').exists()
+    print('Verified folder move', flush=True)
     inside = text_points('MOVE_TARGET')[0]
     command('xdotool', 'mousemove', *inside, 'click', '--repeat', 2, '--delay', 100, '1')
     wait_for(lambda: text_points('MOVE_INSIDE'))
@@ -145,6 +149,7 @@ try:
     wait_for(lambda: text_points('MOVE_TARGET', max_x=220))
     assert (source/'MOVE_TARGET').is_dir()
     screenshot('favorite.png')
+    print('Verified favorite', flush=True)
     time.sleep(2)
     processes.append(subprocess.Popen(['thunar', str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     thunar = wait_for(lambda: window('other-app'))
@@ -152,9 +157,15 @@ try:
     command('xdotool', 'windowsize', thunar, 500, 850)
     command('xdotool', 'windowactivate', '--sync', fiex)
     time.sleep(1)
+    outside_positions = []
     def drag_outside():
-        start = text_points('MOVE_OUTSIDE')[0]
-        command('xdotool', 'mousemove', *start, 'mousedown', '1')
+        if not outside_positions:
+            outside_positions.append(wait_for(lambda: (points := text_points('MOVE_OUTSIDE')) and points[0]))
+        start = outside_positions[0]
+        command('xdotool', 'mousemove', *start)
+        command('xdotool', 'mouseup', '1', 'click', '1')
+        time.sleep(.5)
+        command('xdotool', 'mousedown', '1')
         for x in range(start[0], 1199, 15):
             command('xdotool', 'mousemove', x, start[1]); time.sleep(.025)
         command('xdotool', 'mousemove', 1199, start[1]); time.sleep(1.2)
@@ -170,6 +181,7 @@ try:
     (out/'verified-results.json').write_text(json.dumps(result, indent=2))
     assert result['external_source_preserved'], 'External drag must preserve the source file'
     screenshot('external-drop.png')
+    print('Verified external copy with source preserved', flush=True)
     time.sleep(2)
     processes.append(subprocess.Popen(['python3', str(Path(__file__).with_name('upload-target.py')), str(target/'browser-uploaded.txt')], env=app_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     browser = wait_for(lambda: window('Browser Upload'))
@@ -180,9 +192,12 @@ try:
     drag_outside()
     wait_for(lambda: (target/'browser-uploaded.txt').is_file())
     assert (target/'browser-uploaded.txt').read_bytes() == (source/'MOVE_OUTSIDE.txt').read_bytes()
+    assert json.loads((target/'browser-uploaded.json').read_text())['name'] == 'MOVE_OUTSIDE.txt'
+    wait_for(lambda: text_points('Upload complete', max_x=1700))
     result['browser_upload_received'] = True
     (out/'verified-results.json').write_text(json.dumps(result, indent=2))
     screenshot('browser-upload.png')
+    print('Verified Chromium upload', flush=True)
 
     time.sleep(4)
 finally:

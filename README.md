@@ -66,6 +66,8 @@ npm run desktop:build
 
 `npm run dev` with `/?demo` runs an isolated UI fixture for browser testing. The desktop app always uses the real Rust filesystem backend.
 
+Local recording: `npm run demo:record` captures the UI fixture. For real file moves, external copies and Chromium uploads on Linux, run `scripts/record-native-demo.py <fiex-binary>` under a 1700×950 X11 display with `FIEX_UPLOAD_ELECTRON` pointing to an Electron executable. The recorder needs Openbox, xdotool, Thunar, FFmpeg, ImageMagick and Tesseract (English + simplified Chinese). It verifies received bytes and preserved source files. Recordings are made in the workspace, outside CI.
+
 Modules: `src/components/browser` (views), `src/hooks` (navigation/preferences), `src/lib` (models/IPC), `src-tauri/src/files.rs` (listing/metadata), `operations.rs` (mutations/undo), `search.rs` (Tantivy index/search), `archives.rs` (archives), `remote.rs` (WebDAV/SMB virtual drives), `ignores.rs` (ignore matching), `git.rs` (status, initialization, staging and commits), `terminals.rs` (OS integration), `desktop.rs` (Tauri commands).
 
 Native codecs and network clients are bundled: liblzma is compiled statically, WebDAV uses rustls instead of system OpenSSL, and SMB is implemented by the pure-Rust `smb` crate. The release pipeline runs `npm run audit:native` to reject any app binary that still points at `/opt/homebrew`, `/usr/local` or a build-machine path. Credentials for remote connections are stored in `~/.fiex/connections.json` with owner-only permissions.
