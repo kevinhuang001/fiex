@@ -129,7 +129,22 @@ jobs:
       - run: npm run icons
       - run: npm run build
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
-      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib
+      - name: Core Rust tests
+        shell: bash
+        run: |
+          set +e
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib 2>&1 | tee core-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Core test failure'
+              echo '```'
+              tail -120 core-test.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            tail -40 core-test.log | sed 's/^/::error title=RUSTTEST::/'
+          fi
+          exit "$status"
       - name: Driver, WebDAV and SMB tests
         shell: bash
         env:
@@ -138,7 +153,20 @@ jobs:
           FIEX_SMB_SHARE: fiex
           FIEX_SMB_USER: fiex
           FIEX_SMB_PASSWORD: fiex
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --nocapture
+        run: |
+          set +e
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- --nocapture 2>&1 | tee integration-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Driver/remote test failure'
+              echo '```'
+              tail -160 integration-test.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            tail -50 integration-test.log | sed 's/^/::error title=RUSTTEST::/'
+          fi
+          exit "$status"
       - name: Clippy
         shell: bash
         env:
