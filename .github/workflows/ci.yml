@@ -88,21 +88,22 @@ jobs:
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib
       - name: Clippy
         shell: bash
-        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} -- -D warnings 2>&1 | tee clippy.log
-      - name: Report Clippy failure
-        if: failure()
-        shell: bash
         run: |
-          [ -f clippy.log ] || exit 0
-          {
-            echo '### Clippy failure'
-            echo '```'
-            grep -E -A8 '^(error|warning)' clippy.log | head -160 || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          grep -E -A8 '^(error|warning)' clippy.log | head -160 | while IFS= read -r line; do
-            [ -n "$line" ] && echo "::error title=Clippy::$line"
-          done
+          set +e
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} -- -D warnings 2>&1 | tee clippy.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            {
+              echo '### Clippy failure'
+              echo '```'
+              sed -n '1,220p' clippy.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            grep -E -A6 '^(error|warning)' clippy.log | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=CLIPPY-DIAG::$line"
+            done
+          fi
+          exit "$status"
       - uses: tauri-apps/tauri-action@v0
         with:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
