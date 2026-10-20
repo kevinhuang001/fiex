@@ -5,7 +5,7 @@
 
 use notify::Watcher;
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FsKind {
@@ -807,6 +807,94 @@ fn copy_one(directory: &Route, source: &Path, name: &str) -> Result<(bool, Strin
     ))
 }
 
+fn local_unique(path: &Path) -> PathBuf {
+    if !path.exists() {
+        return path.to_path_buf();
+    }
+    let stem = path
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "item".into());
+    let ext = path
+        .extension()
+        .map(|value| format!(".{}", value.to_string_lossy()))
+        .unwrap_or_default();
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    for index in 2.. {
+        let candidate = parent.join(format!("{stem} ({index}){ext}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
+fn copy_route(source: &Route, target: &Path) -> Result<(), String> {
+    let route_parent = source
+        .rel
+        .rsplit_once('/')
+        .map(|(parent, _)| parent)
+        .unwrap_or("");
+    let name = source
+        .rel
+        .rsplit_once('/')
+        .map(|(_, name)| name)
+        .unwrap_or(source.rel.as_str());
+    let entries = list(&source.driver_device, source.kind, route_parent)?;
+    if let Some(entry) = entries.into_iter().find(|entry| entry.name == name) {
+        if entry.is_dir {
+            std::fs::create_dir_all(target).map_err(|error| error.to_string())?;
+            for child in list(&source.driver_device, source.kind, &source.rel)? {
+                let child_route = Route {
+                    rel: join_rel(&source.rel, &child.name),
+                    ..source.clone()
+                };
+                copy_route(&child_route, &target.join(child.name))?;
+            }
+        } else {
+            let data = read(&source.driver_device, source.kind, &source.rel)?;
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            std::fs::write(target, data).map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    } else {
+        Err("文件不存在".into())
+    }
+}
+
+pub fn copy_to_local(
+    source: &Route,
+    destination: &Path,
+    keep_both: bool,
+    moving: bool,
+) -> Result<String, String> {
+    ensure_access(source)?;
+    let name = source
+        .rel
+        .rsplit_once('/')
+        .map(|(_, name)| name)
+        .unwrap_or(source.rel.as_str());
+    if name.is_empty() {
+        return Err("不能复制整个虚拟卷根目录".into());
+    }
+    let target = if keep_both {
+        local_unique(&destination.join(name))
+    } else {
+        let target = destination.join(name);
+        if target.exists() {
+            return Err("目标位置已有同名项目".into());
+        }
+        target
+    };
+    copy_route(source, &target)?;
+    if moving {
+        remove(source)?;
+    }
+    Ok(target.to_string_lossy().into_owned())
+}
+
 fn watchers() -> &'static std::sync::Mutex<Vec<notify::RecommendedWatcher>> {
     static WATCHERS: std::sync::OnceLock<std::sync::Mutex<Vec<notify::RecommendedWatcher>>> =
         std::sync::OnceLock::new();
@@ -834,17 +922,26 @@ pub fn open_cached(route: &Route) -> Result<String, String> {
     let watched_file = cache.clone();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
         let Ok(event) = event else { return };
-        if !matches!(event.kind, notify::EventKind::Modify(_)) {
+        if !matches!(
+            event.kind,
+            notify::EventKind::Modify(_) | notify::EventKind::Create(_)
+        ) {
             return;
         }
+        if !event.paths.iter().any(|path| path == &watched_file) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(220));
         if let Ok(data) = std::fs::read(&watched_file) {
             let _ = write_path(&watched, &data);
         }
     })
     .map_err(|error| error.to_string())?;
-    watcher
-        .watch(&cache, notify::RecursiveMode::NonRecursive)
-        .map_err(|error| error.to_string())?;
+    if let Some(parent) = cache.parent() {
+        watcher
+            .watch(parent, notify::RecursiveMode::NonRecursive)
+            .map_err(|error| error.to_string())?;
+    }
     watchers().lock().unwrap().push(watcher);
     Ok(cache.to_string_lossy().into_owned())
 }

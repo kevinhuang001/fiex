@@ -177,6 +177,46 @@ async fn transfer(
         .await
         .map_err(|e| e.to_string())?;
     }
+    if paths.iter().any(|path| crate::usbfs::route(path).is_some()) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let mut result = OperationResult {
+                paths: vec![],
+                errors: vec![],
+                skipped: 0,
+            };
+            for source in &paths {
+                if let Some(route) = crate::usbfs::route(source) {
+                    match crate::usbfs::copy_to_local(
+                        &route,
+                        std::path::Path::new(&destination),
+                        keep_both,
+                        moving,
+                    ) {
+                        Ok(path) => result.paths.push(path),
+                        Err(error) => result.errors.push(format!("{source}: {error}")),
+                    }
+                } else {
+                    match app.state::<Operations>().transfer(
+                        std::slice::from_ref(source),
+                        &destination,
+                        moving,
+                        keep_both,
+                        &ignores,
+                    ) {
+                        Ok(mut single) => {
+                            result.paths.append(&mut single.paths);
+                            result.errors.append(&mut single.errors);
+                            result.skipped += single.skipped;
+                        }
+                        Err(error) => result.errors.push(format!("{source}: {error}")),
+                    }
+                }
+            }
+            Ok(result)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<Operations>()
             .transfer(&paths, &destination, moving, keep_both, &ignores)
