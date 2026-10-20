@@ -1,0 +1,10 @@
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+src-tauri/icons
+package-lock.json
+Cargo.lock
+artifacts
+playwright-report
+test-results

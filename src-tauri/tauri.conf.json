@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Fiex",
+  "version": "0.1.0",
+  "identifier": "io.github.kevinhuang001.fiex",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Fiex",
+        "width": 1200,
+        "height": 780,
+        "minWidth": 820,
+        "minHeight": 540,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "shadow": true,
+        "noRedirectionBitmap": true,
+        "dragDropEnabled": true,
+        "windowEffects": {
+          "effects": ["sidebar", "acrylic"],
+          "state": "active",
+          "radius": 16,
+          "color": [235, 240, 248, 75]
+        }
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; frame-src 'self' asset: http://asset.localhost blob:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'",
+      "assetProtocol": { "enable": true, "scope": ["/**"] }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "A calm, fast file explorer",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": { "minimumSystemVersion": "12.0", "signingIdentity": "-" },
+    "windows": {
+      "nsis": { "displayLanguageSelector": true, "languages": ["English", "SimpChinese"] }
+    }
+  }
+}

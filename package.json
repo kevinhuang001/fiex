@@ -1,0 +1,47 @@
+{
+  "name": "fiex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A calm, fast file explorer for macOS, Windows and Linux.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "icons": "tauri icon assets/icon.svg --output src-tauri/icons"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@tauri-apps/api": "^2.9.0",
+    "@tanstack/react-virtual": "^3.13.12",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "@tailwindcss/vite": "^4.1.14",
+    "@tauri-apps/cli": "^2.9.0",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.12",
+    "vitest": "^3.2.4"
+  }
+}

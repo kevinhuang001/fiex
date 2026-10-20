@@ -1,0 +1,54 @@
+[package]
+name = "fiex"
+version = "0.1.0"
+description = "A calm, fast file explorer"
+authors = ["Kevin Huang"]
+edition = "2021"
+rust-version = "1.90"
+license = "MIT"
+
+[lib]
+name = "fiex_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "fiex"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[features]
+default = ["desktop"]
+desktop = ["dep:tauri", "dep:tauri-build", "dep:objc2", "dep:file_icon_provider", "dep:image"]
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true }
+
+[dependencies]
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api"], optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "6"
+ignore = "0.4"
+notify = "8"
+trash = "5"
+open = "5"
+which = "8"
+base64 = "0.22"
+mime_guess = "2"
+zip = { version = "4", default-features = false, features = ["deflate", "bzip2", "zstd", "aes-crypto"] }
+tar = "0.4"
+flate2 = "1"
+bzip2 = "0.6"
+xz2 = "0.1"
+sevenz-rust2 = "0.20"
+tempfile = "3"
+sysinfo = { version = "0.37", default-features = false, features = ["disk"] }
+file_icon_provider = { version = "1", optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", optional = true }
+
+[profile.release]
+strip = true
+opt-level = 2
