@@ -19,7 +19,7 @@ required-features = ["desktop"]
 [features]
 default = ["desktop", "usbfs"]
 desktop = ["dep:tauri", "dep:tauri-build", "dep:objc2", "dep:file_icon_provider", "dep:image", "dep:tauri-plugin-drag"]
-usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4"]
+usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]
 
 [build-dependencies]
 tauri-build = { version = "2", optional = true , features = [] }
@@ -29,6 +29,9 @@ tauri = { version = "2", features = ["protocol-asset", "macos-private-api"], opt
 tauri-plugin-drag = { version = "2.1.1", optional = true }
 rust-fs-ntfs = { version = "0.10", optional = true }
 rust-fs-ext4 = { version = "0.8", optional = true }
+rust-fs-btrfs = { version = "0.10", optional = true }
+apfs = { version = "0.4", optional = true }
+hfsplus = { version = "0.4", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"

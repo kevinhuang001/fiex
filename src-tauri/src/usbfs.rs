@@ -11,6 +11,9 @@ use std::path::Path;
 pub enum FsKind {
     Ntfs,
     Ext4,
+    Apfs,
+    Hfs,
+    Btrfs,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -27,6 +30,11 @@ pub fn detect(filesystem: &str) -> Option<FsKind> {
     match filesystem.to_ascii_lowercase().as_str() {
         "ntfs" | "ntfs3" => Some(FsKind::Ntfs),
         "ext2" | "ext3" | "ext4" | "linux" | "ext" => Some(FsKind::Ext4),
+        "apfs" => Some(FsKind::Apfs),
+        "btrfs" => Some(FsKind::Btrfs),
+        "hfs" | "hfs+" | "hfsplus" | "hfsx" | "mac os extended" | "journaled hfs+" => {
+            Some(FsKind::Hfs)
+        }
         _ => None,
     }
 }
@@ -187,6 +195,95 @@ fn ext4_write(device: &str, path: &str, data: &[u8]) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+fn btrfs_fs(device: &str) -> Result<fs_btrfs::Filesystem, String> {
+    use fs_ext4::block_io::FileDevice;
+    let device = FileDevice::open(device).map_err(|error| error.to_string())?;
+    fs_btrfs::Filesystem::mount(std::sync::Arc::new(device)).map_err(|error| error.to_string())
+}
+
+fn btrfs_list(device: &str, path: &str) -> Result<Vec<UsbEntry>, String> {
+    let fs = btrfs_fs(device)?;
+    let path = clean_path(path);
+    let inode = fs.lookup_path(&path).map_err(|error| error.to_string())?;
+    let mut out = Vec::new();
+    for entry in fs.read_dir(inode.ino).map_err(|error| error.to_string())? {
+        let child = fs
+            .read_inode(entry.ino)
+            .map_err(|error| error.to_string())?;
+        out.push(UsbEntry {
+            name: String::from_utf8_lossy(&entry.name).into_owned(),
+            is_dir: child.mode & 0o170000 == 0o040000,
+            size: child.size,
+            modified: 0,
+            readonly: true,
+        });
+    }
+    Ok(out)
+}
+
+fn btrfs_read(device: &str, path: &str) -> Result<Vec<u8>, String> {
+    let fs = btrfs_fs(device)?;
+    let path = clean_path(path);
+    let inode = fs.lookup_path(&path).map_err(|error| error.to_string())?;
+    fs.read_file(inode.ino).map_err(|error| error.to_string())
+}
+
+fn apple_list(device: &str, path: &str, kind: FsKind) -> Result<Vec<UsbEntry>, String> {
+    let file = std::fs::File::open(device).map_err(|error| error.to_string())?;
+    let reader = std::io::BufReader::new(file);
+    let path = clean_path(path);
+    match kind {
+        FsKind::Apfs => {
+            let mut volume = apfs::ApfsVolume::open(reader).map_err(|error| error.to_string())?;
+            Ok(volume
+                .list_directory(&path)
+                .map_err(|error| error.to_string())?
+                .into_iter()
+                .map(|entry| UsbEntry {
+                    name: entry.name,
+                    is_dir: matches!(entry.kind, apfs::EntryKind::Directory),
+                    size: entry.size,
+                    modified: entry.modify_time.max(0) as u64,
+                    readonly: true,
+                })
+                .collect())
+        }
+        FsKind::Hfs => {
+            let mut volume = hfsplus::HfsVolume::open(reader).map_err(|error| error.to_string())?;
+            Ok(volume
+                .list_directory(&path)
+                .map_err(|error| error.to_string())?
+                .into_iter()
+                .map(|entry| UsbEntry {
+                    name: entry.name,
+                    is_dir: matches!(entry.kind, hfsplus::EntryKind::Directory),
+                    size: entry.size,
+                    modified: (entry.modify_date as i64 - 2_082_844_800).max(0) as u64,
+                    readonly: true,
+                })
+                .collect())
+        }
+        _ => Err("不是 Apple 文件系统".into()),
+    }
+}
+
+fn apple_read(device: &str, path: &str, kind: FsKind) -> Result<Vec<u8>, String> {
+    let file = std::fs::File::open(device).map_err(|error| error.to_string())?;
+    let reader = std::io::BufReader::new(file);
+    let path = clean_path(path);
+    match kind {
+        FsKind::Apfs => apfs::ApfsVolume::open(reader)
+            .map_err(|error| error.to_string())?
+            .read_file(&path)
+            .map_err(|error| error.to_string()),
+        FsKind::Hfs => hfsplus::HfsVolume::open(reader)
+            .map_err(|error| error.to_string())?
+            .read_file(&path)
+            .map_err(|error| error.to_string()),
+        _ => Err("不是 Apple 文件系统".into()),
+    }
+}
+
 pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, String> {
     if !Path::new(device).exists() {
         return Err("设备不存在".into());
@@ -194,6 +291,9 @@ pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, Str
     match kind {
         FsKind::Ntfs => ntfs_list(device, path),
         FsKind::Ext4 => ext4_list(device, path),
+        FsKind::Apfs => apple_list(device, path, FsKind::Apfs),
+        FsKind::Hfs => apple_list(device, path, FsKind::Hfs),
+        FsKind::Btrfs => btrfs_list(device, path),
     }
 }
 
@@ -201,6 +301,9 @@ pub fn read(device: &str, kind: FsKind, path: &str) -> Result<Vec<u8>, String> {
     match kind {
         FsKind::Ntfs => ntfs_read(device, path),
         FsKind::Ext4 => ext4_read(device, path),
+        FsKind::Apfs => apple_read(device, path, FsKind::Apfs),
+        FsKind::Hfs => apple_read(device, path, FsKind::Hfs),
+        FsKind::Btrfs => btrfs_read(device, path),
     }
 }
 
@@ -208,6 +311,7 @@ pub fn write(device: &str, kind: FsKind, path: &str, data: &[u8]) -> Result<(), 
     match kind {
         FsKind::Ntfs => ntfs_write(device, path, data),
         FsKind::Ext4 => ext4_write(device, path, data),
+        FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs => Err("该文件系统内置驱动为只读".into()),
     }
 }
 
@@ -219,7 +323,9 @@ mod tests {
     fn detects_supported_filesystems() {
         assert!(detect("NTFS").is_some());
         assert!(detect("ext4").is_some());
-        assert!(detect("apfs").is_none());
+        assert!(detect("apfs").is_some());
+        assert!(detect("hfs+").is_some());
+        assert!(detect("btrfs").is_some());
     }
 
     #[test]
@@ -348,6 +454,9 @@ pub fn virtual_root(device: &str, kind: FsKind) -> String {
     let kind = match kind {
         FsKind::Ntfs => "ntfs",
         FsKind::Ext4 => "ext4",
+        FsKind::Apfs => "apfs",
+        FsKind::Hfs => "hfs",
+        FsKind::Btrfs => "btrfs",
     };
     base.join(format!("{}-{kind}", hex_encode(device)))
         .to_string_lossy()
@@ -367,6 +476,9 @@ pub fn route(path: &str) -> Option<Route> {
     let kind = match kind {
         "ntfs" => FsKind::Ntfs,
         "ext4" => FsKind::Ext4,
+        "apfs" => FsKind::Apfs,
+        "hfs" => FsKind::Hfs,
+        "btrfs" => FsKind::Btrfs,
         _ => return None,
     };
     let driver_device = if cfg!(target_os = "macos") {
@@ -537,6 +649,7 @@ pub fn create(route: &Route, name: &str, folder: bool) -> Result<(), String> {
                     .map_err(|e| e.to_string())
             }
         }
+        FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs => Err("该文件系统内置驱动为只读".into()),
     }
 }
 
@@ -564,6 +677,7 @@ pub fn remove(route: &Route) -> Result<(), String> {
                 fs.apply_unlink(&path).map_err(|e| e.to_string())
             }
         }
+        FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs => Err("该文件系统内置驱动为只读".into()),
     }
 }
 
@@ -586,6 +700,7 @@ pub fn rename(route: &Route, new_name: &str) -> Result<(), String> {
             fs.apply_rename(&path, &target, false)
                 .map_err(|e| e.to_string())
         }
+        FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs => Err("该文件系统内置驱动为只读".into()),
     }
 }
 
@@ -712,6 +827,9 @@ pub fn open_cached(route: &Route) -> Result<String, String> {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     std::fs::write(&cache, data).map_err(|error| error.to_string())?;
+    if matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs) {
+        return Ok(cache.to_string_lossy().into_owned());
+    }
     let watched = route.clone();
     let watched_file = cache.clone();
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {

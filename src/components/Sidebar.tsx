@@ -218,7 +218,18 @@ export function Sidebar({
                               ? `${size(location.available)} / ${size(location.total)}`
                               : size(location.available)}
                           {location.filesystem && (
-                            <span className="disk-fs">{location.filesystem.toUpperCase()}</span>
+                            <span className="disk-fs">
+                              {location.filesystem.toUpperCase()}
+                              {location.usbfs
+                                ? ['APFS', 'HFS', 'HFS+', 'HFSX', 'BTRFS'].includes(
+                                    location.filesystem.toUpperCase(),
+                                  )
+                                  ? ' · 只读'
+                                  : ' · 内置'
+                                : !location.mounted
+                                  ? ' · 挂载'
+                                  : ''}
+                            </span>
                           )}
                         </small>
                         {location.total > 0 && (
