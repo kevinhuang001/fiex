@@ -299,11 +299,20 @@ pub fn open_in_vscode(path: &str) -> Result<(), String> {
 pub fn open_full_disk_access() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        Ok(())
+        for url in [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+        ] {
+            if Command::new("open")
+                .arg(url)
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false)
+            {
+                return Ok(());
+            }
+        }
+        Err("无法打开“完全磁盘访问权限”设置，请手动打开系统设置".into())
     }
     #[cfg(not(target_os = "macos"))]
     {

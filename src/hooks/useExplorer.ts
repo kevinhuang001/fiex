@@ -46,11 +46,15 @@ export function useExplorer(prefs: Preferences) {
     },
     [cursor, tab],
   )
+  const refreshLocations = useCallback(async () => {
+    const next = await call<Location[]>('locations')
+    setLocations(next)
+    return next
+  }, [])
   useEffect(() => {
-    void call<Location[]>('locations')
-      .then((l) => {
-        setLocations(l)
-        const home = l.find((x) => x.name === '文稿') || l[0]
+    void refreshLocations()
+      .then((next) => {
+        const home = next.find((x) => x.name === '文稿') || next[0]
         if (home) {
           setPath(home.path)
           setHistory([home.path])
@@ -59,7 +63,7 @@ export function useExplorer(prefs: Preferences) {
         }
       })
       .catch((e) => setError(String(e)))
-  }, [])
+  }, [refreshLocations])
   useEffect(() => {
     if (!path || query) return
     let active = true
@@ -274,6 +278,7 @@ export function useExplorer(prefs: Preferences) {
     tagFilter,
     setTagFilter,
     locations,
+    refreshLocations,
     git,
     selected,
     setSelected,

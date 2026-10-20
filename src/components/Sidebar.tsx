@@ -32,6 +32,7 @@ interface Props {
   onAddConnection: () => void
   onRemoveConnection: (id: string) => void
   onEject: (path: string) => void
+  onMount: (device: string) => void
   trashPath: string | null
 }
 const DISK_COLORS = ['#5b9cf8', '#55b98a', '#e0a44a', '#b47ad6', '#e06c75', '#56b6c9']
@@ -47,6 +48,7 @@ export function Sidebar({
   onAddConnection,
   onRemoveConnection,
   onEject,
+  onMount,
   trashPath,
 }: Props) {
   const iconFor = (name: string) =>
@@ -159,8 +161,9 @@ export function Sidebar({
           .map((l, index) => (
             <div className="device-row" key={l.path}>
               <button
-                className={`nav-item disk-item ${x.path === l.path ? 'active' : ''}`}
-                onClick={() => x.navigate(l.path)}
+                className={`nav-item disk-item ${l.mounted ? '' : 'disk-unmounted'} ${l.mounted && x.path === l.path ? 'active' : ''}`}
+                onClick={() => (l.mounted ? x.navigate(l.path) : onMount(l.device))}
+                title={l.mounted ? l.path : '未挂载，点击授权挂载'}
               >
                 {l.removable ? <Usb /> : <HardDrive />}
                 <span>
@@ -169,7 +172,11 @@ export function Sidebar({
                     className="disk-capacity"
                     title={`可用 ${size(l.available)} / 总计 ${size(l.total)}`}
                   >
-                    {l.total > 0 ? `${size(l.available)} / ${size(l.total)}` : size(l.available)}
+                    {!l.mounted
+                      ? size(l.total)
+                      : l.total > 0
+                        ? `${size(l.available)} / ${size(l.total)}`
+                        : size(l.available)}
                     {l.filesystem && <span className="disk-fs">{l.filesystem.toUpperCase()}</span>}
                   </small>
                   {l.total > 0 && (
@@ -184,7 +191,7 @@ export function Sidebar({
                   )}
                 </span>
               </button>
-              {l.path !== '/' && !/^[A-Za-z]:[\\/]?$/.test(l.path) && (
+              {l.mounted && l.path !== '/' && !/^[A-Za-z]:[\\/]?$/.test(l.path) && (
                 <button
                   className="device-eject icon-button"
                   title="弹出设备"

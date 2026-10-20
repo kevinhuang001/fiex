@@ -266,6 +266,12 @@ button[data-slot='button'][data-variant='default'] {
 .devices-label {
   margin-top: 30px;
 }
+.disk-unmounted {
+  opacity: 0.78;
+}
+.disk-unmounted:hover {
+  opacity: 1;
+}
 .disk-item {
   align-items: flex-start;
   padding-top: 12px;

@@ -225,6 +225,14 @@ export default function App() {
       danger: true,
       action: () => call('eject_device', { path }),
     })
+  const mountDevice = (device: string) => {
+    void run('正在请求挂载…', async () => {
+      const path = await call<string>('mount_device', { device })
+      await x.refreshLocations()
+      x.navigate(path)
+      notify('设备已挂载')
+    })
+  }
   const removeConnection = (id: string) => {
     const connection = x.connections.find((item) => item.id === id)
     if (!connection) return
@@ -459,6 +467,8 @@ export default function App() {
           total: 0,
           removable: false,
           filesystem: '',
+          device: '',
+          mounted: true,
         })
       } catch {
         /* The item may have disappeared while dragging. */
@@ -490,6 +500,8 @@ export default function App() {
             total: 0,
             removable: false,
             filesystem: '',
+            device: '',
+            mounted: true,
           },
         ],
       })
@@ -679,6 +691,7 @@ export default function App() {
         onAddConnection={() => setConnectionOpen(true)}
         onRemoveConnection={removeConnection}
         onEject={ejectDevice}
+        onMount={mountDevice}
         trashPath={trashPath}
       />
       <main className="main">
@@ -1231,7 +1244,7 @@ export default function App() {
         open={trashIssue}
         onClose={() => setTrashIssue(false)}
         title="无法浏览废纸篓"
-        description="macOS 不允许应用直接读取 ~/.Trash。请在“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中允许 Fiex，随后即可在应用内浏览废纸篓；也可以现在用 Finder 打开。"
+        description="macOS 不允许应用直接读取 ~/.Trash。请在“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中允许 Fiex；授权后如仍无法打开，请重启 Fiex。也可以现在用 Finder 打开。"
       >
         <div className="dialog-actions">
           <Button variant="ghost" onClick={() => setTrashIssue(false)}>
@@ -1245,6 +1258,15 @@ export default function App() {
             }}
           >
             在 Finder 中打开
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setTrashIssue(false)
+              setTimeout(() => void openTrash(), 300)
+            }}
+          >
+            重试
           </Button>
           <Button
             onClick={() => {

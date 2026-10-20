@@ -12,7 +12,7 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 - Link targets are shown for symlinks and Windows shortcuts in Show Info.
 - Adjustable font size scales both filenames and icon-view icons.
 - A unified Applications entry on macOS, Windows and Linux: macOS browses /Applications, while Windows and Linux open the platform app list.
-- Removable USB drives are detected with a USB icon, filesystem label, available/total capacity and per-drive colored usage bars.
+- Removable USB drives are detected with a USB icon, filesystem label, available/total capacity and per-drive colored usage bars. Unmounted volumes request system authorization and mount read-only.
 - The Trash opens inside Fiex on macOS and Linux; Windows keeps the system Recycle Bin.
 - Crisp native application logos rendered at the display's pixel ratio, including large icon view.
 - One deduplicated Macintosh HD entry on macOS instead of separate root and /System/Volumes/Data volumes.

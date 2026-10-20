@@ -31,6 +31,8 @@ export interface Location {
   total: number
   removable: boolean
   filesystem: string
+  device: string
+  mounted: boolean
 }
 export interface Terminal {
   id: string
