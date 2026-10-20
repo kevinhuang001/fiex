@@ -50,16 +50,26 @@ def text_points(text, max_x=1200):
     shot = screenshot('latest.png')
     enlarged = out / 'ocr.png'
     command('convert', shot, '-resize', '200%', enlarged)
-    tsv = command('tesseract', enlarged, 'stdout', '--psm', '11', 'tsv')
-    desired = re.sub('[^a-z0-9]', '', text.lower())
-    matches = []
+    tsv = command('tesseract', enlarged, 'stdout', '-l', 'eng+chi_sim', '--psm', '11', 'tsv')
+    normalize = lambda value: re.sub(r'[^a-z0-9\u4e00-\u9fff]', '', value.lower())
+    desired = normalize(text)
+    lines = {}
     for row in csv.DictReader(io.StringIO(tsv), delimiter='\t'):
-        actual = re.sub('[^a-z0-9]', '', row.get('text', '').lower())
+        if not row.get('text', '').strip():
+            continue
+        identity = (row['block_num'], row['par_num'], row['line_num'])
+        lines.setdefault(identity, []).append(row)
+    matches = []
+    for rows in lines.values():
+        actual = normalize(''.join(row['text'] for row in rows))
         if desired in actual:
-            x = (int(row['left']) + int(row['width']) / 2) / 2
-            y = (int(row['top']) + int(row['height']) / 2) / 2
+            left = min(int(row['left']) for row in rows)
+            top = min(int(row['top']) for row in rows)
+            right = max(int(row['left'])+int(row['width']) for row in rows)
+            bottom = max(int(row['top'])+int(row['height']) for row in rows)
+            x, y = (left+right)/4, (top+bottom)/4
             if x < max_x:
-                matches.append((int(x), int(y)))
+                matches.append((int(x),int(y)))
     return matches
 
 def drag(start, end):
@@ -97,7 +107,8 @@ try:
     screenshot('internal-move.png')
     time.sleep(2)
     # A favorite is an entry pointing at a folder, not a destructive move.
-    drag(text_points('MOVE_TARGET')[0], (130, 420))
+    favorites = wait_for(lambda: text_points('收藏', max_x=220))
+    drag(text_points('MOVE_TARGET')[0], sorted(favorites, key=lambda point: point[1])[0])
     wait_for(lambda: text_points('MOVE_TARGET', max_x=220))
     assert (source/'MOVE_TARGET').is_dir()
     screenshot('favorite.png')

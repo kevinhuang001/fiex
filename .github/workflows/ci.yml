@@ -279,7 +279,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xvfb openbox xdotool thunar ffmpeg imagemagick tesseract-ocr
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xvfb openbox xdotool thunar ffmpeg imagemagick tesseract-ocr tesseract-ocr-chi-sim
           dbus-run-session -- xvfb-run -a -s '-screen 0 1700x950x24' python3 scripts/record-native-demo.py src-tauri/target/${{ matrix.target }}/release/fiex
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Linux'
