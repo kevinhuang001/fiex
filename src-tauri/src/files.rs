@@ -235,6 +235,7 @@ pub struct Location {
     pub filesystem: String,
     pub device: String,
     pub mounted: bool,
+    pub usbfs: bool,
 }
 #[cfg(target_os = "macos")]
 fn visible_mount(path: &str) -> bool {
@@ -266,6 +267,7 @@ pub fn locations() -> Vec<Location> {
                 filesystem: String::new(),
                 device: String::new(),
                 mounted: true,
+                usbfs: false,
             });
         }
     }
@@ -290,6 +292,7 @@ pub fn locations() -> Vec<Location> {
         filesystem: String::new(),
         device: String::new(),
         mounted: true,
+        usbfs: false,
     });
     let mut seen = HashSet::new();
     for disk in sysinfo::Disks::new_with_refreshed_list().list() {
@@ -315,6 +318,7 @@ pub fn locations() -> Vec<Location> {
             filesystem: disk.file_system().to_string_lossy().into_owned(),
             device: String::new(),
             mounted: true,
+            usbfs: false,
         });
     }
     out.extend(unmounted_removable());
@@ -352,6 +356,18 @@ fn int_field(info: &plist::Dictionary, key: &str) -> u64 {
                 .or_else(|| value.as_signed_integer().map(|value| value.max(0) as u64))
         })
         .unwrap_or_default()
+}
+
+fn virtual_path(device: &str, filesystem: &str) -> Option<String> {
+    #[cfg(feature = "usbfs")]
+    {
+        crate::usbfs::detect(filesystem).map(|kind| crate::usbfs::virtual_root(device, kind))
+    }
+    #[cfg(not(feature = "usbfs"))]
+    {
+        let _ = (device, filesystem);
+        None
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -437,16 +453,19 @@ fn unmounted_removable() -> Vec<Location> {
                     name
                 }
             };
+            let device = format!("/dev/{id}");
+            let virtual_path = virtual_path(&device, &filesystem);
             out.push(Location {
                 name: if name.is_empty() { id.into() } else { name },
-                path: String::new(),
+                path: virtual_path.clone().unwrap_or_default(),
                 kind: "disk".into(),
                 available: int_field(&info, "FreeSpace"),
                 total: int_field(&info, "TotalSize"),
                 removable: true,
                 filesystem,
-                device: format!("/dev/{id}"),
+                device,
                 mounted: false,
+                usbfs: virtual_path.is_some(),
             });
         }
     }
@@ -516,9 +535,10 @@ fn unmounted_removable() -> Vec<Location> {
                                     .unwrap_or("")
                             )
                         });
+                    let virtual_path = virtual_path(&path, &filesystem);
                     out.push(Location {
                         name: name.into(),
-                        path: String::new(),
+                        path: virtual_path.clone().unwrap_or_default(),
                         kind: "disk".into(),
                         available: 0,
                         total: item
@@ -529,6 +549,7 @@ fn unmounted_removable() -> Vec<Location> {
                         filesystem,
                         device: path,
                         mounted: false,
+                        usbfs: virtual_path.is_some(),
                     });
                 }
             }

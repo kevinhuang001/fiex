@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   ExternalLink,
   Eye,
@@ -7,6 +9,7 @@ import {
   Info,
   Keyboard,
   Palette,
+  PanelLeft,
   Plus,
   RotateCcw,
   Scale,
@@ -32,18 +35,19 @@ import {
   type ShortcutAction,
   type ShortcutMap,
 } from '@/lib/shortcuts'
-import type { Preferences, Terminal } from '@/lib/types'
+import type { Location, Preferences, SidebarSection, Terminal } from '@/lib/types'
 
 interface Props {
   open: boolean
   onClose: () => void
   prefs: Preferences
+  locations: Location[]
   update: (p: Partial<Preferences>) => void
   terminals: Terminal[]
   onError: (s: string) => void
 }
 
-type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'terminal' | 'about'
+type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'terminal' | 'about'
 
 interface Section {
   id: SectionId
@@ -67,6 +71,13 @@ const sections: Section[] = [
     icon: Keyboard,
     color: '#8b5cf6',
     keywords: ['keyboard', 'shortcut', '快捷键', '按键'],
+  },
+  {
+    id: 'sidebar',
+    label: '侧边栏',
+    icon: PanelLeft,
+    color: '#5b9cf8',
+    keywords: ['sidebar', '侧边栏', '常用位置', '收藏', '设备', '标签', '顺序'],
   },
   {
     id: 'ignore',
@@ -155,7 +166,22 @@ function IgnoreEditor({
   )
 }
 
-export function PreferencesDialog({ open, onClose, prefs, update, terminals, onError }: Props) {
+const SIDEBAR_LABELS: Record<SidebarSection, string> = {
+  places: '常用位置',
+  favorites: '收藏',
+  tags: '标签',
+  devices: '设备',
+}
+
+export function PreferencesDialog({
+  open,
+  onClose,
+  prefs,
+  locations,
+  update,
+  terminals,
+  onError,
+}: Props) {
   const [section, setSection] = useState<SectionId>('appearance')
   const [query, setQuery] = useState('')
   const [recording, setRecording] = useState<{ action: ShortcutAction; index: number } | null>(null)
@@ -485,6 +511,86 @@ export function PreferencesDialog({ open, onClose, prefs, update, terminals, onE
                 >
                   <RotateCcw size={11} /> 恢复 {styleName} 预设
                 </button>
+              </div>
+            </>
+          )}
+
+          {section === 'sidebar' && (
+            <>
+              <div className="settings-card">
+                <div className="settings-card-header">
+                  <span>区域顺序</span>
+                  <button
+                    className="settings-reset"
+                    onClick={() =>
+                      update({
+                        sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
+                      })
+                    }
+                  >
+                    <RotateCcw size={11} />
+                    恢复预设
+                  </button>
+                </div>
+                <div className="sidebar-order">
+                  {prefs.sidebarOrder.map((id, index) => (
+                    <div className="sidebar-order-row" key={id}>
+                      <span>{SIDEBAR_LABELS[id]}</span>
+                      <button
+                        aria-label={`上移${SIDEBAR_LABELS[id]}`}
+                        disabled={index === 0}
+                        onClick={() => {
+                          const next = [...prefs.sidebarOrder]
+                          ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
+                          update({ sidebarOrder: next })
+                        }}
+                      >
+                        <ArrowUp size={12} />
+                      </button>
+                      <button
+                        aria-label={`下移${SIDEBAR_LABELS[id]}`}
+                        disabled={index === prefs.sidebarOrder.length - 1}
+                        onClick={() => {
+                          const next = [...prefs.sidebarOrder]
+                          ;[next[index + 1], next[index]] = [next[index], next[index + 1]]
+                          update({ sidebarOrder: next })
+                        }}
+                      >
+                        <ArrowDown size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="settings-card">
+                <div className="settings-card-header">
+                  <span>常用位置</span>
+                </div>
+                {locations
+                  .filter(
+                    (location) => location.kind === 'favorite' || location.kind === 'applications',
+                  )
+                  .map((location) => {
+                    const key = location.path || location.name
+                    const hidden = prefs.hiddenPlaces.includes(key)
+                    return (
+                      <button
+                        key={key}
+                        className={`settings-choice ${hidden ? '' : 'selected'}`}
+                        aria-pressed={!hidden}
+                        onClick={() =>
+                          update({
+                            hiddenPlaces: hidden
+                              ? prefs.hiddenPlaces.filter((item) => item !== key)
+                              : [...prefs.hiddenPlaces, key],
+                          })
+                        }
+                      >
+                        <span>{location.name}</span>
+                        {hidden ? <Eye size={14} /> : <Check size={15} />}
+                      </button>
+                    )
+                  })}
               </div>
             </>
           )}

@@ -3,6 +3,7 @@
 //! The drivers operate on a block device or disk image directly; no OS mount
 //! and no FUSE are involved. APFS, HFS+ and btrfs remain read-only elsewhere.
 
+use notify::Watcher;
 use serde::Serialize;
 use std::path::Path;
 
@@ -25,7 +26,7 @@ pub struct UsbEntry {
 pub fn detect(filesystem: &str) -> Option<FsKind> {
     match filesystem.to_ascii_lowercase().as_str() {
         "ntfs" | "ntfs3" => Some(FsKind::Ntfs),
-        "ext2" | "ext3" | "ext4" => Some(FsKind::Ext4),
+        "ext2" | "ext3" | "ext4" | "linux" | "ext" => Some(FsKind::Ext4),
         _ => None,
     }
 }
@@ -212,7 +213,7 @@ pub fn write(device: &str, kind: FsKind, path: &str, data: &[u8]) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
-    use super::detect;
+    use super::*;
 
     #[test]
     fn detects_supported_filesystems() {
@@ -220,4 +221,512 @@ mod tests {
         assert!(detect("ext4").is_some());
         assert!(detect("apfs").is_none());
     }
+
+    #[test]
+    fn ext4_image_roundtrip() {
+        use fs_ext4::block_io::FileDevice;
+        use std::fs::File;
+        let temp = tempfile::tempdir().unwrap();
+        let image = temp.path().join("usb-ext4.img");
+        let file = File::create(&image).unwrap();
+        file.set_len(64 * 1024 * 1024).unwrap();
+        drop(file);
+        let device = image.to_string_lossy().into_owned();
+        let dev = FileDevice::open_rw(&device).unwrap();
+        fs_ext4::mkfs::format_filesystem(&dev, Some("FIEX"), None, 64 * 1024 * 1024, 4096).unwrap();
+        drop(dev);
+        let root = Route {
+            device: device.clone(),
+            driver_device: device.clone(),
+            kind: FsKind::Ext4,
+            rel: String::new(),
+            root: virtual_root(&device, FsKind::Ext4),
+        };
+        create(&root, "hello.txt", false).unwrap();
+        let file = Route {
+            rel: "hello.txt".into(),
+            ..root.clone()
+        };
+        write_path(&file, b"hello ext4").unwrap();
+        assert_eq!(read_path(&file).unwrap(), b"hello ext4");
+        assert!(listing(&root)
+            .unwrap()
+            .iter()
+            .any(|entry| entry.name == "hello.txt"));
+        rename(&file, "renamed.txt").unwrap();
+        let renamed = Route {
+            rel: "renamed.txt".into(),
+            ..root.clone()
+        };
+        assert_eq!(read_path(&renamed).unwrap(), b"hello ext4");
+        remove(&renamed).unwrap();
+    }
+
+    #[test]
+    fn ntfs_image_roundtrip() {
+        use fs_ntfs::block_io::{BlockIo, PathIo};
+        use std::fs::File;
+        let temp = tempfile::tempdir().unwrap();
+        let image = temp.path().join("usb.img");
+        let file = File::create(&image).unwrap();
+        file.set_len(64 * 1024 * 1024).unwrap();
+        drop(file);
+        let mut io = PathIo::open_rw(&image).unwrap();
+        fs_ntfs::mkfs::format_filesystem(
+            &mut io,
+            64 * 1024 * 1024,
+            4096,
+            4096,
+            Some("FIEX"),
+            Some(1),
+        )
+        .unwrap();
+        io.sync().unwrap();
+        drop(io);
+        let device = image.to_string_lossy().into_owned();
+        let root = Route {
+            device: device.clone(),
+            driver_device: device.clone(),
+            kind: FsKind::Ntfs,
+            rel: String::new(),
+            root: virtual_root(&device, FsKind::Ntfs),
+        };
+        create(&root, "hello.txt", false).unwrap();
+        let file = Route {
+            rel: "hello.txt".into(),
+            ..root.clone()
+        };
+        write_path(&file, b"hello usb").unwrap();
+        assert_eq!(read_path(&file).unwrap(), b"hello usb");
+        assert!(listing(&root)
+            .unwrap()
+            .iter()
+            .any(|entry| entry.name == "hello.txt"));
+        rename(&file, "renamed.txt").unwrap();
+        let renamed = Route {
+            rel: "renamed.txt".into(),
+            ..root.clone()
+        };
+        assert_eq!(read_path(&renamed).unwrap(), b"hello usb");
+        remove(&renamed).unwrap();
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Route {
+    pub device: String,
+    pub driver_device: String,
+    pub kind: FsKind,
+    pub rel: String,
+    pub root: String,
+}
+
+fn hex_encode(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn hex_decode(value: &str) -> Option<String> {
+    if !value.len().is_multiple_of(2) {
+        return None;
+    }
+    let bytes = (0..value.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&value[index..index + 2], 16).ok())
+        .collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
+}
+
+pub fn virtual_root(device: &str, kind: FsKind) -> String {
+    let base = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".fiex")
+        .join("usbfs");
+    let kind = match kind {
+        FsKind::Ntfs => "ntfs",
+        FsKind::Ext4 => "ext4",
+    };
+    base.join(format!("{}-{kind}", hex_encode(device)))
+        .to_string_lossy()
+        .into_owned()
+}
+
+pub fn route(path: &str) -> Option<Route> {
+    let base = dirs::home_dir()?
+        .join(".fiex")
+        .join("usbfs")
+        .to_string_lossy()
+        .into_owned();
+    let relative = path.strip_prefix(&base)?.trim_start_matches('/');
+    let (id, rel) = relative.split_once('/').unwrap_or((relative, ""));
+    let (encoded, kind) = id.rsplit_once('-')?;
+    let device = hex_decode(encoded)?;
+    let kind = match kind {
+        "ntfs" => FsKind::Ntfs,
+        "ext4" => FsKind::Ext4,
+        _ => return None,
+    };
+    let driver_device = if cfg!(target_os = "macos") {
+        device.replacen("/dev/disk", "/dev/rdisk", 1)
+    } else {
+        device.clone()
+    };
+    Some(Route {
+        device,
+        driver_device,
+        kind,
+        rel: rel.into(),
+        root: Path::new(&base).join(id).to_string_lossy().into_owned(),
+    })
+}
+
+fn authorized() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    SET.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+fn can_open(device: &str) -> bool {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(device)
+        .is_ok()
+}
+
+#[cfg(target_os = "macos")]
+fn run_privileged(script: &str) -> Result<(), String> {
+    let output = std::process::Command::new("osascript")
+        .args(["-e", script])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().into())
+    }
+}
+
+/// Unmount a volume and grant this process raw read/write access through the
+/// native administrator / polkit prompt. Runs once per device per session.
+pub fn ensure_access(route: &Route) -> Result<(), String> {
+    if authorized().lock().unwrap().contains(&route.device) {
+        return Ok(());
+    }
+    if can_open(&route.driver_device) {
+        authorized().lock().unwrap().insert(route.device.clone());
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("diskutil")
+            .args(["unmount", &route.device])
+            .output();
+        let script = format!(
+            "do shell script \"chmod 666 {}\" with administrator privileges",
+            route.driver_device
+        );
+        run_privileged(&script)?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("udisksctl")
+            .args(["unmount", "-b", &route.device])
+            .output();
+        let output = std::process::Command::new("pkexec")
+            .args(["chmod", "a+rw", &route.driver_device])
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().into());
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        return Err("当前系统需要通过管理员权限访问原始设备".into());
+    }
+    if !can_open(&route.driver_device) {
+        return Err("无法获得设备读写权限".into());
+    }
+    authorized().lock().unwrap().insert(route.device.clone());
+    Ok(())
+}
+
+fn join_rel(rel: &str, name: &str) -> String {
+    if rel.is_empty() {
+        name.into()
+    } else {
+        format!("{}/{}", rel.trim_matches('/'), name)
+    }
+}
+
+pub fn listing(route: &Route) -> Result<Vec<crate::files::Entry>, String> {
+    ensure_access(route)?;
+    let files = list(&route.driver_device, route.kind, &route.rel)?;
+    Ok(files
+        .into_iter()
+        .map(|file| {
+            let rel = join_rel(&route.rel, &file.name);
+            let path = format!("{}/{}", route.root.trim_end_matches('/'), rel);
+            crate::files::Entry {
+                path,
+                extension: Path::new(&file.name)
+                    .extension()
+                    .map(|value| value.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                mime: mime_guess::from_path(&file.name)
+                    .first_or_octet_stream()
+                    .to_string(),
+                name: file.name,
+                is_dir: file.is_dir,
+                is_symlink: false,
+                size: file.size,
+                modified: file.modified,
+                created: file.modified,
+                readonly: file.readonly,
+                link_target: None,
+                tags: vec![],
+            }
+        })
+        .collect())
+}
+
+pub fn read_path(route: &Route) -> Result<Vec<u8>, String> {
+    ensure_access(route)?;
+    read(&route.driver_device, route.kind, &route.rel)
+}
+
+pub fn write_path(route: &Route, data: &[u8]) -> Result<(), String> {
+    ensure_access(route)?;
+    write(&route.driver_device, route.kind, &route.rel, data)
+}
+
+pub fn create(route: &Route, name: &str, folder: bool) -> Result<(), String> {
+    ensure_access(route)?;
+    if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
+        return Err("无效文件名".into());
+    }
+    let rel = join_rel(&route.rel, name);
+    match route.kind {
+        FsKind::Ntfs => {
+            use fs_ntfs::facade::Filesystem;
+            let fs = Filesystem::mount_rw(&route.driver_device).map_err(|e| e.to_string())?;
+            if folder {
+                fs.mkdir(&clean_path(&format!("/{rel}")), "")
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            } else {
+                fs.create_file("/".trim_end_matches('/'), &rel)
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            }
+        }
+        FsKind::Ext4 => {
+            let fs = ext4_mount(&route.driver_device, true)?;
+            let path = clean_path(&format!("/{rel}"));
+            if folder {
+                fs.apply_mkdir(&path, 0o40755)
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            } else {
+                fs.apply_create(&path, 0o100644)
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            }
+        }
+    }
+}
+
+pub fn remove(route: &Route) -> Result<(), String> {
+    ensure_access(route)?;
+    let path = clean_path(&format!("/{}", route.rel));
+    match route.kind {
+        FsKind::Ntfs => {
+            use fs_ntfs::facade::Filesystem;
+            let fs = Filesystem::mount_rw(&route.driver_device).map_err(|e| e.to_string())?;
+            fs.remove(&path).map_err(|e| e.to_string())
+        }
+        FsKind::Ext4 => {
+            let fs = ext4_mount(&route.driver_device, true)?;
+            if fs
+                .stat_ino(
+                    fs.lookup_path_bytes(path.as_bytes())
+                        .map_err(|e| e.to_string())?,
+                )
+                .map(|attrs| attrs.mode & 0o170000 == 0o040000)
+                .unwrap_or(false)
+            {
+                fs.apply_rmdir(&path).map_err(|e| e.to_string())
+            } else {
+                fs.apply_unlink(&path).map_err(|e| e.to_string())
+            }
+        }
+    }
+}
+
+pub fn rename(route: &Route, new_name: &str) -> Result<(), String> {
+    ensure_access(route)?;
+    if new_name.contains('/') || new_name.contains('\\') || new_name == "." || new_name == ".." {
+        return Err("无效文件名".into());
+    }
+    let path = clean_path(&format!("/{}", route.rel));
+    match route.kind {
+        FsKind::Ntfs => {
+            use fs_ntfs::facade::Filesystem;
+            let fs = Filesystem::mount_rw(&route.driver_device).map_err(|e| e.to_string())?;
+            fs.rename(&path, new_name).map_err(|e| e.to_string())
+        }
+        FsKind::Ext4 => {
+            let fs = ext4_mount(&route.driver_device, true)?;
+            let parent = path.rsplit_once('/').map(|(p, _)| p).unwrap_or("/");
+            let target = clean_path(&format!("{parent}/{new_name}"));
+            fs.apply_rename(&path, &target, false)
+                .map_err(|e| e.to_string())
+        }
+    }
+}
+
+pub fn entry(route: &Route) -> Result<crate::files::Entry, String> {
+    let (parent, name) = route
+        .rel
+        .rsplit_once('/')
+        .unwrap_or(("", route.rel.as_str()));
+    let parent_route = Route {
+        rel: parent.into(),
+        ..route.clone()
+    };
+    let entries = listing(&parent_route)?;
+    entries
+        .into_iter()
+        .find(|entry| entry.name == name)
+        .ok_or_else(|| "文件不存在".to_string())
+}
+
+fn exists(route: &Route) -> bool {
+    entry(route).is_ok()
+}
+
+fn unique(route: &Route, name: &str) -> String {
+    if !exists(&Route {
+        rel: join_rel(&route.rel, name),
+        ..route.clone()
+    }) {
+        return name.into();
+    }
+    let path = Path::new(name);
+    let stem = path
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| name.into());
+    let ext = path
+        .extension()
+        .map(|value| format!(".{}", value.to_string_lossy()))
+        .unwrap_or_default();
+    for index in 2.. {
+        let candidate = format!("{stem} ({index}){ext}");
+        if !exists(&Route {
+            rel: join_rel(&route.rel, &candidate),
+            ..route.clone()
+        }) {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
+pub fn copy_local_into(
+    directory: &Route,
+    source: &Path,
+    keep_both: bool,
+    moving: bool,
+) -> Result<String, String> {
+    let name = source
+        .file_name()
+        .ok_or("不能复制根目录")?
+        .to_string_lossy()
+        .into_owned();
+    let name = if keep_both {
+        unique(directory, &name)
+    } else {
+        name
+    };
+    let (copied, path) = copy_one(directory, source, &name)?;
+    if moving && copied {
+        if source.is_dir() {
+            std::fs::remove_dir_all(source).map_err(|error| error.to_string())?;
+        } else {
+            std::fs::remove_file(source).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(path)
+}
+
+fn copy_one(directory: &Route, source: &Path, name: &str) -> Result<(bool, String), String> {
+    let meta = std::fs::symlink_metadata(source).map_err(|error| error.to_string())?;
+    if meta.file_type().is_symlink() {
+        return Err("不复制符号链接".into());
+    }
+    let child = Route {
+        rel: join_rel(&directory.rel, name),
+        ..directory.clone()
+    };
+    if meta.is_dir() {
+        create(directory, name, true)?;
+        for item in std::fs::read_dir(source).map_err(|error| error.to_string())? {
+            let item = item.map_err(|error| error.to_string())?;
+            let child_name = item.file_name().to_string_lossy().into_owned();
+            copy_one(&child, &item.path(), &child_name)?;
+        }
+    } else if meta.is_file() {
+        let data = std::fs::read(source).map_err(|error| error.to_string())?;
+        write_path(&child, &data)?;
+    } else {
+        return Err("不能复制特殊文件".into());
+    }
+    Ok((
+        true,
+        format!("{}/{}", directory.root.trim_end_matches('/'), child.rel),
+    ))
+}
+
+fn watchers() -> &'static std::sync::Mutex<Vec<notify::RecommendedWatcher>> {
+    static WATCHERS: std::sync::OnceLock<std::sync::Mutex<Vec<notify::RecommendedWatcher>>> =
+        std::sync::OnceLock::new();
+    WATCHERS.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// Extracts a file to the local cache and watches it, writing edits back to the
+/// raw filesystem whenever the external application saves.
+pub fn open_cached(route: &Route) -> Result<String, String> {
+    let data = read_path(route)?;
+    let cache = dirs::home_dir()
+        .ok_or("无法创建缓存目录")?
+        .join(".fiex")
+        .join("usbfs-cache")
+        .join(Path::new(&route.root).file_name().unwrap_or_default())
+        .join(&route.rel);
+    if let Some(parent) = cache.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::write(&cache, data).map_err(|error| error.to_string())?;
+    let watched = route.clone();
+    let watched_file = cache.clone();
+    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        let Ok(event) = event else { return };
+        if !matches!(event.kind, notify::EventKind::Modify(_)) {
+            return;
+        }
+        if let Ok(data) = std::fs::read(&watched_file) {
+            let _ = write_path(&watched, &data);
+        }
+    })
+    .map_err(|error| error.to_string())?;
+    watcher
+        .watch(&cache, notify::RecursiveMode::NonRecursive)
+        .map_err(|error| error.to_string())?;
+    watchers().lock().unwrap().push(watcher);
+    Ok(cache.to_string_lossy().into_owned())
 }

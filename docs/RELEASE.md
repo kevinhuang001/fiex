@@ -4,6 +4,7 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 
 - Frosted sidebar inspired by Pantodo, with light and dark appearances.
 - System Settings-style preferences with a searchable sidebar and grouped cards.
+- Sidebar settings for section order and hiding individual common locations.
 - macOS Finder tags with color dots in every view, preset colors, custom tag names, and a Finder-style sidebar tag list.
 - Move files and folders by dragging; hold Option/Alt or Ctrl to copy. Drop folders on Favorites to bookmark them, and drag files out of Fiex to Finder/Explorer/the desktop.
 - Open the selected file or folder in VS Code from the toolbar or context menu.
@@ -12,7 +13,7 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 - Link targets are shown for symlinks and Windows shortcuts in Show Info.
 - Adjustable font size scales both filenames and icon-view icons.
 - A unified Applications entry on macOS, Windows and Linux: macOS browses /Applications, while Windows and Linux open the platform app list.
-- Removable USB drives are detected with a USB icon, filesystem label, available/total capacity and per-drive colored usage bars. Unmounted volumes request system authorization; Linux mounts ext2/3/4 and NTFS read-write while other filesystems remain read-only.
+- Removable USB drives are detected with a USB icon, filesystem label, available/total capacity and per-drive colored usage bars. Unmounted NTFS and ext2/3/4 volumes request system authorization and are read/written in-process under `~/.fiex/usbfs`; APFS/HFS+/btrfs remain read-only.
 - The Trash opens inside Fiex on macOS and Linux; Windows keeps the system Recycle Bin.
 - Crisp native application logos rendered at the display's pixel ratio, including large icon view.
 - One deduplicated Macintosh HD entry on macOS instead of separate root and /System/Volumes/Data volumes.

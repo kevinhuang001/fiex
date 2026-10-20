@@ -30,6 +30,19 @@ async fn list_directory(
     hidden: bool,
     ignores: Vec<String>,
 ) -> Result<files::Listing, String> {
+    if let Some(route) = crate::usbfs::route(&path) {
+        let listing_path = path.clone();
+        return tauri::async_runtime::spawn_blocking(move || {
+            let entries = crate::usbfs::listing(&route)?;
+            Ok(files::Listing {
+                path: listing_path,
+                entries,
+                warnings: vec![],
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
     let warning = remote::sync_dir(&path).await.err();
     tauri::async_runtime::spawn_blocking(move || {
         let mut listing = files::list(&path, hidden, &ignores)?;
@@ -76,10 +89,21 @@ async fn mount_device(device: String) -> Result<String, String> {
 }
 #[tauri::command]
 fn file_info(path: String) -> Result<files::Entry, String> {
+    if let Some(route) = crate::usbfs::route(&path) {
+        return crate::usbfs::entry(&route);
+    }
     files::entry(std::path::Path::new(&path))
 }
 #[tauri::command]
 async fn read_preview(path: String) -> Result<String, String> {
+    if let Some(route) = crate::usbfs::route(&path) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let bytes = crate::usbfs::read_path(&route)?;
+            Ok(String::from_utf8_lossy(&bytes[..bytes.len().min(512 * 1024)]).into_owned())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     tauri::async_runtime::spawn_blocking(move || files::text_preview(&path))
         .await
         .map_err(|e| e.to_string())?
@@ -91,6 +115,10 @@ fn create_entry(
     folder: bool,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
+    if let Some(route) = crate::usbfs::route(&path) {
+        crate::usbfs::create(&route, &name, folder)?;
+        return Ok(format!("{}/{}", path.trim_end_matches('/'), name));
+    }
     state.create(&path, &name, folder)
 }
 #[tauri::command]
@@ -99,6 +127,16 @@ fn rename_entry(
     name: String,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
+    if let Some(route) = crate::usbfs::route(&path) {
+        crate::usbfs::rename(&route, &name)?;
+        return Ok(format!(
+            "{}/{}",
+            path.rsplit_once('/')
+                .map(|(parent, _)| parent)
+                .unwrap_or("/"),
+            name
+        ));
+    }
     state.rename(&path, &name)
 }
 #[tauri::command]
@@ -110,6 +148,35 @@ async fn transfer(
     keep_both: bool,
     ignores: Vec<String>,
 ) -> Result<OperationResult, String> {
+    if let Some(route) = crate::usbfs::route(&destination) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let mut result = OperationResult {
+                paths: vec![],
+                errors: vec![],
+                skipped: 0,
+            };
+            for source in &paths {
+                if crate::usbfs::route(source).is_some() {
+                    result
+                        .errors
+                        .push(format!("{source}: 暂不支持从 U 盘虚拟卷复制"));
+                    continue;
+                }
+                match crate::usbfs::copy_local_into(
+                    &route,
+                    std::path::Path::new(source),
+                    keep_both,
+                    moving,
+                ) {
+                    Ok(path) => result.paths.push(path),
+                    Err(error) => result.errors.push(format!("{source}: {error}")),
+                }
+            }
+            Ok(result)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<Operations>()
             .transfer(&paths, &destination, moving, keep_both, &ignores)
@@ -120,7 +187,27 @@ async fn transfer(
 #[tauri::command]
 async fn recycle(app: tauri::AppHandle, paths: Vec<String>) -> Result<OperationResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let result = operations::recycle(&paths)?;
+        let mut result = OperationResult {
+            paths: vec![],
+            errors: vec![],
+            skipped: 0,
+        };
+        for path in paths {
+            if let Some(route) = crate::usbfs::route(&path) {
+                match crate::usbfs::remove(&route) {
+                    Ok(()) => result.paths.push(path),
+                    Err(error) => result.errors.push(format!("{path}: {error}")),
+                }
+            } else {
+                match operations::recycle(std::slice::from_ref(&path)) {
+                    Ok(mut single) => {
+                        result.paths.append(&mut single.paths);
+                        result.errors.append(&mut single.errors);
+                    }
+                    Err(error) => result.errors.push(format!("{path}: {error}")),
+                }
+            }
+        }
         if !result.paths.is_empty() {
             app.state::<Operations>().clear_undo();
         }
@@ -209,6 +296,28 @@ fn open_terminal(path: String, id: String) -> Result<(), String> {
 }
 #[tauri::command]
 async fn open_path(path: String) -> Result<(), String> {
+    if let Some(route) = crate::usbfs::route(&path) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let bytes = crate::usbfs::read_path(&route)?;
+            let cache = dirs::home_dir()
+                .ok_or("无法创建缓存目录")?
+                .join(".fiex")
+                .join("usbfs-cache")
+                .join(
+                    std::path::Path::new(&route.root)
+                        .file_name()
+                        .unwrap_or_default(),
+                )
+                .join(&route.rel);
+            if let Some(parent) = cache.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&cache, bytes).map_err(|e| e.to_string())?;
+            terminals::open_path(&cache.to_string_lossy())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     let path = remote::ensure_downloaded(&path).await?;
     tauri::async_runtime::spawn_blocking(move || terminals::open_path(&path))
         .await

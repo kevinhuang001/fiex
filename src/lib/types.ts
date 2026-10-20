@@ -23,6 +23,8 @@ export interface Listing {
   entries: Entry[]
   warnings: string[]
 }
+export type SidebarSection = 'places' | 'favorites' | 'tags' | 'devices'
+
 export interface Location {
   name: string
   path: string
@@ -33,6 +35,7 @@ export interface Location {
   filesystem: string
   device: string
   mounted: boolean
+  usbfs: boolean
 }
 export interface Terminal {
   id: string
@@ -65,6 +68,8 @@ export interface Preferences {
   displayIgnore: string[]
   compressIgnore: string[]
   copyIgnore: string[]
+  sidebarOrder: SidebarSection[]
+  hiddenPlaces: string[]
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap

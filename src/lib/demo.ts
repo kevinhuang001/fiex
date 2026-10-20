@@ -89,6 +89,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           filesystem: '',
           device: '',
           mounted: true,
+          usbfs: false,
         },
         ...['Desktop', 'Downloads', 'Documents', 'Pictures', 'Music', 'Movies'].map((name, i) => ({
           name: ['桌面', '下载', '文稿', '图片', '音乐', '视频'][i],
@@ -100,6 +101,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           filesystem: '',
           device: '',
           mounted: true,
+          usbfs: false,
         })),
         {
           name: '应用程序',
@@ -111,6 +113,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           filesystem: '',
           device: '',
           mounted: true,
+          usbfs: false,
         },
         {
           name: 'Macintosh HD',
@@ -122,6 +125,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           filesystem: 'APFS',
           device: '',
           mounted: true,
+          usbfs: false,
         },
       ]
     case 'list_directory':

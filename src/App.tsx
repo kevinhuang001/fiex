@@ -291,6 +291,8 @@ export default function App() {
   const isRemotePath = (path: string) => Boolean(remoteConnection(path))
   const displayName = (path: string) => {
     if (trashPath && path === trashPath) return '废纸篓'
+    const volume = x.locations.find((location) => location.usbfs && location.path === path)
+    if (volume) return volume.name
     const connection = remoteConnection(path)
     if (connection && path === connection.mountPath) return connection.name
     return basename(path)
@@ -469,6 +471,7 @@ export default function App() {
           filesystem: '',
           device: '',
           mounted: true,
+          usbfs: false,
         })
       } catch {
         /* The item may have disappeared while dragging. */
@@ -502,6 +505,7 @@ export default function App() {
             filesystem: '',
             device: '',
             mounted: true,
+            usbfs: false,
           },
         ],
       })
@@ -1304,6 +1308,7 @@ export default function App() {
         open={settings}
         onClose={() => setSettings(false)}
         prefs={prefs}
+        locations={x.locations}
         update={update}
         terminals={terminals}
         onError={x.setError}

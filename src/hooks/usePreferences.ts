@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
+import type { SidebarSection } from '@/lib/types'
 import {
   SHORTCUT_ACTIONS,
   defaultShortcuts,
@@ -22,6 +23,8 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     displayIgnore: defaultDisplayIgnore(),
     compressIgnore: defaultOperationIgnore(),
     copyIgnore: defaultOperationIgnore(),
+    sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
+    hiddenPlaces: [],
     favorites: [],
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
@@ -67,6 +70,14 @@ function load(): Preferences {
         ? stored.compressIgnore
         : fallback.compressIgnore,
       copyIgnore: Array.isArray(stored.copyIgnore) ? stored.copyIgnore : fallback.copyIgnore,
+      sidebarOrder: Array.isArray(stored.sidebarOrder)
+        ? (stored.sidebarOrder.filter((section): section is SidebarSection =>
+            ['places', 'favorites', 'tags', 'devices'].includes(section),
+          ) as SidebarSection[])
+        : fallback.sidebarOrder,
+      hiddenPlaces: Array.isArray(stored.hiddenPlaces)
+        ? stored.hiddenPlaces
+        : fallback.hiddenPlaces,
       shortcutStyle: style,
       shortcuts,
     }

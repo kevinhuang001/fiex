@@ -2527,3 +2527,37 @@ body.dragging-file * {
   font-size: 8px;
   white-space: nowrap;
 }
+.sidebar-order {
+  padding: 6px 10px 8px;
+}
+.sidebar-order-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+}
+.sidebar-order-row:hover {
+  background: var(--hover);
+}
+.sidebar-order-row > span {
+  flex: 1;
+}
+.sidebar-order-row button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--muted);
+}
+.sidebar-order-row button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.sidebar-order-row button:disabled {
+  opacity: 0.25;
+}
