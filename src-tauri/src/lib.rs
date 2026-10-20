@@ -7,6 +7,8 @@ pub mod git_history;
 pub mod ignores;
 #[cfg(all(feature = "desktop", target_os = "macos"))]
 mod macos_material;
+#[cfg(all(feature = "desktop", target_os = "linux"))]
+mod native_drag;
 pub mod operations;
 pub mod remote;
 pub mod search;

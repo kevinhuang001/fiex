@@ -7,8 +7,7 @@ import { VirtualFileGrid } from './VirtualFileGrid'
 import { InlineRename } from './InlineRename'
 import { TagDots } from '../TagDots'
 import { asset, call, native } from '@/lib/api'
-import { DRAG_ICON } from '@/lib/drag'
-import { startDrag } from '@crabnebula/tauri-plugin-drag'
+import { startFileDrag } from '@/lib/drag'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type { Entry, Listing, Preferences } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
@@ -131,13 +130,10 @@ export function FileViews(props: Props) {
       nativeStarted = true
       cleanup()
       if (!native) return
-      void startDrag(
-        { item: paths, icon: DRAG_ICON, mode: copying ? 'copy' : 'move' },
-        (result) => {
-          props.onExternalDrag?.(result.result)
-          if (result.result === 'Dropped') x.reload()
-        },
-      ).catch((error) => {
+      void startFileDrag(paths, copying, (result) => {
+        props.onExternalDrag?.(result)
+        if (result === 'Dropped') x.reload()
+      }).catch((error) => {
         x.setError(String(error))
       })
     }

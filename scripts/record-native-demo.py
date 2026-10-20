@@ -82,6 +82,30 @@ def drag(start, end):
     command('xdotool', 'mouseup', '1')
     time.sleep(1)
 
+import threading
+class ScreenRecorder:
+    def __init__(self, path):
+        self.stop = threading.Event()
+        self.process = subprocess.Popen(['ffmpeg','-hide_banner','-loglevel','error','-y','-f','image2pipe','-framerate','8','-vcodec','png','-i','-','-c:v','libx264','-threads','2','-preset','ultrafast','-crf','22','-pix_fmt','yuv420p',str(path)], stdin=subprocess.PIPE)
+        self.thread = threading.Thread(target=self.capture, daemon=True)
+        self.thread.start()
+    def capture(self):
+        begin = time.monotonic(); frames = 0
+        while not self.stop.is_set():
+            frame = subprocess.check_output(['import','-window','root','png:-'],timeout=5)
+            count = max(1, int((time.monotonic()-begin)*8)-frames)
+            try:
+                for _ in range(count): self.process.stdin.write(frame)
+                self.process.stdin.flush()
+            except BrokenPipeError: return
+            frames += count
+            self.stop.wait(max(0, frames/8-(time.monotonic()-begin)))
+    def terminate(self):
+        self.stop.set(); self.thread.join(timeout=8)
+        self.process.stdin.close()
+    def wait(self, timeout=20):
+        return self.process.wait(timeout=timeout)
+
 recorder = None
 try:
     processes.append(subprocess.Popen(['openbox'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
@@ -95,17 +119,25 @@ try:
     command('xdotool', 'windowactivate', '--sync', fiex)
     time.sleep(2)
     key('Escape')
-    key('ctrl+l')
+    command('xdotool', 'mousemove', 289, 127, 'click', '1')
+    time.sleep(.4)
+    key('ctrl+a')
     command('xdotool', 'type', '--clearmodifiers', '--delay', 8, source)
     key('Return')
     wait_for(lambda: text_points('MOVE_INSIDE'))
-    recorder = subprocess.Popen(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'x11grab', '-framerate', '25', '-video_size', '1700x950', '-i', os.environ['DISPLAY'], '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '22', '-pix_fmt', 'yuv420p', str(out/'fiex-native-drag.mp4')])
+    recorder = ScreenRecorder(out/'fiex-native-drag.mp4')
     time.sleep(2)
     drag(text_points('MOVE_INSIDE')[0], text_points('MOVE_TARGET')[0])
     key('Tab', 'Tab', 'Return')
     wait_for(lambda: (source/'MOVE_TARGET'/'MOVE_INSIDE.txt').is_file())
     assert not (source/'MOVE_INSIDE.txt').exists()
+    inside = text_points('MOVE_TARGET')[0]
+    command('xdotool', 'mousemove', *inside, 'click', '--repeat', 2, '--delay', 100, '1')
+    wait_for(lambda: text_points('MOVE_INSIDE'))
     screenshot('internal-move.png')
+    time.sleep(2)
+    key('alt+Left')
+    wait_for(lambda: text_points('MOVE_OUTSIDE'))
     time.sleep(2)
     # A favorite is an entry pointing at a folder, not a destructive move.
     favorites = wait_for(lambda: text_points('收藏', max_x=220))
@@ -114,18 +146,27 @@ try:
     assert (source/'MOVE_TARGET').is_dir()
     screenshot('favorite.png')
     time.sleep(2)
-    processes.append(subprocess.Popen(['thunar', '--new-window', str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    processes.append(subprocess.Popen(['thunar', str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     thunar = wait_for(lambda: window('other-app'))
     command('xdotool', 'windowmove', thunar, 1200, 0)
     command('xdotool', 'windowsize', thunar, 500, 850)
     command('xdotool', 'windowactivate', '--sync', fiex)
     time.sleep(1)
-    drag(text_points('MOVE_OUTSIDE')[0], (1460, 350))
+    start = text_points('MOVE_OUTSIDE')[0]
+    command('xdotool', 'mousemove', *start, 'mousedown', '1')
+    for x in range(start[0], 1199, 15):
+        command('xdotool', 'mousemove', x, start[1]); time.sleep(.025)
+    command('xdotool', 'mousemove', 1199, start[1]); time.sleep(1.2)
+    for x in range(1200, 1461, 10):
+        command('xdotool', 'mousemove', x, 350); time.sleep(.035)
+    time.sleep(1)
+    command('xdotool', 'mouseup', '1')
     wait_for(lambda: (target/'MOVE_OUTSIDE.txt').is_file())
     assert (target/'MOVE_OUTSIDE.txt').read_text() == 'native external file move verified\n'
     result = {'internal_move': True, 'favorite_added_without_moving_folder': True, 'external_drop_received': True, 'external_source_removed': not (source/'MOVE_OUTSIDE.txt').exists()}
     import json
     (out/'verified-results.json').write_text(json.dumps(result, indent=2))
+    assert result['external_source_removed'], 'Target received a copy instead of a completed move'
     screenshot('external-drop.png')
     time.sleep(4)
 finally:

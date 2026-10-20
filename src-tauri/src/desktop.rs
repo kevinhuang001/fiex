@@ -10,6 +10,23 @@ use std::sync::Mutex;
 use tauri::{ipc::Channel, Emitter, Manager};
 type Watch = Mutex<Option<notify::RecommendedWatcher>>;
 #[tauri::command]
+async fn drag_files(
+    window: tauri::Window,
+    paths: Vec<String>,
+    copy: bool,
+    on_event: Channel<String>,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::native_drag::start(window, paths, copy, on_event).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window, paths, copy, on_event);
+        Err("此命令仅用于 GTK 文件拖动".into())
+    }
+}
+#[tauri::command]
 async fn git_init(path: String) -> Result<git::GitStatus, String> {
     tauri::async_runtime::spawn_blocking(move || git::init(&path))
         .await
@@ -601,6 +618,7 @@ pub fn run() {
         .manage(Mutex::new(None::<notify::RecommendedWatcher>))
         .invoke_handler(tauri::generate_handler![
             platform,
+            drag_files,
             git_init,
             git_stage,
             git_unstage,
