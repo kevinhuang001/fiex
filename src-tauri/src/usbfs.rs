@@ -26,6 +26,30 @@ pub struct UsbEntry {
     pub readonly: bool,
 }
 
+pub fn probe(device: &str) -> Option<FsKind> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(device).ok()?;
+    let mut head = vec![0u8; 70_000];
+    let read = file.read(&mut head).ok()?;
+    head.truncate(read);
+    if head.get(3..11) == Some(b"NTFS    ") {
+        return Some(FsKind::Ntfs);
+    }
+    if head.get(1080..1082) == Some(&[0x53, 0xef]) {
+        return Some(FsKind::Ext4);
+    }
+    if head.get(65_600..65_608) == Some(b"_BHRfS_M") {
+        return Some(FsKind::Btrfs);
+    }
+    if head.get(32..36) == Some(b"NXSB") {
+        return Some(FsKind::Apfs);
+    }
+    if head.get(1024..1026) == Some(b"H+") {
+        return Some(FsKind::Hfs);
+    }
+    None
+}
+
 pub fn detect(filesystem: &str) -> Option<FsKind> {
     match filesystem.to_ascii_lowercase().as_str() {
         "ntfs" | "ntfs3" => Some(FsKind::Ntfs),
@@ -342,6 +366,7 @@ mod tests {
             let dev = FileDevice::open_rw(&device).unwrap();
             fs_btrfs::mkfs::format(&dev, &fs_btrfs::mkfs::Options::default()).unwrap();
         }
+        assert_eq!(probe(&device), Some(FsKind::Btrfs));
         let route = Route {
             device: device.clone(),
             driver_device: device.clone(),
@@ -350,6 +375,52 @@ mod tests {
             root: virtual_root(&device, FsKind::Btrfs),
         };
         assert!(listing(&route).is_ok());
+    }
+
+    #[test]
+    fn virtual_route_end_to_end() {
+        use fs_ntfs::block_io::{BlockIo, PathIo};
+        use std::fs::File;
+        let temp = tempfile::tempdir().unwrap();
+        let image = temp.path().join("virtual-usb.img");
+        let file = File::create(&image).unwrap();
+        file.set_len(64 * 1024 * 1024).unwrap();
+        drop(file);
+        let mut io = PathIo::open_rw(&image).unwrap();
+        fs_ntfs::mkfs::format_filesystem(
+            &mut io,
+            64 * 1024 * 1024,
+            4096,
+            4096,
+            Some("USB"),
+            Some(1),
+        )
+        .unwrap();
+        io.sync().unwrap();
+        drop(io);
+        let device = image.to_string_lossy().into_owned();
+        assert_eq!(probe(&device), Some(FsKind::Ntfs));
+        let root = virtual_root(&device, FsKind::Ntfs);
+        let root_route = route(&root).expect("virtual root route");
+        assert_eq!(root_route.device, device);
+        create(&root_route, "notes.txt", false).unwrap();
+        let file_path = format!("{root}/notes.txt");
+        let file_route = route(&file_path).expect("file route");
+        write_path(&file_route, b"virtual usb").unwrap();
+        assert_eq!(read_path(&file_route).unwrap(), b"virtual usb");
+        let entries = listing(&root_route).unwrap();
+        assert!(entries.iter().any(|entry| entry.path == file_path));
+        assert!(search(&root_route, "notes", 10)
+            .unwrap()
+            .iter()
+            .any(|entry| entry.name == "notes.txt"));
+        let local = temp.path().join("local");
+        std::fs::create_dir(&local).unwrap();
+        copy_to_local(&file_route, &local, false, false).unwrap();
+        assert_eq!(
+            std::fs::read(local.join("notes.txt")).unwrap(),
+            b"virtual usb"
+        );
     }
 
     #[test]
