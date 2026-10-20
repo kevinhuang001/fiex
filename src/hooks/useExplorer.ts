@@ -101,7 +101,7 @@ export function useExplorer(prefs: Preferences) {
     return () => {
       active = false
     }
-  }, [path, prefs.hidden, refresh, query])
+  }, [path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
     if (!path || !native) return
     let cleanup: (() => void) | undefined

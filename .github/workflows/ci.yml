@@ -199,7 +199,6 @@ jobs:
             echo "FIEX_SMB_PORT=10445" >> "$GITHUB_ENV"
           fi
       - run: npm ci
-      - run: npm ci
       - run: npm run icons
       - run: npm run build
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check

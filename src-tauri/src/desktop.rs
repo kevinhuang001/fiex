@@ -3,7 +3,7 @@ use crate::{
     operations::{self, OperationResult, Operations},
     remote,
     search::{SearchBatch, SearchState},
-    terminals,
+    tags, terminals, volumes,
 };
 use notify::Watcher;
 use std::sync::Mutex;
@@ -33,8 +33,8 @@ fn platform() -> &'static str {
     std::env::consts::OS
 }
 #[tauri::command]
-fn locations() -> Vec<files::Location> {
-    files::locations()
+fn locations() -> Vec<volumes::Location> {
+    volumes::locations()
 }
 #[tauri::command]
 async fn list_directory(
@@ -138,7 +138,7 @@ async fn eject_usb(device: String) -> Result<(), String> {
 }
 #[tauri::command]
 async fn mount_device(device: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || files::mount_device(&device))
+    tauri::async_runtime::spawn_blocking(move || volumes::mount_device(&device))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -453,15 +453,15 @@ fn reveal_path(path: String) -> Result<(), String> {
 }
 #[tauri::command]
 fn trash_path() -> Option<String> {
-    files::trash_path().map(|path| path.to_string_lossy().into_owned())
+    volumes::trash_path().map(|path| path.to_string_lossy().into_owned())
 }
 #[tauri::command]
 fn open_applications() -> Result<(), String> {
     terminals::open_applications()
 }
 #[tauri::command]
-fn set_tags(paths: Vec<String>, tags: Vec<files::Tag>) -> Result<(), String> {
-    files::set_tags(&paths, &tags)
+fn set_tags(paths: Vec<String>, tags: Vec<tags::Tag>) -> Result<(), String> {
+    tags::set_tags(&paths, &tags)
 }
 #[tauri::command]
 fn open_full_disk_access() -> Result<(), String> {
