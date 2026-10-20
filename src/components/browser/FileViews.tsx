@@ -90,6 +90,7 @@ export function FileViews(props: Props) {
       onDragOver: (event: React.DragEvent) => {
         if (e.isDir) {
           event.preventDefault()
+          event.dataTransfer.dropEffect = event.altKey || event.ctrlKey ? 'copy' : 'move'
           event.currentTarget.classList.add('drop-target')
         }
       },
@@ -103,7 +104,7 @@ export function FileViews(props: Props) {
             onDrop(
               JSON.parse(event.dataTransfer.getData('application/x-fiex')),
               e.path,
-              event.shiftKey,
+              !(event.altKey || event.ctrlKey),
             )
           } catch {
             /* Native OS drop is handled by Tauri. */
@@ -176,7 +177,11 @@ export function FileViews(props: Props) {
   const dropBackground = (event: React.DragEvent) => {
     event.preventDefault()
     try {
-      onDrop(JSON.parse(event.dataTransfer.getData('application/x-fiex')), x.path, event.shiftKey)
+      onDrop(
+        JSON.parse(event.dataTransfer.getData('application/x-fiex')),
+        x.path,
+        !(event.altKey || event.ctrlKey),
+      )
     } catch {
       /* Ignore unrelated browser drags. */
     }

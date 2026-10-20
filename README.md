@@ -7,7 +7,7 @@ Fiex gives your files room to breathe: a translucent sidebar, compact controls, 
 
 ### Find your way
 
-The path bar edits the current location inline and copies it with one click. Explore with list, icon, column and gallery views. The icon view uses a Finder-style fixed grid with two-line labels and snap-to-grid cells. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
+The path bar edits the current location inline with the full path selected for copying. Explore with list, icon, column and gallery views. The icon view uses a Finder-style fixed grid with two-line labels and snap-to-grid cells. Group by kind, extension, modification date or size. Sort, open tabs, pin favorite folders, browse mounted volumes and jump directly to a path. Folder changes appear automatically.
 
 File icons are colored by type and language using the MIT-licensed [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme), with dedicated icons for 1,300+ extensions and 2,100+ filenames. Application bundles still use their native system logos.
 
@@ -17,7 +17,7 @@ Built-in parallel filename search uses the `ignore` engine from ripgrep. Results
 
 ### Work with your files
 
-Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Renaming happens inline on the item, Finder-style; a new folder is created immediately with a unique name and its name is selected for editing. Drag between Fiex folders to copy; hold Shift to move. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
+Create files and folders, rename, copy, cut, paste, duplicate, move to Trash, and undo file operations within the session. Renaming happens inline on the item, Finder-style; a new folder is created immediately with a unique name and its name is selected for editing. Drag between Fiex folders to move; hold Option/Alt (or Ctrl) to copy. Drop a folder on the Favorites section to bookmark it. Drop files from another app to copy them into the current folder. Existing names are preserved by keeping both files.
 
 The sidebar has one **Applications** entry on every platform. macOS browses `/Applications` directly; Windows and Linux have no equivalent folder, so the entry only opens the platform app list. The **Trash** opens inside Fiex on macOS and Linux, so deleted files can be browsed and moved back without launching Finder.
 

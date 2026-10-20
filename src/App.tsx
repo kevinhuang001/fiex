@@ -51,7 +51,7 @@ import { usePreferences } from './hooks/usePreferences'
 import { call, native, demo } from './lib/api'
 import { basename, isArchive, join, size, uniqueName } from './lib/files'
 import { matchShortcut, shortcutLabel } from './lib/shortcuts'
-import type { Entry, Group, OperationResult, Sort, Terminal, View } from './lib/types'
+import type { Entry, Group, Location, OperationResult, Sort, Terminal, View } from './lib/types'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 /> },
   { id: 'list', name: '列表', icon: <List /> },
@@ -184,13 +184,6 @@ export default function App() {
   const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
   const displayName = (path: string) =>
     trashPath && path === trashPath ? '废纸篓' : basename(path)
-  const copyPath = (value = editingPath ? pathDraft : x.path) => {
-    if (!value) return
-    void navigator.clipboard
-      .writeText(value)
-      .then(() => notify('路径已复制'))
-      .catch((error) => x.setError(String(error)))
-  }
   const startPathEdit = () => {
     setPathDraft(x.path)
     setEditingPath(true)
@@ -298,6 +291,33 @@ export default function App() {
       await call('undo')
       notify('已撤销上一次文件操作')
     })
+  const bookmarkPaths = async (paths: string[]) => {
+    const existing = new Set(prefs.favorites.map((item) => item.path))
+    const additions: Location[] = []
+    let files = 0
+    for (const path of paths) {
+      if (existing.has(path)) continue
+      try {
+        const info = await call<Entry>('file_info', { path })
+        if (!info.isDir) {
+          files += 1
+          continue
+        }
+        existing.add(path)
+        additions.push({ name: info.name, path, kind: 'favorite', available: 0, total: 0 })
+      } catch {
+        /* The item may have disappeared while dragging. */
+      }
+    }
+    if (additions.length) {
+      update({ favorites: [...prefs.favorites, ...additions] })
+      notify(`已收藏 ${additions.length} 个文件夹`)
+    } else if (files) {
+      notify('只能把文件夹加入收藏')
+    } else {
+      notify('这些文件夹已在收藏中')
+    }
+  }
   const favorite = () => {
     const path = first?.isDir ? first.path : x.path
     if (prefs.favorites.some((l) => l.path === path)) {
@@ -489,6 +509,7 @@ export default function App() {
         onSettings={() => setSettings(true)}
         onTrash={openTrash}
         onApplications={openApplications}
+        onBookmark={bookmarkPaths}
         trashPath={trashPath}
       />
       <main className="main">
@@ -731,15 +752,6 @@ export default function App() {
               </>
             )}
           </nav>
-          <button
-            className="icon-button path-copy"
-            title="复制路径"
-            aria-label="复制路径"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => copyPath()}
-          >
-            <Copy size={13} />
-          </button>
           <div className="search-box">
             <Search size={15} />
             <input

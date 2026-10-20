@@ -264,6 +264,15 @@ button[data-slot='button'][data-variant='default'] {
 .disk-item i i {
   background: #7c9db4;
 }
+.favorites-section {
+  border-radius: 10px;
+  transition: background 0.12s;
+}
+.favorites-section.bookmark-drop {
+  background: color-mix(in srgb, var(--selected) 55%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: 1px;
+}
 .favorite-row {
   position: relative;
 }
@@ -485,14 +494,6 @@ button[data-slot='button'][data-variant='default'] {
 }
 .path-input:focus-visible {
   outline: none;
-}
-.path-copy {
-  flex-shrink: 0;
-  color: var(--muted);
-}
-.path-copy:hover {
-  background: var(--hover);
-  color: var(--text);
 }
 .search-box {
   display: flex;

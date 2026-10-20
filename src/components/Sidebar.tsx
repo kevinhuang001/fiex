@@ -29,6 +29,7 @@ interface Props {
   onSettings: () => void
   onTrash: () => void
   onApplications: () => void
+  onBookmark: (paths: string[]) => void
   trashPath: string | null
 }
 export function Sidebar({
@@ -41,6 +42,7 @@ export function Sidebar({
   onSettings,
   onTrash,
   onApplications,
+  onBookmark,
   trashPath,
 }: Props) {
   const iconFor = (name: string) =>
@@ -90,7 +92,9 @@ export function Sidebar({
                 l.kind === 'applications' && !l.path ? onApplications() : x.navigate(l.path)
               }
               onDragOver={(e) => {
-                if (l.path) e.preventDefault()
+                if (!l.path) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = e.altKey || e.ctrlKey ? 'copy' : 'move'
               }}
               onDrop={(e) => {
                 if (!l.path) return
@@ -99,7 +103,7 @@ export function Sidebar({
                   transfer(
                     JSON.parse(e.dataTransfer.getData('application/x-fiex')),
                     l.path,
-                    e.shiftKey,
+                    !(e.altKey || e.ctrlKey),
                   )
                 } catch {}
               }}
@@ -108,36 +112,91 @@ export function Sidebar({
               <span>{l.name}</span>
             </button>
           ))}
-        <div className="sidebar-section-title">
-          <span className="sidebar-label">收藏</span>
-          <button className="icon-button" title="收藏当前文件夹" onClick={favorite}>
-            <Plus size={14} />
-          </button>
+        <div
+          className="favorites-section"
+          onDragOver={(event) => {
+            if (!Array.from(event.dataTransfer.types).includes('application/x-fiex')) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'copy'
+            event.currentTarget.classList.add('bookmark-drop')
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node))
+              event.currentTarget.classList.remove('bookmark-drop')
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            event.currentTarget.classList.remove('bookmark-drop')
+            try {
+              const paths = JSON.parse(event.dataTransfer.getData('application/x-fiex'))
+              if (Array.isArray(paths)) onBookmark(paths)
+            } catch {
+              /* Native OS drops are handled by Tauri. */
+            }
+          }}
+        >
+          <div className="sidebar-section-title">
+            <span className="sidebar-label">收藏</span>
+            <button
+              className="icon-button"
+              title="收藏当前文件夹；也可以把文件夹拖到这里"
+              onClick={favorite}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          {prefs.favorites.length ? (
+            prefs.favorites.map((l) => (
+              <div
+                className="favorite-row"
+                key={l.path}
+                onDragOver={(event) => {
+                  if (!Array.from(event.dataTransfer.types).includes('application/x-fiex')) return
+                  event.preventDefault()
+                  event.stopPropagation()
+                  event.dataTransfer.dropEffect = event.altKey || event.ctrlKey ? 'copy' : 'move'
+                  event.currentTarget.classList.add('drop-target')
+                  event.currentTarget
+                    .closest('.favorites-section')
+                    ?.classList.remove('bookmark-drop')
+                }}
+                onDragLeave={(event) => event.currentTarget.classList.remove('drop-target')}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  event.currentTarget.classList.remove('drop-target')
+                  try {
+                    transfer(
+                      JSON.parse(event.dataTransfer.getData('application/x-fiex')),
+                      l.path,
+                      !(event.altKey || event.ctrlKey),
+                    )
+                  } catch {}
+                }}
+              >
+                <button
+                  className={`nav-item ${x.path === l.path ? 'active' : ''}`}
+                  onClick={() => x.navigate(l.path)}
+                >
+                  <Star />
+                  <span>{l.name}</span>
+                </button>
+                <button
+                  className="favorite-remove icon-button"
+                  title="移除收藏"
+                  onClick={() =>
+                    update({ favorites: prefs.favorites.filter((f) => f.path !== l.path) })
+                  }
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="sidebar-hint">将常用文件夹拖到这里收藏</p>
+          )}
         </div>
-        {prefs.favorites.length ? (
-          prefs.favorites.map((l) => (
-            <div className="favorite-row" key={l.path}>
-              <button
-                className={`nav-item ${x.path === l.path ? 'active' : ''}`}
-                onClick={() => x.navigate(l.path)}
-              >
-                <Star />
-                <span>{l.name}</span>
-              </button>
-              <button
-                className="favorite-remove icon-button"
-                title="移除收藏"
-                onClick={() =>
-                  update({ favorites: prefs.favorites.filter((f) => f.path !== l.path) })
-                }
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))
-        ) : (
-          <p className="sidebar-hint">将常用文件夹留在这里</p>
-        )}
         <div className="sidebar-label devices-label">设备</div>
         {x.locations
           .filter((l) => l.kind === 'disk')

@@ -84,20 +84,45 @@ test('shortcut preset and custom binding', async ({ page }) => {
   await expect(copy).toContainText('⌘C')
   await page.getByRole('button', { name: '关闭', exact: true }).click()
 })
-test('address bar edits and copies the current path', async ({ page }) => {
+test('address bar selects the whole path for copying', async ({ page }) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.getByText('Research', { exact: true }).dblclick()
   await page.getByRole('button', { name: '编辑路径', exact: true }).click()
   const input = page.getByRole('textbox', { name: '文件夹路径' })
   await expect(input).toHaveValue('/Users/kevin/Documents/Research')
   await expect(input).toBeFocused()
-  await page.keyboard.press('Escape')
-  await expect(input).toHaveCount(0)
-  await page.getByRole('button', { name: '复制路径', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('路径已复制')
+  expect(
+    await input.evaluate((element: HTMLInputElement) => [
+      element.selectionStart,
+      element.selectionEnd,
+    ]),
+  ).toEqual([0, '/Users/kevin/Documents/Research'.length])
+  await page.keyboard.press('Control+c')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
     '/Users/kevin/Documents/Research',
   )
+  await page.keyboard.press('Escape')
+  await expect(input).toHaveCount(0)
+})
+test('dragging moves files and bookmarks folders', async ({ page }) => {
+  const data = await page.evaluateHandle(() => new DataTransfer())
+  await page
+    .locator('[data-path="/Users/kevin/Documents/Notes.md"]')
+    .dispatchEvent('dragstart', { dataTransfer: data })
+  const research = page.locator('[data-path="/Users/kevin/Documents/Research"]')
+  await research.dispatchEvent('dragover', { dataTransfer: data })
+  await research.dispatchEvent('drop', { dataTransfer: data })
+  await expect(page.getByRole('dialog')).toContainText('移动项目')
+  await page.getByRole('button', { name: '取消', exact: true }).click()
+
+  const folder = await page.evaluateHandle(() => new DataTransfer())
+  await research.dispatchEvent('dragstart', { dataTransfer: folder })
+  const bookmarks = page.locator('.favorites-section')
+  await bookmarks.dispatchEvent('dragover', { dataTransfer: folder })
+  await bookmarks.dispatchEvent('drop', { dataTransfer: folder })
+  await expect(
+    page.locator('.favorite-row .nav-item').filter({ hasText: 'Research' }),
+  ).toBeVisible()
 })
 test('Applications entry and search focus', async ({ page }) => {
   await page.getByRole('button', { name: '应用程序', exact: true }).click()

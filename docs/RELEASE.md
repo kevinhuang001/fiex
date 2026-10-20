@@ -2,7 +2,8 @@ Fiex is a native file explorer built with Tauri, React and shadcn/ui.
 
 - Frosted sidebar inspired by Pantodo, with light and dark appearances.
 - System Settings-style preferences with a searchable sidebar, grouped cards and per-page navigation.
-- The current path can be edited inline and copied with one click from the path bar.
+- The current path can be edited inline with the whole address selected for copying.
+- Drag between folders moves by default; Option/Alt or Ctrl copies. Drop a folder on Favorites to bookmark it.
 - A unified Applications entry on macOS, Windows and Linux: macOS browses /Applications, while Windows and Linux open the platform app list.
 - The Trash opens inside Fiex on macOS and Linux; Windows keeps the system Recycle Bin.
 - Crisp native application logos rendered at the display's pixel ratio, including large icon view.

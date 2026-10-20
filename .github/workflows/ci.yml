@@ -86,7 +86,23 @@ jobs:
       - run: npm run icons
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib
-      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} -- -D warnings
+      - name: Clippy
+        shell: bash
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} -- -D warnings 2>&1 | tee clippy.log
+      - name: Report Clippy failure
+        if: failure()
+        shell: bash
+        run: |
+          [ -f clippy.log ] || exit 0
+          {
+            echo '### Clippy failure'
+            echo '```'
+            grep -E -A8 '^(error|warning)' clippy.log | head -160 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E -A8 '^(error|warning)' clippy.log | head -160 | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::error title=Clippy::$line"
+          done
       - uses: tauri-apps/tauri-action@v0
         with:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
