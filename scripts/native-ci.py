@@ -31,6 +31,11 @@ with socket.socket() as sock:
 URL = f'http://127.0.0.1:{PORT}/'
 processes = []
 results = {}
+# Optional stages that need extra services can be skipped while recording a
+# demo on a workstation. CI must always exercise every stage.
+SKIP = {item.strip() for item in os.environ.get('FIEX_CI_SKIP', '').split(',') if item.strip()}
+if SKIP and os.environ.get('GITHUB_ACTIONS'):
+    raise SystemExit('FIEX_CI_SKIP is not allowed in CI')
 stage = 'Starting Fiex'
 mouse.PAUSE = .12
 # Dedicated CI desktop; the workflow timeout bounds unattended input.
@@ -308,15 +313,16 @@ try:
     passed('same_app_window_move')
     # Close the other Fiex window using its real window control.
     click('[title="关闭窗口"]', second)
-    stage = 'Copy to the OS file manager and preserve the source'
-    arrange_file_manager(external, tx, ty, tw, th)
-    request(action='focus')
-    original = (source/'03-external.txt').read_bytes()
-    drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+350), (sw-1, ty+260))
-    wait(lambda: (external/'03-external.txt').is_file())
-    assert (external/'03-external.txt').read_bytes() == original
-    assert (source/'03-external.txt').read_bytes() == original
-    passed('external_file_manager_copy')
+    if 'file-manager' not in SKIP:
+        stage = 'Copy to the OS file manager and preserve the source'
+        arrange_file_manager(external, tx, ty, tw, th)
+        request(action='focus')
+        original = (source/'03-external.txt').read_bytes()
+        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+350), (sw-1, ty+260))
+        wait(lambda: (external/'03-external.txt').is_file())
+        assert (external/'03-external.txt').read_bytes() == original
+        assert (source/'03-external.txt').read_bytes() == original
+        passed('external_file_manager_copy')
     stage = 'Drag into Chromium and verify server-received bytes'
     upload = root/'uploaded.txt'
     browser_env = {**env, 'FIEX_CI_RECEIVER_BOUNDS': json.dumps(dict(x=tx, y=ty, width=tw, height=th))}
@@ -380,6 +386,7 @@ try:
     stage = 'WebDAV and SMB: connect, list, download and preview'
     click('[aria-label="切换侧栏"]')
     for protocol in ('webdav', 'smb'):
+        if protocol in SKIP: continue
         click('[title="添加 WebDAV 或 SMB 连接"]')
         if protocol == 'smb': button('SMB')
         def field(label, value):
@@ -403,7 +410,8 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
         passed(protocol+'_live_download_preview')
     stage = 'Disk images: list, read, copy out and verify read-only behavior'
     images = request(action='images')
-    assert {i['name'] for i in images} == {'ntfs', 'ext4', 'btrfs', 'apfs', 'hfs'}, images
+    expected = {p.stem for p in Path(os.environ['FIEX_CI_IMAGES']).glob('*.img')}
+    assert {i['name'] for i in images} == expected, images
     for image in sorted(images, key=lambda i: i['name']):
         name, path = image['name'], image['path']
         stage = 'Filesystem / '+name.upper()
