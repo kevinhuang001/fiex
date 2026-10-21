@@ -77,6 +77,7 @@ export function ExplorerToolbar({
   | 'newWindow'
   | 'inTrash'
   | 'emptyTrash'
+  | 'displayName'
 >) {
   return (
     <>

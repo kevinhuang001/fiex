@@ -21,6 +21,7 @@
         "minHeight": 540,
         "center": true,
         "decorations": true,
+        "titleBarStyle": "Overlay",
         "transparent": true,
         "backgroundColor": "#00000000",
         "shadow": true,

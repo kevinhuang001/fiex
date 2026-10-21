@@ -28,6 +28,7 @@ export default function App() {
   return (
     <div
       className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''}`}
+      data-platform={app.platform}
       style={{ '--label-size': '11px' } as CSSProperties}
     >
       <Sidebar
@@ -46,8 +47,8 @@ export default function App() {
         trashPath={app.trashPath}
       />
       <main className="main">
-        <ExplorerToolbar {...app} />
         <ExplorerTabs {...app} />
+        <ExplorerToolbar {...app} />
         <ExplorerPathBar {...app} />
         {app.gitSwitched && (
           <div className="history-banner">
