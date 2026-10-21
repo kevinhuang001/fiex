@@ -69,6 +69,9 @@ pub fn detect() -> Vec<Terminal> {
     }
     out
 }
+fn shell_escape(path: &std::path::Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+}
 pub fn launch(path: &str, id: &str) -> Result<(), String> {
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
     let dir: PathBuf = if path.is_dir() {
@@ -82,6 +85,54 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let app = if id == "default" { "Terminal" } else { id };
+        // Terminal and iTerm need AppleScript to open a session in a folder;
+        // Warp has a URL scheme and Tabby's CLI opens a tab at a directory.
+        match app {
+            "Terminal" => {
+                let script = format!(
+                    "tell application \"Terminal\"\nactivate\ndo script \"cd {}\"\nend tell",
+                    shell_escape(&dir)
+                );
+                Command::new("osascript")
+                    .args(["-e", &script])
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+            "iTerm" => {
+                let script = format!(
+                    "tell application \"iTerm\"\nactivate\ncreate window with default profile command \"cd {}\"\nend tell",
+                    shell_escape(&dir)
+                );
+                Command::new("osascript")
+                    .args(["-e", &script])
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+            "Warp" => {
+                let target = format!(
+                    "warp://action/new_tab?path={}",
+                    urlencoding::encode(&dir.to_string_lossy())
+                );
+                Command::new("open")
+                    .arg(target)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+            "Tabby" => {
+                if which::which("tabby").is_ok() {
+                    Command::new("tabby")
+                        .arg("open")
+                        .arg(&dir)
+                        .spawn()
+                        .map_err(|e| e.to_string())?;
+                    return Ok(());
+                }
+            }
+            _ => {}
+        }
         let mut command = Command::new("open");
         match app {
             "Ghostty" => {

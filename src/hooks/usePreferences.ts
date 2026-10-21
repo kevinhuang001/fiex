@@ -20,6 +20,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     ide: 'vscode',
     theme: 'system',
     fontSize: 11,
+    startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
     compressIgnore: defaultOperationIgnore(),
     copyIgnore: defaultOperationIgnore(),
@@ -56,9 +57,14 @@ function load(): Preferences {
           )
       }
     }
+    const startPage =
+      stored.startPage === 'home' || stored.startPage === 'documents' || stored.startPage === 'last'
+        ? stored.startPage
+        : 'recent'
     return {
       ...fallback,
       ...stored,
+      startPage,
       fontSize,
       displayIgnore: Array.isArray(stored.displayIgnore)
         ? stored.displayIgnore

@@ -17,6 +17,7 @@ import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
+
   // The label size is the reference size: every window is zoomed by the same
   // ratio so the preference scales the sidebar, toolbar, dialogs and file list
   // together instead of only enlarging file names.
@@ -100,6 +101,7 @@ export default function App() {
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
             onDrop={app.transfer}
             onBookmark={app.bookmarkPaths}
+            onWorkspace={app.addWorkspace}
             onExternalDrag={(result) =>
               app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
             }

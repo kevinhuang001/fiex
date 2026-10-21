@@ -1001,10 +1001,21 @@ button[data-slot='button'][data-variant='default'] {
 .column-detail button {
   color: var(--accent);
 }
+.statusbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  padding: 0 12px;
+}
+.statusbar.workspace-open .workspace-items {
+  padding: 6px 14px 8px;
+}
 .statusbar {
-  height: 34px;
-  min-height: 34px;
-  padding: 0 24px;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 28px;
+  padding: 0;
   border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -2797,4 +2808,113 @@ body.dragging-file * {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 4px;
   pointer-events: none;
+}
+
+/* Workspace tray: references only, never copies. */
+.workspace-bar {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  transition: background 0.12s;
+}
+.workspace-bar.open {
+  background: var(--canvas);
+}
+.workspace-bar.workspace-drop {
+  background: color-mix(in srgb, var(--accent) 12%, var(--canvas));
+  outline: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: -3px;
+}
+.workspace-bar header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 14px;
+}
+.workspace-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+}
+.workspace-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+.workspace-hint {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--muted);
+}
+.workspace-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--muted);
+  background: transparent;
+}
+.workspace-clear:hover {
+  color: #c66c60;
+}
+.workspace-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 132px;
+  padding: 4px 14px 12px;
+  overflow-y: auto;
+}
+.workspace-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.workspace-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text);
+  background: transparent;
+}
+.workspace-open span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-remove {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 7px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  background: transparent;
+}
+.workspace-empty {
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--muted);
 }

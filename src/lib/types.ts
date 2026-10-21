@@ -87,6 +87,8 @@ export interface GitRemoteStatus {
 export type View = 'list' | 'gallery' | 'columns' | 'icons'
 export type Group = 'none' | 'kind' | 'modified' | 'extension' | 'size'
 export type Sort = 'name' | 'modified' | 'size' | 'kind'
+export type StartPage = 'recent' | 'home' | 'documents' | 'last'
+
 export interface Preferences {
   view: View
   group: Group
@@ -97,6 +99,7 @@ export interface Preferences {
   ide: string
   theme: 'system' | 'light' | 'dark'
   fontSize: number
+  startPage: StartPage
   displayIgnore: string[]
   compressIgnore: string[]
   copyIgnore: string[]

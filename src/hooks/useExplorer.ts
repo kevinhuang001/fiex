@@ -80,15 +80,22 @@ export function useExplorer(prefs: Preferences) {
     // the first listing is requested immediately, then fill the sidebar.
     void refreshLocations().catch(() => {})
     void (async () => {
-      const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
-      if (cancelled) return
-      let start = initial
+      let start: string | null = null
+      if (prefs.startPage === 'recent') start = 'recent://'
+      else if (prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
       if (!start) {
-        const next = await call<Location[]>('locations').catch(() => [] as Location[])
+        const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
         if (cancelled) return
-        start = next.find((x) => x.name === '文稿')?.path || next[0]?.path || null
+        const locations = await call<Location[]>('locations').catch(() => [] as Location[])
+        if (cancelled) return
+        const pick = (name: string) => locations.find((item) => item.name === name)?.path
+        start =
+          prefs.startPage === 'home'
+            ? (pick('个人文件夹') ?? initial)
+            : (pick('文稿') ?? initial ?? locations[0]?.path ?? null)
       }
       if (start) {
+        if (start !== 'recent://') localStorage.setItem('fiex:lastPath', start)
         setPath(start)
         setHistory([start])
         setCursor(0)
@@ -117,6 +124,12 @@ export function useExplorer(prefs: Preferences) {
           setListedPath(path)
           setEntries(l.entries)
           setWarnings(l.warnings)
+          // A fresh install has nothing recent yet; do not greet the user with
+          // an empty list.
+          if (path === 'recent://' && l.entries.length === 0 && history.length <= 1) {
+            const home = locations.find((item) => item.name === '个人文件夹')?.path
+            if (home) navigate(home)
+          }
           const paths = new Set(l.entries.map((entry) => entry.path))
           setSelected((selected) => selected.filter((path) => paths.has(path)))
         }

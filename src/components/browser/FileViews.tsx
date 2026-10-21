@@ -33,6 +33,7 @@ interface Props {
   onMenu: (e: Entry, x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
   onBookmark: (paths: string[]) => void
+  onWorkspace: (paths: string[]) => void
   onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
   readOnly?: boolean
   trashPath?: string | null
@@ -41,6 +42,7 @@ interface Props {
 type DropTarget =
   | { kind: 'folder'; path: string; element: HTMLElement }
   | { kind: 'bookmark'; element: HTMLElement }
+  | { kind: 'workspace'; element: HTMLElement }
 
 function dropTargetAt(x: number, y: number): DropTarget | null {
   const element = document.elementFromPoint(x, y)
@@ -49,6 +51,8 @@ function dropTargetAt(x: number, y: number): DropTarget | null {
     return { kind: 'folder', path: folder.dataset.dropFolder, element: folder }
   const bookmark = element?.closest('[data-bookmark-drop]') as HTMLElement | null
   if (bookmark) return { kind: 'bookmark', element: bookmark }
+  const workspace = element?.closest('[data-workspace-drop]') as HTMLElement | null
+  if (workspace) return { kind: 'workspace', element: workspace }
   return null
 }
 
@@ -59,6 +63,9 @@ function clearDropHighlight() {
   document
     .querySelectorAll('.bookmark-drop')
     .forEach((element) => element.classList.remove('bookmark-drop'))
+  document
+    .querySelectorAll('.workspace-drop')
+    .forEach((element) => element.classList.remove('workspace-drop'))
 }
 
 function SyncBadge({ sync }: { sync: Entry['sync'] }) {
@@ -104,7 +111,7 @@ function NameCell({
 }
 
 export function FileViews(props: Props) {
-  const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark } = props
+  const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark, onWorkspace } = props
   const readOnly = Boolean(props.readOnly)
   const inTrash = Boolean(props.trashPath && x.path === props.trashPath)
   const entries = useMemo(
@@ -251,6 +258,7 @@ export function FileViews(props: Props) {
       const target = dropTargetAt(moveEvent.clientX, moveEvent.clientY)
       if (target?.kind === 'folder') target.element.classList.add('drop-target')
       else if (target?.kind === 'bookmark') target.element.classList.add('bookmark-drop')
+      else if (target?.kind === 'workspace') target.element.classList.add('workspace-drop')
     }
     const finish = (upEvent: PointerEvent) => {
       cleanup()
@@ -263,6 +271,7 @@ export function FileViews(props: Props) {
       if (target?.kind === 'folder' && !paths.includes(target.path))
         onDrop(paths, target.path, !(upEvent.altKey || upEvent.ctrlKey))
       else if (target?.kind === 'bookmark') onBookmark(paths)
+      else if (target?.kind === 'workspace') onWorkspace(paths)
     }
     window.addEventListener('pointermove', move, { passive: false })
     window.addEventListener('pointerup', finish)

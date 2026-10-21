@@ -11,12 +11,14 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
+import { useWorkspace } from './useWorkspace'
 import { useFileOperations } from './useFileOperations'
 import { usePathEditor } from './usePathEditor'
 export function useAppController() {
   const [prefs, update] = usePreferences()
   const x = useExplorer(prefs)
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
+  const workspace = useWorkspace()
 
   const [sidebar, setSidebar] = useState(true)
   const [preview, setPreview] = useState<Entry | null>(null)
@@ -130,6 +132,16 @@ export function useAppController() {
       return
     }
     void run('正在打开…', () => call('open_path', { path: e.path }))
+  }
+  const addWorkspace = async (paths: string[]) => {
+    const entries = await Promise.all(
+      paths.map(
+        async (path) =>
+          x.entries.find((entry) => entry.path === path) ||
+          (await call<Entry>('file_info', { path }).catch(() => null)),
+      ),
+    )
+    workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
   }
   const checksum = (path: string) =>
     void run('正在计算校验和…', async () => {
@@ -452,6 +464,10 @@ export function useAppController() {
               await bookmarkPaths(drop.paths)
               return
             }
+            if (element?.closest('[data-workspace-drop]')) {
+              await addWorkspace(drop.paths)
+              return
+            }
             const folder = element?.closest<HTMLElement>('[data-drop-folder]')?.dataset.dropFolder
             transfer(drop.paths, folder || x.path, drop.moving)
           })().catch((error) => x.setError(String(error)))
@@ -581,6 +597,8 @@ export function useAppController() {
     terminals,
     toast,
     setToast,
+    workspace,
+    addWorkspace,
   }
 }
 export type AppController = ReturnType<typeof useAppController>
