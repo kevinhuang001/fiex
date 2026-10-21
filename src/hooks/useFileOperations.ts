@@ -49,20 +49,41 @@ export function useFileOperations({
     label: string,
     fn: () => Promise<T>,
     detail?: string,
+    cancellable = false,
   ): Promise<T | undefined> => {
     if (running.current) return
     running.current = true
     setBusy(label)
     x.setError('')
-    const activity = beginActivity(label, detail)
+    if (cancellable) {
+      // Reset the shared backend flag first so a previous cancel cannot abort
+      // the operation we are about to start.
+      await call('begin_operation').catch(() => {})
+    }
+    const activity = beginActivity(
+      label,
+      detail,
+      cancellable
+        ? () => {
+            void call('cancel_operation').catch(() => {})
+          }
+        : undefined,
+    )
     try {
       const result = await fn()
       finishActivity(activity)
       x.reload()
       return result
     } catch (e) {
-      x.setError(String(e))
-      finishActivity(activity, String(e))
+      const message = String(e)
+      if (message.includes('已取消')) {
+        // Cancelling is the user's choice; the activity centre already says so.
+        // Refresh because a stopped transfer may still have moved some files.
+        x.reload()
+      } else {
+        x.setError(message)
+      }
+      finishActivity(activity, message)
       return undefined
     } finally {
       running.current = false
@@ -106,7 +127,7 @@ export function useFileOperations({
       deletePermanently(paths)
       return
     }
-    void run('正在移到废纸篓…', () => moveToTrash(paths), `${paths.length} 个项目 → 废纸篓`)
+    void run('正在移到废纸篓…', () => moveToTrash(paths), `${paths.length} 个项目 → 废纸篓`, true)
   }
   const deletePermanently = (paths: string[]) => {
     if (!paths.length) return
@@ -115,19 +136,29 @@ export function useFileOperations({
       submit: '彻底删除',
       danger: true,
       action: async () => {
-        await run('正在彻底删除…', () => call<number>('delete_permanently', { paths }))
+        await run(
+          '正在彻底删除…',
+          () => call<number>('delete_permanently', { paths }),
+          undefined,
+          true,
+        )
         x.setSelected([])
       },
     })
   }
   const restoreFromTrash = (paths: string[]) => {
     if (!paths.length) return
-    void run('正在复原…', async () => {
-      const restored = await call<number>('restore_from_trash', { paths })
-      if (restored === undefined) return
-      notify(`已复原 ${restored} 个项目`)
-      x.setSelected([])
-    })
+    void run(
+      '正在复原…',
+      async () => {
+        const restored = await call<number>('restore_from_trash', { paths })
+        if (restored === undefined) return
+        notify(`已复原 ${restored} 个项目`)
+        x.setSelected([])
+      },
+      undefined,
+      true,
+    )
   }
   const emptyTrash = () => {
     setDialog({
@@ -135,7 +166,12 @@ export function useFileOperations({
       submit: '清空废纸篓',
       danger: true,
       action: async () => {
-        const removed = await run('正在清空废纸篓…', () => call<number>('empty_trash'))
+        const removed = await run(
+          '正在清空废纸篓…',
+          () => call<number>('empty_trash'),
+          undefined,
+          true,
+        )
         if (removed === undefined) return
         x.setSelected([])
         notify(removed > 0 ? `已清空 ${removed} 个项目` : '废纸篓已经是空的')
@@ -161,6 +197,7 @@ export function useFileOperations({
           resolutions,
         }),
       `${paths.length} 项 → ${destination}`,
+      true,
     )
     if (!result) return
     if (result.conflicts?.length) {
@@ -192,17 +229,22 @@ export function useFileOperations({
   }
   const duplicate = () => {
     if (!writable()) return
-    void run('正在创建副本…', async () => {
-      handleResult(
-        await call<OperationResult>('transfer', {
-          paths: x.selected,
-          destination: x.path,
-          moving: false,
-          keepBoth: true,
-          ignores: [],
-        }),
-      )
-    })
+    void run(
+      '正在创建副本…',
+      async () => {
+        handleResult(
+          await call<OperationResult>('transfer', {
+            paths: x.selected,
+            destination: x.path,
+            moving: false,
+            keepBoth: true,
+            ignores: [],
+          }),
+        )
+      },
+      undefined,
+      true,
+    )
   }
   const compress = (
     format: ArchiveFormat,
@@ -231,6 +273,7 @@ export function useFileOperations({
       `${base} → ${name} · ${format.name}${options.password ? ' · AES-256' : ''}${
         options.full ? ' · 全量' : ''
       }`,
+      true,
     )
   }
   const extract = () => {
@@ -250,6 +293,7 @@ export function useFileOperations({
             x.reload()
           },
           `${basename(first.path)} → ${basename(destination)}`,
+          true,
         )
       })
       .catch((error) => x.setError(String(error)))

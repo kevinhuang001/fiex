@@ -1,9 +1,10 @@
 use crate::ignores::IgnoreSet;
-use crate::operations::unique;
+use crate::operations::{check_cancelled, copy_stream, unique};
 use std::{
     fs,
     io::{self, Read, Write},
     path::{Component, Path},
+    sync::atomic::AtomicBool,
 };
 const MAX_TOTAL: u64 = 20 * 1024 * 1024 * 1024;
 const MAX_ENTRIES: usize = 100_000;
@@ -22,15 +23,32 @@ fn copy_limited(
     reader: &mut dyn Read,
     writer: &mut dyn Write,
     remaining: &mut u64,
+    cancel: &AtomicBool,
 ) -> Result<(), String> {
-    let n = io::copy(&mut reader.take(*remaining + 1), writer).map_err(|e| e.to_string())?;
-    if n > *remaining {
-        return Err("压缩包展开后超过 20 GiB 限制".into());
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        check_cancelled(cancel)?;
+        // Read one byte past the budget so an oversized archive is still caught.
+        let limit = (*remaining + 1).min(buffer.len() as u64) as usize;
+        let n = reader
+            .read(&mut buffer[..limit])
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Ok(());
+        }
+        if n as u64 > *remaining {
+            return Err("压缩包展开后超过 20 GiB 限制".into());
+        }
+        writer.write_all(&buffer[..n]).map_err(|e| e.to_string())?;
+        *remaining -= n as u64;
     }
-    *remaining -= n;
-    Ok(())
 }
-pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String> {
+pub fn extract(
+    source: &str,
+    destination: Option<&str>,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
+    check_cancelled(cancel)?;
     let src = Path::new(source);
     let name = src.file_name().ok_or("无效文件名")?.to_string_lossy();
     let parent = src.parent().ok_or("没有父文件夹")?;
@@ -58,6 +76,7 @@ pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String
             return Err("压缩包项目过多".into());
         }
         for i in 0..zip.len() {
+            check_cancelled(cancel)?;
             let mut f = zip.by_index(i).map_err(|e| e.to_string())?;
             let relative = f.enclosed_name().ok_or("压缩包包含越界路径")?;
             safe_name(&relative)?;
@@ -74,7 +93,7 @@ pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String
                     .write(true)
                     .open(path)
                     .map_err(|e| e.to_string())?;
-                copy_limited(&mut f, &mut out, &mut remaining)?;
+                copy_limited(&mut f, &mut out, &mut remaining, cancel)?;
             }
         }
     } else if lower.ends_with(".7z") {
@@ -82,6 +101,7 @@ pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String
         sevenz_rust2::decompress_file_with_extract_fn(src, root, |entry, reader, _path| {
             count += 1;
             let fail = |s: String| sevenz_rust2::Error::from(io::Error::other(s));
+            check_cancelled(cancel).map_err(fail)?;
             if count > MAX_ENTRIES {
                 return Err(fail("压缩包项目过多".into()));
             }
@@ -97,7 +117,7 @@ pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String
                     .write(true)
                     .open(path)
                     .map_err(sevenz_rust2::Error::from)?;
-                copy_limited(reader, &mut out, &mut remaining).map_err(fail)?;
+                copy_limited(reader, &mut out, &mut remaining, cancel).map_err(fail)?;
             }
             Ok(true)
         })
@@ -124,6 +144,7 @@ pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String
             let mut count = 0;
             for f in tar.entries().map_err(|e| e.to_string())? {
                 count += 1;
+                check_cancelled(cancel)?;
                 if count > MAX_ENTRIES {
                     return Err("压缩包项目过多".into());
                 }
@@ -141,7 +162,7 @@ pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String
                         .write(true)
                         .open(path)
                         .map_err(|e| e.to_string())?;
-                    copy_limited(&mut f, &mut out, &mut remaining)?;
+                    copy_limited(&mut f, &mut out, &mut remaining, cancel)?;
                 } else {
                     return Err("不解压符号链接、硬链接或特殊文件".into());
                 }
@@ -150,7 +171,7 @@ pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String
             let mut reader = reader;
             let stem = src.file_stem().ok_or("无效文件名")?;
             let mut out = fs::File::create(root.join(stem)).map_err(|e| e.to_string())?;
-            copy_limited(&mut reader, &mut out, &mut remaining)?;
+            copy_limited(&mut reader, &mut out, &mut remaining, cancel)?;
         }
     }
     let dest = unique(&base.join(src.file_stem().ok_or("无效文件名")?));
@@ -164,7 +185,9 @@ pub fn compress(
     ignores: &[String],
     level: Option<u32>,
     password: Option<&str>,
+    cancel: &AtomicBool,
 ) -> Result<String, String> {
+    check_cancelled(cancel)?;
     if paths.is_empty() {
         return Err("请先选择文件".into());
     }
@@ -191,39 +214,40 @@ pub fn compress(
     match format {
         "zip" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            write_zip(file, paths, &ignore, level, password)?;
+            write_zip(file, paths, &ignore, level, password, cancel)?;
         }
         "7z" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            write_7z(file, paths, &ignore)?;
+            write_7z(file, paths, &ignore, cancel)?;
         }
         "tar" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            write_tar(file, paths, &ignore)?;
+            write_tar(file, paths, &ignore, cancel)?;
         }
         "tar.gz" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
             let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::new(level));
-            write_tar(encoder, paths, &ignore)?
+            write_tar(encoder, paths, &ignore, cancel)?
                 .finish()
                 .map_err(|e| e.to_string())?;
         }
         "tar.bz2" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
             let encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::new(level));
-            write_tar(encoder, paths, &ignore)?
+            write_tar(encoder, paths, &ignore, cancel)?
                 .finish()
                 .map_err(|e| e.to_string())?;
         }
         "tar.xz" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
             let encoder = xz2::write::XzEncoder::new(file, level);
-            write_tar(encoder, paths, &ignore)?
+            write_tar(encoder, paths, &ignore, cancel)?
                 .finish()
                 .map_err(|e| e.to_string())?;
         }
         _ => return Err("不支持的压缩格式".into()),
     }
+    check_cancelled(cancel)?;
     temp.persist_noclobber(dest).map_err(|e| e.to_string())?;
     Ok(destination.into())
 }
@@ -234,6 +258,7 @@ fn write_zip(
     ignore: &IgnoreSet,
     level: u32,
     password: Option<&str>,
+    cancel: &AtomicBool,
 ) -> Result<(), String> {
     let mut zip = zip::ZipWriter::new(file);
     fn append(
@@ -243,7 +268,9 @@ fn write_zip(
         level: u32,
         password: Option<&str>,
         ignore: &IgnoreSet,
+        cancel: &AtomicBool,
     ) -> Result<(), String> {
+        check_cancelled(cancel)?;
         let mut options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Deflated)
             .compression_level(Some(i64::from(level)));
@@ -270,12 +297,13 @@ fn write_zip(
                     level,
                     password,
                     ignore,
+                    cancel,
                 )?;
             }
         } else if meta.is_file() {
             zip.start_file(key, options).map_err(|e| e.to_string())?;
-            io::copy(&mut fs::File::open(src).map_err(|e| e.to_string())?, zip)
-                .map_err(|e| e.to_string())?;
+            let mut input = fs::File::open(src).map_err(|e| e.to_string())?;
+            copy_stream(&mut input, zip, cancel)?;
         } else {
             return Err("不能压缩特殊文件".into());
         }
@@ -284,19 +312,34 @@ fn write_zip(
     for item in paths {
         let src = Path::new(item);
         let name = src.file_name().ok_or("不能压缩根目录")?;
-        append(&mut zip, src, Path::new(name), level, password, ignore)?;
+        append(
+            &mut zip,
+            src,
+            Path::new(name),
+            level,
+            password,
+            ignore,
+            cancel,
+        )?;
     }
     zip.finish().map_err(|e| e.to_string())?;
     Ok(())
 }
 
-fn write_tar<W: Write>(writer: W, paths: &[String], ignore: &IgnoreSet) -> Result<W, String> {
+fn write_tar<W: Write>(
+    writer: W,
+    paths: &[String],
+    ignore: &IgnoreSet,
+    cancel: &AtomicBool,
+) -> Result<W, String> {
     fn append<W: Write>(
         builder: &mut tar::Builder<W>,
         src: &Path,
         name: &Path,
         ignore: &IgnoreSet,
+        cancel: &AtomicBool,
     ) -> Result<(), String> {
+        check_cancelled(cancel)?;
         if ignore.is_ignored(name) {
             return Ok(());
         }
@@ -313,6 +356,7 @@ fn write_tar<W: Write>(writer: W, paths: &[String], ignore: &IgnoreSet) -> Resul
                     &child.path(),
                     &name.join(child.file_name()),
                     ignore,
+                    cancel,
                 )?;
             }
         } else if meta.is_file() {
@@ -328,19 +372,26 @@ fn write_tar<W: Write>(writer: W, paths: &[String], ignore: &IgnoreSet) -> Resul
     for item in paths {
         let src = Path::new(item);
         let name = src.file_name().ok_or("不能压缩根目录")?;
-        append(&mut builder, src, Path::new(name), ignore)?;
+        append(&mut builder, src, Path::new(name), ignore, cancel)?;
     }
     builder.into_inner().map_err(|e| e.to_string())
 }
 
-fn write_7z(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(), String> {
+fn write_7z(
+    file: fs::File,
+    paths: &[String],
+    ignore: &IgnoreSet,
+    cancel: &AtomicBool,
+) -> Result<(), String> {
     use sevenz_rust2::{ArchiveEntry, ArchiveWriter};
     fn append<W: Write + std::io::Seek>(
         writer: &mut ArchiveWriter<W>,
         src: &Path,
         name: &Path,
         ignore: &IgnoreSet,
+        cancel: &AtomicBool,
     ) -> Result<(), String> {
+        check_cancelled(cancel)?;
         if ignore.is_ignored(name) {
             return Ok(());
         }
@@ -355,7 +406,13 @@ fn write_7z(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(), 
                 .map_err(|e| e.to_string())?;
             for child in fs::read_dir(src).map_err(|e| e.to_string())? {
                 let child = child.map_err(|e| e.to_string())?;
-                append(writer, &child.path(), &name.join(child.file_name()), ignore)?;
+                append(
+                    writer,
+                    &child.path(),
+                    &name.join(child.file_name()),
+                    ignore,
+                    cancel,
+                )?;
             }
         } else if meta.is_file() {
             writer
@@ -373,7 +430,7 @@ fn write_7z(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(), 
     for item in paths {
         let src = Path::new(item);
         let name = src.file_name().ok_or("不能压缩根目录")?;
-        append(&mut writer, src, Path::new(name), ignore)?;
+        append(&mut writer, src, Path::new(name), ignore, cancel)?;
     }
     writer.finish().map_err(|e| e.to_string())?;
     Ok(())
@@ -382,6 +439,50 @@ fn write_7z(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::operations::CANCELLED;
+    #[test]
+    fn cancelled_compress_leaves_no_archive() {
+        let t = tempfile::tempdir().unwrap();
+        fs::write(t.path().join("hello.txt"), "hello").unwrap();
+        let archive = t.path().join("cancelled.zip");
+        let cancel = AtomicBool::new(true);
+        assert_eq!(
+            compress(
+                &[t.path().join("hello.txt").to_string_lossy().into()],
+                archive.to_str().unwrap(),
+                "zip",
+                &[],
+                None,
+                None,
+                &cancel,
+            )
+            .unwrap_err(),
+            CANCELLED
+        );
+        assert!(!archive.exists());
+    }
+    #[test]
+    fn cancelled_extract_leaves_nothing_behind() {
+        let t = tempfile::tempdir().unwrap();
+        fs::write(t.path().join("hello.txt"), "hello").unwrap();
+        let zip = t.path().join("test.zip");
+        compress(
+            &[t.path().join("hello.txt").to_string_lossy().into()],
+            zip.to_str().unwrap(),
+            "zip",
+            &[],
+            None,
+            None,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        let before = fs::read_dir(t.path()).unwrap().count();
+        assert_eq!(
+            extract(zip.to_str().unwrap(), None, &AtomicBool::new(true)).unwrap_err(),
+            CANCELLED
+        );
+        assert_eq!(fs::read_dir(t.path()).unwrap().count(), before);
+    }
     #[test]
     fn archive_roundtrip() {
         let t = tempfile::tempdir().unwrap();
@@ -394,9 +495,10 @@ mod tests {
             &[],
             None,
             None,
+            &AtomicBool::new(false),
         )
         .unwrap();
-        let out = extract(zip.to_str().unwrap(), None).unwrap();
+        let out = extract(zip.to_str().unwrap(), None, &AtomicBool::new(false)).unwrap();
         assert_eq!(
             fs::read_to_string(Path::new(&out).join("hello.txt")).unwrap(),
             "hello"
@@ -425,9 +527,10 @@ mod tests {
                 &["node_modules".into()],
                 None,
                 None,
+                &AtomicBool::new(false),
             )
             .unwrap();
-            let out = extract(archive.to_str().unwrap(), None).unwrap();
+            let out = extract(archive.to_str().unwrap(), None, &AtomicBool::new(false)).unwrap();
             assert!(Path::new(&out).join("bundle").join("keep.txt").exists());
             assert!(!Path::new(&out).join("bundle").join("node_modules").exists());
         }
@@ -447,7 +550,7 @@ mod tests {
             .unwrap();
         zip.write_all(b"do not extract").unwrap();
         zip.finish().unwrap();
-        assert!(extract(archive.to_str().unwrap(), None).is_err());
+        assert!(extract(archive.to_str().unwrap(), None, &AtomicBool::new(false)).is_err());
         assert!(!t.path().join("escaped.txt").exists());
         assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
     }
@@ -458,7 +561,7 @@ mod tests {
         fs::write(&src, "hello 7z").unwrap();
         let archive = t.path().join("test.7z");
         sevenz_rust2::compress_to_path(&src, &archive).unwrap();
-        let out = extract(archive.to_str().unwrap(), None).unwrap();
+        let out = extract(archive.to_str().unwrap(), None, &AtomicBool::new(false)).unwrap();
         assert_eq!(
             fs::read_to_string(Path::new(&out).join("hello.txt")).unwrap(),
             "hello 7z"

@@ -2,7 +2,7 @@ use crate::{
     archives,
     drag_session::{DragSessions, DropPlan},
     files, git, git_history, git_remote,
-    operations::{self, OperationResult, Operations},
+    operations::{self, OperationCancel, OperationResult, Operations},
     recent, remote,
     search::{SearchBatch, SearchState},
     tags, terminals,
@@ -521,6 +521,8 @@ fn rename_entry(
     }
     state.rename(&path, &name)
 }
+// Tauri commands receive one argument per JS field, so the list is wide.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn transfer(
     app: tauri::AppHandle,
@@ -530,6 +532,7 @@ async fn transfer(
     keep_both: bool,
     ignores: Vec<String>,
     resolutions: Option<Vec<Resolution>>,
+    cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
     if remote::is_remote(&destination) {
         return Err("远程连接只读".into());
@@ -550,7 +553,9 @@ async fn transfer(
         || paths.iter().any(|p| crate::usbfs::route(p).is_some())
     {
         let events = app.clone();
+        let cancel = cancel.inner().clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
+            let flag = cancel.flag();
             crate::virtual_transfers::transfer(
                 &paths,
                 &destination,
@@ -558,6 +563,7 @@ async fn transfer(
                 keep_both,
                 &ignores,
                 &resolutions.unwrap_or_default(),
+                &flag,
             )
         })
         .await
@@ -568,7 +574,9 @@ async fn transfer(
         return result;
     }
     let events = app.clone();
+    let cancel = cancel.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let flag = cancel.flag();
         app.state::<Operations>().transfer_resolved(
             &paths,
             &destination,
@@ -576,6 +584,7 @@ async fn transfer(
             keep_both,
             &ignores,
             &resolutions.unwrap_or_default(),
+            &flag,
         )
     })
     .await
@@ -586,7 +595,12 @@ async fn transfer(
     result
 }
 #[tauri::command]
-async fn recycle(app: tauri::AppHandle, paths: Vec<String>) -> Result<OperationResult, String> {
+async fn recycle(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<OperationResult, String> {
+    let cancel = cancel.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mut result = OperationResult {
             paths: vec![],
@@ -595,6 +609,13 @@ async fn recycle(app: tauri::AppHandle, paths: Vec<String>) -> Result<OperationR
             conflicts: vec![],
         };
         for path in paths {
+            if cancel.is_cancelled() {
+                // Keep the undo history consistent with the items that did move.
+                if !result.paths.is_empty() {
+                    app.state::<Operations>().clear_undo();
+                }
+                return Err(operations::CANCELLED.into());
+            }
             if let Some(route) = crate::usbfs::route(&path) {
                 match crate::usbfs::remove(&route) {
                     Ok(()) => result.paths.push(path),
@@ -696,6 +717,14 @@ fn cancel_search(state: tauri::State<'_, SearchState>) {
     state.cancel();
 }
 #[tauri::command]
+fn begin_operation(state: tauri::State<'_, OperationCancel>) {
+    state.begin();
+}
+#[tauri::command]
+fn cancel_operation(state: tauri::State<'_, OperationCancel>) {
+    state.cancel();
+}
+#[tauri::command]
 async fn file_checksum(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         use sha2::{Digest, Sha256};
@@ -736,9 +765,12 @@ async fn extract_archive(
     app: tauri::AppHandle,
     path: String,
     destination: Option<String>,
+    cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<String, String> {
+    let cancel = cancel.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let result = archives::extract(&path, destination.as_deref())?;
+        let flag = cancel.flag();
+        let result = archives::extract(&path, destination.as_deref(), &flag)?;
         app.state::<Operations>()
             .record_created(std::path::PathBuf::from(&result));
         Ok(result)
@@ -746,6 +778,7 @@ async fn extract_archive(
     .await
     .map_err(|e| e.to_string())?
 }
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn compress_archive(
     app: tauri::AppHandle,
@@ -755,8 +788,11 @@ async fn compress_archive(
     level: Option<u32>,
     password: Option<String>,
     ignores: Vec<String>,
+    cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<String, String> {
+    let cancel = cancel.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let flag = cancel.flag();
         let result = archives::compress(
             &paths,
             &destination,
@@ -764,6 +800,7 @@ async fn compress_archive(
             &ignores,
             level,
             password.as_deref(),
+            &flag,
         )?;
         app.state::<Operations>()
             .record_created(std::path::PathBuf::from(&result));
@@ -856,20 +893,29 @@ fn open_trash() -> Result<(), String> {
     terminals::open_trash()
 }
 #[tauri::command]
-async fn empty_trash() -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(volumes::empty_trash)
+async fn empty_trash(cancel: tauri::State<'_, OperationCancel>) -> Result<usize, String> {
+    let flag = cancel.flag();
+    tauri::async_runtime::spawn_blocking(move || volumes::empty_trash(&flag))
         .await
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
-async fn restore_from_trash(paths: Vec<String>) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || volumes::restore_from_trash(&paths))
+async fn restore_from_trash(
+    paths: Vec<String>,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<usize, String> {
+    let flag = cancel.flag();
+    tauri::async_runtime::spawn_blocking(move || volumes::restore_from_trash(&paths, &flag))
         .await
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
-async fn delete_permanently(paths: Vec<String>) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || volumes::delete_permanently(&paths))
+async fn delete_permanently(
+    paths: Vec<String>,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<usize, String> {
+    let flag = cancel.flag();
+    tauri::async_runtime::spawn_blocking(move || volumes::delete_permanently(&paths, &flag))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -924,6 +970,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_drag::init())
         .manage(Operations::default())
+        .manage(OperationCancel::default())
         .manage(SearchState::default())
         .manage(Watch::default())
         .manage(WindowPaths::default())
@@ -966,6 +1013,8 @@ pub fn run() {
             search_files,
             warm_index,
             cancel_search,
+            begin_operation,
+            cancel_operation,
             extract_archive,
             pick_folder,
             file_checksum,

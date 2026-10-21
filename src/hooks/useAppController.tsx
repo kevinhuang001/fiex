@@ -122,13 +122,18 @@ export function useAppController() {
     }
     if (isArchive(e)) {
       // Archives open in place instead of being handed to the system archiver.
-      void run('正在解压…', async () => {
-        const path = await call<string>('extract_archive', {
-          path: e.path,
-          destination: x.path,
-        })
-        notify(`已解压到 ${basename(path)}`)
-      })
+      void run(
+        '正在解压…',
+        async () => {
+          const path = await call<string>('extract_archive', {
+            path: e.path,
+            destination: x.path,
+          })
+          notify(`已解压到 ${basename(path)}`)
+        },
+        undefined,
+        true,
+      )
       return
     }
     void run('正在打开…', () => call('open_path', { path: e.path }))

@@ -1,7 +1,9 @@
+use crate::operations::check_cancelled;
 use serde::Serialize;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
+    sync::atomic::AtomicBool,
 };
 
 #[derive(Serialize)]
@@ -684,9 +686,10 @@ fn copy_tree(from: &std::path::Path, to: &std::path::Path) -> Result<(), String>
 }
 
 /// Put trashed items back where they came from, like the system file manager.
-pub fn restore_from_trash(paths: &[String]) -> Result<usize, String> {
+pub fn restore_from_trash(paths: &[String], cancel: &AtomicBool) -> Result<usize, String> {
     let mut restored = 0;
     for path in paths {
+        check_cancelled(cancel)?;
         let source = std::path::Path::new(path);
         if !source.exists() {
             continue;
@@ -725,9 +728,10 @@ fn remove_entry(path: &std::path::Path) -> Result<(), String> {
 
 /// Permanently remove items. Used inside the Trash, where "move to Trash" has
 /// no meaning and the user explicitly asks for the item to be gone.
-pub fn delete_permanently(paths: &[String]) -> Result<usize, String> {
+pub fn delete_permanently(paths: &[String], cancel: &AtomicBool) -> Result<usize, String> {
     let mut removed = 0;
     for path in paths {
+        check_cancelled(cancel)?;
         remove_entry(std::path::Path::new(path))?;
         removed += 1;
     }
@@ -735,7 +739,8 @@ pub fn delete_permanently(paths: &[String]) -> Result<usize, String> {
 }
 
 /// Empty the platform Trash the way the system file manager does.
-pub fn empty_trash() -> Result<usize, String> {
+pub fn empty_trash(cancel: &AtomicBool) -> Result<usize, String> {
+    check_cancelled(cancel)?;
     #[cfg(target_os = "macos")]
     {
         let Some(trash) = trash_path() else {
@@ -743,6 +748,7 @@ pub fn empty_trash() -> Result<usize, String> {
         };
         let mut removed = 0;
         for entry in std::fs::read_dir(&trash).map_err(|e| e.to_string())? {
+            check_cancelled(cancel)?;
             let entry = entry.map_err(|e| e.to_string())?;
             remove_entry(&entry.path())?;
             removed += 1;
@@ -760,6 +766,7 @@ pub fn empty_trash() -> Result<usize, String> {
             Err(_) => return Ok(0),
         };
         for entry in entries {
+            check_cancelled(cancel)?;
             let entry = entry.map_err(|e| e.to_string())?;
             let name = entry.file_name().to_string_lossy().into_owned();
             remove_entry(&entry.path())?;

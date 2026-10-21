@@ -3,11 +3,15 @@
 use crate::{
     files::{self, Entry},
     ignores::IgnoreSet,
-    operations::OperationResult,
+    operations::{check_cancelled, OperationResult, CANCELLED},
     transfers::{Action, Conflict, FileVersion, Resolution},
     usbfs,
 };
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
+};
 fn join(dir: &str, name: &str) -> String {
     format!(
         "{}{}{}",
@@ -128,6 +132,7 @@ struct Plan<'a> {
     resolutions: &'a [Resolution],
     keep_both: bool,
     moving: bool,
+    cancel: &'a AtomicBool,
 }
 impl Plan<'_> {
     fn walk(
@@ -137,6 +142,7 @@ impl Plan<'_> {
         existing: Option<Entry>,
         relative: String,
     ) -> Result<(), String> {
+        check_cancelled(self.cancel)?;
         if self.ignores.is_ignored(Path::new(&relative)) {
             self.skipped += 1;
             return Ok(());
@@ -240,14 +246,16 @@ impl Plan<'_> {
         Ok(())
     }
 }
-fn copy_node(source: &Entry, target: &str) -> Result<(), String> {
+fn copy_node(source: &Entry, target: &str, cancel: &AtomicBool) -> Result<(), String> {
+    check_cancelled(cancel)?;
     if source.is_dir {
         create(target, true)?;
         for child in list(&source.path)? {
-            copy_node(&child, &join(target, &child.name))?;
+            copy_node(&child, &join(target, &child.name), cancel)?;
         }
     } else {
         let data = read(&source.path)?;
+        check_cancelled(cancel)?;
         create(target, false)?;
         write(target, &data)?;
         if read(target)? != data {
@@ -263,7 +271,9 @@ pub fn transfer(
     keep_both: bool,
     ignores: &[String],
     resolutions: &[Resolution],
+    cancel: &AtomicBool,
 ) -> Result<OperationResult, String> {
+    check_cancelled(cancel)?;
     writable(destination)?;
     let children = list(destination)?;
     let mut plan = Plan {
@@ -276,8 +286,10 @@ pub fn transfer(
         resolutions,
         keep_both,
         moving,
+        cancel,
     };
     for path in sources {
+        check_cancelled(cancel)?;
         if destination == path
             || destination.starts_with(&format!("{path}/"))
             || destination.starts_with(&format!("{path}\\"))
@@ -302,9 +314,11 @@ pub fn transfer(
         return Ok(result);
     }
     for (_, to) in &plan.dirs {
+        check_cancelled(cancel)?;
         create(to, true)?;
     }
     for (index, task) in plan.tasks.into_iter().enumerate() {
+        check_cancelled(cancel)?;
         let backup = if task.existing {
             let name = format!(
                 ".fiex-replaced-{}-{index}",
@@ -317,7 +331,7 @@ pub fn transfer(
         } else {
             None
         };
-        let result_copy = copy_node(&task.source, &task.target);
+        let result_copy = copy_node(&task.source, &task.target, cancel);
         match result_copy {
             Ok(()) => {
                 if moving {
@@ -342,6 +356,9 @@ pub fn transfer(
                             .as_ref(),
                     )?;
                 }
+                if cancel.load(Ordering::Relaxed) {
+                    return Err(CANCELLED.into());
+                }
                 result.errors.push(error);
             }
         }
@@ -364,6 +381,7 @@ pub fn transfer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transfers::NEVER_CANCELLED;
     #[test]
     fn image_transfers_conflicts_and_moves_verify_actual_bytes() {
         use fs_ntfs::block_io::{BlockIo, PathIo};
@@ -389,19 +407,19 @@ mod tests {
         let local = t.path().join("source.txt");
         fs::write(&local, "first").unwrap();
         let paths = vec![local.to_string_lossy().into_owned()];
-        let result = transfer(&paths, &root, false, false, &[], &[]).unwrap();
+        let result = transfer(&paths, &root, false, false, &[], &[], &NEVER_CANCELLED).unwrap();
         assert!(result.errors.is_empty());
         let in_image = join(&root, "source.txt");
         assert_eq!(read(&in_image).unwrap(), b"first");
         fs::write(&local, "updated").unwrap();
-        let conflict = transfer(&paths, &root, false, false, &[], &[]).unwrap();
+        let conflict = transfer(&paths, &root, false, false, &[], &[], &NEVER_CANCELLED).unwrap();
         assert_eq!(conflict.conflicts.len(), 1);
         assert_eq!(read(&in_image).unwrap(), b"first");
         let choices = vec![Resolution {
             key: conflict.conflicts[0].key.clone(),
             action: Action::Replace,
         }];
-        transfer(&paths, &root, false, false, &[], &choices).unwrap();
+        transfer(&paths, &root, false, false, &[], &choices, &NEVER_CANCELLED).unwrap();
         assert_eq!(read(&in_image).unwrap(), b"updated");
         let export = t.path().join("export");
         fs::create_dir(&export).unwrap();
@@ -412,6 +430,7 @@ mod tests {
             false,
             &[],
             &[],
+            &NEVER_CANCELLED,
         )
         .unwrap();
         assert_eq!(fs::read(export.join("source.txt")).unwrap(), b"updated");
