@@ -1,4 +1,4 @@
-import { Eraser, ListChecks, X } from 'lucide-react'
+import { Eraser, X } from 'lucide-react'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
 
@@ -23,18 +23,12 @@ export function WorkspaceBar({
       data-workspace-drop="true"
       aria-label="工作区"
     >
-      <header>
-        <ListChecks size={14} />
-        <span>工作区</span>
-        <span className="workspace-count">{items.length}</span>
-        <span className="workspace-hint">把文件拖到这里收纳，只记录引用</span>
-        {items.length > 0 && (
-          <button className="workspace-clear" onClick={onClear} title="清空工作区">
-            <Eraser size={13} />
-            清空
-          </button>
-        )}
-      </header>
+      {items.length > 0 && (
+        <button className="workspace-clear" onClick={onClear} title="清空工作区">
+          <Eraser size={12} />
+          清空
+        </button>
+      )}
       {open && (
         <div className="workspace-items">
           {items.length ? (

@@ -2814,6 +2814,7 @@ body.dragging-file * {
 
 /* Workspace tray: references only, never copies. */
 .workspace-bar {
+  position: relative;
   border-top: 1px solid var(--line);
   background: var(--surface);
   transition: background 0.12s;
@@ -2829,12 +2830,23 @@ body.dragging-file * {
   outline: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
   outline-offset: -3px;
 }
-.workspace-bar header {
-  display: flex;
+.workspace-clear {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  height: 30px;
-  padding: 0 14px;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 7px;
+  font-size: 10px;
+  color: var(--muted);
+  background: transparent;
+}
+.workspace-clear:hover {
+  color: #c66c60;
+  background: var(--hover);
 }
 .workspace-toggle {
   display: inline-flex;
@@ -2882,8 +2894,8 @@ body.dragging-file * {
   flex-wrap: nowrap;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 10px 14px 12px;
+  gap: 8px;
+  padding: 4px 14px 6px;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -2893,7 +2905,7 @@ body.dragging-file * {
   flex-direction: column;
   align-items: center;
   width: 76px;
-  height: 72px;
+  height: 66px;
   flex: 0 0 auto;
 }
 .workspace-open {

@@ -1,14 +1,6 @@
 import type { AppController } from '@/hooks/useAppController'
 import { size } from '@/lib/files'
-import {
-  ChevronDown,
-  ChevronUp,
-  Eraser,
-  GitBranch,
-  ListChecks,
-  LoaderCircle,
-  X,
-} from 'lucide-react'
+import { ChevronDown, ChevronUp, GitBranch, ListChecks, LoaderCircle, X } from 'lucide-react'
 export function ExplorerStatusBar({
   busy,
   x,
@@ -61,11 +53,6 @@ export function ExplorerStatusBar({
           {clipboard && (
             <button title="清除剪贴板" onClick={() => setClipboard(null)}>
               {clipboard.moving ? '剪切' : '复制'} {clipboard.paths.length} 项 <X size={11} />
-            </button>
-          )}
-          {workspace.items.length > 0 && (
-            <button title="清空工作区" aria-label="清空工作区" onClick={workspace.clear}>
-              <Eraser size={13} />
             </button>
           )}
           <button
