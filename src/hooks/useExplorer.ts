@@ -53,15 +53,25 @@ export function useExplorer(prefs: Preferences) {
     },
     [cursor, tab],
   )
+  const locationsKey = useRef('')
   const refreshLocations = useCallback(async () => {
     const next = await call<Location[]>('locations')
-    setLocations(next)
+    // Disk probing is expensive and mostly returns the same volumes; only
+    // replace the state when something actually changed.
+    const key = next
+      .map((l) => `${l.name}|${l.path}|${l.available}|${l.total}|${l.mounted}`)
+      .join('\n')
+    if (key !== locationsKey.current) {
+      locationsKey.current = key
+      setLocations(next)
+    }
     return next
   }, [])
   useEffect(() => {
     const timer = window.setInterval(() => {
+      if (document.hidden) return
       void refreshLocations().catch(() => {})
-    }, 15000)
+    }, 60000)
     return () => window.clearInterval(timer)
   }, [refreshLocations])
   useEffect(() => {
@@ -139,7 +149,7 @@ export function useExplorer(prefs: Preferences) {
     void call('watch_directory', { path }).catch((e) => setWarnings([`无法监视文件变更：${e}`]))
     void listen('directory-changed', () => {
       clearTimeout(timer)
-      timer = setTimeout(reload, 150)
+      timer = setTimeout(reload, 250)
     }).then((fn) => {
       if (active) cleanup = fn
       else fn()
@@ -177,8 +187,13 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [path])
   useEffect(() => {
-    void refreshGit()
+    // Navigation bursts (and refresh after a file operation) should not spawn
+    // a git subprocess each time; coalesce them.
+    const timer = window.setTimeout(() => {
+      void refreshGit()
+    }, 350)
     return () => {
+      window.clearTimeout(timer)
       ++gitRequest.current
     }
   }, [refresh, refreshGit])

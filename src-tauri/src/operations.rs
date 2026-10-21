@@ -216,6 +216,7 @@ pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
             Err(e) => result.errors.push(format!("{path}: {e}")),
         }
     }
+    crate::volumes::record_trashed(&result.paths);
     Ok(result)
 }
 #[cfg(test)]

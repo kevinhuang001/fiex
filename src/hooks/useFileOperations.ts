@@ -120,6 +120,15 @@ export function useFileOperations({
       },
     })
   }
+  const restoreFromTrash = (paths: string[]) => {
+    if (!paths.length) return
+    void run('正在复原…', async () => {
+      const restored = await call<number>('restore_from_trash', { paths })
+      if (restored === undefined) return
+      notify(`已复原 ${restored} 个项目`)
+      x.setSelected([])
+    })
+  }
   const emptyTrash = () => {
     setDialog({
       title: '清空废纸篓？',
@@ -240,6 +249,7 @@ export function useFileOperations({
     create,
     recycle,
     deletePermanently,
+    restoreFromTrash,
     emptyTrash,
     inTrash,
     transfer,

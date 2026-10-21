@@ -4,6 +4,7 @@ import { archiveFormats } from '@/lib/archives'
 import { isArchive } from '@/lib/files'
 import {
   Archive,
+  RotateCcw,
   ChevronRight,
   CloudCheck,
   CloudDownload,
@@ -53,6 +54,7 @@ export function FileContextMenu({
   notify,
   recycle,
   deletePermanently,
+  restoreFromTrash,
   inTrash,
   setCompressOpen,
   compressOpen,
@@ -78,6 +80,7 @@ export function FileContextMenu({
   | 'notify'
   | 'recycle'
   | 'deletePermanently'
+  | 'restoreFromTrash'
   | 'inTrash'
   | 'setCompressOpen'
   | 'compressOpen'
@@ -211,11 +214,11 @@ export function FileContextMenu({
               },
               inTrash
                 ? {
-                    label: '彻底删除',
-                    icon: <Trash2 />,
+                    label: '放回原处',
+                    icon: <RotateCcw />,
                     hint: '',
                     action: () =>
-                      deletePermanently(
+                      restoreFromTrash(
                         x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
                       ),
                   }
@@ -226,6 +229,19 @@ export function FileContextMenu({
                     disabled: gitSwitched || x.directoryReadOnly,
                     action: recycle,
                   },
+              ...(inTrash
+                ? [
+                    {
+                      label: '彻底删除',
+                      icon: <Trash2 />,
+                      hint: '',
+                      action: () =>
+                        deletePermanently(
+                          x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
+                        ),
+                    },
+                  ]
+                : []),
             ] as ContextItem[]
           ).map((a) =>
             'submenu' in a ? (

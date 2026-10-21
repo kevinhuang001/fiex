@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::{collections::HashSet, path::PathBuf};
+use std::{collections::HashSet, path::{Path, PathBuf}};
 
 #[derive(Serialize)]
 pub struct Location {
@@ -550,6 +550,161 @@ pub fn trash_path() -> Option<PathBuf> {
     {
         None
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct TrashOrigin {
+    name: String,
+    original: String,
+}
+
+fn journal_path() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".fiex").join("trash-origins.json"))
+}
+
+fn load_journal() -> Vec<TrashOrigin> {
+    journal_path()
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn save_journal(entries: &[TrashOrigin]) {
+    let Some(path) = journal_path() else { return };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(bytes) = serde_json::to_vec(entries) {
+        let _ = std::fs::write(path, bytes);
+    }
+}
+
+/// Remember where an item came from so "Put Back" works even on systems whose
+/// Trash has no metadata for third-party items.
+pub fn record_trashed(paths: &[String]) {
+    if paths.is_empty() {
+        return;
+    }
+    let mut entries = load_journal();
+    for path in paths {
+        let Some(name) = std::path::Path::new(path)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+        else {
+            continue;
+        };
+        entries.retain(|entry| entry.name != name || entry.original != *path);
+        entries.insert(
+            0,
+            TrashOrigin {
+                name,
+                original: path.clone(),
+            },
+        );
+    }
+    entries.truncate(400);
+    save_journal(&entries);
+}
+
+fn original_location(trashed: &std::path::Path) -> Option<String> {
+    let name = trashed.file_name()?.to_string_lossy().into_owned();
+    // The freedesktop spec stores the original path next to the payload.
+    if let Some(trash) = trashed.parent().and_then(|files| files.parent()) {
+        let info = trash.join("info").join(format!("{name}.trashinfo"));
+        if let Ok(text) = std::fs::read_to_string(info) {
+            for line in text.lines() {
+                if let Some(value) = line.strip_prefix("Path=") {
+                    if let Ok(decoded) = urlencoding::decode(value) {
+                        return Some(decoded.into_owned());
+                    }
+                }
+            }
+        }
+    }
+    load_journal()
+        .into_iter()
+        .find(|entry| entry.name == name)
+        .map(|entry| entry.original)
+}
+
+fn free_destination(destination: PathBuf) -> PathBuf {
+    if !destination.exists() {
+        return destination;
+    }
+    let parent = destination.parent().map(Path::to_path_buf).unwrap_or_default();
+    let stem = destination
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "恢复的项目".into());
+    let extension = destination
+        .extension()
+        .map(|value| format!(".{}", value.to_string_lossy()))
+        .unwrap_or_default();
+    for index in 2..10_000 {
+        let candidate = parent.join(format!("{stem} ({index}){extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    destination
+}
+
+fn move_entry(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    // Cross-device restore: copy then remove.
+    if from.is_dir() {
+        copy_tree(from, to)?;
+        std::fs::remove_dir_all(from).map_err(|e| e.to_string())
+    } else {
+        std::fs::copy(from, to).map_err(|e| e.to_string())?;
+        std::fs::remove_file(from).map_err(|e| e.to_string())
+    }
+}
+
+fn copy_tree(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(from).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_tree(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Put trashed items back where they came from, like the system file manager.
+pub fn restore_from_trash(paths: &[String]) -> Result<usize, String> {
+    let mut restored = 0;
+    for path in paths {
+        let source = std::path::Path::new(path);
+        if !source.exists() {
+            continue;
+        }
+        let original = original_location(source)
+            .ok_or_else(|| format!("{path}: 找不到原来的位置，无法复原"))?;
+        let destination = std::path::PathBuf::from(&original);
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let destination = free_destination(destination);
+        move_entry(source, &destination)?;
+        if let Some(trash) = source.parent().and_then(|files| files.parent()) {
+            if let Some(name) = source.file_name() {
+                let _ = std::fs::remove_file(
+                    trash
+                        .join("info")
+                        .join(format!("{}.trashinfo", name.to_string_lossy())),
+                );
+            }
+        }
+        restored += 1;
+    }
+    Ok(restored)
 }
 
 fn remove_entry(path: &std::path::Path) -> Result<(), String> {

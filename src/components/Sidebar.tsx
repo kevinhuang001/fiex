@@ -56,17 +56,21 @@ export function Sidebar({
   onMount,
   trashPath,
 }: Props) {
-  const [trashMenu, setTrashMenu] = useState<{ x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<
+    | { kind: 'trash'; x: number; y: number }
+    | { kind: 'favorite'; x: number; y: number; path: string }
+    | null
+  >(null)
   useEffect(() => {
-    if (!trashMenu) return
-    const close = () => setTrashMenu(null)
+    if (!menu) return
+    const close = () => setMenu(null)
     window.addEventListener('pointerdown', close)
     window.addEventListener('blur', close)
     return () => {
       window.removeEventListener('pointerdown', close)
       window.removeEventListener('blur', close)
     }
-  }, [trashMenu])
+  }, [menu])
   const iconFor = (name: string) =>
     name === '最近使用' ? (
       <Clock />
@@ -153,22 +157,18 @@ export function Sidebar({
                       <button
                         className={`nav-item ${x.path === location.path ? 'active' : ''}`}
                         onClick={() => x.navigate(location.path)}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          setMenu({
+                            kind: 'favorite',
+                            x: event.clientX,
+                            y: event.clientY,
+                            path: location.path,
+                          })
+                        }}
                       >
                         <FavoriteIcon name={location.name} />
                         <span>{location.name}</span>
-                      </button>
-                      <button
-                        className="favorite-remove icon-button"
-                        title="移除收藏"
-                        onClick={() =>
-                          update({
-                            favorites: prefs.favorites.filter(
-                              (item) => item.path !== location.path,
-                            ),
-                          })
-                        }
-                      >
-                        <X size={12} />
                       </button>
                     </div>
                   ))
@@ -320,39 +320,56 @@ export function Sidebar({
           onClick={onTrash}
           onContextMenu={(event) => {
             event.preventDefault()
-            setTrashMenu({ x: event.clientX, y: event.clientY })
+            setMenu({ kind: 'trash', x: event.clientX, y: event.clientY })
           }}
         >
           <Trash2 />
           <span>废纸篓</span>
         </button>
-        {trashMenu && (
+        {menu && (
           <div
             className="context-menu sidebar-menu"
             role="menu"
-            aria-label="废纸篓"
-            style={{ left: trashMenu.x, top: trashMenu.y }}
+            aria-label={menu.kind === 'trash' ? '废纸篓' : '收藏'}
+            style={{ left: menu.x, top: menu.y }}
           >
-            <button
-              role="menuitem"
-              onClick={() => {
-                setTrashMenu(null)
-                onTrash()
-              }}
-            >
-              <Folder size={14} />
-              打开废纸篓
-            </button>
-            <button
-              role="menuitem"
-              onClick={() => {
-                setTrashMenu(null)
-                onEmptyTrash()
-              }}
-            >
-              <Trash size={14} />
-              清空废纸篓
-            </button>
+            {menu.kind === 'trash' ? (
+              <>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setMenu(null)
+                    onTrash()
+                  }}
+                >
+                  <Folder size={14} />
+                  打开废纸篓
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setMenu(null)
+                    onEmptyTrash()
+                  }}
+                >
+                  <Trash size={14} />
+                  清空废纸篓
+                </button>
+              </>
+            ) : (
+              <button
+                role="menuitem"
+                onClick={() => {
+                  update({
+                    favorites: prefs.favorites.filter((item) => item.path !== menu.path),
+                  })
+                  setMenu(null)
+                }}
+              >
+                <X size={14} />
+                从侧栏移除
+              </button>
+            )}
           </div>
         )}
       </div>

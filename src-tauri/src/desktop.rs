@@ -743,6 +743,12 @@ async fn empty_trash() -> Result<usize, String> {
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
+async fn restore_from_trash(paths: Vec<String>) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || volumes::restore_from_trash(&paths))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 async fn delete_permanently(paths: Vec<String>) -> Result<usize, String> {
     tauri::async_runtime::spawn_blocking(move || volumes::delete_permanently(&paths))
         .await
@@ -860,6 +866,7 @@ pub fn run() {
             reveal_path,
             trash_path,
             empty_trash,
+            restore_from_trash,
             delete_permanently,
             open_applications,
             set_tags,
