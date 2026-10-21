@@ -41,6 +41,7 @@ jobs:
             playwright-report/
             test-results/
   desktop:
+    needs: checks
     name: Desktop (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
