@@ -150,7 +150,8 @@ export function useFileOperations({
         destination,
         moving,
         keepBoth: false,
-        ignores: prefs.copyIgnore,
+        // Copy and move always take everything; browsing filters stay visual.
+        ignores: [],
         resolutions,
       }),
     )
@@ -191,32 +192,32 @@ export function useFileOperations({
           destination: x.path,
           moving: false,
           keepBoth: true,
-          ignores: prefs.copyIgnore,
+          ignores: [],
         }),
       )
     })
   }
-  const compress = (format: ArchiveFormat) => {
+  const compress = (
+    format: ArchiveFormat,
+    options: { level?: number; password?: string; full?: boolean } = {},
+  ) => {
     if (!writable()) return
     if (!first) return
-    setDialog({
-      title: `压缩为 ${format.name}`,
-      label: '压缩包名称',
-      value: (chosen.length === 1 ? first.name : 'Archive') + format.ext,
-      submit: '压缩',
-      action: async (value) => {
-        let name = value.trim()
-        if (!name.toLowerCase().endsWith(format.ext)) name += format.ext
-        if (!name || name === '..' || /[\\/]/.test(name)) throw new Error('请输入有效的文件名')
-        await call('compress_archive', {
-          paths: x.selected,
-          destination: join(x.path, name),
-          format: format.id,
-          ignores: prefs.compressIgnore,
-        })
-        notify('压缩完成')
-        x.reload()
-      },
+    const base = chosen.length === 1 ? first.name : 'Archive'
+    const name = uniqueName(
+      x.entries.map((entry) => entry.name),
+      base + format.ext,
+    )
+    void run('正在压缩…', async () => {
+      await call('compress_archive', {
+        paths: x.selected,
+        destination: join(x.path, name),
+        format: format.id,
+        ignores: options.full ? [] : prefs.compressIgnore,
+        level: options.level ?? null,
+        password: options.password || null,
+      })
+      notify(`已压缩为 ${name}`)
     })
   }
   const extract = () => {

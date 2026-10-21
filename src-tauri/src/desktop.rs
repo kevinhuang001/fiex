@@ -694,10 +694,19 @@ async fn compress_archive(
     paths: Vec<String>,
     destination: String,
     format: String,
+    level: Option<u32>,
+    password: Option<String>,
     ignores: Vec<String>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let result = archives::compress(&paths, &destination, &format, &ignores)?;
+        let result = archives::compress(
+            &paths,
+            &destination,
+            &format,
+            &ignores,
+            level,
+            password.as_deref(),
+        )?;
         app.state::<Operations>()
             .record_created(std::path::PathBuf::from(&result));
         Ok(result)

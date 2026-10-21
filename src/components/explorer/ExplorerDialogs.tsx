@@ -10,6 +10,7 @@ import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { AppController } from '@/hooks/useAppController'
+import { CompressDialog } from '../CompressDialog'
 import { call } from '@/lib/api'
 import { CheckCircle2, LoaderCircle, X } from 'lucide-react'
 export function ExplorerDialogs({
@@ -31,6 +32,9 @@ export function ExplorerDialogs({
   setDialogValue,
   dialogError,
   trashIssue,
+  compressAdvanced,
+  setCompressAdvanced,
+  compress,
   setTrashIssue,
   openTrash,
   info,
@@ -70,6 +74,9 @@ export function ExplorerDialogs({
   | 'setDialogValue'
   | 'dialogError'
   | 'trashIssue'
+  | 'compressAdvanced'
+  | 'setCompressAdvanced'
+  | 'compress'
   | 'setTrashIssue'
   | 'openTrash'
   | 'info'
@@ -105,6 +112,14 @@ export function ExplorerDialogs({
         onOpen={open}
       />
 
+      <CompressDialog
+        format={compressAdvanced}
+        onClose={() => setCompressAdvanced(null)}
+        onSubmit={(format, options) => {
+          setCompressAdvanced(null)
+          compress(format, options)
+        }}
+      />
       <Modal
         open={!!dialog}
         onClose={() => {

@@ -162,6 +162,8 @@ pub fn compress(
     destination: &str,
     format: &str,
     ignores: &[String],
+    level: Option<u32>,
+    password: Option<&str>,
 ) -> Result<String, String> {
     if paths.is_empty() {
         return Err("请先选择文件".into());
@@ -180,11 +182,16 @@ pub fn compress(
         }
     }
     let ignore = IgnoreSet::new(ignores);
+    let level = level.unwrap_or(6).min(9);
+    let password = password.map(str::trim).filter(|value| !value.is_empty());
+    if password.is_some() && format != "zip" {
+        return Err("只有 ZIP 支持密码".into());
+    }
     let temp = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
     match format {
         "zip" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            write_zip(file, paths, &ignore)?;
+            write_zip(file, paths, &ignore, level, password)?;
         }
         "7z" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
@@ -196,21 +203,21 @@ pub fn compress(
         }
         "tar.gz" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+            let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::new(level));
             write_tar(encoder, paths, &ignore)?
                 .finish()
                 .map_err(|e| e.to_string())?;
         }
         "tar.bz2" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            let encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::default());
+            let encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::new(level));
             write_tar(encoder, paths, &ignore)?
                 .finish()
                 .map_err(|e| e.to_string())?;
         }
         "tar.xz" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            let encoder = xz2::write::XzEncoder::new(file, 6);
+            let encoder = xz2::write::XzEncoder::new(file, level);
             write_tar(encoder, paths, &ignore)?
                 .finish()
                 .map_err(|e| e.to_string())?;
@@ -221,17 +228,28 @@ pub fn compress(
     Ok(destination.into())
 }
 
-fn write_zip(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(), String> {
+fn write_zip(
+    file: fs::File,
+    paths: &[String],
+    ignore: &IgnoreSet,
+    level: u32,
+    password: Option<&str>,
+) -> Result<(), String> {
     let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
     fn append(
         zip: &mut zip::ZipWriter<fs::File>,
         src: &Path,
         name: &Path,
-        options: zip::write::SimpleFileOptions,
+        level: u32,
+        password: Option<&str>,
         ignore: &IgnoreSet,
     ) -> Result<(), String> {
+        let mut options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .compression_level(Some(i64::from(level)));
+        if let Some(password) = password {
+            options = options.with_aes_encryption(zip::AesMode::Aes256, password);
+        }
         if ignore.is_ignored(name) {
             return Ok(());
         }
@@ -249,7 +267,8 @@ fn write_zip(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(),
                     zip,
                     &child.path(),
                     &name.join(child.file_name()),
-                    options,
+                    level,
+                    password,
                     ignore,
                 )?;
             }
@@ -265,7 +284,7 @@ fn write_zip(file: fs::File, paths: &[String], ignore: &IgnoreSet) -> Result<(),
     for item in paths {
         let src = Path::new(item);
         let name = src.file_name().ok_or("不能压缩根目录")?;
-        append(&mut zip, src, Path::new(name), options, ignore)?;
+        append(&mut zip, src, Path::new(name), level, password, ignore)?;
     }
     zip.finish().map_err(|e| e.to_string())?;
     Ok(())
@@ -373,6 +392,8 @@ mod tests {
             zip.to_str().unwrap(),
             "zip",
             &[],
+            None,
+            None,
         )
         .unwrap();
         let out = extract(zip.to_str().unwrap(), None).unwrap();
@@ -402,6 +423,8 @@ mod tests {
                 archive.to_str().unwrap(),
                 format,
                 &["node_modules".into()],
+                None,
+                None,
             )
             .unwrap();
             let out = extract(archive.to_str().unwrap(), None).unwrap();

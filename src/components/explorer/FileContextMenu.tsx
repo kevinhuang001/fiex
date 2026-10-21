@@ -60,6 +60,7 @@ export function FileContextMenu({
   inTrash,
   setCompressOpen,
   compressOpen,
+  setCompressAdvanced,
   setMenu,
 }: Pick<
   AppController,
@@ -87,6 +88,7 @@ export function FileContextMenu({
   | 'inTrash'
   | 'setCompressOpen'
   | 'compressOpen'
+  | 'setCompressAdvanced'
   | 'setMenu'
 >) {
   return (
@@ -182,10 +184,16 @@ export function FileContextMenu({
                 icon: <Archive />,
                 hint: '',
                 disabled: gitSwitched || x.directoryReadOnly,
-                submenu: archiveFormats.map((format) => ({
-                  label: format.name,
-                  action: () => compress(format),
-                })),
+                submenu: [
+                  ...archiveFormats.map((format) => ({
+                    label: format.name,
+                    action: () => compress(format),
+                  })),
+                  {
+                    label: '高级…',
+                    action: () => setCompressAdvanced(archiveFormats[0]),
+                  },
+                ],
               },
               ...(isArchive(menu.entry)
                 ? [

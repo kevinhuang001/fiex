@@ -4,6 +4,7 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import type { DialogState } from '@/lib/dialogs'
 import { basename, isArchive } from '@/lib/files'
+import type { ArchiveFormat } from '@/lib/archives'
 import { shortcutLabel } from '@/lib/shortcuts'
 import type { Entry, Location, Tag } from '@/lib/types'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -27,6 +28,7 @@ export function useAppController() {
   const [dialogBusy, setDialogBusy] = useState(false)
   const [toast, setToast] = useState('')
   const [trashIssue, setTrashIssue] = useState(false)
+  const [compressAdvanced, setCompressAdvanced] = useState<ArchiveFormat | null>(null)
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
@@ -554,6 +556,8 @@ export function useAppController() {
     inTrash,
     setCompressOpen,
     compressOpen,
+    compressAdvanced,
+    setCompressAdvanced,
     preview,
     setPreview,
     navigatePreview,
