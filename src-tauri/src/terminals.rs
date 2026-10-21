@@ -69,6 +69,7 @@ pub fn detect() -> Vec<Terminal> {
     }
     out
 }
+#[cfg(target_os = "macos")]
 fn shell_escape(path: &std::path::Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
