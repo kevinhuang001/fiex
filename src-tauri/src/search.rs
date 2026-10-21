@@ -6,7 +6,7 @@ use ignore::WalkBuilder;
 use notify::Watcher;
 use serde::Serialize;
 use std::{
-    collections::hash_map::DefaultHasher,
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     fs,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
@@ -18,17 +18,21 @@ use std::{
 };
 use tantivy::tokenizer::{LowerCaser, RawTokenizer, TextAnalyzer};
 use tantivy::{
-    collector::TopDocs,
+    collector::DocSetCollector,
+    indexer::IndexWriter,
     query::RegexQuery,
     schema::{
-        Field, IndexRecordOption, Schema, TantivyDocument, TextFieldIndexing, TextOptions, Value,
+        Field, IndexRecordOption, Schema, TantivyDocument, Term, TextFieldIndexing, TextOptions,
+        Value,
     },
     Index, IndexReader, ReloadPolicy,
 };
 
 const RESULT_LIMIT: usize = 500;
 const INDEX_LIMIT: usize = 1_000_000;
-const INDEX_VERSION: u32 = 1;
+// A burst larger than this is cheaper to rebuild than to patch file by file.
+const PENDING_LIMIT: usize = 20_000;
+const INDEX_VERSION: u32 = 3;
 
 #[derive(Serialize, serde::Deserialize)]
 struct IndexMeta {
@@ -42,16 +46,21 @@ struct IndexHandle {
     signature: String,
     _index: Index,
     reader: IndexReader,
+    writer: IndexWriter,
     name: Field,
     path: Field,
+    path_id: Field,
     skipped: usize,
-    dirty: Arc<AtomicBool>,
+    // Files touched since the last search. Applying them incrementally keeps a
+    // busy home folder from rebuilding the whole index on every keystroke.
+    pending: Arc<Mutex<HashSet<PathBuf>>>,
+    overflow: Arc<AtomicBool>,
     _watcher: Option<notify::RecommendedWatcher>,
 }
 
 #[derive(Clone, Default)]
 pub struct SearchState {
-    generation: Arc<AtomicU64>,
+    generations: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
     index: Arc<Mutex<Option<IndexHandle>>>,
 }
 
@@ -103,6 +112,9 @@ fn open_index(dir: &Path, root: &str, signature: &str) -> Option<IndexHandle> {
             .filter(LowerCaser)
             .build(),
     );
+    index
+        .tokenizers()
+        .register("path_id", RawTokenizer::default());
     let reader: IndexReader = index
         .reader_builder()
         .reload_policy(ReloadPolicy::Manual)
@@ -112,33 +124,51 @@ fn open_index(dir: &Path, root: &str, signature: &str) -> Option<IndexHandle> {
     let schema = index.schema();
     let name = schema.get_field("name").ok()?;
     let path = schema.get_field("path").ok()?;
-    let dirty = Arc::new(AtomicBool::new(false));
-    let watcher = watch_root(root, dirty.clone());
+    let path_id = schema.get_field("path_id").ok()?;
+    let writer = index
+        .writer_with_num_threads::<TantivyDocument>(1, 50_000_000)
+        .ok()?;
+    let pending = Arc::new(Mutex::new(HashSet::new()));
+    let overflow = Arc::new(AtomicBool::new(false));
+    let watcher = watch_root(root, pending.clone(), overflow.clone());
     Some(IndexHandle {
         root: root.into(),
         signature: signature.into(),
         _index: index,
         reader,
+        writer,
         name,
         path,
+        path_id,
         skipped: 0,
-        dirty,
+        pending,
+        overflow,
         _watcher: watcher,
     })
 }
 
-fn watch_root(root: &str, dirty: Arc<AtomicBool>) -> Option<notify::RecommendedWatcher> {
+fn watch_root(
+    root: &str,
+    pending: Arc<Mutex<HashSet<PathBuf>>>,
+    overflow: Arc<AtomicBool>,
+) -> Option<notify::RecommendedWatcher> {
     let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if let Ok(event) = event {
-            if matches!(
-                event.kind,
-                notify::EventKind::Create(_)
-                    | notify::EventKind::Modify(_)
-                    | notify::EventKind::Remove(_)
-            ) {
-                dirty.store(true, Ordering::SeqCst);
-            }
+        let Ok(event) = event else { return };
+        if !matches!(
+            event.kind,
+            notify::EventKind::Create(_)
+                | notify::EventKind::Modify(_)
+                | notify::EventKind::Remove(_)
+        ) {
+            return;
         }
+        let mut queue = pending.lock().unwrap();
+        if queue.len() + event.paths.len() > PENDING_LIMIT {
+            queue.clear();
+            overflow.store(true, Ordering::SeqCst);
+            return;
+        }
+        queue.extend(event.paths);
     })
     .ok()?;
     watcher
@@ -171,6 +201,14 @@ fn build_index(
             .set_stored(),
     );
     let path = schema_builder.add_text_field("path", TextOptions::default().set_stored());
+    let path_id = schema_builder.add_text_field(
+        "path_id",
+        TextOptions::default().set_indexing_options(
+            TextFieldIndexing::default()
+                .set_tokenizer("path_id")
+                .set_index_option(IndexRecordOption::Basic),
+        ),
+    );
     let schema = schema_builder.build();
     let index = Index::create_in_dir(dir, schema).map_err(|e| e.to_string())?;
     index.tokenizers().register(
@@ -179,6 +217,9 @@ fn build_index(
             .filter(LowerCaser)
             .build(),
     );
+    index
+        .tokenizers()
+        .register("path_id", RawTokenizer::default());
     let mut writer = index
         .writer_with_num_threads::<TantivyDocument>(1, 50_000_000)
         .map_err(|e| e.to_string())?;
@@ -217,10 +258,15 @@ fn build_index(
                 if added >= INDEX_LIMIT {
                     break;
                 }
-                let mut doc = TantivyDocument::new();
-                doc.add_text(name, item.file_name().to_string_lossy().to_lowercase());
-                doc.add_text(path, item.path().to_string_lossy());
-                if writer.add_document(doc).is_err() {
+                if !add_document(
+                    &writer,
+                    IndexFields {
+                        name,
+                        path,
+                        path_id,
+                    },
+                    item.path(),
+                ) {
                     skipped += 1;
                 } else {
                     added += 1;
@@ -231,7 +277,6 @@ fn build_index(
         }
     }
     writer.commit().map_err(|e| e.to_string())?;
-    drop(writer);
     fs::write(
         dir.join("fiex-meta.json"),
         serde_json::to_vec(&IndexMeta {
@@ -248,19 +293,142 @@ fn build_index(
         .try_into()
         .map_err(|e: tantivy::TantivyError| e.to_string())?;
     reader.reload().map_err(|e| e.to_string())?;
-    let dirty = Arc::new(AtomicBool::new(false));
-    let watcher = watch_root(root, dirty.clone());
+    let pending = Arc::new(Mutex::new(HashSet::new()));
+    let overflow = Arc::new(AtomicBool::new(false));
+    let watcher = watch_root(root, pending.clone(), overflow.clone());
     Ok(IndexHandle {
         root: root.into(),
         signature: signature.into(),
         _index: index,
         reader,
+        writer,
         name,
         path,
+        path_id,
         skipped,
-        dirty,
+        pending,
+        overflow,
         _watcher: watcher,
     })
+}
+
+#[derive(Clone, Copy)]
+struct IndexFields {
+    name: Field,
+    path: Field,
+    path_id: Field,
+}
+
+fn add_document(writer: &IndexWriter, fields: IndexFields, item: &Path) -> bool {
+    let mut doc = TantivyDocument::new();
+    doc.add_text(
+        fields.name,
+        item.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase(),
+    );
+    doc.add_text(fields.path, item.to_string_lossy());
+    doc.add_text(fields.path_id, item.to_string_lossy());
+    writer.add_document(doc).is_ok()
+}
+
+/// Re-index one path (a file or a whole subtree) after a filesystem event.
+fn index_subtree(
+    writer: &IndexWriter,
+    fields: IndexFields,
+    target: &Path,
+    root: &Path,
+    hidden: bool,
+    ignores: &[String],
+) -> usize {
+    let base = index_base();
+    let filter_root = root.to_path_buf();
+    let filter_ignore = Arc::new(IgnoreSet::new(ignores));
+    let mut added = 0usize;
+    let walker = WalkBuilder::new(target)
+        .hidden(!hidden)
+        .ignore(false)
+        .git_ignore(false)
+        .git_global(false)
+        .git_exclude(false)
+        .parents(false)
+        .follow_links(false)
+        .threads(1)
+        .filter_entry(move |item| {
+            !item.path().starts_with(&base)
+                && !inside_bundle(item.path())
+                && !filter_ignore.is_ignored(
+                    item.path()
+                        .strip_prefix(&filter_root)
+                        .unwrap_or(item.path()),
+                )
+        })
+        .build();
+    for item in walker.flatten() {
+        add_document(writer, fields, item.path());
+        added += 1;
+    }
+    added
+}
+
+fn apply_pending(handle: &mut IndexHandle, hidden: bool, ignores: &[String]) -> Result<(), String> {
+    let mut paths: Vec<PathBuf> = {
+        let mut queue = handle.pending.lock().unwrap();
+        if queue.is_empty() {
+            return Ok(());
+        }
+        queue.drain().collect()
+    };
+    // A rename can report both the directory and every child. Process the
+    // ancestor once, so a large move does not re-index the same tree N times.
+    paths.sort_by_key(|path| path.components().count());
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for path in paths {
+        if !roots.iter().any(|root| path.starts_with(root)) {
+            roots.push(path);
+        }
+    }
+    let root = PathBuf::from(&handle.root);
+    let searcher = handle.reader.searcher();
+    for target in roots {
+        // Remove descendants too. A deleted or renamed directory no longer
+        // exists on disk, so walking it cannot discover its old index entries.
+        let prefix = format!("{}.*", regex::escape(&target.to_string_lossy()));
+        let query =
+            RegexQuery::from_pattern(&prefix, handle.path_id).map_err(|error| error.to_string())?;
+        let addresses = searcher
+            .search(&query, &DocSetCollector)
+            .map_err(|error| error.to_string())?;
+        for address in addresses {
+            if let Ok(doc) = searcher.doc::<TantivyDocument>(address) {
+                if let Some(path) = doc.get_first(handle.path).and_then(|value| value.as_str()) {
+                    if Path::new(path).starts_with(&target) {
+                        handle
+                            .writer
+                            .delete_term(Term::from_field_text(handle.path_id, path));
+                    }
+                }
+            }
+        }
+        if target.exists() {
+            index_subtree(
+                &handle.writer,
+                IndexFields {
+                    name: handle.name,
+                    path: handle.path,
+                    path_id: handle.path_id,
+                },
+                &target,
+                &root,
+                hidden,
+                ignores,
+            );
+        }
+    }
+    handle.writer.commit().map_err(|e| e.to_string())?;
+    handle.reader.reload().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn ensure_index(
@@ -270,13 +438,20 @@ fn ensure_index(
     ignores: &[String],
 ) -> Result<(), String> {
     let signature = signature(hidden, ignores);
-    let rebuild = match handle.as_ref() {
+    let switched = match handle.as_ref() {
         Some(current) => current.root != root || current.signature != signature,
         None => true,
     };
-    if !rebuild && !handle.as_ref().unwrap().dirty.load(Ordering::SeqCst) {
+    let flooded = handle
+        .as_ref()
+        .is_some_and(|current| current.overflow.swap(false, Ordering::SeqCst));
+    if !switched && !flooded {
+        if let Some(current) = handle.as_mut() {
+            apply_pending(current, hidden, ignores)?;
+        }
         return Ok(());
     }
+    let rebuild = switched || flooded;
     let dir = index_dir(root, &signature);
     fs::create_dir_all(dir.parent().ok_or("无效索引目录")?).map_err(|e| e.to_string())?;
     let opened = if handle.is_some() {
@@ -304,8 +479,17 @@ fn ensure_index(
 }
 
 impl SearchState {
-    pub fn cancel(&self) {
-        self.generation.fetch_add(1, Ordering::SeqCst);
+    fn generation(&self, scope: &str) -> Arc<AtomicU64> {
+        self.generations
+            .lock()
+            .unwrap()
+            .entry(scope.to_owned())
+            .or_default()
+            .clone()
+    }
+
+    pub fn cancel(&self, scope: &str) {
+        self.generation(scope).fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn warm(&self, root: &str, hidden: bool, ignores: &[String]) -> Result<(), String> {
@@ -315,13 +499,15 @@ impl SearchState {
 
     pub fn run(
         &self,
+        scope: &str,
         root: &str,
         query: &str,
         hidden: bool,
         ignores: &[String],
         emit: impl Fn(SearchBatch) + Send + Sync,
     ) -> Result<(), String> {
-        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let counter = self.generation(scope);
+        let generation = counter.fetch_add(1, Ordering::SeqCst) + 1;
         let started = Instant::now();
         let query = query.to_lowercase();
         let mut guard = self.index.lock().unwrap();
@@ -331,18 +517,18 @@ impl SearchState {
         let pattern = format!(".*{}.*", regex::escape(&query));
         let regex_query =
             RegexQuery::from_pattern(&pattern, handle.name).map_err(|e| e.to_string())?;
-        let top = searcher
-            .search(
-                &regex_query,
-                &TopDocs::with_limit(RESULT_LIMIT).order_by_score(),
-            )
+        // Scores are irrelevant for substring matching, so collect plain
+        // addresses instead of ranking every match.
+        let found = searcher
+            .search(&regex_query, &DocSetCollector)
             .map_err(|e| e.to_string())?;
+        let truncated = found.len() >= RESULT_LIMIT;
         let mut entries = Vec::new();
-        for (_score, address) in &top {
-            if self.generation.load(Ordering::Relaxed) != generation {
+        for address in found.into_iter().take(RESULT_LIMIT) {
+            if counter.load(Ordering::Relaxed) != generation {
                 return Ok(());
             }
-            if let Ok(doc) = searcher.doc::<TantivyDocument>(*address) {
+            if let Ok(doc) = searcher.doc::<TantivyDocument>(address) {
                 if let Some(path) = doc.get_first(handle.path).and_then(|value| value.as_str()) {
                     if let Ok(entry) = entry(Path::new(path)) {
                         entries.push(entry);
@@ -350,7 +536,6 @@ impl SearchState {
                 }
             }
         }
-        let truncated = top.len() >= RESULT_LIMIT;
         emit(SearchBatch {
             entries,
             done: true,
@@ -392,18 +577,28 @@ mod tests {
         let state = SearchState::default();
         let found = Mutex::new(Vec::new());
         state
-            .run(t.path().to_str().unwrap(), "needle", false, &[], |batch| {
-                found.lock().unwrap().extend(batch.entries)
-            })
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "needle",
+                false,
+                &[],
+                |batch| found.lock().unwrap().extend(batch.entries),
+            )
             .unwrap();
         assert_eq!(found.lock().unwrap().len(), 1);
         assert_eq!(found.lock().unwrap()[0].name, "Needle.txt");
 
         let apps = Mutex::new(Vec::new());
         state
-            .run(t.path().to_str().unwrap(), "safari", false, &[], |batch| {
-                apps.lock().unwrap().extend(batch.entries)
-            })
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "safari",
+                false,
+                &[],
+                |batch| apps.lock().unwrap().extend(batch.entries),
+            )
             .unwrap();
         let apps = apps.lock().unwrap();
         assert_eq!(apps.len(), 1);
@@ -418,9 +613,14 @@ mod tests {
         let state = SearchState::default();
         let out = Mutex::new(Vec::new());
         state
-            .run(t.path().to_str().unwrap(), "needle", true, &[], |b| {
-                out.lock().unwrap().extend(b.entries)
-            })
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "needle",
+                true,
+                &[],
+                |b| out.lock().unwrap().extend(b.entries),
+            )
             .unwrap();
         assert_eq!(out.lock().unwrap().len(), 1);
     }
@@ -435,6 +635,7 @@ mod tests {
         let out = Mutex::new(Vec::new());
         state
             .run(
+                "test",
                 t.path().to_str().unwrap(),
                 "needle",
                 false,
@@ -444,5 +645,48 @@ mod tests {
             .unwrap();
         assert_eq!(out.lock().unwrap().len(), 1);
         assert_eq!(out.lock().unwrap()[0].name, "Needle.txt");
+    }
+
+    #[test]
+    fn removing_a_directory_removes_its_indexed_descendants() {
+        let t = tempfile::tempdir().unwrap();
+        let folder = t.path().join("OldFolder");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("Needle.txt"), "x").unwrap();
+        let state = SearchState::default();
+        state.warm(t.path().to_str().unwrap(), false, &[]).unwrap();
+        fs::remove_dir_all(&folder).unwrap();
+        {
+            let guard = state.index.lock().unwrap();
+            guard
+                .as_ref()
+                .unwrap()
+                .pending
+                .lock()
+                .unwrap()
+                .insert(folder);
+        }
+        let matches = Mutex::new(Vec::new());
+        state
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "needle",
+                false,
+                &[],
+                |batch| {
+                    matches.lock().unwrap().extend(batch.entries);
+                },
+            )
+            .unwrap();
+        assert!(matches.lock().unwrap().is_empty());
+        let guard = state.index.lock().unwrap();
+        let handle = guard.as_ref().unwrap();
+        let searcher = handle.reader.searcher();
+        let query = RegexQuery::from_pattern(".*Needle.*", handle.path_id).unwrap();
+        assert!(searcher
+            .search(&query, &DocSetCollector)
+            .unwrap()
+            .is_empty());
     }
 }

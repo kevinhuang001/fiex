@@ -2,10 +2,17 @@ import { call } from '@/lib/api'
 import type { ArchiveFormat } from '@/lib/archives'
 import type { DialogState } from '@/lib/dialogs'
 import { basename, join, uniqueName } from '@/lib/files'
-import type { Entry, OperationResult, Preferences } from '@/lib/types'
+import type {
+  Entry,
+  OperationResult,
+  Preferences,
+  TransferConflict,
+  ConflictResolution,
+} from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 import { useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
+import { beginActivity, finishActivity } from './useActivity'
 
 export function useFileOperations({
   x,
@@ -15,6 +22,7 @@ export function useFileOperations({
   setDialog,
   chosen,
   first,
+  trashPath,
 }: {
   x: Explorer
   prefs: Preferences
@@ -23,21 +31,59 @@ export function useFileOperations({
   setDialog: Dispatch<SetStateAction<DialogState | null>>
   chosen: Entry[]
   first: Entry | undefined
+  trashPath: string | null
 }) {
+  // Inside the Trash, "move to Trash" would be a no-op, so the delete action
+  // becomes permanent just like the system file manager.
+  const inTrash = Boolean(trashPath && (x.path === trashPath || x.path.startsWith(trashPath + '/')))
   const [busy, setBusy] = useState('')
+  const [conflict, setConflict] = useState<{
+    paths: string[]
+    destination: string
+    moving: boolean
+    items: TransferConflict[]
+  } | null>(null)
   const running = useRef(false)
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
-  const run = async <T>(label: string, fn: () => Promise<T>): Promise<T | undefined> => {
+  const run = async <T>(
+    label: string,
+    fn: () => Promise<T>,
+    detail?: string,
+    cancellable = false,
+  ): Promise<T | undefined> => {
     if (running.current) return
     running.current = true
     setBusy(label)
     x.setError('')
+    if (cancellable) {
+      // Reset the shared backend flag first so a previous cancel cannot abort
+      // the operation we are about to start.
+      await call('begin_operation').catch(() => {})
+    }
+    const activity = beginActivity(
+      label,
+      detail,
+      cancellable
+        ? () => {
+            void call('cancel_operation').catch(() => {})
+          }
+        : undefined,
+    )
     try {
       const result = await fn()
+      finishActivity(activity)
       x.reload()
       return result
     } catch (e) {
-      x.setError(String(e))
+      const message = String(e)
+      if (message.includes('已取消')) {
+        // Cancelling is the user's choice; the activity centre already says so.
+        // Refresh because a stopped transfer may still have moved some files.
+        x.reload()
+      } else {
+        x.setError(message)
+      }
+      finishActivity(activity, message)
       return undefined
     } finally {
       running.current = false
@@ -49,7 +95,7 @@ export function useFileOperations({
       throw new Error(`${result.paths.length} 项已完成。${result.errors.join('\n')}`)
     notify(
       result.skipped
-        ? `${result.paths.length} 项操作完成，已按忽略规则跳过 ${result.skipped} 项`
+        ? `${result.paths.length} 项操作完成，已跳过 ${result.skipped} 项`
         : `${result.paths.length} 项操作完成`,
     )
   }
@@ -72,109 +118,210 @@ export function useFileOperations({
     x.setSelected([])
     x.reload()
   }
-  const recycle = (confirm = true) => {
+  // Moving to the Trash is reversible, so it never asks for confirmation.
+  const recycle = () => {
     if (!writable()) return
     if (!x.selected.length) return
     const paths = [...x.selected]
-    if (!confirm) {
-      void run('正在移到废纸篓…', () => moveToTrash(paths))
+    if (inTrash) {
+      deletePermanently(paths)
       return
     }
-    setDialog({
-      title: `将 ${paths.length} 个项目移到废纸篓？`,
-      description: '项目将移入系统废纸篓，可在系统文件管理器中恢复。',
-      submit: '移到废纸篓',
-      danger: true,
-      action: () => moveToTrash(paths),
-    })
+    void run('正在移到废纸篓…', () => moveToTrash(paths), `${paths.length} 个项目 → 废纸篓`, true)
   }
-  const transfer = (paths: string[], destination: string, moving: boolean) => {
-    if (!writable()) return
+  const deletePermanently = (paths: string[]) => {
     if (!paths.length) return
     setDialog({
-      title: moving ? '移动项目' : '复制项目',
-      description: `${paths.length} 个项目 → ${destination}\n遇到同名项目时自动保留两者，不替换已有文件。`,
-      submit: moving ? '移动（保留两者）' : '复制（保留两者）',
+      title: `彻底删除 ${paths.length} 个项目？`,
+      submit: '彻底删除',
+      danger: true,
       action: async () => {
-        handleResult(
-          await call<OperationResult>('transfer', {
-            paths,
-            destination,
-            moving,
-            keepBoth: true,
-            ignores: prefs.copyIgnore,
-          }),
+        await run(
+          '正在彻底删除…',
+          () => call<number>('delete_permanently', { paths }),
+          undefined,
+          true,
         )
-        if (moving) setClipboard(null)
-        x.reload()
+        x.setSelected([])
       },
     })
+  }
+  const restoreFromTrash = (paths: string[]) => {
+    if (!paths.length) return
+    void run(
+      '正在复原…',
+      async () => {
+        const needsFolder = await call<boolean>('trash_restore_needs_folder', { paths })
+        const fallback = needsFolder ? await call<string | null>('pick_folder', {}) : null
+        if (needsFolder && !fallback) return
+        const restored = await call<number>('restore_from_trash', { paths, fallback })
+        if (restored === undefined) return
+        notify(`已复原 ${restored} 个项目`)
+        x.setSelected([])
+      },
+      undefined,
+      true,
+    )
+  }
+  const emptyTrash = () => {
+    setDialog({
+      title: '清空废纸篓？',
+      submit: '清空废纸篓',
+      danger: true,
+      action: async () => {
+        const removed = await run(
+          '正在清空废纸篓…',
+          () => call<number>('empty_trash'),
+          undefined,
+          true,
+        )
+        if (removed === undefined) return
+        x.setSelected([])
+        notify(removed > 0 ? `已清空 ${removed} 个项目` : '废纸篓已经是空的')
+      },
+    })
+  }
+  const executeTransfer = async (
+    paths: string[],
+    destination: string,
+    moving: boolean,
+    resolutions: ConflictResolution[] = [],
+  ) => {
+    const result = await run(
+      moving ? '正在移动…' : '正在复制…',
+      () =>
+        call<OperationResult>('transfer', {
+          paths,
+          destination,
+          moving,
+          keepBoth: false,
+          // Copy and move always take everything; browsing filters stay visual.
+          ignores: [],
+          resolutions,
+        }),
+      `${paths.length} 项 → ${destination}`,
+      true,
+    )
+    if (!result) return
+    if (result.conflicts?.length) {
+      setConflict({ paths, destination, moving, items: result.conflicts })
+      return
+    }
+    setConflict(null)
+    if (moving) setClipboard(null)
+    try {
+      handleResult(result)
+    } catch (error) {
+      x.setError(String(error))
+    }
+  }
+  const transfer = (paths: string[], destination: string, moving: boolean) => {
+    if (!writable() || !paths.length || conflict) return
+    void executeTransfer(paths, destination, moving)
+  }
+  const resolveConflict = async (resolutions: ConflictResolution[]) => {
+    if (conflict)
+      await executeTransfer(conflict.paths, conflict.destination, conflict.moving, resolutions)
   }
   const copy = (moving: boolean) => {
     if (moving && !writable()) return
     if (x.selected.length) {
       setClipboard({ paths: [...x.selected], moving })
-      notify(moving ? '已剪切，选择目标文件夹后粘贴' : '已复制，选择目标文件夹后粘贴')
+      notify(moving ? '已剪切' : '已复制')
     }
   }
   const duplicate = () => {
     if (!writable()) return
-    void run('正在创建副本…', async () => {
-      handleResult(
-        await call<OperationResult>('transfer', {
-          paths: x.selected,
-          destination: x.path,
-          moving: false,
-          keepBoth: true,
-          ignores: prefs.copyIgnore,
-        }),
-      )
-    })
+    void run(
+      '正在创建副本…',
+      async () => {
+        handleResult(
+          await call<OperationResult>('transfer', {
+            paths: x.selected,
+            destination: x.path,
+            moving: false,
+            keepBoth: true,
+            ignores: [],
+          }),
+        )
+      },
+      undefined,
+      true,
+    )
   }
-  const compress = (format: ArchiveFormat) => {
+  const compress = (
+    format: ArchiveFormat,
+    options: { level?: number; password?: string; full?: boolean } = {},
+  ) => {
     if (!writable()) return
     if (!first) return
-    setDialog({
-      title: `压缩为 ${format.name}`,
-      label: '压缩包名称',
-      value: (chosen.length === 1 ? first.name : 'Archive') + format.ext,
-      submit: '压缩',
-      description: '已按设置中的压缩忽略规则过滤。',
-      action: async (value) => {
-        let name = value.trim()
-        if (!name.toLowerCase().endsWith(format.ext)) name += format.ext
-        if (!name || name === '..' || /[\\/]/.test(name)) throw new Error('请输入有效的文件名')
+    const base = chosen.length === 1 ? first.name : 'Archive'
+    const name = uniqueName(
+      x.entries.map((entry) => entry.name),
+      base + format.ext,
+    )
+    void run(
+      '正在压缩…',
+      async () => {
         await call('compress_archive', {
           paths: x.selected,
           destination: join(x.path, name),
           format: format.id,
-          ignores: prefs.compressIgnore,
+          ignores: options.full ? [] : prefs.compressIgnore,
+          level: options.level ?? null,
+          password: options.password || null,
         })
-        notify('压缩完成')
-        x.reload()
+        notify(`已压缩为 ${name}`)
       },
-    })
+      `${base} → ${name} · ${format.name}${options.password ? ' · AES-256' : ''}${
+        options.full ? ' · 全量' : ''
+      }`,
+      true,
+    )
   }
   const extract = () => {
     if (!writable()) return
-    if (first)
-      void run('正在解压…', async () => {
-        const path = await call<string>('extract_archive', { path: first.path })
-        notify(`已解压到 ${basename(path)}`)
+    if (!first) return
+    void call<string | null>('pick_folder', { default: x.path })
+      .then((destination) => {
+        if (!destination) return
+        void run(
+          '正在解压…',
+          async () => {
+            const path = await call<string>('extract_archive', {
+              path: first.path,
+              destination,
+            })
+            notify(`已解压到 ${basename(path)}`)
+            x.reload()
+          },
+          `${basename(first.path)} → ${basename(destination)}`,
+          true,
+        )
       })
+      .catch((error) => x.setError(String(error)))
   }
-  const undo = () =>
+  const undo = () => {
+    if (!writable()) return
     void run('正在撤销…', async () => {
       await call('undo')
       notify('已撤销上一次文件操作')
     })
+  }
   return {
     busy,
+    conflict,
+    setConflict,
+    resolveConflict,
     clipboard,
     setClipboard,
     run,
     create,
     recycle,
+    deletePermanently,
+    restoreFromTrash,
+    emptyTrash,
+    inTrash,
     transfer,
     copy,
     duplicate,

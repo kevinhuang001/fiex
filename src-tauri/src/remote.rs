@@ -49,6 +49,8 @@ pub struct ConnectionInput {
     #[serde(default)]
     pub host: String,
     #[serde(default)]
+    pub port: Option<u16>,
+    #[serde(default)]
     pub share: String,
     #[serde(default)]
     pub base: String,
@@ -197,6 +199,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     } else if input.host.trim().is_empty() || input.share.trim().is_empty() {
         return Err("请填写 SMB 主机和共享名".into());
     }
+    if input.port == Some(0) {
+        return Err("请输入有效的端口".into());
+    }
     let mut items = load_stored();
     let existing = input
         .id
@@ -207,6 +212,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         items[index].kind = kind.into();
         items[index].url = input.url.trim().into();
         items[index].host = input.host.trim().into();
+        items[index].port = input.port;
         items[index].share = input.share.trim().into();
         items[index].base = input.base.trim().into();
         items[index].username = input.username.trim().into();
@@ -220,7 +226,14 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or_default();
-        let id = format!("{:x}{:x}", stamp, name.bytes().map(u64::from).sum::<u64>());
+        let mut sequence = 0u64;
+        let id = loop {
+            let candidate = format!("{stamp:x}-{sequence:x}");
+            if !items.iter().any(|item| item.id == candidate) {
+                break candidate;
+            }
+            sequence += 1;
+        };
         items.push(StoredConnection {
             id: id.clone(),
             name: name.into(),
@@ -232,20 +245,24 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             username: input.username.trim().into(),
             password: input.password,
             allow_invalid_certs: input.allow_invalid_certs,
-            port: None,
+            port: input.port,
         });
         id
     };
+    let conn = items.iter().find(|c| c.id == id).ok_or("连接不存在")?;
+    fs::create_dir_all(mount_path(conn)).map_err(|e| e.to_string())?;
     save_stored(&items)?;
-    let conn = items.into_iter().find(|c| c.id == id).unwrap();
-    fs::create_dir_all(mount_path(&conn)).map_err(|e| e.to_string())?;
-    Ok(public(&conn))
+    Ok(public(conn))
 }
 
 pub fn remove_connection(id: &str) -> Result<(), String> {
     let mut items = load_stored();
     items.retain(|c| c.id != id);
     save_stored(&items)
+}
+
+pub fn is_remote(path: &str) -> bool {
+    connection_for_path(path).is_some()
 }
 
 fn connection_for_path(path: &str) -> Option<(StoredConnection, PathBuf)> {

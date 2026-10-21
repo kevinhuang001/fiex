@@ -3,35 +3,100 @@ use crate::ignores::IgnoreSet;
 use serde::Serialize;
 use std::{
     fs,
+    io::{Read, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
+/// Error returned by every long operation once the shared flag is set.
+pub const CANCELLED: &str = "已取消";
+
+/// Shared cancel switch for the long-running operations of one app instance.
+/// `begin_operation` resets it; `cancel_operation` flips it; the loops below
+/// poll it and bail out with `CANCELLED` at a safe point.
+#[derive(Clone, Default)]
+pub struct OperationCancel(Arc<AtomicBool>);
+
+impl OperationCancel {
+    pub fn begin(&self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+    pub fn flag(&self) -> Arc<AtomicBool> {
+        self.0.clone()
+    }
+}
+
+pub(crate) fn check_cancelled(cancel: &AtomicBool) -> Result<(), String> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(CANCELLED.into());
+    }
+    Ok(())
+}
+
+/// Copy a stream in chunks so a large file can be interrupted regularly.
+pub(crate) fn copy_stream(
+    input: &mut impl Read,
+    output: &mut impl Write,
+    cancel: &AtomicBool,
+) -> Result<u64, String> {
+    let mut buffer = vec![0u8; 256 * 1024];
+    let mut total = 0;
+    loop {
+        check_cancelled(cancel)?;
+        let read = input.read(&mut buffer).map_err(|e| e.to_string())?;
+        if read == 0 {
+            return Ok(total);
+        }
+        output
+            .write_all(&buffer[..read])
+            .map_err(|e| e.to_string())?;
+        total += read as u64;
+    }
+}
+
 #[derive(Debug)]
-enum Undo {
+pub(crate) enum Undo {
     Rename(PathBuf, PathBuf),
     Created(PathBuf),
+    Replaced(PathBuf, tempfile::TempDir),
 }
 #[derive(Default)]
 pub struct Operations {
     undo: Mutex<Vec<Vec<Undo>>>,
 }
-#[derive(Serialize)]
+#[derive(Default, Serialize)]
 pub struct OperationResult {
     pub paths: Vec<String>,
     pub errors: Vec<String>,
     pub skipped: usize,
+    pub conflicts: Vec<crate::transfers::Conflict>,
 }
-fn exists(path: &Path) -> bool {
+pub(crate) fn exists(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok()
 }
 pub fn unique(path: &Path) -> PathBuf {
     if !exists(path) {
         return path.into();
     }
-    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-    let ext = path
-        .extension()
+    let stem = if path.is_dir() {
+        path.file_name()
+    } else {
+        path.file_stem()
+    }
+    .unwrap_or_default()
+    .to_string_lossy();
+    let ext = (!path.is_dir())
+        .then(|| path.extension())
+        .flatten()
         .map(|s| format!(".{}", s.to_string_lossy()))
         .unwrap_or_default();
     for i in 2.. {
@@ -42,12 +107,14 @@ pub fn unique(path: &Path) -> PathBuf {
     }
     unreachable!()
 }
-fn copy_tree(
+pub(crate) fn copy_tree(
     src: &Path,
     dest: &Path,
     ignore: &IgnoreSet,
     relative: &Path,
+    cancel: &AtomicBool,
 ) -> Result<usize, String> {
+    check_cancelled(cancel)?;
     if ignore.is_ignored(relative) {
         return Ok(1);
     }
@@ -65,6 +132,7 @@ fn copy_tree(
                 &dest.join(item.file_name()),
                 ignore,
                 &relative.join(item.file_name()),
+                cancel,
             )?;
         }
     } else if meta.is_file() {
@@ -74,7 +142,7 @@ fn copy_tree(
             .create_new(true)
             .open(dest)
             .map_err(|e| e.to_string())?;
-        std::io::copy(&mut input, &mut output).map_err(|e| e.to_string())?;
+        copy_stream(&mut input, &mut output, cancel)?;
         fs::set_permissions(dest, meta.permissions()).map_err(|e| e.to_string())?;
     } else {
         return Err("不能复制设备或特殊文件".into());
@@ -131,87 +199,46 @@ impl Operations {
         moving: bool,
         keep_both: bool,
         ignores: &[String],
+        cancel: &AtomicBool,
     ) -> Result<OperationResult, String> {
-        let dest_dir = dunce::canonicalize(destination).map_err(|e| e.to_string())?;
-        if !dest_dir.is_dir() {
-            return Err("目标不是文件夹".into());
-        }
-        let ignore = IgnoreSet::new(ignores);
-        let mut skipped = 0;
-        // Validate every destination before any mutation.
-        let mut plan = Vec::new();
-        for source in sources {
-            let src = PathBuf::from(source);
-            let name = src.file_name().ok_or("不能操作根目录")?;
-            if ignore.is_ignored(Path::new(name)) {
-                skipped += 1;
-                continue;
-            }
-            let real = dunce::canonicalize(&src).map_err(|e| e.to_string())?;
-            if dest_dir.starts_with(&real) {
-                return Err("不能把文件夹复制或移动到其自身内部".into());
-            }
-            let mut dest = dest_dir.join(name);
-            if moving && dest == src {
-                continue;
-            }
-            if exists(&dest) {
-                if keep_both {
-                    dest = unique(&dest);
-                } else {
-                    return Err(format!(
-                        "{} 已存在。请选择“保留两者”或取消。",
-                        dest.display()
-                    ));
-                }
-            }
-            if plan.iter().any(|(_, p): &(PathBuf, PathBuf)| p == &dest) {
-                return Err("所选项目具有重复文件名，请分别操作".into());
-            }
-            plan.push((src, dest));
-        }
-        let mut undo = Vec::new();
-        let mut paths = Vec::new();
-        let mut errors = Vec::new();
-        for (src, dest) in plan {
-            let result: Result<usize, String> = if moving {
-                fs::rename(&src, &dest)
-                    .map(|_| 0)
-                    .map_err(|e| format!("{e}。跨磁盘移动请先复制，核对后移到废纸篓。"))
-            } else {
-                copy_tree(
-                    &src,
-                    &dest,
-                    &ignore,
-                    Path::new(src.file_name().unwrap_or_default()),
-                )
-            };
-            match result {
-                Ok(skipped_children) => {
-                    skipped += skipped_children;
-                    paths.push(dest.to_string_lossy().into_owned());
-                    undo.push(if moving {
-                        Undo::Rename(dest, src)
-                    } else {
-                        Undo::Created(dest)
-                    });
-                }
-                Err(e) => {
-                    errors.push(format!("{}: {e}", src.display()));
-                    if !moving && exists(&dest) {
-                        undo.push(Undo::Created(dest));
-                    }
-                }
-            }
-        }
+        let (result, undo) = crate::transfers::execute(
+            sources,
+            destination,
+            moving,
+            keep_both,
+            ignores,
+            &[],
+            cancel,
+        )?;
         if !undo.is_empty() {
             self.undo.lock().unwrap().push(undo);
         }
-        Ok(OperationResult {
-            paths,
-            errors,
-            skipped,
-        })
+        Ok(result)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn transfer_resolved(
+        &self,
+        sources: &[String],
+        destination: &str,
+        moving: bool,
+        keep_both: bool,
+        ignores: &[String],
+        resolutions: &[crate::transfers::Resolution],
+        cancel: &AtomicBool,
+    ) -> Result<OperationResult, String> {
+        let (result, undo) = crate::transfers::execute(
+            sources,
+            destination,
+            moving,
+            keep_both,
+            ignores,
+            resolutions,
+            cancel,
+        )?;
+        if !undo.is_empty() {
+            self.undo.lock().unwrap().push(undo);
+        }
+        Ok(result)
     }
     pub fn undo(&self) -> Result<(), String> {
         let mut stack = self.undo.lock().unwrap();
@@ -222,10 +249,20 @@ impl Operations {
                     if exists(dest) {
                         Err("原位置已有同名项目，无法撤销".into())
                     } else {
-                        fs::rename(src, dest).map_err(|e| e.to_string())
+                        fs::create_dir_all(dest.parent().ok_or("原路径无效")?)
+                            .map_err(|e| e.to_string())?;
+                        crate::transfers::move_tree(src, dest, &crate::transfers::NEVER_CANCELLED)
+                            .map(|_| ())
                     }
                 }
                 // Put copies/new files in Trash on undo, preserving any intervening edits.
+                Undo::Replaced(path, backup) => {
+                    if exists(path) {
+                        Err("目标已改变，无法恢复被替换文件".into())
+                    } else {
+                        fs::rename(backup.path().join("original"), path).map_err(|e| e.to_string())
+                    }
+                }
                 Undo::Created(path) => trash::delete(path).map_err(|e| e.to_string()),
             };
             if let Err(e) = result {
@@ -242,10 +279,15 @@ pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
         paths: vec![],
         errors: vec![],
         skipped: 0,
+        conflicts: vec![],
     };
     for path in paths {
+        let before = crate::volumes::trash_names();
         match trash::delete(path) {
-            Ok(()) => result.paths.push(path.clone()),
+            Ok(()) => {
+                crate::volumes::record_trashed(path, &before);
+                result.paths.push(path.clone());
+            }
             Err(e) => result.errors.push(format!("{path}: {e}")),
         }
     }
@@ -264,21 +306,27 @@ mod tests {
         fs::write(a.join("x"), "source").unwrap();
         fs::write(b.join("x"), "existing").unwrap();
         let op = Operations::default();
-        assert!(op
-            .transfer(
+        assert_eq!(
+            op.transfer(
                 &[a.join("x").to_string_lossy().into()],
                 b.to_str().unwrap(),
                 false,
                 false,
-                &[]
+                &[],
+                &AtomicBool::new(false)
             )
-            .is_err());
+            .unwrap()
+            .conflicts
+            .len(),
+            1
+        );
         op.transfer(
             &[a.join("x").to_string_lossy().into()],
             b.to_str().unwrap(),
             false,
             true,
             &[],
+            &AtomicBool::new(false),
         )
         .unwrap();
         assert_eq!(fs::read_to_string(b.join("x")).unwrap(), "existing");
@@ -297,9 +345,81 @@ mod tests {
                 t.path().to_str().unwrap(),
                 false,
                 true,
-                &[]
+                &[],
+                &AtomicBool::new(false)
             )
             .is_err());
+    }
+    #[test]
+    fn operation_cancel_flag_roundtrip() {
+        let cancel = OperationCancel::default();
+        assert!(!cancel.is_cancelled());
+        cancel.cancel();
+        assert!(cancel.is_cancelled());
+        cancel.begin();
+        assert!(!cancel.is_cancelled());
+    }
+    #[test]
+    fn cancelled_transfer_stops_before_moving_any_file() {
+        let t = tempfile::tempdir().unwrap();
+        let a = t.path().join("a");
+        let b = t.path().join("b");
+        fs::create_dir(&a).unwrap();
+        fs::create_dir(&b).unwrap();
+        fs::write(a.join("one"), "first").unwrap();
+        fs::write(a.join("two"), "second").unwrap();
+        let sources = vec![
+            a.join("one").to_string_lossy().into_owned(),
+            a.join("two").to_string_lossy().into_owned(),
+        ];
+        let cancel = OperationCancel::default();
+        cancel.cancel();
+        let op = Operations::default();
+        assert_eq!(
+            op.transfer(
+                &sources,
+                b.to_str().unwrap(),
+                true,
+                false,
+                &[],
+                &cancel.flag()
+            )
+            .err(),
+            Some(CANCELLED.to_string())
+        );
+        assert!(!b.join("one").exists());
+        assert!(!b.join("two").exists());
+        assert!(a.join("one").exists());
+        assert!(a.join("two").exists());
+    }
+    #[test]
+    fn copy_stream_stops_after_the_chunk_that_notices_cancellation() {
+        struct Tripping<'a> {
+            left: usize,
+            cancel: &'a AtomicBool,
+        }
+        impl Read for Tripping<'_> {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                let read = self.left.min(buffer.len());
+                buffer[..read].fill(b'x');
+                self.left -= read;
+                // Pretend the user cancels while this read is in flight.
+                self.cancel.store(true, Ordering::SeqCst);
+                Ok(read)
+            }
+        }
+        let cancel = AtomicBool::new(false);
+        let mut input = Tripping {
+            left: 4 * 1024 * 1024,
+            cancel: &cancel,
+        };
+        let mut output = Vec::new();
+        assert_eq!(
+            copy_stream(&mut input, &mut output, &cancel).unwrap_err(),
+            CANCELLED
+        );
+        // One chunk may land, but the copy stops long before the whole file.
+        assert!(output.len() <= 256 * 1024);
     }
     #[test]
     fn rename_undo() {

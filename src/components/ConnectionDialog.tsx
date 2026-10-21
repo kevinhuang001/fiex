@@ -18,6 +18,7 @@ export function ConnectionDialog({
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [host, setHost] = useState('')
+  const [port, setPort] = useState(445)
   const [share, setShare] = useState('')
   const [base, setBase] = useState('')
   const [username, setUsername] = useState('')
@@ -32,6 +33,7 @@ export function ConnectionDialog({
     setName('')
     setUrl('')
     setHost('')
+    setPort(445)
     setShare('')
     setBase('')
     setUsername('')
@@ -51,6 +53,7 @@ export function ConnectionDialog({
           kind,
           url,
           host,
+          port,
           share,
           base,
           username,
@@ -118,6 +121,17 @@ export function ConnectionDialog({
                 value={host}
                 onChange={(e) => setHost(e.target.value)}
                 placeholder="nas.local"
+              />
+            </label>
+            <label>
+              <span>端口</span>
+              <input
+                type="number"
+                min="1"
+                max="65535"
+                aria-label="SMB 端口"
+                value={port}
+                onChange={(e) => setPort(+e.target.value)}
               />
             </label>
             <label>

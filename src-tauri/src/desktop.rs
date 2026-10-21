@@ -1,14 +1,277 @@
 use crate::{
-    archives, files, git,
-    operations::{self, OperationResult, Operations},
-    remote,
+    archives,
+    drag_session::{DragSessions, DropPlan},
+    files, git, git_history, git_remote,
+    operations::{self, OperationCancel, OperationResult, Operations},
+    recent, remote,
     search::{SearchBatch, SearchState},
-    tags, terminals, volumes,
+    tags, terminals,
+    transfers::Resolution,
+    volumes,
 };
 use notify::Watcher;
-use std::sync::Mutex;
-use tauri::{ipc::Channel, Emitter, Manager};
-type Watch = Mutex<Option<notify::RecommendedWatcher>>;
+use serde::Deserialize;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+};
+use tauri::{
+    ipc::Channel,
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Emitter, Manager,
+};
+static QUITTING: AtomicBool = AtomicBool::new(false);
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+/// Closing the window keeps Fiex alive in the tray; only the tray menu quits.
+fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "show", "显示 Fiex", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出 Fiex", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let mut builder = TrayIconBuilder::with_id("fiex-tray")
+        .tooltip("Fiex")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main(app),
+            "quit" => {
+                QUITTING.store(true, Ordering::SeqCst);
+                app.exit(0);
+            }
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder.build(app)?;
+    Ok(())
+}
+type Watch = Mutex<HashMap<String, (String, notify::RecommendedWatcher)>>;
+#[derive(Default)]
+struct WindowPaths(Mutex<HashMap<String, String>>);
+#[tauri::command]
+fn ci_log(message: String) {
+    #[cfg(feature = "ci-driver")]
+    if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
+        eprintln!("ci: {message}");
+    }
+    #[cfg(not(feature = "ci-driver"))]
+    let _ = message;
+}
+#[tauri::command]
+fn ci_reply(app: tauri::AppHandle, id: u64, value: String) {
+    #[cfg(feature = "ci-driver")]
+    crate::ci_driver::reply(&app, id, value);
+    #[cfg(not(feature = "ci-driver"))]
+    let _ = (app, id, value);
+}
+#[tauri::command]
+async fn register_drag(
+    window: tauri::Window,
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    copy_requested: bool,
+) -> Result<Vec<String>, String> {
+    if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
+        eprintln!("drag: register {:?} copy={copy_requested}", paths);
+    }
+    let mut moving = !copy_requested && !paths.iter().any(|p| remote::is_remote(p));
+    for path in &paths {
+        if remote::is_remote(path) {
+            if std::path::Path::new(path).is_dir() {
+                remote::download_dir(path).await?;
+            } else {
+                remote::ensure_downloaded(path).await?;
+            }
+        }
+    }
+    let label = window.label().to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut exported = Vec::new();
+        for path in &paths {
+            if let Some(route) = crate::usbfs::route(path) {
+                let entry = crate::usbfs::entry(&route)?;
+                if entry.is_dir {
+                    return Err("虚拟卷文件夹请使用复制和粘贴".into());
+                }
+                moving &= !entry.readonly;
+                exported.push(crate::usbfs::open_cached(&route)?);
+            } else {
+                exported.push(path.clone());
+            }
+        }
+        app.state::<DragSessions>()
+            .begin(&label, &paths, &exported, moving)?;
+        if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
+            eprintln!("drag: session for {label} moving={moving} exported={exported:?}");
+        }
+        Ok(exported)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn finish_drag(window: tauri::Window, state: tauri::State<DragSessions>) {
+    state.end(window.label());
+}
+#[tauri::command]
+async fn internal_drop(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    consume: bool,
+) -> Result<Option<DropPlan>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<DragSessions>().resolve(&paths, consume)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn launch_path() -> Option<String> {
+    std::env::args()
+        .nth(1)
+        .filter(|path| std::path::Path::new(path).is_dir())
+}
+#[tauri::command]
+fn initial_path(window: tauri::Window, paths: tauri::State<WindowPaths>) -> Option<String> {
+    let explicit = paths
+        .0
+        .lock()
+        .unwrap()
+        .get(window.label())
+        .cloned()
+        .or_else(|| {
+            std::env::args()
+                .nth(1)
+                .filter(|p| std::path::Path::new(p).is_dir())
+        });
+    // Resolving the start folder here lets the first directory listing begin
+    // immediately instead of waiting for the location survey.
+    explicit.or_else(|| {
+        dirs::document_dir()
+            .filter(|path| path.is_dir())
+            .or_else(|| dirs::home_dir().filter(|path| path.is_dir()))
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+}
+#[tauri::command]
+async fn new_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(1);
+    let mut config = app.config().app.windows[0].clone();
+    config.label = format!("explorer-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+    config.title = format!(
+        "Fiex · {}",
+        std::path::Path::new(&path)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+    );
+    app.state::<WindowPaths>()
+        .0
+        .lock()
+        .unwrap()
+        .insert(config.label.clone(), path);
+    let window = tauri::WebviewWindowBuilder::from_config(&app, &config)
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    crate::macos_material::configure(&window);
+    let _ = window;
+    Ok(())
+}
+#[tauri::command]
+async fn git_remote_status(root: String) -> Result<git_remote::RemoteStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git_remote::status(&root))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_remote_remove(root: String, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git_remote::remove(&root, &name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_remote_save(root: String, name: String, url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git_remote::save(&root, &name, &url))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_sync(
+    root: String,
+    remote: String,
+    push: bool,
+    branch: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git_remote::sync(&root, &remote, push, branch.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn drag_files(
+    window: tauri::Window,
+    paths: Vec<String>,
+    on_event: Channel<String>,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::native_drag::start(window, paths, on_event).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window, paths, on_event);
+        Err("此命令仅用于 GTK 文件拖动".into())
+    }
+}
+#[tauri::command]
+async fn git_init(path: String) -> Result<git::GitStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git::init(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_stage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git::stage(&root, &paths, all))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_unstage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git::unstage(&root, &paths, all))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_identity(root: String) -> Result<git::GitIdentity, String> {
+    tauri::async_runtime::spawn_blocking(move || git::identity(&root))
+        .await
+        .map_err(|e| e.to_string())
+}
+#[tauri::command]
+async fn git_commit(
+    root: String,
+    message: String,
+    name: String,
+    email: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git::commit(&root, &message, &name, &email))
+        .await
+        .map_err(|e| e.to_string())?
+}
 #[tauri::command]
 async fn git_refs(root: String) -> Result<git::GitRefs, String> {
     tauri::async_runtime::spawn_blocking(move || git::refs(&root))
@@ -16,10 +279,22 @@ async fn git_refs(root: String) -> Result<git::GitRefs, String> {
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
-async fn git_checkout(root: String, reference: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || git::checkout(&root, &reference))
+async fn git_history(root: String, skip: usize) -> Result<Vec<git_history::Commit>, String> {
+    tauri::async_runtime::spawn_blocking(move || git_history::history(&root, skip))
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_browse(root: String, reference: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git_history::browse(&root, &reference))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn git_history_asset(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || git_history::asset(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_status(path: String) -> Option<git::GitStatus> {
@@ -33,20 +308,54 @@ fn platform() -> &'static str {
     std::env::consts::OS
 }
 #[tauri::command]
-fn locations() -> Vec<volumes::Location> {
-    volumes::locations()
+async fn locations() -> Result<Vec<volumes::Location>, String> {
+    // Disk enumeration touches every mounted volume; keep it off the main
+    // thread so it never delays the first paint or the first listing.
+    tauri::async_runtime::spawn_blocking(volumes::locations)
+        .await
+        .map_err(|error| error.to_string())
 }
 #[tauri::command]
 async fn list_directory(
     path: String,
     hidden: bool,
     ignores: Vec<String>,
+    recent: tauri::State<'_, recent::Recent>,
 ) -> Result<files::Listing, String> {
+    if path == "recent://" {
+        return Ok(files::Listing {
+            read_only: true,
+            virtual_volume: true,
+            path,
+            entries: recent::entries(&recent),
+            warnings: vec![],
+        });
+    }
+    if path.starts_with("history://") {
+        return tauri::async_runtime::spawn_blocking(move || {
+            git_history::list(&path, hidden, &ignores)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
     if let Some(route) = crate::usbfs::route(&path) {
         let listing_path = path.clone();
         return tauri::async_runtime::spawn_blocking(move || {
-            let entries = crate::usbfs::listing(&route)?;
+            let mut entries = crate::usbfs::listing(&route)?;
+            let filter = crate::ignores::IgnoreSet::new(&ignores);
+            entries.retain(|entry| {
+                (hidden || !entry.name.starts_with('.'))
+                    && !filter.is_ignored(std::path::Path::new(&entry.name))
+            });
             Ok(files::Listing {
+                read_only: matches!(
+                    route.kind,
+                    crate::usbfs::FsKind::Apfs
+                        | crate::usbfs::FsKind::Hfs
+                        | crate::usbfs::FsKind::Btrfs
+                ),
+                virtual_volume: true,
                 path: listing_path,
                 entries,
                 warnings: vec![],
@@ -58,6 +367,7 @@ async fn list_directory(
     let warning = remote::sync_dir(&path).await.err();
     tauri::async_runtime::spawn_blocking(move || {
         let mut listing = files::list(&path, hidden, &ignores)?;
+        listing.read_only = remote::is_remote(&path);
         remote::apply_meta(&mut listing.entries);
         if let Some(warning) = warning {
             listing
@@ -144,6 +454,9 @@ async fn mount_device(device: String) -> Result<String, String> {
 }
 #[tauri::command]
 fn file_info(path: String) -> Result<files::Entry, String> {
+    if path.starts_with("history://") {
+        return git_history::info(&path);
+    }
     if let Some(route) = crate::usbfs::route(&path) {
         return crate::usbfs::entry(&route);
     }
@@ -151,6 +464,11 @@ fn file_info(path: String) -> Result<files::Entry, String> {
 }
 #[tauri::command]
 async fn read_preview(path: String) -> Result<String, String> {
+    if path.starts_with("history://") {
+        return tauri::async_runtime::spawn_blocking(move || git_history::preview(&path))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     if let Some(route) = crate::usbfs::route(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
             let bytes = crate::usbfs::read_path(&route)?;
@@ -194,6 +512,8 @@ fn rename_entry(
     }
     state.rename(&path, &name)
 }
+// Tauri commands receive one argument per JS field, so the list is wide.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn transfer(
     app: tauri::AppHandle,
@@ -202,92 +522,91 @@ async fn transfer(
     moving: bool,
     keep_both: bool,
     ignores: Vec<String>,
+    resolutions: Option<Vec<Resolution>>,
+    cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
-    if let Some(route) = crate::usbfs::route(&destination) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let mut result = OperationResult {
-                paths: vec![],
-                errors: vec![],
-                skipped: 0,
-            };
-            for source in &paths {
-                if crate::usbfs::route(source).is_some() {
-                    result
-                        .errors
-                        .push(format!("{source}: 暂不支持从 U 盘虚拟卷复制"));
-                    continue;
-                }
-                match crate::usbfs::copy_local_into(
-                    &route,
-                    std::path::Path::new(source),
-                    keep_both,
-                    moving,
-                ) {
-                    Ok(path) => result.paths.push(path),
-                    Err(error) => result.errors.push(format!("{source}: {error}")),
-                }
+    if remote::is_remote(&destination) {
+        return Err("远程连接只读".into());
+    }
+    for source in &paths {
+        if remote::is_remote(source) {
+            if moving {
+                return Err("远程连接只读，请复制文件".into());
             }
-            Ok(result)
+            if std::path::Path::new(source).is_dir() {
+                remote::download_dir(source).await?;
+            } else {
+                remote::ensure_downloaded(source).await?;
+            }
+        }
+    }
+    if crate::usbfs::route(&destination).is_some()
+        || paths.iter().any(|p| crate::usbfs::route(p).is_some())
+    {
+        let events = app.clone();
+        let cancel = cancel.inner().clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            let flag = cancel.flag();
+            crate::virtual_transfers::transfer(
+                &paths,
+                &destination,
+                moving,
+                keep_both,
+                &ignores,
+                &resolutions.unwrap_or_default(),
+                &flag,
+            )
         })
         .await
         .map_err(|e| e.to_string())?;
+        if result.as_ref().is_ok_and(|r| !r.paths.is_empty()) {
+            let _ = events.emit("directory-changed", ());
+        }
+        return result;
     }
-    if paths.iter().any(|path| crate::usbfs::route(path).is_some()) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let mut result = OperationResult {
-                paths: vec![],
-                errors: vec![],
-                skipped: 0,
-            };
-            for source in &paths {
-                if let Some(route) = crate::usbfs::route(source) {
-                    match crate::usbfs::copy_to_local(
-                        &route,
-                        std::path::Path::new(&destination),
-                        keep_both,
-                        moving,
-                    ) {
-                        Ok(path) => result.paths.push(path),
-                        Err(error) => result.errors.push(format!("{source}: {error}")),
-                    }
-                } else {
-                    match app.state::<Operations>().transfer(
-                        std::slice::from_ref(source),
-                        &destination,
-                        moving,
-                        keep_both,
-                        &ignores,
-                    ) {
-                        Ok(mut single) => {
-                            result.paths.append(&mut single.paths);
-                            result.errors.append(&mut single.errors);
-                            result.skipped += single.skipped;
-                        }
-                        Err(error) => result.errors.push(format!("{source}: {error}")),
-                    }
-                }
-            }
-            Ok(result)
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        app.state::<Operations>()
-            .transfer(&paths, &destination, moving, keep_both, &ignores)
+    let events = app.clone();
+    let cancel = cancel.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let flag = cancel.flag();
+        app.state::<Operations>().transfer_resolved(
+            &paths,
+            &destination,
+            moving,
+            keep_both,
+            &ignores,
+            &resolutions.unwrap_or_default(),
+            &flag,
+        )
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    if result.as_ref().is_ok_and(|r| !r.paths.is_empty()) {
+        let _ = events.emit("directory-changed", ());
+    }
+    result
 }
 #[tauri::command]
-async fn recycle(app: tauri::AppHandle, paths: Vec<String>) -> Result<OperationResult, String> {
+async fn recycle(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<OperationResult, String> {
+    let cancel = cancel.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mut result = OperationResult {
             paths: vec![],
             errors: vec![],
             skipped: 0,
+            conflicts: vec![],
         };
         for path in paths {
+            if cancel.is_cancelled() {
+                // Keep the undo history consistent with the items that did move.
+                if !result.paths.is_empty() {
+                    app.state::<Operations>().clear_undo();
+                }
+                return Err(operations::CANCELLED.into());
+            }
             if let Some(route) = crate::usbfs::route(&path) {
                 match crate::usbfs::remove(&route) {
                     Ok(()) => result.paths.push(path),
@@ -317,15 +636,45 @@ async fn undo(app: tauri::AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
 }
-#[tauri::command]
-async fn search_files(
+#[derive(Deserialize)]
+struct SearchInput {
+    pane: String,
     root: String,
     query: String,
     hidden: bool,
     ignores: Vec<String>,
+}
+
+#[tauri::command]
+async fn search_files(
+    window: tauri::Window,
+    request: SearchInput,
     on_batch: Channel<SearchBatch>,
     state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
+    let SearchInput {
+        pane,
+        root,
+        query,
+        hidden,
+        ignores,
+    } = request;
+    if root.starts_with("history://") {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let started = std::time::Instant::now();
+            let entries = git_history::search(&root, &query, hidden, &ignores)?;
+            let _ = on_batch.send(SearchBatch {
+                truncated: entries.len() >= 500,
+                entries,
+                done: true,
+                elapsed_ms: started.elapsed().as_millis(),
+                skipped: 0,
+            });
+            Ok(())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
     if let Some(route) = crate::usbfs::route(&root) {
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
@@ -343,8 +692,9 @@ async fn search_files(
         .map_err(|error| error.to_string())?;
     }
     let state = state.inner().clone();
+    let scope = format!("{}:{pane}", window.label());
     tauri::async_runtime::spawn_blocking(move || {
-        state.run(&root, &query, hidden, &ignores, |b| {
+        state.run(&scope, &root, &query, hidden, &ignores, |b| {
             let _ = on_batch.send(b);
         })
     })
@@ -369,13 +719,44 @@ async fn warm_index(
     Ok(())
 }
 #[tauri::command]
-fn cancel_search(state: tauri::State<'_, SearchState>) {
+fn cancel_search(window: tauri::Window, pane: String, state: tauri::State<'_, SearchState>) {
+    state.cancel(&format!("{}:{pane}", window.label()));
+}
+#[tauri::command]
+fn begin_operation(state: tauri::State<'_, OperationCancel>) {
+    state.begin();
+}
+#[tauri::command]
+fn cancel_operation(state: tauri::State<'_, OperationCancel>) {
     state.cancel();
 }
 #[tauri::command]
-async fn extract_archive(app: tauri::AppHandle, path: String) -> Result<String, String> {
+async fn file_checksums(path: String) -> Result<Vec<crate::checksums::Checksum>, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::checksums::calculate(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn pick_folder(default: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new();
+    if let Some(directory) = default.filter(|path| std::path::Path::new(path).is_dir()) {
+        dialog = dialog.set_directory(directory);
+    }
+    dialog
+        .pick_folder()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+#[tauri::command]
+async fn extract_archive(
+    app: tauri::AppHandle,
+    path: String,
+    destination: Option<String>,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<String, String> {
+    let cancel = cancel.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let result = archives::extract(&path)?;
+        let flag = cancel.flag();
+        let result = archives::extract(&path, destination.as_deref(), &flag)?;
         app.state::<Operations>()
             .record_created(std::path::PathBuf::from(&result));
         Ok(result)
@@ -383,16 +764,30 @@ async fn extract_archive(app: tauri::AppHandle, path: String) -> Result<String, 
     .await
     .map_err(|e| e.to_string())?
 }
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn compress_archive(
     app: tauri::AppHandle,
     paths: Vec<String>,
     destination: String,
     format: String,
+    level: Option<u32>,
+    password: Option<String>,
     ignores: Vec<String>,
+    cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<String, String> {
+    let cancel = cancel.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let result = archives::compress(&paths, &destination, &format, &ignores)?;
+        let flag = cancel.flag();
+        let result = archives::compress(
+            &paths,
+            &destination,
+            &format,
+            &ignores,
+            level,
+            password.as_deref(),
+            &flag,
+        )?;
         app.state::<Operations>()
             .record_created(std::path::PathBuf::from(&result));
         Ok(result)
@@ -401,12 +796,16 @@ async fn compress_archive(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn detect_terminals() -> Vec<terminals::Terminal> {
-    terminals::detect()
+async fn detect_terminals() -> Result<Vec<terminals::Terminal>, String> {
+    tauri::async_runtime::spawn_blocking(terminals::detect)
+        .await
+        .map_err(|error| error.to_string())
 }
 #[tauri::command]
-fn detect_ides() -> Vec<terminals::Ide> {
-    terminals::detect_ides()
+async fn detect_ides() -> Result<Vec<terminals::Ide>, String> {
+    tauri::async_runtime::spawn_blocking(terminals::detect_ides)
+        .await
+        .map_err(|error| error.to_string())
 }
 #[tauri::command]
 async fn open_in_ide(path: String, id: String) -> Result<(), String> {
@@ -419,7 +818,10 @@ fn open_terminal(path: String, id: String) -> Result<(), String> {
     terminals::launch(&path, &id)
 }
 #[tauri::command]
-async fn open_path(path: String) -> Result<(), String> {
+async fn open_path(path: String, recent: tauri::State<'_, recent::Recent>) -> Result<(), String> {
+    if crate::usbfs::route(&path).is_none() {
+        recent::record(&recent, &path);
+    }
     if let Some(route) = crate::usbfs::route(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
             let bytes = crate::usbfs::read_path(&route)?;
@@ -452,8 +854,13 @@ fn reveal_path(path: String) -> Result<(), String> {
     terminals::reveal(&path)
 }
 #[tauri::command]
-fn trash_path() -> Option<String> {
-    volumes::trash_path().map(|path| path.to_string_lossy().into_owned())
+async fn trash_path() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        volumes::trash_path().map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
 }
 #[tauri::command]
 fn open_applications() -> Result<(), String> {
@@ -472,9 +879,45 @@ fn open_trash() -> Result<(), String> {
     terminals::open_trash()
 }
 #[tauri::command]
+async fn empty_trash(cancel: tauri::State<'_, OperationCancel>) -> Result<usize, String> {
+    let flag = cancel.flag();
+    tauri::async_runtime::spawn_blocking(move || volumes::empty_trash(&flag))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
+fn trash_restore_needs_folder(paths: Vec<String>) -> bool {
+    volumes::restore_needs_folder(&paths)
+}
+#[tauri::command]
+async fn restore_from_trash(
+    paths: Vec<String>,
+    fallback: Option<String>,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<usize, String> {
+    let flag = cancel.flag();
+    tauri::async_runtime::spawn_blocking(move || {
+        volumes::restore_from_trash(&paths, fallback.as_deref(), &flag)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn delete_permanently(
+    paths: Vec<String>,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<usize, String> {
+    let flag = cancel.flag();
+    tauri::async_runtime::spawn_blocking(move || volumes::delete_permanently(&paths, &flag))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 fn watch_directory(
+    window: tauri::Window,
     app: tauri::AppHandle,
     path: String,
+    pane: String,
     state: tauri::State<'_, Watch>,
 ) -> Result<(), String> {
     let mut watcher =
@@ -492,8 +935,27 @@ fn watch_directory(
             notify::RecursiveMode::NonRecursive,
         )
         .map_err(|e| e.to_string())?;
-    *state.lock().unwrap() = Some(watcher);
+    state
+        .lock()
+        .unwrap()
+        .insert(format!("{}:{pane}", window.label()), (path, watcher));
     Ok(())
+}
+#[tauri::command]
+fn unwatch_directory(
+    window: tauri::Window,
+    path: String,
+    pane: String,
+    state: tauri::State<'_, Watch>,
+) {
+    let mut watches = state.lock().unwrap();
+    let key = format!("{}:{pane}", window.label());
+    if watches
+        .get(&key)
+        .is_some_and(|(current, _)| current == &path)
+    {
+        watches.remove(&key);
+    }
 }
 // Synchronous Tauri commands execute on the main thread, as required by GTK's icon provider.
 #[tauri::command]
@@ -518,13 +980,37 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_drag::init())
         .manage(Operations::default())
+        .manage(OperationCancel::default())
         .manage(SearchState::default())
-        .manage(Mutex::new(None::<notify::RecommendedWatcher>))
+        .manage(Watch::default())
+        .manage(WindowPaths::default())
+        .manage(recent::Recent::default())
+        .manage(DragSessions::default())
         .invoke_handler(tauri::generate_handler![
             platform,
+            ci_reply,
+            ci_log,
+            register_drag,
+            finish_drag,
+            internal_drop,
+            initial_path,
+            launch_path,
+            new_window,
+            git_remote_status,
+            git_remote_save,
+            git_remote_remove,
+            git_sync,
+            drag_files,
+            git_init,
+            git_stage,
+            git_unstage,
+            git_commit,
+            git_identity,
             git_status,
             git_refs,
-            git_checkout,
+            git_history,
+            git_browse,
+            git_history_asset,
             locations,
             list_directory,
             file_info,
@@ -537,7 +1023,11 @@ pub fn run() {
             search_files,
             warm_index,
             cancel_search,
+            begin_operation,
+            cancel_operation,
             extract_archive,
+            pick_folder,
+            file_checksums,
             compress_archive,
             detect_terminals,
             detect_ides,
@@ -557,18 +1047,49 @@ pub fn run() {
             mount_device,
             reveal_path,
             trash_path,
+            empty_trash,
+            restore_from_trash,
+            trash_restore_needs_folder,
+            delete_permanently,
             open_applications,
             set_tags,
             open_full_disk_access,
             open_trash,
             watch_directory,
+            unwatch_directory,
             native_icon
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" && !QUITTING.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    return;
+                }
+            }
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window
+                    .state::<Watch>()
+                    .lock()
+                    .unwrap()
+                    .retain(|key, _| !key.starts_with(&format!("{}:", window.label())));
+                window
+                    .state::<WindowPaths>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .remove(window.label());
+                window.state::<DragSessions>().end(window.label());
+            }
+        })
         .setup(|app| {
+            #[cfg(feature = "ci-driver")]
+            crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                super::macos_material::configure(&window);
+                crate::macos_material::configure(&window);
             }
+            setup_tray(app.handle())?;
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 use std::ffi::c_void;

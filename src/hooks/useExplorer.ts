@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { parent } from '@/lib/files'
@@ -10,11 +10,18 @@ import type {
   Preferences,
   RemoteConnection,
 } from '@/lib/types'
-export function useExplorer(prefs: Preferences) {
+export function useExplorer(
+  prefs: Preferences,
+  startOverride?: string,
+  enabled = true,
+  pane = 'left',
+) {
   const [locations, setLocations] = useState<Location[]>([])
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
+  const [directoryReadOnly, setDirectoryReadOnly] = useState(false)
+  const [virtualVolume, setVirtualVolume] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -27,10 +34,15 @@ export function useExplorer(prefs: Preferences) {
   const [refresh, setRefresh] = useState(0)
   const [tabs, setTabs] = useState<string[]>([])
   const [tab, setTab] = useState(0)
+  const tabHistory = useRef<{ paths: string[]; cursor: number }[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [git, setGit] = useState<GitStatus | null>(null)
+  const [gitPath, setGitPath] = useState('')
+  const [gitLoading, setGitLoading] = useState(false)
+  const gitRequest = useRef(0)
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
   const searchRequest = useRef(0)
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
@@ -47,32 +59,78 @@ export function useExplorer(prefs: Preferences) {
     },
     [cursor, tab],
   )
-  const refreshLocations = useCallback(async () => {
-    const next = await call<Location[]>('locations')
-    setLocations(next)
-    return next
+  const locationsKey = useRef('')
+  const locationsPending = useRef<Promise<Location[]> | null>(null)
+  const refreshLocations = useCallback((): Promise<Location[]> => {
+    if (locationsPending.current) return locationsPending.current
+    const pending = call<Location[]>('locations')
+      .then((next) => {
+        const key = JSON.stringify(next)
+        if (key !== locationsKey.current) {
+          locationsKey.current = key
+          setLocations(next)
+        }
+        return next
+      })
+      .finally(() => {
+        locationsPending.current = null
+      })
+    locationsPending.current = pending
+    return pending
   }, [])
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void refreshLocations().catch(() => {})
-    }, 15000)
-    return () => window.clearInterval(timer)
-  }, [refreshLocations])
+    if (!enabled || pane !== 'left') return
+    const check = () => {
+      if (!document.hidden) void refreshLocations().catch(() => {})
+    }
+    const timer = window.setInterval(check, 10000)
+    window.addEventListener('focus', check)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', check)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [refreshLocations, enabled, pane])
   useEffect(() => {
-    void refreshLocations()
-      .then((next) => {
-        const home = next.find((x) => x.name === '文稿') || next[0]
-        if (home) {
-          setPath(home.path)
-          setHistory([home.path])
-          setCursor(0)
-          setTabs([home.path])
-        }
-      })
-      .catch((e) => setError(String(e)))
-  }, [refreshLocations])
+    if (!enabled || path) return
+    let cancelled = false
+    // The start folder must not wait for the disk survey: resolve it first so
+    // the first listing is requested immediately, then fill the sidebar.
+    void refreshLocations().catch(() => {})
+    void (async () => {
+      // A folder passed on the command line wins over the start page.
+      const launched = native && (await call<string | null>('launch_path').catch(() => null))
+      if (cancelled) return
+      let start: string | null = startOverride || launched || null
+      if (!start && prefs.startPage === 'recent') start = 'recent://'
+      else if (!start && prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
+      if (!start) {
+        const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
+        if (cancelled) return
+        const locations = await call<Location[]>('locations').catch(() => [] as Location[])
+        if (cancelled) return
+        const pick = (name: string) => locations.find((item) => item.name === name)?.path
+        start =
+          prefs.startPage === 'home'
+            ? (pick('个人文件夹') ?? initial)
+            : (pick('文稿') ?? initial ?? locations[0]?.path ?? null)
+      }
+      if (start) {
+        if (start !== 'recent://') localStorage.setItem('fiex:lastPath', start)
+        setPath(start)
+        setHistory([start])
+        setCursor(0)
+        setTabs([start])
+        tabHistory.current = [{ paths: [start], cursor: 0 }]
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [refreshLocations, enabled])
   useEffect(() => {
-    if (!path || query) return
+    if (!enabled || !path || query) return
     let active = true
     const id = ++request.current
     setLoading(true)
@@ -84,9 +142,19 @@ export function useExplorer(prefs: Preferences) {
     })
       .then((l) => {
         if (active && id === request.current) {
+          setDirectoryReadOnly(Boolean(l.readOnly))
+          setVirtualVolume(Boolean(l.virtualVolume))
+          setListedPath(path)
           setEntries(l.entries)
           setWarnings(l.warnings)
-          setSelected((s) => s.filter((p) => l.entries.some((e) => e.path === p)))
+          // A fresh install has nothing recent yet; do not greet the user with
+          // an empty list.
+          if (path === 'recent://' && l.entries.length === 0 && history.length <= 1) {
+            const home = locations.find((item) => item.name === '个人文件夹')?.path
+            if (home) navigate(home)
+          }
+          const paths = new Set(l.entries.map((entry) => entry.path))
+          setSelected((selected) => selected.filter((path) => paths.has(path)))
         }
       })
       .catch((e) => {
@@ -101,16 +169,26 @@ export function useExplorer(prefs: Preferences) {
     return () => {
       active = false
     }
-  }, [path, prefs.hidden, prefs.displayIgnore, refresh, query])
+  }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (!path || !native) return
+    if (
+      !enabled ||
+      !path ||
+      !native ||
+      virtualVolume ||
+      path.startsWith('history://') ||
+      path.startsWith('recent://')
+    )
+      return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
-    void call('watch_directory', { path }).catch((e) => setWarnings([`无法监视文件变更：${e}`]))
+    void call('watch_directory', { path, pane }).catch((e) =>
+      setWarnings([`无法监视文件变更：${e}`]),
+    )
     void listen('directory-changed', () => {
       clearTimeout(timer)
-      timer = setTimeout(reload, 150)
+      timer = setTimeout(reload, 250)
     }).then((fn) => {
       if (active) cleanup = fn
       else fn()
@@ -119,40 +197,80 @@ export function useExplorer(prefs: Preferences) {
       active = false
       clearTimeout(timer)
       cleanup?.()
+      void call('unwatch_directory', { path, pane }).catch(() => {})
     }
-  }, [path, reload])
-  useEffect(() => {
-    if (!path) return
-    if (path.startsWith('remote://')) {
+  }, [enabled, path, pane, reload, virtualVolume])
+  const refreshGit = useCallback(async () => {
+    const id = ++gitRequest.current
+    if (
+      !path ||
+      path.startsWith('remote://') ||
+      path.startsWith('usbfs://') ||
+      path.startsWith('recent://')
+    ) {
       setGit(null)
+      setGitLoading(false)
+      setGitPath(path)
       return
     }
-    let active = true
-    void call<GitStatus | null>('git_status', { path })
-      .then((value) => {
-        if (active) setGit(value)
-      })
-      .catch(() => {
-        if (active) setGit(null)
-      })
-    return () => {
-      active = false
+    setGitLoading(true)
+    try {
+      const value = await call<GitStatus | null>('git_status', { path })
+      if (id === gitRequest.current) setGit(value)
+    } catch {
+      if (id === gitRequest.current) setGit(null)
+    } finally {
+      if (id === gitRequest.current) {
+        setGitPath(path)
+        setGitLoading(false)
+      }
     }
-  }, [path, refresh])
+  }, [path])
   useEffect(() => {
-    if (!path || path.startsWith('remote://')) return
-    const timer = setTimeout(() => {
-      void call('warm_index', {
-        path,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-      }).catch(() => {})
-    }, 250)
-    return () => clearTimeout(timer)
-  }, [path, prefs.hidden, prefs.displayIgnore, refresh])
+    if (!enabled) return
+    // Navigation bursts (and refresh after a file operation) should not spawn
+    // a git subprocess each time; coalesce them.
+    const timer = window.setTimeout(() => {
+      void refreshGit()
+    }, 350)
+    return () => {
+      window.clearTimeout(timer)
+      ++gitRequest.current
+    }
+  }, [enabled, refresh, refreshGit])
   useEffect(() => {
+    if (
+      !enabled ||
+      !path ||
+      virtualVolume ||
+      path.startsWith('remote://') ||
+      path.startsWith('history://') ||
+      path.startsWith('recent://')
+    )
+      return
+    // Warming walks the whole folder tree. Handing it to the idle queue keeps
+    // the first paint and the first listing responsive on large folders.
+    let idle = 0
+    const timer = window.setTimeout(() => {
+      const warm = () =>
+        void call('warm_index', {
+          path,
+          hidden: prefs.hidden,
+          ignores: prefs.displayIgnore,
+        }).catch(() => {})
+      idle = window.requestIdleCallback
+        ? window.requestIdleCallback(warm, { timeout: 4000 })
+        : window.setTimeout(warm, 0)
+    }, 5000)
+    return () => {
+      window.clearTimeout(timer)
+      if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle)
+    }
+  }, [enabled, path, prefs.hidden, prefs.displayIgnore, virtualVolume])
+  useEffect(() => {
+    if (!enabled) return
     const generation = ++searchRequest.current
-    void call('cancel_search').catch(() => {})
+    void call('cancel_search', { pane }).catch(() => {})
     if (!query.trim()) {
       setSearching(false)
       setSearchStats('')
@@ -164,13 +282,13 @@ export function useExplorer(prefs: Preferences) {
     setSelected([])
     setError('')
     const timer = setTimeout(() => {
-      void search(path, query, prefs.hidden, prefs.displayIgnore, (b) => {
+      void search(pane, path, query, prefs.hidden, prefs.displayIgnore, (b) => {
         if (generation !== searchRequest.current) return
-        setEntries((v) => [...v, ...b.entries])
+        startTransition(() => setEntries((v) => [...v, ...b.entries]))
         if (b.done) {
           setSearching(false)
           setSearchStats(
-            `${b.elapsedMs} ms${b.truncated ? ' · 已达到 10,000 项上限，请缩小范围' : ''}${b.skipped ? ` · ${b.skipped} 个位置无法访问` : ''}`,
+            `${b.elapsedMs} ms${b.truncated ? ' · 已达到 500 项上限，请缩小范围' : ''}${b.skipped ? ` · ${b.skipped} 个位置无法访问` : ''}`,
           )
         }
       }).catch((e) => {
@@ -183,9 +301,9 @@ export function useExplorer(prefs: Preferences) {
     return () => {
       clearTimeout(timer)
       ++searchRequest.current
-      void call('cancel_search').catch(() => {})
+      void call('cancel_search', { pane }).catch(() => {})
     }
-  }, [query, path, prefs.hidden, prefs.displayIgnore, refresh])
+  }, [enabled, pane, query, path, prefs.hidden, prefs.displayIgnore, refresh])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])
@@ -210,6 +328,8 @@ export function useExplorer(prefs: Preferences) {
     }
   }
   const newTab = (next = path) => {
+    tabHistory.current[tab] = { paths: history, cursor }
+    tabHistory.current.push({ paths: [next], cursor: 0 })
     setTabs((t) => [...t, next])
     setTab(tabs.length)
     setPath(next)
@@ -220,23 +340,56 @@ export function useExplorer(prefs: Preferences) {
     setRenaming(null)
   }
   const switchTab = (i: number) => {
+    if (!tabs[i] || i === tab) return
+    tabHistory.current[tab] = { paths: history, cursor }
+    const saved = tabHistory.current[i] || { paths: [tabs[i]], cursor: 0 }
     setTab(i)
     setPath(tabs[i])
-    setHistory([tabs[i]])
-    setCursor(0)
+    setHistory(saved.paths)
+    setCursor(saved.cursor)
     setQuery('')
     setSelected([])
     setRenaming(null)
   }
   const closeTab = (i: number) => {
     if (tabs.length === 1) return
+    tabHistory.current[tab] = { paths: history, cursor }
+    tabHistory.current.splice(i, 1)
     const next = tabs.filter((_, n) => n !== i)
     const n = i < tab ? tab - 1 : Math.min(tab, next.length - 1)
+    const saved = tabHistory.current[n] || { paths: [next[n]], cursor: 0 }
     setTabs(next)
     setTab(n)
     setPath(next[n])
-    setHistory([next[n]])
-    setCursor(0)
+    setHistory(saved.paths)
+    setCursor(saved.cursor)
+    setQuery('')
+    setSelected([])
+    setRenaming(null)
+  }
+  const moveTab = (from: number, to: number) => {
+    if (from === to || !tabs[from] || !tabs[to]) return
+    tabHistory.current[tab] = { paths: history, cursor }
+    const next = [...tabs]
+    next.splice(to, 0, next.splice(from, 1)[0])
+    const histories = tabHistory.current
+    histories.splice(to, 0, histories.splice(from, 1)[0])
+    setTabs(next)
+    setTab(
+      tab === from
+        ? to
+        : from < tab && to >= tab
+          ? tab - 1
+          : from > tab && to <= tab
+            ? tab + 1
+            : tab,
+    )
+  }
+  const snapshotNavigation = () => ({ path, history, cursor })
+  const restoreNavigation = (state: { path: string; history: string[]; cursor: number }) => {
+    setPath(state.path)
+    setHistory(state.history)
+    setCursor(state.cursor)
     setQuery('')
     setSelected([])
     setRenaming(null)
@@ -286,8 +439,9 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [])
   useEffect(() => {
+    if (!enabled) return
     void refreshConnections()
-  }, [refreshConnections])
+  }, [enabled, refreshConnections])
   return {
     path,
     entries: visibleEntries,
@@ -296,13 +450,18 @@ export function useExplorer(prefs: Preferences) {
     tagFilter,
     setTagFilter,
     readOnly,
+    directoryReadOnly,
+    virtualVolume,
     setReadOnly,
     locations,
     refreshLocations,
-    git,
+    git: gitPath === path ? git : null,
+    gitLoading: gitLoading || (!!path && gitPath !== path),
+    refreshGit,
     selected,
     setSelected,
-    loading,
+    loading: loading || (!query && listedPath !== path && !error),
+    hasListing: listedPath === path,
     error,
     setError,
     warnings,
@@ -316,12 +475,17 @@ export function useExplorer(prefs: Preferences) {
     forward,
     canBack: cursor > 0,
     canForward: cursor < history.length - 1,
-    up: () => navigate(parent(path)),
+    up: () => {
+      if (path !== 'recent://') navigate(parent(path))
+    },
     tabs,
     tab,
     newTab,
     switchTab,
     closeTab,
+    moveTab,
+    snapshotNavigation,
+    restoreNavigation,
     renaming,
     beginRename,
     cancelRename,

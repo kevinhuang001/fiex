@@ -1,9 +1,27 @@
-import { useEffect, useState } from 'react'
-import { GitBranch, RefreshCw, X } from 'lucide-react'
-import { call } from '@/lib/api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  CheckCircle2,
+  Cloud,
+  ChevronDown,
+  FileCode2,
+  FolderGit2,
+  GitBranch,
+  GitCommitHorizontal,
+  GitFork,
+  LoaderCircle,
+  Minus,
+  Plus,
+  RefreshCw,
+  X,
+} from 'lucide-react'
 import { basename } from '@/lib/files'
 import { gitState } from '@/lib/git'
-import type { GitRefs, GitStatus } from '@/lib/types'
+import { useGitRepository } from '@/hooks/useGitRepository'
+import type { GitStatus } from '@/lib/types'
+import { Button } from './ui/button'
+import { CommitPicker } from './git/CommitPicker'
+import { GitRemoteModal } from './git/GitRemote'
+import { CommitDialog } from './git/CommitDialog'
 
 interface Change {
   path: string
@@ -13,192 +31,296 @@ interface Change {
   staged: boolean
   unstaged: boolean
 }
-
-function toChanges(git: GitStatus): Change[] {
-  return Object.entries(git.entries).flatMap(([path, code]) => {
-    const state = gitState(code)
-    return state
-      ? [
-          {
-            path,
-            code,
-            letter: state.letter,
-            label: state.label,
-            staged: state.staged,
-            unstaged: state.unstaged,
-          },
-        ]
-      : []
-  })
+interface Props {
+  open: boolean
+  path: string
+  git: GitStatus | null
+  loading?: boolean
+  allowInit?: boolean
+  onClose: () => void
+  onRefresh: () => Promise<void>
+  onOpen: (path: string) => void
+  onViewRevision: (reference: string) => Promise<void>
+  onReturnToWorktree: () => void
+  readOnly?: boolean
 }
-
-function dirOf(path: string, root: string) {
-  const relative = path.startsWith(root + '/') ? path.slice(root.length + 1) : path
-  const parts = relative.split('/')
-  parts.pop()
-  return parts.join('/')
-}
-
 export function GitPanel({
   open,
+  path,
   git,
+  loading,
+  allowInit = true,
   onClose,
   onRefresh,
   onOpen,
+  onViewRevision,
+  onReturnToWorktree,
   readOnly,
-}: {
-  open: boolean
-  git: GitStatus | null
-  onClose: () => void
-  onRefresh: () => void
-  onOpen: (path: string) => void
-  readOnly?: boolean
-}) {
-  const [refs, setRefs] = useState<GitRefs | null>(null)
-  const [selected, setSelected] = useState('')
-  const [switching, setSwitching] = useState(false)
-  const [branchError, setBranchError] = useState('')
-
+}: Props) {
+  const panel = useRef<HTMLElement>(null)
+  const [panelTop, setPanelTop] = useState(120)
+  const repo = useGitRepository(git?.root, path, open, onRefresh, onViewRevision)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [commitOpen, setCommitOpen] = useState(false)
+  const [remoteOpen, setRemoteOpen] = useState(false)
   useEffect(() => {
-    if (!open || !git) return
-    let active = true
-    void call<GitRefs>('git_refs', { root: git.root })
-      .then((next) => {
-        if (active) {
-          setRefs(next)
-          setSelected(next.current)
-        }
-      })
-      .catch(() => {})
-    return () => {
-      active = false
-    }
-  }, [open, git?.root])
-
+    setPickerOpen(false)
+    setCommitOpen(false)
+  }, [git?.root])
+  const changes = useMemo<Change[]>(
+    () =>
+      git && !readOnly
+        ? Object.entries(git.entries)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .flatMap(([path, code]) => {
+              const state = gitState(code)
+              return state ? [{ path, code, ...state }] : []
+            })
+        : [],
+    [git, readOnly],
+  )
+  const staged = useMemo(() => changes.filter((c) => c.staged), [changes])
+  const unstaged = useMemo(() => changes.filter((c) => c.unstaged), [changes])
   useEffect(() => {
     if (!open) return
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+    const handle = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !pickerOpen && !commitOpen) onClose()
     }
-    document.addEventListener('keydown', close)
-    return () => document.removeEventListener('keydown', close)
-  }, [open, onClose])
-
+    document.addEventListener('keydown', handle)
+    return () => document.removeEventListener('keydown', handle)
+  }, [open, onClose, pickerOpen, commitOpen])
+  useEffect(() => {
+    if (!open) return
+    const position = () =>
+      setPanelTop((document.querySelector('.toolbar')?.getBoundingClientRect().bottom ?? 112) + 8)
+    position()
+    const outside = (event: Event) => {
+      if (pickerOpen || commitOpen || remoteOpen) return
+      const target = event.target as Element | null
+      if (!panel.current?.contains(target) && !target?.closest('.git-toolbar-button')) onClose()
+    }
+    const blur = () => {
+      if (!pickerOpen && !commitOpen && !remoteOpen) onClose()
+    }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('focusin', outside)
+    window.addEventListener('blur', blur)
+    window.addEventListener('resize', position)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('focusin', outside)
+      window.removeEventListener('blur', blur)
+      window.removeEventListener('resize', position)
+    }
+  }, [open, pickerOpen, commitOpen, remoteOpen, onClose])
   if (!open) return null
-
-  const changes = git && !readOnly ? toChanges(git) : []
-  const staged = changes.filter((change) => change.staged)
-  const unstaged = changes.filter((change) => change.code !== '??' && change.unstaged)
-  const untracked = changes.filter((change) => change.code === '??')
-
-  const row = (change: Change) => (
-    <button
-      className="git-change-row"
-      key={`${change.code}:${change.path}`}
-      title={change.path}
-      onClick={() => onOpen(change.path)}
-    >
-      <span className="git-change-name">
-        <span className={`git-file git-file-${change.letter.toLowerCase()}`}>
-          {basename(change.path)}
-        </span>
-        <small>{dirOf(change.path, git?.root || '')}</small>
-      </span>
-      <span className="git-change-label">{change.label}</span>
-    </button>
-  )
-
+  const disabled = Boolean(repo.busy || loading)
+  const commitReason =
+    repo.busy ||
+    (loading
+      ? '正在读取修改'
+      : !staged.length
+        ? changes.length
+          ? '先暂存要提交的文件'
+          : '没有待提交的修改'
+        : '')
+  const sections = [
+    { title: '已暂存', items: staged, staged: true },
+    { title: '更改', items: unstaged, staged: false },
+  ]
   return (
-    <aside className="git-panel" aria-label="源代码管理">
+    <aside
+      ref={panel}
+      style={{ top: panelTop, maxHeight: `calc(100dvh - ${panelTop + 16}px)` }}
+      className="git-panel"
+      aria-label="源代码管理"
+      aria-busy={Boolean(repo.busy)}
+    >
       <header>
         <span className="git-panel-title">
-          <GitBranch size={14} />
+          <GitFork size={16} />
           源代码管理
         </span>
-        <button className="icon-button" title="刷新" onClick={onRefresh}>
-          <RefreshCw size={13} />
+        <button
+          className="icon-button"
+          title="远程仓库"
+          aria-label="远程仓库"
+          disabled={disabled || !git}
+          onClick={() => setRemoteOpen(true)}
+        >
+          <Cloud size={15} />
+        </button>
+        <button
+          className="icon-button"
+          title="刷新源代码管理"
+          aria-label="刷新源代码管理"
+          disabled={disabled}
+          onClick={() => void repo.refresh()}
+        >
+          <RefreshCw size={14} className={repo.busy === '正在刷新' ? 'spin' : ''} />
         </button>
         <button className="icon-button" title="关闭" aria-label="关闭源代码管理" onClick={onClose}>
-          <X size={14} />
+          <X size={16} />
         </button>
       </header>
+      {repo.error && (
+        <div className="git-panel-error" role="alert">
+          {repo.error}
+        </div>
+      )}
+      {repo.success && !repo.busy && (
+        <div className="git-success" role="status">
+          <CheckCircle2 size={14} />
+          {repo.success}
+        </div>
+      )}
+      {repo.busy && (
+        <div className="git-progress" role="status">
+          <LoaderCircle size={13} className="spin" />
+          {repo.busy}…
+        </div>
+      )}
       {!git ? (
-        <p className="git-panel-empty">当前文件夹不在 Git 仓库中。</p>
+        <div className="git-welcome">
+          <span className="git-welcome-icon">
+            <FolderGit2 size={32} />
+          </span>
+          <Button disabled={disabled || !path || !allowInit} onClick={() => void repo.initialize()}>
+            <Plus size={14} />
+            {loading ? '正在检查仓库' : allowInit ? '初始化 Git 仓库' : '请选择本地文件夹'}
+          </Button>
+        </div>
       ) : (
         <>
-          <div className="git-panel-branch">
-            <select
-              className="git-branch-select"
-              value={selected}
-              disabled={switching}
-              aria-label="切换分支或版本"
-              onChange={async (event) => {
-                const next = event.target.value
-                setSelected(next)
-                setSwitching(true)
-                setBranchError('')
-                try {
-                  await call('git_checkout', { root: git.root, reference: next })
-                  onRefresh()
-                  const fresh = await call<GitRefs>('git_refs', { root: git.root })
-                  setRefs(fresh)
-                  setSelected(fresh.current)
-                } catch (error) {
-                  setBranchError(String(error))
-                  setSelected(git.branch)
-                } finally {
-                  setSwitching(false)
-                }
-              }}
+          <div className="git-repository">
+            <span className="git-repo-icon">
+              <FolderGit2 size={20} />
+            </span>
+            <span className="git-repo-name">
+              <strong>{basename(git.root)}</strong>
+            </span>
+            <button
+              className="git-branch-trigger"
+              aria-label="选择 commit"
+              disabled={disabled}
+              onClick={() => setPickerOpen(true)}
             >
-              {refs?.branches.map((branch) => (
-                <option key={`branch:${branch}`} value={branch}>
-                  {branch}
-                </option>
-              ))}
-              {refs?.tags.map((tag) => (
-                <option key={`tag:${tag}`} value={tag}>
-                  标签 · {tag}
-                </option>
-              ))}
-              {!refs?.branches.includes(selected) && !refs?.tags.includes(selected) && (
-                <option value={selected}>{selected || git.branch}</option>
-              )}
-            </select>
-            <small>{readOnly ? '只读' : `${changes.length} 个更改`}</small>
+              <GitBranch size={13} />
+              <span>
+                {repo.refs?.current || git.branch} ·{' '}
+                {readOnly ? git.branch : repo.refs?.head || '尚无 commit'}
+              </span>
+              <ChevronDown size={12} />
+            </button>
           </div>
-          {branchError && <p className="git-panel-error">{branchError}</p>}
-          <div className="git-panel-scroll">
-            {readOnly ? (
-              <p className="git-readonly-note">只读查看分支或版本，不显示工作区更改</p>
-            ) : (
-              changes.length === 0 && <p className="git-panel-empty">没有更改。</p>
-            )}
-            {staged.length > 0 && (
-              <section>
-                <h2>
-                  暂存的更改 <small>{staged.length}</small>
-                </h2>
-                {staged.map((change) => row(change))}
-              </section>
-            )}
-            {unstaged.length > 0 && (
-              <section>
-                <h2>
-                  更改 <small>{unstaged.length}</small>
-                </h2>
-                {unstaged.map((change) => row(change))}
-              </section>
-            )}
-            {untracked.length > 0 && (
-              <section>
-                <h2>
-                  未跟踪 <small>{untracked.length}</small>
-                </h2>
-                {untracked.map((change) => row(change))}
-              </section>
-            )}
-          </div>
+          <CommitPicker
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            commits={repo.commits}
+            path={path}
+            busy={disabled}
+            onSelect={async (id) => {
+              await repo.browse(id)
+              setPickerOpen(false)
+            }}
+            onMore={repo.moreHistory}
+          />
+          <CommitDialog
+            open={commitOpen}
+            onClose={() => setCommitOpen(false)}
+            repo={repo}
+            count={staged.length}
+          />
+          {readOnly && (
+            <div className="git-history-return">
+              <span>历史版本只读 · {git.branch}</span>
+              <button onClick={onReturnToWorktree}>返回工作区</button>
+            </div>
+          )}
+          {!readOnly ? (
+            <>
+              <GitRemoteModal
+                repo={repo}
+                disabled={disabled}
+                open={remoteOpen}
+                onClose={() => setRemoteOpen(false)}
+              />
+              <div className="git-commit-action">
+                <Button disabled={disabled || !staged.length} onClick={() => setCommitOpen(true)}>
+                  <GitCommitHorizontal size={15} />
+                  {commitReason || `提交修改 · ${staged.length}`}
+                </Button>
+              </div>
+              <div className="git-panel-scroll">
+                {!changes.length && (
+                  <div className="git-clean">
+                    <CheckCircle2 size={28} />
+                    <strong>工作区干净</strong>
+                  </div>
+                )}
+                {sections
+                  .filter((section) => section.items.length)
+                  .map((section) => (
+                    <section key={section.title}>
+                      <h2>
+                        <span>{section.title}</span>
+                        <small>{section.items.length}</small>
+                        <button
+                          className="git-section-action"
+                          disabled={disabled}
+                          onClick={() =>
+                            void (section.staged ? repo.unstage([], true) : repo.stage([], true))
+                          }
+                        >
+                          {section.staged ? <Minus size={12} /> : <Plus size={12} />}
+                          {section.staged ? '全部取消暂存' : '暂存全部'}
+                        </button>
+                      </h2>
+                      {section.items.map((change) => (
+                        <div className="git-change-row" key={change.path}>
+                          <button
+                            className="git-change-open"
+                            title={change.path}
+                            onClick={() => onOpen(change.path)}
+                          >
+                            <FileCode2 size={15} />
+                            <span className="git-change-name">
+                              <span className={`git-file git-file-${change.letter.toLowerCase()}`}>
+                                {basename(change.path)}
+                              </span>
+                              <small>{change.path.slice(git.root.length + 1)}</small>
+                            </span>
+                          </button>
+                          <span
+                            className={`git-change-badge git-file-${change.letter.toLowerCase()}`}
+                            title={change.label}
+                          >
+                            {change.code === '??'
+                              ? 'U'
+                              : section.staged
+                                ? change.code[0]
+                                : change.code[1]}
+                          </span>
+                          <button
+                            className="git-file-action"
+                            aria-label={`${section.staged ? '取消暂存' : '暂存'} ${basename(change.path)}`}
+                            disabled={disabled}
+                            title={section.staged ? '取消暂存' : '暂存'}
+                            onClick={() =>
+                              void (section.staged
+                                ? repo.unstage([change.path])
+                                : repo.stage([change.path]))
+                            }
+                          >
+                            {section.staged ? <Minus size={14} /> : <Plus size={14} />}
+                          </button>
+                        </div>
+                      ))}
+                    </section>
+                  ))}
+              </div>
+            </>
+          ) : null}
         </>
       )}
     </aside>

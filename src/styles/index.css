@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+@import './git.css';
+@import './activity.css';
+@import './workspace.css';
 @custom-variant dark (&:is(.dark *));
 @theme inline {
   --color-background: var(--surface);
@@ -109,9 +112,6 @@ button[data-slot='button'][data-variant='default'] {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  border-radius: 16px;
-  clip-path: inset(0 round 16px);
-  border: 1px solid #ffffff3b;
   user-select: none;
 }
 .sidebar {
@@ -125,6 +125,12 @@ button[data-slot='button'][data-variant='default'] {
 }
 .sidebar-hidden .sidebar {
   display: none;
+}
+.app[data-platform='macos'] .sidebar-title {
+  padding-left: 84px;
+}
+.app[data-platform='macos'] .toolbar {
+  padding-left: 12px;
 }
 .sidebar-title {
   height: 69px;
@@ -294,12 +300,24 @@ button[data-slot='button'][data-variant='default'] {
   letter-spacing: 0.4px;
   opacity: 0.75;
 }
+.disk-meter {
+  display: block;
+  width: 100%;
+  align-self: stretch;
+  height: 5px;
+  margin-top: 3px;
+  border-radius: 4px;
+  background: #7a9bb640;
+  overflow: hidden;
+}
 .disk-meter > i {
-  border-radius: 3px;
+  display: block;
+  height: 100%;
+  border-radius: 4px;
 }
 .disk-item small {
   display: block;
-  margin: 5px 0 7px;
+  margin: 5px 0 4px;
   font-size: 9px;
 }
 .disk-item i {
@@ -323,6 +341,9 @@ button[data-slot='button'][data-variant='default'] {
 }
 .favorite-row {
   position: relative;
+}
+.favorite-row .nav-item > .file-icon {
+  flex: 0 0 18px;
 }
 .favorite-row .nav-item {
   padding-right: 26px;
@@ -416,12 +437,6 @@ button[data-slot='button'][data-variant='default'] {
 }
 .terminal-control > button {
   color: var(--text);
-}
-.terminal-control > button:last-child {
-  width: 18px;
-}
-.terminal-control > button:last-child svg {
-  width: 11px;
 }
 .tabs {
   height: 33px;
@@ -988,14 +1003,26 @@ button[data-slot='button'][data-variant='default'] {
 .column-detail button {
   color: var(--accent);
 }
+.statusbar-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  height: 28px;
+  padding: 0 12px;
+}
+.statusbar.workspace-open .workspace-items {
+  padding: 6px 14px 8px;
+}
 .statusbar {
-  height: 34px;
-  min-height: 34px;
-  padding: 0 24px;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 28px;
+  padding: 0;
   border-top: 1px solid var(--line);
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 0;
   font-size: 10px;
   color: var(--muted);
   background: var(--surface);
@@ -1112,9 +1139,12 @@ button[data-slot='button'][data-variant='default'] {
   border-radius: 12px !important;
   min-width: 210px !important;
   padding: 6px !important;
-  background: var(--surface) !important;
+  /* Portaled menus sit over the translucent window material; an opaque sheet
+     keeps them from picking up the grey desktop tint. */
+  background: var(--canvas) !important;
   box-shadow: var(--shadow) !important;
-  backdrop-filter: blur(24px);
+  backdrop-filter: none;
+  border: 1px solid var(--line) !important;
 }
 .fiex-menu [role='menuitem'] {
   font-size: 11px;
@@ -1169,7 +1199,9 @@ button[data-slot='button'][data-variant='default'] {
 .context-menu button:hover {
   background: var(--hover);
 }
-.context-menu button:last-child {
+/* Only a top-level destructive action is red; submenu entries and the
+   "compress to…" wrapper must keep the normal color and geometry. */
+.context-menu > button:last-child {
   color: #c66c60;
   border-top: 1px solid var(--line);
   border-radius: 0 0 6px 6px;
@@ -1677,6 +1709,9 @@ button[data-slot='button'][data-variant='default'] {
   padding: 0;
   overflow: hidden;
 }
+.preview-modal {
+  max-width: 94vw;
+}
 .modal-wide header {
   height: 62px;
   margin: 0;
@@ -1687,9 +1722,9 @@ button[data-slot='button'][data-variant='default'] {
   font-size: 13px;
 }
 .preview-body {
-  height: 58vh;
-  min-height: 250px;
-  max-height: 650px;
+  height: 72vh;
+  min-height: 260px;
+  max-height: 80vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2199,7 +2234,7 @@ body.dragging-file * {
   font-size: 10px !important;
 }
 .connection-error {
-  color: #c05050;
+  color: var(--text);
   font-size: 10px;
 }
 .connection-form footer {
@@ -2284,7 +2319,7 @@ body.dragging-file * {
 }
 .ignore-chip button:hover {
   background: color-mix(in srgb, #c05050 12%, transparent);
-  color: #c05050;
+  color: var(--text);
 }
 .ignore-add {
   display: flex;
@@ -2328,205 +2363,12 @@ body.dragging-file * {
   color: var(--muted);
   font-size: 10px;
 }
-.git-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-right: 12px;
-}
-.git-label small {
-  color: var(--accent);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.git-changes {
-  max-height: 148px;
-  overflow-y: auto;
-  margin: 0 5px;
-  scrollbar-width: thin;
-}
-.git-change {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 5px 7px;
-  border-radius: 6px;
-  text-align: left;
-  color: var(--text);
-  font-size: 11px;
-}
-.git-change:hover {
-  background: #8ba8bd16;
-}
-.git-change > span:nth-child(2) {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.git-change small {
-  color: var(--muted);
-  font-size: 8px;
-  white-space: nowrap;
-}
-
-.git-file-m {
-  color: #a06a16;
-}
-.git-file-a {
-  color: #2d7d46;
-}
-.git-file-u {
-  color: #3d7f9e;
-}
-.git-file-d {
-  color: #a94b4b;
-}
-.git-file-r,
-.git-file-c {
-  color: #7b57a8;
-}
-.dark .git-file-m {
-  color: #e0b25b;
-}
-.dark .git-file-a {
-  color: #79c98c;
-}
-.dark .git-file-u {
-  color: #7bc1df;
-}
-.dark .git-file-d {
-  color: #e58f8f;
-}
-.dark .git-file-r,
-.dark .git-file-c {
-  color: #c3a1ea;
-}
 .git-toolbar-button {
   position: relative;
 }
 .git-toolbar-button.active {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-}
-.git-panel {
-  position: fixed;
-  top: 56px;
-  right: 14px;
-  z-index: 35;
-  display: flex;
-  flex-direction: column;
-  width: 344px;
-  max-height: min(620px, calc(100vh - 74px));
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: 0 18px 50px #1b344833;
-  overflow: hidden;
-}
-.git-panel > header {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 8px 8px 6px 12px;
-}
-.git-panel-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 650;
-}
-.git-panel-branch {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px 8px;
-  color: var(--accent);
-  font-size: 10px;
-}
-.git-panel-branch small {
-  color: var(--muted);
-}
-.git-panel-error {
-  padding: 0 12px 8px;
-  color: #c05050;
-  font-size: 9px;
-  white-space: pre-wrap;
-}
-.git-panel-empty {
-  padding: 18px 14px;
-  color: var(--muted);
-  font-size: 10px;
-  text-align: center;
-}
-.git-panel-scroll {
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 6px 8px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
-}
-.git-panel-scroll section {
-  padding-top: 6px;
-}
-.git-panel-scroll h2 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 7px 4px;
-  color: var(--muted);
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 0.55px;
-  text-transform: uppercase;
-}
-.git-panel-scroll h2 small {
-  padding: 1px 5px;
-  border-radius: 8px;
-  background: var(--hover);
-  color: var(--muted);
-  font-size: 7px;
-}
-.git-change-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  width: 100%;
-  padding: 6px 7px;
-  border-radius: 6px;
-  text-align: left;
-}
-.git-change-row:hover {
-  background: var(--hover);
-}
-.git-change-name {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-}
-.git-change-name > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10.5px;
-}
-.git-change-name small {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.git-change-label {
-  color: var(--muted);
-  font-size: 8px;
-  white-space: nowrap;
 }
 .sidebar-order {
   padding: 6px 10px 8px;
@@ -2666,31 +2508,17 @@ body.dragging-file * {
   color: var(--muted);
   font-size: 9px;
 }
-.git-branch-select {
-  max-width: 190px;
-  height: 24px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--canvas);
-  color: var(--accent);
-  font-size: 10px;
-  outline: none;
-}
-.git-branch-select:focus {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
-}
 .git-toolbar-button.switched {
   width: auto;
   padding: 0 8px;
   gap: 4px;
-  color: #c05050;
+  color: var(--text);
   background: color-mix(in srgb, #c05050 11%, transparent);
 }
 .git-branch-hint {
   max-width: 76px;
   overflow: hidden;
-  color: #c05050;
+  color: var(--text);
   font-size: 9px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -2713,4 +2541,645 @@ body.dragging-file * {
   color: var(--accent);
   font-size: 10px;
   white-space: nowrap;
+}
+
+.conflict-modal {
+  width: min(780px, calc(100vw - 48px));
+}
+.conflict-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 0 18px;
+  color: var(--muted);
+}
+.conflict-actions {
+  display: grid;
+  gap: 8px;
+}
+.conflict-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  padding: 18px;
+  border-radius: 12px;
+  text-align: left;
+  background: var(--surface);
+}
+.conflict-actions > button:hover {
+  background: var(--accent-soft);
+}
+.conflict-actions > button > svg {
+  width: 20px;
+  color: var(--accent);
+}
+.conflict-actions > button > span {
+  flex: 1;
+}
+.conflict-comparison {
+  max-height: 50vh;
+  overflow: auto;
+}
+.conflict-head,
+.conflict-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 1.6fr;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.conflict-head {
+  color: var(--muted);
+  font-size: 12px;
+}
+.conflict-row > strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.conflict-row label {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.conflict-row label span {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.conflict-row small {
+  grid-column: 2;
+  font-size: 10px;
+  color: var(--muted);
+}
+.toolbar {
+  gap: 4px;
+}
+.toolbar > button[data-slot='button'],
+.toolbar .navigation-controls button,
+.toolbar .terminal-control button {
+  width: 32px;
+  height: 34px;
+  border-radius: 9px;
+  color: var(--text);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.toolbar button[data-slot='button'] > svg,
+/* Menu triggers keep their own data-slot, so match them explicitly instead of
+   letting the 13px base font size shrink those two glyphs. */
+.toolbar button[data-slot='dropdown-menu-trigger'] > svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.toolbar button[data-slot='button']:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--accent);
+}
+.toolbar .navigation-controls button > svg {
+  width: 16px;
+  height: 16px;
+}
+.toolbar button[data-slot='button']:disabled {
+  opacity: 0.35;
+}
+.toolbar .view-switch button[aria-pressed='true'],
+.toolbar button[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+.compress-dialog {
+  width: 460px;
+}
+.compress-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 6px 22px 20px;
+}
+.compress-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.compress-form .text-field {
+  width: 100%;
+  color: var(--text);
+}
+.compress-level {
+  margin-left: auto;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.compress-form input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.compress-toggle {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  color: var(--text) !important;
+}
+.compress-form .dialog-actions {
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+/* Rubber-band selection over the file area. */
+.file-area {
+  position: relative;
+}
+.selection-band {
+  position: fixed;
+  z-index: 30;
+  border: 1px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.toolbar-picker {
+  min-width: 168px;
+}
+.toolbar-picker button[data-active='true'] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.main {
+  position: relative;
+}
+.secondary-pane {
+  position: absolute;
+  right: 0;
+  bottom: 30px;
+  z-index: 10;
+  width: 46%;
+  display: flex;
+  flex-direction: column;
+  border-left: 0;
+  background: var(--canvas);
+  box-shadow: none;
+}
+.secondary-pane > .path-toolbar {
+  border-bottom: 1px solid var(--line);
+}
+.secondary-pane .path-toolbar-spacer {
+  flex: 1;
+}
+.secondary-pane.drop-target {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--canvas));
+}
+
+.pane-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.main.split .pane-main {
+  width: calc(100% - var(--second-pane-width));
+  flex: 1 1 auto;
+  margin-right: var(--second-pane-width);
+  overflow: hidden;
+}
+.pane-active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.pane-resizer {
+  position: absolute;
+  bottom: 30px;
+  z-index: 30;
+  width: 7px;
+  cursor: col-resize;
+}
+.pane-resizer::after {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--line);
+}
+.pane-resizer:hover::after {
+  background: var(--accent);
+}
+.secondary-pane {
+  background: var(--canvas);
+  box-shadow: none;
+}
+.pane-close-main {
+  margin-left: 6px;
+}
+
+/* Keep the tab strip and both pane surfaces readable at desktop density. */
+.tabs {
+  height: 38px;
+  min-height: 38px;
+  padding-inline: 16px;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tab {
+  flex: 0 1 190px;
+  min-width: 92px;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.tab:not(.active):hover {
+  background: color-mix(in srgb, var(--hover) 65%, transparent);
+}
+.tab > button:first-child {
+  font-size: 12px;
+  padding-inline: 11px;
+}
+.tab.active {
+  box-shadow: 0 -2px 0 var(--accent) inset;
+}
+.tabs-spacer {
+  min-width: 24px;
+}
+.path-toolbar {
+  background: var(--canvas);
+}
+.main.split > .path-toolbar {
+  width: calc(100% - var(--second-pane-width));
+}
+.breadcrumbs {
+  font-size: 12px;
+}
+.search-box input {
+  font-size: 12px;
+}
+.main.split .pane-main,
+.main.split .secondary-pane {
+  min-width: 0;
+}
+.main.split .pane-main {
+  border-right: 1px solid var(--line);
+}
+.pane-active {
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.pane-resizer {
+  width: 11px;
+  transform: translateX(-5px);
+}
+.pane-resizer::after {
+  inset: 0 5px;
+}
+.pane-resizer:hover::after,
+.pane-resizer:active::after {
+  inset-inline: 4px;
+}
+
+/* Shared desktop chrome across browser, sidebar, and preferences. */
+.sidebar {
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--canvas) 34%, transparent), transparent 72%),
+    var(--glass);
+  border-right-color: color-mix(in srgb, var(--line) 70%, transparent);
+}
+.sidebar-label {
+  font-size: 10px;
+  letter-spacing: 0.35px;
+}
+.nav-item.active {
+  background: color-mix(in srgb, var(--accent) 11%, var(--canvas));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+.dark .nav-item.active {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.file-row {
+  height: 40px;
+  border-radius: 7px;
+}
+.file-row:nth-child(even) {
+  background: transparent;
+}
+.file-row:hover {
+  background: color-mix(in srgb, var(--hover) 72%, var(--canvas));
+}
+.file-row.selected {
+  background: var(--selected);
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.file-label {
+  font-size: max(var(--label-size, 11px), 12px);
+}
+.list-header {
+  background: var(--canvas);
+  font-size: 11px;
+}
+.settings-card {
+  border-color: var(--line);
+  background: var(--canvas);
+  border-radius: 11px;
+}
+.settings-card-header {
+  font-size: 10px;
+  letter-spacing: 0.15px;
+  text-transform: none;
+}
+.modal {
+  background: var(--canvas);
+  border-color: var(--line);
+  border-radius: 15px;
+}
+.git-panel {
+  top: 76px;
+  border-color: var(--line);
+  border-radius: 15px;
+  background: var(--canvas);
+  box-shadow: 0 20px 60px color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+/* Application chrome and layers. */
+.toolbar button svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+.toolbar .navigation-controls button svg {
+  width: 20px;
+  height: 20px;
+}
+.refresh-turn {
+  animation: spin 550ms ease-in-out 1;
+}
+.tabs {
+  height: 46px;
+  min-height: 46px;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 6px;
+  background: color-mix(in srgb, var(--text) 6%, var(--canvas));
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--canvas) 55%, transparent);
+  flex-shrink: 0;
+}
+.tab.active {
+  background: var(--canvas);
+  border-color: var(--line);
+  box-shadow: 0 1px 3px #00000008;
+}
+.tab.tab-drop {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.tab > button:first-child {
+  min-width: 0;
+  touch-action: none;
+}
+.pane-active {
+  box-shadow: none;
+}
+.pane-resizer {
+  transform: translateX(50%);
+}
+.device-row > .nav-item {
+  padding-right: 34px;
+}
+.device-eject {
+  position: absolute;
+  right: 20px;
+  top: 14px;
+  opacity: 0.7;
+}
+.device-row:focus-within .device-eject,
+.device-row:hover .device-eject {
+  opacity: 1;
+}
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+.settings-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding: 18px 0;
+  background: var(--canvas);
+  border-top: 1px solid var(--line);
+}
+.settings-actions button {
+  padding: 7px 20px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.settings-actions .primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.select-field {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 130px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--canvas);
+  font-size: 12px;
+}
+.select-menu {
+  z-index: 80;
+}
+.workspace-bar {
+  z-index: 45;
+}
+.modal-overlay {
+  z-index: 60;
+}
+.modal {
+  z-index: 61;
+}
+
+/* Compact task sheets share the same rhythm and neutral surfaces. */
+.compress-dialog {
+  width: 480px;
+}
+.archive-form {
+  padding: 20px;
+  display: grid;
+  gap: 20px;
+}
+.archive-formats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.archive-format {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+  gap: 5px 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  text-align: left;
+  background: var(--surface);
+}
+.archive-format small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 10px;
+}
+.archive-format.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.archive-option {
+  display: grid;
+  gap: 12px;
+}
+.archive-option > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 500;
+}
+.archive-option label > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.archive-option small,
+.range-endpoints {
+  color: var(--muted);
+  font-size: 10px;
+}
+.range-endpoints {
+  display: flex;
+  justify-content: space-between;
+}
+.archive-option input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.archive-full {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.archive-full input {
+  accent-color: var(--accent);
+}
+.archive-form .dialog-actions {
+  padding: 0;
+  margin: 0;
+}
+.create-tag-form {
+  padding: 20px;
+  display: grid;
+  gap: 18px;
+}
+.create-tag-form .tag-colors {
+  justify-content: center;
+}
+.checksum-dialog {
+  width: 620px;
+}
+.checksum-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.checksum-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.checksum-list {
+  padding: 0 20px 10px;
+}
+.checksum-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.checksum-row:last-child {
+  border: 0;
+}
+.checksum-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.checksum-row strong {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.checksum-row code {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.6;
+  user-select: text;
+}
+.checksum-loading {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+}
+.checksum-error {
+  padding: 20px;
+}
+.preview-text .preview-body {
+  height: auto;
+  min-height: 140px;
+  max-height: 65vh;
+}
+.preview-text .preview-body pre {
+  min-height: 0;
+  padding: 16px 20px;
+}
+.preview-compact {
+  width: 520px;
+}
+.preview-compact .preview-body {
+  height: auto;
+  min-height: 200px;
+  padding: 20px;
+}
+.preview-compact .preview-fallback {
+  gap: 12px;
+}
+.preview-media .preview-body {
+  min-height: 0;
 }

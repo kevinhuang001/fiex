@@ -1,5 +1,6 @@
+import { SelectField } from '../ui/SelectField'
 import type { Preferences } from '@/lib/types'
-import { Eye, SlidersHorizontal, Sun } from 'lucide-react'
+import { Eye, Home, SlidersHorizontal, Sun } from 'lucide-react'
 
 export function AppearanceSettings({
   prefs,
@@ -47,6 +48,27 @@ export function AppearanceSettings({
           >
             <i />
           </button>
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-icon" style={{ background: '#0ea5e9' }}>
+              <Home size={15} />
+            </span>
+            启动页
+          </div>
+          <div className="settings-row-control">
+            <SelectField
+              label="启动页"
+              value={prefs.startPage}
+              options={[
+                { value: 'recent', label: '最近使用' },
+                { value: 'home', label: '个人文件夹' },
+                { value: 'documents', label: '文稿' },
+                { value: 'last', label: '上次位置' },
+              ]}
+              onChange={(startPage) => update({ startPage: startPage as Preferences['startPage'] })}
+            />
+          </div>
         </div>
         <div className="settings-row">
           <div className="settings-row-label">

@@ -1,3 +1,4 @@
+import { demo } from '@/lib/api'
 import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
 import {
   SHORTCUT_ACTIONS,
@@ -20,13 +21,14 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     ide: 'vscode',
     theme: 'system',
     fontSize: 11,
+    startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
     compressIgnore: defaultOperationIgnore(),
-    copyIgnore: defaultOperationIgnore(),
     sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
     placeOrder: [],
     hiddenPlaces: [],
     favorites: [],
+    customTags: [],
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
   }
@@ -56,9 +58,30 @@ function load(): Preferences {
           )
       }
     }
+    // The isolated demo fixture is a folder tree under Documents; always open
+    // it there instead of the empty Recent page a fresh profile would show.
+    const startPage = demo
+      ? 'documents'
+      : stored.startPage === 'home' ||
+          stored.startPage === 'documents' ||
+          stored.startPage === 'last'
+        ? stored.startPage
+        : 'recent'
     return {
       ...fallback,
-      ...stored,
+      ...Object.fromEntries(Object.entries(stored).filter(([key]) => key !== 'copyIgnore')),
+      customTags: Array.isArray(stored.customTags)
+        ? stored.customTags.filter(
+            (tag) =>
+              tag &&
+              typeof tag.name === 'string' &&
+              tag.name.trim() &&
+              Number.isInteger(tag.color) &&
+              tag.color >= 1 &&
+              tag.color <= 7,
+          )
+        : [],
+      startPage,
       fontSize,
       displayIgnore: Array.isArray(stored.displayIgnore)
         ? stored.displayIgnore
@@ -66,7 +89,6 @@ function load(): Preferences {
       compressIgnore: Array.isArray(stored.compressIgnore)
         ? stored.compressIgnore
         : fallback.compressIgnore,
-      copyIgnore: Array.isArray(stored.copyIgnore) ? stored.copyIgnore : fallback.copyIgnore,
       sidebarOrder: Array.isArray(stored.sidebarOrder)
         ? (stored.sidebarOrder.filter((section): section is SidebarSection =>
             ['places', 'favorites', 'tags', 'devices'].includes(section),
@@ -87,6 +109,8 @@ export function usePreferences() {
   const [prefs, setPrefs] = useState<Preferences>(load)
   useEffect(() => {
     localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
+  }, [prefs])
+  useEffect(() => {
     const apply = () =>
       document.documentElement.classList.toggle(
         'dark',
@@ -97,6 +121,6 @@ export function usePreferences() {
     const media = matchMedia('(prefers-color-scheme: dark)')
     media.addEventListener('change', apply)
     return () => media.removeEventListener('change', apply)
-  }, [prefs])
+  }, [prefs.theme])
   return [prefs, (p: Partial<Preferences>) => setPrefs((v) => ({ ...v, ...p }))] as const
 }

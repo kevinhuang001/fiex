@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { TAG_PRESETS, tagColor } from '@/lib/tags'
@@ -8,20 +8,17 @@ import type { Tag } from '@/lib/types'
 interface Props {
   open: boolean
   initial: Tag[]
+  available?: Tag[]
   onClose: () => void
   onApply: (tags: Tag[]) => void
 }
 
-export function TagDialog({ open, initial, onClose, onApply }: Props) {
+export function TagDialog({ open, initial, available = [], onClose, onApply }: Props) {
   const [tags, setTags] = useState<Tag[]>(initial)
-  const [name, setName] = useState('')
-  const [color, setColor] = useState(4)
 
   useEffect(() => {
     if (!open) return
     setTags(initial)
-    setName('')
-    setColor(4)
   }, [open])
 
   const toggle = (tag: Tag) => {
@@ -32,23 +29,18 @@ export function TagDialog({ open, initial, onClose, onApply }: Props) {
     )
   }
 
-  const add = () => {
-    const value = name.trim()
-    if (!value) return
-    if (!tags.some((tag) => tag.name === value)) setTags([...tags, { name: value, color }])
-    setName('')
-  }
-
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="标签"
-      description="为所选项目设置 Finder 标签；同一标签会显示在列表和图标视图中。"
-    >
+    <Modal open={open} onClose={onClose} title="标签">
       <div className="tag-dialog">
         <div className="tag-presets">
-          {TAG_PRESETS.map((preset) => {
+          {Array.from(
+            new Map(
+              [...TAG_PRESETS, ...available, ...initial].map((tag) => [
+                `${tag.name}:${tag.color}`,
+                tag,
+              ]),
+            ).values(),
+          ).map((preset) => {
             const active = tags.some(
               (tag) => tag.name === preset.name && tag.color === preset.color,
             )
@@ -59,7 +51,7 @@ export function TagDialog({ open, initial, onClose, onApply }: Props) {
                 aria-pressed={active}
                 onClick={() => toggle(preset)}
               >
-                <i style={{ background: preset.hex }} />
+                <i style={{ background: tagColor(preset.color) }} />
                 {preset.name}
               </button>
             )
@@ -79,38 +71,6 @@ export function TagDialog({ open, initial, onClose, onApply }: Props) {
             ))}
           </div>
         )}
-
-        <div className="tag-custom">
-          <input
-            className="text-field"
-            aria-label="自定义标签名称"
-            placeholder="自定义标签"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                add()
-              }
-            }}
-          />
-          <div className="tag-colors" aria-label="标签颜色">
-            {[1, 2, 3, 4, 5, 6, 7].map((index) => (
-              <button
-                key={index}
-                aria-label={`选择颜色 ${index}`}
-                aria-pressed={color === index}
-                className={color === index ? 'active' : ''}
-                style={{ background: tagColor(index) }}
-                onClick={() => setColor(index)}
-              />
-            ))}
-          </div>
-          <Button variant="secondary" onClick={add} disabled={!name.trim()}>
-            <Plus />
-            添加
-          </Button>
-        </div>
 
         <div className="dialog-actions">
           <Button variant="ghost" onClick={onClose}>

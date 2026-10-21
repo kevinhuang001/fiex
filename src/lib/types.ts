@@ -20,6 +20,8 @@ export interface Entry {
   sync: 'synced' | 'cloud' | null
 }
 export interface Listing {
+  readOnly?: boolean
+  virtualVolume?: boolean
   path: string
   entries: Entry[]
   warnings: string[]
@@ -57,11 +59,38 @@ export interface OperationResult {
   paths: string[]
   errors: string[]
   skipped: number
+  conflicts?: TransferConflict[]
+}
+export interface FileVersion {
+  path: string
+  size: number
+  modified: number
+  isDir: boolean
+}
+export interface TransferConflict {
+  key: string
+  source: FileVersion
+  destination: FileVersion
+}
+export type ConflictAction = 'replace' | 'skip' | 'keepBoth'
+export interface ConflictResolution {
+  key: string
+  action: ConflictAction
+}
+export interface GitRemoteStatus {
+  remotes: { name: string; url: string }[]
+  branch: string
+  upstream: string
+  ahead: number
+  behind: number
 }
 export type View = 'list' | 'gallery' | 'columns' | 'icons'
 export type Group = 'none' | 'kind' | 'modified' | 'extension' | 'size'
 export type Sort = 'name' | 'modified' | 'size' | 'kind'
+export type StartPage = 'recent' | 'home' | 'documents' | 'last'
+
 export interface Preferences {
+  customTags: Tag[]
   view: View
   group: Group
   sort: Sort
@@ -71,9 +100,9 @@ export interface Preferences {
   ide: string
   theme: 'system' | 'light' | 'dark'
   fontSize: number
+  startPage: StartPage
   displayIgnore: string[]
   compressIgnore: string[]
-  copyIgnore: string[]
   sidebarOrder: SidebarSection[]
   placeOrder: string[]
   hiddenPlaces: string[]
@@ -100,7 +129,17 @@ export interface RemoteConnection {
 }
 
 export interface GitRefs {
+  head: string
   current: string
   branches: string[]
   tags: string[]
+}
+
+export interface GitCommit {
+  refs: string
+  id: string
+  shortId: string
+  subject: string
+  author: string
+  timestamp: number
 }

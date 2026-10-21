@@ -4,6 +4,8 @@ import { archiveFormats } from '@/lib/archives'
 import { isArchive } from '@/lib/files'
 import {
   Archive,
+  Hash,
+  RotateCcw,
   ChevronRight,
   CloudCheck,
   CloudDownload,
@@ -37,6 +39,7 @@ export function FileContextMenu({
   menu,
   hint,
   open,
+  checksum,
   previewEntry,
   setInfo,
   platform,
@@ -52,14 +55,19 @@ export function FileContextMenu({
   terminal,
   notify,
   recycle,
+  deletePermanently,
+  restoreFromTrash,
+  inTrash,
   setCompressOpen,
   compressOpen,
+  setCompressAdvanced,
   setMenu,
 }: Pick<
   AppController,
   | 'menu'
   | 'hint'
   | 'open'
+  | 'checksum'
   | 'previewEntry'
   | 'setInfo'
   | 'platform'
@@ -75,8 +83,12 @@ export function FileContextMenu({
   | 'terminal'
   | 'notify'
   | 'recycle'
+  | 'deletePermanently'
+  | 'restoreFromTrash'
+  | 'inTrash'
   | 'setCompressOpen'
   | 'compressOpen'
+  | 'setCompressAdvanced'
   | 'setMenu'
 >) {
   return (
@@ -115,7 +127,7 @@ export function FileContextMenu({
                 ? [
                     {
                       label: '标签…',
-                      disabled: gitSwitched,
+                      disabled: gitSwitched || x.directoryReadOnly,
                       icon: <Tags />,
                       hint: '',
                       action: () =>
@@ -149,7 +161,7 @@ export function FileContextMenu({
                 label: '重新命名',
                 icon: <Pencil />,
                 hint: hint('rename'),
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: () => x.beginRename(menu.entry.path),
               },
               { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
@@ -157,33 +169,39 @@ export function FileContextMenu({
                 label: '剪切',
                 icon: <Scissors />,
                 hint: hint('cut'),
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: () => copy(true),
               },
               {
                 label: '创建副本',
                 icon: <Copy />,
                 hint: hint('duplicate'),
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: duplicate,
               },
               {
                 label: '压缩为…',
                 icon: <Archive />,
                 hint: '',
-                disabled: gitSwitched,
-                submenu: archiveFormats.map((format) => ({
-                  label: format.name,
-                  action: () => compress(format),
-                })),
+                disabled: gitSwitched || x.directoryReadOnly,
+                submenu: [
+                  ...archiveFormats.map((format) => ({
+                    label: format.name,
+                    action: () => compress(format),
+                  })),
+                  {
+                    label: '高级…',
+                    action: () => setCompressAdvanced(archiveFormats[0]),
+                  },
+                ],
               },
               ...(isArchive(menu.entry)
                 ? [
                     {
-                      label: '解压缩',
+                      label: '解压缩到…',
                       icon: <Archive />,
                       hint: '',
-                      disabled: gitSwitched,
+                      disabled: gitSwitched || x.directoryReadOnly,
                       action: extract,
                     },
                   ]
@@ -192,8 +210,15 @@ export function FileContextMenu({
                 label: 'Open in Terminal',
                 icon: <TerminalSquare />,
                 hint: '',
-                disabled: gitSwitched,
+                disabled: gitSwitched || x.directoryReadOnly,
                 action: () => terminal(),
+              },
+              {
+                label: '查看校验和',
+                icon: <Hash />,
+                hint: '',
+                disabled: menu.entry.isDir,
+                action: () => checksum(menu.entry.path),
               },
               {
                 label: '复制路径',
@@ -205,13 +230,36 @@ export function FileContextMenu({
                     .then(() => notify('路径已复制'))
                     .catch((e) => x.setError(String(e))),
               },
-              {
-                label: '移到废纸篓',
-                icon: <Trash2 />,
-                hint: hint('trash'),
-                disabled: gitSwitched,
-                action: recycle,
-              },
+              inTrash
+                ? {
+                    label: '放回原处',
+                    icon: <RotateCcw />,
+                    hint: '',
+                    action: () =>
+                      restoreFromTrash(
+                        x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
+                      ),
+                  }
+                : {
+                    label: '移到废纸篓',
+                    icon: <Trash2 />,
+                    hint: hint('trash'),
+                    disabled: gitSwitched || x.directoryReadOnly,
+                    action: recycle,
+                  },
+              ...(inTrash
+                ? [
+                    {
+                      label: '彻底删除',
+                      icon: <Trash2 />,
+                      hint: '',
+                      action: () =>
+                        deletePermanently(
+                          x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
+                        ),
+                    },
+                  ]
+                : []),
             ] as ContextItem[]
           ).map((a) =>
             'submenu' in a ? (

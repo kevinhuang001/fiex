@@ -3,19 +3,40 @@ import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import type { DialogState } from '@/lib/dialogs'
-import { basename } from '@/lib/files'
+import { basename, isArchive } from '@/lib/files'
+import type { ArchiveFormat } from '@/lib/archives'
 import { shortcutLabel } from '@/lib/shortcuts'
 import type { Entry, Location, Tag } from '@/lib/types'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
+import { useWorkspace } from './useWorkspace'
 import { useFileOperations } from './useFileOperations'
 import { usePathEditor } from './usePathEditor'
+import { usePaneLayout } from './usePaneLayout'
 export function useAppController() {
   const [prefs, update] = usePreferences()
-  const x = useExplorer(prefs)
+  const left = useExplorer(prefs)
+  const {
+    x,
+    right,
+    split,
+    setSplit,
+    active,
+    setActive,
+    paneWidth,
+    setPaneWidth,
+    panePaths,
+    switchWorkspaceTab,
+    newWorkspaceTab,
+    closeWorkspaceTab,
+    moveWorkspaceTab,
+    openPane,
+    closePane,
+  } = usePaneLayout(prefs, left)
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
+  const workspace = useWorkspace()
 
   const [sidebar, setSidebar] = useState(true)
   const [preview, setPreview] = useState<Entry | null>(null)
@@ -27,42 +48,47 @@ export function useAppController() {
   const [dialogBusy, setDialogBusy] = useState(false)
   const [toast, setToast] = useState('')
   const [trashIssue, setTrashIssue] = useState(false)
+  const [compressAdvanced, setCompressAdvanced] = useState<ArchiveFormat | null>(null)
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [gitOpen, setGitOpen] = useState(false)
-  const gitBase = useRef<{ root: string; branch: string } | null>(null)
+  const workspaces = useRef(new Map<string, string>())
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
   const [compressOpen, setCompressOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
-  const chosen = x.entries.filter((e) => x.selected.includes(e.path))
+  const chosen = useMemo(() => {
+    const selected = new Set(x.selected)
+    return x.entries.filter((entry) => selected.has(entry.path))
+  }, [x.entries, x.selected])
   const first = chosen[0]
   const notify = useCallback((s: string) => setToast(s), [])
+  const gitSwitched = x.path.startsWith('history://')
   useEffect(() => {
-    if (!x.git) {
-      gitBase.current = null
-      return
-    }
-    if (gitBase.current?.root !== x.git.root) {
-      gitBase.current = { root: x.git.root, branch: x.git.branch }
-    }
-  }, [x.git?.root])
-  const gitSwitched = Boolean(x.git && gitBase.current && x.git.branch !== gitBase.current.branch)
-  useEffect(() => {
-    x.setReadOnly(gitSwitched)
-  }, [gitSwitched])
+    x.setReadOnly(gitSwitched || x.directoryReadOnly)
+  }, [gitSwitched, x.directoryReadOnly])
+  const viewRevision = async (reference: string) => {
+    if (!x.git) return
+    const path = await call<string>('git_browse', { root: x.git.root, reference })
+    if (!gitSwitched) workspaces.current.set(x.git.root, x.path)
+    setPreview(null)
+    x.navigate(path)
+  }
+  const returnToWorktree = () => {
+    const path = x.git && (workspaces.current.get(x.git.root) || x.git.root)
+    if (path) x.navigate(path)
+  }
   const writable = () => {
-    if (!gitSwitched) return true
-    x.setError('当前是只读分支或版本，切换回工作区分支后才能修改')
+    if (!gitSwitched && !x.directoryReadOnly) return true
+    if (x.directoryReadOnly && !gitSwitched) {
+      x.setError('此文件系统只读')
+      return false
+    }
+    x.setError('历史版本只读，请返回工作区后再修改')
     return false
   }
-  useEffect(() => {
-    if (!x.path || settings || dialog || preview || info) return
-    const frame = requestAnimationFrame(() => searchInput.current?.focus())
-    return () => cancelAnimationFrame(frame)
-  }, [x.path])
   useEffect(() => {
     if (!toast) return
     const timer = setTimeout(() => setToast(''), 5000)
@@ -77,32 +103,67 @@ export function useAppController() {
 
   const {
     busy,
+    conflict,
+    setConflict,
+    resolveConflict,
     clipboard,
     setClipboard,
     run,
     create,
     recycle,
+    deletePermanently,
+    restoreFromTrash,
+    emptyTrash,
+    inTrash,
     transfer,
     copy,
     duplicate,
     compress,
     extract,
     undo,
-  } = useFileOperations({ x, prefs, writable, notify, setDialog, chosen, first })
+  } = useFileOperations({ x, prefs, writable, notify, setDialog, chosen, first, trashPath })
 
-  const open = (e: Entry) => {
+  const open = (e: Entry, pane = x) => {
     if (e.isDir && e.extension !== 'app') {
       setPreview(null)
-      x.navigate(e.path)
+      pane.navigate(e.path)
       return
     }
-    if (gitSwitched) {
-      previewEntry(e)
+    if (pane.path.startsWith('history://')) {
+      previewEntry(e, pane)
+      return
+    }
+    if (isArchive(e)) {
+      // Archives open in place instead of being handed to the system archiver.
+      void run(
+        '正在解压…',
+        async () => {
+          const path = await call<string>('extract_archive', {
+            path: e.path,
+            destination: pane.path,
+          })
+          notify(`已解压到 ${basename(path)}`)
+        },
+        undefined,
+        true,
+      )
       return
     }
     void run('正在打开…', () => call('open_path', { path: e.path }))
   }
-  const previewEntry = (entry: Entry) => {
+  const addWorkspace = async (paths: string[]) => {
+    const entries = await Promise.all(
+      paths.map(
+        async (path) =>
+          x.entries.find((entry) => entry.path === path) ||
+          (await call<Entry>('file_info', { path }).catch(() => null)),
+      ),
+    )
+    workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
+  }
+  const [checksumPath, setChecksumPath] = useState<string | null>(null)
+  const checksum = (path: string) => setChecksumPath(path)
+  const previewEntry = (entry: Entry, pane = x) => {
     if (!isRemotePath(entry.path)) {
       setPreview(entry)
       return
@@ -110,21 +171,36 @@ export function useAppController() {
     void run('正在下载…', async () => {
       await call('remote_download', { path: entry.path })
       setPreview(entry)
-      x.reload()
+      pane.reload()
     })
+  }
+  const refreshAll = () => {
+    left.reload()
+    if (split) right.reload()
+    void left.refreshLocations().catch((error) => x.setError(String(error)))
+  }
+  const leaveDevice = (path: string) => {
+    const home = left.locations.find((location) => location.kind === 'favorite')?.path || '/'
+    for (const pane of [left, right]) {
+      if (pane.path === path || pane.path.startsWith(path.replace(/[/\\]$/, '') + '/'))
+        pane.navigate(home)
+    }
   }
   const ejectDevice = (path: string) =>
     setDialog({
       title: '弹出设备',
-      description: '确认弹出这个磁盘？',
       submit: '弹出',
       danger: true,
-      action: () => call('eject_device', { path }),
+      action: async () => {
+        await call('eject_device', { path })
+        leaveDevice(path)
+        await left.refreshLocations()
+      },
     })
   const mountDevice = (device: string) => {
     void run('正在请求挂载…', async () => {
       const path = await call<string>('mount_device', { device })
-      await x.refreshLocations()
+      await left.refreshLocations()
       x.navigate(path)
       notify('设备已挂载')
     })
@@ -132,25 +208,22 @@ export function useAppController() {
   const ejectUsb = (device: string) =>
     setDialog({
       title: '弹出 U 盘',
-      description: '确认弹出这个 U 盘？请先等待写入完成。',
       submit: '弹出',
       danger: true,
       action: async () => {
-        const volume = x.locations.find((location) => location.usbfs && location.device === device)
+        const volume = left.locations.find(
+          (location) => location.usbfs && location.device === device,
+        )
         await call('eject_usb', { device })
-        await x.refreshLocations()
-        if (volume && x.path.startsWith(volume.path)) {
-          const home = x.locations.find((location) => location.kind === 'favorite')?.path
-          x.navigate(home || '/')
-        }
+        await left.refreshLocations()
+        if (volume) leaveDevice(volume.path)
       },
     })
   const removeConnection = (id: string) => {
     const connection = x.connections.find((item) => item.id === id)
     if (!connection) return
     setDialog({
-      title: '关闭连接',
-      description: `关闭“${connection.name}”？已下载的文件会保留在 ~/.fiex。`,
+      title: `关闭“${connection.name}”？`,
       submit: '关闭连接',
       danger: true,
       action: async () => {
@@ -189,8 +262,11 @@ export function useAppController() {
     )
   const isRemotePath = (path: string) => Boolean(remoteConnection(path))
   const displayName = (path: string) => {
+    if (/^history:\/\/[^/]+\/[^/]+\/?$/.test(path))
+      return '历史版本 · ' + path.split('/')[3].slice(0, 8)
+    if (path === 'recent://') return '最近使用'
     if (trashPath && path === trashPath) return '废纸篓'
-    const volume = x.locations.find((location) => location.usbfs && location.path === path)
+    const volume = left.locations.find((location) => location.usbfs && location.path === path)
     if (volume) return volume.name
     const connection = remoteConnection(path)
     if (connection && path === connection.mountPath) return connection.name
@@ -206,7 +282,7 @@ export function useAppController() {
     startPathEdit,
     submitPath,
     crumbs,
-  } = usePathEditor({ x, prefs, displayName })
+  } = usePathEditor({ x: left, prefs, displayName })
 
   const hint = (action: Parameters<typeof shortcutLabel>[1]) =>
     shortcutLabel(prefs.shortcuts, action, prefs.shortcutStyle)
@@ -325,7 +401,7 @@ export function useAppController() {
   useExplorerShortcuts({
     shortcuts: prefs.shortcuts,
     blocked: Boolean(
-      dialog || settings || preview || info || tagOpen || connectionOpen || trashIssue,
+      dialog || conflict || settings || preview || info || tagOpen || connectionOpen || trashIssue,
     ),
     handlers: {
       settings: () => setSettings(true),
@@ -344,8 +420,8 @@ export function useAppController() {
       newFile: () => {
         void create(false)
       },
-      newTab: () => x.newTab(),
-      closeTab: () => x.closeTab(x.tab),
+      newTab: newWorkspaceTab,
+      closeTab: () => closeWorkspaceTab(left.tab),
       duplicate,
       back: x.back,
       forward: x.forward,
@@ -359,8 +435,8 @@ export function useAppController() {
       open: () => {
         if (first) open(first)
       },
-      trash: () => recycle(false),
-      refresh: x.reload,
+      trash: () => recycle(),
+      refresh: refreshAll,
       toggleSidebar: () => setSidebar((value) => !value),
       info: () => {
         if (first) setInfo(first)
@@ -376,15 +452,49 @@ export function useAppController() {
     if (!native) return
     let active = true
     let dispose: (() => void) | undefined
+    type DropPlan = { paths: string[]; moving: boolean }
+    let origin: { key: string; pending: Promise<DropPlan | null> } | null = null
+    const key = (paths: string[]) => [...paths].sort().join('\0')
     void getCurrentWebviewWindow()
       .onDragDropEvent((event) => {
+        void call('ci_log', {
+          message: `drop event ${event.payload.type} ${
+            'paths' in event.payload ? JSON.stringify(event.payload.paths) : ''
+          } ${'position' in event.payload ? JSON.stringify(event.payload.position) : ''}`,
+        }).catch(() => {})
         if (event.payload.type === 'enter') {
+          const paths = event.payload.paths
+          origin = {
+            key: key(paths),
+            pending: call<DropPlan | null>('internal_drop', { paths, consume: false }).catch(
+              () => null,
+            ),
+          }
           setDragging(true)
         } else if (event.payload.type === 'leave') {
+          origin = null
           setDragging(false)
         } else if (event.payload.type === 'drop') {
           setDragging(false)
-          transfer(event.payload.paths, x.path, false)
+          const { paths, position } = event.payload
+          const captured = origin?.key === key(paths) ? origin.pending : null
+          origin = null
+          void (async () => {
+            const current = await call<DropPlan | null>('internal_drop', { paths, consume: true })
+            const drop = (await captured) || current || { paths, moving: false }
+            const scale = await getCurrentWindow().scaleFactor()
+            const element = document.elementFromPoint(position.x / scale, position.y / scale)
+            if (element?.closest('[data-bookmark-drop]')) {
+              await bookmarkPaths(drop.paths)
+              return
+            }
+            if (element?.closest('[data-workspace-drop]')) {
+              await addWorkspace(drop.paths)
+              return
+            }
+            const folder = element?.closest<HTMLElement>('[data-drop-folder]')?.dataset.dropFolder
+            transfer(drop.paths, folder || x.path, drop.moving)
+          })().catch((error) => x.setError(String(error)))
         }
       })
       .then((fn) => {
@@ -395,7 +505,7 @@ export function useAppController() {
       active = false
       dispose?.()
     }
-  }, [x.path])
+  }, [x.path, conflict, x.directoryReadOnly])
   useEffect(() => {
     if (!menu) {
       setCompressOpen(false)
@@ -427,6 +537,7 @@ export function useAppController() {
     openApplications,
     setConnectionOpen,
     removeConnection,
+    refreshAll,
     ejectDevice,
     ejectUsb,
     mountDevice,
@@ -434,6 +545,8 @@ export function useAppController() {
     setSidebar,
     displayName,
     gitSwitched,
+    viewRevision,
+    returnToWorktree,
     hint,
     create,
     gitOpen,
@@ -442,6 +555,8 @@ export function useAppController() {
     openIde,
     terminal,
     setSettings,
+    newWindow: () =>
+      void call('new_window', { path: x.path }).catch((error) => x.setError(String(error))),
     startPathEdit,
     editingPath,
     submitPath,
@@ -452,11 +567,19 @@ export function useAppController() {
     searchInput,
     crumbs,
     open,
+    openLeft: (entry: Entry) => open(entry, left),
+    openRight: (entry: Entry) => open(entry, right),
+    checksum,
+    checksumPath,
+    setChecksumPath,
     previewEntry,
     setMenu,
     transfer,
     bookmarkPaths,
     busy,
+    conflict,
+    setConflict,
+    resolveConflict,
     chosen,
     clipboard,
     setClipboard,
@@ -472,8 +595,14 @@ export function useAppController() {
     extract,
     notify,
     recycle,
+    deletePermanently,
+    restoreFromTrash,
+    emptyTrash,
+    inTrash,
     setCompressOpen,
     compressOpen,
+    compressAdvanced,
+    setCompressAdvanced,
     preview,
     setPreview,
     navigatePreview,
@@ -497,6 +626,23 @@ export function useAppController() {
     terminals,
     toast,
     setToast,
+    workspace,
+    addWorkspace,
+    left,
+    right,
+    split,
+    paneWidth,
+    panePaths,
+    setPaneWidth,
+    setSplit,
+    active,
+    setActive,
+    closePane,
+    openPane,
+    switchWorkspaceTab,
+    newWorkspaceTab,
+    closeWorkspaceTab,
+    moveWorkspaceTab,
   }
 }
 export type AppController = ReturnType<typeof useAppController>

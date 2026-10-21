@@ -13,6 +13,8 @@ export function ExplorerPathBar({
   searchInput,
   crumbs,
   hint,
+  split,
+  closePane,
 }: Pick<
   AppController,
   | 'x'
@@ -26,6 +28,8 @@ export function ExplorerPathBar({
   | 'searchInput'
   | 'crumbs'
   | 'hint'
+  | 'split'
+  | 'closePane'
 >) {
   return (
     <>
@@ -103,6 +107,16 @@ export function ExplorerPathBar({
             <kbd>{hint('search')}</kbd>
           )}
         </div>
+        {split && (
+          <button
+            className="icon-button pane-close-main"
+            title="关闭此面板"
+            aria-label="关闭左侧面板"
+            onClick={() => closePane('left')}
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
     </>
   )

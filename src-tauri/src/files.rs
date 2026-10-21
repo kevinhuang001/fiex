@@ -41,7 +41,13 @@ fn shortcut_target(path: &Path) -> Option<String> {
 
 pub fn entry(path: &Path) -> Result<Entry, String> {
     let link = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let meta = fs::metadata(path).unwrap_or(link.clone());
+    // Most entries are not links. Reuse lstat instead of issuing a second
+    // metadata syscall for every item in a large directory.
+    let meta = if link.file_type().is_symlink() {
+        fs::metadata(path).unwrap_or(link.clone())
+    } else {
+        link.clone()
+    };
     let extension = path
         .extension()
         .unwrap_or_default()
@@ -96,7 +102,10 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
     })
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Listing {
+    pub read_only: bool,
+    pub virtual_volume: bool,
     pub path: String,
     pub entries: Vec<Entry>,
     pub warnings: Vec<String>,
@@ -123,12 +132,10 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
             Err(e) => warnings.push(e.to_string()),
         }
     }
-    entries.sort_unstable_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
+    entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
     Ok(Listing {
+        read_only: false,
+        virtual_volume: false,
         path: path.to_string_lossy().into_owned(),
         entries,
         warnings,

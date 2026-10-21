@@ -1,3 +1,4 @@
+import { commonPlaces } from '@/lib/places'
 import {
   Home,
   Monitor,
@@ -8,27 +9,30 @@ import {
   FileText,
   Folder,
   Plus,
-  Star,
+  Trash,
   HardDrive,
   X,
   Trash2,
   AppWindow,
+  Clock,
   Server,
   Unplug,
   Usb,
 } from 'lucide-react'
-import { Fragment } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
-import { TAG_PRESETS } from '@/lib/tags'
+import { fileVisual } from '@/lib/fileIcons'
+import { CreateTagDialog } from './CreateTagDialog'
+import { TAG_PRESETS, tagColor } from '@/lib/tags'
 interface Props {
   x: Explorer
   prefs: Preferences
   update: (p: Partial<Preferences>) => void
   favorite: () => void
-  control: (action: 'close' | 'minimize' | 'toggleMaximize') => void
   onTrash: () => void
+  onEmptyTrash: () => void
   onApplications: () => void
   onAddConnection: () => void
   onRemoveConnection: (id: string) => void
@@ -44,8 +48,8 @@ export function Sidebar({
   prefs,
   update,
   favorite,
-  control,
   onTrash,
+  onEmptyTrash,
   onApplications,
   onAddConnection,
   onRemoveConnection,
@@ -54,8 +58,29 @@ export function Sidebar({
   onMount,
   trashPath,
 }: Props) {
+  const [creatingTag, setCreatingTag] = useState(false)
+  const allTags = [...TAG_PRESETS, ...prefs.customTags]
+  const [menu, setMenu] = useState<
+    | { kind: 'trash'; x: number; y: number }
+    | { kind: 'favorite'; x: number; y: number; path: string }
+    | null
+  >(null)
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('blur', close)
+    }
+  }, [menu])
   const iconFor = (name: string) =>
-    name === '个人文件夹' ? (
+    name === '废纸篓' ? (
+      <Trash2 />
+    ) : name === '最近使用' ? (
+      <Clock />
+    ) : name === '个人文件夹' ? (
       <Home />
     ) : name === '桌面' ? (
       <Monitor />
@@ -78,27 +103,14 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-title" data-tauri-drag-region>
-        <div className="traffic">
-          <button title="关闭窗口" className="traffic-close" onClick={() => control('close')} />
-          <button title="最小化" className="traffic-minimize" onClick={() => control('minimize')} />
-          <button
-            title="最大化"
-            className="traffic-maximize"
-            onClick={() => control('toggleMaximize')}
-          />
-        </div>
         <span data-tauri-drag-region>Fiex</span>
       </div>
       <div className="sidebar-content">
         {prefs.sidebarOrder.map((section) => {
           if (section === 'places') {
             const order = new Map(prefs.placeOrder.map((key, index) => [key, index]))
-            const places = x.locations
-              .filter(
-                (location) =>
-                  (location.kind === 'favorite' || location.kind === 'applications') &&
-                  !prefs.hiddenPlaces.includes(location.path || location.name),
-              )
+            const places = commonPlaces(x.locations)
+              .filter((location) => !prefs.hiddenPlaces.includes(location.path || location.name))
               .sort(
                 (left, right) =>
                   (order.get(left.path || left.name) ?? Number.MAX_SAFE_INTEGER) -
@@ -110,14 +122,25 @@ export function Sidebar({
                 <div className="sidebar-label">常用位置</div>
                 {places.map((location) => (
                   <button
-                    className={`nav-item ${location.path && x.path === location.path ? 'active' : ''}`}
+                    className={`nav-item ${(location.kind === 'trash' ? trashPath && x.path === trashPath : location.path && x.path === location.path) ? 'active' : ''}`}
                     key={`${location.kind}:${location.path || location.name}`}
                     onClick={() =>
-                      location.kind === 'applications' && !location.path
-                        ? onApplications()
-                        : x.navigate(location.path)
+                      location.kind === 'trash'
+                        ? onTrash()
+                        : location.kind === 'applications' && !location.path
+                          ? onApplications()
+                          : x.navigate(location.path)
                     }
-                    data-drop-folder={location.path || undefined}
+                    onContextMenu={(event) => {
+                      if (location.kind !== 'trash') return
+                      event.preventDefault()
+                      setMenu({ kind: 'trash', x: event.clientX, y: event.clientY })
+                    }}
+                    data-drop-folder={
+                      location.kind === 'trash' || location.kind === 'recent'
+                        ? undefined
+                        : location.path || undefined
+                    }
                   >
                     {iconFor(location.name)}
                     <span>{location.name}</span>
@@ -131,11 +154,7 @@ export function Sidebar({
               <div className="favorites-section" data-bookmark-drop="true" key="favorites">
                 <div className="sidebar-section-title">
                   <span className="sidebar-label">收藏</span>
-                  <button
-                    className="icon-button"
-                    title="收藏当前文件夹；也可以把文件夹拖到这里"
-                    onClick={favorite}
-                  >
+                  <button className="icon-button" title="收藏当前文件夹" onClick={favorite}>
                     <Plus size={14} />
                   </button>
                 </div>
@@ -149,27 +168,23 @@ export function Sidebar({
                       <button
                         className={`nav-item ${x.path === location.path ? 'active' : ''}`}
                         onClick={() => x.navigate(location.path)}
-                      >
-                        <Star />
-                        <span>{location.name}</span>
-                      </button>
-                      <button
-                        className="favorite-remove icon-button"
-                        title="移除收藏"
-                        onClick={() =>
-                          update({
-                            favorites: prefs.favorites.filter(
-                              (item) => item.path !== location.path,
-                            ),
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          setMenu({
+                            kind: 'favorite',
+                            x: event.clientX,
+                            y: event.clientY,
+                            path: location.path,
                           })
-                        }
+                        }}
                       >
-                        <X size={12} />
+                        <FavoriteIcon name={location.name} />
+                        <span>{location.name}</span>
                       </button>
                     </div>
                   ))
                 ) : (
-                  <p className="sidebar-hint">将常用文件夹拖到这里收藏</p>
+                  <></>
                 )}
               </div>
             )
@@ -177,14 +192,24 @@ export function Sidebar({
           if (section === 'tags') {
             return (
               <Fragment key="tags">
-                <div className="sidebar-label tags-label">标签</div>
-                {TAG_PRESETS.map((tag) => (
+                <div className="sidebar-section-title">
+                  <span className="sidebar-label">标签</span>
+                  <button
+                    className="icon-button"
+                    aria-label="添加标签"
+                    title="添加标签"
+                    onClick={() => setCreatingTag(true)}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {allTags.map((tag) => (
                   <button
                     key={tag.name}
                     className={`nav-item tag-nav ${x.tagFilter === tag.name ? 'active' : ''}`}
                     onClick={() => x.setTagFilter(x.tagFilter === tag.name ? null : tag.name)}
                   >
-                    <span className="tag-dot" style={{ background: tag.hex }} />
+                    <span className="tag-dot" style={{ background: tagColor(tag.color) }} />
                     <span>{tag.name}</span>
                   </button>
                 ))}
@@ -205,77 +230,86 @@ export function Sidebar({
               </div>
               {x.locations
                 .filter((location) => location.kind === 'disk')
-                .map((location, index) => (
-                  <div className="device-row" key={location.path || location.device}>
-                    <button
-                      className={`nav-item disk-item ${location.mounted || location.usbfs ? '' : 'disk-unmounted'} ${x.path === location.path ? 'active' : ''}`}
-                      onClick={() =>
-                        location.path ? x.navigate(location.path) : onMount(location.device)
-                      }
-                      title={location.path ? location.path : '未挂载，点击授权挂载'}
-                    >
-                      {location.removable ? <Usb /> : <HardDrive />}
-                      <span>
-                        <span>{location.name || location.path}</span>
-                        <small
-                          className="disk-capacity"
-                          title={`可用 ${size(location.available)} / 总计 ${size(location.total)}`}
-                        >
-                          {!location.mounted
-                            ? size(location.total)
-                            : location.total > 0
-                              ? `${size(location.available)} / ${size(location.total)}`
-                              : size(location.available)}
-                          {location.filesystem && (
-                            <span className="disk-fs">
-                              {location.filesystem.toUpperCase()}
-                              {location.usbfs
-                                ? ['APFS', 'HFS', 'HFS+', 'HFSX', 'BTRFS'].includes(
-                                    location.filesystem.toUpperCase(),
-                                  )
-                                  ? ' · 只读'
-                                  : ' · 内置'
-                                : !location.mounted
-                                  ? ' · 挂载'
-                                  : ''}
+                .map((location, index) => {
+                  const color = DISK_COLORS[index % DISK_COLORS.length]
+                  const used =
+                    location.total > 0
+                      ? Math.min(100, Math.max(0, (1 - location.available / location.total) * 100))
+                      : 0
+                  return (
+                    <div className="device-row" key={location.path || location.device}>
+                      <button
+                        className={`nav-item disk-item ${location.mounted || location.usbfs ? '' : 'disk-unmounted'} ${x.path === location.path ? 'active' : ''}`}
+                        onClick={() =>
+                          location.path ? x.navigate(location.path) : onMount(location.device)
+                        }
+                        title={location.path ? location.path : '未挂载，点击授权挂载'}
+                      >
+                        {location.removable ? <Usb color={color} /> : <HardDrive color={color} />}
+                        <span>
+                          <span>{location.name || location.path}</span>
+                          <small
+                            className="disk-capacity"
+                            title={`可用 ${size(location.available)} / 总计 ${size(location.total)}`}
+                          >
+                            {!location.mounted
+                              ? size(location.total)
+                              : location.total > 0
+                                ? `${size(location.available)} / ${size(location.total)}`
+                                : size(location.available)}
+                            {location.filesystem && (
+                              <span className="disk-fs">
+                                {location.filesystem.toUpperCase()}
+                                {location.usbfs
+                                  ? ['APFS', 'HFS', 'HFS+', 'HFSX', 'BTRFS'].includes(
+                                      location.filesystem.toUpperCase(),
+                                    )
+                                    ? ' · 只读'
+                                    : ' · 内置'
+                                  : !location.mounted
+                                    ? ' · 挂载'
+                                    : ''}
+                              </span>
+                            )}
+                          </small>
+                          {location.total > 0 && (
+                            <span
+                              className="disk-meter"
+                              role="progressbar"
+                              aria-label={`${location.name || location.path} 已用 ${Math.round(used)}%`}
+                              aria-valuenow={Math.round(used)}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                            >
+                              <i style={{ width: `${used}%`, background: color }} />
                             </span>
                           )}
-                        </small>
-                        {location.total > 0 && (
-                          <i className="disk-meter">
-                            <i
-                              style={{
-                                width: `${(1 - location.available / location.total) * 100}%`,
-                                background: DISK_COLORS[index % DISK_COLORS.length],
-                              }}
-                            />
-                          </i>
-                        )}
-                      </span>
-                    </button>
-                    {location.usbfs ? (
-                      <button
-                        className="device-eject icon-button"
-                        title="弹出 U 盘"
-                        onClick={() => onEjectDevice(location.device)}
-                      >
-                        <Unplug size={13} />
+                        </span>
                       </button>
-                    ) : (
-                      location.mounted &&
-                      location.path !== '/' &&
-                      !/^[A-Za-z]:[\\/]?$/.test(location.path) && (
+                      {location.usbfs ? (
                         <button
                           className="device-eject icon-button"
-                          title="弹出设备"
-                          onClick={() => onEject(location.path)}
+                          title="弹出 U 盘"
+                          onClick={() => onEjectDevice(location.device)}
                         >
                           <Unplug size={13} />
                         </button>
-                      )
-                    )}
-                  </div>
-                ))}
+                      ) : (
+                        location.mounted &&
+                        location.path !== '/' &&
+                        !/^[A-Za-z]:[\\/]?$/.test(location.path) && (
+                          <button
+                            className="device-eject icon-button"
+                            title="弹出设备"
+                            onClick={() => onEject(location.path)}
+                          >
+                            <Unplug size={13} />
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )
+                })}
               {x.connections.map((connection) => (
                 <div className="device-row" key={connection.id}>
                   <button
@@ -301,15 +335,80 @@ export function Sidebar({
           )
         })}
       </div>
-      <div className="sidebar-bottom">
-        <button
-          className={`nav-item ${trashPath && x.path === trashPath ? 'active' : ''}`}
-          onClick={onTrash}
+      {menu && (
+        <div
+          className="context-menu sidebar-menu"
+          role="menu"
+          aria-label={menu.kind === 'trash' ? '废纸篓' : '收藏'}
+          style={{ left: menu.x, top: menu.y }}
         >
-          <Trash2 />
-          <span>废纸篓</span>
-        </button>
-      </div>
+          {menu.kind === 'trash' ? (
+            <>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null)
+                  onTrash()
+                }}
+              >
+                <Folder size={14} />
+                打开废纸篓
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null)
+                  onEmptyTrash()
+                }}
+              >
+                <Trash size={14} />
+                清空废纸篓
+              </button>
+            </>
+          ) : (
+            <button
+              role="menuitem"
+              onClick={() => {
+                update({
+                  favorites: prefs.favorites.filter((item) => item.path !== menu.path),
+                })
+                setMenu(null)
+              }}
+            >
+              <X size={14} />
+              从侧栏移除
+            </button>
+          )}
+        </div>
+      )}
+      {creatingTag && (
+        <CreateTagDialog
+          existing={allTags}
+          onClose={() => setCreatingTag(false)}
+          onCreate={(tag) => {
+            update({ customTags: [...prefs.customTags, tag] })
+            setCreatingTag(false)
+          }}
+        />
+      )}
     </aside>
+  )
+}
+
+function FavoriteIcon({ name }: { name: string }) {
+  const visual = fileVisual({
+    name,
+    isDir: true,
+    extension: name.split('.').pop()?.toLowerCase() || '',
+  })
+  return (
+    <span className="file-icon" style={{ width: 18, height: 18 }}>
+      <img
+        src={visual.url}
+        className={visual.generic ? 'generic-folder' : ''}
+        alt=""
+        draggable={false}
+      />
+    </span>
   )
 }

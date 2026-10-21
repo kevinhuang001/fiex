@@ -87,11 +87,6 @@ export function IgnoreSettings({
             title: '压缩忽略',
             reset: defaultOperationIgnore,
           },
-          {
-            key: 'copyIgnore',
-            title: '复制 / 移动忽略',
-            reset: defaultOperationIgnore,
-          },
         ] as const
       ).map(({ key, title, reset }) => (
         <IgnoreEditor

@@ -2,30 +2,46 @@ import { FileViews } from '@/components/browser/FileViews'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
+import { ActivityCenter } from '@/components/ActivityCenter'
+import { SecondaryPane } from '@/components/SecondaryPane'
+import { WorkspaceBar } from '@/components/WorkspaceBar'
 import { ExplorerTabs } from '@/components/explorer/ExplorerTabs'
 import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { GitPanel } from '@/components/GitPanel'
 import { Sidebar } from '@/components/Sidebar'
 import { useAppController } from '@/hooks/useAppController'
-import { call, demo } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import { parent } from '@/lib/files'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
+import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
+
+  // The label size is the reference size: every window is zoomed by the same
+  // ratio so the preference scales the sidebar, toolbar, dialogs and file list
+  // together instead of only enlarging file names.
+  useEffect(() => {
+    if (!native) return
+    void getCurrentWebviewWindow()
+      .setZoom(app.prefs.fontSize / 11)
+      .catch(() => {})
+  }, [app.prefs.fontSize])
   return (
     <div
       className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''}`}
-      style={{ '--label-size': `${app.prefs.fontSize}px` } as CSSProperties}
+      data-platform={app.platform}
+      style={{ '--label-size': '11px' } as CSSProperties}
     >
       <Sidebar
-        x={app.x}
+        x={{ ...app.x, locations: app.left.locations, connections: app.left.connections }}
         prefs={app.prefs}
         update={app.update}
         favorite={app.favorite}
-        control={app.control}
         onTrash={app.openTrash}
+        onEmptyTrash={app.emptyTrash}
         onApplications={app.openApplications}
         onAddConnection={() => app.setConnectionOpen(true)}
         onRemoveConnection={app.removeConnection}
@@ -34,11 +50,25 @@ export default function App() {
         onMount={app.mountDevice}
         trashPath={app.trashPath}
       />
-      <main className="main">
-        <ExplorerToolbar {...app} />
+      <main
+        className={`main ${app.split ? 'split' : ''}`}
+        style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
+      >
         <ExplorerTabs {...app} />
-        <ExplorerPathBar {...app} />
-        {demo && <div className="demo-note">界面演示 · 桌面应用连接真实文件系统</div>}
+        <ExplorerToolbar
+          {...app}
+          split={app.split}
+          onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
+        />
+        <ExplorerPathBar {...app} x={app.left} />
+        {app.gitSwitched && (
+          <div className="history-banner">
+            <span>
+              历史版本 · {app.x.git?.branch || app.x.path.split('/')[3]?.slice(0, 8)} · 只读
+            </span>
+            <button onClick={app.returnToWorktree}>返回工作区</button>
+          </div>
+        )}
         {app.x.error && (
           <div className="error-banner" role="alert">
             <Info size={16} />
@@ -64,32 +94,71 @@ export default function App() {
             {app.x.warnings.join('\n')}
           </details>
         )}
-        {app.x.loading ? (
+        {app.left.loading && !app.left.hasListing ? (
           <div className="loading">
             <LoaderCircle className="spin" />
             正在读取文件夹…
           </div>
         ) : (
-          <FileViews
-            readOnly={app.gitSwitched}
-            explorer={app.x}
+          <div
+            className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
+            onPointerDownCapture={() => app.setActive('left')}
+          >
+            <FileViews
+              readOnly={app.left.path.startsWith('history://') || app.left.directoryReadOnly}
+              trashPath={app.trashPath}
+              explorer={app.left}
+              prefs={app.prefs}
+              onOpen={app.openLeft}
+              onPreview={(entry) => app.previewEntry(entry, app.left)}
+              onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+              onDrop={app.transfer}
+              onBookmark={app.bookmarkPaths}
+              onWorkspace={app.addWorkspace}
+              onExternalDrag={(result) =>
+                app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
+              }
+            />
+          </div>
+        )}
+        {app.split && (
+          <SecondaryPane
+            explorer={app.right}
             prefs={app.prefs}
-            onOpen={app.open}
-            onPreview={app.previewEntry}
+            active={app.active === 'right'}
+            onFocus={() => app.setActive('right')}
+            onClose={() => app.closePane('right')}
+            onTransfer={(paths, destination, moving) => app.transfer(paths, destination, moving)}
+            onOpen={app.openRight}
+            onPreview={(entry) => app.previewEntry(entry, app.right)}
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
-            onDrop={app.transfer}
-            onBookmark={app.bookmarkPaths}
+            width={app.paneWidth}
+            onWidthChange={app.setPaneWidth}
           />
         )}
         <GitPanel
           open={app.gitOpen}
           git={app.x.git}
+          path={app.x.path}
+          loading={app.x.gitLoading}
+          allowInit={!app.isRemotePath(app.x.path) && !app.x.virtualVolume}
           onClose={() => app.setGitOpen(false)}
-          onRefresh={app.x.reload}
+          onRefresh={app.x.refreshGit}
+          onViewRevision={app.viewRevision}
+          onReturnToWorktree={app.returnToWorktree}
           readOnly={app.gitSwitched}
           onOpen={(path) => app.x.navigate(parent(path))}
         />
+        <WorkspaceBar
+          items={app.workspace.items}
+          open={app.workspace.open}
+          onOpen={app.open}
+          onRemove={app.workspace.remove}
+          onClear={app.workspace.clear}
+          onClose={() => app.workspace.setOpen(false)}
+        />
         <ExplorerStatusBar {...app} />
+        <ActivityCenter />
       </main>
       {app.dragging && (
         <div className="drop-overlay">

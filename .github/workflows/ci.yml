@@ -43,6 +43,7 @@ jobs:
   desktop:
     needs: checks
     name: Desktop (${{ matrix.target }})
+    needs: checks
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -51,9 +52,6 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-            bundles: app,dmg
-          - os: macos-latest
-            target: x86_64-apple-darwin
             bundles: app,dmg
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -189,9 +187,9 @@ jobs:
             valid users = fiex
             force user = fiex
           EOF
-            printf 'Zebra!2026#Quartz\nZebra!2026#Quartz\n' | sudo /opt/homebrew/bin/pdbedit -a -u fiex -s /tmp/fiex-smb.conf
+            printf 'Zebra!2026#Quartz\nZebra!2026#Quartz\n' | sudo "$(brew --prefix)/bin/pdbedit" -a -u fiex -s /tmp/fiex-smb.conf
             sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
-            sudo /opt/homebrew/sbin/samba-dot-org-smbd -s /tmp/fiex-smb.conf --foreground --no-process-group --debug-stdout -d 2 > /tmp/fiex-smbd.log 2>&1 &
+            sudo "$(brew --prefix)/sbin/samba-dot-org-smbd" -s /tmp/fiex-smb.conf --foreground --no-process-group --debug-stdout -d 2 > /tmp/fiex-smbd.log 2>&1 &
             for i in $(seq 1 30); do
               (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 && break
               sleep 1
@@ -290,6 +288,7 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
             src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+
   release:
     name: Publish tested installers
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

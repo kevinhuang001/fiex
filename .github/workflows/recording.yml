@@ -1,0 +1,266 @@
+name: Record native integrations
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: recording-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  filesystem-fixtures:
+    name: Disk images (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26-intel]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image formatters
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ntfs-3g e2fsprogs btrfs-progs
+      - run: python3 scripts/ci-filesystems.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filesystem-images-${{ runner.os }}
+          path: .ci/filesystems/*.img
+          if-no-files-found: error
+          retention-days: 3
+  recording:
+    needs: [filesystem-fixtures]
+    name: Record (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    # Outgoing native drag-and-drop is a known platform limitation on the two
+    # proprietary webviews: WKWebView never starts the drag at all (the frontend
+    # hand-off to startFileDrag is logged, the drag never begins), and on Windows
+    # the shell's DoDragDrop never returns so the plugin's drag callback never
+    # fires. Dragging a file out of Fiex therefore cannot be verified there.
+    # Linux (GTK) starts and finishes the drag, so its job stays strict and keeps
+    # recording the full native integration video; the macOS and Windows jobs keep
+    # running and keep uploading their videos and logs for inspection, they are
+    # just not allowed to fail the workflow for a platform limitation.
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26-intel
+            target: x86_64-apple-darwin
+            experimental: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            experimental: true
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            experimental: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        with:
+          packages: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev python3-venv
+          version: 1.0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+          cache-all-crates: true
+          cache-on-failure: true
+      - name: Start WebDAV test server
+        shell: bash
+        run: |
+          set -euo pipefail
+          PY=python3
+          if [ "$RUNNER_OS" = "Windows" ]; then PY=python; fi
+          "$PY" -m venv .ci/venv
+          if [ "$RUNNER_OS" = "Windows" ]; then VPY=.ci/venv/Scripts/python.exe; else VPY=.ci/venv/bin/python; fi
+          "$VPY" -m pip install -q --upgrade pip wsgidav cheroot impacket
+          mkdir -p .ci/webdav
+          printf 'hello webdav\n' > .ci/webdav/hello.txt
+          ROOT="$PWD/.ci/webdav"
+          if command -v cygpath >/dev/null 2>&1; then ROOT=$(cygpath -w "$ROOT"); fi
+          "$VPY" -c 'from wsgidav.server.server_cli import run; run()' --host=127.0.0.1 --port=8080 --root="$ROOT" --auth=anonymous > .ci/wsgidav.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -sS -X PROPFIND -H 'Depth: 1' http://127.0.0.1:8080/ >/dev/null || (cat .ci/wsgidav.log; exit 1)
+      - name: Start SMB test server
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y samba smbclient
+            mkdir -p /tmp/fiex-smb
+            printf 'hello smb\n' > /tmp/fiex-smb/hello.txt
+            chmod 777 /tmp/fiex-smb
+            sudo useradd -M -s /usr/sbin/nologin fiex 2>/dev/null || true
+            printf 'Zebra!2026#Quartz\nZebra!2026#Quartz\n' | sudo smbpasswd -a fiex -s
+            cat > /tmp/fiex-smb.conf <<'EOF'
+          [global]
+            workgroup = WORKGROUP
+            server role = standalone server
+            security = user
+            map to guest = Bad User
+            server min protocol = SMB2
+            smb ports = 445
+          [fiex]
+            path = /tmp/fiex-smb
+            browseable = yes
+            read only = no
+            guest ok = yes
+            valid users = fiex
+            force user = fiex
+          EOF
+            sudo systemctl stop smbd 2>/dev/null || true
+            sudo smbd -s /tmp/fiex-smb.conf -F --no-process-group > /tmp/fiex-smbd.log 2>&1 &
+            for i in $(seq 1 20); do
+              smbclient //127.0.0.1/fiex -U fiex%Zebra!2026#Quartz -c 'ls' >/dev/null 2>&1 && break
+              sleep 1
+            done
+            smbclient //127.0.0.1/fiex -U fiex%Zebra!2026#Quartz -c 'ls' || (cat /tmp/fiex-smbd.log; exit 1)
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            powershell.exe -NoProfile -Command "
+              \$ErrorActionPreference = 'Stop';
+              net accounts /minpwlen:0 | Out-Null;
+              if (Get-LocalUser -Name fiex -ErrorAction SilentlyContinue) { Remove-LocalUser -Name fiex };
+              New-LocalUser -Name fiex -Password (ConvertTo-SecureString 'Zebra!2026#Quartz' -AsPlainText -Force) -PasswordNeverExpires | Out-Null;
+              New-Item -ItemType Directory -Force C:\fiex-smb | Out-Null;
+              [IO.File]::WriteAllText('C:\fiex-smb\hello.txt', 'hello smb' + [char]10);
+              if (Get-SmbShare -Name fiex -ErrorAction SilentlyContinue) { Remove-SmbShare -Name fiex -Force };
+              New-SmbShare -Name fiex -Path C:\fiex-smb -FullAccess (\$env:COMPUTERNAME + '\fiex') | Out-Null;
+              icacls C:\fiex-smb /grant 'fiex:(OI)(CI)F' | Out-Null;
+              New-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa -Name LocalAccountTokenFilterPolicy -Value 1 -PropertyType DWord -Force | Out-Null;
+              Start-Service LanmanServer
+            "
+            for i in $(seq 1 30); do
+              (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 && break
+              sleep 1
+            done
+            (echo > /dev/tcp/127.0.0.1/445) >/dev/null 2>&1 || exit 1
+          else
+            brew install samba
+            if ! id fiex >/dev/null 2>&1; then
+              sudo sysadminctl -addUser fiex -password 'Zebra!2026#Quartz' -fullName fiex 2>/dev/null || true
+            fi
+            sudo mkdir -p /Users/Shared/fiex-smb
+            printf 'hello smb\n' | sudo tee /Users/Shared/fiex-smb/hello.txt >/dev/null
+            sudo chmod 777 /Users/Shared/fiex-smb
+            sudo mkdir -p /tmp/fiex-samba/private /tmp/fiex-samba/state /tmp/fiex-samba/cache /tmp/fiex-samba/lock /tmp/fiex-samba/pid
+            sudo chmod -R 777 /tmp/fiex-samba
+            cat > /tmp/fiex-smb.conf <<'EOF'
+          [global]
+            workgroup = WORKGROUP
+            server role = standalone server
+            security = user
+            map to guest = Bad User
+            guest account = nobody
+            server min protocol = SMB2
+            smb ports = 10445
+            private dir = /tmp/fiex-samba/private
+            state directory = /tmp/fiex-samba/state
+            cache directory = /tmp/fiex-samba/cache
+            lock directory = /tmp/fiex-samba/lock
+            pid directory = /tmp/fiex-samba/pid
+            ncalrpc dir = /tmp/fiex-samba/private
+          [fiex]
+            path = /Users/Shared/fiex-smb
+            browseable = yes
+            read only = no
+            guest ok = no
+            valid users = fiex
+            force user = fiex
+          EOF
+            printf 'Zebra!2026#Quartz\nZebra!2026#Quartz\n' | sudo "$(brew --prefix)/bin/pdbedit" -a -u fiex -s /tmp/fiex-smb.conf
+            sudo launchctl bootout system/com.apple.smbd 2>/dev/null || true
+            sudo "$(brew --prefix)/sbin/samba-dot-org-smbd" -s /tmp/fiex-smb.conf --foreground --no-process-group --debug-stdout -d 2 > /tmp/fiex-smbd.log 2>&1 &
+            for i in $(seq 1 30); do
+              (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 && break
+              sleep 1
+            done
+            (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 || (cat /tmp/fiex-smbd.log; exit 1)
+            echo "FIEX_SMB_PORT=10445" >> "$GITHUB_ENV"
+          fi
+      - run: npm ci
+      - run: npm run icons
+      - run: npm run build
+      - name: Download filesystem images
+        uses: actions/download-artifact@v4
+        with:
+          pattern: filesystem-images-*
+          path: .ci/filesystems
+          merge-multiple: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native recording tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install pyautogui pillow mss
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb dbus-x11 openbox thunar xdotool ffmpeg python3-tk scrot gcc pkg-config
+            # The upload target is a real browser, built here from
+            # scripts/upload-browser.c. It is WebKitGTK rather than Chromium
+            # because Chromium asks for the URI list, previews the dragged file in
+            # its status bar and then refuses the drop on a headless X server; a
+            # stock Thunar drag into it is refused in exactly the same way.
+            gcc scripts/upload-browser.c -o .ci/upload-browser $(pkg-config --cflags --libs webkit2gtk-4.1) -O1
+            echo "FIEX_UPLOAD_BROWSER=$PWD/.ci/upload-browser" >> "$GITHUB_ENV"
+          else
+            npm install --prefix .ci/browser --no-package-lock electron@44.9.2
+            node <<'JS'
+            const fs = require('node:fs')
+            const electron = require('./.ci/browser/node_modules/electron')
+            fs.appendFileSync(process.env.GITHUB_ENV, `FIEX_UPLOAD_ELECTRON=${electron}\n`)
+            JS
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              brew install ffmpeg
+            else
+              choco install ffmpeg -y --no-progress
+            fi
+          fi
+      - name: Build separate native UI test binary
+        run: cargo build --locked --release --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --features ci-driver,tauri/custom-protocol
+      - name: Record and verify native integrations
+        # The full sweep now runs end to end (transfers, git, WebDAV/SMB and the
+        # disk images), so the bound has to cover real work rather than a stall.
+        # scripts/native-ci.py dumps every thread's stack after four minutes of
+        # no progress, so a hang is still attributable instead of silent.
+        timeout-minutes: 30
+        shell: bash
+        env:
+          FIEX_WEBDAV_URL: http://127.0.0.1:8080/
+          FIEX_SMB_HOST: 127.0.0.1
+          FIEX_SMB_SHARE: fiex
+          FIEX_SMB_USER: fiex
+          FIEX_SMB_PASSWORD: Zebra!2026#Quartz
+          FIEX_CI_IMAGES: ${{ github.workspace }}/.ci/filesystems
+        run: |
+          set -euo pipefail
+          binary="$PWD/src-tauri/target/${{ matrix.target }}/release/fiex"
+          if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a -s '-screen 0 1920x1080x24' dbus-run-session -- bash -c 'openbox > /tmp/fiex-openbox.log 2>&1 & python scripts/native-ci.py "$1"' bash "$binary"
+          else
+            python scripts/native-ci.py "$binary"
+          fi
+      - name: Native integration videos and verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-integrations-${{ matrix.target }}
+          path: artifacts/native/
+          if-no-files-found: error

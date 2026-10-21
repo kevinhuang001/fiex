@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.2.4"
+version = "0.2.5"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -18,14 +18,24 @@ required-features = ["desktop"]
 
 [features]
 default = ["desktop", "usbfs"]
-desktop = ["dep:tauri", "dep:tauri-build", "dep:objc2", "dep:file_icon_provider", "dep:image", "dep:tauri-plugin-drag"]
+desktop = [
+    "dep:gtk",
+    "dep:tauri",
+    "dep:tauri-build",
+    "dep:objc2",
+    "dep:file_icon_provider",
+    "dep:image",
+    "dep:tauri-plugin-drag",
+    "dep:rfd",
+]
+ci-driver = ["desktop", "usbfs"]
 usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]
 
 [build-dependencies]
 tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["protocol-asset", "macos-private-api"], optional = true }
+tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
 tauri-plugin-drag = { version = "2.1.1", optional = true }
 rust-fs-ntfs = { version = "0.10", optional = true }
 rust-fs-ext4 = { version = "0.8", optional = true }
@@ -51,6 +61,10 @@ trash = "5"
 open = "5"
 which = "8"
 base64 = "0.22"
+sha2 = "0.10"
+sha1 = "0.10"
+md-5 = "0.11"
+crc32fast = "1"
 mime_guess = "2"
 zip = { version = "4", default-features = false, features = ["deflate", "bzip2", "zstd", "aes-crypto"] }
 tar = "0.4"
@@ -65,12 +79,18 @@ sysinfo = { version = "0.37", default-features = false, features = ["disk"] }
 file_icon_provider = { version = "1", optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "0.18", optional = true }
+rfd = { version = "0.15", optional = true, default-features = false, features = ["gtk3"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
+rfd = { version = "0.15", optional = true, default-features = false }
 objc2 = { version = "0.6", optional = true }
 plist = "1"
 xattr = "1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+rfd = { version = "0.15", optional = true, default-features = false }
 lnk = "0.5"
 
 [profile.release]

@@ -1,18 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronRight, CloudCheck, CloudDownload, Files, FolderOpen, SearchX } from 'lucide-react'
+import {
+  ChevronRight,
+  CloudCheck,
+  CloudDownload,
+  Files,
+  FolderOpen,
+  LoaderCircle,
+  SearchX,
+} from 'lucide-react'
 import { FileIcon } from '../FileIcon'
+import { BrowserColumn } from './BrowserColumn'
+import { VirtualFileGrid } from './VirtualFileGrid'
 import { InlineRename } from './InlineRename'
 import { TagDots } from '../TagDots'
 import { asset, call, native } from '@/lib/api'
-import { DRAG_ICON } from '@/lib/drag'
-import { startDrag } from '@crabnebula/tauri-plugin-drag'
+import { startFileDrag } from '@/lib/drag'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type { Entry, Listing, Preferences } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
 import { gitState } from '@/lib/git'
 import type { CSSProperties } from 'react'
 
+// macOS stops reporting pointer events once the cursor leaves the window while a
+// button is held, so hand the drag to the OS a few pixels before the boundary.
+const EDGE = 4
 interface Props {
   explorer: Explorer
   prefs: Preferences
@@ -21,12 +33,16 @@ interface Props {
   onMenu: (e: Entry, x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
   onBookmark: (paths: string[]) => void
+  onWorkspace: (paths: string[]) => void
+  onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
   readOnly?: boolean
+  trashPath?: string | null
 }
 
 type DropTarget =
   | { kind: 'folder'; path: string; element: HTMLElement }
   | { kind: 'bookmark'; element: HTMLElement }
+  | { kind: 'workspace'; element: HTMLElement }
 
 function dropTargetAt(x: number, y: number): DropTarget | null {
   const element = document.elementFromPoint(x, y)
@@ -35,6 +51,8 @@ function dropTargetAt(x: number, y: number): DropTarget | null {
     return { kind: 'folder', path: folder.dataset.dropFolder, element: folder }
   const bookmark = element?.closest('[data-bookmark-drop]') as HTMLElement | null
   if (bookmark) return { kind: 'bookmark', element: bookmark }
+  const workspace = element?.closest('[data-workspace-drop]') as HTMLElement | null
+  if (workspace) return { kind: 'workspace', element: workspace }
   return null
 }
 
@@ -45,6 +63,9 @@ function clearDropHighlight() {
   document
     .querySelectorAll('.bookmark-drop')
     .forEach((element) => element.classList.remove('bookmark-drop'))
+  document
+    .querySelectorAll('.workspace-drop')
+    .forEach((element) => element.classList.remove('workspace-drop'))
 }
 
 function SyncBadge({ sync }: { sync: Entry['sync'] }) {
@@ -90,26 +111,99 @@ function NameCell({
 }
 
 export function FileViews(props: Props) {
-  const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark } = props
+  const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark, onWorkspace } = props
   const readOnly = Boolean(props.readOnly)
+  const inTrash = Boolean(props.trashPath && x.path === props.trashPath)
   const entries = useMemo(
     () => sortEntries(x.entries, prefs.sort, prefs.descending),
     [x.entries, prefs.sort, prefs.descending],
   )
-  const iconSize = Math.round(prefs.fontSize * 8)
+  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
+  // The window is zoomed from the font-size preference, so the tile geometry
+  // stays at the reference size and scales with the rest of the interface.
+  const iconSize = 88
   const anchor = useRef<string | null>(null)
   const suppressClick = useRef(false)
   const container = useRef<HTMLDivElement>(null)
+  const [band, setBand] = useState<{
+    left: number
+    top: number
+    width: number
+    height: number
+  } | null>(null)
+  const bandStart = useRef<{ x: number; y: number; base: string[]; additive: boolean } | null>(null)
+  const bandDragged = useRef(false)
+  const startBand = (event: React.PointerEvent) => {
+    if (event.button !== 0 || !container.current) return
+    // Begin only from empty space: rows, tiles, inputs and buttons keep their
+    // own drag/click behaviour.
+    if ((event.target as Element).closest('[data-path],button,input,a')) return
+    const additive = event.metaKey || event.ctrlKey || event.shiftKey
+    bandStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      base: additive ? [...x.selected] : [],
+      additive,
+    }
+    bandDragged.current = false
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const moveBand = (event: React.PointerEvent) => {
+    const start = bandStart.current
+    if (!start || !container.current) return
+    const left = Math.min(start.x, event.clientX)
+    const top = Math.min(start.y, event.clientY)
+    const width = Math.abs(event.clientX - start.x)
+    const height = Math.abs(event.clientY - start.y)
+    if (width > 3 || height > 3) bandDragged.current = true
+    setBand({ left, top, width, height })
+    const bandRect = { left, top, right: left + width, bottom: top + height }
+    const picked: string[] = []
+    container.current.querySelectorAll<HTMLElement>('[data-path]').forEach((element) => {
+      const rect = element.getBoundingClientRect()
+      const hit =
+        rect.left < bandRect.right &&
+        rect.right > bandRect.left &&
+        rect.top < bandRect.bottom &&
+        rect.bottom > bandRect.top
+      if (hit && element.dataset.path) picked.push(element.dataset.path)
+    })
+    const next = start.additive ? [...new Set([...start.base, ...picked])] : picked
+    x.setSelected(next)
+  }
+  const endBand = () => {
+    bandStart.current = null
+    setBand(null)
+  }
   const [ghost, setGhost] = useState<{ paths: string[]; x: number; y: number } | null>(null)
   const beginPointerDrag = (event: React.PointerEvent, entry: Entry) => {
     if (event.button !== 0 || x.renaming || readOnly) return
     if ((event.target as Element).closest('input,button,a')) return
-    const paths = x.selected.includes(entry.path) ? [...x.selected] : [entry.path]
-    if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !x.selected.includes(entry.path)) {
+    const paths = selectedPaths.has(entry.path) ? [...x.selected] : [entry.path]
+    if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !selectedPaths.has(entry.path)) {
       x.setSelected([entry.path])
     }
     const startX = event.clientX
     const startY = event.clientY
+    // Keep pointer events flowing once the cursor crosses the window edge:
+    // without capture macOS/Windows stop reporting moves before the drag can
+    // be handed over to the native drag session.
+    const captureTarget = event.currentTarget as Element
+    const pointerId = event.pointerId
+    try {
+      captureTarget.setPointerCapture(pointerId)
+    } catch {
+      // Older webviews may not support pointer capture; the edge check below
+      // still handles the common case.
+    }
+    const releaseCapture = () => {
+      try {
+        if (captureTarget.hasPointerCapture?.(pointerId))
+          captureTarget.releasePointerCapture(pointerId)
+      } catch {
+        // Capture is already gone.
+      }
+    }
     let active = false
     let nativeStarted = false
     const cleanup = () => {
@@ -117,20 +211,31 @@ export function FileViews(props: Props) {
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
       document.removeEventListener('mouseleave', leave)
+      releaseCapture()
       document.body.classList.remove('dragging-file')
       clearDropHighlight()
       setGhost(null)
     }
-    const startNative = () => {
+    const startNative = (copyRequested = false) => {
       if (!active || nativeStarted) return
       nativeStarted = true
       cleanup()
       if (!native) return
-      void startDrag({ item: paths, icon: DRAG_ICON, mode: 'copy' }).catch((error) => {
+      void call('ci_log', {
+        message: `startNative active=${active} inner=${window.innerWidth}x${window.innerHeight} paths=${JSON.stringify(paths)}`,
+      }).catch(() => {})
+      void startFileDrag(
+        paths,
+        (result) => {
+          props.onExternalDrag?.(result)
+          if (result === 'Dropped') x.reload()
+        },
+        copyRequested,
+      ).catch((error) => {
         x.setError(String(error))
       })
     }
-    const leave = () => startNative()
+    const leave = (event: MouseEvent) => startNative(event.altKey || event.ctrlKey)
     const move = (moveEvent: PointerEvent) => {
       if (!active) {
         if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
@@ -139,12 +244,12 @@ export function FileViews(props: Props) {
       }
       if (
         native &&
-        (moveEvent.clientX <= 1 ||
-          moveEvent.clientY <= 1 ||
-          moveEvent.clientX >= window.innerWidth - 1 ||
-          moveEvent.clientY >= window.innerHeight - 1)
+        (moveEvent.clientX <= EDGE ||
+          moveEvent.clientY <= EDGE ||
+          moveEvent.clientX >= window.innerWidth - EDGE ||
+          moveEvent.clientY >= window.innerHeight - EDGE)
       ) {
-        startNative()
+        startNative(moveEvent.altKey || moveEvent.ctrlKey)
         return
       }
       moveEvent.preventDefault()
@@ -153,6 +258,7 @@ export function FileViews(props: Props) {
       const target = dropTargetAt(moveEvent.clientX, moveEvent.clientY)
       if (target?.kind === 'folder') target.element.classList.add('drop-target')
       else if (target?.kind === 'bookmark') target.element.classList.add('bookmark-drop')
+      else if (target?.kind === 'workspace') target.element.classList.add('workspace-drop')
     }
     const finish = (upEvent: PointerEvent) => {
       cleanup()
@@ -165,6 +271,7 @@ export function FileViews(props: Props) {
       if (target?.kind === 'folder' && !paths.includes(target.path))
         onDrop(paths, target.path, !(upEvent.altKey || upEvent.ctrlKey))
       else if (target?.kind === 'bookmark') onBookmark(paths)
+      else if (target?.kind === 'workspace') onWorkspace(paths)
     }
     window.addEventListener('pointermove', move, { passive: false })
     window.addEventListener('pointerup', finish)
@@ -201,13 +308,13 @@ export function FileViews(props: Props) {
       },
       onContextMenu: (event: React.MouseEvent) => {
         event.preventDefault()
-        if (!x.selected.includes(e.path)) x.setSelected([e.path])
+        if (!selectedPaths.has(e.path)) x.setSelected([e.path])
         onMenu(e, event.clientX, event.clientY)
       },
       onPointerDown: (event: React.PointerEvent) => beginPointerDrag(event, e),
       'data-path': e.path,
       'data-drop-folder': e.isDir ? e.path : undefined,
-      'aria-selected': x.selected.includes(e.path),
+      'aria-selected': selectedPaths.has(e.path),
       tabIndex: -1,
     }
   }
@@ -262,7 +369,7 @@ export function FileViews(props: Props) {
                 last + (event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1),
               ),
             )
-    if (last < 0) next = 0
+    if (last < 0 && event.key !== 'End' && event.key !== 'Home') next = 0
     const e = entries[next]
     x.setSelected(event.shiftKey ? [...new Set([...x.selected, e.path])] : [e.path])
     const row = flat.findIndex((r) => r.entry?.path === e.path)
@@ -284,15 +391,46 @@ export function FileViews(props: Props) {
       aria-label="文件"
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onPointerDown={startBand}
+      onPointerMove={moveBand}
+      onPointerUp={endBand}
+      onPointerCancel={endBand}
       onClick={(e) => {
+        // A finished rubber-band gesture must not collapse the selection.
+        if (bandDragged.current) {
+          bandDragged.current = false
+          return
+        }
         if (e.target === e.currentTarget) x.setSelected([])
       }}
     >
+      {band && (
+        <div
+          className="selection-band"
+          style={{ left: band.left, top: band.top, width: band.width, height: band.height }}
+        />
+      )}
       {entries.length === 0 && !x.loading && !x.error && (
         <div className="empty-state">
-          {x.query ? <SearchX /> : <FolderOpen />}
-          <h3>{x.query ? '没有找到匹配的文件' : '文件夹是空的'}</h3>
-          <p>{x.query ? '试试其他名称，或调整搜索范围。' : '拖入文件，或新建文件夹。'}</p>
+          {x.searching ? (
+            <>
+              <LoaderCircle className="spin" />
+              <h3>正在搜索…</h3>
+            </>
+          ) : (
+            <>
+              {x.query ? <SearchX /> : <FolderOpen />}
+              <h3>
+                {x.query
+                  ? '没有找到匹配的文件'
+                  : x.path === 'recent://'
+                    ? '还没有最近打开的文件'
+                    : inTrash
+                      ? '废纸篓是空的'
+                      : '文件夹是空的'}
+              </h3>
+            </>
+          )}
         </div>
       )}
       {prefs.view === 'list' && entries.length > 0 ? (
@@ -321,7 +459,7 @@ export function FileViews(props: Props) {
                   {item.entry ? (
                     <div
                       role="row"
-                      className={`file-row ${x.selected.includes(item.entry.path) ? 'selected' : ''}`}
+                      className={`file-row ${selectedPaths.has(item.entry.path) ? 'selected' : ''}`}
                       {...shared(item.entry)}
                     >
                       <span className="file-name">
@@ -367,42 +505,68 @@ export function FileViews(props: Props) {
               })()}
             </div>
           )}
-          {groups(entries, prefs.group).map(([heading, files]) => (
-            <section key={heading}>
-              {heading && <div className="group-heading">{heading}</div>}
-              <div
-                className={prefs.view === 'gallery' ? 'gallery-strip' : 'icon-grid'}
-                style={
-                  prefs.view !== 'gallery'
-                    ? ({
-                        '--tile-size': `${Math.max(96, iconSize + 38)}px`,
-                        '--icon-size': `${iconSize}px`,
-                        '--label-size': `${prefs.fontSize}px`,
-                      } as CSSProperties)
-                    : undefined
-                }
-                onClick={(event) => {
-                  if (event.target === event.currentTarget) x.setSelected([])
-                }}
-              >
-                {files.map((e) => (
-                  <div
-                    role="gridcell"
-                    className={`file-tile ${x.selected.includes(e.path) ? 'selected' : ''}`}
-                    key={e.path}
-                    {...shared(e)}
-                  >
-                    <span className="tile-icon">
-                      <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
-                    </span>
-                    <NameCell explorer={x} entry={e} className="tile-label" />
-                    <TagDots tags={e.tags} />
-                    <SyncBadge sync={e.sync} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+          {prefs.view === 'icons' && entries.length > 200 ? (
+            <VirtualFileGrid
+              entries={entries}
+              group={prefs.group}
+              tileSize={Math.max(96, iconSize + 38)}
+              rowHeight={iconSize + 76}
+              scrollRef={container}
+              target={x.renaming || x.selected.at(-1) || null}
+              render={(e) => (
+                <div
+                  role="gridcell"
+                  className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}`}
+                  key={e.path}
+                  {...shared(e)}
+                >
+                  <span className="tile-icon">
+                    <Thumbnail entry={e} size={iconSize} />
+                  </span>
+                  <NameCell explorer={x} entry={e} className="tile-label" />
+                  <TagDots tags={e.tags} />
+                  <SyncBadge sync={e.sync} />
+                </div>
+              )}
+            />
+          ) : (
+            groups(entries, prefs.group).map(([heading, files]) => (
+              <section key={heading}>
+                {heading && <div className="group-heading">{heading}</div>}
+                <div
+                  className={prefs.view === 'gallery' ? 'gallery-strip' : 'icon-grid'}
+                  style={
+                    prefs.view !== 'gallery'
+                      ? ({
+                          '--tile-size': `${Math.max(96, iconSize + 38)}px`,
+                          '--icon-size': `${iconSize}px`,
+                          '--label-size': '11px',
+                        } as CSSProperties)
+                      : undefined
+                  }
+                  onClick={(event) => {
+                    if (event.target === event.currentTarget) x.setSelected([])
+                  }}
+                >
+                  {files.map((e) => (
+                    <div
+                      role="gridcell"
+                      className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}`}
+                      key={e.path}
+                      {...shared(e)}
+                    >
+                      <span className="tile-icon">
+                        <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
+                      </span>
+                      <NameCell explorer={x} entry={e} className="tile-label" />
+                      <TagDots tags={e.tags} />
+                      <SyncBadge sync={e.sync} />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))
+          )}
         </>
       )}
       {ghost && (
@@ -444,6 +608,7 @@ function Columns({
   shared: (e: Entry) => Record<string, unknown>
   onKeyDown: (e: React.KeyboardEvent) => void
 }) {
+  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
   const [left, setLeft] = useState<Entry[]>([])
   const [right, setRight] = useState<Entry[]>([])
   const [error, setError] = useState('')
@@ -462,7 +627,7 @@ function Columns({
     return () => {
       active = false
     }
-  }, [x.path, prefs.hidden])
+  }, [x.path, prefs.hidden, prefs.displayIgnore])
   useEffect(() => {
     let active = true
     setRight([])
@@ -482,13 +647,16 @@ function Columns({
     return () => {
       active = false
     }
-  }, [selected?.path, selected?.isDir, prefs.hidden])
+  }, [selected?.path, selected?.isDir, prefs.hidden, prefs.displayIgnore])
   const column = (files: Entry[], current: boolean) => (
-    <div className="browser-column">
-      {sortEntries(files, prefs.sort, prefs.descending).map((e) => (
+    <BrowserColumn
+      entries={files}
+      prefs={prefs}
+      target={current ? x.selected.at(-1) : x.path}
+      render={(e) => (
         <div
           key={e.path}
-          className={`column-row ${x.selected.includes(e.path) || e.path === x.path ? 'selected' : ''}`}
+          className={`column-row ${selectedPaths.has(e.path) || e.path === x.path ? 'selected' : ''}`}
           data-drop-folder={e.isDir ? e.path : undefined}
           {...(current
             ? shared(e)
@@ -503,8 +671,8 @@ function Columns({
           <SyncBadge sync={e.sync} />
           {e.isDir && <ChevronRight size={13} />}
         </div>
-      ))}
-    </div>
+      )}
+    />
   )
   return (
     <div className="columns-view" role="grid" aria-label="文件" tabIndex={0} onKeyDown={onKeyDown}>
@@ -525,7 +693,7 @@ function Columns({
           <button onClick={() => onPreview(selected)}>快速查看</button>
         </div>
       ) : (
-        <div className="column-detail muted">选择文件查看预览</div>
+        <div className="column-detail muted" />
       )}
     </div>
   )

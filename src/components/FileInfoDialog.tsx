@@ -61,6 +61,7 @@ export function FileInfoDialog({
           )}
           <Button
             variant="secondary"
+            disabled={info.path.startsWith('history://')}
             onClick={() => void run('正在显示…', () => call('reveal_path', { path: info.path }))}
           >
             在系统文件管理器中显示

@@ -1,20 +1,33 @@
+import { ChecksumDialog } from '@/components/ChecksumDialog'
+import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
 import { FileInfoDialog } from '@/components/FileInfoDialog'
-import { PreferencesDialog } from '@/components/PreferencesDialog'
+import { lazy, Suspense } from 'react'
+const PreferencesDialog = lazy(() =>
+  import('@/components/PreferencesDialog').then((m) => ({ default: m.PreferencesDialog })),
+)
 import { Preview } from '@/components/Preview'
 import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { AppController } from '@/hooks/useAppController'
+import { CompressDialog } from '../CompressDialog'
 import { call } from '@/lib/api'
 import { CheckCircle2, LoaderCircle, X } from 'lucide-react'
 export function ExplorerDialogs({
+  left,
+  checksumPath,
+  setChecksumPath,
   preview,
   setPreview,
   navigatePreview,
   open,
   dialog,
   dialogBusy,
+  conflict,
+  setConflict,
+  resolveConflict,
+  busy,
   setDialog,
   setDialogBusy,
   setDialogError,
@@ -23,6 +36,9 @@ export function ExplorerDialogs({
   setDialogValue,
   dialogError,
   trashIssue,
+  compressAdvanced,
+  setCompressAdvanced,
+  compress,
   setTrashIssue,
   openTrash,
   info,
@@ -44,12 +60,19 @@ export function ExplorerDialogs({
   setToast,
 }: Pick<
   AppController,
+  | 'left'
+  | 'checksumPath'
+  | 'setChecksumPath'
   | 'preview'
   | 'setPreview'
   | 'navigatePreview'
   | 'open'
   | 'dialog'
   | 'dialogBusy'
+  | 'conflict'
+  | 'setConflict'
+  | 'resolveConflict'
+  | 'busy'
   | 'setDialog'
   | 'setDialogBusy'
   | 'setDialogError'
@@ -58,6 +81,9 @@ export function ExplorerDialogs({
   | 'setDialogValue'
   | 'dialogError'
   | 'trashIssue'
+  | 'compressAdvanced'
+  | 'setCompressAdvanced'
+  | 'compress'
   | 'setTrashIssue'
   | 'openTrash'
   | 'info'
@@ -80,6 +106,12 @@ export function ExplorerDialogs({
 >) {
   return (
     <>
+      <ConflictDialog
+        request={conflict}
+        busy={Boolean(busy)}
+        onClose={() => setConflict(null)}
+        onResolve={resolveConflict}
+      />
       <Preview
         entry={preview}
         onClose={() => setPreview(null)}
@@ -87,13 +119,20 @@ export function ExplorerDialogs({
         onOpen={open}
       />
 
+      <CompressDialog
+        format={compressAdvanced}
+        onClose={() => setCompressAdvanced(null)}
+        onSubmit={(format, options) => {
+          setCompressAdvanced(null)
+          compress(format, options)
+        }}
+      />
       <Modal
         open={!!dialog}
         onClose={() => {
           if (!dialogBusy) setDialog(null)
         }}
         title={dialog?.title || ''}
-        description={dialog?.description}
       >
         <form
           onSubmit={async (e) => {
@@ -150,12 +189,7 @@ export function ExplorerDialogs({
         </form>
       </Modal>
 
-      <Modal
-        open={trashIssue}
-        onClose={() => setTrashIssue(false)}
-        title="无法浏览废纸篓"
-        description="macOS 不允许应用直接读取 ~/.Trash。请在“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中允许 Fiex；授权后如仍无法打开，请重启 Fiex。也可以现在用 Finder 打开。"
-      >
+      <Modal open={trashIssue} onClose={() => setTrashIssue(false)} title="无法浏览废纸篓">
         <div className="dialog-actions">
           <Button variant="ghost" onClick={() => setTrashIssue(false)}>
             取消
@@ -196,9 +230,11 @@ export function ExplorerDialogs({
         onError={x.setError}
       />
 
+      <ChecksumDialog path={checksumPath} onClose={() => setChecksumPath(null)} />
       <TagDialog
         open={tagOpen}
         initial={tagInitial}
+        available={prefs.customTags}
         onClose={() => setTagOpen(false)}
         onApply={applyTags}
       />
@@ -214,17 +250,20 @@ export function ExplorerDialogs({
         }}
       />
 
-      <PreferencesDialog
-        open={settings}
-        onClose={() => setSettings(false)}
-        prefs={prefs}
-        locations={x.locations}
-        update={update}
-        terminals={terminals}
-        ides={ides}
-        onError={x.setError}
-      />
-
+      {settings && (
+        <Suspense fallback={null}>
+          <PreferencesDialog
+            open={settings}
+            onClose={() => setSettings(false)}
+            prefs={prefs}
+            locations={left.locations}
+            update={update}
+            terminals={terminals}
+            ides={ides}
+            onError={x.setError}
+          />
+        </Suspense>
+      )}
       {toast && (
         <div className="toast" role="status">
           <CheckCircle2 size={16} />

@@ -87,13 +87,18 @@ const sections: Section[] = [
 export function PreferencesDialog({
   open,
   onClose,
-  prefs,
+  prefs: savedPrefs,
   locations,
-  update,
+  update: savePreferences,
   terminals,
   ides,
   onError,
 }: Props) {
+  const [prefs, setDraft] = useState(savedPrefs)
+  const update = (patch: Partial<Preferences>) => setDraft((current) => ({ ...current, ...patch }))
+  useEffect(() => {
+    if (open) setDraft(savedPrefs)
+  }, [open, savedPrefs])
   const [section, setSection] = useState<SectionId>('appearance')
   const [query, setQuery] = useState('')
   const [integrationsOpen, setIntegrationsOpen] = useState(false)
@@ -129,7 +134,6 @@ export function PreferencesDialog({
               <img src="/fiex.png" alt="" />
               <div>
                 <strong>Fiex</strong>
-                <span>文件浏览器</span>
               </div>
             </div>
             <label className="settings-search">
@@ -170,10 +174,6 @@ export function PreferencesDialog({
               })}
               {visible.length === 0 && <p className="settings-empty">没有匹配的设置</p>}
             </nav>
-            <div className="settings-sidebar-footer">
-              <span>Fiex</span>
-              <span>0.2.4</span>
-            </div>
           </aside>
 
           <section className="settings-content">
@@ -198,6 +198,20 @@ export function PreferencesDialog({
             )}
 
             {section === 'about' && <AboutSettings onError={onError} />}
+            <footer className="settings-actions">
+              <button className="button" onClick={onClose}>
+                取消
+              </button>
+              <button
+                className="button primary"
+                onClick={() => {
+                  savePreferences(prefs)
+                  onClose()
+                }}
+              >
+                确认
+              </button>
+            </footer>
           </section>
         </div>
       </Modal>

@@ -1,23 +1,23 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 export function Modal({
   open,
   onClose,
   title,
-  description,
   children,
   wide = false,
   className,
+  contentStyle,
   bare = false,
 }: {
   open: boolean
   onClose: () => void
   title: string
-  description?: string
   children: ReactNode
   wide?: boolean
   className?: string
+  contentStyle?: CSSProperties
   bare?: boolean
 }) {
   return (
@@ -26,10 +26,11 @@ export function Modal({
         <Dialog.Overlay className="modal-overlay" />
         <Dialog.Content
           className={`modal ${wide ? 'modal-wide' : ''} ${className || ''}`}
+          style={contentStyle}
           onOpenAutoFocus={(e) => {
             if (wide || bare) e.preventDefault()
           }}
-          aria-describedby={description ? 'modal-description' : undefined}
+          aria-describedby={undefined}
         >
           {bare ? (
             <>
@@ -45,9 +46,6 @@ export function Modal({
                 <X size={17} />
               </Dialog.Close>
             </header>
-          )}
-          {description && (
-            <Dialog.Description id="modal-description">{description}</Dialog.Description>
           )}
           {children}
         </Dialog.Content>

@@ -29,7 +29,7 @@ function visual(id: string | undefined, folder: boolean, generic: boolean): File
  * extensions, so `foo.d.ts`, `schema.json`, `Dockerfile` and `.gitignore` all
  * get their dedicated icon.
  */
-export function fileVisual(entry: Entry): FileVisual {
+export function fileVisual(entry: Pick<Entry, 'name' | 'isDir' | 'extension'>): FileVisual {
   const key = `${entry.isDir ? 'd' : 'f'}:${entry.name}`
   const hit = cache.get(key)
   if (hit) return hit
@@ -56,7 +56,7 @@ export function fileVisual(entry: Entry): FileVisual {
     const id = nameId || extensionId || manifest.fileExtensions.txt || 'document'
     result = visual(id, false, !nameId && !extensionId)
   }
-  if (cache.size > 4000) cache.clear()
+  if (cache.size >= 4000) cache.delete(cache.keys().next().value!)
   cache.set(key, result)
   return result
 }
