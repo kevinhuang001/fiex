@@ -24,5 +24,8 @@ export function search(
     return call<Batch>('search_files', { root, query, hidden, ignores, pane }).then(onBatch)
   const onBatchChannel = new Channel<Batch>()
   onBatchChannel.onmessage = onBatch
-  return invoke('search_files', { root, query, hidden, ignores, pane, onBatch: onBatchChannel })
+  return invoke('search_files', {
+    request: { root, query, hidden, ignores, pane },
+    onBatch: onBatchChannel,
+  })
 }

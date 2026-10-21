@@ -252,7 +252,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     let conn = items.iter().find(|c| c.id == id).ok_or("连接不存在")?;
     fs::create_dir_all(mount_path(conn)).map_err(|e| e.to_string())?;
     save_stored(&items)?;
-    Ok(public(&conn))
+    Ok(public(conn))
 }
 
 pub fn remove_connection(id: &str) -> Result<(), String> {

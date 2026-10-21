@@ -10,6 +10,7 @@ use crate::{
     volumes,
 };
 use notify::Watcher;
+use serde::Deserialize;
 use std::{
     collections::HashMap,
     sync::{
@@ -645,17 +646,29 @@ async fn undo(app: tauri::AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?
 }
-#[tauri::command]
-async fn search_files(
-    window: tauri::Window,
+#[derive(Deserialize)]
+struct SearchInput {
     pane: String,
     root: String,
     query: String,
     hidden: bool,
     ignores: Vec<String>,
+}
+
+#[tauri::command]
+async fn search_files(
+    window: tauri::Window,
+    request: SearchInput,
     on_batch: Channel<SearchBatch>,
     state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
+    let SearchInput {
+        pane,
+        root,
+        query,
+        hidden,
+        ignores,
+    } = request;
     if root.starts_with("history://") {
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
