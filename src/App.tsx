@@ -35,8 +35,8 @@ export default function App() {
         prefs={app.prefs}
         update={app.update}
         favorite={app.favorite}
-        control={app.control}
         onTrash={app.openTrash}
+        onEmptyTrash={app.emptyTrash}
         onApplications={app.openApplications}
         onAddConnection={() => app.setConnectionOpen(true)}
         onRemoveConnection={app.removeConnection}
@@ -90,6 +90,7 @@ export default function App() {
         ) : (
           <FileViews
             readOnly={app.gitSwitched}
+            trashPath={app.trashPath}
             explorer={app.x}
             prefs={app.prefs}
             onOpen={app.open}

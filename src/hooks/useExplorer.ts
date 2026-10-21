@@ -125,7 +125,14 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (!path || !native || virtualVolume || path.startsWith('history://')) return
+    if (
+      !path ||
+      !native ||
+      virtualVolume ||
+      path.startsWith('history://') ||
+      path.startsWith('recent://')
+    )
+      return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
@@ -145,7 +152,12 @@ export function useExplorer(prefs: Preferences) {
   }, [path, reload, virtualVolume])
   const refreshGit = useCallback(async () => {
     const id = ++gitRequest.current
-    if (!path || path.startsWith('remote://') || path.startsWith('usbfs://')) {
+    if (
+      !path ||
+      path.startsWith('remote://') ||
+      path.startsWith('usbfs://') ||
+      path.startsWith('recent://')
+    ) {
       setGit(null)
       setGitLoading(false)
       setGitPath(path)
@@ -171,7 +183,13 @@ export function useExplorer(prefs: Preferences) {
     }
   }, [refresh, refreshGit])
   useEffect(() => {
-    if (!path || virtualVolume || path.startsWith('remote://') || path.startsWith('history://'))
+    if (
+      !path ||
+      virtualVolume ||
+      path.startsWith('remote://') ||
+      path.startsWith('history://') ||
+      path.startsWith('recent://')
+    )
       return
     // Warming walks the whole folder tree. Handing it to the idle queue keeps
     // the first paint and the first listing responsive on large folders.
@@ -363,7 +381,9 @@ export function useExplorer(prefs: Preferences) {
     forward,
     canBack: cursor > 0,
     canForward: cursor < history.length - 1,
-    up: () => navigate(parent(path)),
+    up: () => {
+      if (path !== 'recent://') navigate(parent(path))
+    },
     tabs,
     tab,
     newTab,

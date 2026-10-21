@@ -3,6 +3,7 @@ use crate::{
     drag_session::{DragSessions, DropPlan},
     files, git, git_history, git_remote,
     operations::{self, OperationResult, Operations},
+    recent,
     remote,
     search::{SearchBatch, SearchState},
     tags, terminals,
@@ -137,7 +138,7 @@ async fn new_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
-    super::macos_material::configure(&window);
+    macos_material::configure(&window);
     let _ = window;
     Ok(())
 }
@@ -258,7 +259,17 @@ async fn list_directory(
     path: String,
     hidden: bool,
     ignores: Vec<String>,
+    recent: tauri::State<'_, recent::Recent>,
 ) -> Result<files::Listing, String> {
+    if path == "recent://" {
+        return Ok(files::Listing {
+            read_only: true,
+            virtual_volume: true,
+            path,
+            entries: recent::entries(&recent),
+            warnings: vec![],
+        });
+    }
     if path.starts_with("history://") {
         return tauri::async_runtime::spawn_blocking(move || {
             git_history::list(&path, hidden, &ignores)
@@ -665,7 +676,10 @@ fn open_terminal(path: String, id: String) -> Result<(), String> {
     terminals::launch(&path, &id)
 }
 #[tauri::command]
-async fn open_path(path: String) -> Result<(), String> {
+async fn open_path(path: String, recent: tauri::State<'_, recent::Recent>) -> Result<(), String> {
+    if crate::usbfs::route(&path).is_none() {
+        recent::record(&recent, &path);
+    }
     if let Some(route) = crate::usbfs::route(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
             let bytes = crate::usbfs::read_path(&route)?;
@@ -723,6 +737,18 @@ fn open_trash() -> Result<(), String> {
     terminals::open_trash()
 }
 #[tauri::command]
+async fn empty_trash() -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(volumes::empty_trash)
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
+async fn delete_permanently(paths: Vec<String>) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || volumes::delete_permanently(&paths))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 fn watch_directory(
     window: tauri::Window,
     app: tauri::AppHandle,
@@ -776,6 +802,7 @@ pub fn run() {
         .manage(SearchState::default())
         .manage(Watch::default())
         .manage(WindowPaths::default())
+        .manage(recent::Recent::default())
         .manage(DragSessions::default())
         .invoke_handler(tauri::generate_handler![
             platform,
@@ -832,6 +859,8 @@ pub fn run() {
             mount_device,
             reveal_path,
             trash_path,
+            empty_trash,
+            delete_permanently,
             open_applications,
             set_tags,
             open_full_disk_access,
@@ -860,7 +889,7 @@ pub fn run() {
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                super::macos_material::configure(&window);
+                macos_material::configure(&window);
             }
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {

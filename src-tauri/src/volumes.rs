@@ -23,6 +23,18 @@ fn visible_mount(path: &str) -> bool {
 
 pub fn locations() -> Vec<Location> {
     let mut out = Vec::new();
+    out.push(Location {
+        name: "最近使用".into(),
+        path: "recent://".into(),
+        kind: "recent".into(),
+        available: 0,
+        total: 0,
+        removable: false,
+        filesystem: String::new(),
+        device: String::new(),
+        mounted: true,
+        usbfs: false,
+    });
     let named: [(&str, Option<PathBuf>); 7] = [
         ("个人文件夹", dirs::home_dir()),
         ("桌面", dirs::desktop_dir()),
@@ -537,6 +549,87 @@ pub fn trash_path() -> Option<PathBuf> {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         None
+    }
+}
+
+fn remove_entry(path: &std::path::Path) -> Result<(), String> {
+    let meta = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    let result = if meta.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    };
+    result.map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Permanently remove items. Used inside the Trash, where "move to Trash" has
+/// no meaning and the user explicitly asks for the item to be gone.
+pub fn delete_permanently(paths: &[String]) -> Result<usize, String> {
+    let mut removed = 0;
+    for path in paths {
+        remove_entry(std::path::Path::new(path))?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
+/// Empty the platform Trash the way the system file manager does.
+pub fn empty_trash() -> Result<usize, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let Some(trash) = trash_path() else {
+            return Ok(0);
+        };
+        let mut removed = 0;
+        for entry in std::fs::read_dir(&trash).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            remove_entry(&entry.path())?;
+            removed += 1;
+        }
+        return Ok(removed);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let data = dirs::data_dir().ok_or("无法定位废纸篓")?;
+        let files = data.join("Trash/files");
+        let info = data.join("Trash/info");
+        let mut removed = 0;
+        let entries = match std::fs::read_dir(&files) {
+            Ok(entries) => entries,
+            Err(_) => return Ok(0),
+        };
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            remove_entry(&entry.path())?;
+            // The freedesktop spec stores the original location next to the
+            // payload as "<name>.trashinfo"; removing it keeps the Trash
+            // consistent for other file managers.
+            let _ = std::fs::remove_file(info.join(format!("{name}.trashinfo")));
+            removed += 1;
+        }
+        return Ok(removed);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let status = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Clear-RecycleBin -Force -ErrorAction SilentlyContinue",
+            ])
+            .status()
+            .map_err(|e| e.to_string())?;
+        if status.success() {
+            Ok(0)
+        } else {
+            Err("无法清空回收站".into())
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Err("当前系统请使用系统废纸篓清空".into())
     }
 }
 

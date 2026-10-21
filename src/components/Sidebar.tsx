@@ -8,15 +8,17 @@ import {
   FileText,
   Folder,
   Plus,
+  Trash,
   HardDrive,
   X,
   Trash2,
   AppWindow,
+  Clock,
   Server,
   Unplug,
   Usb,
 } from 'lucide-react'
-import { Fragment } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
@@ -27,8 +29,8 @@ interface Props {
   prefs: Preferences
   update: (p: Partial<Preferences>) => void
   favorite: () => void
-  control: (action: 'close' | 'minimize' | 'toggleMaximize') => void
   onTrash: () => void
+  onEmptyTrash: () => void
   onApplications: () => void
   onAddConnection: () => void
   onRemoveConnection: (id: string) => void
@@ -44,8 +46,8 @@ export function Sidebar({
   prefs,
   update,
   favorite,
-  control,
   onTrash,
+  onEmptyTrash,
   onApplications,
   onAddConnection,
   onRemoveConnection,
@@ -54,8 +56,21 @@ export function Sidebar({
   onMount,
   trashPath,
 }: Props) {
+  const [trashMenu, setTrashMenu] = useState<{ x: number; y: number } | null>(null)
+  useEffect(() => {
+    if (!trashMenu) return
+    const close = () => setTrashMenu(null)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('blur', close)
+    }
+  }, [trashMenu])
   const iconFor = (name: string) =>
-    name === '个人文件夹' ? (
+    name === '最近使用' ? (
+      <Clock />
+    ) : name === '个人文件夹' ? (
       <Home />
     ) : name === '桌面' ? (
       <Monitor />
@@ -78,15 +93,6 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-title" data-tauri-drag-region>
-        <div className="traffic">
-          <button title="关闭窗口" className="traffic-close" onClick={() => control('close')} />
-          <button title="最小化" className="traffic-minimize" onClick={() => control('minimize')} />
-          <button
-            title="最大化"
-            className="traffic-maximize"
-            onClick={() => control('toggleMaximize')}
-          />
-        </div>
         <span data-tauri-drag-region>Fiex</span>
       </div>
       <div className="sidebar-content">
@@ -96,7 +102,9 @@ export function Sidebar({
             const places = x.locations
               .filter(
                 (location) =>
-                  (location.kind === 'favorite' || location.kind === 'applications') &&
+                  (location.kind === 'favorite' ||
+                    location.kind === 'applications' ||
+                    location.kind === 'recent') &&
                   !prefs.hiddenPlaces.includes(location.path || location.name),
               )
               .sort(
@@ -310,10 +318,43 @@ export function Sidebar({
         <button
           className={`nav-item ${trashPath && x.path === trashPath ? 'active' : ''}`}
           onClick={onTrash}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            setTrashMenu({ x: event.clientX, y: event.clientY })
+          }}
         >
           <Trash2 />
           <span>废纸篓</span>
         </button>
+        {trashMenu && (
+          <div
+            className="context-menu sidebar-menu"
+            role="menu"
+            aria-label="废纸篓"
+            style={{ left: trashMenu.x, top: trashMenu.y }}
+          >
+            <button
+              role="menuitem"
+              onClick={() => {
+                setTrashMenu(null)
+                onTrash()
+              }}
+            >
+              <Folder size={14} />
+              打开废纸篓
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                setTrashMenu(null)
+                onEmptyTrash()
+              }}
+            >
+              <Trash size={14} />
+              清空废纸篓
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   )

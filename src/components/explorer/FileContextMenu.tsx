@@ -52,6 +52,8 @@ export function FileContextMenu({
   terminal,
   notify,
   recycle,
+  deletePermanently,
+  inTrash,
   setCompressOpen,
   compressOpen,
   setMenu,
@@ -75,6 +77,8 @@ export function FileContextMenu({
   | 'terminal'
   | 'notify'
   | 'recycle'
+  | 'deletePermanently'
+  | 'inTrash'
   | 'setCompressOpen'
   | 'compressOpen'
   | 'setMenu'
@@ -205,13 +209,23 @@ export function FileContextMenu({
                     .then(() => notify('路径已复制'))
                     .catch((e) => x.setError(String(e))),
               },
-              {
-                label: '移到废纸篓',
-                icon: <Trash2 />,
-                hint: hint('trash'),
-                disabled: gitSwitched || x.directoryReadOnly,
-                action: recycle,
-              },
+              inTrash
+                ? {
+                    label: '彻底删除',
+                    icon: <Trash2 />,
+                    hint: '',
+                    action: () =>
+                      deletePermanently(
+                        x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
+                      ),
+                  }
+                : {
+                    label: '移到废纸篓',
+                    icon: <Trash2 />,
+                    hint: hint('trash'),
+                    disabled: gitSwitched || x.directoryReadOnly,
+                    action: recycle,
+                  },
             ] as ContextItem[]
           ).map((a) =>
             'submenu' in a ? (

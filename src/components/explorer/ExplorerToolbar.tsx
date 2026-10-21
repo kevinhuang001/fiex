@@ -17,6 +17,7 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { AppWindowIcon as PanelsTopLeft } from '@phosphor-icons/react/dist/csr/AppWindow'
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
+import { Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
@@ -39,7 +40,6 @@ const sortOptions: [Sort, string][] = [
 ]
 export function ExplorerToolbar({
   sidebar,
-  control,
   setSidebar,
   x,
   displayName,
@@ -55,10 +55,11 @@ export function ExplorerToolbar({
   terminal,
   setSettings,
   newWindow,
+  inTrash,
+  emptyTrash,
 }: Pick<
   AppController,
   | 'sidebar'
-  | 'control'
   | 'setSidebar'
   | 'x'
   | 'displayName'
@@ -74,25 +75,12 @@ export function ExplorerToolbar({
   | 'terminal'
   | 'setSettings'
   | 'newWindow'
+  | 'inTrash'
+  | 'emptyTrash'
 >) {
   return (
     <>
       <header className="toolbar" data-tauri-drag-region>
-        {!sidebar && (
-          <div className="traffic">
-            <button title="关闭窗口" className="traffic-close" onClick={() => control('close')} />
-            <button
-              title="最小化"
-              className="traffic-minimize"
-              onClick={() => control('minimize')}
-            />
-            <button
-              title="最大化"
-              className="traffic-maximize"
-              onClick={() => control('toggleMaximize')}
-            />
-          </div>
-        )}
         <Button
           variant="ghost"
           size="icon"
@@ -150,7 +138,7 @@ export function ExplorerToolbar({
             </Button>
           ))}
         </div>
-        <Menu label="分组方式" icon={<CardsThree weight="duotone" size={20} />}>
+        <Menu label="分组方式" icon={<CardsThree weight="regular" size={20} />}>
           <Label>分组方式</Label>
           {groupOptions.map(([id, name]) => (
             <Choice key={id} checked={prefs.group === id} onClick={() => update({ group: id })}>
@@ -158,7 +146,7 @@ export function ExplorerToolbar({
             </Choice>
           ))}
         </Menu>
-        <Menu label="排序方式" icon={<ArrowsDownUp weight="duotone" size={20} />}>
+        <Menu label="排序方式" icon={<ArrowsDownUp weight="regular" size={20} />}>
           <Label>排序方式</Label>
           {sortOptions.map(([id, name]) => (
             <Choice key={id} checked={prefs.sort === id} onClick={() => update({ sort: id })}>
@@ -172,6 +160,17 @@ export function ExplorerToolbar({
             降序
           </Choice>
         </Menu>
+        {inTrash && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="清空废纸篓"
+            aria-label="清空废纸篓"
+            onClick={emptyTrash}
+          >
+            <Trash2 size={20} />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -206,7 +205,7 @@ export function ExplorerToolbar({
           disabled={gitSwitched || x.directoryReadOnly}
           onClick={() => openIde()}
         >
-          <Code2 weight="duotone" size={20} />
+          <Code2 weight="regular" size={20} />
         </Button>
         <div className="toolbar-divider" />
         <div className="terminal-control">
@@ -218,7 +217,7 @@ export function ExplorerToolbar({
             disabled={gitSwitched || x.directoryReadOnly}
             onClick={() => terminal()}
           >
-            <TerminalSquare weight="duotone" size={20} />
+            <TerminalSquare weight="regular" size={20} />
           </Button>
         </div>
         <Button

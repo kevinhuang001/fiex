@@ -64,6 +64,11 @@ export function usePathEditor({
     setEditingPath,
     startPathEdit,
     submitPath,
-    crumbs: historyRoot ? [{ name: '历史版本', path: historyRoot }, ...crumbs] : crumbs,
+    crumbs:
+      x.path === 'recent://'
+        ? [{ name: displayName('recent://'), path: x.path }]
+        : historyRoot
+          ? [{ name: '历史版本', path: historyRoot }, ...crumbs]
+          : crumbs,
   }
 }

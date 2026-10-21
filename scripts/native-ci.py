@@ -328,19 +328,21 @@ try:
         assert (external/'03-external.txt').read_bytes() == original
         assert (source/'03-external.txt').read_bytes() == original
         passed('external_file_manager_copy')
-    stage = 'Drag into Chromium and verify server-received bytes'
     upload = root/'uploaded.txt'
-    browser_env = {**env, 'FIEX_CI_RECEIVER_BOUNDS': json.dumps(dict(x=tx, y=ty, width=tw, height=th))}
-    processes.append(subprocess.Popen([sys.executable, str(Path(__file__).with_name('upload-target.py')), str(upload)], env=browser_env, stdout=log, stderr=log))
-    time.sleep(6)
-    request(action='focus')
-    drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+300), (sw-1, ty+260))
-    wait(lambda: upload.is_file() and upload.with_suffix('.json').is_file())
-    assert upload.read_bytes() == original
-    assert json.loads(upload.with_suffix('.json').read_text())['name'] == '03-external.txt'
-    assert (source/'03-external.txt').read_bytes() == original
-    screenshot('browser-upload.png')
-    passed('browser_upload_and_source_preserved')
+    original = (source/'03-external.txt').read_bytes()
+    if 'browser' not in SKIP:
+        stage = 'Drag into Chromium and verify server-received bytes'
+        browser_env = {**env, 'FIEX_CI_RECEIVER_BOUNDS': json.dumps(dict(x=tx, y=ty, width=tw, height=th))}
+        processes.append(subprocess.Popen([sys.executable, str(Path(__file__).with_name('upload-target.py')), str(upload)], env=browser_env, stdout=log, stderr=log))
+        time.sleep(6)
+        request(action='focus')
+        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+300), (sw-1, ty+260))
+        wait(lambda: upload.is_file() and upload.with_suffix('.json').is_file())
+        assert upload.read_bytes() == original
+        assert json.loads(upload.with_suffix('.json').read_text())['name'] == '03-external.txt'
+        assert (source/'03-external.txt').read_bytes() == original
+        screenshot('browser-upload.png')
+        passed('browser_upload_and_source_preserved')
     stage = 'Windows-style conflict choices: skip, compare and keep both'
     request(action='focus')
     click(row('03-external.txt'))

@@ -21,6 +21,7 @@ export function useFileOperations({
   setDialog,
   chosen,
   first,
+  trashPath,
 }: {
   x: Explorer
   prefs: Preferences
@@ -29,7 +30,11 @@ export function useFileOperations({
   setDialog: Dispatch<SetStateAction<DialogState | null>>
   chosen: Entry[]
   first: Entry | undefined
+  trashPath: string | null
 }) {
+  // Inside the Trash, "move to Trash" would be a no-op, so the delete action
+  // becomes permanent just like the system file manager.
+  const inTrash = Boolean(trashPath && (x.path === trashPath || x.path.startsWith(trashPath + '/')))
   const [busy, setBusy] = useState('')
   const [conflict, setConflict] = useState<{
     paths: string[]
@@ -88,6 +93,10 @@ export function useFileOperations({
     if (!writable()) return
     if (!x.selected.length) return
     const paths = [...x.selected]
+    if (inTrash) {
+      deletePermanently(paths)
+      return
+    }
     if (!confirm) {
       void run('正在移到废纸篓…', () => moveToTrash(paths))
       return
@@ -97,6 +106,31 @@ export function useFileOperations({
       submit: '移到废纸篓',
       danger: true,
       action: () => moveToTrash(paths),
+    })
+  }
+  const deletePermanently = (paths: string[]) => {
+    if (!paths.length) return
+    setDialog({
+      title: `彻底删除 ${paths.length} 个项目？`,
+      submit: '彻底删除',
+      danger: true,
+      action: async () => {
+        await run('正在彻底删除…', () => call<number>('delete_permanently', { paths }))
+        x.setSelected([])
+      },
+    })
+  }
+  const emptyTrash = () => {
+    setDialog({
+      title: '清空废纸篓？',
+      submit: '清空废纸篓',
+      danger: true,
+      action: async () => {
+        const removed = await run('正在清空废纸篓…', () => call<number>('empty_trash'))
+        if (removed === undefined) return
+        x.setSelected([])
+        notify(removed > 0 ? `已清空 ${removed} 个项目` : '废纸篓已经是空的')
+      },
     })
   }
   const executeTransfer = async (
@@ -205,6 +239,9 @@ export function useFileOperations({
     run,
     create,
     recycle,
+    deletePermanently,
+    emptyTrash,
+    inTrash,
     transfer,
     copy,
     duplicate,

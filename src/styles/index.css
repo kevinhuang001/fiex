@@ -110,9 +110,6 @@ button[data-slot='button'][data-variant='default'] {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  border-radius: 16px;
-  clip-path: inset(0 round 16px);
-  border: 1px solid #ffffff3b;
   user-select: none;
 }
 .sidebar {
@@ -1120,9 +1117,12 @@ button[data-slot='button'][data-variant='default'] {
   border-radius: 12px !important;
   min-width: 210px !important;
   padding: 6px !important;
-  background: var(--surface) !important;
+  /* Portaled menus sit over the translucent window material; an opaque sheet
+     keeps them from picking up the grey desktop tint. */
+  background: var(--canvas) !important;
   box-shadow: var(--shadow) !important;
-  backdrop-filter: blur(24px);
+  backdrop-filter: none;
+  border: 1px solid var(--line) !important;
 }
 .fiex-menu [role='menuitem'] {
   font-size: 11px;

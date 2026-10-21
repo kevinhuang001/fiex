@@ -94,13 +94,16 @@ export function useAppController() {
     run,
     create,
     recycle,
+    deletePermanently,
+    emptyTrash,
+    inTrash,
     transfer,
     copy,
     duplicate,
     compress,
     extract,
     undo,
-  } = useFileOperations({ x, prefs, writable, notify, setDialog, chosen, first })
+  } = useFileOperations({ x, prefs, writable, notify, setDialog, chosen, first, trashPath })
 
   const open = (e: Entry) => {
     if (e.isDir && e.extension !== 'app') {
@@ -200,6 +203,7 @@ export function useAppController() {
   const displayName = (path: string) => {
     if (/^history:\/\/[^/]+\/[^/]+\/?$/.test(path))
       return '历史版本 · ' + path.split('/')[3].slice(0, 8)
+    if (path === 'recent://') return '最近使用'
     if (trashPath && path === trashPath) return '废纸篓'
     const volume = x.locations.find((location) => location.usbfs && location.path === path)
     if (volume) return volume.name
@@ -520,6 +524,9 @@ export function useAppController() {
     extract,
     notify,
     recycle,
+    deletePermanently,
+    emptyTrash,
+    inTrash,
     setCompressOpen,
     compressOpen,
     preview,

@@ -35,6 +35,7 @@ interface Props {
   onBookmark: (paths: string[]) => void
   onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
   readOnly?: boolean
+  trashPath?: string | null
 }
 
 type DropTarget =
@@ -105,6 +106,7 @@ function NameCell({
 export function FileViews(props: Props) {
   const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark } = props
   const readOnly = Boolean(props.readOnly)
+  const inTrash = Boolean(props.trashPath && x.path === props.trashPath)
   const entries = useMemo(
     () => sortEntries(x.entries, prefs.sort, prefs.descending),
     [x.entries, prefs.sort, prefs.descending],
@@ -344,7 +346,15 @@ export function FileViews(props: Props) {
           ) : (
             <>
               {x.query ? <SearchX /> : <FolderOpen />}
-              <h3>{x.query ? '没有找到匹配的文件' : '文件夹是空的'}</h3>
+              <h3>
+                {x.query
+                  ? '没有找到匹配的文件'
+                  : x.path === 'recent://'
+                    ? '还没有最近打开的文件'
+                    : inTrash
+                      ? '废纸篓是空的'
+                      : '文件夹是空的'}
+              </h3>
             </>
           )}
         </div>
