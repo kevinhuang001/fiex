@@ -15,6 +15,11 @@ export function SecondaryPane({
   onFocus,
   onClose,
   onTransfer,
+  onOpen,
+  onPreview,
+  onMenu,
+  width,
+  onWidthChange,
 }: {
   explorer: ReturnType<typeof useExplorer>
   prefs: Preferences
@@ -22,12 +27,16 @@ export function SecondaryPane({
   onFocus: () => void
   onClose: () => void
   onTransfer: (paths: string[], destination: string, moving: boolean) => void
+  onOpen: (entry: Entry) => void
+  onPreview: (entry: Entry) => void
+  onMenu: (entry: Entry, x: number, y: number) => void
+  width: number
+  onWidthChange: (width: number) => void
 }) {
   const x = explorer
   const [draft, setDraft] = useState(x.path)
   const [editing, setEditing] = useState(false)
   const [top, setTop] = useState<number | null>(null)
-  const [width, setWidth] = useState(46)
   const input = useRef<HTMLInputElement>(null)
   const segments = (() => {
     const parts = x.path.split('/').filter(Boolean)
@@ -47,9 +56,6 @@ export function SecondaryPane({
   useEffect(() => {
     if (editing) input.current?.select()
   }, [editing])
-  const open = (entry: Entry) => {
-    if (entry.isDir) x.navigate(entry.path)
-  }
   return (
     <>
       <div
@@ -63,7 +69,7 @@ export function SecondaryPane({
           const rect = main.getBoundingClientRect()
           const move = (e: PointerEvent) => {
             const percent = 100 - ((e.clientX - rect.left) / rect.width) * 100
-            setWidth(Math.min(75, Math.max(24, percent)))
+            onWidthChange(Math.min(75, Math.max(24, percent)))
           }
           const up = () => {
             window.removeEventListener('pointermove', move)
@@ -155,13 +161,13 @@ export function SecondaryPane({
         <FileViews
           explorer={x}
           prefs={prefs}
-          onOpen={open}
-          onPreview={() => {}}
-          onMenu={() => {}}
+          onOpen={onOpen}
+          onPreview={onPreview}
+          onMenu={onMenu}
           onDrop={(paths, destination, moving) => onTransfer(paths, destination, moving)}
           onBookmark={() => {}}
           onWorkspace={() => {}}
-          readOnly
+          readOnly={x.path.startsWith('history://') || x.directoryReadOnly}
         />
       </aside>
     </>

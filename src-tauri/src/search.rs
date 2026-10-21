@@ -6,7 +6,7 @@ use ignore::WalkBuilder;
 use notify::Watcher;
 use serde::Serialize;
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     fs,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
@@ -32,7 +32,7 @@ const RESULT_LIMIT: usize = 500;
 const INDEX_LIMIT: usize = 1_000_000;
 // A burst larger than this is cheaper to rebuild than to patch file by file.
 const PENDING_LIMIT: usize = 20_000;
-const INDEX_VERSION: u32 = 2;
+const INDEX_VERSION: u32 = 3;
 
 #[derive(Serialize, serde::Deserialize)]
 struct IndexMeta {
@@ -60,7 +60,7 @@ struct IndexHandle {
 
 #[derive(Clone, Default)]
 pub struct SearchState {
-    generation: Arc<AtomicU64>,
+    generations: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
     index: Arc<Mutex<Option<IndexHandle>>>,
 }
 
@@ -112,6 +112,7 @@ fn open_index(dir: &Path, root: &str, signature: &str) -> Option<IndexHandle> {
             .filter(LowerCaser)
             .build(),
     );
+    index.tokenizers().register("path_id", RawTokenizer::default());
     let reader: IndexReader = index
         .reader_builder()
         .reload_policy(ReloadPolicy::Manual)
@@ -202,7 +203,7 @@ fn build_index(
         "path_id",
         TextOptions::default().set_indexing_options(
             TextFieldIndexing::default()
-                .set_tokenizer("filename")
+                .set_tokenizer("path_id")
                 .set_index_option(IndexRecordOption::Basic),
         ),
     );
@@ -214,6 +215,7 @@ fn build_index(
             .filter(LowerCaser)
             .build(),
     );
+    index.tokenizers().register("path_id", RawTokenizer::default());
     let mut writer = index
         .writer_with_num_threads::<TantivyDocument>(1, 50_000_000)
         .map_err(|e| e.to_string())?;
@@ -367,19 +369,40 @@ fn index_subtree(
 }
 
 fn apply_pending(handle: &mut IndexHandle, hidden: bool, ignores: &[String]) -> Result<(), String> {
-    let paths: Vec<PathBuf> = {
+    let mut paths: Vec<PathBuf> = {
         let mut queue = handle.pending.lock().unwrap();
         if queue.is_empty() {
             return Ok(());
         }
         queue.drain().collect()
     };
+    // A rename can report both the directory and every child. Process the
+    // ancestor once, so a large move does not re-index the same tree N times.
+    paths.sort_by_key(|path| path.components().count());
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for path in paths {
+        if !roots.iter().any(|root| path.starts_with(root)) {
+            roots.push(path);
+        }
+    }
     let root = PathBuf::from(&handle.root);
-    for target in paths {
-        handle.writer.delete_term(Term::from_field_text(
-            handle.path_id,
-            &target.to_string_lossy(),
-        ));
+    let searcher = handle.reader.searcher();
+    for target in roots {
+        // Remove descendants too. A deleted or renamed directory no longer
+        // exists on disk, so walking it cannot discover its old index entries.
+        let prefix = format!("{}.*", regex::escape(&target.to_string_lossy()));
+        let query = RegexQuery::from_pattern(&prefix, handle.path_id)
+            .map_err(|error| error.to_string())?;
+        let addresses = searcher.search(&query, &DocSetCollector).map_err(|error| error.to_string())?;
+        for address in addresses {
+            if let Ok(doc) = searcher.doc::<TantivyDocument>(address) {
+                if let Some(path) = doc.get_first(handle.path).and_then(|value| value.as_str()) {
+                    if Path::new(path).starts_with(&target) {
+                        handle.writer.delete_term(Term::from_field_text(handle.path_id, path));
+                    }
+                }
+            }
+        }
         if target.exists() {
             index_subtree(
                 &handle.writer,
@@ -448,8 +471,17 @@ fn ensure_index(
 }
 
 impl SearchState {
-    pub fn cancel(&self) {
-        self.generation.fetch_add(1, Ordering::SeqCst);
+    fn generation(&self, scope: &str) -> Arc<AtomicU64> {
+        self.generations
+            .lock()
+            .unwrap()
+            .entry(scope.to_owned())
+            .or_default()
+            .clone()
+    }
+
+    pub fn cancel(&self, scope: &str) {
+        self.generation(scope).fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn warm(&self, root: &str, hidden: bool, ignores: &[String]) -> Result<(), String> {
@@ -459,13 +491,15 @@ impl SearchState {
 
     pub fn run(
         &self,
+        scope: &str,
         root: &str,
         query: &str,
         hidden: bool,
         ignores: &[String],
         emit: impl Fn(SearchBatch) + Send + Sync,
     ) -> Result<(), String> {
-        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let counter = self.generation(scope);
+        let generation = counter.fetch_add(1, Ordering::SeqCst) + 1;
         let started = Instant::now();
         let query = query.to_lowercase();
         let mut guard = self.index.lock().unwrap();
@@ -483,7 +517,7 @@ impl SearchState {
         let truncated = found.len() >= RESULT_LIMIT;
         let mut entries = Vec::new();
         for address in found.into_iter().take(RESULT_LIMIT) {
-            if self.generation.load(Ordering::Relaxed) != generation {
+            if counter.load(Ordering::Relaxed) != generation {
                 return Ok(());
             }
             if let Ok(doc) = searcher.doc::<TantivyDocument>(address) {
@@ -535,7 +569,7 @@ mod tests {
         let state = SearchState::default();
         let found = Mutex::new(Vec::new());
         state
-            .run(t.path().to_str().unwrap(), "needle", false, &[], |batch| {
+            .run("test", t.path().to_str().unwrap(), "needle", false, &[], |batch| {
                 found.lock().unwrap().extend(batch.entries)
             })
             .unwrap();
@@ -544,7 +578,7 @@ mod tests {
 
         let apps = Mutex::new(Vec::new());
         state
-            .run(t.path().to_str().unwrap(), "safari", false, &[], |batch| {
+            .run("test", t.path().to_str().unwrap(), "safari", false, &[], |batch| {
                 apps.lock().unwrap().extend(batch.entries)
             })
             .unwrap();
@@ -561,7 +595,7 @@ mod tests {
         let state = SearchState::default();
         let out = Mutex::new(Vec::new());
         state
-            .run(t.path().to_str().unwrap(), "needle", true, &[], |b| {
+            .run("test", t.path().to_str().unwrap(), "needle", true, &[], |b| {
                 out.lock().unwrap().extend(b.entries)
             })
             .unwrap();
@@ -578,6 +612,7 @@ mod tests {
         let out = Mutex::new(Vec::new());
         state
             .run(
+                "test",
                 t.path().to_str().unwrap(),
                 "needle",
                 false,
@@ -587,5 +622,32 @@ mod tests {
             .unwrap();
         assert_eq!(out.lock().unwrap().len(), 1);
         assert_eq!(out.lock().unwrap()[0].name, "Needle.txt");
+    }
+
+    #[test]
+    fn removing_a_directory_removes_its_indexed_descendants() {
+        let t = tempfile::tempdir().unwrap();
+        let folder = t.path().join("OldFolder");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("Needle.txt"), "x").unwrap();
+        let state = SearchState::default();
+        state.warm(t.path().to_str().unwrap(), false, &[]).unwrap();
+        fs::remove_dir_all(&folder).unwrap();
+        {
+            let guard = state.index.lock().unwrap();
+            guard.as_ref().unwrap().pending.lock().unwrap().insert(folder);
+        }
+        let matches = Mutex::new(Vec::new());
+        state
+            .run("test", t.path().to_str().unwrap(), "needle", false, &[], |batch| {
+                matches.lock().unwrap().extend(batch.entries);
+            })
+            .unwrap();
+        assert!(matches.lock().unwrap().is_empty());
+        let guard = state.index.lock().unwrap();
+        let handle = guard.as_ref().unwrap();
+        let searcher = handle.reader.searcher();
+        let query = RegexQuery::from_pattern(".*Needle.*", handle.path_id).unwrap();
+        assert!(searcher.search(&query, &DocSetCollector).unwrap().is_empty());
     }
 }

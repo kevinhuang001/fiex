@@ -50,14 +50,17 @@ export default function App() {
         onMount={app.mountDevice}
         trashPath={app.trashPath}
       />
-      <main className={`main ${app.split ? 'split' : ''}`}>
+      <main
+        className={`main ${app.split ? 'split' : ''}`}
+        style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
+      >
         <ExplorerTabs {...app} />
         <ExplorerToolbar
           {...app}
           split={app.split}
-          onToggleSplit={() => (app.split ? app.closePane() : app.setSplit(true))}
+          onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
         />
-        <ExplorerPathBar {...app} />
+        <ExplorerPathBar {...app} x={app.left} />
         {app.gitSwitched && (
           <div className="history-banner">
             <span>
@@ -91,7 +94,7 @@ export default function App() {
             {app.x.warnings.join('\n')}
           </details>
         )}
-        {app.x.loading && !app.x.hasListing ? (
+        {app.left.loading && !app.left.hasListing ? (
           <div className="loading">
             <LoaderCircle className="spin" />
             正在读取文件夹…
@@ -102,12 +105,12 @@ export default function App() {
             onPointerDownCapture={() => app.setActive('left')}
           >
             <FileViews
-              readOnly={app.gitSwitched}
+              readOnly={app.left.path.startsWith('history://') || app.left.directoryReadOnly}
               trashPath={app.trashPath}
-              explorer={app.split ? app.left : app.x}
+              explorer={app.left}
               prefs={app.prefs}
-              onOpen={app.open}
-              onPreview={app.previewEntry}
+              onOpen={app.openLeft}
+              onPreview={(entry) => app.previewEntry(entry, app.left)}
               onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
               onDrop={app.transfer}
               onBookmark={app.bookmarkPaths}
@@ -124,11 +127,13 @@ export default function App() {
             prefs={app.prefs}
             active={app.active === 'right'}
             onFocus={() => app.setActive('right')}
-            onClose={() => {
-              app.setSplit(false)
-              app.setActive('left')
-            }}
+            onClose={() => app.closePane('right')}
             onTransfer={(paths, destination, moving) => app.transfer(paths, destination, moving)}
+            onOpen={app.openRight}
+            onPreview={(entry) => app.previewEntry(entry, app.right)}
+            onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+            width={app.paneWidth}
+            onWidthChange={app.setPaneWidth}
           />
         )}
         <GitPanel
@@ -150,6 +155,7 @@ export default function App() {
           onOpen={app.open}
           onRemove={app.workspace.remove}
           onClear={app.workspace.clear}
+          onClose={() => app.workspace.setOpen(false)}
         />
         <ExplorerStatusBar {...app} />
         <ActivityCenter />

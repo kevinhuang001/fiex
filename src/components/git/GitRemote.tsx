@@ -133,7 +133,7 @@ export function GitRemoteModal({
                 ))}
               </ul>
             ) : (
-              <p className="git-remote-empty">还没有远程仓库，添加一个即可推送和拉取。</p>
+              <p className="git-remote-empty">无远程仓库</p>
             )}
             <button
               className="git-remote-add"

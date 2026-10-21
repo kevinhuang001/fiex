@@ -14,13 +14,26 @@ import { useDesktopEnvironment } from './useDesktopEnvironment'
 import { useWorkspace } from './useWorkspace'
 import { useFileOperations } from './useFileOperations'
 import { usePathEditor } from './usePathEditor'
+import { usePaneLayout } from './usePaneLayout'
 export function useAppController() {
   const [prefs, update] = usePreferences()
   const left = useExplorer(prefs)
-  const right = useExplorer(prefs, left.path)
-  const [split, setSplit] = useState(false)
-  const [active, setActive] = useState<'left' | 'right'>('left')
-  const x = active === 'right' ? right : left
+  const {
+    x,
+    right,
+    split,
+    setSplit,
+    active,
+    setActive,
+    paneWidth,
+    setPaneWidth,
+    panePaths,
+    switchWorkspaceTab,
+    newWorkspaceTab,
+    closeWorkspaceTab,
+    openPane,
+    closePane,
+  } = usePaneLayout(prefs, left)
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
 
@@ -76,11 +89,6 @@ export function useAppController() {
     return false
   }
   useEffect(() => {
-    if (!x.path || settings || dialog || preview || info) return
-    const frame = requestAnimationFrame(() => searchInput.current?.focus())
-    return () => cancelAnimationFrame(frame)
-  }, [x.path])
-  useEffect(() => {
     if (!toast) return
     const timer = setTimeout(() => setToast(''), 5000)
     return () => clearTimeout(timer)
@@ -114,14 +122,14 @@ export function useAppController() {
     undo,
   } = useFileOperations({ x, prefs, writable, notify, setDialog, chosen, first, trashPath })
 
-  const open = (e: Entry) => {
+  const open = (e: Entry, pane = x) => {
     if (e.isDir && e.extension !== 'app') {
       setPreview(null)
-      x.navigate(e.path)
+      pane.navigate(e.path)
       return
     }
-    if (gitSwitched) {
-      previewEntry(e)
+    if (pane.path.startsWith('history://')) {
+      previewEntry(e, pane)
       return
     }
     if (isArchive(e)) {
@@ -131,7 +139,7 @@ export function useAppController() {
         async () => {
           const path = await call<string>('extract_archive', {
             path: e.path,
-            destination: x.path,
+            destination: pane.path,
           })
           notify(`已解压到 ${basename(path)}`)
         },
@@ -152,12 +160,6 @@ export function useAppController() {
     )
     workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
   }
-  const closePane = () => {
-    if (!split) return
-    // Closing the focused pane leaves the other one in place.
-    setSplit(false)
-    setActive(active === 'right' ? 'left' : 'right')
-  }
   const checksum = (path: string) =>
     void run('正在计算校验和…', async () => {
       const hash = await call<string>('file_checksum', { path })
@@ -169,7 +171,7 @@ export function useAppController() {
         action: async () => {},
       })
     })
-  const previewEntry = (entry: Entry) => {
+  const previewEntry = (entry: Entry, pane = x) => {
     if (!isRemotePath(entry.path)) {
       setPreview(entry)
       return
@@ -177,7 +179,7 @@ export function useAppController() {
     void run('正在下载…', async () => {
       await call('remote_download', { path: entry.path })
       setPreview(entry)
-      x.reload()
+      pane.reload()
     })
   }
   const ejectDevice = (path: string) =>
@@ -273,7 +275,7 @@ export function useAppController() {
     startPathEdit,
     submitPath,
     crumbs,
-  } = usePathEditor({ x, prefs, displayName })
+  } = usePathEditor({ x: left, prefs, displayName })
 
   const hint = (action: Parameters<typeof shortcutLabel>[1]) =>
     shortcutLabel(prefs.shortcuts, action, prefs.shortcutStyle)
@@ -411,8 +413,8 @@ export function useAppController() {
       newFile: () => {
         void create(false)
       },
-      newTab: () => x.newTab(),
-      closeTab: () => x.closeTab(x.tab),
+      newTab: newWorkspaceTab,
+      closeTab: () => closeWorkspaceTab(left.tab),
       duplicate,
       back: x.back,
       forward: x.forward,
@@ -557,6 +559,8 @@ export function useAppController() {
     searchInput,
     crumbs,
     open,
+    openLeft: (entry: Entry) => open(entry, left),
+    openRight: (entry: Entry) => open(entry, right),
     checksum,
     previewEntry,
     setMenu,
@@ -617,10 +621,17 @@ export function useAppController() {
     left,
     right,
     split,
+    paneWidth,
+    panePaths,
+    setPaneWidth,
     setSplit,
     active,
     setActive,
     closePane,
+    openPane,
+    switchWorkspaceTab,
+    newWorkspaceTab,
+    closeWorkspaceTab,
   }
 }
 export type AppController = ReturnType<typeof useAppController>

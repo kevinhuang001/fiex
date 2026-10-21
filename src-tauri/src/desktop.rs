@@ -64,7 +64,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     builder.build(app)?;
     Ok(())
 }
-type Watch = Mutex<HashMap<String, notify::RecommendedWatcher>>;
+type Watch = Mutex<HashMap<String, (String, notify::RecommendedWatcher)>>;
 #[derive(Default)]
 struct WindowPaths(Mutex<HashMap<String, String>>);
 #[tauri::command]
@@ -647,6 +647,8 @@ async fn undo(app: tauri::AppHandle) -> Result<(), String> {
 }
 #[tauri::command]
 async fn search_files(
+    window: tauri::Window,
+    pane: String,
     root: String,
     query: String,
     hidden: bool,
@@ -687,8 +689,9 @@ async fn search_files(
         .map_err(|error| error.to_string())?;
     }
     let state = state.inner().clone();
+    let scope = format!("{}:{pane}", window.label());
     tauri::async_runtime::spawn_blocking(move || {
-        state.run(&root, &query, hidden, &ignores, |b| {
+        state.run(&scope, &root, &query, hidden, &ignores, |b| {
             let _ = on_batch.send(b);
         })
     })
@@ -713,8 +716,8 @@ async fn warm_index(
     Ok(())
 }
 #[tauri::command]
-fn cancel_search(state: tauri::State<'_, SearchState>) {
-    state.cancel();
+fn cancel_search(window: tauri::Window, pane: String, state: tauri::State<'_, SearchState>) {
+    state.cancel(&format!("{}:{pane}", window.label()));
 }
 #[tauri::command]
 fn begin_operation(state: tauri::State<'_, OperationCancel>) {
@@ -924,6 +927,7 @@ fn watch_directory(
     window: tauri::Window,
     app: tauri::AppHandle,
     path: String,
+    pane: String,
     state: tauri::State<'_, Watch>,
 ) -> Result<(), String> {
     let mut watcher =
@@ -944,8 +948,16 @@ fn watch_directory(
     state
         .lock()
         .unwrap()
-        .insert(window.label().to_string(), watcher);
+        .insert(format!("{}:{pane}", window.label()), (path, watcher));
     Ok(())
+}
+#[tauri::command]
+fn unwatch_directory(window: tauri::Window, path: String, pane: String, state: tauri::State<'_, Watch>) {
+    let mut watches = state.lock().unwrap();
+    let key = format!("{}:{pane}", window.label());
+    if watches.get(&key).is_some_and(|(current, _)| current == &path) {
+        watches.remove(&key);
+    }
 }
 // Synchronous Tauri commands execute on the main thread, as required by GTK's icon provider.
 #[tauri::command]
@@ -1045,6 +1057,7 @@ pub fn run() {
             open_full_disk_access,
             open_trash,
             watch_directory,
+            unwatch_directory,
             native_icon
         ])
         .on_window_event(|window, event| {
@@ -1060,7 +1073,7 @@ pub fn run() {
                     .state::<Watch>()
                     .lock()
                     .unwrap()
-                    .remove(window.label());
+                    .retain(|key, _| !key.starts_with(&format!("{}:", window.label())));
                 window
                     .state::<WindowPaths>()
                     .0

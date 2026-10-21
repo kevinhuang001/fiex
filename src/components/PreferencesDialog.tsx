@@ -169,10 +169,6 @@ export function PreferencesDialog({
               })}
               {visible.length === 0 && <p className="settings-empty">没有匹配的设置</p>}
             </nav>
-            <div className="settings-sidebar-footer">
-              <span>Fiex</span>
-              <span>0.2.4</span>
-            </div>
           </aside>
 
           <section className="settings-content">

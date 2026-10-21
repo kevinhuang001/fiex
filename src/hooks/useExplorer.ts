@@ -10,7 +10,12 @@ import type {
   Preferences,
   RemoteConnection,
 } from '@/lib/types'
-export function useExplorer(prefs: Preferences, startOverride?: string) {
+export function useExplorer(
+  prefs: Preferences,
+  startOverride?: string,
+  enabled = true,
+  pane = 'left',
+) {
   const [locations, setLocations] = useState<Location[]>([])
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
@@ -29,6 +34,7 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
   const [refresh, setRefresh] = useState(0)
   const [tabs, setTabs] = useState<string[]>([])
   const [tab, setTab] = useState(0)
+  const tabHistory = useRef<{ paths: string[]; cursor: number }[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [git, setGit] = useState<GitStatus | null>(null)
   const [gitPath, setGitPath] = useState('')
@@ -68,13 +74,15 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     return next
   }, [])
   useEffect(() => {
+    if (!enabled) return
     const timer = window.setInterval(() => {
       if (document.hidden) return
       void refreshLocations().catch(() => {})
     }, 60000)
     return () => window.clearInterval(timer)
-  }, [refreshLocations, startOverride])
+  }, [refreshLocations, enabled])
   useEffect(() => {
+    if (!enabled || path) return
     let cancelled = false
     // The start folder must not wait for the disk survey: resolve it first so
     // the first listing is requested immediately, then fill the sidebar.
@@ -103,14 +111,15 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
         setHistory([start])
         setCursor(0)
         setTabs([start])
+        tabHistory.current = [{ paths: [start], cursor: 0 }]
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [refreshLocations])
+  }, [refreshLocations, enabled])
   useEffect(() => {
-    if (!path || query) return
+    if (!enabled || !path || query) return
     let active = true
     const id = ++request.current
     setLoading(true)
@@ -149,9 +158,10 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     return () => {
       active = false
     }
-  }, [path, prefs.hidden, prefs.displayIgnore, refresh, query])
+  }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
     if (
+      !enabled ||
       !path ||
       !native ||
       virtualVolume ||
@@ -162,7 +172,9 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
-    void call('watch_directory', { path }).catch((e) => setWarnings([`无法监视文件变更：${e}`]))
+    void call('watch_directory', { path, pane }).catch((e) =>
+      setWarnings([`无法监视文件变更：${e}`]),
+    )
     void listen('directory-changed', () => {
       clearTimeout(timer)
       timer = setTimeout(reload, 250)
@@ -174,8 +186,9 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
       active = false
       clearTimeout(timer)
       cleanup?.()
+      void call('unwatch_directory', { path, pane }).catch(() => {})
     }
-  }, [path, reload, virtualVolume])
+  }, [enabled, path, pane, reload, virtualVolume])
   const refreshGit = useCallback(async () => {
     const id = ++gitRequest.current
     if (
@@ -203,6 +216,7 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     }
   }, [path])
   useEffect(() => {
+    if (!enabled) return
     // Navigation bursts (and refresh after a file operation) should not spawn
     // a git subprocess each time; coalesce them.
     const timer = window.setTimeout(() => {
@@ -212,9 +226,10 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
       window.clearTimeout(timer)
       ++gitRequest.current
     }
-  }, [refresh, refreshGit])
+  }, [enabled, refresh, refreshGit])
   useEffect(() => {
     if (
+      !enabled ||
       !path ||
       virtualVolume ||
       path.startsWith('remote://') ||
@@ -235,15 +250,16 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
       idle = window.requestIdleCallback
         ? window.requestIdleCallback(warm, { timeout: 4000 })
         : window.setTimeout(warm, 0)
-    }, 900)
+    }, 5000)
     return () => {
       window.clearTimeout(timer)
       if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle)
     }
-  }, [path, prefs.hidden, prefs.displayIgnore, refresh, virtualVolume])
+  }, [enabled, path, prefs.hidden, prefs.displayIgnore, virtualVolume])
   useEffect(() => {
+    if (!enabled) return
     const generation = ++searchRequest.current
-    void call('cancel_search').catch(() => {})
+    void call('cancel_search', { pane }).catch(() => {})
     if (!query.trim()) {
       setSearching(false)
       setSearchStats('')
@@ -255,7 +271,7 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     setSelected([])
     setError('')
     const timer = setTimeout(() => {
-      void search(path, query, prefs.hidden, prefs.displayIgnore, (b) => {
+      void search(pane, path, query, prefs.hidden, prefs.displayIgnore, (b) => {
         if (generation !== searchRequest.current) return
         startTransition(() => setEntries((v) => [...v, ...b.entries]))
         if (b.done) {
@@ -274,9 +290,9 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     return () => {
       clearTimeout(timer)
       ++searchRequest.current
-      void call('cancel_search').catch(() => {})
+      void call('cancel_search', { pane }).catch(() => {})
     }
-  }, [query, path, prefs.hidden, prefs.displayIgnore, refresh])
+  }, [enabled, pane, query, path, prefs.hidden, prefs.displayIgnore, refresh])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])
@@ -301,6 +317,8 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     }
   }
   const newTab = (next = path) => {
+    tabHistory.current[tab] = { paths: history, cursor }
+    tabHistory.current.push({ paths: [next], cursor: 0 })
     setTabs((t) => [...t, next])
     setTab(tabs.length)
     setPath(next)
@@ -311,23 +329,38 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     setRenaming(null)
   }
   const switchTab = (i: number) => {
+    if (!tabs[i] || i === tab) return
+    tabHistory.current[tab] = { paths: history, cursor }
+    const saved = tabHistory.current[i] || { paths: [tabs[i]], cursor: 0 }
     setTab(i)
     setPath(tabs[i])
-    setHistory([tabs[i]])
-    setCursor(0)
+    setHistory(saved.paths)
+    setCursor(saved.cursor)
     setQuery('')
     setSelected([])
     setRenaming(null)
   }
   const closeTab = (i: number) => {
     if (tabs.length === 1) return
+    tabHistory.current[tab] = { paths: history, cursor }
+    tabHistory.current.splice(i, 1)
     const next = tabs.filter((_, n) => n !== i)
     const n = i < tab ? tab - 1 : Math.min(tab, next.length - 1)
+    const saved = tabHistory.current[n] || { paths: [next[n]], cursor: 0 }
     setTabs(next)
     setTab(n)
     setPath(next[n])
-    setHistory([next[n]])
-    setCursor(0)
+    setHistory(saved.paths)
+    setCursor(saved.cursor)
+    setQuery('')
+    setSelected([])
+    setRenaming(null)
+  }
+  const snapshotNavigation = () => ({ path, history, cursor })
+  const restoreNavigation = (state: { path: string; history: string[]; cursor: number }) => {
+    setPath(state.path)
+    setHistory(state.history)
+    setCursor(state.cursor)
     setQuery('')
     setSelected([])
     setRenaming(null)
@@ -377,8 +410,9 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     }
   }, [])
   useEffect(() => {
+    if (!enabled) return
     void refreshConnections()
-  }, [refreshConnections])
+  }, [enabled, refreshConnections])
   return {
     path,
     entries: visibleEntries,
@@ -420,6 +454,8 @@ export function useExplorer(prefs: Preferences, startOverride?: string) {
     newTab,
     switchTab,
     closeTab,
+    snapshotNavigation,
+    restoreNavigation,
     renaming,
     beginRename,
     cancelRename,

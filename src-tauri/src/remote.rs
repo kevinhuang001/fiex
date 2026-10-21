@@ -226,7 +226,14 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or_default();
-        let id = format!("{:x}{:x}", stamp, name.bytes().map(u64::from).sum::<u64>());
+        let mut sequence = 0u64;
+        let id = loop {
+            let candidate = format!("{stamp:x}-{sequence:x}");
+            if !items.iter().any(|item| item.id == candidate) {
+                break candidate;
+            }
+            sequence += 1;
+        };
         items.push(StoredConnection {
             id: id.clone(),
             name: name.into(),
@@ -242,9 +249,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         });
         id
     };
+    let conn = items.iter().find(|c| c.id == id).ok_or("连接不存在")?;
+    fs::create_dir_all(mount_path(conn)).map_err(|e| e.to_string())?;
     save_stored(&items)?;
-    let conn = items.into_iter().find(|c| c.id == id).unwrap();
-    fs::create_dir_all(mount_path(&conn)).map_err(|e| e.to_string())?;
     Ok(public(&conn))
 }
 

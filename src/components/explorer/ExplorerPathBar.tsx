@@ -112,7 +112,7 @@ export function ExplorerPathBar({
             className="icon-button pane-close-main"
             title="关闭此面板"
             aria-label="关闭左侧面板"
-            onClick={closePane}
+            onClick={() => closePane('left')}
           >
             <X size={14} />
           </button>

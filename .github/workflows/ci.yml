@@ -42,6 +42,7 @@ jobs:
             test-results/
   desktop:
     name: Desktop (${{ matrix.target }})
+    needs: checks
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:

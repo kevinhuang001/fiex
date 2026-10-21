@@ -27,7 +27,7 @@ export function AboutSettings({ onError }: { onError: (s: string) => void }) {
             </span>
             版本
           </div>
-          <span className="settings-value">0.2.4</span>
+          <span className="settings-value">0.2.5</span>
         </div>
         <button
           className="settings-row settings-row-button"
