@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
+  Cloud,
   ChevronDown,
   FileCode2,
   FolderGit2,
@@ -19,7 +20,7 @@ import { useGitRepository } from '@/hooks/useGitRepository'
 import type { GitStatus } from '@/lib/types'
 import { Button } from './ui/button'
 import { CommitPicker } from './git/CommitPicker'
-import { GitRemote } from './git/GitRemote'
+import { GitRemoteBar, GitRemoteModal } from './git/GitRemote'
 import { CommitDialog } from './git/CommitDialog'
 
 interface Change {
@@ -59,6 +60,7 @@ export function GitPanel({
   const repo = useGitRepository(git?.root, path, open, onRefresh, onViewRevision)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
+  const [remoteOpen, setRemoteOpen] = useState(false)
   useEffect(() => {
     setPickerOpen(false)
     setCommitOpen(false)
@@ -107,6 +109,15 @@ export function GitPanel({
         </span>
         <button
           className="icon-button"
+          title="远程仓库"
+          aria-label="远程仓库"
+          disabled={disabled || !git}
+          onClick={() => setRemoteOpen(true)}
+        >
+          <Cloud size={15} />
+        </button>
+        <button
+          className="icon-button"
           title="刷新源代码管理"
           aria-label="刷新源代码管理"
           disabled={disabled}
@@ -153,7 +164,6 @@ export function GitPanel({
             </span>
             <span className="git-repo-name">
               <strong>{basename(git.root)}</strong>
-              <small title={git.root}>{git.root}</small>
             </span>
             <button
               className="git-branch-trigger"
@@ -195,7 +205,13 @@ export function GitPanel({
           )}
           {!readOnly ? (
             <>
-              <GitRemote repo={repo} disabled={disabled} />
+              <GitRemoteBar repo={repo} disabled={disabled} />
+              <GitRemoteModal
+                repo={repo}
+                disabled={disabled}
+                open={remoteOpen}
+                onClose={() => setRemoteOpen(false)}
+              />
               <div className="git-commit-action">
                 <Button disabled={disabled || !staged.length} onClick={() => setCommitOpen(true)}>
                   <GitCommitHorizontal size={15} />

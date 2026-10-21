@@ -291,6 +291,11 @@ try:
     sw, sh = max(820, min(1000, screen_width - 840)), min(820, screen_height - 90)
     tx, ty, tw, th = sw+10, 35, max(500, screen_width-sw-20), sh
     request(action='layout', x=0, y=35, width=sw, height=sh)
+    time.sleep(.6)
+    # Native decorations shrink the content area, so the edge that hands the
+    # drag to the OS must come from the webview itself.
+    inner_w, inner_h = js('return [window.innerWidth, window.innerHeight]')
+    print('webview', inner_w, inner_h, flush=True)
     click('[aria-label="列表视图"]')
     recorder = Recording()
     stage = 'Move into a folder without a confirmation dialog'
@@ -312,18 +317,23 @@ try:
     request(action='layout', window=second, x=tx, y=ty, width=tw, height=th)
     navigate(target, second)
     request(action='focus')
-    drag(point(row('02-window.txt')), (tx+min(340, tw-60), ty+350), (sw-1, ty+260))
+    drag(point(row('02-window.txt')), (tx+min(340, tw-60), ty+350), (inner_w-3, ty+260))
     wait(lambda: (target/'02-window.txt').is_file())
     assert not (source/'02-window.txt').exists(), 'Same-app windows must move'
     passed('same_app_window_move')
-    # Close the other Fiex window using its real window control.
-    click('[title="关闭窗口"]', second)
+    # Close the other Fiex window through its own window API; the title bar is
+    # drawn by the OS now and no longer has custom buttons to click.
+    request(
+        script="return window.__TAURI_INTERNALS__.invoke('plugin:window|close', { label: window.__TAURI_INTERNALS__.metadata.currentWindow.label })",
+        window=second,
+    )
+    wait(lambda: len(request(action='windows')) == 1)
     if 'file-manager' not in SKIP:
         stage = 'Copy to the OS file manager and preserve the source'
         arrange_file_manager(external, tx, ty, tw, th)
         request(action='focus')
         original = (source/'03-external.txt').read_bytes()
-        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+350), (sw-1, ty+260))
+        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+350), (inner_w-3, ty+260))
         wait(lambda: (external/'03-external.txt').is_file())
         assert (external/'03-external.txt').read_bytes() == original
         assert (source/'03-external.txt').read_bytes() == original
@@ -336,7 +346,7 @@ try:
         processes.append(subprocess.Popen([sys.executable, str(Path(__file__).with_name('upload-target.py')), str(upload)], env=browser_env, stdout=log, stderr=log))
         time.sleep(6)
         request(action='focus')
-        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+300), (sw-1, ty+260))
+        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+300), (inner_w-3, ty+260))
         wait(lambda: upload.is_file() and upload.with_suffix('.json').is_file())
         assert upload.read_bytes() == original
         assert json.loads(upload.with_suffix('.json').read_text())['name'] == '03-external.txt'
