@@ -210,8 +210,12 @@ def passed(name):
     time.sleep(1)
 
 
-def run(*args):
-    return subprocess.check_output([str(a) for a in args], text=True).strip()
+def run(*args, timeout=20):
+    # Every helper call is bounded: a window manager that never activates the
+    # file manager must not stall the recording until the job timeout.
+    return subprocess.check_output(
+        [str(a) for a in args], text=True, timeout=timeout
+    ).strip()
 
 
 def arrange_file_manager(path, x, y, width, height):
@@ -220,7 +224,8 @@ def arrange_file_manager(path, x, y, width, height):
         handle = wait(lambda: run('xdotool', 'search', '--name', path.name).splitlines()[-1])
         run('xdotool', 'windowmove', handle, x, y)
         run('xdotool', 'windowsize', handle, width, height)
-        run('xdotool', 'windowactivate', '--sync', handle)
+        # --sync blocks forever when the window manager ignores the request.
+        run('xdotool', 'windowactivate', handle)
     elif SYSTEM == 'Darwin':
         subprocess.check_call(['open', str(path)])
         time.sleep(2)
