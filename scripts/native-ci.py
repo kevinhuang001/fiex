@@ -323,8 +323,10 @@ try:
     passed('same_app_window_move')
     # Close the other Fiex window through its own window API; the title bar is
     # drawn by the OS now and no longer has custom buttons to click.
+    # Close asynchronously: destroying the window would drop the reply the
+    # driver is waiting for if the close were awaited inline.
     request(
-        script="return window.__TAURI_INTERNALS__.invoke('plugin:window|close', { label: window.__TAURI_INTERNALS__.metadata.currentWindow.label })",
+        script="setTimeout(() => window.__TAURI_INTERNALS__.invoke('plugin:window|close', { label: window.__TAURI_INTERNALS__.metadata.currentWindow.label }), 50); return true",
         window=second,
     )
     wait(lambda: len(request(action='windows')) == 1)
