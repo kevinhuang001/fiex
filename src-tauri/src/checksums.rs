@@ -49,7 +49,13 @@ pub fn calculate(path: &str) -> Result<Vec<Checksum>, String> {
         },
         Checksum {
             algorithm: "MD5",
-            value: format!("{:x}", md5.finalize()),
+            // md-5 0.11 returns a hybrid_array digest that does not implement
+            // LowerHex, so render the bytes explicitly.
+            value: md5
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
         },
         Checksum {
             algorithm: "CRC32",
