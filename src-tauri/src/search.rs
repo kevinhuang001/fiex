@@ -252,11 +252,15 @@ fn build_index(
                 if added >= INDEX_LIMIT {
                     break;
                 }
-                let mut doc = TantivyDocument::new();
-                doc.add_text(name, item.file_name().to_string_lossy().to_lowercase());
-                doc.add_text(path, item.path().to_string_lossy());
-                doc.add_text(path_id, item.path().to_string_lossy());
-                if writer.add_document(doc).is_err() {
+                if !add_document(
+                    &writer,
+                    IndexFields {
+                        name,
+                        path,
+                        path_id,
+                    },
+                    item.path(),
+                ) {
                     skipped += 1;
                 } else {
                     added += 1;
@@ -302,32 +306,31 @@ fn build_index(
     })
 }
 
-fn add_document(
-    writer: &IndexWriter,
+#[derive(Clone, Copy)]
+struct IndexFields {
     name: Field,
     path: Field,
     path_id: Field,
-    item: &Path,
-) -> bool {
+}
+
+fn add_document(writer: &IndexWriter, fields: IndexFields, item: &Path) -> bool {
     let mut doc = TantivyDocument::new();
     doc.add_text(
-        name,
+        fields.name,
         item.file_name()
             .unwrap_or_default()
             .to_string_lossy()
             .to_lowercase(),
     );
-    doc.add_text(path, item.to_string_lossy());
-    doc.add_text(path_id, item.to_string_lossy());
+    doc.add_text(fields.path, item.to_string_lossy());
+    doc.add_text(fields.path_id, item.to_string_lossy());
     writer.add_document(doc).is_ok()
 }
 
 /// Re-index one path (a file or a whole subtree) after a filesystem event.
 fn index_subtree(
     writer: &IndexWriter,
-    name: Field,
-    path: Field,
-    path_id: Field,
+    fields: IndexFields,
     target: &Path,
     root: &Path,
     hidden: bool,
@@ -356,11 +359,9 @@ fn index_subtree(
                 )
         })
         .build();
-    for result in walker {
-        if let Ok(item) = result {
-            add_document(writer, name, path, path_id, item.path());
-            added += 1;
-        }
+    for item in walker.flatten() {
+        add_document(writer, fields, item.path());
+        added += 1;
     }
     added
 }
@@ -382,9 +383,11 @@ fn apply_pending(handle: &mut IndexHandle, hidden: bool, ignores: &[String]) -> 
         if target.exists() {
             index_subtree(
                 &handle.writer,
-                handle.name,
-                handle.path,
-                handle.path_id,
+                IndexFields {
+                    name: handle.name,
+                    path: handle.path,
+                    path_id: handle.path_id,
+                },
                 &target,
                 &root,
                 hidden,

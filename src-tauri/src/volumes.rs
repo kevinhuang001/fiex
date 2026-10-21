@@ -769,7 +769,7 @@ pub fn empty_trash() -> Result<usize, String> {
             let _ = std::fs::remove_file(info.join(format!("{name}.trashinfo")));
             removed += 1;
         }
-        return Ok(removed);
+        Ok(removed)
     }
     #[cfg(target_os = "windows")]
     {
