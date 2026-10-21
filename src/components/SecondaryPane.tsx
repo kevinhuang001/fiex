@@ -1,8 +1,9 @@
-import { ArrowUp, ChevronRight, HardDrive, X } from 'lucide-react'
+import { ArrowUp, ChevronRight, HardDrive, LoaderCircle, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from './ui/button'
 import { FileViews } from './browser/FileViews'
 import { useExplorer } from '@/hooks/useExplorer'
+import { shortcutLabel } from '@/lib/shortcuts'
 import type { Entry, Preferences } from '@/lib/types'
 
 /// Second browser pane: an independent explorer that shares preferences. The
@@ -38,6 +39,8 @@ export function SecondaryPane({
   const [editing, setEditing] = useState(false)
   const [top, setTop] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
+  const search = useRef<HTMLInputElement>(null)
+  const searchHint = shortcutLabel(prefs.shortcuts, 'search', prefs.shortcutStyle)
   const segments = (() => {
     const parts = x.path.split('/').filter(Boolean)
     return parts.map((name, index) => ({
@@ -147,16 +150,40 @@ export function SecondaryPane({
                 ))}
               </>
             )}
-            <span className="path-toolbar-spacer" />
-            <button
-              className="icon-button"
-              title="关闭面板"
-              aria-label="关闭面板"
-              onClick={onClose}
-            >
-              <X size={14} />
-            </button>
           </nav>
+          <div className="search-box">
+            <Search size={15} />
+            <input
+              ref={search}
+              aria-label="搜索第二个面板"
+              placeholder="搜索此文件夹"
+              value={x.query}
+              onChange={(event) => x.setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Escape') return
+                event.stopPropagation()
+                x.setQuery('')
+                event.currentTarget.blur()
+              }}
+            />
+            {x.searching ? (
+              <LoaderCircle className="spin" size={14} />
+            ) : x.query ? (
+              <button className="icon-button" aria-label="清除搜索" onClick={() => x.setQuery('')}>
+                <X size={13} />
+              </button>
+            ) : (
+              <kbd>{searchHint}</kbd>
+            )}
+          </div>
+          <button
+            className="icon-button pane-close-secondary"
+            title="关闭面板"
+            aria-label="关闭面板"
+            onClick={onClose}
+          >
+            <X size={14} />
+          </button>
         </div>
         <FileViews
           explorer={x}

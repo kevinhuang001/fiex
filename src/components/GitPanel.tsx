@@ -58,7 +58,7 @@ export function GitPanel({
   readOnly,
 }: Props) {
   const panel = useRef<HTMLElement>(null)
-  const [panelTop, setPanelTop] = useState(120)
+  const [panelTop, setPanelTop] = useState(100)
   const repo = useGitRepository(git?.root, path, open, onRefresh, onViewRevision)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
@@ -91,8 +91,13 @@ export function GitPanel({
   }, [open, onClose, pickerOpen, commitOpen])
   useEffect(() => {
     if (!open) return
-    const position = () =>
-      setPanelTop((document.querySelector('.toolbar')?.getBoundingClientRect().bottom ?? 112) + 8)
+    const position = () => {
+      // Attach the sheet to the source-control button so it reads as a
+      // dropdown; the toolbar container's bottom sits too far down.
+      const button = document.querySelector('.git-toolbar-button')?.getBoundingClientRect().bottom
+      const toolbar = document.querySelector('.toolbar')?.getBoundingClientRect().bottom
+      setPanelTop((button ?? toolbar ?? 95) + 4)
+    }
     position()
     const outside = (event: Event) => {
       if (pickerOpen || commitOpen || remoteOpen) return

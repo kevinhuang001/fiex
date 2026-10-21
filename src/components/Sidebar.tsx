@@ -19,18 +19,17 @@ import {
   Unplug,
   Usb,
 } from 'lucide-react'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
 import { fileVisual } from '@/lib/fileIcons'
 import { CreateTagDialog } from './CreateTagDialog'
-import { TAG_PRESETS, tagColor } from '@/lib/tags'
+import { TAG_PRESETS, tagHex } from '@/lib/tags'
 interface Props {
   x: Explorer
   prefs: Preferences
   update: (p: Partial<Preferences>) => void
-  favorite: () => void
   onTrash: () => void
   onEmptyTrash: () => void
   onApplications: () => void
@@ -47,7 +46,6 @@ export function Sidebar({
   x,
   prefs,
   update,
-  favorite,
   onTrash,
   onEmptyTrash,
   onApplications,
@@ -65,9 +63,15 @@ export function Sidebar({
     | { kind: 'favorite'; x: number; y: number; path: string }
     | null
   >(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!menu) return
-    const close = () => setMenu(null)
+    // pointerdown fires before click, so an item can only be activated when the
+    // press inside the menu is ignored by the outside-click handler.
+    const close = (event: Event) => {
+      if (menuRef.current?.contains(event.target as Node)) return
+      setMenu(null)
+    }
     window.addEventListener('pointerdown', close)
     window.addEventListener('blur', close)
     return () => {
@@ -102,9 +106,7 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-title" data-tauri-drag-region>
-        <span data-tauri-drag-region>Fiex</span>
-      </div>
+      <div className="sidebar-title" data-tauri-drag-region />
       <div className="sidebar-content">
         {prefs.sidebarOrder.map((section) => {
           if (section === 'places') {
@@ -154,9 +156,6 @@ export function Sidebar({
               <div className="favorites-section" data-bookmark-drop="true" key="favorites">
                 <div className="sidebar-section-title">
                   <span className="sidebar-label">收藏</span>
-                  <button className="icon-button" title="收藏当前文件夹" onClick={favorite}>
-                    <Plus size={14} />
-                  </button>
                 </div>
                 {prefs.favorites.length ? (
                   prefs.favorites.map((location) => (
@@ -184,7 +183,7 @@ export function Sidebar({
                     </div>
                   ))
                 ) : (
-                  <></>
+                  <p className="sidebar-hint">将文件夹拖到这里收藏</p>
                 )}
               </div>
             )
@@ -209,10 +208,52 @@ export function Sidebar({
                     className={`nav-item tag-nav ${x.tagFilter === tag.name ? 'active' : ''}`}
                     onClick={() => x.setTagFilter(x.tagFilter === tag.name ? null : tag.name)}
                   >
-                    <span className="tag-dot" style={{ background: tagColor(tag.color) }} />
+                    <span className="tag-dot" style={{ background: tagHex(tag) }} />
                     <span>{tag.name}</span>
                   </button>
                 ))}
+              </Fragment>
+            )
+          }
+          if (section === 'connections') {
+            return (
+              <Fragment key="connections">
+                <div className="sidebar-section-title">
+                  <span className="sidebar-label">连接</span>
+                  <button
+                    className="icon-button"
+                    title="添加 WebDAV 或 SMB 连接"
+                    aria-label="添加 WebDAV 或 SMB 连接"
+                    onClick={onAddConnection}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {x.connections.length === 0 ? (
+                  <p className="sidebar-hint">WebDAV · SMB</p>
+                ) : (
+                  x.connections.map((connection) => (
+                    <div className="device-row" key={connection.id}>
+                      <button
+                        className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath + '/') ? 'active' : ''}`}
+                        onClick={() => x.navigate(connection.mountPath)}
+                      >
+                        <Server />
+                        <span>
+                          <span>{connection.name}</span>
+                          <small>{connection.kind === 'webdav' ? 'WebDAV' : 'SMB'}</small>
+                        </span>
+                      </button>
+                      <button
+                        className="device-eject icon-button"
+                        title="关闭连接"
+                        onClick={() => onRemoveConnection(connection.id)}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))
+                )}
               </Fragment>
             )
           }
@@ -220,13 +261,6 @@ export function Sidebar({
             <Fragment key="devices">
               <div className="sidebar-section-title devices-title">
                 <span className="sidebar-label">设备</span>
-                <button
-                  className="icon-button"
-                  title="添加 WebDAV 或 SMB 连接"
-                  onClick={onAddConnection}
-                >
-                  <Plus size={14} />
-                </button>
               </div>
               {x.locations
                 .filter((location) => location.kind === 'disk')
@@ -310,33 +344,13 @@ export function Sidebar({
                     </div>
                   )
                 })}
-              {x.connections.map((connection) => (
-                <div className="device-row" key={connection.id}>
-                  <button
-                    className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath + '/') ? 'active' : ''}`}
-                    onClick={() => x.navigate(connection.mountPath)}
-                  >
-                    <Server />
-                    <span>
-                      <span>{connection.name}</span>
-                      <small>{connection.kind === 'webdav' ? 'WebDAV' : 'SMB'}</small>
-                    </span>
-                  </button>
-                  <button
-                    className="device-eject icon-button"
-                    title="关闭连接"
-                    onClick={() => onRemoveConnection(connection.id)}
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              ))}
             </Fragment>
           )
         })}
       </div>
       {menu && (
         <div
+          ref={menuRef}
           className="context-menu sidebar-menu"
           role="menu"
           aria-label={menu.kind === 'trash' ? '废纸篓' : '收藏'}

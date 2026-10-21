@@ -24,7 +24,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
     compressIgnore: defaultOperationIgnore(),
-    sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
+    sidebarOrder: ['places', 'favorites', 'tags', 'devices', 'connections'],
     placeOrder: [],
     hiddenPlaces: [],
     favorites: [],
@@ -90,9 +90,21 @@ function load(): Preferences {
         ? stored.compressIgnore
         : fallback.compressIgnore,
       sidebarOrder: Array.isArray(stored.sidebarOrder)
-        ? (stored.sidebarOrder.filter((section): section is SidebarSection =>
-            ['places', 'favorites', 'tags', 'devices'].includes(section),
-          ) as SidebarSection[])
+        ? (() => {
+            const known: SidebarSection[] = [
+              'places',
+              'favorites',
+              'tags',
+              'devices',
+              'connections',
+            ]
+            const saved = stored.sidebarOrder.filter((section): section is SidebarSection =>
+              known.includes(section),
+            )
+            // Older preferences predate the connections section; append it so
+            // the new group appears without disturbing the saved order.
+            return [...saved, ...known.filter((section) => !saved.includes(section))]
+          })()
         : fallback.sidebarOrder,
       hiddenPlaces: Array.isArray(stored.hiddenPlaces)
         ? stored.hiddenPlaces

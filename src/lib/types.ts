@@ -2,7 +2,10 @@ import type { ShortcutMap, ShortcutStyle } from './shortcuts'
 
 export interface Tag {
   name: string
+  /** Finder tag colour index (0–7). */
   color: number
+  /** Optional exact colour chosen in Fiex for custom tags. */
+  hex?: string
 }
 export interface Entry {
   path: string
@@ -26,7 +29,7 @@ export interface Listing {
   entries: Entry[]
   warnings: string[]
 }
-export type SidebarSection = 'places' | 'favorites' | 'tags' | 'devices'
+export type SidebarSection = 'places' | 'favorites' | 'tags' | 'devices' | 'connections'
 
 export interface Location {
   name: string

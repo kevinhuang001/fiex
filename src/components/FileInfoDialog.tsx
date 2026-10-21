@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { gitState } from '@/lib/git'
 import { FileIcon } from './FileIcon'
 import { date, parent, kind, size } from '@/lib/files'
-import { tagColor } from '@/lib/tags'
+import { tagHex } from '@/lib/tags'
 import { call } from '@/lib/api'
 import type { Entry } from '@/lib/types'
 export function FileInfoDialog({
@@ -53,7 +53,7 @@ export function FileInfoDialog({
             <div className="file-info-tags">
               {info.tags.map((tag) => (
                 <span className="tag-chip" key={`${tag.name}:${tag.color}`}>
-                  <i style={{ background: tagColor(tag.color) }} />
+                  <i style={{ background: tagHex(tag) }} />
                   {tag.name}
                 </span>
               ))}

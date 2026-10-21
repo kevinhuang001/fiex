@@ -39,7 +39,6 @@ export default function App() {
         x={{ ...app.x, locations: app.left.locations, connections: app.left.connections }}
         prefs={app.prefs}
         update={app.update}
-        favorite={app.favorite}
         onTrash={app.openTrash}
         onEmptyTrash={app.emptyTrash}
         onApplications={app.openApplications}
@@ -103,6 +102,9 @@ export default function App() {
           <div
             className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
             onPointerDownCapture={() => app.setActive('left')}
+            data-drop-folder={
+              /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) ? undefined : app.left.path
+            }
           >
             <FileViews
               readOnly={app.left.path.startsWith('history://') || app.left.directoryReadOnly}

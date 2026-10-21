@@ -59,7 +59,7 @@ const sections: Section[] = [
     label: '侧边栏',
     icon: PanelLeft,
     color: '#5b9cf8',
-    keywords: ['sidebar', '侧边栏', '常用位置', '收藏', '设备', '标签', '顺序'],
+    keywords: ['sidebar', '侧边栏', '常用位置', '收藏', '设备', '连接', '标签', '顺序'],
   },
   {
     id: 'ignore',

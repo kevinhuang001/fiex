@@ -16,6 +16,8 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { ReactNode } from 'react'
 function placeIcon(name: string) {
   if (name === '最近使用') return <Clock size={14} />
   if (name === '废纸篓') return <Trash2 size={14} />
@@ -35,6 +37,7 @@ const SIDEBAR_LABELS: Record<SidebarSection, string> = {
   favorites: '收藏',
   tags: '标签',
   devices: '设备',
+  connections: '连接',
 }
 
 export function SidebarSettings({
@@ -48,16 +51,31 @@ export function SidebarSettings({
 }) {
   const [draggingRow, setDraggingRow] = useState<string | null>(null)
   const [dropRow, setDropRow] = useState<string | null>(null)
+  const [ghost, setGhost] = useState<{
+    kind: 'section' | 'place'
+    label: string
+    icon?: ReactNode
+    hidden?: boolean
+    width: number
+    x: number
+    y: number
+  } | null>(null)
   const reorder = <T,>(items: T[], from: number, to: number) => {
     const next = [...items]
     const [item] = next.splice(from, 1)
     next.splice(to, 0, item)
     return next
   }
-  const beginReorder = (event: React.PointerEvent, kind: 'section' | 'place', index: number) => {
+  const beginReorder = (
+    event: React.PointerEvent,
+    kind: 'section' | 'place',
+    index: number,
+    preview: { label: string; icon?: ReactNode; hidden?: boolean },
+  ) => {
     if ((event.target as Element).closest('input,button')) return
     const startX = event.clientX
     const startY = event.clientY
+    const width = Math.min(event.currentTarget.getBoundingClientRect().width, 260)
     let active = false
     let target = index
     const move = (moveEvent: PointerEvent) => {
@@ -65,8 +83,16 @@ export function SidebarSettings({
         if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
         active = true
         setDraggingRow(`${kind}:${index}`)
+        document.body.classList.add('dragging-reorder')
       }
       moveEvent.preventDefault()
+      setGhost({
+        ...preview,
+        kind,
+        width,
+        x: moveEvent.clientX,
+        y: moveEvent.clientY,
+      })
       const row = document
         .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
         ?.closest<HTMLElement>(`[data-reorder="${kind}"]`)
@@ -82,8 +108,10 @@ export function SidebarSettings({
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
+      document.body.classList.remove('dragging-reorder')
       setDraggingRow(null)
       setDropRow(null)
+      setGhost(null)
       if (!active || target === index) return
       if (kind === 'section') {
         update({ sidebarOrder: reorder(prefs.sidebarOrder, index, target) })
@@ -116,7 +144,7 @@ export function SidebarSettings({
             className="settings-reset"
             onClick={() =>
               update({
-                sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
+                sidebarOrder: ['places', 'favorites', 'tags', 'devices', 'connections'],
                 placeOrder: [],
                 hiddenPlaces: [],
               })
@@ -133,7 +161,9 @@ export function SidebarSettings({
               key={id}
               data-reorder="section"
               data-reorder-index={index}
-              onPointerDown={(event) => beginReorder(event, 'section', index)}
+              onPointerDown={(event) =>
+                beginReorder(event, 'section', index, { label: SIDEBAR_LABELS[id] })
+              }
             >
               <GripVertical size={13} className="drag-handle" />
               <span>{SIDEBAR_LABELS[id]}</span>
@@ -155,7 +185,13 @@ export function SidebarSettings({
                 key={key}
                 data-reorder="place"
                 data-reorder-index={index}
-                onPointerDown={(event) => beginReorder(event, 'place', index)}
+                onPointerDown={(event) =>
+                  beginReorder(event, 'place', index, {
+                    label: location.name,
+                    icon: placeIcon(location.name),
+                    hidden,
+                  })
+                }
               >
                 <GripVertical size={13} className="drag-handle" />
                 <span className="settings-choice-icon place-icon">{placeIcon(location.name)}</span>
@@ -177,6 +213,22 @@ export function SidebarSettings({
           })}
         </div>
       </div>
+      {ghost &&
+        createPortal(
+          <div
+            className="reorder-ghost"
+            style={{ left: ghost.x, top: ghost.y, width: ghost.width }}
+            aria-hidden="true"
+          >
+            <GripVertical size={13} className="drag-handle" />
+            {ghost.icon && <span className="reorder-ghost-icon">{ghost.icon}</span>}
+            <span className="reorder-ghost-label">{ghost.label}</span>
+            {ghost.kind === 'place' && (
+              <span className="reorder-ghost-state">{ghost.hidden ? '隐藏' : '显示'}</span>
+            )}
+          </div>,
+          document.body,
+        )}
     </>
   )
 }

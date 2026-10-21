@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
-import { TAG_PRESETS, tagColor } from '@/lib/tags'
+import { TAG_PRESETS, tagHex } from '@/lib/tags'
 import type { Tag } from '@/lib/types'
 
 interface Props {
@@ -51,7 +51,7 @@ export function TagDialog({ open, initial, available = [], onClose, onApply }: P
                 aria-pressed={active}
                 onClick={() => toggle(preset)}
               >
-                <i style={{ background: tagColor(preset.color) }} />
+                <i style={{ background: tagHex(preset) }} />
                 {preset.name}
               </button>
             )
@@ -62,7 +62,7 @@ export function TagDialog({ open, initial, available = [], onClose, onApply }: P
           <div className="tag-chips">
             {tags.map((tag) => (
               <span className="tag-chip" key={`${tag.name}:${tag.color}`}>
-                <i style={{ background: tagColor(tag.color) }} />
+                <i style={{ background: tagHex(tag) }} />
                 {tag.name}
                 <button aria-label={`移除标签 ${tag.name}`} onClick={() => toggle(tag)}>
                   <X size={10} />

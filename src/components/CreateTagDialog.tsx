@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
-import { tagColor } from '@/lib/tags'
+import { ColorPicker } from './ui/ColorPicker'
+import { TAG_PALETTE, nearestFinderColor } from '@/lib/tags'
 import type { Tag } from '@/lib/types'
 export function CreateTagDialog({
   onClose,
@@ -13,15 +14,17 @@ export function CreateTagDialog({
   existing: Tag[]
 }) {
   const [name, setName] = useState('')
-  const [color, setColor] = useState(4)
+  const [hex, setHex] = useState('#007aff')
   const duplicate = existing.some((tag) => tag.name === name.trim())
+  const choose = (value: string) => setHex(value.toLowerCase())
   return (
     <Modal open onClose={onClose} title="添加标签">
       <form
         className="create-tag-form"
         onSubmit={(e) => {
           e.preventDefault()
-          if (name.trim() && !duplicate) onCreate({ name: name.trim(), color })
+          if (name.trim() && !duplicate)
+            onCreate({ name: name.trim(), color: nearestFinderColor(hex), hex })
         }}
       >
         <input
@@ -33,16 +36,18 @@ export function CreateTagDialog({
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <div className="tag-colors" aria-label="标签颜色">
-          {[1, 2, 3, 4, 5, 6, 7].map((index) => (
+        <span className="create-tag-color-label">颜色</span>
+        <ColorPicker value={hex} onChange={choose} />
+        <div className="tag-colors" aria-label="常用颜色">
+          {TAG_PALETTE.map((swatch) => (
             <button
               type="button"
-              key={index}
-              aria-label={`选择颜色 ${index}`}
-              aria-pressed={color === index}
-              className={color === index ? 'active' : ''}
-              style={{ background: tagColor(index) }}
-              onClick={() => setColor(index)}
+              key={swatch}
+              aria-label={`选择颜色 ${swatch}`}
+              aria-pressed={hex === swatch}
+              className={hex === swatch ? 'active' : ''}
+              style={{ background: swatch }}
+              onClick={() => choose(swatch)}
             />
           ))}
         </div>

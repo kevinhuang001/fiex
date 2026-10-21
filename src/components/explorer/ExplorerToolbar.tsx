@@ -93,7 +93,10 @@ export function ExplorerToolbar({
   } | null>(null)
   useEffect(() => {
     if (!picker) return
-    const close = () => setPicker(null)
+    const close = (event: Event) => {
+      if ((event.target as Element | null)?.closest('.toolbar-picker')) return
+      setPicker(null)
+    }
     window.addEventListener('pointerdown', close)
     window.addEventListener('blur', close)
     return () => {
@@ -188,18 +191,6 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title="刷新"
-          aria-label="刷新"
-          onClick={() => {
-            setRefreshKey((key) => key + 1)
-            refreshAll()
-          }}
-        >
-          <RefreshCw key={refreshKey} size={20} className={refreshKey ? 'refresh-turn' : ''} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
           title={gitSwitched ? '历史版本只读' : `新建文件夹 ${hint('newFolder')}`}
           aria-label="新建文件夹"
           disabled={gitSwitched || x.directoryReadOnly}
@@ -258,6 +249,18 @@ export function ExplorerToolbar({
           </Button>
         </div>
         <div className="toolbar-divider" />
+        <Button
+          variant="ghost"
+          size="icon"
+          title="刷新"
+          aria-label="刷新"
+          onClick={() => {
+            setRefreshKey((key) => key + 1)
+            refreshAll()
+          }}
+        >
+          <RefreshCw key={refreshKey} size={20} className={refreshKey ? 'refresh-turn' : ''} />
+        </Button>
         <Button
           variant="ghost"
           size="icon"

@@ -1533,7 +1533,7 @@ dependencies = [
 
 [[package]]
 name = "fiex"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "apfs",
  "base64 0.22.1",
