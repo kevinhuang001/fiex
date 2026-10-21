@@ -149,6 +149,12 @@ async fn git_remote_status(root: String) -> Result<git_remote::RemoteStatus, Str
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+async fn git_remote_remove(root: String, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || git_remote::remove(&root, &name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
 async fn git_remote_save(root: String, name: String, url: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || git_remote::save(&root, &name, &url))
         .await
@@ -633,6 +639,16 @@ fn cancel_search(state: tauri::State<'_, SearchState>) {
     state.cancel();
 }
 #[tauri::command]
+fn pick_folder(default: Option<String>) -> Option<String> {
+    let mut dialog = rfd::FileDialog::new();
+    if let Some(directory) = default.filter(|path| std::path::Path::new(path).is_dir()) {
+        dialog = dialog.set_directory(directory);
+    }
+    dialog
+        .pick_folder()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+#[tauri::command]
 async fn extract_archive(
     app: tauri::AppHandle,
     path: String,
@@ -832,6 +848,7 @@ pub fn run() {
             new_window,
             git_remote_status,
             git_remote_save,
+            git_remote_remove,
             git_sync,
             drag_files,
             git_init,
@@ -857,6 +874,7 @@ pub fn run() {
             warm_index,
             cancel_search,
             extract_archive,
+            pick_folder,
             compress_archive,
             detect_terminals,
             detect_ides,

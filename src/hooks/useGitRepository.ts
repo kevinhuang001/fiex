@@ -116,6 +116,11 @@ export function useGitRepository(
         await loadRemote()
         setRemote(name)
       }),
+    removeRemote: (name: string) =>
+      run('正在移除远程仓库', async () => {
+        await call('git_remote_remove', { root, name })
+        await loadRemote()
+      }),
     sync: (push: boolean, branch?: string) =>
       run(push ? '正在推送' : '正在拉取', async () => {
         await call('git_sync', { root, remote, push, branch: branch || null })

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Check, Cloud } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Cloud, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { useGitRepository } from '@/hooks/useGitRepository'
 import { Button } from '../ui/button'
 import { Modal } from '../ui/Modal'
 
-/// Everything about remotes lives here: selection, name/address editing and
-/// the sync actions. The panel itself only keeps changes and the commit box.
+/// The remote manager lists what the repository already has (origin is not
+/// special) and switches to a small form when adding or editing, so the list
+/// stays a read-only overview with the sync controls underneath.
 export function GitRemoteModal({
   repo,
   disabled,
@@ -17,128 +18,237 @@ export function GitRemoteModal({
   open: boolean
   onClose: () => void
 }) {
-  const [name, setName] = useState('origin')
-  const [url, setUrl] = useState('')
+  const [editing, setEditing] = useState<{
+    mode: 'new' | 'edit'
+    name: string
+    url: string
+  } | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const [branch, setBranch] = useState('')
   const status = repo.remoteStatus
   const remotes = status?.remotes || []
-  const configured = remotes.length > 0
+  const selected = remotes.find((remote) => remote.name === repo.remote)
   const busy = Boolean(repo.busy) || disabled
   useEffect(() => {
     if (!open) return
-    const current = remotes.find((r) => r.name === repo.remote) || remotes[0]
-    setName(current?.name || 'origin')
-    setUrl(current?.url || '')
+    setEditing(null)
+    setPendingRemove(null)
     setBranch(repo.refs?.current || '')
-  }, [open, repo.remote, repo.refs?.current])
-  const choose = (name: string) => {
-    const remote = remotes.find((r) => r.name === name)
-    repo.setRemote(name)
-    setName(remote?.name || name)
-    setUrl(remote?.url || '')
-  }
+  }, [open, repo.refs?.current])
   return (
     <Modal
       open={open}
       onClose={() => {
         if (!repo.busy) onClose()
       }}
-      title="远程仓库"
+      title={editing ? (editing.mode === 'new' ? '添加远程仓库' : '编辑远程仓库') : '远程仓库'}
       className="git-remote-modal"
     >
-      {configured && (
-        <div className="git-remote-list" role="listbox" aria-label="已有远程仓库">
-          {remotes.map((remote) => (
+      {editing ? (
+        <RemoteForm
+          repo={repo}
+          busy={busy}
+          editing={editing}
+          onCancel={() => setEditing(null)}
+          onSaved={() => setEditing(null)}
+        />
+      ) : (
+        <>
+          <section className="git-remote-section">
+            <div className="git-remote-section-title">
+              <span>已配置</span>
+              <span className="git-remote-badge">{remotes.length}</span>
+              <span className="git-remote-count" title={status?.upstream || ''}>
+                ↓ {status?.behind || 0} · ↑ {status?.ahead || 0}
+              </span>
+            </div>
+            {remotes.length ? (
+              <ul className="git-remote-list" role="listbox" aria-label="远程仓库">
+                {remotes.map((remote) => (
+                  <li
+                    key={remote.name}
+                    className={`git-remote-row ${remote.name === repo.remote ? 'active' : ''}`}
+                  >
+                    {pendingRemove === remote.name ? (
+                      <div className="git-remote-confirm">
+                        <span>移除 {remote.name}？</span>
+                        <Button
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => setPendingRemove(null)}
+                        >
+                          取消
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          disabled={busy}
+                          onClick={() => {
+                            void repo.removeRemote(remote.name)
+                            setPendingRemove(null)
+                          }}
+                        >
+                          移除
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          role="option"
+                          aria-selected={remote.name === repo.remote}
+                          className="git-remote-select"
+                          onClick={() => repo.setRemote(remote.name)}
+                        >
+                          <Cloud size={14} />
+                          <span className="git-remote-name">{remote.name}</span>
+                          <span className="git-remote-url" title={remote.url}>
+                            {remote.url}
+                          </span>
+                          {remote.name === repo.remote && (
+                            <Check size={13} className="git-remote-check" />
+                          )}
+                        </button>
+                        <button
+                          className="icon-button"
+                          title={`编辑 ${remote.name}`}
+                          aria-label={`编辑 ${remote.name}`}
+                          disabled={busy}
+                          onClick={() =>
+                            setEditing({ mode: 'edit', name: remote.name, url: remote.url })
+                          }
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          title={`移除 ${remote.name}`}
+                          aria-label={`移除 ${remote.name}`}
+                          disabled={busy}
+                          onClick={() => setPendingRemove(remote.name)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="git-remote-empty">还没有远程仓库，添加一个即可推送和拉取。</p>
+            )}
             <button
-              key={remote.name}
-              role="option"
-              aria-selected={remote.name === repo.remote}
-              className={`git-remote-item ${remote.name === repo.remote ? 'active' : ''}`}
-              onClick={() => choose(remote.name)}
+              className="git-remote-add"
+              disabled={busy}
+              onClick={() => setEditing({ mode: 'new', name: '', url: '' })}
             >
-              <Cloud size={13} />
-              {remote.name}
-              {remote.name === repo.remote && <Check size={13} className="git-remote-check" />}
+              <Plus size={13} />
+              添加远程仓库
             </button>
-          ))}
-          <span className="git-remote-count" title={status?.upstream || ''}>
-            ↓ {status?.behind || 0} · ↑ {status?.ahead || 0}
-          </span>
-        </div>
+          </section>
+          <section className="git-remote-sync">
+            <label className="git-remote-branch">
+              分支
+              <input
+                className="text-field"
+                aria-label="同步分支"
+                list="fiex-git-branches"
+                value={branch}
+                placeholder={repo.refs?.current || '当前分支'}
+                onChange={(e) => setBranch(e.target.value)}
+              />
+              <datalist id="fiex-git-branches">
+                {repo.refs?.branches.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
+            </label>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy || !selected}
+              onClick={() => void repo.sync(false, branch)}
+            >
+              <ArrowDown size={14} />
+              拉取
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy || !selected || !repo.refs?.head}
+              onClick={() => void repo.sync(true, branch)}
+            >
+              <ArrowUp size={14} />
+              推送
+            </Button>
+          </section>
+          {repo.error && (
+            <p className="git-panel-error git-remote-error" role="alert">
+              {repo.error}
+            </p>
+          )}
+        </>
       )}
-      <form
-        className="git-commit-form"
-        onSubmit={async (e) => {
-          e.preventDefault()
-          if (await repo.saveRemote(name, url)) onClose()
-        }}
-      >
-        <label>
-          名称
-          <input
-            className="text-field"
-            aria-label="远程名称"
-            value={name}
-            required
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <label>
-          仓库地址
-          <input
-            className="text-field"
-            aria-label="仓库地址"
-            value={url}
-            required
-            placeholder="https://… / git@…"
-            onChange={(e) => setUrl(e.target.value)}
-          />
-        </label>
-        <label>
-          分支
-          <input
-            className="text-field"
-            aria-label="同步分支"
-            list="fiex-git-branches"
-            value={branch}
-            placeholder={repo.refs?.current || '当前分支'}
-            onChange={(e) => setBranch(e.target.value)}
-          />
-          <datalist id="fiex-git-branches">
-            {repo.refs?.branches.map((item) => (
-              <option key={item} value={item} />
-            ))}
-          </datalist>
-        </label>
-        {repo.error && (
-          <p className="git-panel-error" role="alert">
-            {repo.error}
-          </p>
-        )}
-        <div className="dialog-actions">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy || !configured}
-            onClick={() => void repo.sync(false, branch)}
-          >
-            <ArrowDown size={14} />
-            拉取
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={busy || !configured || !repo.refs?.head}
-            onClick={() => void repo.sync(true, branch)}
-          >
-            <ArrowUp size={14} />
-            推送
-          </Button>
-          <Button type="submit" disabled={busy || !name.trim() || !url.trim()}>
-            {repo.busy || '保存'}
-          </Button>
-        </div>
-      </form>
     </Modal>
+  )
+}
+
+function RemoteForm({
+  repo,
+  busy,
+  editing,
+  onCancel,
+  onSaved,
+}: {
+  repo: ReturnType<typeof useGitRepository>
+  busy: boolean
+  editing: { mode: 'new' | 'edit'; name: string; url: string }
+  onCancel: () => void
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(editing.name)
+  const [url, setUrl] = useState(editing.url)
+  return (
+    <form
+      className="git-remote-form"
+      onSubmit={async (e) => {
+        e.preventDefault()
+        if (await repo.saveRemote(name, url)) onSaved()
+      }}
+    >
+      <label>
+        名称
+        <input
+          className="text-field"
+          aria-label="远程名称"
+          value={name}
+          required
+          placeholder="origin"
+          onChange={(e) => setName(e.target.value)}
+        />
+      </label>
+      <label>
+        仓库地址
+        <input
+          className="text-field"
+          aria-label="仓库地址"
+          value={url}
+          required
+          placeholder="https://… / git@…"
+          onChange={(e) => setUrl(e.target.value)}
+        />
+      </label>
+      {repo.error && (
+        <p className="git-panel-error" role="alert">
+          {repo.error}
+        </p>
+      )}
+      <div className="git-remote-actions">
+        <Button type="button" variant="ghost" disabled={Boolean(repo.busy)} onClick={onCancel}>
+          返回
+        </Button>
+        <Button type="submit" disabled={busy || !name.trim() || !url.trim()}>
+          {repo.busy || '保存'}
+        </Button>
+      </div>
+    </form>
   )
 }

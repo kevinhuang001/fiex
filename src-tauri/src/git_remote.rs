@@ -78,6 +78,22 @@ fn remote<'a>(root: &Path, name: &'a str) -> Result<&'a str, String> {
     Ok(name)
 }
 
+pub fn remove(root: &str, name: &str) -> Result<(), String> {
+    if name.is_empty()
+        || name.starts_with('-')
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+    {
+        return Err("请输入有效的远程名称".into());
+    }
+    let root = repository(root)?;
+    if !run(&root, &["remote"])?.lines().any(|item| item == name) {
+        return Err("远程仓库不存在".into());
+    }
+    run(&root, &["remote", "remove", "--", name])?;
+    Ok(())
+}
 pub fn sync(root: &str, name: &str, push: bool, branch: Option<&str>) -> Result<String, String> {
     let root = repository(root)?;
     let name = remote(&root, name)?;
