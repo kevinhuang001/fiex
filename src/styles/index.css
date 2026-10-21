@@ -2815,6 +2815,7 @@ body.dragging-file * {
 /* Workspace tray: references only, never copies. */
 .workspace-bar {
   position: relative;
+  z-index: 60;
   border-top: 1px solid var(--line);
   background: var(--surface);
   transition: background 0.12s;
@@ -2983,7 +2984,7 @@ body.dragging-file * {
   top: 96px;
   right: 0;
   bottom: 30px;
-  z-index: 20;
+  z-index: 10;
   width: 46%;
   display: flex;
   flex-direction: column;
@@ -3001,11 +3002,23 @@ body.dragging-file * {
 }
 .secondary-path {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  height: 24px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
   font-size: 11px;
   color: var(--text);
+  text-overflow: ellipsis;
+}
+.secondary-path:hover {
+  border-color: var(--line);
+}
+.secondary-path:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
 }
 .secondary-pane.drop-target {
   border-left-color: var(--accent);

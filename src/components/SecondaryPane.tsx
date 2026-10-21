@@ -1,7 +1,7 @@
 import { ArrowUp, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { FileViews } from './browser/FileViews'
 import { useExplorer } from '@/hooks/useExplorer'
-import { basename } from '@/lib/files'
 import type { Entry, Preferences } from '@/lib/types'
 
 /// Second browser pane: an independent explorer that shares preferences. The
@@ -19,6 +19,8 @@ export function SecondaryPane({
   onTransfer: (paths: string[], destination: string, moving: boolean) => void
 }) {
   const x = useExplorer(prefs, start)
+  const [draft, setDraft] = useState(x.path)
+  useEffect(() => setDraft(x.path), [x.path])
   const open = (entry: Entry) => {
     if (entry.isDir) x.navigate(entry.path)
   }
@@ -32,9 +34,19 @@ export function SecondaryPane({
         <button className="icon-button" title="上一级" aria-label="上一级" onClick={x.up}>
           <ArrowUp size={14} />
         </button>
-        <span className="secondary-path" title={x.path}>
-          {x.path === 'recent://' ? '最近使用' : basename(x.path) || x.path}
-        </span>
+        <input
+          className="secondary-path"
+          aria-label="第二个面板的路径"
+          title={x.path}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            const next = draft.trim()
+            if (next && next !== x.path) x.navigate(next)
+            event.currentTarget.blur()
+          }}
+        />
         <button className="icon-button" title="关闭面板" aria-label="关闭面板" onClick={onClose}>
           <X size={14} />
         </button>
