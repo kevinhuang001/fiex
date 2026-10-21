@@ -100,7 +100,18 @@ e.dispatchEvent(new Event('input',{{bubbles:true}}));e.dispatchEvent(new Event('
 
 def navigate(path, window='main'):
     request(action='focus', window=window)
-    click('[aria-label="编辑路径"]', window)
+    # A freshly created window can swallow the first native click while it is
+    # still being mapped, so retry until the inline path editor is really open.
+    editor = 'return !!document.querySelector(\'[aria-label="文件夹路径"]\')'
+    for _ in range(3):
+        click('[aria-label="编辑路径"]', window)
+        try:
+            wait(lambda: js(editor, window), timeout=5)
+            break
+        except AssertionError:
+            continue
+    else:
+        raise AssertionError('Path editor did not open')
     fill('[aria-label="文件夹路径"]', str(path), window)
     js('document.querySelector(".path-editor").requestSubmit(); return true', window)
     wait(lambda: js('return !!document.querySelector("[role=grid]") && !document.querySelector(".loading") && !document.querySelector(".path-editor")', window))
