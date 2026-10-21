@@ -2821,6 +2821,9 @@ body.dragging-file * {
 .workspace-bar.open {
   background: var(--canvas);
 }
+.workspace-bar header > span:first-of-type {
+  font-size: 11px;
+}
 .workspace-bar.workspace-drop {
   background: color-mix(in srgb, var(--accent) 12%, var(--canvas));
   outline: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
@@ -2936,7 +2939,18 @@ body.dragging-file * {
   display: inline-flex;
 }
 .workspace-empty {
-  margin: 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin: 2px 0;
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
   font-size: 11px;
   color: var(--muted);
+}
+.workspace-empty small {
+  font-size: 10px;
+  opacity: 0.8;
 }

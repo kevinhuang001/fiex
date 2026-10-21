@@ -59,13 +59,13 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener)
 }
 
-export function beginActivity(rawLabel: string, cancel?: () => void): string {
+export function beginActivity(rawLabel: string, detail?: string, cancel?: () => void): string {
   const label = rawLabel.replace(/^正在/, '').replace(/…$/, '')
   const id = `${Date.now()}-${++seq}`
-  items = [{ id, label, status: 'running' as const, startedAt: Date.now() }, ...items].slice(
-    0,
-    LIMIT,
-  )
+  items = [
+    { id, label, detail, status: 'running' as const, startedAt: Date.now() },
+    ...items,
+  ].slice(0, LIMIT)
   // Transfers and archive work show their progress by default; quick commands
   // stay in the history without covering the window.
   if (/复制|移动|压缩|解压/.test(label)) open = true
@@ -89,11 +89,16 @@ export function isCancellable(id: string) {
   return cancellers.has(id)
 }
 
-export function finishActivity(id: string, error?: string) {
+export function finishActivity(id: string, error?: string, detail?: string) {
   cancellers.delete(id)
   items = items.map((item) =>
     item.id === id
-      ? { ...item, status: error ? 'error' : 'done', finishedAt: Date.now(), detail: error }
+      ? {
+          ...item,
+          status: error ? 'error' : 'done',
+          finishedAt: Date.now(),
+          detail: error || detail || item.detail,
+        }
       : item,
   )
   persist()

@@ -3,6 +3,7 @@ import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
 import { ActivityCenter } from '@/components/ActivityCenter'
+import { WorkspaceBar } from '@/components/WorkspaceBar'
 import { ExplorerTabs } from '@/components/explorer/ExplorerTabs'
 import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
@@ -119,6 +120,13 @@ export default function App() {
           onReturnToWorktree={app.returnToWorktree}
           readOnly={app.gitSwitched}
           onOpen={(path) => app.x.navigate(parent(path))}
+        />
+        <WorkspaceBar
+          items={app.workspace.items}
+          open={app.workspace.open}
+          onOpen={app.open}
+          onRemove={app.workspace.remove}
+          onClear={app.workspace.clear}
         />
         <ExplorerStatusBar {...app} />
         <ActivityCenter />

@@ -45,12 +45,16 @@ export function useFileOperations({
   } | null>(null)
   const running = useRef(false)
   const [clipboard, setClipboard] = useState<{ paths: string[]; moving: boolean } | null>(null)
-  const run = async <T>(label: string, fn: () => Promise<T>): Promise<T | undefined> => {
+  const run = async <T>(
+    label: string,
+    fn: () => Promise<T>,
+    detail?: string,
+  ): Promise<T | undefined> => {
     if (running.current) return
     running.current = true
     setBusy(label)
     x.setError('')
-    const activity = beginActivity(label)
+    const activity = beginActivity(label, detail)
     try {
       const result = await fn()
       finishActivity(activity)
@@ -102,7 +106,7 @@ export function useFileOperations({
       deletePermanently(paths)
       return
     }
-    void run('正在移到废纸篓…', () => moveToTrash(paths))
+    void run('正在移到废纸篓…', () => moveToTrash(paths), `${paths.length} 个项目 → 废纸篓`)
   }
   const deletePermanently = (paths: string[]) => {
     if (!paths.length) return
@@ -144,16 +148,19 @@ export function useFileOperations({
     moving: boolean,
     resolutions: ConflictResolution[] = [],
   ) => {
-    const result = await run(moving ? '正在移动…' : '正在复制…', () =>
-      call<OperationResult>('transfer', {
-        paths,
-        destination,
-        moving,
-        keepBoth: false,
-        // Copy and move always take everything; browsing filters stay visual.
-        ignores: [],
-        resolutions,
-      }),
+    const result = await run(
+      moving ? '正在移动…' : '正在复制…',
+      () =>
+        call<OperationResult>('transfer', {
+          paths,
+          destination,
+          moving,
+          keepBoth: false,
+          // Copy and move always take everything; browsing filters stay visual.
+          ignores: [],
+          resolutions,
+        }),
+      `${paths.length} 项 → ${destination}`,
     )
     if (!result) return
     if (result.conflicts?.length) {
@@ -208,17 +215,23 @@ export function useFileOperations({
       x.entries.map((entry) => entry.name),
       base + format.ext,
     )
-    void run('正在压缩…', async () => {
-      await call('compress_archive', {
-        paths: x.selected,
-        destination: join(x.path, name),
-        format: format.id,
-        ignores: options.full ? [] : prefs.compressIgnore,
-        level: options.level ?? null,
-        password: options.password || null,
-      })
-      notify(`已压缩为 ${name}`)
-    })
+    void run(
+      '正在压缩…',
+      async () => {
+        await call('compress_archive', {
+          paths: x.selected,
+          destination: join(x.path, name),
+          format: format.id,
+          ignores: options.full ? [] : prefs.compressIgnore,
+          level: options.level ?? null,
+          password: options.password || null,
+        })
+        notify(`已压缩为 ${name}`)
+      },
+      `${base} → ${name} · ${format.name}${options.password ? ' · AES-256' : ''}${
+        options.full ? ' · 全量' : ''
+      }`,
+    )
   }
   const extract = () => {
     if (!writable()) return
@@ -226,14 +239,18 @@ export function useFileOperations({
     void call<string | null>('pick_folder', { default: x.path })
       .then((destination) => {
         if (!destination) return
-        void run('正在解压…', async () => {
-          const path = await call<string>('extract_archive', {
-            path: first.path,
-            destination,
-          })
-          notify(`已解压到 ${basename(path)}`)
-          x.reload()
-        })
+        void run(
+          '正在解压…',
+          async () => {
+            const path = await call<string>('extract_archive', {
+              path: first.path,
+              destination,
+            })
+            notify(`已解压到 ${basename(path)}`)
+            x.reload()
+          },
+          `${basename(first.path)} → ${basename(destination)}`,
+        )
       })
       .catch((error) => x.setError(String(error)))
   }

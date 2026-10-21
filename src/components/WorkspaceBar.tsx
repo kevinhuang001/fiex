@@ -1,5 +1,4 @@
-import { ChevronDown, ChevronUp, Eraser, Folder, ListChecks, X } from 'lucide-react'
-import { useState } from 'react'
+import { Eraser, ListChecks, X } from 'lucide-react'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
 
@@ -7,16 +6,17 @@ import { FileIcon } from './FileIcon'
 /// an item here never copies it; clicking a chip opens it.
 export function WorkspaceBar({
   items,
+  open,
   onOpen,
   onRemove,
   onClear,
 }: {
   items: Entry[]
+  open: boolean
   onOpen: (entry: Entry) => void
   onRemove: (path: string) => void
   onClear: () => void
 }) {
-  const [open, setOpen] = useState(false)
   return (
     <section
       className={`workspace-bar ${open ? 'open' : ''}`}
@@ -24,19 +24,10 @@ export function WorkspaceBar({
       aria-label="工作区"
     >
       <header>
-        <button
-          className="workspace-toggle"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-        >
-          <ListChecks size={14} />
-          <span>工作区</span>
-          <span className="workspace-count">{items.length}</span>
-          {open ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-        </button>
-        <span className="workspace-hint">
-          {open ? '把文件拖到这里收纳，不会复制' : '收纳跨文件夹的文件'}
-        </span>
+        <ListChecks size={14} />
+        <span>工作区</span>
+        <span className="workspace-count">{items.length}</span>
+        <span className="workspace-hint">把文件拖到这里收纳，只记录引用</span>
         {items.length > 0 && (
           <button className="workspace-clear" onClick={onClear} title="清空工作区">
             <Eraser size={13} />
@@ -50,7 +41,7 @@ export function WorkspaceBar({
             items.map((entry) => (
               <span className="workspace-chip" key={entry.path}>
                 <button className="workspace-open" title={entry.path} onClick={() => onOpen(entry)}>
-                  {entry.isDir ? <Folder size={13} /> : <FileIcon entry={entry} size={14} />}
+                  <FileIcon entry={entry} size={30} />
                   <span>{entry.name}</span>
                 </button>
                 <button

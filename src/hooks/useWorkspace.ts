@@ -18,6 +18,7 @@ function load(): Entry[] {
 /// copies. It survives restarts and can be cleared in one click.
 export function useWorkspace() {
   const [items, setItems] = useState<Entry[]>(load)
+  const [open, setOpen] = useState(() => load().length > 0)
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(items))
@@ -36,5 +37,5 @@ export function useWorkspace() {
     setItems((current) => current.filter((item) => item.path !== path))
   }, [])
   const clear = useCallback(() => setItems([]), [])
-  return { items, add, remove, clear }
+  return { items, open, setOpen, add, remove, clear }
 }

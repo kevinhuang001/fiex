@@ -9,8 +9,6 @@ import {
   LoaderCircle,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
-import { FileIcon } from '../FileIcon'
 export function ExplorerStatusBar({
   busy,
   x,
@@ -19,41 +17,13 @@ export function ExplorerStatusBar({
   clipboard,
   setClipboard,
   workspace,
-  open,
 }: Pick<
   AppController,
-  'busy' | 'x' | 'chosen' | 'gitSwitched' | 'clipboard' | 'setClipboard' | 'workspace' | 'open'
+  'busy' | 'x' | 'chosen' | 'gitSwitched' | 'clipboard' | 'setClipboard' | 'workspace'
 >) {
-  const [workspaceOpen, setWorkspaceOpen] = useState(false)
   return (
     <>
-      <footer
-        className={`statusbar ${workspaceOpen ? 'workspace-open' : ''}`}
-        data-workspace-drop="true"
-      >
-        {workspaceOpen && (
-          <div className="workspace-items">
-            {workspace.items.length ? (
-              workspace.items.map((entry) => (
-                <span className="workspace-chip" key={entry.path}>
-                  <button className="workspace-open" title={entry.path} onClick={() => open(entry)}>
-                    {<FileIcon entry={entry} size={24} />}
-                    <span>{entry.name}</span>
-                  </button>
-                  <button
-                    className="workspace-remove"
-                    aria-label={`移出工作区 ${entry.name}`}
-                    onClick={() => workspace.remove(entry.path)}
-                  >
-                    <X size={11} />
-                  </button>
-                </span>
-              ))
-            ) : (
-              <p className="workspace-empty">把文件拖到这条栏上收纳，不会复制。</p>
-            )}
-          </div>
-        )}
+      <footer className="statusbar" data-workspace-drop="true">
         <div className="statusbar-row">
           <span>
             {busy ? (
@@ -100,14 +70,14 @@ export function ExplorerStatusBar({
           )}
           <button
             className="workspace-toggle"
-            aria-expanded={workspaceOpen}
+            aria-expanded={workspace.open}
             aria-label="工作区"
-            onClick={() => setWorkspaceOpen((value) => !value)}
+            onClick={() => workspace.setOpen(!workspace.open)}
           >
             <ListChecks size={13} />
             工作区
             <span className="workspace-count">{workspace.items.length}</span>
-            {workspaceOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+            {workspace.open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
         </div>
       </footer>
