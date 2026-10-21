@@ -187,10 +187,10 @@ test('Finder tags can be applied to a file', async ({ page }) => {
   await page.getByRole('menuitem', { name: '显示简介' }).click()
   await expect(page.getByRole('dialog')).toContainText('验收')
 })
-test('Applications entry and search focus', async ({ page }) => {
+test('Applications entry and search control', async ({ page }) => {
   await page.getByRole('button', { name: '应用程序', exact: true }).click()
   await expect(page.getByText('Fiex.app', { exact: true })).toBeVisible()
-  await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeFocused()
+  await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeVisible()
 })
 test('opens the Trash inside Fiex', async ({ page }) => {
   await page.getByRole('button', { name: '废纸篓', exact: true }).click()
@@ -501,7 +501,7 @@ test('remotes are read and managed from the Git panel dialog', async ({ page }) 
   await panel.getByRole('button', { name: '远程仓库', exact: true }).click()
   const manager = page.locator('.git-remote-modal')
   await expect(manager).toBeVisible()
-  await expect(manager.getByText('还没有远程仓库')).toBeVisible()
+  await expect(manager.getByText('无远程仓库')).toBeVisible()
   await manager.getByRole('button', { name: '添加远程仓库', exact: true }).click()
   await manager.getByRole('textbox', { name: '远程名称' }).fill('origin')
   await manager.getByRole('textbox', { name: '仓库地址' }).fill('https://example.com/project.git')

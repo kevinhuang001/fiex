@@ -93,12 +93,14 @@ export function finishActivity(id: string, error?: string, detail?: string) {
   cancellers.delete(id)
   items = items.map((item) =>
     item.id === id
-      ? {
-          ...item,
-          status: error ? 'error' : 'done',
-          finishedAt: Date.now(),
-          detail: error || detail || item.detail,
-        }
+      ? item.status === 'error' && item.detail === '已取消'
+        ? item
+        : {
+            ...item,
+            status: error ? 'error' : 'done',
+            finishedAt: Date.now(),
+            detail: error || detail || item.detail,
+          }
       : item,
   )
   persist()

@@ -2813,6 +2813,9 @@ body.dragging-file * {
 .path-toolbar {
   background: var(--canvas);
 }
+.main.split > .path-toolbar {
+  width: calc(100% - var(--second-pane-width));
+}
 .breadcrumbs {
   font-size: 12px;
 }
