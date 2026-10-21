@@ -710,9 +710,8 @@ pub fn restore_from_trash(
         let destination = original_location(source)
             .map(PathBuf::from)
             .or_else(|| {
-                fallback.and_then(|folder| {
-                    source.file_name().map(|name| Path::new(folder).join(name))
-                })
+                fallback
+                    .and_then(|folder| source.file_name().map(|name| Path::new(folder).join(name)))
             })
             .ok_or_else(|| format!("{path}: 请选择恢复位置"))?;
         if !destination.is_absolute() {
@@ -733,7 +732,11 @@ pub fn restore_from_trash(
             }
         }
         let mut journal = load_journal();
-        journal.retain(|entry| source.file_name().is_none_or(|name| name != entry.name.as_str()));
+        journal.retain(|entry| {
+            source
+                .file_name()
+                .is_none_or(|name| name != entry.name.as_str())
+        });
         save_journal(&journal);
         restored += 1;
     }
