@@ -2653,7 +2653,8 @@ body.dragging-file * {
 .activity-center {
   position: absolute;
   right: 16px;
-  bottom: 40px;
+  top: 96px;
+  bottom: auto;
   z-index: 40;
   width: 380px;
   max-height: min(56vh, 520px);
@@ -2875,44 +2876,64 @@ body.dragging-file * {
 }
 .workspace-items {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 132px;
-  padding: 4px 14px 12px;
-  overflow-y: auto;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 14px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .workspace-chip {
+  position: relative;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  max-width: 220px;
-  height: 26px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+  width: 76px;
+  height: 72px;
+  flex: 0 0 auto;
 }
 .workspace-open {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 0 8px;
-  font-size: 11px;
+  gap: 7px;
+  width: 100%;
+  height: 100%;
+  padding: 8px 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 10px;
   color: var(--text);
   background: transparent;
 }
+.workspace-open:hover {
+  background: var(--hover);
+  border-color: var(--line);
+}
 .workspace-open span {
+  max-width: 68px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 10px;
 }
 .workspace-remove {
-  display: inline-flex;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: none;
   align-items: center;
-  height: 100%;
-  padding: 0 7px;
-  border-left: 1px solid var(--line);
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--hover);
   color: var(--muted);
-  background: transparent;
+}
+.workspace-chip:hover .workspace-remove {
+  display: inline-flex;
 }
 .workspace-empty {
   margin: 4px 0;

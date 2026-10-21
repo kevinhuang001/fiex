@@ -1,5 +1,5 @@
 import { CheckCircle2, CircleAlert, History, LoaderCircle, X } from 'lucide-react'
-import { useActivity } from '@/hooks/useActivity'
+import { cancelActivity, isCancellable, useActivity } from '@/hooks/useActivity'
 
 const time = (value: number) =>
   new Date(value).toLocaleTimeString('zh-CN', {
@@ -43,8 +43,18 @@ export function ActivityCenter() {
               </span>
               <span className="activity-main">
                 <span className="activity-label">{item.label}</span>
+                {item.status === 'running' && (
+                  <span className="activity-progress" aria-label="进行中">
+                    <i />
+                  </span>
+                )}
                 {item.detail && <small title={item.detail}>{item.detail}</small>}
               </span>
+              {item.status === 'running' && isCancellable(item.id) && (
+                <button className="activity-cancel" onClick={() => cancelActivity(item.id)}>
+                  取消
+                </button>
+              )}
               <span className="activity-time">{time(item.finishedAt || item.startedAt)}</span>
             </li>
           ))

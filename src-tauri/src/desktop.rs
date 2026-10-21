@@ -145,6 +145,12 @@ async fn internal_drop(
     .map_err(|e| e.to_string())
 }
 #[tauri::command]
+fn launch_path() -> Option<String> {
+    std::env::args()
+        .nth(1)
+        .filter(|path| std::path::Path::new(path).is_dir())
+}
+#[tauri::command]
 fn initial_path(window: tauri::Window, paths: tauri::State<WindowPaths>) -> Option<String> {
     let explicit = paths
         .0
@@ -931,6 +937,7 @@ pub fn run() {
             finish_drag,
             internal_drop,
             initial_path,
+            launch_path,
             new_window,
             git_remote_status,
             git_remote_save,

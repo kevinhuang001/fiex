@@ -37,7 +37,7 @@ export function ExplorerStatusBar({
               workspace.items.map((entry) => (
                 <span className="workspace-chip" key={entry.path}>
                   <button className="workspace-open" title={entry.path} onClick={() => open(entry)}>
-                    {entry.isDir ? <ListChecks size={13} /> : <FileIcon entry={entry} size={14} />}
+                    {<FileIcon entry={entry} size={24} />}
                     <span>{entry.name}</span>
                   </button>
                   <button

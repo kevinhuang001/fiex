@@ -80,9 +80,12 @@ export function useExplorer(prefs: Preferences) {
     // the first listing is requested immediately, then fill the sidebar.
     void refreshLocations().catch(() => {})
     void (async () => {
-      let start: string | null = null
-      if (prefs.startPage === 'recent') start = 'recent://'
-      else if (prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
+      // A folder passed on the command line wins over the start page.
+      const launched = native && (await call<string | null>('launch_path').catch(() => null))
+      if (cancelled) return
+      let start: string | null = launched || null
+      if (!start && prefs.startPage === 'recent') start = 'recent://'
+      else if (!start && prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
       if (!start) {
         const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
         if (cancelled) return

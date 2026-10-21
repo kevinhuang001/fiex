@@ -9,6 +9,7 @@ export interface ActivityItem {
   startedAt: number
   finishedAt?: number
   detail?: string
+  progress?: number
 }
 
 const LIMIT = 60
@@ -18,6 +19,7 @@ let items: ActivityItem[] = load()
 let open = false
 let seq = 0
 const listeners = new Set<() => void>()
+const cancellers = new Map<string, () => void>()
 
 function load(): ActivityItem[] {
   try {
@@ -57,7 +59,7 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener)
 }
 
-export function beginActivity(rawLabel: string): string {
+export function beginActivity(rawLabel: string, cancel?: () => void): string {
   const label = rawLabel.replace(/^正在/, '').replace(/…$/, '')
   const id = `${Date.now()}-${++seq}`
   items = [{ id, label, status: 'running' as const, startedAt: Date.now() }, ...items].slice(
@@ -67,12 +69,28 @@ export function beginActivity(rawLabel: string): string {
   // Transfers and archive work show their progress by default; quick commands
   // stay in the history without covering the window.
   if (/复制|移动|压缩|解压/.test(label)) open = true
+  if (cancel) cancellers.set(id, cancel)
   persist()
   emit()
   return id
 }
 
+export function cancelActivity(id: string) {
+  cancellers.get(id)?.()
+  cancellers.delete(id)
+  items = items.map((item) =>
+    item.id === id ? { ...item, status: 'error', finishedAt: Date.now(), detail: '已取消' } : item,
+  )
+  persist()
+  emit()
+}
+
+export function isCancellable(id: string) {
+  return cancellers.has(id)
+}
+
 export function finishActivity(id: string, error?: string) {
+  cancellers.delete(id)
   items = items.map((item) =>
     item.id === id
       ? { ...item, status: error ? 'error' : 'done', finishedAt: Date.now(), detail: error }
