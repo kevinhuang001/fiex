@@ -8,16 +8,27 @@ import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { GitPanel } from '@/components/GitPanel'
 import { Sidebar } from '@/components/Sidebar'
 import { useAppController } from '@/hooks/useAppController'
-import { call } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import { parent } from '@/lib/files'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
+import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
+  // The label size is the reference size: every window is zoomed by the same
+  // ratio so the preference scales the sidebar, toolbar, dialogs and file list
+  // together instead of only enlarging file names.
+  useEffect(() => {
+    if (!native) return
+    void getCurrentWebviewWindow()
+      .setZoom(app.prefs.fontSize / 11)
+      .catch(() => {})
+  }, [app.prefs.fontSize])
   return (
     <div
       className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''}`}
-      style={{ '--label-size': `${app.prefs.fontSize}px` } as CSSProperties}
+      style={{ '--label-size': '11px' } as CSSProperties}
     >
       <Sidebar
         x={app.x}

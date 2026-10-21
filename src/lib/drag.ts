@@ -20,9 +20,9 @@ export async function startFileDrag(
   try {
     platform ??= call<string>('platform')
     const kind = await platform
-    void call('ci_log', { message: `drag start platform=${kind} exported=${JSON.stringify(exported)}` }).catch(
-      () => {},
-    )
+    void call('ci_log', {
+      message: `drag start platform=${kind} exported=${JSON.stringify(exported)}`,
+    }).catch(() => {})
     if (kind === 'linux') {
       const onEvent = new Channel<string>()
       onEvent.onmessage = (result) => completed(result === 'Dropped' ? 'Dropped' : 'Cancelled')

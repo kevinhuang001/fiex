@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 export function Modal({
   open,
   onClose,
@@ -8,6 +8,7 @@ export function Modal({
   children,
   wide = false,
   className,
+  contentStyle,
   bare = false,
 }: {
   open: boolean
@@ -16,6 +17,7 @@ export function Modal({
   children: ReactNode
   wide?: boolean
   className?: string
+  contentStyle?: CSSProperties
   bare?: boolean
 }) {
   return (
@@ -24,6 +26,7 @@ export function Modal({
         <Dialog.Overlay className="modal-overlay" />
         <Dialog.Content
           className={`modal ${wide ? 'modal-wide' : ''} ${className || ''}`}
+          style={contentStyle}
           onOpenAutoFocus={(e) => {
             if (wide || bare) e.preventDefault()
           }}

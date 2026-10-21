@@ -201,77 +201,86 @@ export function Sidebar({
               </div>
               {x.locations
                 .filter((location) => location.kind === 'disk')
-                .map((location, index) => (
-                  <div className="device-row" key={location.path || location.device}>
-                    <button
-                      className={`nav-item disk-item ${location.mounted || location.usbfs ? '' : 'disk-unmounted'} ${x.path === location.path ? 'active' : ''}`}
-                      onClick={() =>
-                        location.path ? x.navigate(location.path) : onMount(location.device)
-                      }
-                      title={location.path ? location.path : '未挂载，点击授权挂载'}
-                    >
-                      {location.removable ? <Usb /> : <HardDrive />}
-                      <span>
-                        <span>{location.name || location.path}</span>
-                        <small
-                          className="disk-capacity"
-                          title={`可用 ${size(location.available)} / 总计 ${size(location.total)}`}
-                        >
-                          {!location.mounted
-                            ? size(location.total)
-                            : location.total > 0
-                              ? `${size(location.available)} / ${size(location.total)}`
-                              : size(location.available)}
-                          {location.filesystem && (
-                            <span className="disk-fs">
-                              {location.filesystem.toUpperCase()}
-                              {location.usbfs
-                                ? ['APFS', 'HFS', 'HFS+', 'HFSX', 'BTRFS'].includes(
-                                    location.filesystem.toUpperCase(),
-                                  )
-                                  ? ' · 只读'
-                                  : ' · 内置'
-                                : !location.mounted
-                                  ? ' · 挂载'
-                                  : ''}
+                .map((location, index) => {
+                  const color = DISK_COLORS[index % DISK_COLORS.length]
+                  const used =
+                    location.total > 0
+                      ? Math.min(100, Math.max(0, (1 - location.available / location.total) * 100))
+                      : 0
+                  return (
+                    <div className="device-row" key={location.path || location.device}>
+                      <button
+                        className={`nav-item disk-item ${location.mounted || location.usbfs ? '' : 'disk-unmounted'} ${x.path === location.path ? 'active' : ''}`}
+                        onClick={() =>
+                          location.path ? x.navigate(location.path) : onMount(location.device)
+                        }
+                        title={location.path ? location.path : '未挂载，点击授权挂载'}
+                      >
+                        {location.removable ? <Usb color={color} /> : <HardDrive color={color} />}
+                        <span>
+                          <span>{location.name || location.path}</span>
+                          <small
+                            className="disk-capacity"
+                            title={`可用 ${size(location.available)} / 总计 ${size(location.total)}`}
+                          >
+                            {!location.mounted
+                              ? size(location.total)
+                              : location.total > 0
+                                ? `${size(location.available)} / ${size(location.total)}`
+                                : size(location.available)}
+                            {location.filesystem && (
+                              <span className="disk-fs">
+                                {location.filesystem.toUpperCase()}
+                                {location.usbfs
+                                  ? ['APFS', 'HFS', 'HFS+', 'HFSX', 'BTRFS'].includes(
+                                      location.filesystem.toUpperCase(),
+                                    )
+                                    ? ' · 只读'
+                                    : ' · 内置'
+                                  : !location.mounted
+                                    ? ' · 挂载'
+                                    : ''}
+                              </span>
+                            )}
+                          </small>
+                          {location.total > 0 && (
+                            <span
+                              className="disk-meter"
+                              role="progressbar"
+                              aria-label={`${location.name || location.path} 已用 ${Math.round(used)}%`}
+                              aria-valuenow={Math.round(used)}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                            >
+                              <i style={{ width: `${used}%`, background: color }} />
                             </span>
                           )}
-                        </small>
-                        {location.total > 0 && (
-                          <i className="disk-meter">
-                            <i
-                              style={{
-                                width: `${(1 - location.available / location.total) * 100}%`,
-                                background: DISK_COLORS[index % DISK_COLORS.length],
-                              }}
-                            />
-                          </i>
-                        )}
-                      </span>
-                    </button>
-                    {location.usbfs ? (
-                      <button
-                        className="device-eject icon-button"
-                        title="弹出 U 盘"
-                        onClick={() => onEjectDevice(location.device)}
-                      >
-                        <Unplug size={13} />
+                        </span>
                       </button>
-                    ) : (
-                      location.mounted &&
-                      location.path !== '/' &&
-                      !/^[A-Za-z]:[\\/]?$/.test(location.path) && (
+                      {location.usbfs ? (
                         <button
                           className="device-eject icon-button"
-                          title="弹出设备"
-                          onClick={() => onEject(location.path)}
+                          title="弹出 U 盘"
+                          onClick={() => onEjectDevice(location.device)}
                         >
                           <Unplug size={13} />
                         </button>
-                      )
-                    )}
-                  </div>
-                ))}
+                      ) : (
+                        location.mounted &&
+                        location.path !== '/' &&
+                        !/^[A-Za-z]:[\\/]?$/.test(location.path) && (
+                          <button
+                            className="device-eject icon-button"
+                            title="弹出设备"
+                            onClick={() => onEject(location.path)}
+                          >
+                            <Unplug size={13} />
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )
+                })}
               {x.connections.map((connection) => (
                 <div className="device-row" key={connection.id}>
                   <button

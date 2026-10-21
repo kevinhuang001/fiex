@@ -295,12 +295,22 @@ button[data-slot='button'][data-variant='default'] {
   letter-spacing: 0.4px;
   opacity: 0.75;
 }
+.disk-meter {
+  display: block;
+  height: 5px;
+  margin-top: 3px;
+  border-radius: 4px;
+  background: #7a9bb640;
+  overflow: hidden;
+}
 .disk-meter > i {
-  border-radius: 3px;
+  display: block;
+  height: 100%;
+  border-radius: 4px;
 }
 .disk-item small {
   display: block;
-  margin: 5px 0 7px;
+  margin: 5px 0 4px;
   font-size: 9px;
 }
 .disk-item i {
@@ -1675,6 +1685,9 @@ button[data-slot='button'][data-variant='default'] {
   padding: 0;
   overflow: hidden;
 }
+.preview-modal {
+  max-width: 94vw;
+}
 .modal-wide header {
   height: 62px;
   margin: 0;
@@ -1685,9 +1698,9 @@ button[data-slot='button'][data-variant='default'] {
   font-size: 13px;
 }
 .preview-body {
-  height: 58vh;
-  min-height: 250px;
-  max-height: 650px;
+  height: 72vh;
+  min-height: 260px;
+  max-height: 80vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2590,7 +2603,10 @@ body.dragging-file * {
     background-color 140ms ease,
     color 140ms ease;
 }
-.toolbar button[data-slot='button'] > svg {
+.toolbar button[data-slot='button'] > svg,
+/* Menu triggers keep their own data-slot, so match them explicitly instead of
+   letting the 13px base font size shrink those two glyphs. */
+.toolbar button[data-slot='dropdown-menu-trigger'] > svg {
   width: 20px;
   height: 20px;
   flex-shrink: 0;

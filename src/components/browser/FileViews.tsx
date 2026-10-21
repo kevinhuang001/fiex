@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronRight, CloudCheck, CloudDownload, Files, FolderOpen, SearchX } from 'lucide-react'
+import {
+  ChevronRight,
+  CloudCheck,
+  CloudDownload,
+  Files,
+  FolderOpen,
+  LoaderCircle,
+  SearchX,
+} from 'lucide-react'
 import { FileIcon } from '../FileIcon'
 import { BrowserColumn } from './BrowserColumn'
 import { VirtualFileGrid } from './VirtualFileGrid'
@@ -14,6 +22,9 @@ import type { Explorer } from '@/hooks/useExplorer'
 import { gitState } from '@/lib/git'
 import type { CSSProperties } from 'react'
 
+// macOS stops reporting pointer events once the cursor leaves the window while a
+// button is held, so hand the drag to the OS a few pixels before the boundary.
+const EDGE = 4
 interface Props {
   explorer: Explorer
   prefs: Preferences
@@ -99,7 +110,9 @@ export function FileViews(props: Props) {
     [x.entries, prefs.sort, prefs.descending],
   )
   const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
-  const iconSize = Math.round(prefs.fontSize * 8)
+  // The window is zoomed from the font-size preference, so the tile geometry
+  // stays at the reference size and scales with the rest of the interface.
+  const iconSize = 88
   const anchor = useRef<string | null>(null)
   const suppressClick = useRef(false)
   const container = useRef<HTMLDivElement>(null)
@@ -172,10 +185,10 @@ export function FileViews(props: Props) {
       }
       if (
         native &&
-        (moveEvent.clientX <= 1 ||
-          moveEvent.clientY <= 1 ||
-          moveEvent.clientX >= window.innerWidth - 1 ||
-          moveEvent.clientY >= window.innerHeight - 1)
+        (moveEvent.clientX <= EDGE ||
+          moveEvent.clientY <= EDGE ||
+          moveEvent.clientX >= window.innerWidth - EDGE ||
+          moveEvent.clientY >= window.innerHeight - EDGE)
       ) {
         startNative(moveEvent.altKey || moveEvent.ctrlKey)
         return
@@ -323,8 +336,17 @@ export function FileViews(props: Props) {
     >
       {entries.length === 0 && !x.loading && !x.error && (
         <div className="empty-state">
-          {x.query ? <SearchX /> : <FolderOpen />}
-          <h3>{x.query ? '没有找到匹配的文件' : '文件夹是空的'}</h3>
+          {x.searching ? (
+            <>
+              <LoaderCircle className="spin" />
+              <h3>正在搜索…</h3>
+            </>
+          ) : (
+            <>
+              {x.query ? <SearchX /> : <FolderOpen />}
+              <h3>{x.query ? '没有找到匹配的文件' : '文件夹是空的'}</h3>
+            </>
+          )}
         </div>
       )}
       {prefs.view === 'list' && entries.length > 0 ? (
@@ -434,7 +456,7 @@ export function FileViews(props: Props) {
                       ? ({
                           '--tile-size': `${Math.max(96, iconSize + 38)}px`,
                           '--icon-size': `${iconSize}px`,
-                          '--label-size': `${prefs.fontSize}px`,
+                          '--label-size': '11px',
                         } as CSSProperties)
                       : undefined
                   }

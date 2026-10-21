@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { ExternalLink, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
@@ -22,6 +22,22 @@ export function Preview({
   const [error, setError] = useState('')
   const [source, setSource] = useState('')
   const [loading, setLoading] = useState(false)
+  const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
+  // Quick Look sizing: the sheet hugs the media so a photo is not surrounded by
+  // an oversized empty canvas, while huge images still fit inside the window.
+  const fit = useMemo(() => {
+    if (!media || !media.width || !media.height) return null
+    const maxWidth = Math.round(window.innerWidth * 0.92)
+    const maxHeight = Math.round(window.innerHeight * 0.76)
+    const scale = Math.min(1, maxWidth / media.width, maxHeight / media.height)
+    return {
+      width: Math.max(420, Math.round(media.width * scale)),
+      height: Math.max(280, Math.round(media.height * scale)),
+    }
+  }, [media])
+  useEffect(() => {
+    setMedia(null)
+  }, [entry?.path])
   useEffect(() => {
     setSource(entry ? asset(entry.path) : '')
     if (!entry || !entry.path.startsWith('history://') || entry.isDir || isText(entry)) return
@@ -72,10 +88,17 @@ export function Preview({
     return () => document.removeEventListener('keydown', listener)
   }, [entry, onClose, onNavigate])
   return (
-    <Modal open={!!entry} onClose={onClose} title={entry?.name || '快速查看'} wide>
+    <Modal
+      open={!!entry}
+      onClose={onClose}
+      title={entry?.name || '快速查看'}
+      wide
+      className="preview-modal"
+      contentStyle={fit ? { width: fit.width } : undefined}
+    >
       {entry && (
         <>
-          <div className="preview-body">
+          <div className="preview-body" style={fit ? { height: fit.height } : undefined}>
             {error ? (
               <div className="preview-fallback">
                 <AlertCircle />
@@ -99,6 +122,12 @@ export function Preview({
               <img
                 src={source}
                 alt={entry.name}
+                onLoad={(event) =>
+                  setMedia({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  })
+                }
                 onError={() => setError('此图片格式无法预览，可用默认应用打开。')}
               />
             ) : entry.mime.startsWith('video/') && native ? (
@@ -106,6 +135,12 @@ export function Preview({
                 controls
                 autoPlay
                 src={source}
+                onLoadedMetadata={(event) =>
+                  setMedia({
+                    width: event.currentTarget.videoWidth,
+                    height: event.currentTarget.videoHeight,
+                  })
+                }
                 onError={() => setError('系统不支持此视频编码，可用默认应用打开。')}
               />
             ) : entry.mime.startsWith('audio/') && native ? (

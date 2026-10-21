@@ -2,13 +2,13 @@ import { Choice, Label, Menu } from '@/components/Menus'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
 import type { Group, Sort, View } from '@/lib/types'
-import { SortAscendingIcon as ArrowDownUp } from '@phosphor-icons/react/dist/csr/SortAscending'
+import { ArrowsDownUpIcon as ArrowsDownUp } from '@phosphor-icons/react/dist/csr/ArrowsDownUp'
 import { CaretLeftIcon as ChevronLeft } from '@phosphor-icons/react/dist/csr/CaretLeft'
 import { CaretRightIcon as ChevronRight } from '@phosphor-icons/react/dist/csr/CaretRight'
 import { CodeIcon as Code2 } from '@phosphor-icons/react/dist/csr/Code'
 import { ColumnsIcon as Columns3 } from '@phosphor-icons/react/dist/csr/Columns'
 import { FolderPlusIcon as FolderPlus } from '@phosphor-icons/react/dist/csr/FolderPlus'
-import { TreeStructureIcon as FolderTree } from '@phosphor-icons/react/dist/csr/TreeStructure'
+import { CardsThreeIcon as CardsThree } from '@phosphor-icons/react/dist/csr/CardsThree'
 import { GitBranchIcon as GitBranch } from '@phosphor-icons/react/dist/csr/GitBranch'
 import { SquaresFourIcon as Grid2X2 } from '@phosphor-icons/react/dist/csr/SquaresFour'
 import { ImagesIcon as Image } from '@phosphor-icons/react/dist/csr/Images'
@@ -150,7 +150,7 @@ export function ExplorerToolbar({
             </Button>
           ))}
         </div>
-        <Menu label="分组方式" icon={<FolderTree weight="duotone" size={20} />}>
+        <Menu label="分组方式" icon={<CardsThree weight="duotone" size={20} />}>
           <Label>分组方式</Label>
           {groupOptions.map(([id, name]) => (
             <Choice key={id} checked={prefs.group === id} onClick={() => update({ group: id })}>
@@ -158,7 +158,7 @@ export function ExplorerToolbar({
             </Choice>
           ))}
         </Menu>
-        <Menu label="排序方式" icon={<ArrowDownUp weight="duotone" size={20} />}>
+        <Menu label="排序方式" icon={<ArrowsDownUp weight="duotone" size={20} />}>
           <Label>排序方式</Label>
           {sortOptions.map(([id, name]) => (
             <Choice key={id} checked={prefs.sort === id} onClick={() => update({ sort: id })}>
