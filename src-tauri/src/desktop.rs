@@ -94,7 +94,7 @@ async fn internal_drop(
 }
 #[tauri::command]
 fn initial_path(window: tauri::Window, paths: tauri::State<WindowPaths>) -> Option<String> {
-    paths
+    let explicit = paths
         .0
         .lock()
         .unwrap()
@@ -104,7 +104,15 @@ fn initial_path(window: tauri::Window, paths: tauri::State<WindowPaths>) -> Opti
             std::env::args()
                 .nth(1)
                 .filter(|p| std::path::Path::new(p).is_dir())
-        })
+        });
+    // Resolving the start folder here lets the first directory listing begin
+    // immediately instead of waiting for the location survey.
+    explicit.or_else(|| {
+        dirs::document_dir()
+            .filter(|path| path.is_dir())
+            .or_else(|| dirs::home_dir().filter(|path| path.is_dir()))
+            .map(|path| path.to_string_lossy().into_owned())
+    })
 }
 #[tauri::command]
 async fn new_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
@@ -238,8 +246,12 @@ fn platform() -> &'static str {
     std::env::consts::OS
 }
 #[tauri::command]
-fn locations() -> Vec<volumes::Location> {
-    volumes::locations()
+async fn locations() -> Result<Vec<volumes::Location>, String> {
+    // Disk enumeration touches every mounted volume; keep it off the main
+    // thread so it never delays the first paint or the first listing.
+    tauri::async_runtime::spawn_blocking(volumes::locations)
+        .await
+        .map_err(|error| error.to_string())
 }
 #[tauri::command]
 async fn list_directory(
@@ -631,12 +643,16 @@ async fn compress_archive(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn detect_terminals() -> Vec<terminals::Terminal> {
-    terminals::detect()
+async fn detect_terminals() -> Result<Vec<terminals::Terminal>, String> {
+    tauri::async_runtime::spawn_blocking(terminals::detect)
+        .await
+        .map_err(|error| error.to_string())
 }
 #[tauri::command]
-fn detect_ides() -> Vec<terminals::Ide> {
-    terminals::detect_ides()
+async fn detect_ides() -> Result<Vec<terminals::Ide>, String> {
+    tauri::async_runtime::spawn_blocking(terminals::detect_ides)
+        .await
+        .map_err(|error| error.to_string())
 }
 #[tauri::command]
 async fn open_in_ide(path: String, id: String) -> Result<(), String> {
@@ -682,8 +698,13 @@ fn reveal_path(path: String) -> Result<(), String> {
     terminals::reveal(&path)
 }
 #[tauri::command]
-fn trash_path() -> Option<String> {
-    volumes::trash_path().map(|path| path.to_string_lossy().into_owned())
+async fn trash_path() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        volumes::trash_path().map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
 }
 #[tauri::command]
 fn open_applications() -> Result<(), String> {

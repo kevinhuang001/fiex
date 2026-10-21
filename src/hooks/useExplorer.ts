@@ -65,19 +65,29 @@ export function useExplorer(prefs: Preferences) {
     return () => window.clearInterval(timer)
   }, [refreshLocations])
   useEffect(() => {
-    void refreshLocations()
-      .then(async (next) => {
-        const initial = native ? await call<string | null>('initial_path') : null
-        const home = next.find((x) => x.name === '文稿') || next[0]
-        if (home) {
-          const start = initial || home.path
-          setPath(start)
-          setHistory([start])
-          setCursor(0)
-          setTabs([start])
-        }
-      })
-      .catch((e) => setError(String(e)))
+    let cancelled = false
+    // The start folder must not wait for the disk survey: resolve it first so
+    // the first listing is requested immediately, then fill the sidebar.
+    void refreshLocations().catch(() => {})
+    void (async () => {
+      const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
+      if (cancelled) return
+      let start = initial
+      if (!start) {
+        const next = await call<Location[]>('locations').catch(() => [] as Location[])
+        if (cancelled) return
+        start = next.find((x) => x.name === '文稿')?.path || next[0]?.path || null
+      }
+      if (start) {
+        setPath(start)
+        setHistory([start])
+        setCursor(0)
+        setTabs([start])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [refreshLocations])
   useEffect(() => {
     if (!path || query) return
@@ -163,14 +173,24 @@ export function useExplorer(prefs: Preferences) {
   useEffect(() => {
     if (!path || virtualVolume || path.startsWith('remote://') || path.startsWith('history://'))
       return
-    const timer = setTimeout(() => {
-      void call('warm_index', {
-        path,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-      }).catch(() => {})
-    }, 250)
-    return () => clearTimeout(timer)
+    // Warming walks the whole folder tree. Handing it to the idle queue keeps
+    // the first paint and the first listing responsive on large folders.
+    let idle = 0
+    const timer = window.setTimeout(() => {
+      const warm = () =>
+        void call('warm_index', {
+          path,
+          hidden: prefs.hidden,
+          ignores: prefs.displayIgnore,
+        }).catch(() => {})
+      idle = window.requestIdleCallback
+        ? window.requestIdleCallback(warm, { timeout: 4000 })
+        : window.setTimeout(warm, 0)
+    }, 900)
+    return () => {
+      window.clearTimeout(timer)
+      if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle)
+    }
   }, [path, prefs.hidden, prefs.displayIgnore, refresh, virtualVolume])
   useEffect(() => {
     const generation = ++searchRequest.current
