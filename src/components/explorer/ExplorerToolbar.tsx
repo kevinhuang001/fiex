@@ -17,6 +17,7 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { AppWindowIcon as PanelsTopLeft } from '@phosphor-icons/react/dist/csr/AppWindow'
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
+import { useEffect, useState } from 'react'
 import { RefreshCw, ScrollText, Trash2 } from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
 import type { ReactNode } from 'react'
@@ -52,6 +53,7 @@ export function ExplorerToolbar({
   gitOpen,
   setGitOpen,
   ides,
+  terminals,
   openIde,
   terminal,
   setSettings,
@@ -72,6 +74,7 @@ export function ExplorerToolbar({
   | 'gitOpen'
   | 'setGitOpen'
   | 'ides'
+  | 'terminals'
   | 'openIde'
   | 'terminal'
   | 'setSettings'
@@ -81,6 +84,21 @@ export function ExplorerToolbar({
   | 'displayName'
 >) {
   const activity = useActivity()
+  const [picker, setPicker] = useState<{
+    kind: 'terminal' | 'ide'
+    x: number
+    y: number
+  } | null>(null)
+  useEffect(() => {
+    if (!picker) return
+    const close = () => setPicker(null)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('blur', close)
+    }
+  }, [picker])
   return (
     <>
       <header className="toolbar" data-tauri-drag-region>
@@ -210,22 +228,34 @@ export function ExplorerToolbar({
           aria-label="在 IDE 中打开"
           disabled={gitSwitched || x.directoryReadOnly}
           onClick={() => openIde()}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            setPicker({ kind: 'ide', x: event.clientX, y: event.clientY })
+          }}
         >
           <Code2 weight="regular" size={20} />
         </Button>
-        <div className="toolbar-divider" />
         <div className="terminal-control">
           <Button
             variant="ghost"
             size="icon"
-            title={gitSwitched ? '历史版本只读' : 'Open in Terminal'}
+            title={
+              gitSwitched
+                ? '历史版本只读'
+                : `在 ${terminals.find((t) => t.id === prefs.terminal)?.name || '终端'} 中打开`
+            }
             aria-label="Open in Terminal"
             disabled={gitSwitched || x.directoryReadOnly}
             onClick={() => terminal()}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setPicker({ kind: 'terminal', x: event.clientX, y: event.clientY })
+            }}
           >
             <TerminalSquare weight="regular" size={20} />
           </Button>
         </div>
+        <div className="toolbar-divider" />
         <Button
           variant="ghost"
           size="icon"
@@ -245,6 +275,35 @@ export function ExplorerToolbar({
           <Settings2 weight="duotone" size={20} />
         </Button>
       </header>
+      {picker && (
+        <div
+          className="context-menu toolbar-picker"
+          role="menu"
+          aria-label={picker.kind === 'ide' ? '选择 IDE' : '选择终端'}
+          style={{ left: picker.x, top: picker.y }}
+        >
+          {(picker.kind === 'ide' ? ides : terminals).map((item) => (
+            <button
+              role="menuitem"
+              key={item.id}
+              data-active={
+                (picker.kind === 'ide' ? prefs.ide : prefs.terminal) === item.id || undefined
+              }
+              onClick={() => {
+                update(picker.kind === 'ide' ? { ide: item.id } : { terminal: item.id })
+                setPicker(null)
+              }}
+            >
+              {item.name}
+            </button>
+          ))}
+          {(picker.kind === 'ide' ? ides : terminals).length === 0 && (
+            <button role="menuitem" disabled>
+              未检测到可用应用
+            </button>
+          )}
+        </div>
+      )}
     </>
   )
 }

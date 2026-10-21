@@ -2966,3 +2966,11 @@ body.dragging-file * {
   font-size: 10px;
   opacity: 0.8;
 }
+
+.toolbar-picker {
+  min-width: 168px;
+}
+.toolbar-picker button[data-active='true'] {
+  color: var(--accent);
+  font-weight: 600;
+}
