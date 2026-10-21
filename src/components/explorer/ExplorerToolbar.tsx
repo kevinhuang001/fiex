@@ -18,7 +18,7 @@ import { AppWindowIcon as PanelsTopLeft } from '@phosphor-icons/react/dist/csr/A
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
 import { useEffect, useState } from 'react'
-import { RefreshCw, ScrollText, Trash2 } from 'lucide-react'
+import { Columns2, RefreshCw, ScrollText, Trash2 } from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
 import type { ReactNode } from 'react'
 const views: { id: View; name: string; icon: ReactNode }[] = [
@@ -60,6 +60,8 @@ export function ExplorerToolbar({
   newWindow,
   inTrash,
   emptyTrash,
+  split,
+  onToggleSplit,
 }: Pick<
   AppController,
   | 'sidebar'
@@ -82,7 +84,7 @@ export function ExplorerToolbar({
   | 'inTrash'
   | 'emptyTrash'
   | 'displayName'
->) {
+> & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
   const [picker, setPicker] = useState<{
     kind: 'terminal' | 'ide'
@@ -144,6 +146,16 @@ export function ExplorerToolbar({
         </div>
         <h1 data-tauri-drag-region>{x.query ? '搜索' : displayName(x.path) || 'Fiex'}</h1>
         <div className="toolbar-spacer" data-tauri-drag-region />
+        <Button
+          variant="ghost"
+          size="icon"
+          title="双面板"
+          aria-label="双面板"
+          aria-pressed={split}
+          onClick={onToggleSplit}
+        >
+          <Columns2 size={20} />
+        </Button>
         <div className="view-switch">
           {views.map((v) => (
             <Button

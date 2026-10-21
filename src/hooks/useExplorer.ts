@@ -10,7 +10,7 @@ import type {
   Preferences,
   RemoteConnection,
 } from '@/lib/types'
-export function useExplorer(prefs: Preferences) {
+export function useExplorer(prefs: Preferences, startOverride?: string) {
   const [locations, setLocations] = useState<Location[]>([])
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
@@ -73,7 +73,7 @@ export function useExplorer(prefs: Preferences) {
       void refreshLocations().catch(() => {})
     }, 60000)
     return () => window.clearInterval(timer)
-  }, [refreshLocations])
+  }, [refreshLocations, startOverride])
   useEffect(() => {
     let cancelled = false
     // The start folder must not wait for the disk survey: resolve it first so
@@ -83,7 +83,7 @@ export function useExplorer(prefs: Preferences) {
       // A folder passed on the command line wins over the start page.
       const launched = native && (await call<string | null>('launch_path').catch(() => null))
       if (cancelled) return
-      let start: string | null = launched || null
+      let start: string | null = startOverride || launched || null
       if (!start && prefs.startPage === 'recent') start = 'recent://'
       else if (!start && prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
       if (!start) {

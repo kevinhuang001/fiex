@@ -2974,3 +2974,54 @@ body.dragging-file * {
   color: var(--accent);
   font-weight: 600;
 }
+
+.main {
+  position: relative;
+}
+.secondary-pane {
+  position: absolute;
+  top: 96px;
+  right: 0;
+  bottom: 30px;
+  z-index: 20;
+  width: 46%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--canvas);
+  box-shadow: -12px 0 32px #183a5910;
+}
+.secondary-pane > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+.secondary-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text);
+}
+.secondary-pane > footer {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+}
+.secondary-pane > footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 11px;
+  color: var(--text);
+}

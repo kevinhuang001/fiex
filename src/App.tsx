@@ -3,6 +3,7 @@ import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
 import { ActivityCenter } from '@/components/ActivityCenter'
+import { SecondaryPane } from '@/components/SecondaryPane'
 import { WorkspaceBar } from '@/components/WorkspaceBar'
 import { ExplorerTabs } from '@/components/explorer/ExplorerTabs'
 import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
@@ -14,10 +15,11 @@ import { call, native } from '@/lib/api'
 import { parent } from '@/lib/files'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
+  const [split, setSplit] = useState(false)
 
   // The label size is the reference size: every window is zoomed by the same
   // ratio so the preference scales the sidebar, toolbar, dialogs and file list
@@ -49,9 +51,9 @@ export default function App() {
         onMount={app.mountDevice}
         trashPath={app.trashPath}
       />
-      <main className="main">
+      <main className={`main ${split ? 'split' : ''}`}>
         <ExplorerTabs {...app} />
-        <ExplorerToolbar {...app} />
+        <ExplorerToolbar {...app} split={split} onToggleSplit={() => setSplit((value) => !value)} />
         <ExplorerPathBar {...app} />
         {app.gitSwitched && (
           <div className="history-banner">
@@ -106,6 +108,14 @@ export default function App() {
             onExternalDrag={(result) =>
               app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
             }
+          />
+        )}
+        {split && (
+          <SecondaryPane
+            prefs={app.prefs}
+            start={app.x.path}
+            onClose={() => setSplit(false)}
+            onTransfer={(destination, moving) => app.transfer(app.x.selected, destination, moving)}
           />
         )}
         <GitPanel
