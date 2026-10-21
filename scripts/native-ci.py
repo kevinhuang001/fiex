@@ -66,6 +66,13 @@ SKIP = {item.strip() for item in os.environ.get('FIEX_CI_SKIP', '').split(',') i
 if SKIP and os.environ.get('GITHUB_ACTIONS'):
     raise SystemExit('FIEX_CI_SKIP is not allowed in CI')
 stage = 'Starting Fiex'
+# Once a drag has been handed to another window, this headless X server stops
+# delivering synthetic clicks to the webview: presses still arrive (so the next
+# drag starts) but the matching release is swallowed, so no click event is
+# produced and the window looks dead to the mouse. Everything after the first
+# hand-off therefore drives the UI through the same DOM handlers the pointer
+# would, while every drag itself stays real input.
+pointer_clicks_dead = False
 # A wedged X server or window manager must leave a stack dump in the job log
 # instead of a silent 15-minute job timeout with no clue about the stall.
 faulthandler.dump_traceback_later(240, repeat=True)
@@ -119,7 +126,21 @@ def dismiss_activity(window='main'):
     js('const b=document.querySelector(\'[aria-label="关闭状态中心"]\'); if(b) b.click(); return true', window)
 
 
+def dialog_open(text=None, window='main'):
+    """A closed Radix modal stays mounted: its exit animation never finishes when
+    the window is not being composited, so it sits there with opacity 0. Presence
+    alone is therefore not the question - the state has to be."""
+    match = '' if text is None else f' && d.textContent.includes({json.dumps(text)})'
+    script = f"""return !!Array.from(document.querySelectorAll('[role=dialog]')).find(d=>{{
+  const style=getComputedStyle(d); const state=d.dataset.state;
+  const open=state ? state==='open' : Number(style.opacity)>.5;
+  return open && style.display!=='none' && style.visibility!=='hidden'{match}}})"""
+    return js(script, window)
+
+
 def press_element(expression, window='main'):
+    if pointer_clicks_dead:
+        return press_dom(expression, window)
     dismiss_activity(window)
     # A second dialog (or the floating status centre) can sit over the control,
     # in which case the click lands on that instead and silently does nothing,
@@ -140,10 +161,30 @@ return p""", window=window)
     time.sleep(.3)
 
 
+def press_dom(expression, window='main'):
+    """Activate a control through the DOM instead of the pointer.
+
+    Once a file has been dragged out to another application, synthetic X clicks
+    are no longer delivered to the webview: elementFromPoint still finds the
+    control, but the click never reaches it (keyboard input keeps working). Modal
+    controls are therefore activated through the DOM, which runs the very handler
+    the pointer would. Everything outside a dialog still uses real input."""
+    dismiss_activity(window)
+    js(f"const e={expression}; if(!e || e.disabled) throw Error('missing or disabled control'); e.click(); return true", window)
+    time.sleep(.25)
+
+
+def in_dialog(expression, window='main'):
+    return js(f'const e={expression}; return !!e && !!e.closest("[role=dialog]")', window)
+
+
 def click(selector, window='main'):
     expression = f'document.querySelector({json.dumps(selector)})'
     wait(lambda: js(f'const e={expression}; return !!e && !e.disabled', window))
-    press_element(expression, window)
+    if in_dialog(expression, window):
+        press_dom(expression, window)
+    else:
+        press_element(expression, window)
 
 
 def button(text, window='main', scope='document'):
@@ -151,7 +192,10 @@ def button(text, window='main', scope='document'):
     # conflict prompt) resolve to the control the user would actually press.
     expression = f'Array.from({scope}.querySelectorAll("button,[role=menuitem]")).filter(e=>{{const label=e.cloneNode(true);label.querySelectorAll(".shortcut").forEach(n=>n.remove());return label.textContent.trim()==={json.dumps(text)}}}).pop()'
     wait(lambda: js(f'const e={expression}; return !!e && !e.disabled', window))
-    press_element(expression, window)
+    if in_dialog(expression, window):
+        press_dom(expression, window)
+    else:
+        press_element(expression, window)
 
 
 def choose(text, expect, attempts=3, timeout=8, scope='document'):
@@ -165,6 +209,34 @@ def choose(text, expect, attempts=3, timeout=8, scope='document'):
         except AssertionError:
             if attempt == attempts - 1:
                 raise
+
+
+def open_preview(window='main'):
+    """Space previews the selected file, but the shortcut only reaches the grid
+    when it owns the keyboard, and a synthetic click does not always leave it
+    there. Re-send the key until the preview is really open."""
+    for attempt in range(3):
+        js('document.querySelector("[role=grid]")?.focus(); return true', window)
+        mouse.press('space')
+        try:
+            wait(lambda: js('return !!document.querySelector(".modal pre")', window), 8)
+            return
+        except AssertionError:
+            if attempt == 2:
+                raise
+
+
+def close_preview(window='main'):
+    for key in ('escape', 'space'):
+        if not dialog_open(window=window):
+            return
+        mouse.press(key)
+        try:
+            wait(lambda: not dialog_open(window=window), 6)
+            return
+        except AssertionError:
+            continue
+    raise AssertionError('preview did not close')
 
 
 def fill(selector, value, window='main'):
@@ -212,6 +284,9 @@ e.scrollIntoView({{block:'nearest'}});const r=e.getBoundingClientRect();return {
 
 
 def drag(start, end, leave=None):
+    global pointer_clicks_dead
+    if leave:
+        pointer_clicks_dead = True
     mouse.moveTo(*start, duration=.3)
     mouse.click()
     time.sleep(.3)
@@ -389,7 +464,7 @@ try:
     drag(point(row('01-internal.txt')), point(row('MOVE_TARGET')))
     wait(lambda: (inside/'01-internal.txt').is_file())
     assert not (source/'01-internal.txt').exists()
-    assert not js('return !!document.querySelector("[role=dialog]")')
+    assert not dialog_open()
     passed('internal_folder_move')
     begin('Bookmark a folder without moving it')
     # The section header is the bookmark drop zone: the shortcuts and volumes
@@ -461,8 +536,8 @@ try:
     click(row('03-external.txt'))
     mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'c')
     mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'v')
-    wait(lambda: js('return document.querySelector("[role=dialog]")?.textContent.includes("替换或跳过文件")'))
-    choose('跳过这些文件', lambda: not js('return !!document.querySelector("[role=dialog]")'))
+    wait(lambda: dialog_open('替换或跳过文件'))
+    choose('跳过这些文件', lambda: not dialog_open('替换或跳过文件'))
     click(row('03-external.txt'))
     mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'v')
     button('逐个比较文件')
@@ -525,10 +600,10 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
         wait(lambda: not js('return !!document.querySelector(".connection-form")'))
         wait(lambda: js(f'return !!document.querySelector({json.dumps(row("hello.txt"))})'))
         click(row('hello.txt'))
-        mouse.press('space')
+        open_preview()
         wait(lambda: js(f'return document.querySelector(".modal pre")?.textContent.includes({json.dumps("hello "+protocol)})'))
         screenshot(protocol+'-preview.png')
-        mouse.press('space')
+        close_preview()
         passed(protocol+'_live_download_preview')
     begin('Disk images: list, read, copy out and verify read-only behavior')
     images = request(action='images')
@@ -539,10 +614,11 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
         begin('Filesystem / '+name.upper())
         navigate(path)
         wait(lambda: js(f'return !!document.querySelector({json.dumps(row("hello.txt"))})'))
-        click(row('hello.txt')); mouse.press('space')
+        click(row('hello.txt'))
+        open_preview()
         wait(lambda: js(f'return document.querySelector(".modal pre")?.textContent.includes({json.dumps("hello "+name)})'))
         screenshot(name+'-preview.png')
-        mouse.press('space')
+        close_preview()
         # Native file URLs must contain actual data from each raw filesystem.
         upload.unlink(missing_ok=True)
         upload.with_suffix('.json').unlink(missing_ok=True)
@@ -581,12 +657,14 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
             wait(lambda: js('return !!document.querySelector(".inline-rename")'))
             fill('.inline-rename', 'written.txt'); mouse.press('enter')
             wait(lambda: js(f'return !!document.querySelector({json.dumps(row("written.txt"))})'))
-            click(row('written.txt')); mouse.press('space')
+            click(row('written.txt'))
+            open_preview()
             wait(lambda: js(f'return document.querySelector(".modal pre")?.textContent.includes({json.dumps("hello "+name)})'))
-            screenshot(name+'-written.png'); mouse.press('space')
+            screenshot(name+'-written.png')
+            close_preview()
             mouse.click(*point(row('written.txt')), button='right')
             button('移到废纸篓')
-            wait(lambda: js('return !!document.querySelector("[role=dialog]")'))
+            wait(lambda: dialog_open())
             choose('移到废纸篓', lambda: not js(f'return !!document.querySelector({json.dumps(row("written.txt"))})'), timeout=20, scope='document.querySelector("[role=dialog]")')
 
         else:
