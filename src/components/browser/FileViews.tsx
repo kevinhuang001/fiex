@@ -118,6 +118,56 @@ export function FileViews(props: Props) {
   const anchor = useRef<string | null>(null)
   const suppressClick = useRef(false)
   const container = useRef<HTMLDivElement>(null)
+  const [band, setBand] = useState<{
+    left: number
+    top: number
+    width: number
+    height: number
+  } | null>(null)
+  const bandStart = useRef<{ x: number; y: number; base: string[]; additive: boolean } | null>(null)
+  const bandDragged = useRef(false)
+  const startBand = (event: React.PointerEvent) => {
+    if (event.button !== 0 || !container.current) return
+    // Begin only from empty space: rows, tiles, inputs and buttons keep their
+    // own drag/click behaviour.
+    if ((event.target as Element).closest('[data-path],button,input,a')) return
+    const additive = event.metaKey || event.ctrlKey || event.shiftKey
+    bandStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      base: additive ? [...x.selected] : [],
+      additive,
+    }
+    bandDragged.current = false
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const moveBand = (event: React.PointerEvent) => {
+    const start = bandStart.current
+    if (!start || !container.current) return
+    const left = Math.min(start.x, event.clientX)
+    const top = Math.min(start.y, event.clientY)
+    const width = Math.abs(event.clientX - start.x)
+    const height = Math.abs(event.clientY - start.y)
+    if (width > 3 || height > 3) bandDragged.current = true
+    setBand({ left, top, width, height })
+    const bandRect = { left, top, right: left + width, bottom: top + height }
+    const picked: string[] = []
+    container.current.querySelectorAll<HTMLElement>('[data-path]').forEach((element) => {
+      const rect = element.getBoundingClientRect()
+      const hit =
+        rect.left < bandRect.right &&
+        rect.right > bandRect.left &&
+        rect.top < bandRect.bottom &&
+        rect.bottom > bandRect.top
+      if (hit && element.dataset.path) picked.push(element.dataset.path)
+    })
+    const next = start.additive ? [...new Set([...start.base, ...picked])] : picked
+    x.setSelected(next)
+  }
+  const endBand = () => {
+    bandStart.current = null
+    setBand(null)
+  }
   const [ghost, setGhost] = useState<{ paths: string[]; x: number; y: number } | null>(null)
   const beginPointerDrag = (event: React.PointerEvent, entry: Entry) => {
     if (event.button !== 0 || x.renaming || readOnly) return
@@ -332,10 +382,25 @@ export function FileViews(props: Props) {
       aria-label="文件"
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onPointerDown={startBand}
+      onPointerMove={moveBand}
+      onPointerUp={endBand}
+      onPointerCancel={endBand}
       onClick={(e) => {
+        // A finished rubber-band gesture must not collapse the selection.
+        if (bandDragged.current) {
+          bandDragged.current = false
+          return
+        }
         if (e.target === e.currentTarget) x.setSelected([])
       }}
     >
+      {band && (
+        <div
+          className="selection-band"
+          style={{ left: band.left, top: band.top, width: band.width, height: band.height }}
+        />
+      )}
       {entries.length === 0 && !x.loading && !x.error && (
         <div className="empty-state">
           {x.searching ? (

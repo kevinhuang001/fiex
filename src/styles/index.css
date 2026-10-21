@@ -2785,3 +2785,16 @@ body.dragging-file * {
   justify-content: flex-end;
   margin-top: 2px;
 }
+
+/* Rubber-band selection over the file area. */
+.file-area {
+  position: relative;
+}
+.selection-band {
+  position: fixed;
+  z-index: 30;
+  border: 1px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 4px;
+  pointer-events: none;
+}
