@@ -3001,3 +3001,13 @@ body.dragging-file * {
   border-left-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 6%, var(--canvas));
 }
+
+.pane-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.pane-active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}

@@ -9,17 +9,21 @@ import type { Entry, Preferences } from '@/lib/types'
 /// buttons at the bottom copy or move the other pane's selection into the
 /// folder this pane is showing, which is the usual dual-pane workflow.
 export function SecondaryPane({
+  explorer,
   prefs,
-  start,
+  active,
+  onFocus,
   onClose,
   onTransfer,
 }: {
+  explorer: ReturnType<typeof useExplorer>
   prefs: Preferences
-  start: string
+  active: boolean
+  onFocus: () => void
   onClose: () => void
   onTransfer: (paths: string[], destination: string, moving: boolean) => void
 }) {
-  const x = useExplorer(prefs, start)
+  const x = explorer
   const [draft, setDraft] = useState(x.path)
   const [editing, setEditing] = useState(false)
   const [top, setTop] = useState<number | null>(null)
@@ -47,8 +51,9 @@ export function SecondaryPane({
   }
   return (
     <aside
-      className="secondary-pane"
+      className={`secondary-pane ${active ? 'pane-active' : ''}`}
       aria-label="第二个面板"
+      onPointerDownCapture={onFocus}
       style={top === null ? undefined : { top }}
       data-drop-folder={x.path === 'recent://' ? undefined : x.path}
     >

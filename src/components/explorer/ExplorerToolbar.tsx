@@ -149,8 +149,8 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title="双面板"
-          aria-label="双面板"
+          title={split ? '关闭当前面板' : '双面板'}
+          aria-label={split ? '关闭当前面板' : '双面板'}
           aria-pressed={split}
           onClick={onToggleSplit}
         >

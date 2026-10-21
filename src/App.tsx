@@ -15,11 +15,10 @@ import { call, native } from '@/lib/api'
 import { parent } from '@/lib/files'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
-  const [split, setSplit] = useState(false)
 
   // The label size is the reference size: every window is zoomed by the same
   // ratio so the preference scales the sidebar, toolbar, dialogs and file list
@@ -51,9 +50,13 @@ export default function App() {
         onMount={app.mountDevice}
         trashPath={app.trashPath}
       />
-      <main className={`main ${split ? 'split' : ''}`}>
+      <main className={`main ${app.split ? 'split' : ''}`}>
         <ExplorerTabs {...app} />
-        <ExplorerToolbar {...app} split={split} onToggleSplit={() => setSplit((value) => !value)} />
+        <ExplorerToolbar
+          {...app}
+          split={app.split}
+          onToggleSplit={() => (app.split ? app.closePane() : app.setSplit(true))}
+        />
         <ExplorerPathBar {...app} />
         {app.gitSwitched && (
           <div className="history-banner">
@@ -94,27 +97,37 @@ export default function App() {
             正在读取文件夹…
           </div>
         ) : (
-          <FileViews
-            readOnly={app.gitSwitched}
-            trashPath={app.trashPath}
-            explorer={app.x}
-            prefs={app.prefs}
-            onOpen={app.open}
-            onPreview={app.previewEntry}
-            onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
-            onDrop={app.transfer}
-            onBookmark={app.bookmarkPaths}
-            onWorkspace={app.addWorkspace}
-            onExternalDrag={(result) =>
-              app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
-            }
-          />
+          <div
+            className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
+            onPointerDownCapture={() => app.setActive('left')}
+          >
+            <FileViews
+              readOnly={app.gitSwitched}
+              trashPath={app.trashPath}
+              explorer={app.split ? app.left : app.x}
+              prefs={app.prefs}
+              onOpen={app.open}
+              onPreview={app.previewEntry}
+              onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+              onDrop={app.transfer}
+              onBookmark={app.bookmarkPaths}
+              onWorkspace={app.addWorkspace}
+              onExternalDrag={(result) =>
+                app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
+              }
+            />
+          </div>
         )}
-        {split && (
+        {app.split && (
           <SecondaryPane
+            explorer={app.right}
             prefs={app.prefs}
-            start={app.x.path}
-            onClose={() => setSplit(false)}
+            active={app.active === 'right'}
+            onFocus={() => app.setActive('right')}
+            onClose={() => {
+              app.setSplit(false)
+              app.setActive('left')
+            }}
             onTransfer={(paths, destination, moving) => app.transfer(paths, destination, moving)}
           />
         )}

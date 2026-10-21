@@ -16,7 +16,11 @@ import { useFileOperations } from './useFileOperations'
 import { usePathEditor } from './usePathEditor'
 export function useAppController() {
   const [prefs, update] = usePreferences()
-  const x = useExplorer(prefs)
+  const left = useExplorer(prefs)
+  const right = useExplorer(prefs, left.path)
+  const [split, setSplit] = useState(false)
+  const [active, setActive] = useState<'left' | 'right'>('left')
+  const x = active === 'right' ? right : left
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
 
@@ -147,6 +151,12 @@ export function useAppController() {
       ),
     )
     workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
+  }
+  const closePane = () => {
+    if (!split) return
+    // Closing the focused pane leaves the other one in place.
+    setSplit(false)
+    setActive(active === 'right' ? 'left' : 'right')
   }
   const checksum = (path: string) =>
     void run('正在计算校验和…', async () => {
@@ -604,6 +614,13 @@ export function useAppController() {
     setToast,
     workspace,
     addWorkspace,
+    left,
+    right,
+    split,
+    setSplit,
+    active,
+    setActive,
+    closePane,
   }
 }
 export type AppController = ReturnType<typeof useAppController>
