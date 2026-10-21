@@ -31,8 +31,8 @@ export function Preview({
     const maxHeight = Math.round(window.innerHeight * 0.76)
     const scale = Math.min(1, maxWidth / media.width, maxHeight / media.height)
     return {
-      width: Math.max(420, Math.round(media.width * scale)),
-      height: Math.max(280, Math.round(media.height * scale)),
+      width: Math.max(320, Math.round(media.width * scale)),
+      height: Math.round(media.height * scale),
     }
   }, [media])
   useEffect(() => {
@@ -93,7 +93,7 @@ export function Preview({
       onClose={onClose}
       title={entry?.name || '快速查看'}
       wide
-      className="preview-modal"
+      className={`preview-modal ${entry && isText(entry) ? 'preview-text' : entry?.extension === 'pdf' ? 'preview-pdf' : fit ? 'preview-media' : 'preview-compact'}`}
       contentStyle={fit ? { width: fit.width } : undefined}
     >
       {entry && (

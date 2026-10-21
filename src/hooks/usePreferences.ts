@@ -24,11 +24,11 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
     compressIgnore: defaultOperationIgnore(),
-    copyIgnore: defaultOperationIgnore(),
     sidebarOrder: ['places', 'favorites', 'tags', 'devices'],
     placeOrder: [],
     hiddenPlaces: [],
     favorites: [],
+    customTags: [],
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
   }
@@ -69,7 +69,18 @@ function load(): Preferences {
         : 'recent'
     return {
       ...fallback,
-      ...stored,
+      ...Object.fromEntries(Object.entries(stored).filter(([key]) => key !== 'copyIgnore')),
+      customTags: Array.isArray(stored.customTags)
+        ? stored.customTags.filter(
+            (tag) =>
+              tag &&
+              typeof tag.name === 'string' &&
+              tag.name.trim() &&
+              Number.isInteger(tag.color) &&
+              tag.color >= 1 &&
+              tag.color <= 7,
+          )
+        : [],
       startPage,
       fontSize,
       displayIgnore: Array.isArray(stored.displayIgnore)
@@ -78,7 +89,6 @@ function load(): Preferences {
       compressIgnore: Array.isArray(stored.compressIgnore)
         ? stored.compressIgnore
         : fallback.compressIgnore,
-      copyIgnore: Array.isArray(stored.copyIgnore) ? stored.copyIgnore : fallback.copyIgnore,
       sidebarOrder: Array.isArray(stored.sidebarOrder)
         ? (stored.sidebarOrder.filter((section): section is SidebarSection =>
             ['places', 'favorites', 'tags', 'devices'].includes(section),

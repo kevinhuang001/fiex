@@ -1,3 +1,4 @@
+import { SelectField } from '../ui/SelectField'
 import type { Preferences } from '@/lib/types'
 import { Eye, Home, SlidersHorizontal, Sun } from 'lucide-react'
 
@@ -56,19 +57,17 @@ export function AppearanceSettings({
             启动页
           </div>
           <div className="settings-row-control">
-            <select
-              className="text-field settings-select"
-              aria-label="启动页"
+            <SelectField
+              label="启动页"
               value={prefs.startPage}
-              onChange={(event) =>
-                update({ startPage: event.target.value as Preferences['startPage'] })
-              }
-            >
-              <option value="recent">最近使用</option>
-              <option value="home">个人文件夹</option>
-              <option value="documents">文稿</option>
-              <option value="last">上次位置</option>
-            </select>
+              options={[
+                { value: 'recent', label: '最近使用' },
+                { value: 'home', label: '个人文件夹' },
+                { value: 'documents', label: '文稿' },
+                { value: 'last', label: '上次位置' },
+              ]}
+              onChange={(startPage) => update({ startPage: startPage as Preferences['startPage'] })}
+            />
           </div>
         </div>
         <div className="settings-row">

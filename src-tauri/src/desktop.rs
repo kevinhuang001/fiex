@@ -21,7 +21,7 @@ use std::{
 use tauri::{
     ipc::Channel,
     menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    tray::TrayIconBuilder,
     Emitter, Manager,
 };
 static QUITTING: AtomicBool = AtomicBool::new(false);
@@ -40,7 +40,7 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let mut builder = TrayIconBuilder::with_id("fiex-tray")
         .tooltip("Fiex")
         .menu(&menu)
-        .show_menu_on_left_click(false)
+        .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main(app),
             "quit" => {
@@ -48,16 +48,6 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 app.exit(0);
             }
             _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                show_main(tray.app_handle());
-            }
         });
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
@@ -741,30 +731,10 @@ fn cancel_operation(state: tauri::State<'_, OperationCancel>) {
     state.cancel();
 }
 #[tauri::command]
-async fn file_checksum(path: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        use sha2::{Digest, Sha256};
-        use std::io::Read;
-        let mut file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
-        let mut hasher = Sha256::new();
-        let mut buffer = [0u8; 64 * 1024];
-        loop {
-            let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
-            if read == 0 {
-                break;
-            }
-            hasher.update(&buffer[..read]);
-        }
-        Ok::<String, String>(
-            hasher
-                .finalize()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect(),
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())?
+async fn file_checksums(path: String) -> Result<Vec<crate::checksums::Checksum>, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::checksums::calculate(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn pick_folder(default: Option<String>) -> Option<String> {
@@ -916,14 +886,21 @@ async fn empty_trash(cancel: tauri::State<'_, OperationCancel>) -> Result<usize,
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
+fn trash_restore_needs_folder(paths: Vec<String>) -> bool {
+    volumes::restore_needs_folder(&paths)
+}
+#[tauri::command]
 async fn restore_from_trash(
     paths: Vec<String>,
+    fallback: Option<String>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<usize, String> {
     let flag = cancel.flag();
-    tauri::async_runtime::spawn_blocking(move || volumes::restore_from_trash(&paths, &flag))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        volumes::restore_from_trash(&paths, fallback.as_deref(), &flag)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 async fn delete_permanently(
@@ -1050,7 +1027,7 @@ pub fn run() {
             cancel_operation,
             extract_archive,
             pick_folder,
-            file_checksum,
+            file_checksums,
             compress_archive,
             detect_terminals,
             detect_ides,
@@ -1072,6 +1049,7 @@ pub fn run() {
             trash_path,
             empty_trash,
             restore_from_trash,
+            trash_restore_needs_folder,
             delete_permanently,
             open_applications,
             set_tags,

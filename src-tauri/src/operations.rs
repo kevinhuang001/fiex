@@ -282,12 +282,15 @@ pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
         conflicts: vec![],
     };
     for path in paths {
+        let before = crate::volumes::trash_names();
         match trash::delete(path) {
-            Ok(()) => result.paths.push(path.clone()),
+            Ok(()) => {
+                crate::volumes::record_trashed(path, &before);
+                result.paths.push(path.clone());
+            }
             Err(e) => result.errors.push(format!("{path}: {e}")),
         }
     }
-    crate::volumes::record_trashed(&result.paths);
     Ok(result)
 }
 #[cfg(test)]

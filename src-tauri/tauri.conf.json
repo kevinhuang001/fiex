@@ -22,6 +22,7 @@
         "center": true,
         "decorations": true,
         "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "transparent": true,
         "backgroundColor": "#00000000",
         "shadow": true,

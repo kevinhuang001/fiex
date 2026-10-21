@@ -1,4 +1,5 @@
 pub mod archives;
+pub mod checksums;
 #[cfg(feature = "ci-driver")]
 mod ci_driver;
 #[cfg(feature = "desktop")]

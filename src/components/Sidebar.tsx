@@ -1,3 +1,4 @@
+import { commonPlaces } from '@/lib/places'
 import {
   Home,
   Monitor,
@@ -23,7 +24,8 @@ import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
 import { fileVisual } from '@/lib/fileIcons'
-import { TAG_PRESETS } from '@/lib/tags'
+import { CreateTagDialog } from './CreateTagDialog'
+import { TAG_PRESETS, tagColor } from '@/lib/tags'
 interface Props {
   x: Explorer
   prefs: Preferences
@@ -56,6 +58,8 @@ export function Sidebar({
   onMount,
   trashPath,
 }: Props) {
+  const [creatingTag, setCreatingTag] = useState(false)
+  const allTags = [...TAG_PRESETS, ...prefs.customTags]
   const [menu, setMenu] = useState<
     | { kind: 'trash'; x: number; y: number }
     | { kind: 'favorite'; x: number; y: number; path: string }
@@ -72,7 +76,9 @@ export function Sidebar({
     }
   }, [menu])
   const iconFor = (name: string) =>
-    name === '最近使用' ? (
+    name === '废纸篓' ? (
+      <Trash2 />
+    ) : name === '最近使用' ? (
       <Clock />
     ) : name === '个人文件夹' ? (
       <Home />
@@ -103,14 +109,8 @@ export function Sidebar({
         {prefs.sidebarOrder.map((section) => {
           if (section === 'places') {
             const order = new Map(prefs.placeOrder.map((key, index) => [key, index]))
-            const places = x.locations
-              .filter(
-                (location) =>
-                  (location.kind === 'favorite' ||
-                    location.kind === 'applications' ||
-                    location.kind === 'recent') &&
-                  !prefs.hiddenPlaces.includes(location.path || location.name),
-              )
+            const places = commonPlaces(x.locations)
+              .filter((location) => !prefs.hiddenPlaces.includes(location.path || location.name))
               .sort(
                 (left, right) =>
                   (order.get(left.path || left.name) ?? Number.MAX_SAFE_INTEGER) -
@@ -122,14 +122,25 @@ export function Sidebar({
                 <div className="sidebar-label">常用位置</div>
                 {places.map((location) => (
                   <button
-                    className={`nav-item ${location.path && x.path === location.path ? 'active' : ''}`}
+                    className={`nav-item ${(location.kind === 'trash' ? trashPath && x.path === trashPath : location.path && x.path === location.path) ? 'active' : ''}`}
                     key={`${location.kind}:${location.path || location.name}`}
                     onClick={() =>
-                      location.kind === 'applications' && !location.path
-                        ? onApplications()
-                        : x.navigate(location.path)
+                      location.kind === 'trash'
+                        ? onTrash()
+                        : location.kind === 'applications' && !location.path
+                          ? onApplications()
+                          : x.navigate(location.path)
                     }
-                    data-drop-folder={location.path || undefined}
+                    onContextMenu={(event) => {
+                      if (location.kind !== 'trash') return
+                      event.preventDefault()
+                      setMenu({ kind: 'trash', x: event.clientX, y: event.clientY })
+                    }}
+                    data-drop-folder={
+                      location.kind === 'trash' || location.kind === 'recent'
+                        ? undefined
+                        : location.path || undefined
+                    }
                   >
                     {iconFor(location.name)}
                     <span>{location.name}</span>
@@ -181,14 +192,24 @@ export function Sidebar({
           if (section === 'tags') {
             return (
               <Fragment key="tags">
-                <div className="sidebar-label tags-label">标签</div>
-                {TAG_PRESETS.map((tag) => (
+                <div className="sidebar-section-title">
+                  <span className="sidebar-label">标签</span>
+                  <button
+                    className="icon-button"
+                    aria-label="添加标签"
+                    title="添加标签"
+                    onClick={() => setCreatingTag(true)}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {allTags.map((tag) => (
                   <button
                     key={tag.name}
                     className={`nav-item tag-nav ${x.tagFilter === tag.name ? 'active' : ''}`}
                     onClick={() => x.setTagFilter(x.tagFilter === tag.name ? null : tag.name)}
                   >
-                    <span className="tag-dot" style={{ background: tag.hex }} />
+                    <span className="tag-dot" style={{ background: tagColor(tag.color) }} />
                     <span>{tag.name}</span>
                   </button>
                 ))}
@@ -314,65 +335,62 @@ export function Sidebar({
           )
         })}
       </div>
-      <div className="sidebar-bottom">
-        <button
-          className={`nav-item ${trashPath && x.path === trashPath ? 'active' : ''}`}
-          onClick={onTrash}
-          onContextMenu={(event) => {
-            event.preventDefault()
-            setMenu({ kind: 'trash', x: event.clientX, y: event.clientY })
-          }}
+      {menu && (
+        <div
+          className="context-menu sidebar-menu"
+          role="menu"
+          aria-label={menu.kind === 'trash' ? '废纸篓' : '收藏'}
+          style={{ left: menu.x, top: menu.y }}
         >
-          <Trash2 />
-          <span>废纸篓</span>
-        </button>
-        {menu && (
-          <div
-            className="context-menu sidebar-menu"
-            role="menu"
-            aria-label={menu.kind === 'trash' ? '废纸篓' : '收藏'}
-            style={{ left: menu.x, top: menu.y }}
-          >
-            {menu.kind === 'trash' ? (
-              <>
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    setMenu(null)
-                    onTrash()
-                  }}
-                >
-                  <Folder size={14} />
-                  打开废纸篓
-                </button>
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    setMenu(null)
-                    onEmptyTrash()
-                  }}
-                >
-                  <Trash size={14} />
-                  清空废纸篓
-                </button>
-              </>
-            ) : (
+          {menu.kind === 'trash' ? (
+            <>
               <button
                 role="menuitem"
                 onClick={() => {
-                  update({
-                    favorites: prefs.favorites.filter((item) => item.path !== menu.path),
-                  })
                   setMenu(null)
+                  onTrash()
                 }}
               >
-                <X size={14} />
-                从侧栏移除
+                <Folder size={14} />
+                打开废纸篓
               </button>
-            )}
-          </div>
-        )}
-      </div>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null)
+                  onEmptyTrash()
+                }}
+              >
+                <Trash size={14} />
+                清空废纸篓
+              </button>
+            </>
+          ) : (
+            <button
+              role="menuitem"
+              onClick={() => {
+                update({
+                  favorites: prefs.favorites.filter((item) => item.path !== menu.path),
+                })
+                setMenu(null)
+              }}
+            >
+              <X size={14} />
+              从侧栏移除
+            </button>
+          )}
+        </div>
+      )}
+      {creatingTag && (
+        <CreateTagDialog
+          existing={allTags}
+          onClose={() => setCreatingTag(false)}
+          onCreate={(tag) => {
+            update({ customTags: [...prefs.customTags, tag] })
+            setCreatingTag(false)
+          }}
+        />
+      )}
     </aside>
   )
 }

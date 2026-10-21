@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckCircle2,
   Cloud,
@@ -57,6 +57,8 @@ export function GitPanel({
   onReturnToWorktree,
   readOnly,
 }: Props) {
+  const panel = useRef<HTMLElement>(null)
+  const [panelTop, setPanelTop] = useState(120)
   const repo = useGitRepository(git?.root, path, open, onRefresh, onViewRevision)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [commitOpen, setCommitOpen] = useState(false)
@@ -68,10 +70,12 @@ export function GitPanel({
   const changes = useMemo<Change[]>(
     () =>
       git && !readOnly
-        ? Object.entries(git.entries).flatMap(([path, code]) => {
-            const state = gitState(code)
-            return state ? [{ path, code, ...state }] : []
-          })
+        ? Object.entries(git.entries)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .flatMap(([path, code]) => {
+              const state = gitState(code)
+              return state ? [{ path, code, ...state }] : []
+            })
         : [],
     [git, readOnly],
   )
@@ -85,6 +89,30 @@ export function GitPanel({
     document.addEventListener('keydown', handle)
     return () => document.removeEventListener('keydown', handle)
   }, [open, onClose, pickerOpen, commitOpen])
+  useEffect(() => {
+    if (!open) return
+    const position = () =>
+      setPanelTop((document.querySelector('.toolbar')?.getBoundingClientRect().bottom ?? 112) + 8)
+    position()
+    const outside = (event: Event) => {
+      if (pickerOpen || commitOpen || remoteOpen) return
+      const target = event.target as Element | null
+      if (!panel.current?.contains(target) && !target?.closest('.git-toolbar-button')) onClose()
+    }
+    const blur = () => {
+      if (!pickerOpen && !commitOpen && !remoteOpen) onClose()
+    }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('focusin', outside)
+    window.addEventListener('blur', blur)
+    window.addEventListener('resize', position)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('focusin', outside)
+      window.removeEventListener('blur', blur)
+      window.removeEventListener('resize', position)
+    }
+  }, [open, pickerOpen, commitOpen, remoteOpen, onClose])
   if (!open) return null
   const disabled = Boolean(repo.busy || loading)
   const commitReason =
@@ -101,7 +129,13 @@ export function GitPanel({
     { title: '更改', items: unstaged, staged: false },
   ]
   return (
-    <aside className="git-panel" aria-label="源代码管理" aria-busy={Boolean(repo.busy)}>
+    <aside
+      ref={panel}
+      style={{ top: panelTop, maxHeight: `calc(100dvh - ${panelTop + 16}px)` }}
+      className="git-panel"
+      aria-label="源代码管理"
+      aria-busy={Boolean(repo.busy)}
+    >
       <header>
         <span className="git-panel-title">
           <GitFork size={16} />

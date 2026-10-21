@@ -60,27 +60,38 @@ export function useExplorer(
     [cursor, tab],
   )
   const locationsKey = useRef('')
-  const refreshLocations = useCallback(async () => {
-    const next = await call<Location[]>('locations')
-    // Disk probing is expensive and mostly returns the same volumes; only
-    // replace the state when something actually changed.
-    const key = next
-      .map((l) => `${l.name}|${l.path}|${l.available}|${l.total}|${l.mounted}`)
-      .join('\n')
-    if (key !== locationsKey.current) {
-      locationsKey.current = key
-      setLocations(next)
-    }
-    return next
+  const locationsPending = useRef<Promise<Location[]> | null>(null)
+  const refreshLocations = useCallback((): Promise<Location[]> => {
+    if (locationsPending.current) return locationsPending.current
+    const pending = call<Location[]>('locations')
+      .then((next) => {
+        const key = JSON.stringify(next)
+        if (key !== locationsKey.current) {
+          locationsKey.current = key
+          setLocations(next)
+        }
+        return next
+      })
+      .finally(() => {
+        locationsPending.current = null
+      })
+    locationsPending.current = pending
+    return pending
   }, [])
   useEffect(() => {
-    if (!enabled) return
-    const timer = window.setInterval(() => {
-      if (document.hidden) return
-      void refreshLocations().catch(() => {})
-    }, 60000)
-    return () => window.clearInterval(timer)
-  }, [refreshLocations, enabled])
+    if (!enabled || pane !== 'left') return
+    const check = () => {
+      if (!document.hidden) void refreshLocations().catch(() => {})
+    }
+    const timer = window.setInterval(check, 10000)
+    window.addEventListener('focus', check)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', check)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [refreshLocations, enabled, pane])
   useEffect(() => {
     if (!enabled || path) return
     let cancelled = false
@@ -356,6 +367,24 @@ export function useExplorer(
     setSelected([])
     setRenaming(null)
   }
+  const moveTab = (from: number, to: number) => {
+    if (from === to || !tabs[from] || !tabs[to]) return
+    tabHistory.current[tab] = { paths: history, cursor }
+    const next = [...tabs]
+    next.splice(to, 0, next.splice(from, 1)[0])
+    const histories = tabHistory.current
+    histories.splice(to, 0, histories.splice(from, 1)[0])
+    setTabs(next)
+    setTab(
+      tab === from
+        ? to
+        : from < tab && to >= tab
+          ? tab - 1
+          : from > tab && to <= tab
+            ? tab + 1
+            : tab,
+    )
+  }
   const snapshotNavigation = () => ({ path, history, cursor })
   const restoreNavigation = (state: { path: string; history: string[]; cursor: number }) => {
     setPath(state.path)
@@ -454,6 +483,7 @@ export function useExplorer(
     newTab,
     switchTab,
     closeTab,
+    moveTab,
     snapshotNavigation,
     restoreNavigation,
     renaming,

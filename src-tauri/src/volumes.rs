@@ -584,31 +584,38 @@ fn save_journal(entries: &[TrashOrigin]) {
     }
 }
 
-/// Remember where an item came from so "Put Back" works even on systems whose
-/// Trash has no metadata for third-party items.
-pub fn record_trashed(paths: &[String]) {
-    if paths.is_empty() {
+/// Capture actual trash names so renamed collisions retain their own origin.
+pub fn trash_names() -> HashSet<String> {
+    trash_path()
+        .and_then(|path| std::fs::read_dir(path).ok())
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect()
+}
+
+pub fn record_trashed(original: &str, before: &HashSet<String>) {
+    let after = trash_names();
+    let added: Vec<_> = after.difference(before).collect();
+    // Never guess when another process concurrently puts an item in the trash.
+    if added.len() != 1 {
         return;
     }
+    let name = added[0].clone();
     let mut entries = load_journal();
-    for path in paths {
-        let Some(name) = std::path::Path::new(path)
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-        else {
-            continue;
-        };
-        entries.retain(|entry| entry.name != name || entry.original != *path);
-        entries.insert(
-            0,
-            TrashOrigin {
-                name,
-                original: path.clone(),
-            },
-        );
-    }
-    entries.truncate(400);
+    entries.retain(|entry| entry.name != name && after.contains(&entry.name));
+    entries.push(TrashOrigin {
+        name,
+        original: original.into(),
+    });
     save_journal(&entries);
+}
+
+pub fn restore_needs_folder(paths: &[String]) -> bool {
+    paths
+        .iter()
+        .any(|path| original_location(Path::new(path)).is_none())
 }
 
 fn original_location(trashed: &std::path::Path) -> Option<String> {
@@ -620,7 +627,9 @@ fn original_location(trashed: &std::path::Path) -> Option<String> {
             for line in text.lines() {
                 if let Some(value) = line.strip_prefix("Path=") {
                     if let Ok(decoded) = urlencoding::decode(value) {
-                        return Some(decoded.into_owned());
+                        if Path::new(decoded.as_ref()).is_absolute() {
+                            return Some(decoded.into_owned());
+                        }
                     }
                 }
             }
@@ -686,7 +695,11 @@ fn copy_tree(from: &std::path::Path, to: &std::path::Path) -> Result<(), String>
 }
 
 /// Put trashed items back where they came from, like the system file manager.
-pub fn restore_from_trash(paths: &[String], cancel: &AtomicBool) -> Result<usize, String> {
+pub fn restore_from_trash(
+    paths: &[String],
+    fallback: Option<&str>,
+    cancel: &AtomicBool,
+) -> Result<usize, String> {
     let mut restored = 0;
     for path in paths {
         check_cancelled(cancel)?;
@@ -694,9 +707,17 @@ pub fn restore_from_trash(paths: &[String], cancel: &AtomicBool) -> Result<usize
         if !source.exists() {
             continue;
         }
-        let original = original_location(source)
-            .ok_or_else(|| format!("{path}: 找不到原来的位置，无法复原"))?;
-        let destination = std::path::PathBuf::from(&original);
+        let destination = original_location(source)
+            .map(PathBuf::from)
+            .or_else(|| {
+                fallback.and_then(|folder| {
+                    source.file_name().map(|name| Path::new(folder).join(name))
+                })
+            })
+            .ok_or_else(|| format!("{path}: 请选择恢复位置"))?;
+        if !destination.is_absolute() {
+            return Err("恢复位置必须为绝对路径".into());
+        }
         if let Some(parent) = destination.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -711,6 +732,9 @@ pub fn restore_from_trash(paths: &[String], cancel: &AtomicBool) -> Result<usize
                 );
             }
         }
+        let mut journal = load_journal();
+        journal.retain(|entry| source.file_name().is_none_or(|name| name != entry.name.as_str()));
+        save_journal(&journal);
         restored += 1;
     }
     Ok(restored)

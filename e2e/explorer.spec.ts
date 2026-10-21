@@ -172,12 +172,18 @@ test('dragging moves files and bookmarks folders', async ({ page }) => {
     page.locator('.favorite-row .nav-item').filter({ hasText: 'Research' }),
   ).toBeVisible()
 })
-test('Finder tags can be applied to a file', async ({ page }) => {
+test('sidebar creates tags and the file dialog only applies them', async ({ page }) => {
+  await page.getByRole('button', { name: '添加标签', exact: true }).click()
+  await page.getByRole('textbox', { name: '标签名称', exact: true }).fill('验收')
+  await page.getByRole('button', { name: '添加', exact: true }).click()
+  await expect(
+    page.locator('.sidebar').getByRole('button', { name: '验收', exact: true }),
+  ).toBeVisible()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await page.getByRole('menuitem', { name: '标签…', exact: true }).click()
   await expect(page.getByRole('dialog')).toContainText('标签')
-  await page.getByRole('textbox', { name: '自定义标签名称' }).fill('验收')
-  await page.getByRole('button', { name: '添加', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: '自定义标签名称' })).toHaveCount(0)
+  await page.getByRole('dialog').getByRole('button', { name: '验收', exact: true }).click()
   await page.getByRole('button', { name: '应用标签', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(
@@ -200,11 +206,12 @@ test('opens the Trash inside Fiex', async ({ page }) => {
 test('settings are custom controls and theme persists', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '深色', exact: true }).click()
-  await expect(page.locator('html')).toHaveClass('dark')
+  await expect(page.locator('html')).not.toHaveClass('dark')
   await page.getByRole('switch').click()
   await expect(page.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.locator('html')).toHaveClass('dark')
   await page.screenshot({ path: 'artifacts/dark.png' })
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
   await page.reload()
   await expect(page.locator('html')).toHaveClass('dark')
 })
@@ -324,7 +331,7 @@ test('settings sections keep preferences and release shortcut recording on exit'
   await expect(page.getByText('开源许可', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '快捷键', exact: true }).click()
   await expect(page.getByText('按下快捷键…', { exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.getByRole('button', { name: '确认', exact: true }).click()
   await page.reload()
   await expect(page.locator('html')).toHaveClass('dark')
   await expect(
@@ -532,4 +539,44 @@ test('non Git welcome contains only its icon and action', async ({ page }) => {
   await expect(welcome).toHaveText('初始化 Git 仓库')
   await expect(welcome.locator('p, h2, code')).toHaveCount(0)
   await expect(welcome.locator('svg')).toHaveCount(2)
+})
+
+test('advanced compression only exposes supported options', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '压缩为…', exact: true }).hover()
+  await page.getByRole('menuitem', { name: '高级…', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '高级压缩' })
+  await expect(dialog.getByLabel('压缩密码')).toBeVisible()
+  await dialog.getByRole('button', { name: 'TAR 仅打包', exact: true }).click()
+  await expect(dialog.getByRole('slider')).toHaveCount(0)
+  await expect(dialog.getByLabel('压缩密码')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'TAR.BZ2 Bzip2', exact: true }).click()
+  await expect(dialog.getByRole('slider')).toHaveAttribute('min', '1')
+  await page.screenshot({ path: 'artifacts/compress.png' })
+})
+
+test('checksum sheet displays five selectable hashes', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '查看校验和', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '文件校验和' })
+  await expect(dialog.locator('.checksum-row')).toHaveCount(5)
+  await expect(dialog.getByRole('button', { name: '复制 SHA-256', exact: true })).toBeVisible()
+  await page.screenshot({ path: 'artifacts/checksums.png' })
+})
+
+test('tab dragging preserves the active folder', async ({ page }) => {
+  await page.getByRole('button', { name: '新建标签页', exact: true }).click()
+  await page.getByText('Research', { exact: true }).dblclick()
+  const tabs = page.getByRole('tab')
+  const from = await tabs.nth(1).boundingBox()
+  const to = await tabs.nth(0).boundingBox()
+  if (!from || !to) throw new Error('missing tab geometry')
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 })
+  await page.mouse.up()
+  await expect(tabs.nth(0)).toContainText('Research')
+  await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true')
+  await tabs.nth(1).click()
+  await expect(page.getByText('Notes.md', { exact: true })).toBeVisible()
 })

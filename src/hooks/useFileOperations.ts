@@ -151,7 +151,10 @@ export function useFileOperations({
     void run(
       '正在复原…',
       async () => {
-        const restored = await call<number>('restore_from_trash', { paths })
+        const needsFolder = await call<boolean>('trash_restore_needs_folder', { paths })
+        const fallback = needsFolder ? await call<string | null>('pick_folder', {}) : null
+        if (needsFolder && !fallback) return
+        const restored = await call<number>('restore_from_trash', { paths, fallback })
         if (restored === undefined) return
         notify(`已复原 ${restored} 个项目`)
         x.setSelected([])

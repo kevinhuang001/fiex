@@ -90,6 +90,7 @@ export type Sort = 'name' | 'modified' | 'size' | 'kind'
 export type StartPage = 'recent' | 'home' | 'documents' | 'last'
 
 export interface Preferences {
+  customTags: Tag[]
   view: View
   group: Group
   sort: Sort
@@ -102,7 +103,6 @@ export interface Preferences {
   startPage: StartPage
   displayIgnore: string[]
   compressIgnore: string[]
-  copyIgnore: string[]
   sidebarOrder: SidebarSection[]
   placeOrder: string[]
   hiddenPlaces: string[]

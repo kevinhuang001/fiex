@@ -14,7 +14,6 @@ import { SquaresFourIcon as Grid2X2 } from '@phosphor-icons/react/dist/csr/Squar
 import { ImagesIcon as Image } from '@phosphor-icons/react/dist/csr/Images'
 import { RowsIcon as List } from '@phosphor-icons/react/dist/csr/Rows'
 import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/SidebarSimple'
-import { AppWindowIcon as PanelsTopLeft } from '@phosphor-icons/react/dist/csr/AppWindow'
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
 import { useEffect, useState } from 'react'
@@ -57,7 +56,7 @@ export function ExplorerToolbar({
   openIde,
   terminal,
   setSettings,
-  newWindow,
+  refreshAll,
   inTrash,
   emptyTrash,
   split,
@@ -80,12 +79,13 @@ export function ExplorerToolbar({
   | 'openIde'
   | 'terminal'
   | 'setSettings'
-  | 'newWindow'
+  | 'refreshAll'
   | 'inTrash'
   | 'emptyTrash'
   | 'displayName'
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
+  const [refreshKey, setRefreshKey] = useState(0)
   const [picker, setPicker] = useState<{
     kind: 'terminal' | 'ide'
     x: number
@@ -104,15 +104,6 @@ export function ExplorerToolbar({
   return (
     <>
       <header className="toolbar" data-tauri-drag-region>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="新建窗口"
-          title="新建窗口"
-          onClick={newWindow}
-        >
-          <PanelsTopLeft weight="duotone" size={20} />
-        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -146,16 +137,6 @@ export function ExplorerToolbar({
         </div>
         <h1 data-tauri-drag-region>{x.query ? '搜索' : displayName(x.path) || 'Fiex'}</h1>
         <div className="toolbar-spacer" data-tauri-drag-region />
-        <Button
-          variant="ghost"
-          size="icon"
-          title={split ? '关闭当前面板' : '双面板'}
-          aria-label={split ? '关闭当前面板' : '双面板'}
-          aria-pressed={split}
-          onClick={onToggleSplit}
-        >
-          <Columns2 size={20} />
-        </Button>
         <div className="view-switch">
           {views.map((v) => (
             <Button
@@ -204,8 +185,17 @@ export function ExplorerToolbar({
             <Trash2 size={20} />
           </Button>
         )}
-        <Button variant="ghost" size="icon" title="刷新" aria-label="刷新" onClick={x.reload}>
-          <RefreshCw size={20} className={x.loading ? 'spin' : ''} />
+        <Button
+          variant="ghost"
+          size="icon"
+          title="刷新"
+          aria-label="刷新"
+          onClick={() => {
+            setRefreshKey((key) => key + 1)
+            refreshAll()
+          }}
+        >
+          <RefreshCw key={refreshKey} size={20} className={refreshKey ? 'refresh-turn' : ''} />
         </Button>
         <Button
           variant="ghost"
@@ -268,6 +258,17 @@ export function ExplorerToolbar({
           </Button>
         </div>
         <div className="toolbar-divider" />
+        <Button
+          variant="ghost"
+          size="icon"
+          title={split ? '关闭当前面板' : '双面板'}
+          aria-label={split ? '关闭当前面板' : '双面板'}
+          aria-pressed={split}
+          onClick={onToggleSplit}
+        >
+          <Columns2 size={20} />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"

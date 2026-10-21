@@ -233,7 +233,7 @@ pub fn compress(
         }
         "tar.bz2" => {
             let file = temp.reopen().map_err(|e| e.to_string())?;
-            let encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::new(level));
+            let encoder = bzip2::write::BzEncoder::new(file, bzip2::Compression::new(level.max(1)));
             write_tar(encoder, paths, &ignore, cancel)?
                 .finish()
                 .map_err(|e| e.to_string())?;

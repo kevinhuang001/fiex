@@ -44,6 +44,12 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
     restore(next)
     left.closeTab(index)
   }
+  const moveWorkspaceTab = (from: number, to: number) => {
+    if (from === to) return
+    save()
+    tabs.current.splice(to, 0, tabs.current.splice(from, 1)[0])
+    left.moveTab(from, to)
+  }
   const openPane = () => {
     if (!right.path) right.navigate(left.path)
     setSplit(true)
@@ -70,6 +76,7 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
     switchWorkspaceTab,
     newWorkspaceTab,
     closeWorkspaceTab,
+    moveWorkspaceTab,
     openPane,
     closePane,
   }

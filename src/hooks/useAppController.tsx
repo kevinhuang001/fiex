@@ -31,6 +31,7 @@ export function useAppController() {
     switchWorkspaceTab,
     newWorkspaceTab,
     closeWorkspaceTab,
+    moveWorkspaceTab,
     openPane,
     closePane,
   } = usePaneLayout(prefs, left)
@@ -160,17 +161,8 @@ export function useAppController() {
     )
     workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
   }
-  const checksum = (path: string) =>
-    void run('正在计算校验和…', async () => {
-      const hash = await call<string>('file_checksum', { path })
-      setDialog({
-        title: 'SHA-256 校验和',
-        label: 'SHA-256',
-        value: hash,
-        submit: '关闭',
-        action: async () => {},
-      })
-    })
+  const [checksumPath, setChecksumPath] = useState<string | null>(null)
+  const checksum = (path: string) => setChecksumPath(path)
   const previewEntry = (entry: Entry, pane = x) => {
     if (!isRemotePath(entry.path)) {
       setPreview(entry)
@@ -182,17 +174,33 @@ export function useAppController() {
       pane.reload()
     })
   }
+  const refreshAll = () => {
+    left.reload()
+    if (split) right.reload()
+    void left.refreshLocations().catch((error) => x.setError(String(error)))
+  }
+  const leaveDevice = (path: string) => {
+    const home = left.locations.find((location) => location.kind === 'favorite')?.path || '/'
+    for (const pane of [left, right]) {
+      if (pane.path === path || pane.path.startsWith(path.replace(/[/\\]$/, '') + '/'))
+        pane.navigate(home)
+    }
+  }
   const ejectDevice = (path: string) =>
     setDialog({
       title: '弹出设备',
       submit: '弹出',
       danger: true,
-      action: () => call('eject_device', { path }),
+      action: async () => {
+        await call('eject_device', { path })
+        leaveDevice(path)
+        await left.refreshLocations()
+      },
     })
   const mountDevice = (device: string) => {
     void run('正在请求挂载…', async () => {
       const path = await call<string>('mount_device', { device })
-      await x.refreshLocations()
+      await left.refreshLocations()
       x.navigate(path)
       notify('设备已挂载')
     })
@@ -203,13 +211,12 @@ export function useAppController() {
       submit: '弹出',
       danger: true,
       action: async () => {
-        const volume = x.locations.find((location) => location.usbfs && location.device === device)
+        const volume = left.locations.find(
+          (location) => location.usbfs && location.device === device,
+        )
         await call('eject_usb', { device })
-        await x.refreshLocations()
-        if (volume && x.path.startsWith(volume.path)) {
-          const home = x.locations.find((location) => location.kind === 'favorite')?.path
-          x.navigate(home || '/')
-        }
+        await left.refreshLocations()
+        if (volume) leaveDevice(volume.path)
       },
     })
   const removeConnection = (id: string) => {
@@ -259,7 +266,7 @@ export function useAppController() {
       return '历史版本 · ' + path.split('/')[3].slice(0, 8)
     if (path === 'recent://') return '最近使用'
     if (trashPath && path === trashPath) return '废纸篓'
-    const volume = x.locations.find((location) => location.usbfs && location.path === path)
+    const volume = left.locations.find((location) => location.usbfs && location.path === path)
     if (volume) return volume.name
     const connection = remoteConnection(path)
     if (connection && path === connection.mountPath) return connection.name
@@ -429,7 +436,7 @@ export function useAppController() {
         if (first) open(first)
       },
       trash: () => recycle(),
-      refresh: x.reload,
+      refresh: refreshAll,
       toggleSidebar: () => setSidebar((value) => !value),
       info: () => {
         if (first) setInfo(first)
@@ -498,7 +505,7 @@ export function useAppController() {
       active = false
       dispose?.()
     }
-  }, [x.path, prefs.copyIgnore, conflict, x.directoryReadOnly])
+  }, [x.path, conflict, x.directoryReadOnly])
   useEffect(() => {
     if (!menu) {
       setCompressOpen(false)
@@ -530,6 +537,7 @@ export function useAppController() {
     openApplications,
     setConnectionOpen,
     removeConnection,
+    refreshAll,
     ejectDevice,
     ejectUsb,
     mountDevice,
@@ -562,6 +570,8 @@ export function useAppController() {
     openLeft: (entry: Entry) => open(entry, left),
     openRight: (entry: Entry) => open(entry, right),
     checksum,
+    checksumPath,
+    setChecksumPath,
     previewEntry,
     setMenu,
     transfer,
@@ -632,6 +642,7 @@ export function useAppController() {
     switchWorkspaceTab,
     newWorkspaceTab,
     closeWorkspaceTab,
+    moveWorkspaceTab,
   }
 }
 export type AppController = ReturnType<typeof useAppController>

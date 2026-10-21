@@ -1,3 +1,4 @@
+import { ChecksumDialog } from '@/components/ChecksumDialog'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
 import { FileInfoDialog } from '@/components/FileInfoDialog'
@@ -14,6 +15,9 @@ import { CompressDialog } from '../CompressDialog'
 import { call } from '@/lib/api'
 import { CheckCircle2, LoaderCircle, X } from 'lucide-react'
 export function ExplorerDialogs({
+  left,
+  checksumPath,
+  setChecksumPath,
   preview,
   setPreview,
   navigatePreview,
@@ -56,6 +60,9 @@ export function ExplorerDialogs({
   setToast,
 }: Pick<
   AppController,
+  | 'left'
+  | 'checksumPath'
+  | 'setChecksumPath'
   | 'preview'
   | 'setPreview'
   | 'navigatePreview'
@@ -223,9 +230,11 @@ export function ExplorerDialogs({
         onError={x.setError}
       />
 
+      <ChecksumDialog path={checksumPath} onClose={() => setChecksumPath(null)} />
       <TagDialog
         open={tagOpen}
         initial={tagInitial}
+        available={prefs.customTags}
         onClose={() => setTagOpen(false)}
         onApply={applyTags}
       />
@@ -247,7 +256,7 @@ export function ExplorerDialogs({
             open={settings}
             onClose={() => setSettings(false)}
             prefs={prefs}
-            locations={x.locations}
+            locations={left.locations}
             update={update}
             terminals={terminals}
             ides={ides}

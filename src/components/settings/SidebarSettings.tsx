@@ -1,6 +1,9 @@
+import { commonPlaces as getCommonPlaces } from '@/lib/places'
 import type { Location, Preferences, SidebarSection } from '@/lib/types'
 import {
   AppWindow,
+  Clock,
+  Trash2,
   Download,
   FileText,
   Film,
@@ -14,6 +17,8 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 function placeIcon(name: string) {
+  if (name === '最近使用') return <Clock size={14} />
+  if (name === '废纸篓') return <Trash2 size={14} />
   if (name === '个人文件夹') return <Home size={14} />
   if (name === '桌面') return <Monitor size={14} />
   if (name === '下载') return <Download size={14} />
@@ -92,9 +97,7 @@ export function SidebarSettings({
     window.addEventListener('pointercancel', finish)
   }
 
-  const commonPlaces = locations.filter(
-    (location) => location.kind === 'favorite' || location.kind === 'applications',
-  )
+  const commonPlaces = getCommonPlaces(locations)
   const placeKeys = commonPlaces.map((location) => location.path || location.name)
   const orderedKeys = [
     ...prefs.placeOrder.filter((key) => placeKeys.includes(key)),

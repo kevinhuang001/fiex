@@ -36,7 +36,7 @@ export default function App() {
       style={{ '--label-size': '11px' } as CSSProperties}
     >
       <Sidebar
-        x={app.x}
+        x={{ ...app.x, locations: app.left.locations, connections: app.left.connections }}
         prefs={app.prefs}
         update={app.update}
         favorite={app.favorite}
