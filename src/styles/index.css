@@ -3011,3 +3011,27 @@ body.dragging-file * {
 .pane-active {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
+
+.pane-resizer {
+  position: absolute;
+  bottom: 30px;
+  z-index: 30;
+  width: 7px;
+  cursor: col-resize;
+}
+.pane-resizer::after {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--line);
+}
+.pane-resizer:hover::after {
+  background: var(--accent);
+}
+.secondary-pane {
+  background: var(--canvas);
+  box-shadow: none;
+}
+.pane-close-main {
+  margin-left: 6px;
+}
