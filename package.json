@@ -18,7 +18,8 @@
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "icons": "tauri icon assets/icon.png --output src-tauri/icons"
+    "icons": "tauri icon assets/icon.png --output src-tauri/icons",
+    "demo:record": "node scripts/record-demo.mjs"
   },
   "dependencies": {
     "@crabnebula/tauri-plugin-drag": "2.1.0",

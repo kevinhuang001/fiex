@@ -260,3 +260,45 @@ test('switched branch is read-only and hides worktree changes', async ({ page })
   await expect(page.getByRole('button', { name: '新建文件夹', exact: true })).toBeEnabled()
   await expect(page.locator('.git-branch-hint')).toHaveCount(0)
 })
+
+test('settings sections keep preferences and release shortcut recording on exit', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByRole('button', { name: '快捷键', exact: true }).click()
+  await page.getByRole('button', { name: '设置 复制 快捷键', exact: true }).first().click()
+  await page.getByRole('button', { name: '外观', exact: true }).click()
+  await page.getByRole('button', { name: '深色', exact: true }).click()
+  await page.getByRole('button', { name: '侧边栏', exact: true }).click()
+  const desktop = page.getByRole('checkbox', { name: '显示桌面', exact: true })
+  await desktop.uncheck()
+  await page.getByRole('button', { name: '忽略', exact: true }).click()
+  await expect(page.locator('.settings-card-header').filter({ hasText: '显示忽略' })).toBeVisible()
+  await page.getByRole('button', { name: '启动方式', exact: true }).click()
+  await expect(page.getByText('默认终端', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '关于', exact: true }).click()
+  await expect(page.getByText('开源许可', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '快捷键', exact: true }).click()
+  await expect(page.getByText('按下快捷键…', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await page.reload()
+  await expect(page.locator('html')).toHaveClass('dark')
+  await expect(
+    page.locator('.sidebar').getByRole('button', { name: '桌面', exact: true }),
+  ).toHaveCount(0)
+})
+
+test('read-only branch disables destructive context actions and archive submenu', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await page.getByRole('combobox', { name: '切换分支或版本' }).selectOption('dev')
+  await expect(page.getByRole('button', { name: '新建文件夹', exact: true })).toBeDisabled()
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  for (const name of ['重新命名', '剪切', '创建副本', '压缩为…', '移到废纸篓']) {
+    await expect(page.getByRole('menuitem', { name, exact: false })).toBeDisabled()
+  }
+  await page.locator('.context-submenu-wrap').hover()
+  await expect(page.getByRole('menuitem', { name: 'TAR.GZ', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '快速查看', exact: false })).toBeEnabled()
+})

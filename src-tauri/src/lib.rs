@@ -9,8 +9,10 @@ mod macos_material;
 pub mod operations;
 pub mod remote;
 pub mod search;
+pub mod tags;
 pub mod terminals;
 #[cfg(feature = "usbfs")]
 pub mod usbfs;
+pub mod volumes;
 #[cfg(feature = "desktop")]
 pub use desktop::run;

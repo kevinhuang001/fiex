@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react'
 import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
-import type { SidebarSection } from '@/lib/types'
 import {
   SHORTCUT_ACTIONS,
   defaultShortcuts,
@@ -8,7 +6,8 @@ import {
   type ShortcutMap,
   type ShortcutStyle,
 } from '@/lib/shortcuts'
-import type { Preferences } from '@/lib/types'
+import type { Preferences, SidebarSection } from '@/lib/types'
+import { useEffect, useState } from 'react'
 
 function defaultsFor(style: ShortcutStyle): Preferences {
   return {
@@ -43,14 +42,10 @@ function load(): Preferences {
   try {
     const stored = JSON.parse(
       localStorage.getItem('fiex:preferences') || '{}',
-    ) as Partial<Preferences> & { iconSize?: number }
+    ) as Partial<Preferences>
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
-      typeof stored.fontSize === 'number'
-        ? Math.min(18, Math.max(8, stored.fontSize))
-        : typeof stored.iconSize === 'number'
-          ? Math.min(18, Math.max(8, Math.round(stored.iconSize / 8)))
-          : 11
+      typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
     const shortcuts: ShortcutMap = defaultShortcuts(style)
     if (stored.shortcuts && typeof stored.shortcuts === 'object') {
       for (const action of SHORTCUT_ACTIONS) {

@@ -41,6 +41,7 @@ jobs:
             playwright-report/
             test-results/
   desktop:
+    needs: checks
     name: Desktop (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -198,7 +199,6 @@ jobs:
             (echo > /dev/tcp/127.0.0.1/10445) >/dev/null 2>&1 || (cat /tmp/fiex-smbd.log; exit 1)
             echo "FIEX_SMB_PORT=10445" >> "$GITHUB_ENV"
           fi
-      - run: npm ci
       - run: npm ci
       - run: npm run icons
       - run: npm run build
