@@ -1,6 +1,7 @@
 import type { AppController } from '@/hooks/useAppController'
 import { size } from '@/lib/files'
-import { GitBranch, LoaderCircle, RefreshCw, X } from 'lucide-react'
+import { GitBranch, History, LoaderCircle, X } from 'lucide-react'
+import { useActivity } from '@/hooks/useActivity'
 export function ExplorerStatusBar({
   busy,
   x,
@@ -9,6 +10,7 @@ export function ExplorerStatusBar({
   clipboard,
   setClipboard,
 }: Pick<AppController, 'busy' | 'x' | 'chosen' | 'gitSwitched' | 'clipboard' | 'setClipboard'>) {
+  const activity = useActivity()
   return (
     <>
       <footer className="statusbar">
@@ -45,14 +47,18 @@ export function ExplorerStatusBar({
         {x.tagFilter && <span>标签：{x.tagFilter}</span>}
         <span>{x.searchStats}</span>
         <div className="toolbar-spacer" />
+        <button
+          title="状态中心"
+          aria-label="状态中心"
+          onClick={() => activity.setOpen(!activity.open)}
+        >
+          <History size={13} />
+        </button>
         {clipboard && (
           <button title="清除剪贴板" onClick={() => setClipboard(null)}>
             {clipboard.moving ? '剪切' : '复制'} {clipboard.paths.length} 项 <X size={11} />
           </button>
         )}
-        <button title="刷新" aria-label="刷新" onClick={x.reload}>
-          <RefreshCw size={13} />
-        </button>
       </footer>
     </>
   )

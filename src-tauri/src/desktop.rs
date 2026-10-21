@@ -638,6 +638,32 @@ fn cancel_search(state: tauri::State<'_, SearchState>) {
     state.cancel();
 }
 #[tauri::command]
+async fn file_checksum(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
+        let mut file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+        let mut hasher = Sha256::new();
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+        }
+        Ok::<String, String>(
+            hasher
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
 fn pick_folder(default: Option<String>) -> Option<String> {
     let mut dialog = rfd::FileDialog::new();
     if let Some(directory) = default.filter(|path| std::path::Path::new(path).is_dir()) {
@@ -874,6 +900,7 @@ pub fn run() {
             cancel_search,
             extract_archive,
             pick_folder,
+            file_checksum,
             compress_archive,
             detect_terminals,
             detect_ides,

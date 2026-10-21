@@ -2636,3 +2636,112 @@ body.dragging-file * {
 .toolbar button[aria-pressed='true'] {
   color: var(--accent);
 }
+
+/* Status centre: live operations and their history. */
+.activity-center {
+  position: absolute;
+  right: 16px;
+  bottom: 40px;
+  z-index: 40;
+  width: 380px;
+  max-height: min(56vh, 520px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--canvas);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.activity-center header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.activity-center header .icon-button {
+  margin-left: auto;
+}
+.activity-running {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent);
+}
+.activity-list {
+  flex: 1;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+}
+.activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: 8px;
+}
+.activity-item + .activity-item {
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.activity-icon {
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--muted);
+}
+.activity-item.done .activity-icon {
+  color: #3f9a6d;
+}
+.activity-item.error .activity-icon {
+  color: #c66c60;
+}
+.activity-item.running .activity-icon {
+  color: var(--accent);
+}
+.activity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.activity-label {
+  font-size: 11px;
+  color: var(--text);
+}
+.activity-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--muted);
+}
+.activity-time {
+  font-size: 9px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.activity-empty {
+  padding: 18px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.activity-center footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 13px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--muted);
+}
+.activity-center footer button {
+  font-size: 10px;
+  color: var(--accent);
+  background: transparent;
+}

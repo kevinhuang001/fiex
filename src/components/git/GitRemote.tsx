@@ -147,19 +147,23 @@ export function GitRemoteModal({
           <section className="git-remote-sync">
             <label className="git-remote-branch">
               分支
-              <input
+              <select
                 className="text-field"
                 aria-label="同步分支"
-                list="fiex-git-branches"
-                value={branch}
-                placeholder={repo.refs?.current || '当前分支'}
+                value={branch || repo.refs?.current || ''}
                 onChange={(e) => setBranch(e.target.value)}
-              />
-              <datalist id="fiex-git-branches">
-                {repo.refs?.branches.map((item) => (
-                  <option key={item} value={item} />
+              >
+                {(repo.refs?.branches.length
+                  ? repo.refs.branches
+                  : repo.refs?.current
+                    ? [repo.refs.current]
+                    : []
+                ).map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </label>
             <Button
               type="button"

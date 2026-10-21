@@ -12,6 +12,7 @@ import type {
 import type { Dispatch, SetStateAction } from 'react'
 import { useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
+import { beginActivity, finishActivity } from './useActivity'
 
 export function useFileOperations({
   x,
@@ -49,12 +50,15 @@ export function useFileOperations({
     running.current = true
     setBusy(label)
     x.setError('')
+    const activity = beginActivity(label)
     try {
       const result = await fn()
+      finishActivity(activity)
       x.reload()
       return result
     } catch (e) {
       x.setError(String(e))
+      finishActivity(activity, String(e))
       return undefined
     } finally {
       running.current = false
@@ -89,7 +93,8 @@ export function useFileOperations({
     x.setSelected([])
     x.reload()
   }
-  const recycle = (confirm = true) => {
+  // Moving to the Trash is reversible, so it never asks for confirmation.
+  const recycle = () => {
     if (!writable()) return
     if (!x.selected.length) return
     const paths = [...x.selected]
@@ -97,16 +102,7 @@ export function useFileOperations({
       deletePermanently(paths)
       return
     }
-    if (!confirm) {
-      void run('正在移到废纸篓…', () => moveToTrash(paths))
-      return
-    }
-    setDialog({
-      title: `将 ${paths.length} 个项目移到废纸篓？`,
-      submit: '移到废纸篓',
-      danger: true,
-      action: () => moveToTrash(paths),
-    })
+    void run('正在移到废纸篓…', () => moveToTrash(paths))
   }
   const deletePermanently = (paths: string[]) => {
     if (!paths.length) return

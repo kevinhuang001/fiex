@@ -17,7 +17,7 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { AppWindowIcon as PanelsTopLeft } from '@phosphor-icons/react/dist/csr/AppWindow'
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
-import { Trash2 } from 'lucide-react'
+import { RefreshCw, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
@@ -172,6 +172,9 @@ export function ExplorerToolbar({
             <Trash2 size={20} />
           </Button>
         )}
+        <Button variant="ghost" size="icon" title="刷新" aria-label="刷新" onClick={x.reload}>
+          <RefreshCw size={20} className={x.loading ? 'spin' : ''} />
+        </Button>
         <Button
           variant="ghost"
           size="icon"

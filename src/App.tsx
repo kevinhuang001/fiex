@@ -2,6 +2,7 @@ import { FileViews } from '@/components/browser/FileViews'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
+import { ActivityCenter } from '@/components/ActivityCenter'
 import { ExplorerTabs } from '@/components/explorer/ExplorerTabs'
 import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
@@ -118,6 +119,7 @@ export default function App() {
           onOpen={(path) => app.x.navigate(parent(path))}
         />
         <ExplorerStatusBar {...app} />
+        <ActivityCenter />
       </main>
       {app.dragging && (
         <div className="drop-overlay">

@@ -129,6 +129,17 @@ export function useAppController() {
     }
     void run('正在打开…', () => call('open_path', { path: e.path }))
   }
+  const checksum = (path: string) =>
+    void run('正在计算校验和…', async () => {
+      const hash = await call<string>('file_checksum', { path })
+      setDialog({
+        title: 'SHA-256 校验和',
+        label: 'SHA-256',
+        value: hash,
+        submit: '关闭',
+        action: async () => {},
+      })
+    })
   const previewEntry = (entry: Entry) => {
     if (!isRemotePath(entry.path)) {
       setPreview(entry)
@@ -386,7 +397,7 @@ export function useAppController() {
       open: () => {
         if (first) open(first)
       },
-      trash: () => recycle(false),
+      trash: () => recycle(),
       refresh: x.reload,
       toggleSidebar: () => setSidebar((value) => !value),
       info: () => {
@@ -513,6 +524,7 @@ export function useAppController() {
     searchInput,
     crumbs,
     open,
+    checksum,
     previewEntry,
     setMenu,
     transfer,

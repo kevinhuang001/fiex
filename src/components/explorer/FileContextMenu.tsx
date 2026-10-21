@@ -4,6 +4,7 @@ import { archiveFormats } from '@/lib/archives'
 import { isArchive } from '@/lib/files'
 import {
   Archive,
+  Hash,
   RotateCcw,
   ChevronRight,
   CloudCheck,
@@ -38,6 +39,7 @@ export function FileContextMenu({
   menu,
   hint,
   open,
+  checksum,
   previewEntry,
   setInfo,
   platform,
@@ -64,6 +66,7 @@ export function FileContextMenu({
   | 'menu'
   | 'hint'
   | 'open'
+  | 'checksum'
   | 'previewEntry'
   | 'setInfo'
   | 'platform'
@@ -201,6 +204,13 @@ export function FileContextMenu({
                 hint: '',
                 disabled: gitSwitched || x.directoryReadOnly,
                 action: () => terminal(),
+              },
+              {
+                label: '查看校验和',
+                icon: <Hash />,
+                hint: '',
+                disabled: menu.entry.isDir,
+                action: () => checksum(menu.entry.path),
               },
               {
                 label: '复制路径',
