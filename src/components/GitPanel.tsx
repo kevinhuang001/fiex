@@ -20,7 +20,7 @@ import { useGitRepository } from '@/hooks/useGitRepository'
 import type { GitStatus } from '@/lib/types'
 import { Button } from './ui/button'
 import { CommitPicker } from './git/CommitPicker'
-import { GitRemoteBar, GitRemoteModal } from './git/GitRemote'
+import { GitRemoteModal } from './git/GitRemote'
 import { CommitDialog } from './git/CommitDialog'
 
 interface Change {
@@ -205,7 +205,6 @@ export function GitPanel({
           )}
           {!readOnly ? (
             <>
-              <GitRemoteBar repo={repo} disabled={disabled} />
               <GitRemoteModal
                 repo={repo}
                 disabled={disabled}

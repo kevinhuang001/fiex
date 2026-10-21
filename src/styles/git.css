@@ -566,6 +566,41 @@
   font-size: 12px;
   min-height: 32px;
 }
+.git-remote-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 20px 4px;
+}
+.git-remote-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+}
+.git-remote-item.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+}
+.git-remote-check {
+  color: var(--accent);
+}
+.git-remote-list .git-remote-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted);
+}
+.git-remote-modal .dialog-actions {
+  justify-content: flex-end;
+}
 .git-remote-modal input {
   display: block;
   width: 100%;

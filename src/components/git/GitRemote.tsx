@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, Cloud } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Cloud } from 'lucide-react'
 import type { useGitRepository } from '@/hooks/useGitRepository'
-import { Choice, Menu } from '../Menus'
 import { Button } from '../ui/button'
 import { Modal } from '../ui/Modal'
 
-/// Remote configuration lives behind the header button so the panel keeps its
-/// space for changes, commits and the sync counters.
+/// Everything about remotes lives here: selection, name/address editing and
+/// the sync actions. The panel itself only keeps changes and the commit box.
 export function GitRemoteModal({
   repo,
   disabled,
@@ -20,12 +19,22 @@ export function GitRemoteModal({
 }) {
   const [name, setName] = useState('origin')
   const [url, setUrl] = useState('')
+  const status = repo.remoteStatus
+  const remotes = status?.remotes || []
+  const configured = remotes.length > 0
+  const busy = Boolean(repo.busy) || disabled
   useEffect(() => {
     if (!open) return
-    const current = repo.remoteStatus?.remotes.find((r) => r.name === repo.remote)
+    const current = remotes.find((r) => r.name === repo.remote) || remotes[0]
     setName(current?.name || 'origin')
     setUrl(current?.url || '')
-  }, [open, repo.remote, repo.remoteStatus])
+  }, [open, repo.remote])
+  const choose = (name: string) => {
+    const remote = remotes.find((r) => r.name === name)
+    repo.setRemote(name)
+    setName(remote?.name || name)
+    setUrl(remote?.url || '')
+  }
   return (
     <Modal
       open={open}
@@ -35,6 +44,26 @@ export function GitRemoteModal({
       title="远程仓库"
       className="git-remote-modal"
     >
+      {configured && (
+        <div className="git-remote-list" role="listbox" aria-label="已有远程仓库">
+          {remotes.map((remote) => (
+            <button
+              key={remote.name}
+              role="option"
+              aria-selected={remote.name === repo.remote}
+              className={`git-remote-item ${remote.name === repo.remote ? 'active' : ''}`}
+              onClick={() => choose(remote.name)}
+            >
+              <Cloud size={13} />
+              {remote.name}
+              {remote.name === repo.remote && <Check size={13} className="git-remote-check" />}
+            </button>
+          ))}
+          <span className="git-remote-count" title={status?.upstream || ''}>
+            ↓ {status?.behind || 0} · ↑ {status?.ahead || 0}
+          </span>
+        </div>
+      )}
       <form
         className="git-commit-form"
         onSubmit={async (e) => {
@@ -70,66 +99,28 @@ export function GitRemoteModal({
         )}
         <div className="dialog-actions">
           <Button
-            type="submit"
-            disabled={disabled || Boolean(repo.busy) || !name.trim() || !url.trim()}
+            type="button"
+            variant="secondary"
+            disabled={busy || !configured}
+            onClick={() => void repo.sync(false)}
           >
+            <ArrowDown size={14} />
+            拉取
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy || !configured || !repo.refs?.head}
+            onClick={() => void repo.sync(true)}
+          >
+            <ArrowUp size={14} />
+            推送
+          </Button>
+          <Button type="submit" disabled={busy || !name.trim() || !url.trim()}>
             {repo.busy || '保存'}
           </Button>
         </div>
       </form>
     </Modal>
-  )
-}
-
-export function GitRemoteBar({
-  repo,
-  disabled,
-}: {
-  repo: ReturnType<typeof useGitRepository>
-  disabled: boolean
-}) {
-  const status = repo.remoteStatus
-  const configured = Boolean(status?.remotes.length)
-  return (
-    <div className="git-remote">
-      <div className="git-remote-heading">
-        <Cloud size={14} />
-        <span>{configured ? repo.remote : '未配置远程仓库'}</span>
-        {configured && (
-          <Menu icon={<ChevronDown size={11} />} label="选择远程仓库">
-            {status?.remotes.map((r) => (
-              <Choice
-                key={r.name}
-                checked={r.name === repo.remote}
-                onClick={() => repo.setRemote(r.name)}
-              >
-                {r.name}
-              </Choice>
-            ))}
-          </Menu>
-        )}
-        <span className="git-remote-count" title={status?.upstream || ''}>
-          ↓ {status?.behind || 0} · ↑ {status?.ahead || 0}
-        </span>
-      </div>
-      <div className="git-remote-actions">
-        <Button
-          variant="secondary"
-          disabled={disabled || !configured}
-          onClick={() => void repo.sync(false)}
-        >
-          <ArrowDown size={14} />
-          拉取
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={disabled || !configured || !repo.refs?.head}
-          onClick={() => void repo.sync(true)}
-        >
-          <ArrowUp size={14} />
-          推送
-        </Button>
-      </div>
-    </div>
   )
 }
