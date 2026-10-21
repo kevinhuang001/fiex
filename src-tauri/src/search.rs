@@ -112,7 +112,9 @@ fn open_index(dir: &Path, root: &str, signature: &str) -> Option<IndexHandle> {
             .filter(LowerCaser)
             .build(),
     );
-    index.tokenizers().register("path_id", RawTokenizer::default());
+    index
+        .tokenizers()
+        .register("path_id", RawTokenizer::default());
     let reader: IndexReader = index
         .reader_builder()
         .reload_policy(ReloadPolicy::Manual)
@@ -215,7 +217,9 @@ fn build_index(
             .filter(LowerCaser)
             .build(),
     );
-    index.tokenizers().register("path_id", RawTokenizer::default());
+    index
+        .tokenizers()
+        .register("path_id", RawTokenizer::default());
     let mut writer = index
         .writer_with_num_threads::<TantivyDocument>(1, 50_000_000)
         .map_err(|e| e.to_string())?;
@@ -391,14 +395,18 @@ fn apply_pending(handle: &mut IndexHandle, hidden: bool, ignores: &[String]) -> 
         // Remove descendants too. A deleted or renamed directory no longer
         // exists on disk, so walking it cannot discover its old index entries.
         let prefix = format!("{}.*", regex::escape(&target.to_string_lossy()));
-        let query = RegexQuery::from_pattern(&prefix, handle.path_id)
+        let query =
+            RegexQuery::from_pattern(&prefix, handle.path_id).map_err(|error| error.to_string())?;
+        let addresses = searcher
+            .search(&query, &DocSetCollector)
             .map_err(|error| error.to_string())?;
-        let addresses = searcher.search(&query, &DocSetCollector).map_err(|error| error.to_string())?;
         for address in addresses {
             if let Ok(doc) = searcher.doc::<TantivyDocument>(address) {
                 if let Some(path) = doc.get_first(handle.path).and_then(|value| value.as_str()) {
                     if Path::new(path).starts_with(&target) {
-                        handle.writer.delete_term(Term::from_field_text(handle.path_id, path));
+                        handle
+                            .writer
+                            .delete_term(Term::from_field_text(handle.path_id, path));
                     }
                 }
             }
@@ -569,18 +577,28 @@ mod tests {
         let state = SearchState::default();
         let found = Mutex::new(Vec::new());
         state
-            .run("test", t.path().to_str().unwrap(), "needle", false, &[], |batch| {
-                found.lock().unwrap().extend(batch.entries)
-            })
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "needle",
+                false,
+                &[],
+                |batch| found.lock().unwrap().extend(batch.entries),
+            )
             .unwrap();
         assert_eq!(found.lock().unwrap().len(), 1);
         assert_eq!(found.lock().unwrap()[0].name, "Needle.txt");
 
         let apps = Mutex::new(Vec::new());
         state
-            .run("test", t.path().to_str().unwrap(), "safari", false, &[], |batch| {
-                apps.lock().unwrap().extend(batch.entries)
-            })
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "safari",
+                false,
+                &[],
+                |batch| apps.lock().unwrap().extend(batch.entries),
+            )
             .unwrap();
         let apps = apps.lock().unwrap();
         assert_eq!(apps.len(), 1);
@@ -595,9 +613,14 @@ mod tests {
         let state = SearchState::default();
         let out = Mutex::new(Vec::new());
         state
-            .run("test", t.path().to_str().unwrap(), "needle", true, &[], |b| {
-                out.lock().unwrap().extend(b.entries)
-            })
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "needle",
+                true,
+                &[],
+                |b| out.lock().unwrap().extend(b.entries),
+            )
             .unwrap();
         assert_eq!(out.lock().unwrap().len(), 1);
     }
@@ -635,19 +658,35 @@ mod tests {
         fs::remove_dir_all(&folder).unwrap();
         {
             let guard = state.index.lock().unwrap();
-            guard.as_ref().unwrap().pending.lock().unwrap().insert(folder);
+            guard
+                .as_ref()
+                .unwrap()
+                .pending
+                .lock()
+                .unwrap()
+                .insert(folder);
         }
         let matches = Mutex::new(Vec::new());
         state
-            .run("test", t.path().to_str().unwrap(), "needle", false, &[], |batch| {
-                matches.lock().unwrap().extend(batch.entries);
-            })
+            .run(
+                "test",
+                t.path().to_str().unwrap(),
+                "needle",
+                false,
+                &[],
+                |batch| {
+                    matches.lock().unwrap().extend(batch.entries);
+                },
+            )
             .unwrap();
         assert!(matches.lock().unwrap().is_empty());
         let guard = state.index.lock().unwrap();
         let handle = guard.as_ref().unwrap();
         let searcher = handle.reader.searcher();
         let query = RegexQuery::from_pattern(".*Needle.*", handle.path_id).unwrap();
-        assert!(searcher.search(&query, &DocSetCollector).unwrap().is_empty());
+        assert!(searcher
+            .search(&query, &DocSetCollector)
+            .unwrap()
+            .is_empty());
     }
 }

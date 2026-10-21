@@ -952,10 +952,18 @@ fn watch_directory(
     Ok(())
 }
 #[tauri::command]
-fn unwatch_directory(window: tauri::Window, path: String, pane: String, state: tauri::State<'_, Watch>) {
+fn unwatch_directory(
+    window: tauri::Window,
+    path: String,
+    pane: String,
+    state: tauri::State<'_, Watch>,
+) {
     let mut watches = state.lock().unwrap();
     let key = format!("{}:{pane}", window.label());
-    if watches.get(&key).is_some_and(|(current, _)| current == &path) {
+    if watches
+        .get(&key)
+        .is_some_and(|(current, _)| current == &path)
+    {
         watches.remove(&key);
     }
 }
