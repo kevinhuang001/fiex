@@ -2,6 +2,7 @@
 """CI-only desktop integration recording. Native drags use actual OS input.
 The optional Rust UI driver locates controls; it never synthesizes drag payloads.
 """
+import faulthandler
 import json
 import os
 from pathlib import Path
@@ -17,9 +18,37 @@ import traceback
 import urllib.request
 import urllib.error
 
-import pyautogui as mouse
+import pyautogui as _pyautogui
 from PIL import Image, ImageDraw
 import mss
+
+
+class _SerialisedInput:
+    """pyautogui talks to the X server over one shared connection, and a second
+    thread reading that connection while the first waits for a reply swallows the
+    reply: both threads then block in Xlib's select() forever. The video recorder
+    polls the pointer eight times a second, so every call is serialised here."""
+
+    def __init__(self, module):
+        object.__setattr__(self, 'module', module)
+        object.__setattr__(self, 'lock', threading.Lock())
+
+    def __getattr__(self, name):
+        attribute = getattr(self.module, name)
+        if not callable(attribute):
+            return attribute
+
+        def call(*args, **kwargs):
+            with self.lock:
+                return attribute(*args, **kwargs)
+
+        return call
+
+    def __setattr__(self, name, value):
+        setattr(self.module, name, value)
+
+
+mouse = _SerialisedInput(_pyautogui)
 
 OUT = Path('artifacts/native').resolve()
 OUT.mkdir(parents=True, exist_ok=True)
@@ -37,9 +66,19 @@ SKIP = {item.strip() for item in os.environ.get('FIEX_CI_SKIP', '').split(',') i
 if SKIP and os.environ.get('GITHUB_ACTIONS'):
     raise SystemExit('FIEX_CI_SKIP is not allowed in CI')
 stage = 'Starting Fiex'
+# A wedged X server or window manager must leave a stack dump in the job log
+# instead of a silent 15-minute job timeout with no clue about the stall.
+faulthandler.dump_traceback_later(240, repeat=True)
 mouse.PAUSE = .12
 # Dedicated CI desktop; the workflow timeout bounds unattended input.
 mouse.FAILSAFE = False
+
+
+def begin(description):
+    """Announce a stage before touching the UI so a stall is attributable."""
+    global stage
+    stage = description
+    print('STAGE:', description, flush=True)
 
 
 def wait(check, timeout=40):
@@ -74,7 +113,14 @@ def js(script, window='main'):
     return result.get('value')
 
 
+def dismiss_activity(window='main'):
+    """The status centre opens itself when a transfer starts and floats over the
+    panels, so an unnoticed one swallows the next click instead of the control."""
+    js('const b=document.querySelector(\'[aria-label="关闭状态中心"]\'); if(b) b.click(); return true', window)
+
+
 def press_element(expression, window='main'):
+    dismiss_activity(window)
     response = request(script=f"const e={expression}; if(!e || e.disabled) throw Error('missing or disabled control'); e.scrollIntoView({{block:'nearest'}}); const r=e.getBoundingClientRect(); if(!r.width || !r.height) throw Error('hidden control'); return {{x:r.x+r.width/2,y:r.y+r.height/2}}", window=window)
     point = response['result'].get('value')
     if not point:
@@ -152,6 +198,21 @@ def drag(start, end, leave=None):
     time.sleep(.8)
     mouse.mouseUp()
     time.sleep(1)
+
+
+def drag_until(start, end, verify, leave=None, attempts=2, timeout=20):
+    """Native hand-off to another application (the OS file manager, Chromium)
+    can miss the first attempt while that window is still registering its drag
+    targets, so the drag is retried once before the stage fails."""
+    for attempt in range(attempts):
+        drag(start, end, leave)
+        try:
+            wait(verify, timeout)
+            return
+        except AssertionError:
+            if attempt == attempts - 1:
+                raise
+        request(action='focus')
 
 
 def screenshot(name):
@@ -298,19 +359,25 @@ try:
     print('webview', inner_w, inner_h, flush=True)
     click('[aria-label="列表视图"]')
     recorder = Recording()
-    stage = 'Move into a folder without a confirmation dialog'
+    begin('Move into a folder without a confirmation dialog')
     drag(point(row('01-internal.txt')), point(row('MOVE_TARGET')))
     wait(lambda: (inside/'01-internal.txt').is_file())
     assert not (source/'01-internal.txt').exists()
     assert not js('return !!document.querySelector("[role=dialog]")')
     passed('internal_folder_move')
-    stage = 'Bookmark a folder without moving it'
-    drag(point(row('MOVE_TARGET')), point('[data-bookmark-drop]'))
-    wait(lambda: js('return document.querySelector(".favorites-section")?.textContent.includes("MOVE_TARGET")'))
+    begin('Bookmark a folder without moving it')
+    # The section header is the bookmark drop zone: the shortcuts and volumes
+    # listed below it are folder drop targets, so a drop there moves the folder
+    # into them instead of bookmarking it.
+    drag(point(row('MOVE_TARGET')), point('[data-bookmark-drop] .sidebar-section-title'))
+    # Quote the whole selector as one JS string literal: interpolating the path
+    # on its own leaves the JSON quotes unescaped inside the script.
+    favorite = json.dumps(f'.favorites-section [data-drop-folder="{inside}"]')
+    wait(lambda: js(f'return !!document.querySelector({favorite})'))
     assert inside.is_dir()
     passed('favorite_preserves_folder')
     click('[aria-label="切换侧栏"]')
-    stage = 'Move between two Fiex windows'
+    begin('Move between two Fiex windows')
     click('[aria-label="新建窗口"]')
     second = wait(lambda: next((w for w in request(action='windows') if w != 'main'), None))
     wait(lambda: js(f'return !!document.querySelector({json.dumps(row("03-external.txt"))})', second))
@@ -331,31 +398,39 @@ try:
     )
     wait(lambda: len(request(action='windows')) == 1)
     if 'file-manager' not in SKIP:
-        stage = 'Copy to the OS file manager and preserve the source'
+        begin('Copy to the OS file manager and preserve the source')
         arrange_file_manager(external, tx, ty, tw, th)
         request(action='focus')
         original = (source/'03-external.txt').read_bytes()
-        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+350), (inner_w-3, ty+260))
-        wait(lambda: (external/'03-external.txt').is_file())
+        drag_until(
+            point(row('03-external.txt')),
+            (tx+min(340, tw-60), ty+350),
+            lambda: (external/'03-external.txt').is_file(),
+            (inner_w-3, ty+260),
+        )
         assert (external/'03-external.txt').read_bytes() == original
         assert (source/'03-external.txt').read_bytes() == original
         passed('external_file_manager_copy')
     upload = root/'uploaded.txt'
     original = (source/'03-external.txt').read_bytes()
     if 'browser' not in SKIP:
-        stage = 'Drag into Chromium and verify server-received bytes'
+        begin('Drag into Chromium and verify server-received bytes')
         browser_env = {**env, 'FIEX_CI_RECEIVER_BOUNDS': json.dumps(dict(x=tx, y=ty, width=tw, height=th))}
         processes.append(subprocess.Popen([sys.executable, str(Path(__file__).with_name('upload-target.py')), str(upload)], env=browser_env, stdout=log, stderr=log))
         time.sleep(6)
         request(action='focus')
-        drag(point(row('03-external.txt')), (tx+min(340, tw-60), ty+300), (inner_w-3, ty+260))
-        wait(lambda: upload.is_file() and upload.with_suffix('.json').is_file())
+        drag_until(
+            point(row('03-external.txt')),
+            (tx+min(340, tw-60), ty+300),
+            lambda: upload.is_file() and upload.with_suffix('.json').is_file(),
+            (inner_w-3, ty+260),
+        )
         assert upload.read_bytes() == original
         assert json.loads(upload.with_suffix('.json').read_text())['name'] == '03-external.txt'
         assert (source/'03-external.txt').read_bytes() == original
         screenshot('browser-upload.png')
         passed('browser_upload_and_source_preserved')
-    stage = 'Windows-style conflict choices: skip, compare and keep both'
+    begin('Windows-style conflict choices: skip, compare and keep both')
     request(action='focus')
     click(row('03-external.txt'))
     mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'c')
@@ -371,7 +446,7 @@ try:
     wait(lambda: (source/'03-external (2).txt').is_file())
     assert (source/'03-external (2).txt').read_bytes() == original
     passed('conflict_skip_compare_keep_both')
-    stage = 'Git init, commit, remote push and fast-forward pull'
+    begin('Git init, commit, remote push and fast-forward pull')
     remote = root/'remote.git'
     run('git', 'init', '--bare', '--initial-branch=main', remote)
     click('[aria-label="源代码管理"]')
@@ -386,9 +461,13 @@ try:
     fill('[aria-label="提交说明"]', 'Verify native operations')
     click('.git-commit-form button[type=submit]')
     wait(lambda: (source/'.git/refs/heads/main').is_file())
-    click('.git-remote [aria-label="配置远程仓库"]')
+    click('.git-panel [aria-label="远程仓库"]')
+    wait(lambda: js('return !!document.querySelector(".git-remote-add")'))
+    button('添加远程仓库')
+    fill('[aria-label="远程名称"]', 'origin')
     fill('[aria-label="仓库地址"]', str(remote))
     button('保存')
+    wait(lambda: js('return document.querySelector(".git-remote-list")?.textContent.includes("origin")'))
     button('推送')
     wait(lambda: run('git', '--git-dir', remote, 'rev-parse', 'main') == run('git', '-C', source, 'rev-parse', 'HEAD'))
     producer = root/'producer'
@@ -402,7 +481,7 @@ try:
     assert (source/'remote.txt').read_text() == 'remote pull verified\n'
     passed('git_push_pull')
     click('[aria-label="关闭源代码管理"]')
-    stage = 'WebDAV and SMB: connect, list, download and preview'
+    begin('WebDAV and SMB: connect, list, download and preview')
     click('[aria-label="切换侧栏"]')
     for protocol in ('webdav', 'smb'):
         if protocol in SKIP: continue
@@ -427,13 +506,13 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
         screenshot(protocol+'-preview.png')
         mouse.press('space')
         passed(protocol+'_live_download_preview')
-    stage = 'Disk images: list, read, copy out and verify read-only behavior'
+    begin('Disk images: list, read, copy out and verify read-only behavior')
     images = request(action='images')
     expected = {p.stem for p in Path(os.environ['FIEX_CI_IMAGES']).glob('*.img')}
     assert {i['name'] for i in images} == expected, images
     for image in sorted(images, key=lambda i: i['name']):
         name, path = image['name'], image['path']
-        stage = 'Filesystem / '+name.upper()
+        begin('Filesystem / '+name.upper())
         navigate(path)
         wait(lambda: js(f'return !!document.querySelector({json.dumps(row("hello.txt"))})'))
         click(row('hello.txt')); mouse.press('space')
@@ -443,9 +522,12 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
         # Native file URLs must contain actual data from each raw filesystem.
         upload.unlink(missing_ok=True)
         upload.with_suffix('.json').unlink(missing_ok=True)
-        request(action='focus')
-        drag(point(row('hello.txt')), (tx+min(340, tw-60), ty+300), (sw-1, ty+260))
-        wait(lambda: upload.is_file() and upload.with_suffix('.json').is_file())
+        drag_until(
+            point(row('hello.txt')),
+            (tx+min(340, tw-60), ty+300),
+            lambda: upload.is_file() and upload.with_suffix('.json').is_file(),
+            (sw-1, ty+260),
+        )
         assert upload.read_text().strip() == 'hello '+name
         assert json.loads(upload.with_suffix('.json').read_text())['name'] == 'hello.txt'
         passed(name+'_native_browser_upload')
@@ -487,7 +569,7 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
         else:
             assert js('return document.querySelector("[aria-label=新建文件夹]").disabled')
         passed(name+'_image_read_export_'+('write' if name in ('ntfs','ext4') else 'readonly'))
-    stage = 'All native integrations verified'
+    begin('All native integrations verified')
     screenshot('completed.png')
     passed('all_integrations')
     time.sleep(2)
