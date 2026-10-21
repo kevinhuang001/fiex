@@ -16,6 +16,15 @@ type Watch = Mutex<HashMap<String, notify::RecommendedWatcher>>;
 #[derive(Default)]
 struct WindowPaths(Mutex<HashMap<String, String>>);
 #[tauri::command]
+fn ci_log(message: String) {
+    #[cfg(feature = "ci-driver")]
+    if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
+        eprintln!("ci: {message}");
+    }
+    #[cfg(not(feature = "ci-driver"))]
+    let _ = message;
+}
+#[tauri::command]
 fn ci_reply(app: tauri::AppHandle, id: u64, value: String) {
     #[cfg(feature = "ci-driver")]
     crate::ci_driver::reply(&app, id, value);
@@ -29,6 +38,9 @@ async fn register_drag(
     paths: Vec<String>,
     copy_requested: bool,
 ) -> Result<Vec<String>, String> {
+    if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
+        eprintln!("drag: register {:?} copy={copy_requested}", paths);
+    }
     let mut moving = !copy_requested && !paths.iter().any(|p| remote::is_remote(p));
     for path in &paths {
         if remote::is_remote(path) {
@@ -56,6 +68,9 @@ async fn register_drag(
         }
         app.state::<DragSessions>()
             .begin(&label, &paths, &exported, moving)?;
+        if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
+            eprintln!("drag: session for {label} moving={moving} exported={exported:?}");
+        }
         Ok(exported)
     })
     .await
@@ -744,6 +759,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             ci_reply,
+            ci_log,
             register_drag,
             finish_drag,
             internal_drop,

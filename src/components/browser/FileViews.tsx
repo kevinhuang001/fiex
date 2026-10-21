@@ -113,6 +113,25 @@ export function FileViews(props: Props) {
     }
     const startX = event.clientX
     const startY = event.clientY
+    // Keep pointer events flowing once the cursor crosses the window edge:
+    // without capture macOS/Windows stop reporting moves before the drag can
+    // be handed over to the native drag session.
+    const captureTarget = event.currentTarget as Element
+    const pointerId = event.pointerId
+    try {
+      captureTarget.setPointerCapture(pointerId)
+    } catch {
+      // Older webviews may not support pointer capture; the edge check below
+      // still handles the common case.
+    }
+    const releaseCapture = () => {
+      try {
+        if (captureTarget.hasPointerCapture?.(pointerId))
+          captureTarget.releasePointerCapture(pointerId)
+      } catch {
+        // Capture is already gone.
+      }
+    }
     let active = false
     let nativeStarted = false
     const cleanup = () => {
@@ -120,6 +139,7 @@ export function FileViews(props: Props) {
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
       document.removeEventListener('mouseleave', leave)
+      releaseCapture()
       document.body.classList.remove('dragging-file')
       clearDropHighlight()
       setGhost(null)
@@ -129,6 +149,9 @@ export function FileViews(props: Props) {
       nativeStarted = true
       cleanup()
       if (!native) return
+      void call('ci_log', {
+        message: `startNative active=${active} inner=${window.innerWidth}x${window.innerHeight} paths=${JSON.stringify(paths)}`,
+      }).catch(() => {})
       void startFileDrag(
         paths,
         (result) => {

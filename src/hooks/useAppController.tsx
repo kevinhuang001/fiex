@@ -392,6 +392,11 @@ export function useAppController() {
     const key = (paths: string[]) => [...paths].sort().join('\0')
     void getCurrentWebviewWindow()
       .onDragDropEvent((event) => {
+        void call('ci_log', {
+          message: `drop event ${event.payload.type} ${
+            'paths' in event.payload ? JSON.stringify(event.payload.paths) : ''
+          } ${'position' in event.payload ? JSON.stringify(event.payload.position) : ''}`,
+        }).catch(() => {})
         if (event.payload.type === 'enter') {
           const paths = event.payload.paths
           origin = {

@@ -13,12 +13,17 @@ export async function startFileDrag(
 ) {
   const exported = await call<string[]>('register_drag', { paths, copyRequested })
   const completed = (result: 'Dropped' | 'Cancelled') => {
+    void call('ci_log', { message: `drag result ${result}` }).catch(() => {})
     void call('finish_drag').catch(() => {})
     onResult(result)
   }
   try {
     platform ??= call<string>('platform')
-    if ((await platform) === 'linux') {
+    const kind = await platform
+    void call('ci_log', { message: `drag start platform=${kind} exported=${JSON.stringify(exported)}` }).catch(
+      () => {},
+    )
+    if (kind === 'linux') {
       const onEvent = new Channel<string>()
       onEvent.onmessage = (result) => completed(result === 'Dropped' ? 'Dropped' : 'Cancelled')
       await call('drag_files', { paths: exported, onEvent })
@@ -29,6 +34,7 @@ export async function startFileDrag(
     }
   } catch (error) {
     platform = undefined
+    void call('ci_log', { message: `drag error ${String(error)}` }).catch(() => {})
     await call('finish_drag').catch(() => {})
     throw error
   }
