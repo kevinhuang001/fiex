@@ -212,19 +212,28 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install pyautogui pillow mss
-          npm install --prefix .ci/browser --no-package-lock electron@44.9.2
-          node <<'JS'
-          const fs = require('node:fs')
-          const electron = require('./.ci/browser/node_modules/electron')
-          fs.appendFileSync(process.env.GITHUB_ENV, `FIEX_UPLOAD_ELECTRON=${electron}\n`)
-          JS
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get update
-            sudo apt-get install -y xvfb dbus-x11 openbox thunar xdotool ffmpeg python3-tk scrot
-          elif [ "$RUNNER_OS" = "macOS" ]; then
-            brew install ffmpeg
+            sudo apt-get install -y xvfb dbus-x11 openbox thunar xdotool ffmpeg python3-tk scrot gcc pkg-config
+            # The upload target is a real browser, built here from
+            # scripts/upload-browser.c. It is WebKitGTK rather than Chromium
+            # because Chromium asks for the URI list, previews the dragged file in
+            # its status bar and then refuses the drop on a headless X server; a
+            # stock Thunar drag into it is refused in exactly the same way.
+            gcc scripts/upload-browser.c -o .ci/upload-browser $(pkg-config --cflags --libs webkit2gtk-4.1) -O1
+            echo "FIEX_UPLOAD_BROWSER=$PWD/.ci/upload-browser" >> "$GITHUB_ENV"
           else
-            choco install ffmpeg -y --no-progress
+            npm install --prefix .ci/browser --no-package-lock electron@44.9.2
+            node <<'JS'
+            const fs = require('node:fs')
+            const electron = require('./.ci/browser/node_modules/electron')
+            fs.appendFileSync(process.env.GITHUB_ENV, `FIEX_UPLOAD_ELECTRON=${electron}\n`)
+            JS
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              brew install ffmpeg
+            else
+              choco install ffmpeg -y --no-progress
+            fi
           fi
       - name: Build separate native UI test binary
         run: cargo build --locked --release --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --features ci-driver,tauri/custom-protocol

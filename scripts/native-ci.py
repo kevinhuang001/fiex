@@ -121,7 +121,18 @@ def dismiss_activity(window='main'):
 
 def press_element(expression, window='main'):
     dismiss_activity(window)
-    response = request(script=f"const e={expression}; if(!e || e.disabled) throw Error('missing or disabled control'); e.scrollIntoView({{block:'nearest'}}); const r=e.getBoundingClientRect(); if(!r.width || !r.height) throw Error('hidden control'); return {{x:r.x+r.width/2,y:r.y+r.height/2}}", window=window)
+    # A second dialog (or the floating status centre) can sit over the control,
+    # in which case the click lands on that instead and silently does nothing,
+    # so the hit test is part of locating the control.
+    response = request(script=f"""const e={expression};
+if(!e || e.disabled) throw Error('missing or disabled control');
+e.scrollIntoView({{block:'nearest'}});
+const r=e.getBoundingClientRect();
+if(!r.width || !r.height) throw Error('hidden control');
+const p={{x:r.x+r.width/2,y:r.y+r.height/2}};
+const hit=document.elementFromPoint(p.x,p.y);
+if(hit && !(hit===e || e.contains(hit) || hit.contains(e))) throw Error('control covered by '+(hit.className||hit.tagName));
+return p""", window=window)
     point = response['result'].get('value')
     if not point:
         raise AssertionError(response)
@@ -136,9 +147,24 @@ def click(selector, window='main'):
 
 
 def button(text, window='main', scope='document'):
-    expression = f'Array.from({scope}.querySelectorAll("button,[role=menuitem]")).find(e=>{{const label=e.cloneNode(true);label.querySelectorAll(".shortcut").forEach(n=>n.remove());return label.textContent.trim()==={json.dumps(text)}}})'
+    # The last match is the one rendered on top, so stacked dialogs (a second
+    # conflict prompt) resolve to the control the user would actually press.
+    expression = f'Array.from({scope}.querySelectorAll("button,[role=menuitem]")).filter(e=>{{const label=e.cloneNode(true);label.querySelectorAll(".shortcut").forEach(n=>n.remove());return label.textContent.trim()==={json.dumps(text)}}}).pop()'
     wait(lambda: js(f'const e={expression}; return !!e && !e.disabled', window))
     press_element(expression, window)
+
+
+def choose(text, expect, attempts=3, timeout=8, scope='document'):
+    """A modal can swallow the first click while it is still animating in, so the
+    choice is repeated until the dialog is really gone."""
+    for attempt in range(attempts):
+        button(text, scope=scope)
+        try:
+            wait(expect, timeout)
+            return
+        except AssertionError:
+            if attempt == attempts - 1:
+                raise
 
 
 def fill(selector, value, window='main'):
@@ -414,7 +440,7 @@ try:
     upload = root/'uploaded.txt'
     original = (source/'03-external.txt').read_bytes()
     if 'browser' not in SKIP:
-        begin('Drag into Chromium and verify server-received bytes')
+        begin('Drag into a browser and verify the received bytes')
         browser_env = {**env, 'FIEX_CI_RECEIVER_BOUNDS': json.dumps(dict(x=tx, y=ty, width=tw, height=th))}
         processes.append(subprocess.Popen([sys.executable, str(Path(__file__).with_name('upload-target.py')), str(upload)], env=browser_env, stdout=log, stderr=log))
         time.sleep(6)
@@ -436,14 +462,12 @@ try:
     mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'c')
     mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'v')
     wait(lambda: js('return document.querySelector("[role=dialog]")?.textContent.includes("替换或跳过文件")'))
-    button('跳过这些文件')
-    wait(lambda: not js('return !!document.querySelector("[role=dialog]")'))
+    choose('跳过这些文件', lambda: not js('return !!document.querySelector("[role=dialog]")'))
     click(row('03-external.txt'))
     mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'v')
     button('逐个比较文件')
     screenshot('conflicts.png')
-    button('继续')
-    wait(lambda: (source/'03-external (2).txt').is_file())
+    choose('继续', lambda: (source/'03-external (2).txt').is_file(), timeout=20)
     assert (source/'03-external (2).txt').read_bytes() == original
     passed('conflict_skip_compare_keep_both')
     begin('Git init, commit, remote push and fast-forward pull')
@@ -550,8 +574,8 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
             navigate(path)
             mouse.click(*point('[role=grid]'))
             mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'v')
-            button('逐个比较文件'); button('全部保留两者')
-            wait(lambda: js(f'return !!document.querySelector({json.dumps(row("hello (2).txt"))})'))
+            button('逐个比较文件')
+            choose('全部保留两者', lambda: js(f'return !!document.querySelector({json.dumps(row("hello (2).txt"))})'), timeout=20)
             mouse.click(*point(row('hello (2).txt')), button='right')
             button('重新命名')
             wait(lambda: js('return !!document.querySelector(".inline-rename")'))
@@ -563,8 +587,7 @@ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{
             mouse.click(*point(row('written.txt')), button='right')
             button('移到废纸篓')
             wait(lambda: js('return !!document.querySelector("[role=dialog]")'))
-            button('移到废纸篓', scope='document.querySelector("[role=dialog]")')
-            wait(lambda: not js(f'return !!document.querySelector({json.dumps(row("written.txt"))})'))
+            choose('移到废纸篓', lambda: not js(f'return !!document.querySelector({json.dumps(row("written.txt"))})'), timeout=20, scope='document.querySelector("[role=dialog]")')
 
         else:
             assert js('return document.querySelector("[aria-label=新建文件夹]").disabled')
@@ -577,6 +600,15 @@ except Exception:
     traceback.print_exc()
     results['failure_stage'] = stage
     (OUT/'verified-results.json').write_text(json.dumps(results, indent=2))
+    # Leave enough state in the job log to explain a stuck dialog without another
+    # twenty-minute round trip.
+    try:
+        print('dialogs:', js('return Array.from(document.querySelectorAll("[role=dialog]")).map(d=>({visible: d.offsetParent!==null, disabled: d.querySelectorAll("button[disabled]").length, text: d.textContent.slice(0,80)}))'), flush=True)
+        print('buttons:', js('return Array.from(document.querySelectorAll(".conflict-actions button")).map(b=>[b.textContent.trim(), b.disabled])'), flush=True)
+        print('activity:', (js('return document.querySelector(".activity-center")?.innerText?.slice(0,300) || ""') or '').replace('\n', ' | '), flush=True)
+        print('listing:', js('return Array.from(document.querySelectorAll("[data-path] .file-label,[data-path] .tile-label")).map(e=>e.title)'), flush=True)
+    except Exception as diagnostic:
+        print('diagnostics unavailable:', diagnostic, flush=True)
     screenshot('failure.png')
     raise
 finally:
