@@ -225,11 +225,21 @@ export function useFileOperations({
   }
   const extract = () => {
     if (!writable()) return
-    if (first)
-      void run('正在解压…', async () => {
-        const path = await call<string>('extract_archive', { path: first.path })
+    if (!first) return
+    setDialog({
+      title: '解压缩到',
+      label: '目标文件夹',
+      value: x.path,
+      submit: '解压',
+      action: async (destination) => {
+        const path = await call<string>('extract_archive', {
+          path: first.path,
+          destination: destination.trim() || null,
+        })
         notify(`已解压到 ${basename(path)}`)
-      })
+        x.reload()
+      },
+    })
   }
   const undo = () => {
     if (!writable()) return

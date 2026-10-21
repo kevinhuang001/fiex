@@ -187,7 +187,7 @@ export function FileContextMenu({
               ...(isArchive(menu.entry)
                 ? [
                     {
-                      label: '解压缩',
+                      label: '解压缩到…',
                       icon: <Archive />,
                       hint: '',
                       disabled: gitSwitched || x.directoryReadOnly,

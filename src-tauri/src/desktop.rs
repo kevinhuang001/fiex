@@ -155,8 +155,15 @@ async fn git_remote_save(root: String, name: String, url: String) -> Result<(), 
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn git_sync(root: String, remote: String, push: bool) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || git_remote::sync(&root, &remote, push))
+async fn git_sync(
+    root: String,
+    remote: String,
+    push: bool,
+    branch: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git_remote::sync(&root, &remote, push, branch.as_deref())
+    })
         .await
         .map_err(|e| e.to_string())?
 }
@@ -626,9 +633,13 @@ fn cancel_search(state: tauri::State<'_, SearchState>) {
     state.cancel();
 }
 #[tauri::command]
-async fn extract_archive(app: tauri::AppHandle, path: String) -> Result<String, String> {
+async fn extract_archive(
+    app: tauri::AppHandle,
+    path: String,
+    destination: Option<String>,
+) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let result = archives::extract(&path)?;
+        let result = archives::extract(&path, destination.as_deref())?;
         app.state::<Operations>()
             .record_created(std::path::PathBuf::from(&result));
         Ok(result)

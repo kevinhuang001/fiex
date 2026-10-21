@@ -116,9 +116,9 @@ export function useGitRepository(
         await loadRemote()
         setRemote(name)
       }),
-    sync: (push: boolean) =>
+    sync: (push: boolean, branch?: string) =>
       run(push ? '正在推送' : '正在拉取', async () => {
-        await call('git_sync', { root, remote, push })
+        await call('git_sync', { root, remote, push, branch: branch || null })
         await Promise.all([loadRefs(), loadRemote()])
         const items = await call<GitCommit[]>('git_history', { root, skip: 0 })
         if (latest.current === scope) {

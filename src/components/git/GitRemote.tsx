@@ -19,6 +19,7 @@ export function GitRemoteModal({
 }) {
   const [name, setName] = useState('origin')
   const [url, setUrl] = useState('')
+  const [branch, setBranch] = useState('')
   const status = repo.remoteStatus
   const remotes = status?.remotes || []
   const configured = remotes.length > 0
@@ -28,7 +29,8 @@ export function GitRemoteModal({
     const current = remotes.find((r) => r.name === repo.remote) || remotes[0]
     setName(current?.name || 'origin')
     setUrl(current?.url || '')
-  }, [open, repo.remote])
+    setBranch(repo.refs?.current || '')
+  }, [open, repo.remote, repo.refs?.current])
   const choose = (name: string) => {
     const remote = remotes.find((r) => r.name === name)
     repo.setRemote(name)
@@ -92,6 +94,22 @@ export function GitRemoteModal({
             onChange={(e) => setUrl(e.target.value)}
           />
         </label>
+        <label>
+          分支
+          <input
+            className="text-field"
+            aria-label="同步分支"
+            list="fiex-git-branches"
+            value={branch}
+            placeholder={repo.refs?.current || '当前分支'}
+            onChange={(e) => setBranch(e.target.value)}
+          />
+          <datalist id="fiex-git-branches">
+            {repo.refs?.branches.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
+        </label>
         {repo.error && (
           <p className="git-panel-error" role="alert">
             {repo.error}
@@ -102,7 +120,7 @@ export function GitRemoteModal({
             type="button"
             variant="secondary"
             disabled={busy || !configured}
-            onClick={() => void repo.sync(false)}
+            onClick={() => void repo.sync(false, branch)}
           >
             <ArrowDown size={14} />
             拉取
@@ -111,7 +129,7 @@ export function GitRemoteModal({
             type="button"
             variant="secondary"
             disabled={busy || !configured || !repo.refs?.head}
-            onClick={() => void repo.sync(true)}
+            onClick={() => void repo.sync(true, branch)}
           >
             <ArrowUp size={14} />
             推送

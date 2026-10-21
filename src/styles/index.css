@@ -1177,7 +1177,9 @@ button[data-slot='button'][data-variant='default'] {
 .context-menu button:hover {
   background: var(--hover);
 }
-.context-menu button:last-child {
+/* Only a top-level destructive action is red; submenu entries and the
+   "compress to…" wrapper must keep the normal color and geometry. */
+.context-menu > button:last-child {
   color: #c66c60;
   border-top: 1px solid var(--line);
   border-radius: 0 0 6px 6px;

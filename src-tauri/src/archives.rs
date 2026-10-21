@@ -30,13 +30,23 @@ fn copy_limited(
     *remaining -= n;
     Ok(())
 }
-pub fn extract(source: &str) -> Result<String, String> {
+pub fn extract(source: &str, destination: Option<&str>) -> Result<String, String> {
     let src = Path::new(source);
     let name = src.file_name().ok_or("无效文件名")?.to_string_lossy();
     let parent = src.parent().ok_or("没有父文件夹")?;
+    let base = match destination.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(target) => {
+            let path = Path::new(target);
+            if !path.is_dir() {
+                return Err("目标文件夹不存在".into());
+            }
+            path.to_path_buf()
+        }
+        None => parent.to_path_buf(),
+    };
     let temp = tempfile::Builder::new()
         .prefix(".fiex-extract-")
-        .tempdir_in(parent)
+        .tempdir_in(&base)
         .map_err(|e| e.to_string())?;
     let root = temp.path();
     let lower = name.to_lowercase();
@@ -143,7 +153,7 @@ pub fn extract(source: &str) -> Result<String, String> {
             copy_limited(&mut reader, &mut out, &mut remaining)?;
         }
     }
-    let dest = unique(&parent.join(src.file_stem().ok_or("无效文件名")?));
+    let dest = unique(&base.join(src.file_stem().ok_or("无效文件名")?));
     fs::rename(root, &dest).map_err(|e| e.to_string())?;
     Ok(dest.to_string_lossy().into_owned())
 }
@@ -365,7 +375,7 @@ mod tests {
             &[],
         )
         .unwrap();
-        let out = extract(zip.to_str().unwrap()).unwrap();
+        let out = extract(zip.to_str().unwrap(), None).unwrap();
         assert_eq!(
             fs::read_to_string(Path::new(&out).join("hello.txt")).unwrap(),
             "hello"
@@ -394,7 +404,7 @@ mod tests {
                 &["node_modules".into()],
             )
             .unwrap();
-            let out = extract(archive.to_str().unwrap()).unwrap();
+            let out = extract(archive.to_str().unwrap(), None).unwrap();
             assert!(Path::new(&out).join("bundle").join("keep.txt").exists());
             assert!(!Path::new(&out).join("bundle").join("node_modules").exists());
         }
@@ -414,7 +424,7 @@ mod tests {
             .unwrap();
         zip.write_all(b"do not extract").unwrap();
         zip.finish().unwrap();
-        assert!(extract(archive.to_str().unwrap()).is_err());
+        assert!(extract(archive.to_str().unwrap(), None).is_err());
         assert!(!t.path().join("escaped.txt").exists());
         assert_eq!(fs::read_dir(t.path()).unwrap().count(), 1);
     }
@@ -425,7 +435,7 @@ mod tests {
         fs::write(&src, "hello 7z").unwrap();
         let archive = t.path().join("test.7z");
         sevenz_rust2::compress_to_path(&src, &archive).unwrap();
-        let out = extract(archive.to_str().unwrap()).unwrap();
+        let out = extract(archive.to_str().unwrap(), None).unwrap();
         assert_eq!(
             fs::read_to_string(Path::new(&out).join("hello.txt")).unwrap(),
             "hello 7z"
