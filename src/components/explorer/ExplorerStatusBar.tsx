@@ -112,7 +112,7 @@ export function ExplorerStatusBar({
             aria-label="状态中心"
             onClick={() => activity.setOpen(!activity.open)}
           >
-            <History size={13} />
+            <ScrollText size={13} />
           </button>
           {clipboard && (
             <button title="清除剪贴板" onClick={() => setClipboard(null)}>
