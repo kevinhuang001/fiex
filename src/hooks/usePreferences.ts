@@ -1,3 +1,4 @@
+import { demo } from '@/lib/api'
 import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
 import {
   SHORTCUT_ACTIONS,
@@ -57,8 +58,13 @@ function load(): Preferences {
           )
       }
     }
-    const startPage =
-      stored.startPage === 'home' || stored.startPage === 'documents' || stored.startPage === 'last'
+    // The isolated demo fixture is a folder tree under Documents; always open
+    // it there instead of the empty Recent page a fresh profile would show.
+    const startPage = demo
+      ? 'documents'
+      : stored.startPage === 'home' ||
+          stored.startPage === 'documents' ||
+          stored.startPage === 'last'
         ? stored.startPage
         : 'recent'
     return {
