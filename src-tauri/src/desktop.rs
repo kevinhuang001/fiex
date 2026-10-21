@@ -3,8 +3,7 @@ use crate::{
     drag_session::{DragSessions, DropPlan},
     files, git, git_history, git_remote,
     operations::{self, OperationResult, Operations},
-    recent,
-    remote,
+    recent, remote,
     search::{SearchBatch, SearchState},
     tags, terminals,
     transfers::Resolution,
@@ -170,8 +169,8 @@ async fn git_sync(
     tauri::async_runtime::spawn_blocking(move || {
         git_remote::sync(&root, &remote, push, branch.as_deref())
     })
-        .await
-        .map_err(|e| e.to_string())?
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn drag_files(

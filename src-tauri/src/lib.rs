@@ -3,18 +3,18 @@ pub mod archives;
 mod ci_driver;
 #[cfg(feature = "desktop")]
 mod desktop;
-#[cfg(all(feature = "desktop", target_os = "macos"))]
-mod macos_material;
 pub mod drag_session;
 pub mod files;
 pub mod git;
 pub mod git_history;
 pub mod git_remote;
 pub mod ignores;
-pub mod recent;
+#[cfg(all(feature = "desktop", target_os = "macos"))]
+mod macos_material;
 #[cfg(all(feature = "desktop", target_os = "linux"))]
 mod native_drag;
 pub mod operations;
+pub mod recent;
 pub mod remote;
 pub mod search;
 pub mod tags;

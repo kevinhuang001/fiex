@@ -1,5 +1,8 @@
 use serde::Serialize;
-use std::{collections::HashSet, path::{Path, PathBuf}};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 #[derive(Serialize)]
 pub struct Location {
@@ -631,7 +634,10 @@ fn free_destination(destination: PathBuf) -> PathBuf {
     if !destination.exists() {
         return destination;
     }
-    let parent = destination.parent().map(Path::to_path_buf).unwrap_or_default();
+    let parent = destination
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
     let stem = destination
         .file_stem()
         .map(|value| value.to_string_lossy().into_owned())

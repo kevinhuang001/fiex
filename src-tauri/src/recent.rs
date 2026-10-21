@@ -40,7 +40,9 @@ fn save(list: &[String]) {
 }
 
 pub fn record(state: &Recent, path: &str) {
-    if path.starts_with("remote://") || path.starts_with("history://") || path.starts_with("recent://")
+    if path.starts_with("remote://")
+        || path.starts_with("history://")
+        || path.starts_with("recent://")
     {
         return;
     }

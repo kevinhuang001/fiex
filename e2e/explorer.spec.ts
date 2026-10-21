@@ -449,18 +449,37 @@ test('copy conflicts offer compare and keep both, ordinary pastes need no confir
   await expect(dialog).toHaveCount(0)
 })
 
-test('remote settings and push pull remain in the Git panel', async ({ page }) => {
+test('remotes are read and managed from the Git panel dialog', async ({ page }) => {
   await page.getByRole('button', { name: '源代码管理', exact: true }).click()
-  const panel = page.getByRole('complementary', { name: '源代码管理' })
-  await panel.getByRole('button', { name: '配置远程仓库', exact: true }).last().click()
-  const dialog = page.getByRole('dialog', { name: '远程仓库' })
-  await dialog.getByRole('textbox', { name: '仓库地址' }).fill('https://example.com/project.git')
-  await dialog.getByRole('button', { name: '保存', exact: true }).click()
-  await expect(dialog).toHaveCount(0)
-  await panel.getByRole('button', { name: '推送', exact: true }).click()
-  await expect(panel.getByRole('status').filter({ hasText: '推送完成' })).toBeVisible()
-  await panel.getByRole('button', { name: '拉取', exact: true }).click()
-  await expect(panel.getByRole('status').filter({ hasText: '拉取完成' })).toBeVisible()
+  // A CSS locator keeps working while Radix hides the page behind the dialog.
+  const panel = page.locator('.git-panel')
+  // The panel itself no longer hosts remote management.
+  await expect(panel.locator('.git-remote')).toHaveCount(0)
+  await panel.getByRole('button', { name: '远程仓库', exact: true }).click()
+  const manager = page.locator('.git-remote-modal')
+  await expect(manager).toBeVisible()
+  await expect(manager.getByText('还没有远程仓库')).toBeVisible()
+  await manager.getByRole('button', { name: '添加远程仓库', exact: true }).click()
+  await manager.getByRole('textbox', { name: '远程名称' }).fill('origin')
+  await manager.getByRole('textbox', { name: '仓库地址' }).fill('https://example.com/project.git')
+  await manager.getByRole('button', { name: '保存', exact: true }).click()
+  const row = manager.locator('.git-remote-row')
+  await expect(row).toHaveCount(1)
+  await expect(row.getByText('origin', { exact: true })).toBeVisible()
+  await expect(row.getByText('https://example.com/project.git')).toBeVisible()
+  await manager.getByRole('button', { name: '编辑 origin', exact: true }).click()
+  await expect(manager.getByRole('textbox', { name: '仓库地址' })).toHaveValue(
+    'https://example.com/project.git',
+  )
+  await manager.getByRole('button', { name: '返回', exact: true }).click()
+  // Radix hides the page behind the dialog from the accessibility tree, so the
+  // panel status is asserted by text rather than by role.
+  await manager.getByRole('button', { name: '推送', exact: true }).click()
+  await expect(panel.getByText('推送完成', { exact: true })).toBeVisible()
+  await manager.getByRole('button', { name: '拉取', exact: true }).click()
+  await expect(panel.getByText('拉取完成', { exact: true })).toBeVisible()
+  await manager.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(manager).toHaveCount(0)
 })
 
 test('non Git welcome contains only its icon and action', async ({ page }) => {

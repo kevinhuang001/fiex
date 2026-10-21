@@ -365,11 +365,7 @@ fn index_subtree(
     added
 }
 
-fn apply_pending(
-    handle: &mut IndexHandle,
-    hidden: bool,
-    ignores: &[String],
-) -> Result<(), String> {
+fn apply_pending(handle: &mut IndexHandle, hidden: bool, ignores: &[String]) -> Result<(), String> {
     let paths: Vec<PathBuf> = {
         let mut queue = handle.pending.lock().unwrap();
         if queue.is_empty() {
