@@ -22,6 +22,7 @@ export function SecondaryPane({
   const x = useExplorer(prefs, start)
   const [draft, setDraft] = useState(x.path)
   const [editing, setEditing] = useState(false)
+  const [top, setTop] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const segments = (() => {
     const parts = x.path.split('/').filter(Boolean)
@@ -31,6 +32,13 @@ export function SecondaryPane({
     }))
   })()
   useEffect(() => setDraft(x.path), [x.path])
+  // Line the pane up with the main path bar so both rows sit at one height.
+  useEffect(() => {
+    const main = document.querySelector('.main')
+    const bar = document.querySelector('.main > .path-toolbar')
+    if (!main || !bar) return
+    setTop(bar.getBoundingClientRect().top - main.getBoundingClientRect().top)
+  }, [])
   useEffect(() => {
     if (editing) input.current?.select()
   }, [editing])
@@ -41,6 +49,7 @@ export function SecondaryPane({
     <aside
       className="secondary-pane"
       aria-label="第二个面板"
+      style={top === null ? undefined : { top }}
       data-drop-folder={x.path === 'recent://' ? undefined : x.path}
     >
       <div className="path-toolbar">
