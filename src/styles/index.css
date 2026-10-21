@@ -3007,21 +3007,7 @@ body.dragging-file * {
   font-size: 11px;
   color: var(--text);
 }
-.secondary-pane > footer {
-  display: flex;
-  gap: 8px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--line);
-}
-.secondary-pane > footer button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-  font-size: 11px;
-  color: var(--text);
+.secondary-pane.drop-target {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--canvas));
 }

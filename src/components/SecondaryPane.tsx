@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowRightToLine, ArrowUp, X } from 'lucide-react'
+import { ArrowUp, X } from 'lucide-react'
 import { FileViews } from './browser/FileViews'
 import { useExplorer } from '@/hooks/useExplorer'
 import { basename } from '@/lib/files'
@@ -16,14 +16,18 @@ export function SecondaryPane({
   prefs: Preferences
   start: string
   onClose: () => void
-  onTransfer: (destination: string, moving: boolean) => void
+  onTransfer: (paths: string[], destination: string, moving: boolean) => void
 }) {
   const x = useExplorer(prefs, start)
   const open = (entry: Entry) => {
     if (entry.isDir) x.navigate(entry.path)
   }
   return (
-    <aside className="secondary-pane" aria-label="第二个面板">
+    <aside
+      className="secondary-pane"
+      aria-label="第二个面板"
+      data-drop-folder={x.path === 'recent://' ? undefined : x.path}
+    >
       <header>
         <button className="icon-button" title="上一级" aria-label="上一级" onClick={x.up}>
           <ArrowUp size={14} />
@@ -41,24 +45,11 @@ export function SecondaryPane({
         onOpen={open}
         onPreview={() => {}}
         onMenu={() => {}}
-        onDrop={(paths, destination, moving) => {
-          onTransfer(destination, moving)
-          void paths
-        }}
+        onDrop={(paths, destination, moving) => onTransfer(paths, destination, moving)}
         onBookmark={() => {}}
         onWorkspace={() => {}}
         readOnly
       />
-      <footer>
-        <button onClick={() => onTransfer(x.path, false)}>
-          <ArrowRightToLine size={13} />
-          复制到此处
-        </button>
-        <button onClick={() => onTransfer(x.path, true)}>
-          <ArrowDownToLine size={13} />
-          移动到此处
-        </button>
-      </footer>
     </aside>
   )
 }

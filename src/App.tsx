@@ -115,7 +115,7 @@ export default function App() {
             prefs={app.prefs}
             start={app.x.path}
             onClose={() => setSplit(false)}
-            onTransfer={(destination, moving) => app.transfer(app.x.selected, destination, moving)}
+            onTransfer={(paths, destination, moving) => app.transfer(paths, destination, moving)}
           />
         )}
         <GitPanel
