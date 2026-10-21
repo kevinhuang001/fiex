@@ -753,7 +753,7 @@ pub fn empty_trash(cancel: &AtomicBool) -> Result<usize, String> {
             remove_entry(&entry.path())?;
             removed += 1;
         }
-        return Ok(removed);
+        Ok(removed)
     }
     #[cfg(target_os = "linux")]
     {

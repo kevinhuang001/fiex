@@ -122,15 +122,13 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
                     .map_err(|e| e.to_string())?;
                 return Ok(());
             }
-            "Tabby" => {
-                if which::which("tabby").is_ok() {
-                    Command::new("tabby")
-                        .arg("open")
-                        .arg(&dir)
-                        .spawn()
-                        .map_err(|e| e.to_string())?;
-                    return Ok(());
-                }
+            "Tabby" if which::which("tabby").is_ok() => {
+                Command::new("tabby")
+                    .arg("open")
+                    .arg(&dir)
+                    .spawn()
+                    .map_err(|e| e.to_string())?;
+                return Ok(());
             }
             _ => {}
         }
