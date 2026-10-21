@@ -5,14 +5,12 @@ import {
   ChevronUp,
   Eraser,
   GitBranch,
-  History,
   ListChecks,
   LoaderCircle,
   X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { FileIcon } from '../FileIcon'
-import { useActivity } from '@/hooks/useActivity'
 export function ExplorerStatusBar({
   busy,
   x,
@@ -26,7 +24,6 @@ export function ExplorerStatusBar({
   AppController,
   'busy' | 'x' | 'chosen' | 'gitSwitched' | 'clipboard' | 'setClipboard' | 'workspace' | 'open'
 >) {
-  const activity = useActivity()
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   return (
     <>
@@ -91,6 +88,11 @@ export function ExplorerStatusBar({
           {x.tagFilter && <span>标签：{x.tagFilter}</span>}
           <span>{x.searchStats}</span>
           <div className="toolbar-spacer" />
+          {clipboard && (
+            <button title="清除剪贴板" onClick={() => setClipboard(null)}>
+              {clipboard.moving ? '剪切' : '复制'} {clipboard.paths.length} 项 <X size={11} />
+            </button>
+          )}
           {workspace.items.length > 0 && (
             <button title="清空工作区" aria-label="清空工作区" onClick={workspace.clear}>
               <Eraser size={13} />
@@ -107,18 +109,6 @@ export function ExplorerStatusBar({
             <span className="workspace-count">{workspace.items.length}</span>
             {workspaceOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </button>
-          <button
-            title="状态中心"
-            aria-label="状态中心"
-            onClick={() => activity.setOpen(!activity.open)}
-          >
-            <ScrollText size={13} />
-          </button>
-          {clipboard && (
-            <button title="清除剪贴板" onClick={() => setClipboard(null)}>
-              {clipboard.moving ? '剪切' : '复制'} {clipboard.paths.length} 项 <X size={11} />
-            </button>
-          )}
         </div>
       </footer>
     </>

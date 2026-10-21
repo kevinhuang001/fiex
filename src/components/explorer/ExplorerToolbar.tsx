@@ -17,7 +17,8 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { AppWindowIcon as PanelsTopLeft } from '@phosphor-icons/react/dist/csr/AppWindow'
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
-import { RefreshCw, Trash2 } from 'lucide-react'
+import { RefreshCw, ScrollText, Trash2 } from 'lucide-react'
+import { useActivity } from '@/hooks/useActivity'
 import type { ReactNode } from 'react'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
@@ -79,6 +80,7 @@ export function ExplorerToolbar({
   | 'emptyTrash'
   | 'displayName'
 >) {
+  const activity = useActivity()
   return (
     <>
       <header className="toolbar" data-tauri-drag-region>
@@ -224,6 +226,15 @@ export function ExplorerToolbar({
             <TerminalSquare weight="regular" size={20} />
           </Button>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="状态中心"
+          aria-label="状态中心"
+          onClick={() => activity.setOpen(!activity.open)}
+        >
+          <ScrollText size={20} />
+        </Button>
         <Button
           variant="ghost"
           size="icon"

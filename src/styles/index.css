@@ -1004,6 +1004,7 @@ button[data-slot='button'][data-variant='default'] {
 .statusbar-row {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   height: 28px;
   padding: 0 12px;
