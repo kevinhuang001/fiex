@@ -137,7 +137,7 @@ async fn new_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
-    macos_material::configure(&window);
+    crate::macos_material::configure(&window);
     let _ = window;
     Ok(())
 }
@@ -951,7 +951,7 @@ pub fn run() {
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                macos_material::configure(&window);
+                crate::macos_material::configure(&window);
             }
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
