@@ -2992,33 +2992,11 @@ body.dragging-file * {
   background: var(--canvas);
   box-shadow: -12px 0 32px #183a5910;
 }
-.secondary-pane > header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 8px;
+.secondary-pane > .path-toolbar {
   border-bottom: 1px solid var(--line);
 }
-.secondary-path {
+.secondary-pane .path-toolbar-spacer {
   flex: 1;
-  height: 24px;
-  min-width: 0;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  font-size: 11px;
-  color: var(--text);
-  text-overflow: ellipsis;
-}
-.secondary-path:hover {
-  border-color: var(--line);
-}
-.secondary-path:focus {
-  outline: none;
-  border-color: var(--accent);
-  background: var(--surface);
 }
 .secondary-pane.drop-target {
   border-left-color: var(--accent);

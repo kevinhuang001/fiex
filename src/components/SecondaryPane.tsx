@@ -1,5 +1,6 @@
-import { ArrowUp, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowUp, ChevronRight, HardDrive, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Button } from './ui/button'
 import { FileViews } from './browser/FileViews'
 import { useExplorer } from '@/hooks/useExplorer'
 import type { Entry, Preferences } from '@/lib/types'
@@ -20,7 +21,19 @@ export function SecondaryPane({
 }) {
   const x = useExplorer(prefs, start)
   const [draft, setDraft] = useState(x.path)
+  const [editing, setEditing] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+  const segments = (() => {
+    const parts = x.path.split('/').filter(Boolean)
+    return parts.map((name, index) => ({
+      name,
+      path: (x.path.startsWith('/') ? '/' : '') + parts.slice(0, index + 1).join('/'),
+    }))
+  })()
   useEffect(() => setDraft(x.path), [x.path])
+  useEffect(() => {
+    if (editing) input.current?.select()
+  }, [editing])
   const open = (entry: Entry) => {
     if (entry.isDir) x.navigate(entry.path)
   }
@@ -30,27 +43,66 @@ export function SecondaryPane({
       aria-label="第二个面板"
       data-drop-folder={x.path === 'recent://' ? undefined : x.path}
     >
-      <header>
-        <button className="icon-button" title="上一级" aria-label="上一级" onClick={x.up}>
-          <ArrowUp size={14} />
-        </button>
-        <input
-          className="secondary-path"
+      <div className="path-toolbar">
+        <Button variant="ghost" size="icon" title="上一级" aria-label="上一级" onClick={x.up}>
+          <ArrowUp />
+        </Button>
+        <nav
+          className="breadcrumbs"
           aria-label="第二个面板的路径"
-          title={x.path}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter') return
-            const next = draft.trim()
-            if (next && next !== x.path) x.navigate(next)
-            event.currentTarget.blur()
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setEditing(true)
           }}
-        />
-        <button className="icon-button" title="关闭面板" aria-label="关闭面板" onClick={onClose}>
-          <X size={14} />
-        </button>
-      </header>
+        >
+          {editing ? (
+            <form
+              className="path-editor"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const next = draft.trim()
+                if (next) x.navigate(next)
+                setEditing(false)
+              }}
+            >
+              <input
+                ref={input}
+                className="path-input"
+                aria-label="第二个面板的路径"
+                value={draft}
+                spellCheck={false}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={() => setEditing(false)}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  if (event.key === 'Escape') setEditing(false)
+                }}
+              />
+            </form>
+          ) : (
+            <>
+              <button onClick={() => setEditing(true)} title="编辑或复制路径" aria-label="编辑路径">
+                <HardDrive size={13} />
+              </button>
+              {segments.map((segment, index) => (
+                <span key={segment.path} className="crumb">
+                  <button
+                    className="crumb-button"
+                    onClick={() => x.navigate(segment.path)}
+                    title={segment.path}
+                  >
+                    {segment.name}
+                  </button>
+                  {index < segments.length - 1 && <ChevronRight size={12} className="crumb-sep" />}
+                </span>
+              ))}
+            </>
+          )}
+          <span className="path-toolbar-spacer" />
+          <button className="icon-button" title="关闭面板" aria-label="关闭面板" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </nav>
+      </div>
       <FileViews
         explorer={x}
         prefs={prefs}
