@@ -21,8 +21,6 @@ function walk(dir) {
 const files = walk('release-input').filter((p) => /\.(dmg|exe|msi|deb|rpm|AppImage)$/.test(p))
 for (const ext of ['dmg', 'exe', 'msi', 'deb', 'rpm', 'AppImage'])
   if (!files.some((p) => p.endsWith('.' + ext))) throw new Error(`Missing ${ext} installer`)
-if (files.filter((p) => p.endsWith('.dmg')).length < 2)
-  throw new Error('Missing macOS architecture')
 if (files.some((p) => statSync(p).size < 100000))
   throw new Error('An installer is unexpectedly small')
 const names = files.map((p) => basename(p))

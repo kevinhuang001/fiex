@@ -8,4 +8,4 @@
 - WebDAV/SMB 连接保存前先创建本地目录，避免目录创建失败留下无效配置。
 - 文件冲突处理、跨窗口拖拽、Git 远程推送和拉取、文件系统驱动集成来自本次合并的功能更新。
 
-提供 macOS Apple Silicon 和 Intel DMG、Windows EXE 和 MSI、Linux DEB、RPM 和 AppImage。
+提供 macOS Apple Silicon DMG、Windows EXE 和 MSI、Linux DEB、RPM 和 AppImage。
