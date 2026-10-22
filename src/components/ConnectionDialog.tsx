@@ -59,18 +59,25 @@ export function ConnectionDialog({
     setBusy(true)
     setError('')
     try {
-      // Legacy connection persistence is temporary. Unknown providers must
-      // not be misrepresented as WebDAV/SMB.
-      const kind = current.factory.id
-      if (kind !== 'webdav' && kind !== 'smb')
-        throw new Error('该连接插件尚未提供兼容的连接保存接口')
+      const settings = Object.fromEntries(
+        current.factory.fields.map((field) => [
+          field.id,
+          field.type === 'number'
+            ? Number(values[field.id] || 0)
+            : field.type === 'checkbox'
+              ? Boolean(values[field.id])
+              : String(values[field.id] ?? ''),
+        ]),
+      )
       const connection = await call<RemoteConnection>('save_remote_connection', {
         input: {
           name,
-          kind,
+          pluginId: current.plugin.id,
+          kind: current.factory.id,
+          settings,
           url: String(values.url || ''),
           host: String(values.host || ''),
-          port: Number(values.port || 445),
+          port: values.port ? Number(values.port) : undefined,
           share: String(values.share || ''),
           base: String(values.base || ''),
           username: String(values.username || ''),
