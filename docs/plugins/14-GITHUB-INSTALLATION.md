@@ -17,14 +17,14 @@
 
 ```json
 {
-  "schemaVersion":1,
-  "id":"org.example.archive",
-  "name":"Archive",
-  "version":"1.0.0",
-  "author":{"name":"Example Developer","url":"https://github.com/example"},
-  "permissions":{"filesystem.read":true,"filesystem.write":true,"ui.dialog":true},
-  "entrypoints":{"linux-x86_64":"bin/plugin"},
-  "contributes":{"contextMenus":[],"panels":[]}
+  "schemaVersion": 1,
+  "id": "org.example.archive",
+  "name": "Archive",
+  "version": "1.0.0",
+  "author": { "name": "Example Developer", "url": "https://github.com/example" },
+  "permissions": { "filesystem.read": true, "filesystem.write": true, "ui.dialog": true },
+  "entrypoints": { "linux-x86_64": "bin/plugin" },
+  "contributes": { "contextMenus": [], "panels": [] }
 }
 ```
 

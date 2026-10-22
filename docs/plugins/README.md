@@ -17,20 +17,20 @@
 
 ## 阅读顺序
 
-| 文档                                             | 核心内容                                                 |
-| ------------------------------------------------ | -------------------------------------------------------- |
-| [01 架构与边界](01-ARCHITECTURE.md)              | 分层、生命周期、可组合能力、目录结构与职责               |
-| [02 VFS 与目录树](02-VFS.md)                     | 挂载、节点、分页、流式 I/O、跨源复制和虚拟文件           |
-| [03 内核缓存与同步](03-CACHE-SYNC.md)            | 元数据/内容缓存、选择性同步、双向三方对比、失败保护      |
-| [04 IPC 协议](04-IPC-PROTOCOL.md)                | JSON-RPC 帧、握手、方法表、数据通道、错误与版本          |
-| [05 UI 扩展](05-UI-EXTENSIONS.md)                | 右键菜单、工具栏、预编译 iframe 面板、条件与操作上下文   |
-| [06 任务与活动中心](06-TASKS.md)                 | 任务状态机、进度、取消、持久化与进程异常                 |
-| [07 安全与打包发布](07-SECURITY-PACKAGING.md)    | 权限、凭据、插件包、权限审批与三平台差异                 |
-| [08 SDK 与开发指南](08-SDK.md)                   | Rust Native SDK、npm UI SDK、构建、开发体验与兼容        |
-| [09 迁移与验收](09-MIGRATION-TESTING.md)         | PR #3 代码迁移、兼容迁移、CI 与验收门槛                  |
-| [10 插件场景和完整示例](10-EXAMPLES.md)          | WebDAV、SMB、Git、Google Calendar、样例消息              |
-| [11 iframe UI SDK](11-UI-SDK.md)                 | `@fiex/ui-sdk`、iframe 安全 MessageChannel、UI-only 插件 |
-| [13 插件持久化与 OAuth](13-PERSISTENCE-OAUTH.md) | 内核 KV、SecretStore、账户作用域、Token 生命周期与迁移   |
+| 文档                                              | 核心内容                                                  |
+| ------------------------------------------------- | --------------------------------------------------------- |
+| [01 架构与边界](01-ARCHITECTURE.md)               | 分层、生命周期、可组合能力、目录结构与职责                |
+| [02 VFS 与目录树](02-VFS.md)                      | 挂载、节点、分页、流式 I/O、跨源复制和虚拟文件            |
+| [03 内核缓存与同步](03-CACHE-SYNC.md)             | 元数据/内容缓存、选择性同步、双向三方对比、失败保护       |
+| [04 IPC 协议](04-IPC-PROTOCOL.md)                 | JSON-RPC 帧、握手、方法表、数据通道、错误与版本           |
+| [05 UI 扩展](05-UI-EXTENSIONS.md)                 | 右键菜单、工具栏、预编译 iframe 面板、条件与操作上下文    |
+| [06 任务与活动中心](06-TASKS.md)                  | 任务状态机、进度、取消、持久化与进程异常                  |
+| [07 安全与打包发布](07-SECURITY-PACKAGING.md)     | 权限、凭据、插件包、权限审批与三平台差异                  |
+| [08 SDK 与开发指南](08-SDK.md)                    | Rust Native SDK、npm UI SDK、构建、开发体验与兼容         |
+| [09 迁移与验收](09-MIGRATION-TESTING.md)          | PR #3 代码迁移、兼容迁移、CI 与验收门槛                   |
+| [10 插件场景和完整示例](10-EXAMPLES.md)           | WebDAV、SMB、Git、Google Calendar、样例消息               |
+| [11 iframe UI SDK](11-UI-SDK.md)                  | `@fiex/ui-sdk`、iframe 安全 MessageChannel、UI-only 插件  |
+| [13 插件持久化与 OAuth](13-PERSISTENCE-OAUTH.md)  | 内核 KV、SecretStore、账户作用域、Token 生命周期与迁移    |
 | [14 GitHub 安装与权限](14-GITHUB-INSTALLATION.md) | 下载审核、安装授权、作者信息、iframe 菜单与待实现安全约束 |
 
 ## 设计的不变量
