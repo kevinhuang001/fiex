@@ -21,7 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - run: npx prettier --write plugins/official/*/manifest.json src-tauri/tauri.conf.json src/components src/lib src/styles docs/plugins sdk/ui
+      - run: npx prettier --write plugins/official src-tauri/tauri.conf.json src docs/plugins sdk/ui
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml
       - run: cargo fmt --manifest-path sdk/rust/Cargo.toml
       - run: cargo fmt --manifest-path plugins/official/git/Cargo.toml
