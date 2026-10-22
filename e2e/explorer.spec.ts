@@ -68,7 +68,7 @@ test('status center records transfers and shows source and destination', async (
   await page.getByText('Projects', { exact: true }).dblclick()
   await page.keyboard.press('Control+v')
   const center = page.getByRole('complementary', { name: '状态中心' })
-  if (!(await center.isVisible())) await page.getByRole('button', { name: '状态中心' }).click()
+  if (!(await center.isVisible())) await page.getByRole('button', { name: '状态中心', exact: true }).click()
   await expect(center.getByText('复制', { exact: true })).toBeVisible()
   await expect(center.getByText('新建文件夹', { exact: true })).toHaveCount(0)
   await center.getByRole('button', { name: /查看详情：复制/ }).click()
