@@ -528,7 +528,9 @@ async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result
     let plugin_id = format!("org.fiex.{}", conn.kind);
     for permission in ["network", "filesystem.write"] {
         if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
-            return Err(format!("remote plugin permission not granted: {permission}"));
+            return Err(format!(
+                "remote plugin permission not granted: {permission}"
+            ));
         }
     }
     let result = crate::plugin_host::global().invoke(
