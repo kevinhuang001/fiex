@@ -138,12 +138,24 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
 
     fn pipe() -> Result<(std::fs::File, std::fs::File), String> {
         let mut fds = [0i32; 2];
+        #[cfg(target_os = "linux")]
         let result = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
+        #[cfg(not(target_os = "linux"))]
+        let result = unsafe { libc::pipe(fds.as_mut_ptr()) };
         if result != 0 {
             return Err(format!(
                 "cannot create plugin IPC pipe: {}",
                 std::io::Error::last_os_error()
             ));
+        }
+        #[cfg(not(target_os = "linux"))]
+        for fd in fds {
+            if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } != 0 {
+                return Err(format!(
+                    "cannot mark plugin IPC pipe close-on-exec: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
         }
         // SAFETY: pipe2 returned two fresh descriptors owned by this process.
         Ok(unsafe {
@@ -217,6 +229,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         extra_fds: Vec::new(),
         tty: false,
         network_proxy_socket: None,
+        #[cfg(target_os = "linux")]
         allowed_hosts: Vec::new(),
         env,
         audit_sink: None,
