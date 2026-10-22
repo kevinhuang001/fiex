@@ -109,9 +109,9 @@ async fn register_drag(
     for path in &paths {
         if remote::is_remote(path) {
             if std::path::Path::new(path).is_dir() {
-                remote::download_dir(path).await?;
+                remote::download_dir(path, &remote::TransferOptions::default()).await?;
             } else {
-                remote::ensure_downloaded(path).await?;
+                remote::ensure_downloaded(path, &remote::TransferOptions::default()).await?;
             }
         }
     }
@@ -345,7 +345,7 @@ fn plugin_secret_set(
     let permitted = crate::plugin_host::catalog()
         .into_iter()
         .find(|p| p.id == plugin_id)
-        .and_then(|p| p.contributes.get("settings").cloned())
+        .and_then(|p| p.contributions.get("settings").cloned())
         .and_then(|v| v.as_array().cloned())
         .is_some_and(|fields| {
             fields.iter().any(|f| {
