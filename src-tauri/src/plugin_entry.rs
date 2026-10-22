@@ -89,11 +89,16 @@ fn remote_dispatch(kind: &str, method: &str, p: Value) -> Result<Value, plugin_s
         }
         "connection.remove" => wrap(remote::remove_connection(as_string(&p, "id")?)),
         "fs.list" => {
-            let id = p.get("connectionId").or_else(|| p.get("mountId"))
+            let id = p
+                .get("connectionId")
+                .or_else(|| p.get("mountId"))
                 .and_then(Value::as_str)
                 .ok_or_else(|| plugin_sdk::RpcError::invalid_params("missing connectionId"))?;
-            let relative = p.get("relativePath").or_else(|| p.get("directoryId"))
-                .and_then(Value::as_str).unwrap_or("");
+            let relative = p
+                .get("relativePath")
+                .or_else(|| p.get("directoryId"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
             let cursor = p.get("cursor").and_then(Value::as_str);
             let limit = p.get("limit").and_then(Value::as_u64).unwrap_or(200) as usize;
             wrap(tauri::async_runtime::block_on(remote::provider_list(
