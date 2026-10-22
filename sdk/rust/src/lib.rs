@@ -279,6 +279,33 @@ mod tests {
         .is_err());
     }
     #[test]
+    fn host_storage_round_trip_is_namespaced_and_framed() {
+        let mut host_reply = Vec::new();
+        write_frame(
+            &mut host_reply,
+            &json!({"jsonrpc":"2.0","id":"host-1","result":{"cursor":"opaque"}}),
+        )
+        .unwrap();
+        let mut input = BufReader::new(host_reply.as_slice());
+        let mut output = Vec::new();
+        let mut api = HostClient {
+            reader: &mut input,
+            writer: &mut output,
+            sequence: 0,
+        };
+        assert_eq!(
+            api.storage_get("account-example", "syncCursor").unwrap(),
+            json!({"cursor":"opaque"})
+        );
+        let sent = read_frame(&mut BufReader::new(output.as_slice()))
+            .unwrap()
+            .unwrap();
+        assert_eq!(sent["method"], "host.storage.get");
+        assert_eq!(sent["params"]["scope"], "account-example");
+        assert_eq!(sent["params"]["key"], "syncCursor");
+    }
+
+    #[test]
     fn non_ascii_byte_lengths_are_correct() {
         let mut data = Vec::new();
         write_frame(&mut data, &json!({"name":"你好"})).unwrap();
