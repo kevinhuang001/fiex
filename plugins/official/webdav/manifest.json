@@ -4,10 +4,7 @@
   "name": "WebDAV",
   "version": "0.1.0",
   "protocolVersion": "1.0",
-  "capabilities": [
-    "filesystem",
-    "connectionFactory"
-  ],
+  "capabilities": ["filesystem", "connectionFactory"],
   "entrypoints": {
     "windows-x86_64": "fiex-plugin-webdav.exe",
     "macos-aarch64": "fiex-plugin-webdav",

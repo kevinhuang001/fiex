@@ -51,14 +51,26 @@ fn valid_id(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
 static BUNDLED_ROOT: OnceLock<PathBuf> = OnceLock::new();
-const OFFICIAL_IDS: &[&str] = &["org.fiex.git","org.fiex.webdav","org.fiex.smb","org.fiex.archive","org.fiex.checksum"];
+const OFFICIAL_IDS: &[&str] = &[
+    "org.fiex.git",
+    "org.fiex.webdav",
+    "org.fiex.smb",
+    "org.fiex.archive",
+    "org.fiex.checksum",
+];
 fn builtin_manifest(id: &str) -> Option<&'static str> {
     match id {
         "org.fiex.git" => Some(include_str!("../../../plugins/official/git/manifest.json")),
-        "org.fiex.webdav" => Some(include_str!("../../../plugins/official/webdav/manifest.json")),
+        "org.fiex.webdav" => Some(include_str!(
+            "../../../plugins/official/webdav/manifest.json"
+        )),
         "org.fiex.smb" => Some(include_str!("../../../plugins/official/smb/manifest.json")),
-        "org.fiex.archive" => Some(include_str!("../../../plugins/official/archive/manifest.json")),
-        "org.fiex.checksum" => Some(include_str!("../../../plugins/official/checksum/manifest.json")),
+        "org.fiex.archive" => Some(include_str!(
+            "../../../plugins/official/archive/manifest.json"
+        )),
+        "org.fiex.checksum" => Some(include_str!(
+            "../../../plugins/official/checksum/manifest.json"
+        )),
         _ => None,
     }
 }
@@ -69,50 +81,85 @@ fn canonical_under(folder: &Path, root: &Path) -> bool {
     }
 }
 fn trusted_builtin(manifest: &PluginManifest, folder: &Path) -> bool {
-    let Some(expected) = builtin_manifest(&manifest.id) else { return false; };
-    let packaged = BUNDLED_ROOT.get().is_some_and(|root| canonical_under(folder, root));
+    let Some(expected) = builtin_manifest(&manifest.id) else {
+        return false;
+    };
+    let packaged = BUNDLED_ROOT
+        .get()
+        .is_some_and(|root| canonical_under(folder, root));
     // A debug build's staged plugin directory is trusted only for development.
-    let debug_staged = cfg!(debug_assertions) && canonical_under(
-        folder, &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins")
-    );
-    if !packaged && !debug_staged { return false; }
-    let Ok(bytes) = fs::read(folder.join("manifest.json")) else { return false; };
-    let Ok(found) = serde_json::from_slice::<Value>(&bytes) else { return false; };
-    let Ok(reference) = serde_json::from_str::<Value>(expected) else { return false; };
+    let debug_staged = cfg!(debug_assertions)
+        && canonical_under(
+            folder,
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins"),
+        );
+    if !packaged && !debug_staged {
+        return false;
+    }
+    let Ok(bytes) = fs::read(folder.join("manifest.json")) else {
+        return false;
+    };
+    let Ok(found) = serde_json::from_slice::<Value>(&bytes) else {
+        return false;
+    };
+    let Ok(reference) = serde_json::from_str::<Value>(expected) else {
+        return false;
+    };
     found == reference
 }
-fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>,String> {
+fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>, String> {
     crate::plugin_permissions::declaration(&manifest.permissions)
 }
-pub fn permission_status(id: &str) -> Result<(bool, crate::plugin_permissions::PluginGrant, Vec<String>),String> {
-    let (manifest, folder) = discover().into_iter().find(|(m,_)| m.id==id)
+pub fn permission_status(
+    id: &str,
+) -> Result<(bool, crate::plugin_permissions::PluginGrant, Vec<String>), String> {
+    let (manifest, folder) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     let declared = declared(&manifest)?;
     let bundled = trusted_builtin(&manifest, &folder);
     let status = crate::plugin_permissions::status(id, &declared, bundled)?;
-    Ok((bundled,status,declared.into_iter().collect()))
+    Ok((bundled, status, declared.into_iter().collect()))
 }
-pub fn set_enabled(id: &str, enabled: bool) -> Result<(),String> {
-    let (manifest,folder) = discover().into_iter().find(|(m,_)|m.id==id)
+pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
+    let (manifest, folder) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     let declared = declared(&manifest)?;
-    crate::plugin_permissions::set_enabled(id,&declared,trusted_builtin(&manifest,&folder),enabled)?;
+    crate::plugin_permissions::set_enabled(
+        id,
+        &declared,
+        trusted_builtin(&manifest, &folder),
+        enabled,
+    )?;
     global().stop(id);
     Ok(())
 }
-pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(),String> {
-    let (manifest,folder) = discover().into_iter().find(|(m,_)|m.id==id)
+pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), String> {
+    let (manifest, folder) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     let declared = declared(&manifest)?;
-    crate::plugin_permissions::set_granted(id,&declared,trusted_builtin(&manifest,&folder),permission,grant)?;
+    crate::plugin_permissions::set_granted(
+        id,
+        &declared,
+        trusted_builtin(&manifest, &folder),
+        permission,
+        grant,
+    )?;
     global().stop(id);
     Ok(())
 }
-pub fn approve_install(id: &str) -> Result<(),String> {
-    let (manifest,folder) = discover().into_iter().find(|(m,_)|m.id==id)
+pub fn approve_install(id: &str) -> Result<(), String> {
+    let (manifest, folder) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     let declared = declared(&manifest)?;
-    crate::plugin_permissions::approve_install(id,&declared,trusted_builtin(&manifest,&folder))?;
+    crate::plugin_permissions::approve_install(id, &declared, trusted_builtin(&manifest, &folder))?;
     Ok(())
 }
 
@@ -171,11 +218,12 @@ fn discover() -> Vec<(PluginManifest, PathBuf)> {
             let Ok(manifest) = serde_json::from_slice::<PluginManifest>(&bytes) else {
                 continue;
             };
-            if !valid_id(&manifest.id) || manifest.name.len() > 128 ||
-                declared(&manifest).is_err() {
+            if !valid_id(&manifest.id) || manifest.name.len() > 128 || declared(&manifest).is_err()
+            {
                 continue;
             }
-            if OFFICIAL_IDS.contains(&manifest.id.as_str()) && !trusted_builtin(&manifest, &folder) {
+            if OFFICIAL_IDS.contains(&manifest.id.as_str()) && !trusted_builtin(&manifest, &folder)
+            {
                 // Reserved IDs cannot be installed by untrusted packages.
                 continue;
             }
@@ -223,7 +271,7 @@ pub fn catalog() -> Vec<PluginInfo> {
             let official = trusted_builtin(&manifest, &folder);
             let declared = declared(&manifest).unwrap_or_default();
             let state = crate::plugin_permissions::status(&manifest.id, &declared, official)
-                .unwrap_or_default();  // unreadable policy fails closed
+                .unwrap_or_default(); // unreadable policy fails closed
             PluginInfo {
                 id: manifest.id,
                 name: manifest.name,
@@ -256,9 +304,10 @@ impl Running {
     /// All host.* requests are authenticated by the Running process identity,
     /// never by a pluginId supplied in the message.
     fn host_method(&self, method: &str, p: &Value) -> Result<Value, String> {
-        let permitted = |name: &str| crate::plugin_permissions::allowed(
-            &self.plugin_id, &self.declared, self.official, name
-        ).unwrap_or(false);
+        let permitted = |name: &str| {
+            crate::plugin_permissions::allowed(&self.plugin_id, &self.declared, self.official, name)
+                .unwrap_or(false)
+        };
         let arg = |key: &str| {
             p.get(key)
                 .and_then(Value::as_str)

@@ -14,8 +14,13 @@ use std::{
 };
 
 pub const PERMISSIONS: &[&str] = &[
-    "storage", "secrets", "network", "filesystem.read",
-    "filesystem.write", "externalCommands", "ui.dialog",
+    "storage",
+    "secrets",
+    "network",
+    "filesystem.read",
+    "filesystem.write",
+    "externalCommands",
+    "ui.dialog",
 ];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -49,42 +54,61 @@ fn path() -> Result<PathBuf, String> {
 }
 fn load() -> Result<PolicyStore, String> {
     match fs::read(path()?) {
-        Ok(data) => serde_json::from_slice(&data).map_err(|e| format!("permission store unavailable: {e}")),
+        Ok(data) => {
+            serde_json::from_slice(&data).map_err(|e| format!("permission store unavailable: {e}"))
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(PolicyStore::default()),
         Err(e) => Err(e.to_string()),
     }
 }
 fn save(store: &PolicyStore) -> Result<(), String> {
     let destination = path()?;
-    let parent = destination.parent().ok_or("permission path missing parent")?;
+    let parent = destination
+        .parent()
+        .ok_or("permission path missing parent")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let buffer = serde_json::to_vec_pretty(store).map_err(|e| e.to_string())?;
     let temp = parent.join(format!("plugin-permissions-{}.tmp", std::process::id()));
     let result = (|| {
-        let mut out = fs::OpenOptions::new().create_new(true).write(true)
-            .open(&temp).map_err(|e| e.to_string())?;
+        let mut out = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temp)
+            .map_err(|e| e.to_string())?;
         out.write_all(&buffer).map_err(|e| e.to_string())?;
         out.sync_all().map_err(|e| e.to_string())?;
         // On Windows atomic replacement is implemented with platform-specific
         // APIs in the final storage backend; fail closed if rename is denied.
         fs::rename(&temp, &destination).map_err(|e| e.to_string())
     })();
-    if result.is_err() { let _ = fs::remove_file(&temp); }
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
     result
 }
 pub fn declaration(raw: &serde_json::Value) -> Result<BTreeSet<String>, String> {
-    let obj = raw.as_object().ok_or("manifest.permissions must be an object")?;
+    let obj = raw
+        .as_object()
+        .ok_or("manifest.permissions must be an object")?;
     let mut set = BTreeSet::new();
     for (permission, value) in obj {
         if !PERMISSIONS.contains(&permission.as_str()) {
             return Err(format!("unknown permission: {permission}"));
         }
-        if !value.is_boolean() { return Err(format!("invalid permission declaration: {permission}")); }
-        if value == true { set.insert(permission.clone()); }
+        if !value.is_boolean() {
+            return Err(format!("invalid permission declaration: {permission}"));
+        }
+        if value == true {
+            set.insert(permission.clone());
+        }
     }
     Ok(set)
 }
-fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String>, bundled: bool) -> PluginGrant {
+fn effective(
+    record: Option<&PluginGrant>,
+    declared: &BTreeSet<String>,
+    bundled: bool,
+) -> PluginGrant {
     if bundled {
         match record {
             Some(current) => PluginGrant {
@@ -117,32 +141,64 @@ pub fn status(id: &str, declared: &BTreeSet<String>, bundled: bool) -> Result<Pl
     let store = load()?;
     Ok(effective(store.plugins.get(id), declared, bundled))
 }
-pub fn allowed(id: &str, declared: &BTreeSet<String>, bundled: bool, permission: &str) -> Result<bool, String> {
-    if !declared.contains(permission) { return Ok(false); }
+pub fn allowed(
+    id: &str,
+    declared: &BTreeSet<String>,
+    bundled: bool,
+    permission: &str,
+) -> Result<bool, String> {
+    if !declared.contains(permission) {
+        return Ok(false);
+    }
     let state = status(id, declared, bundled)?;
     Ok(state.approved && state.enabled && state.granted.contains(permission))
 }
-pub fn approve_install(id: &str, declared: &BTreeSet<String>, bundled: bool) -> Result<PluginGrant, String> {
-    if bundled { return status(id, declared, true); }
+pub fn approve_install(
+    id: &str,
+    declared: &BTreeSet<String>,
+    bundled: bool,
+) -> Result<PluginGrant, String> {
+    if bundled {
+        return status(id, declared, true);
+    }
     mutate(id, declared, false, |record| {
-        if record.approved { return Err("plugin already approved".into()); }
+        if record.approved {
+            return Err("plugin already approved".into());
+        }
         record.approved = true;
         record.enabled = true;
         record.granted = declared.clone();
         Ok(())
     })
 }
-pub fn set_enabled(id: &str, declared: &BTreeSet<String>, bundled: bool, enabled: bool) -> Result<PluginGrant,String> {
+pub fn set_enabled(
+    id: &str,
+    declared: &BTreeSet<String>,
+    bundled: bool,
+    enabled: bool,
+) -> Result<PluginGrant, String> {
     mutate(id, declared, bundled, |record| {
-        if !record.approved { return Err("install approval required".into()); }
+        if !record.approved {
+            return Err("install approval required".into());
+        }
         record.enabled = enabled;
         Ok(())
     })
 }
-pub fn set_granted(id: &str, declared: &BTreeSet<String>, bundled: bool, permission: &str, granted: bool) -> Result<PluginGrant,String> {
-    if !declared.contains(permission) { return Err("undeclared permission".into()); }
+pub fn set_granted(
+    id: &str,
+    declared: &BTreeSet<String>,
+    bundled: bool,
+    permission: &str,
+    granted: bool,
+) -> Result<PluginGrant, String> {
+    if !declared.contains(permission) {
+        return Err("undeclared permission".into());
+    }
     mutate(id, declared, bundled, |record| {
-        if !record.approved { return Err("install approval required".into()); }
+        if !record.approved {
+            return Err("install approval required".into());
+        }
         if granted {
             record.denied.remove(permission);
             record.granted.insert(permission.into());
@@ -154,14 +210,16 @@ pub fn set_granted(id: &str, declared: &BTreeSet<String>, bundled: bool, permiss
     })
 }
 fn mutate(
-    id: &str, declared: &BTreeSet<String>, bundled: bool,
-    change: impl FnOnce(&mut PluginGrant)->Result<(),String>,
-) -> Result<PluginGrant,String> {
+    id: &str,
+    declared: &BTreeSet<String>,
+    bundled: bool,
+    change: impl FnOnce(&mut PluginGrant) -> Result<(), String>,
+) -> Result<PluginGrant, String> {
     let _guard = lock().lock().map_err(|_| "permission mutex poisoned")?;
     let mut store = load()?;
     let mut next = effective(store.plugins.get(id), declared, bundled);
     change(&mut next)?;
-    store.plugins.insert(id.to_string(),next.clone());
+    store.plugins.insert(id.to_string(), next.clone());
     save(&store)?;
     Ok(next)
 }
@@ -174,16 +232,16 @@ mod tests {
         let declared = declaration(&serde_json::json!({"secrets":true,"storage":true})).unwrap();
         let initial = effective(None, &declared, true);
         assert!(initial.enabled && initial.granted.contains("secrets"));
-        let mut revoked=initial.clone();
+        let mut revoked = initial.clone();
         revoked.denied.insert("secrets".into());
-        let next=effective(Some(&revoked), &declared, true);
+        let next = effective(Some(&revoked), &declared, true);
         assert!(!next.granted.contains("secrets"));
         assert!(next.granted.contains("storage"));
     }
     #[test]
     fn untrusted_identity_does_not_inherit_builtin_grants() {
-        let declared=declaration(&serde_json::json!({"secrets":true})).unwrap();
-        let state=effective(None,&declared,false);
+        let declared = declaration(&serde_json::json!({"secrets":true})).unwrap();
+        let state = effective(None, &declared, false);
         assert!(!state.approved && !state.enabled && state.granted.is_empty());
     }
     #[test]

@@ -42,11 +42,12 @@ export function usePluginCatalog(): PluginInfo[] {
   const [items, setItems] = useState<PluginInfo[]>([])
   useEffect(() => {
     let mounted = true
-    const refresh = () => void pluginCatalog()
-      .then((plugins) => {
-        if (mounted) setItems(plugins)
-      })
-      .catch(() => {})
+    const refresh = () =>
+      void pluginCatalog()
+        .then((plugins) => {
+          if (mounted) setItems(plugins)
+        })
+        .catch(() => {})
     refresh()
     window.addEventListener('fiex:plugins-changed', refresh)
     return () => {
@@ -57,4 +58,6 @@ export function usePluginCatalog(): PluginInfo[] {
   return items
 }
 
-export function refreshPluginCatalog() { window.dispatchEvent(new Event('fiex:plugins-changed')) }
+export function refreshPluginCatalog() {
+  window.dispatchEvent(new Event('fiex:plugins-changed'))
+}
