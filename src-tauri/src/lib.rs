@@ -15,6 +15,9 @@ mod macos_material;
 #[cfg(all(feature = "desktop", target_os = "linux"))]
 mod native_drag;
 pub mod operations;
+#[path = "../../sdk/rust/src/lib.rs"]
+pub mod plugin_sdk;
+pub mod plugin_host;
 pub mod recent;
 pub mod remote;
 pub mod search;

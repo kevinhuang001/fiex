@@ -399,6 +399,27 @@ async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result
     }
 }
 
+
+/// Provider-only listing. Unlike the legacy mirror this does not create empty
+/// placeholder files or mutate the core's cache/sync baseline.
+pub async fn provider_list(kind: &str, connection_id: &str, relative: &str) -> Result<serde_json::Value, String> {
+    if relative.split('/').any(|segment| segment == ".." || segment.contains('\\') || segment.contains('\0')) {
+        return Err("invalid remote relative path".into());
+    }
+    let conn = load_stored().into_iter().find(|c| c.id == connection_id && c.kind == kind)
+        .ok_or("connection not found")?;
+    let files = list_remote(&conn, relative).await?;
+    Ok(serde_json::Value::Array(files.into_iter().map(|file| {
+        serde_json::json!({
+            "nodeId":file.path,
+            "name":file.name,
+            "kind":if file.is_dir {"directory"} else {"file"},
+            "size":file.size,
+            "modified":file.modified
+        })
+    }).collect()))
+}
+
 pub async fn download(path: &str) -> Result<String, String> {
     let Some((conn, rel)) = connection_for_path(path) else {
         return Ok(path.into());
