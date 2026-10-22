@@ -1,39 +1,43 @@
 # 插件架构实现进度（开发分支）
 
-> **此文档对应 `feat/plugin-sdk-extraction` 开发分支，非正式发布说明。** Draft 0.1 协议在实装中允许修改；SDK 不保证 1.0 兼容性。
+> 当前开发目标：`refactor/fiex-external-submodules` / [Draft PR #5](https://github.com/kevinhuang001/fiex/pull/5)。本页是**开发状态**，不是已发布功能承诺。实验协议尚未冻结。
 
-## 本阶段已写入代码
+## 已落地的仓库边界
 
-- `sdk/rust/`：独立可发布的 Rust Native SDK 初版，Content-Length JSON-RPC framing、错误和服务循环、单元测试。
-- `sdk/ui/`：浏览器端 `@fiex/ui-sdk` 原型及宿主 MessageChannel 桥接口，支持 iframe 握手、请求/响应、事件、取消和类型。
-- `src-tauri/src/plugin_host.rs`：按 manifest 动态发现插件、独立子进程与握手验证，并支持插件→宿主的 `host.storage.*`、`host.secret.*` 反向请求。
-- 新增 `plugins/official/{webdav,smb,git}` 三个**不再链接 Fiex Core 的独立 crate**，Linux SDK/Git 测试及 WebDAV/SMB 编译已通过。旧 `src-tauri/src/bin/*` 过渡 sidecar 仍存在，主程序运行时和打包尚未完全切换到独立 crate，不能算最终解耦。
-- `src-tauri/src/plugin_storage.rs`：内核持有的普通 KV（作用域、配额、原子替换）与系统凭据库；旧连接密码尝试迁移并停止写入明文。
-- `src/components/ConnectionDialog.tsx`、`PreferencesDialog.tsx`、`ExplorerToolbar.tsx`：插件清单驱动连接选择、插件设置 Tab 和插件工具下拉，正式插件 iframe 加载仍待完成。
-- `remote::provider_list`：由远程 provider 直接列出资源元数据，不创建本地空占位文件；Core 可以据此接入 VFS。
+| 仓库 | 职责与测试 |
+| --- | --- |
+| [fiex](https://github.com/kevinhuang001/fiex) | Core 文件操作、通用插件安装和权限、原生进程宿主、UI、模拟 IPC 测试；仅引入 `sdk/` 子模块 |
+| [fiex-sdk](https://github.com/kevinhuang001/fiex-sdk) | Rust JSON-RPC 协议、Native SDK、TypeScript UI SDK，独立 CI |
+| [fiex-official-plugins](https://github.com/kevinhuang001/fiex-official-plugins) | Git、WebDAV、SMB、Archive、Checksum 插件实现及 Linux/macOS/Windows 打包；真实 WebDAV/SMB 服务器功能测试和调用真实 Core 宿主的集成测试 |
 
-## 规格审查发现的实际问题
+不内置、预安装、特殊信任任何官方插件。安装从 GitHub Release 手动选择 `.fiexplugin`，预览并确认权限，卸载、禁用、权限撤销均由 Core 统一管理。Native 插件仍是**未受操作系统强制沙箱隔离的进程**，宿主侧权限门控不能防止恶意插件直接使用进程的 OS 用户权限。
 
-1. **独立执行程序与逻辑独立不是一回事**：初期把旧 Core 业务调用移到另一进程可以验证 IPC，却依然有库依赖。正式发布前必须把三种后端移动到 `plugins/official/*` 独立 crate，使 Core 不链接任何实现。
-2. **目录列表必须明确快照/游标**：当前过渡 `fs.list` 只返回节点数组，并不满足 [v1 VFS 规范](02-VFS.md) 的 `{entries,nextCursor,snapshotToken}`；正式能力声明前需实现完整接口。
-3. **数据流不可塞 JSON**：当前过渡下载命令仍通过宿主本地路径/旧镜像工作；真正的 `fs.openRead/beginWrite/commitWrite` 必须使用受控二进制流和版本前置条件。
-4. **SDK 与宿主对外语义尚未冻结**：HostBridge 示例只提供握手、请求白名单，不代表安装/权限/独立 origin 和资源加载链已完成。不得让不可信 iframe 在主应用同源页面中运行。
-5. **缓存和同步仍在遗留 `remote.rs`**：直到 CacheManager/SyncEngine 落地并完成有效缓存迁移，不能声称 WebDAV/SMB 已经从内核完整拆分。
-6. **可靠取消和任务机制仍未迁移**：Native 进程同步调用无法提供完善的每任务取消，正在跟进独立 TaskManager。
+## 已实现的运行时迁移
 
-## 发布阻断项
+- Core `src-tauri/src/plugins/host.rs` 支持动态 manifest、原生进程握手、`plugin.invoke`、存储/凭据反向调用和生命周期管理。
+- Core `src-tauri/src/remote.rs` 的 `provider_list`、挂载目录枚举 `list_remote`、连接验证和文件下载已改为经**已安装、已授权**插件进程 RPC 执行，不再在 Core 内启动 WebDAV/SMB 网络客户端；未授权时不得静默回退。
+- `desktop.rs` 现在通过 `remote::list_listing` 将插件元数据映射为虚拟文件条目；目录列出时**不生成零字节本地占位文件**。只在显式下载、预览或拷贝时按需物化。
+- WebDAV / SMB 插件均支持 `connection.validate`、游标式 `fs.list`、`fs.readSmall`、`fs.download`；各自的真实服务器测试位于**官方插件仓库**。
+- `PluginPanelHost.tsx` 使用 sandboxed iframe（opaque origin）、限定 CSP、MessageChannel 桥；对话框权限由 Core 检查。插件配置和工具通过 manifest 加载。
+- Core CI 不运行 WebDAV/SMB 服务、不构建官方插件；官方插件仓库 CI 拥有协议/服务端测试，避免职责回流。
 
-- [ ] SDK、Native 宿主、三个二进制跨平台 `cargo fmt/clippy/test` 和完整构建通过。**Linux 独立 crate CI 已通过，三平台待测。**
-- [ ] 旧 `remote.rs` / `git*.rs` 不再被 Core 链接，插件可独立构建和打包。
-- [ ] 官方插件不在 Host 实现中硬编码列表；第三方 manifest 动态安装/能力授权可用。
-- [ ] WebDAV/SMB 所有目录与文件访问都使用 Core VFS，无零字节占位，连接配置/凭据安全迁移完成。
-- [ ] Git 工具栏和历史虚拟目录通过同一插件 API 接入，无专用 Tauri Git 命令。
-- [ ] 内核级缓存、选择性同步、冲突解决、任务进度、取消、恢复真正落地。
-- [ ] iframe UI 独立 origin、CSP/权限、构建产物加载及真实活动中心集成。
-- [ ] 原有文件浏览、Git、WebDAV、SMB 行为与三平台打包测试不回退。
+## 尚未完成：不能宣称全面解耦
 
-- [ ] OAuth Broker（PKCE/state/callback、Refresh Token 轮换）及安装授权 UI 完整落地；目前只实现 SecretStore 与账户级 KV 基础。
+1. **受控二进制流**：目前 `fs.download` 经 Core 指定本地暂存文件路径，仍是过渡式原生路径交接；`fs.readSmall` 的预览体采用限额 Base64。尚未实现 `fs.openRead / beginWrite / commitWrite` 双向流、传输版本条件与可取消任务，也没有限制插件只能写入指定临时文件的 OS 沙箱。
+2. **任意第三方连接 Provider**：连接表单由 manifest 提供，但 Core 连接持久化仍基于旧 WebDAV/SMB 两种字段和种类、与 `org.fiex.<kind>` 的旧映射；无法保证任意新连接插件可用，须把 schema、加密密钥名及 provider ID 完全动态化。
+3. **Git**：Core 旧 `git.rs`、`git_history.rs`、`git_remote.rs` 及若干 Tauri Git 命令仍在使用；官方 Git 插件虽独立实现，UI 尚未彻底迁往插件 API。
+4. **缓存/同步引擎**：Core 的远程连接注册、缓存元数据及下载历史仍在 `remote.rs`，需拆分 CacheManager/SyncEngine，具备断点续传、离线冲突与版本判定。
+5. **进程隔离**：缺少按 OS（Windows/macOS/Linux）强制约束 Native 插件的沙箱；未授予的系统文件、网络和外部命令仍可能被插件进程直接访问。
+6. **SDK 规范及生命周期**：宿主/SDK 契约、任务进度/可靠取消、OAuth Broker（PKCE/state/callback/refresh）、插件升级迁移、安全安装路径、全链路集成/录屏回归仍需补齐。
+7. **依赖清理**：Core Cargo.lock 和部分旧 crate 声明尚未清理；应待 Rust 全平台构建稳定后统一更新 `Cargo.lock` 并以 `--locked` 回归。
 
-## 稳定性策略
+## 发布准则
 
-在上述阻断项完成之前，所有 protocol 标注为 `experimental-0.1`，未来可以破坏性修改；**不要向第三方承诺 v1.0 的向后兼容性**。首个正式版必须附完整 JSON Schema、行为测试、错误码和安全规则。
+- [ ] SDK、Core（含主程序）及独立插件在 Linux、macOS、Windows 的检查全部成功。
+- [ ] 官方插件真实 WebDAV/SMB 功能测试与真实 Core Host 集成通过。
+- [ ] 所有 Git/远程协议后端仅存在于插件仓库，Core 不再有专有 Tauri 命令或协议依赖。
+- [ ] 安装、授权、禁用、撤销与未安装失败回归均通过，Core 不包含 `plugins/` 子模块或预装包。
+- [ ] 真实 VFS 数据传输、缓存与 UI 无回退，支持第三方自定义 Provider。
+- [ ] 编写稳定 schema、协议兼容性/安全准则并通过完整回归测试。
+
+在所有发布条件满足前继续保留 Draft PR，不将实验性接口称为 v1.0。
