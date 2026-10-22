@@ -146,9 +146,9 @@ fn declared_connection_fields(
         .get("connectionFactories")
         .and_then(serde_json::Value::as_array)
         .and_then(|factories| {
-            factories.iter().find(|factory| {
-                factory.get("id").and_then(serde_json::Value::as_str) == Some(kind)
-            })
+            factories
+                .iter()
+                .find(|factory| factory.get("id").and_then(serde_json::Value::as_str) == Some(kind))
         })
         .ok_or("插件未声明请求的连接类型")?;
     let mut fields = Vec::new();
