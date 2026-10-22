@@ -190,6 +190,21 @@ fn save_meta(conn: &StoredConnection, meta: &RemoteMeta) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+/// Explicitly pass credentials only to the selected, authorized provider
+/// subprocess; the connection registry itself never serializes passwords.
+fn provider_config(conn: &StoredConnection) -> serde_json::Value {
+    serde_json::json!({
+        "url": conn.url,
+        "host": conn.host,
+        "port": conn.port,
+        "share": conn.share,
+        "base": conn.base,
+        "username": conn.username,
+        "password": conn.password,
+        "allowInvalidCerts": conn.allow_invalid_certs
+    })
+}
+
 fn public(conn: &StoredConnection) -> ConnectionInfo {
     let mount = mount_path(conn);
     let _ = fs::create_dir_all(&mount);
@@ -277,6 +292,15 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         id
     };
     let conn = items.iter().find(|c| c.id == id).ok_or("连接不存在")?;
+    let plugin_id = format!("org.fiex.{}", conn.kind);
+    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
+        return Err("连接插件尚未安装、启用或未获得网络授权".into());
+    }
+    crate::plugin_host::global().invoke(
+        &plugin_id,
+        "connection.validate",
+        serde_json::json!({"connection": provider_config(conn)}),
+    )?;
     if !conn.password.is_empty() {
         crate::plugin_storage::secret_set(
             &format!("org.fiex.{kind}"),
@@ -379,19 +403,15 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("remote plugin network permission not granted".into());
     }
-    let config = serde_json::json!({
-        "url": conn.url,
-        "host": conn.host,
-        "port": conn.port,
-        "share": conn.share,
-        "base": conn.base,
-        "username": conn.username,
-        "password": conn.password,
-        "allowInvalidCerts": conn.allow_invalid_certs
-    });
+    let config = provider_config(conn);
     let mut files = Vec::new();
     let mut cursor: Option<String> = None;
+    let mut page_count = 0usize;
     loop {
+        page_count += 1;
+        if page_count > 1000 {
+            return Err("provider sent too many pages".into());
+        }
         let page = crate::plugin_host::global().invoke(
             &plugin_id,
             "fs.list",
@@ -519,6 +539,12 @@ pub async fn list_listing(
 }
 
 async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
+    // Legacy download transport cannot bypass a revoked plugin authorization.
+    // It will be removed when the SDK binary stream transport is in place.
+    let plugin_id = format!("org.fiex.{}", conn.kind);
+    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
+        return Err("remote plugin network permission not granted".into());
+    }
     if conn.kind == "webdav" {
         webdav_get(conn, rel, dest).await
     } else {
@@ -553,16 +579,7 @@ pub async fn provider_list(
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("remote plugin network permission not granted".into());
     }
-    let config = serde_json::json!({
-        "url": conn.url,
-        "host": conn.host,
-        "port": conn.port,
-        "share": conn.share,
-        "base": conn.base,
-        "username": conn.username,
-        "password": conn.password,
-        "allowInvalidCerts": conn.allow_invalid_certs
-    });
+    let config = provider_config(conn);
     crate::plugin_host::global().invoke(
         &plugin_id,
         "fs.list",
