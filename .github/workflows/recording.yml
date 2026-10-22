@@ -16,6 +16,8 @@ jobs:
         os: [ubuntu-24.04, macos-26-intel]
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
       - name: Install image formatters
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ntfs-3g e2fsprogs btrfs-progs
@@ -56,6 +58,8 @@ jobs:
             experimental: false
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
       - uses: actions/setup-node@v4
         with:
           node-version: 22

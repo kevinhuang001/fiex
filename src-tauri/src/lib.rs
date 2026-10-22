@@ -23,8 +23,7 @@ pub mod plugin_host;
 pub mod plugin_installer;
 #[path = "plugins/permissions.rs"]
 pub mod plugin_permissions;
-#[path = "../../sdk/rust/src/lib.rs"]
-pub mod plugin_sdk;
+pub use fiex_plugin_sdk as plugin_sdk;
 #[path = "plugins/storage.rs"]
 pub mod plugin_storage;
 #[path = "core/recent.rs"]

@@ -35,6 +35,7 @@ usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs"
 tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
+fiex-plugin-sdk = { path = "../sdk/rust" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
 tauri-plugin-drag = { version = "2.1.1", optional = true }
 rust-fs-ntfs = { version = "0.10", optional = true }

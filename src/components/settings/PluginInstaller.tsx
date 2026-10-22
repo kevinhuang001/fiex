@@ -29,7 +29,7 @@ interface InstallPreview {
  * No plugin executable is started during preview.
  */
 export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
-  const [repository, setRepository] = useState('')
+  const [repository, setRepository] = useState('kevinhuang001/fiex-official-plugins')
   const [busy, setBusy] = useState(false)
   const [assets, setAssets] = useState<string[]>([])
   const [preview, setPreview] = useState<InstallPreview | null>(null)
