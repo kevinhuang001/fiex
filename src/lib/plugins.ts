@@ -26,6 +26,8 @@ export interface PluginInfo {
   approved: boolean
   declaredPermissions: string[]
   grantedPermissions: string[]
+  requestedNetworkDomains: string[]
+  allowedNetworkDomains: string[]
   backendAvailable: boolean
   contributes?: {
     connectionFactories?: Array<{ id: string; title: string; fields: PluginField[] }>

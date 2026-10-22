@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Database, KeyRound, Puzzle, ShieldCheck } from 'lucide-react'
+import { Database, Globe2, KeyRound, Puzzle, ShieldCheck } from 'lucide-react'
 import { call } from '@/lib/api'
 import { usePluginCatalog, refreshPluginCatalog, type PluginField } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
@@ -22,6 +22,8 @@ export function PluginSettings() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [permissionToApprove, setPermissionToApprove] = useState<string | null>(null)
+  const [domainDraft, setDomainDraft] = useState('')
+  const [domainToApprove, setDomainToApprove] = useState<string | null>(null)
   const [confirmInstall, setConfirmInstall] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
   const active = plugins.find((p) => p.id === selected) || plugins[0]
@@ -78,6 +80,25 @@ export function PluginSettings() {
     try {
       await call('plugin_set_permission', { pluginId: active.id, permission, granted })
       setPermissionToApprove(null)
+      refreshPluginCatalog()
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const updateDomain = async (domain: string, granted: boolean) => {
+    if (!active) return
+    if (granted && domainToApprove !== domain) {
+      setDomainToApprove(domain)
+      return
+    }
+    setBusy(true)
+    setMessage('')
+    try {
+      await call('plugin_set_network_domain', { pluginId: active.id, domain, granted })
+      setDomainToApprove(null)
+      setDomainDraft('')
       refreshPluginCatalog()
     } catch (error) {
       setMessage(String(error))
@@ -231,6 +252,58 @@ export function PluginSettings() {
                     <p className="sidebar-hint">此插件未声明受控宿主权限。</p>
                   )}
                 </div>
+                {active.declaredPermissions.includes('network') && (
+                  <div className="plugin-permissions">
+                    <div className="plugin-permission-heading">
+                      <strong><Globe2 size={15} /> 网络域名白名单</strong>
+                      <small>仅匹配完整主机名，不接受通配符。变更后会重启插件进程。</small>
+                    </div>
+                    <p className="sidebar-hint">
+                      插件声明的域名会在授权时列出；用户也可为自己的 NAS 或服务器单独添加域名。
+                      未在白名单中的目标必须拒绝访问。
+                    </p>
+                    {[...new Set([
+                      ...(active.requestedNetworkDomains || []),
+                      ...(active.allowedNetworkDomains || []),
+                    ])].sort().map((domain) => (
+                      <label className="plugin-permission-item" key={domain}>
+                        <span>
+                          {domain}
+                          {(active.requestedNetworkDomains || []).includes(domain) && (
+                            <small> · 插件申请</small>
+                          )}
+                        </span>
+                        <input
+                          aria-label={`允许访问 ${domain}`}
+                          type="checkbox"
+                          checked={(active.allowedNetworkDomains || []).includes(domain)}
+                          disabled={busy || !active.approved || !active.grantedPermissions.includes('network')}
+                          onChange={(event) => void updateDomain(domain, event.target.checked)}
+                        />
+                      </label>
+                    ))}
+                    <div className="plugin-install-row">
+                      <input
+                        aria-label="添加精确的域名"
+                        placeholder="例如 nas.local 或 api.example.com"
+                        value={domainDraft}
+                        disabled={busy || !active.approved || !active.grantedPermissions.includes('network')}
+                        onChange={(event) => setDomainDraft(event.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={busy || !domainDraft.trim() || !active.approved || !active.grantedPermissions.includes('network')}
+                        onClick={() => setDomainToApprove(domainDraft.trim())}
+                      >
+                        添加域名
+                      </Button>
+                    </div>
+                    <p className="sidebar-hint">
+                      不允许 *.example.com、协议前缀或端口。域名只授权该插件，不影响其他插件。
+                    </p>
+                  </div>
+                )}
                 {fields.map((field: PluginField) => (
                   <label key={field.id} className="plugin-settings-field">
                     <span>
@@ -282,6 +355,17 @@ export function PluginSettings() {
           </div>
         </div>
       </div>
+      <Modal open={Boolean(domainToApprove)} title="授权插件访问网络域名" onClose={() => setDomainToApprove(null)}>
+        <p>
+          确认允许「{active?.name}」访问 {domainToApprove} 吗？仅授权此精确域名，不包括它的子域名。
+        </p>
+        <footer className="plugin-consent-actions">
+          <Button variant="outline" onClick={() => setDomainToApprove(null)}>取消</Button>
+          <Button disabled={busy} onClick={() => domainToApprove && void updateDomain(domainToApprove, true)}>
+            允许此域名
+          </Button>
+        </footer>
+      </Modal>
       <Modal
         open={Boolean(permissionToApprove)}
         title="重新授予插件权限"
@@ -327,6 +411,15 @@ export function PluginSettings() {
             <li key={permission}>{permissionLabels[permission] || permission}</li>
           ))}
         </ul>
+        {Boolean(active?.requestedNetworkDomains.length) && (
+          <>
+            <strong>申请访问的域名</strong>
+            <ul>
+              {active?.requestedNetworkDomains.map((domain) => <li key={domain}>{domain}</li>)}
+            </ul>
+            <p className="sidebar-hint">同意后将只授权以上精确域名，你可以逐个撤销。</p>
+          </>
+        )}
         <footer className="plugin-consent-actions">
           <Button variant="outline" onClick={() => setConfirmInstall(false)}>
             取消

@@ -20,6 +20,7 @@ interface InstallPreview {
   version: string
   author?: { name: string; url?: string }
   permissions: string[]
+  requestedNetworkDomains: string[]
   repository: string
 }
 
@@ -168,6 +169,17 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
               <span>无需宿主权限</span>
             )}
           </div>
+          {!!preview?.requestedNetworkDomains.length && (
+            <>
+              <strong>插件申请的网络域名</strong>
+              <div className="plugin-install-permissions">
+                {preview.requestedNetworkDomains.map((domain) => (
+                  <div key={domain}><Shield size={14} />{domain}</div>
+                ))}
+              </div>
+              <p className="sidebar-hint">安装确认会同时授权这些精确域名，之后可以在权限管理中逐一撤销。</p>
+            </>
+          )}
           <p className="sidebar-hint">
             所有插件（包括 Fiex 官方发布的插件）使用同样的授权流程。插件为 Native
             程序；在系统沙箱完善前，权限控制仅约束宿主代理的操作，不能阻止插件直接进行系统调用。
