@@ -16,21 +16,6 @@ name = "fiex"
 path = "src/main.rs"
 required-features = ["desktop"]
 
-[[bin]]
-name = "fiex-plugin-webdav"
-path = "src/bin/fiex-plugin-webdav.rs"
-required-features = ["desktop"]
-
-[[bin]]
-name = "fiex-plugin-smb"
-path = "src/bin/fiex-plugin-smb.rs"
-required-features = ["desktop"]
-
-[[bin]]
-name = "fiex-plugin-git"
-path = "src/bin/fiex-plugin-git.rs"
-required-features = ["desktop"]
-
 [features]
 default = ["desktop", "usbfs"]
 desktop = [

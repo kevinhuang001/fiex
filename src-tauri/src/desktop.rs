@@ -1371,6 +1371,9 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            if let Ok(resources) = app.path().resource_dir() {
+                crate::plugin_host::set_bundle_root(resources);
+            }
             #[cfg(feature = "ci-driver")]
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]

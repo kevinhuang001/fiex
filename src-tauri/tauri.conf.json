@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && node scripts/package-plugins.mjs",
     "frontendDist": "../dist"
   },
   "app": {
@@ -27,10 +27,18 @@
         "noRedirectionBitmap": true,
         "dragDropEnabled": true,
         "windowEffects": {
-          "effects": ["sidebar", "acrylic"],
+          "effects": [
+            "sidebar",
+            "acrylic"
+          ],
           "state": "active",
           "radius": 16,
-          "color": [235, 240, 248, 75]
+          "color": [
+            235,
+            240,
+            248,
+            75
+          ]
         }
       }
     ],
@@ -39,7 +47,9 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["**"],
+          "allow": [
+            "**"
+          ],
           "requireLiteralLeadingDot": false
         }
       }
@@ -64,8 +74,14 @@
     "windows": {
       "nsis": {
         "displayLanguageSelector": true,
-        "languages": ["English", "SimpChinese"]
+        "languages": [
+          "English",
+          "SimpChinese"
+        ]
       }
-    }
+    },
+    "resources": [
+      "plugins/"
+    ]
   }
 }

@@ -46,6 +46,10 @@ fn valid_id(s: &str) -> bool {
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
+static BUNDLED_ROOT: OnceLock<PathBuf> = OnceLock::new();
+pub fn set_bundle_root(resource_root: PathBuf) {
+    let _ = BUNDLED_ROOT.set(resource_root.join("plugins"));
+}
 fn roots() -> Vec<PathBuf> {
     let mut all = Vec::new();
     if let Some(v) = std::env::var_os("FIEX_PLUGIN_DIR") {
@@ -54,6 +58,9 @@ fn roots() -> Vec<PathBuf> {
     if let Some(d) = dirs::data_local_dir() {
         all.push(d.join("fiex").join("plugins"));
     }
+    if let Some(bundled) = BUNDLED_ROOT.get() { all.push(bundled.clone()); }
+    let dev_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins");
+    if dev_bundled.is_dir() { all.push(dev_bundled); }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             all.push(dir.join("plugins"));
