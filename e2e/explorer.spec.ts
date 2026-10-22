@@ -563,8 +563,8 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
   await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.getByRole('button', { name: '插件', exact: true }).click()
-  await expect(page.getByText('从 GitHub 安装插件')).toBeVisible()
+  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await expect(page.getByText('从 GitHub 安装插件', { exact: true })).toBeVisible()
   await expect(page.getByRole('textbox', { name: 'GitHub 插件仓库' })).toBeVisible()
 })
 
@@ -659,7 +659,9 @@ test('settings and tag dialogs keep their compact widths', async ({ page }) => {
   expect(dialogWidth).toBeLessThanOrEqual(420)
 })
 
-test('installed plugin contributes submenu and isolated iframe modal with context bridge', async ({ page }) => {
+test('installed plugin contributes submenu and isolated iframe modal with context bridge', async ({
+  page,
+}) => {
   await page.goto('/?demo&pluginFixture')
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
