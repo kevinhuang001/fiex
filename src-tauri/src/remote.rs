@@ -450,10 +450,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .and_then(serde_json::Value::as_str)
             .is_none_or(str::is_empty);
         if empty {
-            if let Some(value) = previous
-                .as_ref()
-                .and_then(|conn| conn.settings.get(key))
-            {
+            if let Some(value) = previous.as_ref().and_then(|conn| conn.settings.get(key)) {
                 settings.insert(key.clone(), value.clone());
             }
         }
@@ -463,9 +460,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .and_then(serde_json::Value::as_str)
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
-        .or_else(|| {
-            (!input.password.is_empty()).then_some(input.password.clone())
-        })
+        .or_else(|| (!input.password.is_empty()).then_some(input.password.clone()))
         .or_else(|| previous.as_ref().map(|conn| conn.password.clone()))
         .unwrap_or_default();
     let record = StoredConnection {
@@ -492,7 +487,11 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     )?;
     let scope = format!("connection-{id}");
     for field in &record.secret_keys {
-        if let Some(value) = record.settings.get(field).and_then(serde_json::Value::as_str) {
+        if let Some(value) = record
+            .settings
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+        {
             if !value.is_empty() {
                 crate::plugin_storage::secret_set(&plugin_id, &scope, field, value)?;
             }
