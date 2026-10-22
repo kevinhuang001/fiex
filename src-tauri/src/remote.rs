@@ -71,7 +71,6 @@ pub struct ConnectionInfo {
 #[derive(Clone)]
 struct RemoteFile {
     name: String,
-    path: String,
     is_dir: bool,
     size: u64,
     modified: u64,
@@ -388,7 +387,7 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("remote plugin network permission not granted".into());
     }
-    let config = provider_config(&conn);
+    let config = provider_config(conn);
     let mut files = Vec::new();
     let mut cursor: Option<String> = None;
     let mut page_count = 0usize;
@@ -428,11 +427,6 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
             }
             files.push(RemoteFile {
                 name: name.into(),
-                path: entry
-                    .get("nodeId")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or(name)
-                    .into(),
                 is_dir: kind == "directory",
                 size: entry
                     .get("size")
