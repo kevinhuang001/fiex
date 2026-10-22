@@ -29,6 +29,7 @@ export interface MarketplacePlugin {
   author?: { name: string; url?: string }
   permissions: string[]
   requestedNetworkDomains: string[]
+  commands: string[]
   asset: string
   repository: string
 }
@@ -47,6 +48,8 @@ export interface PluginInfo {
   grantedPermissions: string[]
   requestedNetworkDomains: string[]
   allowedNetworkDomains: string[]
+  requestedCommands: string[]
+  allowedCommands: string[]
   backendAvailable: boolean
   contributions?: {
     connections?: Array<{ id: string; title: string; fields: PluginField[] }>

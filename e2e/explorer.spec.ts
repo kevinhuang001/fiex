@@ -648,6 +648,8 @@ test('installed plugin rows expose permissions and settings', async ({ page }) =
   await expect(permissions).toContainText('读取文件')
   await expect(permissions).toContainText('修改文件')
   await expect(permissions).toContainText('网络访问')
+  await expect(permissions).toContainText('命令')
+  await expect(permissions).toContainText('git')
   await expect(permissions).toContainText('github.com')
   await permissions.getByRole('textbox', { name: '添加允许的域名' }).fill('gitea.example.com')
   await permissions.getByRole('button', { name: '添加域名', exact: true }).click()

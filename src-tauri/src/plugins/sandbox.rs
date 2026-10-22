@@ -197,7 +197,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     let profile = Profile {
         read_paths: policy.read_roots.clone(),
         write_paths: policy.write_roots.clone(),
-        allow_exec: true,
+        allow_exec: false,
         use_netns: false,
         use_pidns: false,
         seccomp_profile: if policy.network {
@@ -361,7 +361,7 @@ pub fn run_wrapper_if_requested() {
     let profile = arapuca::Profile {
         read_paths: policy.read_paths.into_iter().map(Into::into).collect(),
         write_paths: policy.write_paths.into_iter().map(Into::into).collect(),
-        allow_exec: true,
+        allow_exec: false,
         // On Windows, `use_netns` controls the AppContainer internet capability.
         use_netns: !policy.network,
         cgroup_policy: arapuca::CgroupPolicy::BestEffort,

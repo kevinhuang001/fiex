@@ -132,6 +132,8 @@ interface DemoPlugin {
   grantedPermissions: string[]
   requestedNetworkDomains: string[]
   allowedNetworkDomains: string[]
+  requestedCommands?: string[]
+  allowedCommands?: string[]
   author?: { name: string; url?: string }
   contributions?: Record<string, unknown>
 }
@@ -194,10 +196,12 @@ const fixturePlugins: DemoPlugin[] = [
     approved: true,
     backendAvailable: true,
     capabilities: ['filesystem', 'toolbar', 'commands'],
-    declaredPermissions: ['filesystem.read', 'filesystem.write', 'network'],
-    grantedPermissions: ['filesystem.read', 'filesystem.write', 'network'],
+    declaredPermissions: ['filesystem.read', 'filesystem.write', 'network', 'commands'],
+    grantedPermissions: ['filesystem.read', 'filesystem.write', 'network', 'commands'],
     requestedNetworkDomains: ['github.com'],
     allowedNetworkDomains: ['github.com'],
+    requestedCommands: ['git'],
+    allowedCommands: ['git'],
     author: { name: 'Fiex Contributors' },
     contributions: {
       toolbar: [
@@ -279,6 +283,7 @@ const marketplace = [
     author: { name: 'Fiex Contributors' },
     permissions: ['filesystem.read', 'network'],
     requestedNetworkDomains: [],
+    commands: [],
     asset: 'webdav-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
     capabilities: ['filesystem', 'connection'],
@@ -304,6 +309,7 @@ const marketplace = [
     author: { name: 'Fiex Contributors' },
     permissions: ['filesystem.read', 'network'],
     requestedNetworkDomains: [],
+    commands: [],
     asset: 'smb-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
     capabilities: ['filesystem', 'connection'],
@@ -506,6 +512,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       }
       return null
     }
+    case 'plugin_set_command':
+      return null
     case 'plugin_set_network_domain': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {

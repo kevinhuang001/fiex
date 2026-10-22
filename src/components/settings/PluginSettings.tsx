@@ -10,6 +10,7 @@ import {
   Puzzle,
   Settings2,
   ShieldCheck,
+  Terminal,
   Trash2,
   X,
 } from 'lucide-react'
@@ -28,11 +29,13 @@ const permissionLabels: Record<string, string> = {
   'filesystem.read': '读取文件',
   'filesystem.write': '修改文件',
   network: '网络访问',
+  commands: '执行命令',
 }
 const permissionHints: Record<string, string> = {
   'filesystem.read': '读取你选择的目录和文件内容。',
   'filesystem.write': '创建、修改和删除用户文件。',
   network: '只允许连接下方白名单中的精确域名。',
+  commands: '只能通过宿主代理执行下方允许的命令；插件进程本身不能执行命令。',
 }
 
 function iconFor(_id: string) {
@@ -86,6 +89,7 @@ export function PluginSettings() {
   const [permissionToApprove, setPermissionToApprove] = useState<string | null>(null)
   const [domainDraft, setDomainDraft] = useState('')
   const [domainToApprove, setDomainToApprove] = useState<string | null>(null)
+  const [commandDraft, setCommandDraft] = useState('')
   const [confirmInstall, setConfirmInstall] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState<PluginInfo | null>(null)
 
@@ -180,6 +184,19 @@ export function PluginSettings() {
       await call('plugin_set_network_domain', { pluginId: plugin.id, domain, granted })
       setDomainToApprove(null)
       setDomainDraft('')
+      refreshPluginCatalog()
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const updateCommand = async (plugin: PluginInfo, command: string, granted: boolean) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await call('plugin_set_command', { pluginId: plugin.id, command, granted })
+      setCommandDraft('')
       refreshPluginCatalog()
     } catch (error) {
       setMessage(String(error))
@@ -507,6 +524,86 @@ export function PluginSettings() {
                     }}
                   >
                     添加域名
+                  </Button>
+                </div>
+              </section>
+            )}
+            {permissionsFor.declaredPermissions.includes('commands') && (
+              <section className="plugin-domain-section">
+                <div className="plugin-section-title">
+                  <strong>
+                    <Terminal size={15} /> 允许的命令
+                  </strong>
+                  <small>插件只能请求宿主执行这里列出的可执行文件。</small>
+                </div>
+                <div className="plugin-domain-list">
+                  {[
+                    ...new Set([
+                      ...(permissionsFor.requestedCommands || []),
+                      ...(permissionsFor.allowedCommands || []),
+                    ]),
+                  ]
+                    .sort()
+                    .map((command) => {
+                      const allowed = (permissionsFor.allowedCommands || []).includes(command)
+                      const requested = (permissionsFor.requestedCommands || []).includes(command)
+                      return (
+                        <div className="plugin-domain-row" key={command}>
+                          <span>
+                            <code>{command}</code>
+                            {requested && <small>插件申请</small>}
+                            {!allowed && <small className="muted">未授权</small>}
+                          </span>
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            aria-label={allowed ? `移除命令 ${command}` : `授权命令 ${command}`}
+                            title={allowed ? '移除命令' : '授权命令'}
+                            disabled={
+                              busy || !permissionsFor.grantedPermissions.includes('commands')
+                            }
+                            onClick={() => void updateCommand(permissionsFor, command, !allowed)}
+                          >
+                            {allowed ? <X size={13} /> : <Plus size={13} />}
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  {![
+                    ...(permissionsFor.requestedCommands || []),
+                    ...(permissionsFor.allowedCommands || []),
+                  ].length && <p className="sidebar-hint">尚未允许任何命令。</p>}
+                </div>
+                <div className="plugin-domain-add">
+                  <input
+                    aria-label="添加允许的命令"
+                    placeholder="git、ffmpeg、tar"
+                    value={commandDraft}
+                    disabled={busy || !permissionsFor.grantedPermissions.includes('commands')}
+                    onChange={(event) => setCommandDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        const command = commandDraft.trim()
+                        if (command) void updateCommand(permissionsFor, command, true)
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      busy ||
+                      !commandDraft.trim() ||
+                      !permissionsFor.grantedPermissions.includes('commands')
+                    }
+                    onClick={() => {
+                      const command = commandDraft.trim()
+                      if (command) void updateCommand(permissionsFor, command, true)
+                    }}
+                  >
+                    添加命令
                   </Button>
                 </div>
               </section>

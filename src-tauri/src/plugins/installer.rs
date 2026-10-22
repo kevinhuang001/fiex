@@ -42,6 +42,7 @@ pub struct InstallPreview {
     pub author: Option<plugin_host::PluginAuthor>,
     pub permissions: Vec<String>,
     pub requested_network_domains: Vec<String>,
+    pub commands: Vec<String>,
     pub repository: String,
 }
 
@@ -58,6 +59,7 @@ pub struct MarketplacePlugin {
     pub permissions: Vec<String>,
     #[serde(default)]
     pub requested_network_domains: Vec<String>,
+    pub commands: Vec<String>,
     pub asset: String,
     pub repository: String,
 }
@@ -298,6 +300,18 @@ fn catalog_entries(
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let commands = plugin
+            .get("commands")
+            .and_then(serde_json::Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .filter(|command| plugin_permissions::valid_command(command))
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let requested_network_domains = plugin
             .get("networkDomains")
             .and_then(serde_json::Value::as_array)
@@ -343,6 +357,7 @@ fn catalog_entries(
                 .and_then(|value| serde_json::from_value(value).ok()),
             permissions,
             requested_network_domains,
+            commands,
             asset: asset.into(),
             repository: repository.into(),
         });
@@ -378,6 +393,7 @@ fn fallback_marketplace(
             author: None,
             permissions: Vec::new(),
             requested_network_domains: Vec::new(),
+            commands: Vec::new(),
             asset: name.into(),
             repository: repository.into(),
         });
@@ -492,6 +508,7 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
         author: manifest.author.clone(),
         permissions,
         requested_network_domains,
+        commands: manifest.permissions.commands.allow.clone(),
         repository: repository.into(),
     };
     let mut map = pending().lock().map_err(|_| "installer locked")?;
@@ -524,6 +541,7 @@ pub fn install(ticket: &str) -> Result<String, String> {
         &id,
         &declared,
         &staged.manifest.permissions.network.domains,
+        &staged.manifest.permissions.commands.allow,
     ) {
         let _ = fs::remove_dir_all(&destination);
         return Err(error);

@@ -284,6 +284,10 @@ fn plugin_set_permission(
     crate::plugin_host::set_permission(&plugin_id, &permission, granted)
 }
 #[tauri::command]
+fn plugin_set_command(plugin_id: String, command: String, granted: bool) -> Result<(), String> {
+    crate::plugin_host::set_command(&plugin_id, &command, granted)
+}
+#[tauri::command]
 fn plugin_set_network_domain(
     plugin_id: String,
     domain: String,
@@ -1396,6 +1400,7 @@ pub fn run() {
             plugin_uninstall,
             plugin_set_enabled,
             plugin_set_permission,
+            plugin_set_command,
             plugin_set_network_domain,
             plugin_approve_install,
             plugin_storage_get,

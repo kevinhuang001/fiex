@@ -17,7 +17,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-pub const PERMISSIONS: &[&str] = &["filesystem.read", "filesystem.write", "network"];
+pub const PERMISSIONS: &[&str] = &["filesystem.read", "filesystem.write", "network", "commands"];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +31,8 @@ pub struct PluginGrant {
     /// Exact outbound hostnames approved by the user. No wildcards.
     #[serde(default)]
     pub network_domains: BTreeSet<String>,
+    #[serde(default)]
+    pub commands: BTreeSet<String>,
 }
 #[derive(Default, Serialize, Deserialize)]
 struct PolicyStore {
@@ -80,6 +82,51 @@ fn save(state: &PolicyStore) -> Result<(), String> {
     }
     result
 }
+pub fn valid_command(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name != "."
+        && name != ".."
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+pub fn validate_commands(
+    declared: &BTreeSet<String>,
+    commands: &[String],
+) -> Result<BTreeSet<String>, String> {
+    if !commands.is_empty() && !declared.contains("commands") {
+        return Err("commands must be declared before listing executables".into());
+    }
+    if commands.len() > 64 {
+        return Err("too many requested commands".into());
+    }
+    let mut unique = BTreeSet::new();
+    for command in commands {
+        if !valid_command(command) {
+            return Err(format!("invalid command name: {command}"));
+        }
+        unique.insert(command.to_ascii_lowercase());
+    }
+    Ok(unique)
+}
+
+pub fn allowed_command(
+    id: &str,
+    declared: &BTreeSet<String>,
+    command: &str,
+) -> Result<bool, String> {
+    let command = command.to_ascii_lowercase();
+    if !declared.contains("commands") {
+        return Ok(false);
+    }
+    Ok(status(id, declared)?
+        .commands
+        .iter()
+        .any(|granted| granted.eq_ignore_ascii_case(&command)))
+}
+
 fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String>) -> PluginGrant {
     match record {
         Some(r) if r.approved => PluginGrant {
@@ -90,6 +137,15 @@ fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String>) -> Plugi
                 r.network_domains
                     .iter()
                     .filter(|d| normalize_domain(d).is_ok())
+                    .cloned()
+                    .collect()
+            } else {
+                BTreeSet::new()
+            },
+            commands: if declared.contains("commands") {
+                r.commands
+                    .iter()
+                    .filter(|command| valid_command(command))
                     .cloned()
                     .collect()
             } else {
@@ -164,6 +220,31 @@ pub fn validate_network_domains(
 
 /// Only a user action can extend the whitelist. Revoking a domain is immediate
 /// for future connections; the plugin process is restarted by the host.
+pub fn set_command(
+    id: &str,
+    declared: &BTreeSet<String>,
+    command: &str,
+    grant: bool,
+) -> Result<PluginGrant, String> {
+    if !declared.contains("commands") {
+        return Err("plugin did not request command execution".into());
+    }
+    if !valid_command(command) {
+        return Err("invalid command name".into());
+    }
+    mutate(id, declared, |current| {
+        if !current.approved {
+            return Err("installation approval required".into());
+        }
+        if grant {
+            current.commands.insert(command.to_ascii_lowercase());
+        } else {
+            current.commands.remove(&command.to_ascii_lowercase());
+        }
+        Ok(())
+    })
+}
+
 pub fn set_domain(
     id: &str,
     declared: &BTreeSet<String>,
@@ -206,16 +287,20 @@ pub fn revoke_install(id: &str) -> Result<(), String> {
     save(&state)
 }
 pub fn approve_install(id: &str, declared: &BTreeSet<String>) -> Result<PluginGrant, String> {
-    approve_install_with_domains(id, declared, &[])
+    approve_install_with_domains(id, declared, &[], &[])
 }
 
-/// Installation consent explicitly covers the requested exact domains.
+/// Installation consent explicitly covers the requested exact domains and
+/// executable names. Plugin processes can never execute commands directly;
+/// the host proxy checks this set on every `host.exec` call.
 pub fn approve_install_with_domains(
     id: &str,
     declared: &BTreeSet<String>,
     domains: &[String],
+    commands: &[String],
 ) -> Result<PluginGrant, String> {
     let domains = validate_network_domains(declared, domains)?;
+    let commands = validate_commands(declared, commands)?;
     mutate(id, declared, |current| {
         if current.approved {
             return Err("plugin is already authorized".into());
@@ -224,6 +309,7 @@ pub fn approve_install_with_domains(
         current.enabled = true;
         current.granted = declared.clone();
         current.network_domains = domains.clone();
+        current.commands = commands.clone();
         Ok(())
     })
 }
@@ -296,11 +382,40 @@ mod tests {
             enabled: true,
             granted: old,
             network_domains: BTreeSet::new(),
+            commands: BTreeSet::new(),
         };
         let new = declared(&["filesystem.read", "filesystem.write"]);
         let s = effective(Some(&current), &new);
         assert!(s.granted.contains("filesystem.read") && !s.granted.contains("filesystem.write"));
     }
+    #[test]
+    fn command_grants_are_exact_and_require_declaration() {
+        let commands = declared(&["commands"]);
+        assert!(valid_command("git"));
+        assert!(valid_command("python3"));
+        for value in ["", "../git", "/usr/bin/git", "git --help", ".."] {
+            assert!(!valid_command(value), "{value}");
+        }
+        let validated =
+            validate_commands(&commands, &["git".to_string(), "Git".to_string()]).unwrap();
+        assert_eq!(validated.into_iter().collect::<Vec<_>>(), vec!["git"]);
+        assert!(validate_commands(&BTreeSet::new(), &["git".into()]).is_err());
+        let grant = PluginGrant {
+            approved: true,
+            enabled: true,
+            granted: commands.clone(),
+            network_domains: BTreeSet::new(),
+            commands: ["git".to_string()].into(),
+        };
+        assert_eq!(
+            effective(Some(&grant), &commands)
+                .commands
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec!["git"]
+        );
+    }
+
     #[test]
     fn domain_scopes_are_exact_and_require_explicit_grants() {
         let declared = declared(&["network"]);
@@ -322,6 +437,7 @@ mod tests {
                 enabled: true,
                 granted: declared.clone(),
                 network_domains: ["example.com".to_string()].into(),
+                commands: BTreeSet::new(),
             }),
             &declared,
         );

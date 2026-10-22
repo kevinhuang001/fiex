@@ -8,7 +8,8 @@
 {
   "permissions": {
     "filesystem": { "read": true, "write": true },
-    "network": { "enabled": true, "domains": ["github.com"] }
+    "network": { "enabled": true, "domains": ["github.com"] },
+    "commands": { "enabled": true, "allow": ["git"] }
   }
 }
 ```
@@ -16,7 +17,7 @@
 - `filesystem.read` / `filesystem.write`：用户文件读取/修改。
 - `network`：只允许连接 manifest 申请的域名与用户后来添加的域名。
 - `localhost`、`127.0.0.1`、`::1` 等回环地址始终允许，不要求加入白名单。
-- 插件私有 KV、凭据代理、宿主文件选择器、执行外部程序不是权限项。
+- 插件进程本身永远不能执行外部程序；需要运行 Git、ffmpeg 等命令时，manifest 用 `permissions.commands` 申请可执行文件名，所有调用都经宿主 `host.exec` 代理。
 
 安装时必须展示全部声明权限；安装成功后才写入授权状态。撤销权限会停止插件进程。域名可以在设置中逐个删除或添加。
 
@@ -34,10 +35,10 @@ Linux 规则：
 - 无 `filesystem.write`：不授予用户目录写入。
 - 无 `network`：seccomp 拒绝 `socket/connect/socketpair`。
 - 有 `network`：允许网络；域名白名单由插件在连接前校验，因为 Landlock 不能按域名过滤。
-- 执行外部程序不是权限项；插件始终可以执行系统程序，但子进程继承文件系统/网络沙箱。
+- 沙箱禁止插件进程执行外部程序（Arapuca `allow_exec = false`）。命令只能通过宿主 `host.exec` 代理执行，宿主校验用户授权的命令名，拒绝 shell、路径和未授权程序。
 - 沙箱初始化失败时拒绝启动插件。
 
-**限制**：域名白名单是插件进程内的策略，不是 OS 级网络过滤；恶意 Native 插件仍可能绕过。Windows 的 AppContainer 启动器尚未在 CI 真机验证前视为完成。文档不得把这些描述成完全隔离。
+**限制**：域名白名单是插件进程内的策略，不是 OS 级网络过滤；`host.exec` 代理执行的是宿主权限下的程序，因此用户授权命令等同于授予该命令的能力。Windows 的 AppContainer 启动器尚未在 CI 真机验证前视为完成。文档不得把这些描述成完全隔离。
 
 ## 安装包
 

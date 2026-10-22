@@ -23,6 +23,7 @@ export const permissionTitles: Record<string, string> = {
   'filesystem.read': '读取文件',
   'filesystem.write': '修改文件',
   network: '网络访问',
+  commands: '执行命令',
 }
 
 interface InstallPreview {
@@ -33,6 +34,7 @@ interface InstallPreview {
   author?: { name: string; url?: string }
   permissions: string[]
   requestedNetworkDomains: string[]
+  commands: string[]
   repository: string
 }
 
@@ -263,6 +265,21 @@ export function PluginInstaller({
               <span>无需宿主权限</span>
             )}
           </div>
+          {!!preview?.commands?.length && (
+            <>
+              <strong>插件申请的命令</strong>
+              <div className="plugin-install-domains">
+                {(preview.commands || []).map((command) => (
+                  <span key={command}>
+                    <code>{command}</code>
+                  </span>
+                ))}
+              </div>
+              <p className="sidebar-hint">
+                命令由宿主代理执行，插件进程不能直接启动程序；安装后可在设置里增删。
+              </p>
+            </>
+          )}
           {!!preview?.requestedNetworkDomains.length && (
             <>
               <strong>插件申请的网络域名</strong>

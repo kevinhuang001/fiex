@@ -8,7 +8,10 @@ use std::{
     fs,
     io::{BufReader, Read, Write},
     path::{Component, Path, PathBuf},
+    process::{Command, Stdio},
     sync::{Arc, Mutex, OnceLock},
+    thread,
+    time::{Duration, Instant},
 };
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -31,6 +34,15 @@ pub struct FilesystemPermission {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CommandsPermission {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub allow: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetworkPermission {
     #[serde(default)]
     pub enabled: bool,
@@ -45,6 +57,8 @@ pub struct PluginPermissions {
     pub filesystem: FilesystemPermission,
     #[serde(default)]
     pub network: NetworkPermission,
+    #[serde(default)]
+    pub commands: CommandsPermission,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -93,6 +107,8 @@ pub struct PluginInfo {
     pub granted_permissions: Vec<String>,
     pub requested_network_domains: Vec<String>,
     pub allowed_network_domains: Vec<String>,
+    pub requested_commands: Vec<String>,
+    pub allowed_commands: Vec<String>,
 }
 pub fn declared_permissions(
     manifest: &PluginManifest,
@@ -107,6 +123,10 @@ pub fn declared_permissions(
     if manifest.permissions.network.enabled {
         declared.insert("network".to_string());
     }
+    if manifest.permissions.commands.enabled {
+        declared.insert("commands".to_string());
+    }
+    crate::plugin_permissions::validate_commands(&declared, &manifest.permissions.commands.allow)?;
     crate::plugin_permissions::validate_network_domains(
         &declared,
         &manifest.permissions.network.domains,
@@ -189,6 +209,15 @@ pub fn set_network_domain(id: &str, domain: &str, grant: bool) -> Result<(), Str
     global().stop(id);
     Ok(())
 }
+pub fn set_command(id: &str, command: &str, grant: bool) -> Result<(), String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
+        .ok_or("plugin not installed")?;
+    crate::plugin_permissions::set_command(id, &declared(&manifest)?, command, grant)?;
+    global().stop(id);
+    Ok(())
+}
 pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), String> {
     let (manifest, _) = discover()
         .into_iter()
@@ -207,6 +236,7 @@ pub fn approve_install(id: &str) -> Result<(), String> {
         id,
         &declared(&manifest)?,
         &manifest.permissions.network.domains,
+        &manifest.permissions.commands.allow,
     )?;
     Ok(())
 }
@@ -324,6 +354,8 @@ pub fn catalog() -> Vec<PluginInfo> {
                 granted_permissions: state.granted.into_iter().collect(),
                 requested_network_domains: manifest.permissions.network.domains,
                 allowed_network_domains: state.network_domains.into_iter().collect(),
+                requested_commands: manifest.permissions.commands.allow,
+                allowed_commands: state.commands.into_iter().collect(),
             }
         })
         .collect()
@@ -367,6 +399,157 @@ pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
 pub fn exists(id: &str) -> bool {
     discover().iter().any(|(m, _)| m.id == id)
 }
+const EXEC_OUTPUT_LIMIT: usize = 2 * 1024 * 1024;
+const EXEC_TIMEOUT: Duration = Duration::from_secs(120);
+
+fn read_capped(mut reader: impl Read) -> (Vec<u8>, bool) {
+    let mut output = Vec::new();
+    let mut truncated = false;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => {
+                if output.len() + read > EXEC_OUTPUT_LIMIT {
+                    let keep = EXEC_OUTPUT_LIMIT.saturating_sub(output.len());
+                    output.extend_from_slice(&buffer[..keep]);
+                    truncated = true;
+                    break;
+                }
+                output.extend_from_slice(&buffer[..read]);
+            }
+            Err(_) => break,
+        }
+    }
+    (output, truncated)
+}
+
+fn host_exec(
+    plugin_id: &str,
+    declared: &std::collections::BTreeSet<String>,
+    params: &Value,
+) -> Result<Value, String> {
+    let command = params
+        .get("command")
+        .and_then(Value::as_str)
+        .ok_or("missing command")?;
+    if !crate::plugin_permissions::valid_command(command)
+        || !crate::plugin_permissions::allowed_command(plugin_id, declared, command)?
+    {
+        return Err("command was not approved by the user".into());
+    }
+    let args = params
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| "command arguments must be strings".to_string())
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+    if args.len() > 128
+        || args
+            .iter()
+            .any(|arg| arg.len() > 8192 || arg.contains('\0'))
+    {
+        return Err("command arguments are too large".into());
+    }
+    let cwd = params
+        .get("cwd")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .map(|path| dunce::canonicalize(path).map_err(|error| error.to_string()))
+        .transpose()?;
+    if cwd.as_ref().is_some_and(|path| !path.is_dir()) {
+        return Err("command working directory is not a folder".into());
+    }
+    let executable =
+        which::which(command).map_err(|error| format!("command unavailable: {error}"))?;
+    let mut process = Command::new(executable);
+    process
+        .args(&args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env_clear()
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "Never");
+    for key in [
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "SystemRoot",
+        "PATHEXT",
+        "SSH_AUTH_SOCK",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            process.env(key, value);
+        }
+    }
+    if let Some(cwd) = &cwd {
+        process.current_dir(cwd);
+    }
+    let mut child = process
+        .spawn()
+        .map_err(|error| format!("command failed to start: {error}"))?;
+    if let Some(stdin) = params.get("stdin").and_then(Value::as_str) {
+        if let Some(mut pipe) = child.stdin.take() {
+            pipe.write_all(stdin.as_bytes())
+                .map_err(|error| error.to_string())?;
+        }
+    } else {
+        drop(child.stdin.take());
+    }
+    let out_thread = child
+        .stdout
+        .take()
+        .map(|stream| thread::spawn(move || read_capped(stream)));
+    let err_thread = child
+        .stderr
+        .take()
+        .map(|stream| thread::spawn(move || read_capped(stream)));
+    let deadline = Instant::now() + EXEC_TIMEOUT;
+    let status = loop {
+        match child.try_wait().map_err(|error| error.to_string())? {
+            Some(status) => break status,
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("command timed out".into());
+            }
+            None => thread::sleep(Duration::from_millis(20)),
+        }
+    };
+    let (stdout, out_truncated) = out_thread
+        .map(|handle| handle.join().unwrap_or_default())
+        .unwrap_or_default();
+    let (stderr, err_truncated) = err_thread
+        .map(|handle| handle.join().unwrap_or_default())
+        .unwrap_or_default();
+    use base64::Engine;
+    let engine = base64::engine::general_purpose::STANDARD;
+    Ok(json!({
+        "code": status.code(),
+        "stdout": String::from_utf8_lossy(&stdout),
+        "stdoutBase64": engine.encode(&stdout),
+        "stderr": String::from_utf8_lossy(&stderr),
+        "stderrBase64": engine.encode(&stderr),
+        "truncated": out_truncated || err_truncated
+    }))
+}
+
 struct Running {
     plugin_id: String,
     declared: std::collections::BTreeSet<String>,
@@ -429,6 +612,7 @@ impl Running {
             "host.secret.available" if permitted("secrets") => {
                 Ok(json!(crate::plugin_storage::secret_available()))
             }
+            "host.exec" if permitted("commands") => host_exec(&self.plugin_id, &self.declared, p),
             _ => Err("host method not available or permission denied".into()),
         }
     }

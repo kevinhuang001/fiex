@@ -34,7 +34,6 @@ fn main() {
         share: String::new(),
         base: String::new(),
         username: String::new(),
-        password: String::new(),
         allow_invalid_certs: false,
     })
     .expect("save_connection failed");
