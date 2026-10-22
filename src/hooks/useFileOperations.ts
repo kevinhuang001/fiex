@@ -307,27 +307,34 @@ export function useFileOperations({
       directory: x.path,
       suggestedName: name,
       extensions: [format.ext.split('.').filter(Boolean).pop() || 'zip'],
-    }).then(destination => {
-      if (!destination) return
-      void run(
-        '正在压缩…',
-        async () => {
-          await call('compress_archive', {
-            paths: x.selected,
-            destination,
-            format: format.id,
-            ignores: options.full ? [] : prefs.compressIgnore,
-            level: options.level ?? null,
-            password: options.password || null,
-          })
-          notify('已压缩为 ' + basename(destination))
-          x.reload()
-        },
-        base + ' → ' + basename(destination) + ' · ' + format.name +
-          (options.password ? ' · AES-256' : '') + (options.full ? ' · 全量' : ''),
-        true,
-      )
-    }).catch(error => x.setError(String(error)))
+    })
+      .then((destination) => {
+        if (!destination) return
+        void run(
+          '正在压缩…',
+          async () => {
+            await call('compress_archive', {
+              paths: x.selected,
+              destination,
+              format: format.id,
+              ignores: options.full ? [] : prefs.compressIgnore,
+              level: options.level ?? null,
+              password: options.password || null,
+            })
+            notify('已压缩为 ' + basename(destination))
+            x.reload()
+          },
+          base +
+            ' → ' +
+            basename(destination) +
+            ' · ' +
+            format.name +
+            (options.password ? ' · AES-256' : '') +
+            (options.full ? ' · 全量' : ''),
+          true,
+        )
+      })
+      .catch((error) => x.setError(String(error)))
   }
   const extract = () => {
     if (!writable()) return

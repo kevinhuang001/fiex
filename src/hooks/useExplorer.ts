@@ -283,16 +283,23 @@ export function useExplorer(
     setSelected([])
     setError('')
     const timer = setTimeout(() => {
-      void search(pane, globalSearch ? 'everywhere://' : path, query, prefs.hidden, prefs.displayIgnore, (b) => {
-        if (generation !== searchRequest.current) return
-        startTransition(() => setEntries((v) => [...v, ...b.entries]))
-        if (b.done) {
-          setSearching(false)
-          setSearchStats(
-            `${b.elapsedMs} ms${b.truncated ? ' · 已达到 500 项上限，请缩小范围' : ''}${b.skipped ? ` · ${b.skipped} 个位置无法访问` : ''}`,
-          )
-        }
-      }).catch((e) => {
+      void search(
+        pane,
+        globalSearch ? 'everywhere://' : path,
+        query,
+        prefs.hidden,
+        prefs.displayIgnore,
+        (b) => {
+          if (generation !== searchRequest.current) return
+          startTransition(() => setEntries((v) => [...v, ...b.entries]))
+          if (b.done) {
+            setSearching(false)
+            setSearchStats(
+              `${b.elapsedMs} ms${b.truncated ? ' · 已达到 500 项上限，请缩小范围' : ''}${b.skipped ? ` · ${b.skipped} 个位置无法访问` : ''}`,
+            )
+          }
+        },
+      ).catch((e) => {
         if (generation === searchRequest.current) {
           setError(String(e))
           setSearching(false)
