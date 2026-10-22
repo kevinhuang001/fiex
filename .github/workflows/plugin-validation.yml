@@ -1,0 +1,41 @@
+name: Plugin SDK and isolated provider checks
+on:
+  push:
+    branches: [feat/plugin-sdk-extraction]
+  pull_request:
+    paths:
+      - "sdk/**"
+      - "plugins/**"
+      - "src-tauri/src/plugin_*.rs"
+      - ".github/workflows/plugin-validation.yml"
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Independent SDK and official plugin crates
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Rust Native SDK
+        run: cargo test --manifest-path sdk/rust/Cargo.toml
+      - name: Standalone Git
+        run: cargo test --manifest-path plugins/official/git/Cargo.toml
+      - name: Standalone WebDAV
+        run: cargo check --manifest-path plugins/official/webdav/Cargo.toml
+      - name: Standalone SMB
+        run: cargo check --manifest-path plugins/official/smb/Cargo.toml
+  browser-sdk:
+    name: Browser UI SDK types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --project sdk/ui/tsconfig.json --noEmit

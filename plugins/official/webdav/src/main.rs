@@ -132,11 +132,16 @@ fn dispatch(method: &str, p: Value) -> Result<Value, RpcError> {
                             return Err("server ignored Range".into());
                         }
                     }
-                    let bytes = res.bytes().await.map_err(|e| e.to_string())?;
-                    if bytes.len() > max as usize {
-                        return Err("file exceeds preview limit".into());
+                    let mut data = Vec::with_capacity((max.min(65536)) as usize);
+                    let mut stream = res.bytes_stream();
+                    while let Some(chunk) = stream.next().await {
+                        let chunk = chunk.map_err(|e| e.to_string())?;
+                        if data.len().saturating_add(chunk.len()) > max as usize {
+                            return Err("file exceeds preview limit".into());
+                        }
+                        data.extend_from_slice(&chunk);
                     }
-                    Ok::<_, String>(bytes)
+                    Ok::<_, String>(data)
                 })
                 .map_err(RpcError::internal)?;
             use base64::Engine;

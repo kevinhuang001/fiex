@@ -30,6 +30,7 @@
 | [09 迁移与验收](09-MIGRATION-TESTING.md)      | PR #3 代码迁移、兼容迁移、CI 与验收门槛                  |
 | [10 插件场景和完整示例](10-EXAMPLES.md)       | WebDAV、SMB、Git、Google Calendar、样例消息              |
 | [11 iframe UI SDK](11-UI-SDK.md)              | `@fiex/ui-sdk`、iframe 安全 MessageChannel、UI-only 插件 |
+| [13 插件持久化与 OAuth](13-PERSISTENCE-OAUTH.md) | 内核 KV、SecretStore、账户作用域、Token 生命周期与迁移 |
 
 ## 设计的不变量
 
