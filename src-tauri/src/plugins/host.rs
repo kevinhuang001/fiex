@@ -136,15 +136,20 @@ fn platform() -> String {
     };
     format!("{os}-{}", std::env::consts::ARCH)
 }
-pub fn valid_id(id:&str)->bool{
-    id.len()>2 && id.len()<128 && id.contains('.') &&
-        !id.starts_with('.') && !id.contains("..") &&
-        id.bytes().all(|b|b.is_ascii_alphanumeric()||b"._-".contains(&b))
+pub fn valid_id(id: &str) -> bool {
+    id.len() > 2
+        && id.len() < 128
+        && id.contains('.')
+        && !id.starts_with('.')
+        && !id.contains("..")
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
-fn canonical_under(candidate:&Path, root:&Path)->bool{
-    match (fs::canonicalize(candidate),fs::canonicalize(root)){
-        (Ok(candidate),Ok(root)) => candidate.starts_with(&root) && candidate != root,
-        _=>false
+fn canonical_under(candidate: &Path, root: &Path) -> bool {
+    match (fs::canonicalize(candidate), fs::canonicalize(root)) {
+        (Ok(candidate), Ok(root)) => candidate.starts_with(&root) && candidate != root,
+        _ => false,
     }
 }
 fn executable(manifest: &PluginManifest, dir: &Path) -> Result<PathBuf, String> {

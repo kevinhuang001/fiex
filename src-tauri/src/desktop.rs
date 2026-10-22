@@ -226,34 +226,43 @@ async fn plugin_invoke(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn plugin_prepare_install(repository:String)->Result<crate::plugin_installer::InstallPreview,String>{
-    tauri::async_runtime::spawn_blocking(move||crate::plugin_installer::prepare(&repository))
-        .await.map_err(|e|e.to_string())?
+async fn plugin_prepare_install(
+    repository: String,
+) -> Result<crate::plugin_installer::InstallPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::prepare(&repository))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn plugin_confirm_install(ticket:String)->Result<String,String>{
-    tauri::async_runtime::spawn_blocking(move||crate::plugin_installer::install(&ticket))
-        .await.map_err(|e|e.to_string())?
+async fn plugin_confirm_install(ticket: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::install(&ticket))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn plugin_cancel_install(ticket:String)->Result<(),String>{
+fn plugin_cancel_install(ticket: String) -> Result<(), String> {
     crate::plugin_installer::cancel(&ticket)
 }
 #[tauri::command]
-async fn plugin_uninstall(plugin_id:String)->Result<(),String>{
-    tauri::async_runtime::spawn_blocking(move||crate::plugin_installer::uninstall(&plugin_id))
-        .await.map_err(|e|e.to_string())?
+async fn plugin_uninstall(plugin_id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::uninstall(&plugin_id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn plugin_set_enabled(plugin_id:String,enabled:bool)->Result<(),String>{
-    crate::plugin_host::set_enabled(&plugin_id,enabled)
+fn plugin_set_enabled(plugin_id: String, enabled: bool) -> Result<(), String> {
+    crate::plugin_host::set_enabled(&plugin_id, enabled)
 }
 #[tauri::command]
-fn plugin_set_permission(plugin_id:String,permission:String,granted:bool)->Result<(),String>{
-    crate::plugin_host::set_permission(&plugin_id,&permission,granted)
+fn plugin_set_permission(
+    plugin_id: String,
+    permission: String,
+    granted: bool,
+) -> Result<(), String> {
+    crate::plugin_host::set_permission(&plugin_id, &permission, granted)
 }
 #[tauri::command]
-fn plugin_approve_install(plugin_id:String)->Result<(),String>{
+fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
     crate::plugin_host::approve_install(&plugin_id)
 }
 #[tauri::command]

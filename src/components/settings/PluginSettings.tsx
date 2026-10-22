@@ -94,8 +94,11 @@ export function PluginSettings() {
       setSelected('')
       refreshPluginCatalog()
       setMessage('插件已卸载，插件配置与同步目录未删除。')
-    } catch (error) { setMessage(String(error)) }
-    finally { setBusy(false) }
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
   }
   const install = async () => {
     if (!active) return
@@ -261,7 +264,12 @@ export function PluginSettings() {
                   <ShieldCheck size={13} /> 敏感凭据由系统凭据库管理，不会回显。
                 </p>
                 {message && <p role="status">{message}</p>}
-                <Button type="button" variant="outline" onClick={() => setConfirmRemove(true)} disabled={busy}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmRemove(true)}
+                  disabled={busy}
+                >
                   卸载插件
                 </Button>
                 <Button type="button" onClick={() => void save()} disabled={busy || !fields.length}>
@@ -296,10 +304,16 @@ export function PluginSettings() {
         </footer>
       </Modal>
       <Modal open={confirmRemove} title="卸载插件" onClose={() => setConfirmRemove(false)}>
-        <p>确定卸载「{active?.name}」吗？将停止插件进程并删除程序文件，插件数据和用户同步目录会保留。</p>
+        <p>
+          确定卸载「{active?.name}」吗？将停止插件进程并删除程序文件，插件数据和用户同步目录会保留。
+        </p>
         <footer className="plugin-consent-actions">
-          <Button variant="outline" onClick={() => setConfirmRemove(false)}>取消</Button>
-          <Button disabled={busy} onClick={() => void uninstall()}>卸载</Button>
+          <Button variant="outline" onClick={() => setConfirmRemove(false)}>
+            取消
+          </Button>
+          <Button disabled={busy} onClick={() => void uninstall()}>
+            卸载
+          </Button>
         </footer>
       </Modal>
       <Modal
