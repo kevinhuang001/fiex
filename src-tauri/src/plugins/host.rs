@@ -1,5 +1,5 @@
-//! Manifest-driven native plugin discovery. Official and third-party packages
-//! share the same loader. Plugin IDs and paths never come from untrusted RPC.
+//! Manifest-driven installed-plugin discovery. Every plugin must be approved
+//! by the user; no ID, publisher name or package location grants privileges.
 use crate::plugin_sdk;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -26,6 +26,14 @@ pub struct PluginManifest {
     pub contributes: Value,
     #[serde(default)]
     pub permissions: Value,
+    #[serde(default)]
+    pub author: Option<PluginAuthor>,
+}
+#[derive(Clone,Debug,Serialize,Deserialize)]
+#[serde(rename_all="camelCase")]
+pub struct PluginAuthor {
+    pub name: String,
+    #[serde(default)] pub url: Option<String>,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,7 +45,7 @@ pub struct PluginInfo {
     pub contributes: Value,
     pub backend_available: bool,
     pub enabled: bool,
-    pub official: bool,
+    pub author: Option<PluginAuthor>,
     pub approved: bool,
     pub declared_permissions: Vec<String>,
     pub granted_permissions: Vec<String>,
@@ -50,152 +58,37 @@ fn valid_id(s: &str) -> bool {
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
-static BUNDLED_ROOT: OnceLock<PathBuf> = OnceLock::new();
-const OFFICIAL_IDS: &[&str] = &[
-    "org.fiex.git",
-    "org.fiex.webdav",
-    "org.fiex.smb",
-    "org.fiex.archive",
-    "org.fiex.checksum",
-];
-fn builtin_manifest(id: &str) -> Option<&'static str> {
-    match id {
-        "org.fiex.git" => Some(include_str!("../../../plugins/official/git/manifest.json")),
-        "org.fiex.webdav" => Some(include_str!(
-            "../../../plugins/official/webdav/manifest.json"
-        )),
-        "org.fiex.smb" => Some(include_str!("../../../plugins/official/smb/manifest.json")),
-        "org.fiex.archive" => Some(include_str!(
-            "../../../plugins/official/archive/manifest.json"
-        )),
-        "org.fiex.checksum" => Some(include_str!(
-            "../../../plugins/official/checksum/manifest.json"
-        )),
-        _ => None,
-    }
-}
-fn canonical_under(folder: &Path, root: &Path) -> bool {
-    match (fs::canonicalize(folder), fs::canonicalize(root)) {
-        (Ok(folder), Ok(root)) => folder.starts_with(root) && folder != root,
-        _ => false,
-    }
-}
-fn trusted_builtin(manifest: &PluginManifest, folder: &Path) -> bool {
-    let Some(expected) = builtin_manifest(&manifest.id) else {
-        return false;
-    };
-    let packaged = BUNDLED_ROOT
-        .get()
-        .is_some_and(|root| canonical_under(folder, root));
-    // A debug build's staged plugin directory is trusted only for development.
-    let debug_staged = cfg!(debug_assertions)
-        && canonical_under(
-            folder,
-            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins"),
-        );
-    if !packaged && !debug_staged {
-        return false;
-    }
-    let Ok(bytes) = fs::read(folder.join("manifest.json")) else {
-        return false;
-    };
-    let Ok(found) = serde_json::from_slice::<Value>(&bytes) else {
-        return false;
-    };
-    let Ok(reference) = serde_json::from_str::<Value>(expected) else {
-        return false;
-    };
-    found == reference
-}
 fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>, String> {
     crate::plugin_permissions::declaration(&manifest.permissions)
 }
-pub fn permission_status(
-    id: &str,
-) -> Result<(bool, crate::plugin_permissions::PluginGrant, Vec<String>), String> {
-    let (manifest, folder) = discover()
-        .into_iter()
-        .find(|(m, _)| m.id == id)
+pub fn set_enabled(id:&str,enabled:bool)->Result<(),String>{
+    let (manifest,_) = discover().into_iter().find(|(m,_)|m.id==id)
         .ok_or("plugin not installed")?;
-    let declared = declared(&manifest)?;
-    let bundled = trusted_builtin(&manifest, &folder);
-    let status = crate::plugin_permissions::status(id, &declared, bundled)?;
-    Ok((bundled, status, declared.into_iter().collect()))
-}
-pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
-    let (manifest, folder) = discover()
-        .into_iter()
-        .find(|(m, _)| m.id == id)
-        .ok_or("plugin not installed")?;
-    let declared = declared(&manifest)?;
-    crate::plugin_permissions::set_enabled(
-        id,
-        &declared,
-        trusted_builtin(&manifest, &folder),
-        enabled,
-    )?;
+    crate::plugin_permissions::set_enabled(id,&declared(&manifest)?,enabled)?;
     global().stop(id);
     Ok(())
 }
-pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), String> {
-    let (manifest, folder) = discover()
-        .into_iter()
-        .find(|(m, _)| m.id == id)
+pub fn set_permission(id:&str,permission:&str,grant:bool)->Result<(),String>{
+    let (manifest,_) = discover().into_iter().find(|(m,_)|m.id==id)
         .ok_or("plugin not installed")?;
-    let declared = declared(&manifest)?;
-    crate::plugin_permissions::set_granted(
-        id,
-        &declared,
-        trusted_builtin(&manifest, &folder),
-        permission,
-        grant,
-    )?;
+    crate::plugin_permissions::set_granted(id,&declared(&manifest)?,permission,grant)?;
     global().stop(id);
     Ok(())
 }
-pub fn approve_install(id: &str) -> Result<(), String> {
-    let (manifest, folder) = discover()
-        .into_iter()
-        .find(|(m, _)| m.id == id)
+pub fn approve_install(id:&str)->Result<(),String>{
+    let (manifest,_) = discover().into_iter().find(|(m,_)|m.id==id)
         .ok_or("plugin not installed")?;
-    let declared = declared(&manifest)?;
-    crate::plugin_permissions::approve_install(id, &declared, trusted_builtin(&manifest, &folder))?;
+    crate::plugin_permissions::approve_install(id,&declared(&manifest)?)?;
     Ok(())
 }
-
-pub fn set_bundle_root(resource_root: PathBuf) {
-    let _ = BUNDLED_ROOT.set(resource_root.join("plugins"));
-}
-fn roots() -> Vec<PathBuf> {
-    let mut all = Vec::new();
-    // App-owned bundle comes first; an environment override is NEVER proof
-    // that a plugin is official.
-    // Bundled, verified first-party IDs take precedence over user directories.
-    if let Some(bundled) = BUNDLED_ROOT.get() {
-        all.push(bundled.clone());
-    }
-    if let Some(v) = std::env::var_os("FIEX_PLUGIN_DIR") {
-        all.push(PathBuf::from(v));
-    }
-    if let Some(d) = dirs::data_local_dir() {
-        all.push(d.join("fiex").join("plugins"));
-    }
-    let dev_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins");
-    if dev_bundled.is_dir() {
-        all.push(dev_bundled);
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            all.push(dir.join("plugins"));
-            all.push(dir.to_path_buf());
-        }
-    }
-    // Development-only source manifests, never a special official-only runtime.
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../plugins/official");
-    if dev.is_dir() {
-        all.push(dev);
-    }
-    all
+fn roots()->Vec<PathBuf>{
+    let mut roots=Vec::new();
+    // The user-level plugin installation directory is the sole release source.
+    if let Some(data)=dirs::data_local_dir(){roots.push(data.join("fiex").join("plugins"));}
+    // Test isolation override is unavailable in packaged release builds.
+    #[cfg(debug_assertions)]
+    if let Some(path)=std::env::var_os("FIEX_PLUGIN_DIR"){roots.insert(0,PathBuf::from(path));}
+    roots
 }
 fn discover() -> Vec<(PluginManifest, PathBuf)> {
     let mut by_id = HashMap::new();
@@ -220,11 +113,6 @@ fn discover() -> Vec<(PluginManifest, PathBuf)> {
             };
             if !valid_id(&manifest.id) || manifest.name.len() > 128 || declared(&manifest).is_err()
             {
-                continue;
-            }
-            if OFFICIAL_IDS.contains(&manifest.id.as_str()) && !trusted_builtin(&manifest, &folder)
-            {
-                // Reserved IDs cannot be installed by untrusted packages.
                 continue;
             }
             by_id
@@ -259,8 +147,7 @@ fn executable(manifest: &PluginManifest, dir: &Path) -> Result<PathBuf, String> 
     if inside.is_file() && canonical_under(&inside, dir) {
         return Ok(inside);
     }
-    // Never look for a matching filename in another package or PATH:
-    // doing so would run an attacker binary with an official manifest.
+    // An executable outside the declared plugin package is never allowed.
     Err("plugin native backend is not installed inside its package".into())
 }
 pub fn catalog() -> Vec<PluginInfo> {
@@ -268,9 +155,8 @@ pub fn catalog() -> Vec<PluginInfo> {
         .into_iter()
         .map(|(manifest, folder)| {
             let backend = executable(&manifest, &folder).is_ok();
-            let official = trusted_builtin(&manifest, &folder);
             let declared = declared(&manifest).unwrap_or_default();
-            let state = crate::plugin_permissions::status(&manifest.id, &declared, official)
+            let state = crate::plugin_permissions::status(&manifest.id, &declared)
                 .unwrap_or_default(); // unreadable policy fails closed
             PluginInfo {
                 id: manifest.id,
@@ -280,7 +166,7 @@ pub fn catalog() -> Vec<PluginInfo> {
                 contributes: manifest.contributes,
                 backend_available: backend,
                 enabled: state.enabled && state.approved,
-                official,
+                author: manifest.author,
                 approved: state.approved,
                 declared_permissions: declared.into_iter().collect(),
                 granted_permissions: state.granted.into_iter().collect(),
@@ -294,7 +180,6 @@ pub fn exists(id: &str) -> bool {
 struct Running {
     plugin_id: String,
     declared: std::collections::BTreeSet<String>,
-    official: bool,
     child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
@@ -305,7 +190,7 @@ impl Running {
     /// never by a pluginId supplied in the message.
     fn host_method(&self, method: &str, p: &Value) -> Result<Value, String> {
         let permitted = |name: &str| {
-            crate::plugin_permissions::allowed(&self.plugin_id, &self.declared, self.official, name)
+            crate::plugin_permissions::allowed(&self.plugin_id, &self.declared, name)
                 .unwrap_or(false)
         };
         let arg = |key: &str| {
@@ -435,8 +320,7 @@ impl PluginHost {
                 .find(|(m, _)| m.id == plugin_id)
                 .ok_or("plugin is not installed")?;
             let declared = declared(&manifest)?;
-            let official = trusted_builtin(&manifest, &dir);
-            let state = crate::plugin_permissions::status(plugin_id, &declared, official)?;
+            let state = crate::plugin_permissions::status(plugin_id, &declared)?;
             if !state.enabled || !state.approved {
                 return Err("plugin is disabled or installation consent is pending".into());
             }
@@ -452,7 +336,6 @@ impl PluginHost {
             let mut running = Running {
                 plugin_id: plugin_id.to_string(),
                 declared,
-                official,
                 child,
                 stdin,
                 stdout: BufReader::new(stdout),

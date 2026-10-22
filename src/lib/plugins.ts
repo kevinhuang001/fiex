@@ -22,7 +22,7 @@ export interface PluginInfo {
   version: string
   capabilities: string[]
   enabled: boolean
-  official: boolean
+  author?: { name: string; url?: string }
   approved: boolean
   declaredPermissions: string[]
   grantedPermissions: string[]

@@ -70,7 +70,7 @@ discovered → verified → installed → disabled
                                          stopping → stopped
 ```
 
-1. 扫描包、校验结构/摘要/签名策略，读取 manifest，验证 API 范围和权限请求；首次启用需授权。
+1. 扫描包、校验结构/下载完整性和版本，读取 manifest，验证 API 范围和权限请求；首次启用需授权。
 2. Core 按系统架构选取二进制，以当前用户的权限启动进程；`stdin/stdout` 用于控制协议，`stderr` 只记日志。
 3. Core 发 `plugin.initialize`，插件回复版本和实际能力。Core 验证声明与实报一致，再登记挂载工厂/贡献。
 4. 超时/崩溃标记挂载不可用、使进行中任务进入明确中断状态；按有界退避重启。挂载 ID 与已持久的缓存/同步规则**不会**因为进程重启而更换。

@@ -88,7 +88,7 @@ npm run build  # 开发者执行，将 dist/index.html 与 JS/CSS 打入插件�
 cargo install fiex-plugin-cli          # 拟议命令，尚不存在
 fiex-plugin new sample --lang rust      # 生成 manifest、SDK 样例和测试
 cargo build --release --target ...
-fiex-plugin validate ./plugin          # schema/ABI/capability/路径/签名检查
+fiex-plugin validate ./plugin          # schema/ABI/capability/路径检查
 fiex-plugin pack ./plugin -o sample.fiexplugin
 fiex-plugin dev --host ./fiex           # 开发模式启动真实独立进程
 ```
