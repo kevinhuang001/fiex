@@ -29,6 +29,9 @@ pub struct PluginGrant {
     pub enabled: bool,
     #[serde(default)]
     pub granted: BTreeSet<String>,
+    /// Exact outbound hostnames approved by the user. No wildcards.
+    #[serde(default)]
+    pub network_domains: BTreeSet<String>,
 }
 #[derive(Default, Serialize, Deserialize)]
 struct PolicyStore {
@@ -102,6 +105,11 @@ fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String>) -> Plugi
             approved: true,
             enabled: r.enabled,
             granted: r.granted.intersection(declared).cloned().collect(),
+            network_domains: if declared.contains("network") {
+                r.network_domains.iter().filter(|d| normalize_domain(d).is_ok()).cloned().collect()
+            } else {
+                BTreeSet::new()
+            },
         },
         _ => PluginGrant::default(),
     }
@@ -119,6 +127,77 @@ pub fn allowed(id: &str, declared: &BTreeSet<String>, permission: &str) -> Resul
     let grant = status(id, declared)?;
     Ok(grant.approved && grant.enabled && grant.granted.contains(permission))
 }
+
+/// Normalize an exact DNS hostname or IPv4 address. Patterns, schemes, URLs,
+/// ports and wildcard suffixes are not permission scopes.
+pub fn normalize_domain(input: &str) -> Result<String, String> {
+    let domain = input.trim().to_ascii_lowercase();
+    if domain.is_empty() || domain.len() > 253 || !domain.is_ascii() {
+        return Err("domain must be a nonempty ASCII hostname (use IDNA/punycode)".into());
+    }
+    if domain.split('.').any(|label| {
+        label.is_empty()
+            || label.len() > 63
+            || label.starts_with('-')
+            || label.ends_with('-')
+            || !label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    }) {
+        return Err("invalid hostname: enter an exact domain without a wildcard or port".into());
+    }
+    Ok(domain)
+}
+
+pub fn validate_network_domains(
+    declared: &BTreeSet<String>,
+    domains: &[String],
+) -> Result<BTreeSet<String>, String> {
+    if domains.len() > 128 || (!domains.is_empty() && !declared.contains("network")) {
+        return Err("network domains require a declared network permission (maximum 128)".into());
+    }
+    domains.iter().map(|d| normalize_domain(d)).collect()
+}
+
+/// Only a user action can extend the whitelist. Revoking a domain is immediate
+/// for future broker operations; the plugin launcher is restarted by the host.
+pub fn set_domain(
+    id: &str,
+    declared: &BTreeSet<String>,
+    domain: &str,
+    grant: bool,
+) -> Result<PluginGrant, String> {
+    if !declared.contains("network") {
+        return Err("plugin did not declare network permission".into());
+    }
+    let domain = normalize_domain(domain)?;
+    mutate(id, declared, |current| {
+        if !current.approved {
+            return Err("installation approval required".into());
+        }
+        if grant {
+            if current.network_domains.len() >= 128 {
+                return Err("too many allowed domains".into());
+            }
+            current.network_domains.insert(domain);
+        } else {
+            current.network_domains.remove(&domain);
+        }
+        Ok(())
+    })
+}
+
+pub fn domain_allowed(
+    id: &str,
+    declared: &BTreeSet<String>,
+    domain: &str,
+) -> Result<bool, String> {
+    let domain = normalize_domain(domain)?;
+    let policy = status(id, declared)?;
+    Ok(policy.approved
+        && policy.enabled
+        && policy.granted.contains("network")
+        && policy.network_domains.contains(&domain))
+}
+
 pub fn revoke_install(id: &str) -> Result<(), String> {
     let _guard = gate().lock().map_err(|_| "permission store locked")?;
     let mut state = load()?;
@@ -126,6 +205,16 @@ pub fn revoke_install(id: &str) -> Result<(), String> {
     save(&state)
 }
 pub fn approve_install(id: &str, declared: &BTreeSet<String>) -> Result<PluginGrant, String> {
+    approve_install_with_domains(id, declared, &[])
+}
+
+/// The installation consent explicitly covers the requested exact domains.
+pub fn approve_install_with_domains(
+    id: &str,
+    declared: &BTreeSet<String>,
+    domains: &[String],
+) -> Result<PluginGrant, String> {
+    let domains = validate_network_domains(declared, domains)?;
     mutate(id, declared, |current| {
         if current.approved {
             return Err("plugin is already authorized".into());
@@ -133,6 +222,7 @@ pub fn approve_install(id: &str, declared: &BTreeSet<String>) -> Result<PluginGr
         current.approved = true;
         current.enabled = true;
         current.granted = declared.clone();
+        current.network_domains = domains.clone();
         Ok(())
     })
 }
@@ -201,10 +291,31 @@ mod tests {
             approved: true,
             enabled: true,
             granted: old,
+            network_domains: BTreeSet::new(),
         };
         let new = declaration(&serde_json::json!({"storage":true,"secrets":true})).unwrap();
         let s = effective(Some(&current), &new);
         assert!(s.granted.contains("storage") && !s.granted.contains("secrets"));
+    }
+    #[test]
+    fn domain_scopes_are_exact_and_require_explicit_grants() {
+        let declared = declaration(&serde_json::json!({"network": true})).unwrap();
+        assert_eq!(normalize_domain("Example.COM").unwrap(), "example.com");
+        for value in ["*.example.com", "https://example.com", "example.com:443", ".example.com", "evil/example.com", ""] {
+            assert!(normalize_domain(value).is_err(), "{value}");
+        }
+        assert!(validate_network_domains(&BTreeSet::new(), &["example.com".into()]).is_err());
+        let grant = effective(
+            Some(&PluginGrant {
+                approved: true,
+                enabled: true,
+                granted: declared.clone(),
+                network_domains: ["example.com".to_string()].into(),
+            }),
+            &declared,
+        );
+        assert!(grant.network_domains.contains("example.com"));
+        assert!(!grant.network_domains.contains("sub.example.com"));
     }
     #[test]
     fn invalid_permissions_fail_closed() {
