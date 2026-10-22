@@ -123,22 +123,35 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
   switch (command) {
     case 'plugins_list':
       return [
-        ...(new URLSearchParams(location.search).has('pluginFixture') ? [{
-          id: 'org.test.fixture', name: '测试插件', version: '1.0.0',
-          enabled: true, approved: true, backendAvailable: true,
-          capabilities: ['commands','contextMenu','panel'],
-          declaredPermissions: ['ui.dialog'], grantedPermissions: ['ui.dialog'],
-          contributes: {
-            contextMenus: [{
-              id:'fixture.root', title:'测试插件', when:'context.selection.count > 0',
-              children:[
-                {id:'fixture.panel',title:'信息面板',openPanel:'fixture.details'},
-                {id:'fixture.action',title:'检查文件',command:'fixture.inspect'}
-              ],
-            }],
-            panels: [{id:'fixture.details',title:'信息面板',entry:'ui/index.html'}],
-          },
-        }] : []),
+        ...(new URLSearchParams(location.search).has('pluginFixture')
+          ? [
+              {
+                id: 'org.test.fixture',
+                name: '测试插件',
+                version: '1.0.0',
+                enabled: true,
+                approved: true,
+                backendAvailable: true,
+                capabilities: ['commands', 'contextMenu', 'panel'],
+                declaredPermissions: ['ui.dialog'],
+                grantedPermissions: ['ui.dialog'],
+                contributes: {
+                  contextMenus: [
+                    {
+                      id: 'fixture.root',
+                      title: '测试插件',
+                      when: 'context.selection.count > 0',
+                      children: [
+                        { id: 'fixture.panel', title: '信息面板', openPanel: 'fixture.details' },
+                        { id: 'fixture.action', title: '检查文件', command: 'fixture.inspect' },
+                      ],
+                    },
+                  ],
+                  panels: [{ id: 'fixture.details', title: '信息面板', entry: 'ui/index.html' }],
+                },
+              },
+            ]
+          : []),
         {
           id: 'org.fiex.webdav',
           name: 'WebDAV',
@@ -204,10 +217,11 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         },
       ]
     case 'plugin_panel_html':
-      if(new URLSearchParams(location.search).has('pluginFixture')) return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selection||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
+      if (new URLSearchParams(location.search).has('pluginFixture'))
+        return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selection||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
       throw new Error('No installed fixture plugin')
     case 'plugin_invoke':
-      return {ok:true,method:a.method,params:a.params}
+      return { ok: true, method: a.method, params: a.params }
     case 'plugin_permission_allowed':
       return new URLSearchParams(location.search).has('pluginFixture')
     case 'plugin_storage_get':
