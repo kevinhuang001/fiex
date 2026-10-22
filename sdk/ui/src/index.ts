@@ -217,8 +217,14 @@ export class FiexUiClient {
         this.invoke<string[] | null>('dialog.openFiles', options),
       openDirectory: (options: { title?: string; directory?: string } = {}) =>
         this.invoke<string | null>('dialog.openDirectory', options),
-      saveFile: (options: { title?: string; directory?: string; suggestedName?: string; extensions?: string[] } = {}) =>
-        this.invoke<string | null>('dialog.saveFile', options),
+      saveFile: (
+        options: {
+          title?: string
+          directory?: string
+          suggestedName?: string
+          extensions?: string[]
+        } = {},
+      ) => this.invoke<string | null>('dialog.saveFile', options),
     }
   }
   get panel() {
