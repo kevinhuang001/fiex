@@ -320,94 +320,189 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         return Err("请输入连接名称".into());
     }
     let kind = input.kind.trim();
-    if kind != "webdav" && kind != "smb" {
-        return Err("不支持的连接类型".into());
+    if kind.is_empty() || kind.len() > 80 || kind.contains(['/', '\\', '\0']) {
+        return Err("连接类型无效".into());
     }
-    if kind == "webdav" {
-        let url = input.url.trim();
-        if !url.starts_with("http://") && !url.starts_with("https://") {
-            return Err("WebDAV 地址必须以 http:// 或 https:// 开头".into());
+    let plugin_id = input
+        .plugin_id
+        .clone()
+        .unwrap_or_else(|| format!("org.fiex.{kind}"));
+    if !crate::plugin_host::valid_id(&plugin_id) {
+        return Err("连接插件 ID 无效".into());
+    }
+    let declared_fields = declared_connection_fields(&plugin_id, kind)?;
+    for (key, value) in &input.settings {
+        let field_type = declared_fields
+            .iter()
+            .find(|(id, _)| id == key)
+            .map(|(_, ty)| ty.as_str())
+            .ok_or_else(|| format!("连接插件未声明字段：{key}"))?;
+        let valid = match field_type {
+            "checkbox" => value.is_boolean(),
+            "number" => value.is_number(),
+            _ => value.is_string(),
+        };
+        if !valid {
+            return Err(format!("连接字段数据类型无效：{key}"));
         }
-    } else if input.host.trim().is_empty() || input.share.trim().is_empty() {
+    }
+    let secret_keys = declared_fields
+        .into_iter()
+        .filter(|(_, ty)| ty == "secret")
+        .map(|(id, _)| id)
+        .collect::<Vec<_>>();
+    let value_string = |field: &str| {
+        input
+            .settings
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    };
+    let url = if input.url.trim().is_empty() {
+        value_string("url")
+    } else {
+        input.url.trim().to_string()
+    };
+    let host = if input.host.trim().is_empty() {
+        value_string("host")
+    } else {
+        input.host.trim().to_string()
+    };
+    let share = if input.share.trim().is_empty() {
+        value_string("share")
+    } else {
+        input.share.trim().to_string()
+    };
+    if kind == "webdav" && !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("WebDAV 地址必须以 http:// 或 https:// 开头".into());
+    }
+    if kind == "smb" && (host.is_empty() || share.is_empty()) {
         return Err("请填写 SMB 主机和共享名".into());
     }
     if input.port == Some(0) {
         return Err("请输入有效的端口".into());
     }
+
     let mut items = load_stored();
     let existing = input
         .id
         .as_deref()
-        .and_then(|id| items.iter().position(|c| c.id == id));
-    let id = if let Some(index) = existing {
-        items[index].name = name.into();
-        items[index].kind = kind.into();
-        items[index].url = input.url.trim().into();
-        items[index].host = input.host.trim().into();
-        items[index].port = input.port;
-        items[index].share = input.share.trim().into();
-        items[index].base = input.base.trim().into();
-        items[index].username = input.username.trim().into();
-        if !input.password.is_empty() {
-            items[index].password = input.password.clone();
-        }
-        items[index].allow_invalid_certs = input.allow_invalid_certs;
-        items[index].id.clone()
-    } else {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or_default();
-        let mut sequence = 0u64;
-        let id = loop {
-            let candidate = format!("{stamp:x}-{sequence:x}");
-            if !items.iter().any(|item| item.id == candidate) {
-                break candidate;
+        .and_then(|id| items.iter().position(|conn| conn.id == id));
+    let previous = existing.map(|index| items[index].clone());
+    if previous
+        .as_ref()
+        .is_some_and(|conn| connection_plugin_id(conn) != plugin_id || conn.kind != kind)
+    {
+        return Err("更新连接时不得改变所属插件和连接类型".into());
+    }
+    let id = match previous.as_ref() {
+        Some(conn) => conn.id.clone(),
+        None => {
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_millis())
+                .unwrap_or_default();
+            let mut sequence = 0u64;
+            loop {
+                let candidate = format!("{stamp:x}-{sequence:x}");
+                if !items.iter().any(|item| item.id == candidate) {
+                    break candidate;
+                }
+                sequence += 1;
             }
-            sequence += 1;
-        };
-        items.push(StoredConnection {
-            id: id.clone(),
-            name: name.into(),
-            kind: kind.into(),
-            url: input.url.trim().into(),
-            host: input.host.trim().into(),
-            share: input.share.trim().into(),
-            base: input.base.trim().into(),
-            username: input.username.trim().into(),
-            password: input.password,
-            allow_invalid_certs: input.allow_invalid_certs,
-            port: input.port,
-        });
-        id
+        }
     };
-    let conn = items.iter().find(|c| c.id == id).ok_or("连接不存在")?;
-    let plugin_id = connection_plugin_id(conn);
-    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
-        return Err("连接插件尚未安装、启用或未获得网络授权".into());
+    let mut settings = input.settings;
+    // An empty value in an update keeps the existing keyring credential;
+    // only declared "secret" fields are ever persisted in that keyring.
+    for key in &secret_keys {
+        let empty = settings
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .is_none_or(str::is_empty);
+        if empty {
+            if let Some(value) = previous
+                .as_ref()
+                .and_then(|conn| conn.settings.get(key))
+            {
+                settings.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    let password = settings
+        .get("password")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            (!input.password.is_empty()).then_some(input.password.clone())
+        })
+        .or_else(|| previous.as_ref().map(|conn| conn.password.clone()))
+        .unwrap_or_default();
+    let record = StoredConnection {
+        id: id.clone(),
+        name: name.into(),
+        kind: kind.into(),
+        plugin_id: plugin_id.clone(),
+        settings,
+        secret_keys,
+        url,
+        host,
+        share,
+        base: input.base.trim().into(),
+        username: input.username.trim().into(),
+        password,
+        allow_invalid_certs: input.allow_invalid_certs,
+        port: input.port,
+    };
+    if (kind == "webdav" || kind == "smb")
+        && !crate::plugin_host::permission_allowed(&plugin_id, "network")?
+    {
+        return Err("连接插件没有网络权限".into());
     }
     crate::plugin_host::global().invoke(
         &plugin_id,
         "connection.validate",
-        serde_json::json!({"connection": provider_config(conn)}),
+        serde_json::json!({"connection": provider_config(&record)}),
     )?;
-    if !conn.password.is_empty() {
-        crate::plugin_storage::secret_set(
-            &format!("org.fiex.{kind}"),
-            &format!("connection-{id}"),
-            "password",
-            &conn.password,
-        )?;
+    let scope = format!("connection-{id}");
+    for field in &record.secret_keys {
+        if let Some(value) = record.settings.get(field).and_then(serde_json::Value::as_str) {
+            if !value.is_empty() {
+                crate::plugin_storage::secret_set(&plugin_id, &scope, field, value)?;
+            }
+        }
     }
-    fs::create_dir_all(mount_path(conn)).map_err(|e| e.to_string())?;
+    // Old records may still supply their password through legacy UI arguments.
+    if !record.password.is_empty() && !record.secret_keys.iter().any(|key| key == "password") {
+        crate::plugin_storage::secret_set(&plugin_id, &scope, "password", &record.password)?;
+    }
+    fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
+    if let Some(index) = existing {
+        items[index] = record.clone();
+    } else {
+        items.push(record.clone());
+    }
     save_stored(&items)?;
-    Ok(public(conn))
+    Ok(public(&record))
 }
 
 pub fn remove_connection(id: &str) -> Result<(), String> {
     let mut items = load_stored();
-    items.retain(|c| c.id != id);
-    save_stored(&items)
+    let removed = items.iter().find(|conn| conn.id == id).cloned();
+    items.retain(|conn| conn.id != id);
+    save_stored(&items)?;
+    if let Some(conn) = removed {
+        let scope = format!("connection-{id}");
+        let plugin_id = connection_plugin_id(&conn);
+        for field in &conn.secret_keys {
+            let _ = crate::plugin_storage::secret_delete(&plugin_id, &scope, field);
+        }
+        let _ = crate::plugin_storage::secret_delete(&plugin_id, &scope, "password");
+    }
+    Ok(())
 }
 
 pub fn is_remote(path: &str) -> bool {
