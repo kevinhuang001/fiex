@@ -12,7 +12,10 @@ fn main() {
         .find(|p| p.id == id)
         .expect("expected plugin fixture in FIEX_PLUGIN_DIR");
     assert!(entry.backend_available, "native backend is missing");
-    assert!(!entry.approved, "test must start with no prior permission grant");
+    assert!(
+        !entry.approved,
+        "test must start with no prior permission grant"
+    );
     assert!(
         plugin_host::global()
             .invoke(&id, "plugin.ping", json!({}))
