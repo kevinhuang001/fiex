@@ -131,6 +131,33 @@ fn connection_plugin_id(conn: &StoredConnection) -> String {
     }
 }
 
+/// Refuse requests when a provider has lost one of its declared permissions.
+/// A local-only provider need not ask for network access, but native staging
+/// downloads additionally require explicitly granted filesystem.write.
+fn ensure_provider_access(conn: &StoredConnection, write_file: bool) -> Result<String, String> {
+    let plugin_id = connection_plugin_id(conn);
+    let plugin = crate::plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
+        .ok_or("连接插件未安装、启用或已被撤销授权")?;
+    let mut required = Vec::new();
+    if plugin.declared_permissions.iter().any(|p| p == "network") {
+        required.push("network");
+    }
+    if write_file {
+        if !plugin.declared_permissions.iter().any(|p| p == "filesystem.write") {
+            return Err("文件下载插件未声明写入权限".into());
+        }
+        required.push("filesystem.write");
+    }
+    for permission in required {
+        if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
+            return Err(format!("插件权限未授权：{permission}"));
+        }
+    }
+    Ok(plugin_id)
+}
+
 /// Find the user-installed and approved provider that declares this factory.
 /// No official or trusted-publisher shortcut is permitted.
 fn declared_connection_fields(
@@ -457,11 +484,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         allow_invalid_certs: input.allow_invalid_certs,
         port: input.port,
     };
-    if (kind == "webdav" || kind == "smb")
-        && !crate::plugin_host::permission_allowed(&plugin_id, "network")?
-    {
-        return Err("连接插件没有网络权限".into());
-    }
+    ensure_provider_access(&record, false)?;
     crate::plugin_host::global().invoke(
         &plugin_id,
         "connection.validate",
@@ -573,10 +596,7 @@ fn local_for(conn: &StoredConnection, rel: &str) -> PathBuf {
 }
 
 async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
-    let plugin_id = connection_plugin_id(conn);
-    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
-        return Err("remote plugin network permission not granted".into());
-    }
+    let plugin_id = ensure_provider_access(conn, false)?;
     let config = provider_config(conn);
     let mut files = Vec::new();
     let mut cursor: Option<String> = None;
@@ -709,14 +729,7 @@ pub async fn list_listing(
 /// This is an interim file-backed IPC operation pending the SDK's binary
 /// stream channel; Core does not link WebDAV or SMB client implementations.
 async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
-    let plugin_id = connection_plugin_id(conn);
-    for permission in ["network", "filesystem.write"] {
-        if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
-            return Err(format!(
-                "remote plugin permission not granted: {permission}"
-            ));
-        }
-    }
+    let plugin_id = ensure_provider_access(conn, true)?;
     let result = crate::plugin_host::global().invoke(
         &plugin_id,
         "fs.download",
@@ -755,10 +768,7 @@ pub async fn provider_list(
         .ok_or("connection not found")?;
     // The manifest and actual user-granted permission gate every request.
     // No built-in provider is trusted implicitly, including the official ones.
-    let plugin_id = connection_plugin_id(&conn);
-    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
-        return Err("remote plugin network permission not granted".into());
-    }
+    let plugin_id = ensure_provider_access(&conn, false)?;
     let config = provider_config(&conn);
     crate::plugin_host::global().invoke(
         &plugin_id,
