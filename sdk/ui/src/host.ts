@@ -6,7 +6,7 @@ export type HostSession = {
   origin: string
   frame: HTMLIFrameElement
   allowedMethods: ReadonlySet<string>
-  dispatch(method: string, params: JsonValue | undefined): Promise<JsonValue>
+  dispatch(method: string, params: unknown): Promise<JsonValue>
 }
 export function attachFiexPanel(session: HostSession): () => void {
   const target = session.frame.contentWindow

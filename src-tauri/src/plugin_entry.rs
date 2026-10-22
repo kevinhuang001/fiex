@@ -1,6 +1,6 @@
 //! Migration adapter for the first three native plugin processes.
 //! Backend implementation will move out of the fiex crate incrementally.
-use fiex::{git, git_history, git_remote, plugin_sdk, remote};
+use fiex_lib::{git, git_history, git_remote, plugin_sdk, remote};
 use serde_json::{json, Value};
 
 fn as_string<'a>(p: &'a Value, name: &str) -> Result<&'a str, plugin_sdk::RpcError> {

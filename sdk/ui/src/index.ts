@@ -9,7 +9,7 @@ export type BridgeRequest = {
   requestId: string
   type: 'request'
   method: string
-  params?: JsonValue
+  params?: unknown
 }
 export type BridgeResponse = {
   bridgeVersion: '1.0'
@@ -102,7 +102,7 @@ export class FiexUiClient {
   }
   private onMessage(raw: unknown): void {
     if (!raw || typeof raw !== 'object') return
-    const msg = raw as Partial<BridgeResponse & BridgeEvent>
+    const msg = raw as Partial<BridgeResponse> | Partial<BridgeEvent>
     if (msg.bridgeVersion !== '1.0' || msg.sessionId !== this.sessionId) return
     if (msg.type === 'response' && typeof msg.requestId === 'string') {
       const pending = this.pending.get(msg.requestId)
@@ -117,7 +117,7 @@ export class FiexUiClient {
   }
   async invoke<T = JsonValue>(
     method: string,
-    params?: JsonValue,
+    params?: unknown,
     options?: { signal?: AbortSignal },
   ): Promise<T> {
     await this.ready()
