@@ -130,7 +130,9 @@ fn load_stored() -> Vec<StoredConnection> {
                 &format!("connection-{}", item.id),
                 "password",
                 &item.password,
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 item.password.clear();
                 migrated = true;
             }
@@ -146,7 +148,8 @@ fn load_stored() -> Vec<StoredConnection> {
                 &format!("org.fiex.{}", item.kind),
                 &format!("connection-{}", item.id),
                 "password",
-            ).unwrap_or_default();
+            )
+            .unwrap_or_default();
         }
     }
     items

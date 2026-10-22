@@ -38,10 +38,14 @@ export function usePluginCatalog(): PluginInfo[] {
   const [items, setItems] = useState<PluginInfo[]>([])
   useEffect(() => {
     let mounted = true
-    void pluginCatalog().then((plugins) => {
-      if (mounted) setItems(plugins)
-    }).catch(() => {})
-    return () => { mounted = false }
+    void pluginCatalog()
+      .then((plugins) => {
+        if (mounted) setItems(plugins)
+      })
+      .catch(() => {})
+    return () => {
+      mounted = false
+    }
   }, [])
   return items
 }

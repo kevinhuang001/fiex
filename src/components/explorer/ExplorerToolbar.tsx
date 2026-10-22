@@ -227,9 +227,9 @@ export function ExplorerToolbar({
               </Action>
             )),
           )}
-          {!plugins.some((plugin) => plugin.enabled && (plugin.contributes?.toolbar?.length ?? 0) > 0) && (
-            <Label>暂无可用的插件工具</Label>
-          )}
+          {!plugins.some(
+            (plugin) => plugin.enabled && (plugin.contributes?.toolbar?.length ?? 0) > 0,
+          ) && <Label>暂无可用的插件工具</Label>}
         </Menu>
         <Button
           variant="ghost"

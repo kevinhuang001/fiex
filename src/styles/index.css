@@ -3689,7 +3689,6 @@ body.dragging-reorder * {
   line-height: 1.7;
 }
 
-
 /* Manifest-driven connection picker and plugin preferences. */
 .connection-plugin-picker {
   display: flex;
@@ -3708,7 +3707,9 @@ body.dragging-reorder * {
   color: var(--text);
   background: var(--surface);
   text-align: left;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
 .connection-plugin-choice:hover {
   border-color: var(--accent);
@@ -3721,8 +3722,13 @@ body.dragging-reorder * {
   gap: 4px;
   min-width: 0;
 }
-.connection-plugin-choice strong { font-size: 12px; }
-.connection-plugin-choice small { font-size: 10px; color: var(--muted); }
+.connection-plugin-choice strong {
+  font-size: 12px;
+}
+.connection-plugin-choice small {
+  font-size: 10px;
+  color: var(--muted);
+}
 .connection-back {
   display: inline-flex;
   align-items: center;
@@ -3731,10 +3737,21 @@ body.dragging-reorder * {
   color: var(--muted);
   font-size: 11px;
 }
-.connection-back:hover { color: var(--text); }
-.plugin-settings-layout { display: flex; flex-direction: column; gap: 18px; }
-.plugin-settings-grid { display: grid; grid-template-columns: minmax(140px, 40%) minmax(0, 1fr); gap: 12px; }
-.plugin-settings-list, .plugin-settings-detail {
+.connection-back:hover {
+  color: var(--text);
+}
+.plugin-settings-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.plugin-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(140px, 40%) minmax(0, 1fr);
+  gap: 12px;
+}
+.plugin-settings-list,
+.plugin-settings-detail {
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -3753,15 +3770,38 @@ body.dragging-reorder * {
   text-align: left;
   color: var(--text);
 }
-.plugin-settings-list button:hover, .plugin-settings-list button.active {
+.plugin-settings-list button:hover,
+.plugin-settings-list button.active {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
-.plugin-settings-list button span { display: flex; flex-direction: column; gap: 2px; }
-.plugin-settings-list strong { font-size: 11px; }
-.plugin-settings-list small, .plugin-settings-detail > small { font-size: 9px; color: var(--muted); }
-.plugin-settings-detail > strong { font-size: 13px; }
-.plugin-settings-field { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
-.plugin-settings-field > span { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+.plugin-settings-list button span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plugin-settings-list strong {
+  font-size: 11px;
+}
+.plugin-settings-list small,
+.plugin-settings-detail > small {
+  font-size: 9px;
+  color: var(--muted);
+}
+.plugin-settings-detail > strong {
+  font-size: 13px;
+}
+.plugin-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+.plugin-settings-field > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+}
 .plugin-settings-field > input:not([type='checkbox']) {
   min-height: 32px;
   padding: 5px 8px;
@@ -3770,7 +3810,13 @@ body.dragging-reorder * {
   background: var(--canvas);
   color: var(--text);
 }
-.plugin-settings-detail .sidebar-hint { display: flex; align-items: center; gap: 5px; }
+.plugin-settings-detail .sidebar-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 @media (max-width: 640px) {
-  .plugin-settings-grid { grid-template-columns: 1fr; }
+  .plugin-settings-grid {
+    grid-template-columns: 1fr;
+  }
 }

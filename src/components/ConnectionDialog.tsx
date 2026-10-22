@@ -7,15 +7,23 @@ import { usePluginCatalog, type PluginField } from '@/lib/plugins'
 import type { RemoteConnection } from '@/lib/types'
 
 export function ConnectionDialog({
-  open, onClose, onSaved,
-}: { open: boolean; onClose: () => void; onSaved: (connection: RemoteConnection) => void }) {
+  open,
+  onClose,
+  onSaved,
+}: {
+  open: boolean
+  onClose: () => void
+  onSaved: (connection: RemoteConnection) => void
+}) {
   const plugins = usePluginCatalog()
   const choices = useMemo(
-    () => plugins.flatMap(plugin =>
-      plugin.enabled && plugin.capabilities.includes('connectionFactory')
-        ? (plugin.contributes?.connectionFactories || []).map(factory => ({ plugin, factory }))
-        : [],
-    ), [plugins],
+    () =>
+      plugins.flatMap((plugin) =>
+        plugin.enabled && plugin.capabilities.includes('connectionFactory')
+          ? (plugin.contributes?.connectionFactories || []).map((factory) => ({ plugin, factory }))
+          : [],
+      ),
+    [plugins],
   )
   const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -26,20 +34,30 @@ export function ConnectionDialog({
 
   useEffect(() => {
     if (!open) return
-    setSelected(null); setName(''); setValues({}); setBusy(false); setError('')
+    setSelected(null)
+    setName('')
+    setValues({})
+    setBusy(false)
+    setError('')
   }, [open])
 
   const choose = (key: string, fields: PluginField[]) => {
     setSelected(key)
-    setValues(Object.fromEntries(fields.map(field => [
-      field.id, field.defaultValue ?? (field.type === 'checkbox' ? false : ''),
-    ])))
+    setValues(
+      Object.fromEntries(
+        fields.map((field) => [
+          field.id,
+          field.defaultValue ?? (field.type === 'checkbox' ? false : ''),
+        ]),
+      ),
+    )
     setError('')
   }
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!current || busy) return
-    setBusy(true); setError('')
+    setBusy(true)
+    setError('')
     try {
       // Legacy connection persistence is temporary. Unknown providers must
       // not be misrepresented as WebDAV/SMB.
@@ -48,57 +66,97 @@ export function ConnectionDialog({
         throw new Error('该连接插件尚未提供兼容的连接保存接口')
       const connection = await call<RemoteConnection>('save_remote_connection', {
         input: {
-          name, kind,
-          url: String(values.url || ''), host: String(values.host || ''),
-          port: Number(values.port || 445), share: String(values.share || ''),
-          base: String(values.base || ''), username: String(values.username || ''),
-          password: String(values.password || ''), allowInvalidCerts: Boolean(values.allowInvalidCerts),
+          name,
+          kind,
+          url: String(values.url || ''),
+          host: String(values.host || ''),
+          port: Number(values.port || 445),
+          share: String(values.share || ''),
+          base: String(values.base || ''),
+          username: String(values.username || ''),
+          password: String(values.password || ''),
+          allowInvalidCerts: Boolean(values.allowInvalidCerts),
         },
       })
       onSaved(connection)
-    } catch (cause) { setError(String(cause)) }
-    finally { setBusy(false) }
+    } catch (cause) {
+      setError(String(cause))
+    } finally {
+      setBusy(false)
+    }
   }
   return (
-    <Modal open={open} onClose={onClose} title={current ? '配置 ' + current.plugin.name : '添加连接'}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={current ? '配置 ' + current.plugin.name : '添加连接'}
+    >
       {!current ? (
         <div className="connection-form">
           <p className="sidebar-hint">选择已安装的连接插件</p>
           <div className="connection-plugin-picker">
             {choices.map(({ plugin, factory }) => (
               <button
-                key={plugin.id + ':' + factory.id} type="button"
+                key={plugin.id + ':' + factory.id}
+                type="button"
                 className="connection-plugin-choice"
                 onClick={() => choose(plugin.id + ':' + factory.id, factory.fields)}
               >
-                {factory.id === 'webdav' ? <Cloud size={20} /> :
-                  factory.id === 'smb' ? <HardDrive size={20} /> : <Plug size={20} />}
+                {factory.id === 'webdav' ? (
+                  <Cloud size={20} />
+                ) : factory.id === 'smb' ? (
+                  <HardDrive size={20} />
+                ) : (
+                  <Plug size={20} />
+                )}
                 <span>
                   <strong>{factory.title || plugin.name}</strong>
-                  <small>{plugin.name} · {plugin.version}</small>
+                  <small>
+                    {plugin.name} · {plugin.version}
+                  </small>
                 </span>
                 <Server size={14} />
               </button>
             ))}
-            {!choices.length && <p className="sidebar-hint">没有已安装的连接插件。请先在设置 → 插件中安装或启用插件。</p>}
+            {!choices.length && (
+              <p className="sidebar-hint">
+                没有已安装的连接插件。请先在设置 → 插件中安装或启用插件。
+              </p>
+            )}
           </div>
-          <footer><Button type="button" onClick={onClose}>取消</Button></footer>
+          <footer>
+            <Button type="button" onClick={onClose}>
+              取消
+            </Button>
+          </footer>
         </div>
       ) : (
         <form className="connection-form" onSubmit={save}>
           <button
-            type="button" className="connection-back"
-            onClick={() => { setSelected(null); setError('') }}
+            type="button"
+            className="connection-back"
+            onClick={() => {
+              setSelected(null)
+              setError('')
+            }}
           >
             <ArrowLeft size={15} /> 选择其他插件
           </button>
           <p className="sidebar-hint">{current.factory.title}</p>
           <label>
             <span>连接名称</span>
-            <input value={name} onChange={event => setName(event.target.value)} autoFocus required />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoFocus
+              required
+            />
           </label>
-          {current.factory.fields.map(field => (
-            <label key={field.id} className={field.type === 'checkbox' ? 'connection-check' : undefined}>
+          {current.factory.fields.map((field) => (
+            <label
+              key={field.id}
+              className={field.type === 'checkbox' ? 'connection-check' : undefined}
+            >
               {field.type !== 'checkbox' && <span>{field.label}</span>}
               <input
                 type={field.type === 'secret' ? 'password' : field.type}
@@ -108,17 +166,26 @@ export function ConnectionDialog({
                 placeholder={field.placeholder}
                 min={field.type === 'number' ? 1 : undefined}
                 max={field.type === 'number' ? 65535 : undefined}
-                onChange={event => setValues(prev => ({
-                  ...prev,
-                  [field.id]: field.type === 'checkbox' ? event.target.checked : event.target.value,
-                }))}
+                onChange={(event) =>
+                  setValues((prev) => ({
+                    ...prev,
+                    [field.id]:
+                      field.type === 'checkbox' ? event.target.checked : event.target.value,
+                  }))
+                }
               />
               {field.type === 'checkbox' && <span>{field.label}</span>}
             </label>
           ))}
-          {error && <p className="connection-error" role="alert">{error}</p>}
+          {error && (
+            <p className="connection-error" role="alert">
+              {error}
+            </p>
+          )}
           <footer>
-            <Button type="button" onClick={onClose}>取消</Button>
+            <Button type="button" onClick={onClose}>
+              取消
+            </Button>
             <Button type="submit" disabled={busy || !name.trim()}>
               {busy ? '连接中…' : '添加连接'}
             </Button>

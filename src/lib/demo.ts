@@ -123,30 +123,79 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
   switch (command) {
     case 'plugins_list':
       return [
-        { id: 'org.fiex.webdav', name: 'WebDAV', version: '0.1.0', enabled: true, backendAvailable: true,
+        {
+          id: 'org.fiex.webdav',
+          name: 'WebDAV',
+          version: '0.1.0',
+          enabled: true,
+          backendAvailable: true,
           capabilities: ['filesystem', 'connectionFactory'],
-          contributes: { connectionFactories: [{ id:'webdav', title:'WebDAV',
-            fields: [{id:'url',label:'地址',type:'url',required:true},{id:'username',label:'用户名',type:'text'},
-              {id:'password',label:'密码',type:'secret'},{id:'allowInvalidCerts',label:'允许自签名证书',type:'checkbox'}] }],
-            settings:[{id:'timeout',label:'连接超时（秒）',type:'number',defaultValue:'90'}] } },
-        { id: 'org.fiex.smb', name: 'SMB / NAS', version: '0.1.0', enabled: true, backendAvailable: true,
+          contributes: {
+            connectionFactories: [
+              {
+                id: 'webdav',
+                title: 'WebDAV',
+                fields: [
+                  { id: 'url', label: '地址', type: 'url', required: true },
+                  { id: 'username', label: '用户名', type: 'text' },
+                  { id: 'password', label: '密码', type: 'secret' },
+                  { id: 'allowInvalidCerts', label: '允许自签名证书', type: 'checkbox' },
+                ],
+              },
+            ],
+            settings: [
+              { id: 'timeout', label: '连接超时（秒）', type: 'number', defaultValue: '90' },
+            ],
+          },
+        },
+        {
+          id: 'org.fiex.smb',
+          name: 'SMB / NAS',
+          version: '0.1.0',
+          enabled: true,
+          backendAvailable: true,
           capabilities: ['filesystem', 'connectionFactory'],
-          contributes: { connectionFactories: [{ id:'smb', title:'SMB 网络共享',fields:[
-              {id:'host',label:'主机',type:'text',required:true},{id:'port',label:'端口',type:'number',defaultValue:'445'},
-              {id:'share',label:'共享名',type:'text',required:true},{id:'base',label:'子路径',type:'text'},
-              {id:'username',label:'用户名',type:'text'},{id:'password',label:'密码',type:'secret'}]}] } },
-        { id:'org.fiex.git', name:'Git',version:'0.1.0',enabled:true,backendAvailable:true,
-          capabilities:['toolbar','filesystem','commands'],
-          contributes:{toolbar:[{id:'git.main',title:'源代码管理',command:'git.status'}],
-            settings:[{id:'historyLimit',label:'历史提交显示条数',type:'number',defaultValue:'50'}]} },
+          contributes: {
+            connectionFactories: [
+              {
+                id: 'smb',
+                title: 'SMB 网络共享',
+                fields: [
+                  { id: 'host', label: '主机', type: 'text', required: true },
+                  { id: 'port', label: '端口', type: 'number', defaultValue: '445' },
+                  { id: 'share', label: '共享名', type: 'text', required: true },
+                  { id: 'base', label: '子路径', type: 'text' },
+                  { id: 'username', label: '用户名', type: 'text' },
+                  { id: 'password', label: '密码', type: 'secret' },
+                ],
+              },
+            ],
+          },
+        },
+        {
+          id: 'org.fiex.git',
+          name: 'Git',
+          version: '0.1.0',
+          enabled: true,
+          backendAvailable: true,
+          capabilities: ['toolbar', 'filesystem', 'commands'],
+          contributes: {
+            toolbar: [{ id: 'git.main', title: '源代码管理', command: 'git.status' }],
+            settings: [
+              { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
+            ],
+          },
+        },
       ]
     case 'plugin_storage_get':
-      return pluginSettings.get(String(a.pluginId)+':'+String(a.scope)+':'+String(a.key)) ?? null
+      return (
+        pluginSettings.get(String(a.pluginId) + ':' + String(a.scope) + ':' + String(a.key)) ?? null
+      )
     case 'plugin_storage_set':
-      pluginSettings.set(String(a.pluginId)+':'+String(a.scope)+':'+String(a.key),a.value)
+      pluginSettings.set(String(a.pluginId) + ':' + String(a.scope) + ':' + String(a.key), a.value)
       return null
     case 'plugin_storage_delete':
-      pluginSettings.delete(String(a.pluginId)+':'+String(a.scope)+':'+String(a.key))
+      pluginSettings.delete(String(a.pluginId) + ':' + String(a.scope) + ':' + String(a.key))
       return null
     case 'plugin_secret_set':
       return null

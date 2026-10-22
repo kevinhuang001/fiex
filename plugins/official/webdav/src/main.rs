@@ -1,90 +1,158 @@
 //! Standalone WebDAV adapter. The Fiex host owns mount configuration,
 //! credential storage, cache, sync rules and conflict resolution.
-use std::{time::{Duration,SystemTime,UNIX_EPOCH},path::Path,fs,io::Write};
-use serde::{Deserialize,Serialize};
-use serde_json::{json,Value};
-use fiex_plugin_sdk::{self as sdk,RpcError};
-use quick_xml::events::Event;
+use fiex_plugin_sdk::{self as sdk, RpcError};
 use futures_util::StreamExt;
+use quick_xml::events::Event;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::{
+    fs,
+    io::Write,
+    path::Path,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tokio::runtime::Builder;
 
-const DAV_BODY:&str = r#"<?xml version="1.0" encoding="utf-8"?>
+const DAV_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:resourcetype/><d:getcontentlength/><d:getlastmodified/><d:getcontenttype/></d:prop></d:propfind>"#;
 #[derive(Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 struct StoredConnection {
-    url:String,
-    #[serde(default)] username:String,
-    #[serde(default)] password:String,
-    #[serde(default)] allow_invalid_certs:bool,
+    url: String,
+    #[serde(default)]
+    username: String,
+    #[serde(default)]
+    password: String,
+    #[serde(default)]
+    allow_invalid_certs: bool,
 }
-struct RemoteFile { name:String,path:String,is_dir:bool,size:u64,modified:u64 }
+struct RemoteFile {
+    name: String,
+    path: String,
+    is_dir: bool,
+    size: u64,
+    modified: u64,
+}
 
-fn safe_relative(value:&str)->Result<(),RpcError>{
-    if value.starts_with('/')||value.split('/').any(|p|p=="."||p==".."||p.contains(['\\','\0'])) {
+fn safe_relative(value: &str) -> Result<(), RpcError> {
+    if value.starts_with('/')
+        || value
+            .split('/')
+            .any(|p| p == "." || p == ".." || p.contains(['\\', '\0']))
+    {
         return Err(RpcError::invalid_params("invalid node ID"));
     }
     Ok(())
 }
-fn dispatch(method:&str,p:Value)->Result<Value,RpcError>{
-    let cfg:StoredConnection=serde_json::from_value(p.get("connection").cloned()
-        .ok_or_else(||RpcError::invalid_params("missing connection"))?)
-        .map_err(|e|RpcError::invalid_params(e.to_string()))?;
-    if !(cfg.url.starts_with("https://")||cfg.url.starts_with("http://")){
+fn dispatch(method: &str, p: Value) -> Result<Value, RpcError> {
+    let cfg: StoredConnection = serde_json::from_value(
+        p.get("connection")
+            .cloned()
+            .ok_or_else(|| RpcError::invalid_params("missing connection"))?,
+    )
+    .map_err(|e| RpcError::invalid_params(e.to_string()))?;
+    if !(cfg.url.starts_with("https://") || cfg.url.starts_with("http://")) {
         return Err(RpcError::invalid_params("invalid WebDAV URL"));
     }
-    let path=p.get("directoryId").or_else(||p.get("nodeId"))
-        .and_then(Value::as_str).unwrap_or("");
+    let path = p
+        .get("directoryId")
+        .or_else(|| p.get("nodeId"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
     safe_relative(path)?;
-    let rt=Builder::new_current_thread().enable_all().build().map_err(|e|RpcError::internal(e.to_string()))?;
+    let rt = Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| RpcError::internal(e.to_string()))?;
     match method {
         "connection.validate" => {
-            rt.block_on(webdav_list(&cfg,""))
+            rt.block_on(webdav_list(&cfg, ""))
                 .map_err(RpcError::internal)?;
             Ok(json!({"valid":true}))
         }
         "fs.list" => {
-            let mut nodes=rt.block_on(webdav_list(&cfg,path)).map_err(RpcError::internal)?;
-            nodes.sort_by(|a,b|a.name.cmp(&b.name));
-            let start=p.get("cursor").and_then(Value::as_str).unwrap_or("0").parse::<usize>()
-                .map_err(|_|RpcError::invalid_params("invalid cursor"))?;
-            if start>nodes.len(){return Err(RpcError::invalid_params("cursor out of range"));}
-            let limit=p.get("limit").and_then(Value::as_u64).unwrap_or(200).clamp(1,500) as usize;
-            let end=(start+limit).min(nodes.len());
-            let entries=nodes[start..end].iter().map(|f|{
-                let id=if path.is_empty(){f.path.clone()}else{format!("{}/{}",path.trim_matches('/'),f.path)};
-                json!({"nodeId":id,"name":f.name,"kind":if f.is_dir{"directory"}else{"file"},
+            let mut nodes = rt
+                .block_on(webdav_list(&cfg, path))
+                .map_err(RpcError::internal)?;
+            nodes.sort_by(|a, b| a.name.cmp(&b.name));
+            let start = p
+                .get("cursor")
+                .and_then(Value::as_str)
+                .unwrap_or("0")
+                .parse::<usize>()
+                .map_err(|_| RpcError::invalid_params("invalid cursor"))?;
+            if start > nodes.len() {
+                return Err(RpcError::invalid_params("cursor out of range"));
+            }
+            let limit = p
+                .get("limit")
+                .and_then(Value::as_u64)
+                .unwrap_or(200)
+                .clamp(1, 500) as usize;
+            let end = (start + limit).min(nodes.len());
+            let entries = nodes[start..end]
+                .iter()
+                .map(|f| {
+                    let id = if path.is_empty() {
+                        f.path.clone()
+                    } else {
+                        format!("{}/{}", path.trim_matches('/'), f.path)
+                    };
+                    json!({"nodeId":id,"name":f.name,"kind":if f.is_dir{"directory"}else{"file"},
                     "size":f.size,"modified":f.modified})
-            }).collect::<Vec<_>>();
-            Ok(json!({"entries":entries,"nextCursor":if end<nodes.len(){Some(end.to_string())}else{None},
-                "snapshotToken":null,"identityStability":"path"}))
+                })
+                .collect::<Vec<_>>();
+            Ok(
+                json!({"entries":entries,"nextCursor":if end<nodes.len(){Some(end.to_string())}else{None},
+                "snapshotToken":null,"identityStability":"path"}),
+            )
         }
         "fs.readSmall" => {
-            let max=p.get("maxBytes").and_then(Value::as_u64).unwrap_or(262144).clamp(1,1048576);
-            let data=rt.block_on(async{
-                let req=auth(webdav_client(&cfg)?.get(webdav_url(&cfg,path))
-                    .header("Range",format!("bytes=0-{}",max-1)),&cfg);
-                let res=req.send().await.map_err(|e|e.to_string())?.error_for_status().map_err(|e|e.to_string())?;
-                if res.status().as_u16()!=206 {
-                    if res.content_length().unwrap_or(u64::MAX)>max {return Err("server ignored Range".into());}
-                }
-                let bytes=res.bytes().await.map_err(|e|e.to_string())?;
-                if bytes.len()>max as usize {return Err("file exceeds preview limit".into());}
-                Ok::<_,String>(bytes)
-            }).map_err(RpcError::internal)?;
+            let max = p
+                .get("maxBytes")
+                .and_then(Value::as_u64)
+                .unwrap_or(262144)
+                .clamp(1, 1048576);
+            let data = rt
+                .block_on(async {
+                    let req = auth(
+                        webdav_client(&cfg)?
+                            .get(webdav_url(&cfg, path))
+                            .header("Range", format!("bytes=0-{}", max - 1)),
+                        &cfg,
+                    );
+                    let res = req
+                        .send()
+                        .await
+                        .map_err(|e| e.to_string())?
+                        .error_for_status()
+                        .map_err(|e| e.to_string())?;
+                    if res.status().as_u16() != 206 {
+                        if res.content_length().unwrap_or(u64::MAX) > max {
+                            return Err("server ignored Range".into());
+                        }
+                    }
+                    let bytes = res.bytes().await.map_err(|e| e.to_string())?;
+                    if bytes.len() > max as usize {
+                        return Err("file exceeds preview limit".into());
+                    }
+                    Ok::<_, String>(bytes)
+                })
+                .map_err(RpcError::internal)?;
             use base64::Engine;
-            Ok(json!({"base64":base64::engine::general_purpose::STANDARD.encode(&data),"length":data.len()}))
+            Ok(
+                json!({"base64":base64::engine::general_purpose::STANDARD.encode(&data),"length":data.len()}),
+            )
         }
         _ => Err(RpcError::method_not_found(method)),
     }
 }
-fn main(){
-    if let Err(e)=sdk::serve("org.fiex.webdav",dispatch){
+fn main() {
+    if let Err(e) = sdk::serve("org.fiex.webdav", dispatch) {
         eprintln!("WebDAV plugin IPC failed: {e}");
         std::process::exit(1);
     }
 }
-
 
 fn webdav_client(conn: &StoredConnection) -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
@@ -262,4 +330,3 @@ async fn webdav_get(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u
     }
     Ok(size)
 }
-

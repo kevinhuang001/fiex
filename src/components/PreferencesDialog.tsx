@@ -33,7 +33,8 @@ interface Props {
   onError: (s: string) => void
 }
 
-type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about' | 'plugins'
+type SectionId =
+  'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about' | 'plugins'
 
 interface Section {
   id: SectionId
