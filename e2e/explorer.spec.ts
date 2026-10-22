@@ -302,8 +302,8 @@ test('git status, tags and connection dialog', async ({ page }) => {
   await page.getByRole('button', { name: '选择其他插件' }).click()
   await page.getByRole('button', { name: '关闭', exact: true }).click()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
-  await page.getByRole('menuitem', { name: '压缩为…' }).hover()
-  await expect(page.getByRole('menuitem', { name: 'TAR.GZ' })).toBeVisible()
+  // Optional archive plugin is not preinstalled.
+  await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
 })
 
 test('multi-select and select all', async ({ page }) => {
@@ -365,11 +365,10 @@ test('read-only commit disables destructive context actions and archive submenu'
   await page.getByRole('button', { name: '查看提交 bbbbbbbb', exact: true }).click()
   await expect(page.getByRole('button', { name: '新建文件夹', exact: true })).toBeDisabled()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
-  for (const name of ['重新命名', '剪切', '创建副本', '压缩为…', '移到废纸篓']) {
+  for (const name of ['重新命名', '剪切', '创建副本', '移到废纸篓']) {
     await expect(page.getByRole('menuitem', { name, exact: false })).toBeDisabled()
   }
-  await page.locator('.context-submenu-wrap').hover()
-  await expect(page.getByRole('menuitem', { name: 'TAR.GZ', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '快速查看', exact: false })).toBeEnabled()
 })
 
@@ -559,27 +558,14 @@ test('non Git welcome contains only its icon and action', async ({ page }) => {
   await expect(welcome.locator('svg')).toHaveCount(2)
 })
 
-test('advanced compression only exposes supported options', async ({ page }) => {
+test('optional archive and checksum features are not preinstalled', async ({ page }) => {
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
-  await page.getByRole('menuitem', { name: '压缩为…', exact: true }).hover()
-  await page.getByRole('menuitem', { name: '高级…', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: '高级压缩' })
-  await expect(dialog.getByLabel('压缩密码')).toBeVisible()
-  await dialog.getByRole('button', { name: 'TAR 仅打包', exact: true }).click()
-  await expect(dialog.getByRole('slider')).toHaveCount(0)
-  await expect(dialog.getByLabel('压缩密码')).toHaveCount(0)
-  await dialog.getByRole('button', { name: 'TAR.BZ2 Bzip2', exact: true }).click()
-  await expect(dialog.getByRole('slider')).toHaveAttribute('min', '1')
-  await page.screenshot({ path: 'artifacts/compress.png' })
-})
-
-test('checksum sheet displays five selectable hashes', async ({ page }) => {
-  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
-  await page.getByRole('menuitem', { name: '查看校验和', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: '文件校验和' })
-  await expect(dialog.locator('.checksum-row')).toHaveCount(5)
-  await expect(dialog.getByRole('button', { name: '复制 SHA-256', exact: true })).toBeVisible()
-  await page.screenshot({ path: 'artifacts/checksums.png' })
+  await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await expect(page.getByText('从 GitHub 安装插件')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'GitHub 插件仓库' })).toBeVisible()
 })
 
 test('tab dragging preserves the active folder', async ({ page }) => {
