@@ -57,6 +57,18 @@
           }
         ]
       }
+    ],
+    "settings": [
+      {
+        "id": "scanInterval",
+        "label": "目录扫描间隔（秒）",
+        "type": "number",
+        "defaultValue": "90"
+      }
     ]
+  },
+  "permissions": {
+    "storage": true,
+    "secrets": true
   }
 }

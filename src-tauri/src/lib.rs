@@ -16,6 +16,7 @@ mod macos_material;
 mod native_drag;
 pub mod operations;
 pub mod plugin_host;
+pub mod plugin_storage;
 #[path = "../../sdk/rust/src/lib.rs"]
 pub mod plugin_sdk;
 pub mod recent;

@@ -44,6 +44,24 @@
           }
         ]
       }
+    ],
+    "settings": [
+      {
+        "id": "timeout",
+        "label": "连接超时（秒）",
+        "type": "number",
+        "defaultValue": "90"
+      },
+      {
+        "id": "cacheMetadataTtl",
+        "label": "目录刷新周期（秒）",
+        "type": "number",
+        "defaultValue": "60"
+      }
     ]
+  },
+  "permissions": {
+    "storage": true,
+    "secrets": true
   }
 }

@@ -1,4 +1,4 @@
-import { Choice, Label, Menu } from '@/components/Menus'
+import { Action, Choice, Label, Menu } from '@/components/Menus'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
 import type { Group, Sort, View } from '@/lib/types'
@@ -17,8 +17,10 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
 import { useEffect, useState } from 'react'
-import { Columns2, RefreshCw, ScrollText, Trash2 } from 'lucide-react'
+import { Columns2, Puzzle, RefreshCw, ScrollText, Trash2 } from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
+import { usePluginCatalog } from '@/lib/plugins'
+import { call } from '@/lib/api'
 import type { ReactNode } from 'react'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
@@ -85,6 +87,7 @@ export function ExplorerToolbar({
   | 'displayName'
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
+  const plugins = usePluginCatalog()
   const [refreshKey, setRefreshKey] = useState(0)
   const [picker, setPicker] = useState<{
     kind: 'terminal' | 'ide'
@@ -198,6 +201,36 @@ export function ExplorerToolbar({
         >
           <FolderPlus weight="duotone" size={20} />
         </Button>
+        <Menu label="插件" icon={<Puzzle size={20} />}>
+          <Label>插件工具</Label>
+          {plugins.flatMap((plugin) =>
+            (plugin.enabled ? plugin.contributes?.toolbar || [] : []).map((tool) => (
+              <Action
+                key={plugin.id + ':' + tool.id}
+                onClick={() => {
+                  // Built-in Git panel is a compatibility adapter until its
+                  // iframe is bundled as a plugin UI contribution.
+                  if (tool.id === 'git.main' && plugin.id === 'org.fiex.git') {
+                    setGitOpen(true)
+                  } else if (tool.command && plugin.backendAvailable) {
+                    void call('plugin_invoke', {
+                      pluginId: plugin.id,
+                      method: tool.command,
+                      params: { root: x.path },
+                    }).catch((error) => x.setError(String(error)))
+                  } else {
+                    x.setError('插件尚未提供可用的工具面板')
+                  }
+                }}
+              >
+                {plugin.name} · {tool.title}
+              </Action>
+            )),
+          )}
+          {!plugins.some((plugin) => plugin.enabled && (plugin.contributes?.toolbar?.length ?? 0) > 0) && (
+            <Label>暂无可用的插件工具</Label>
+          )}
+        </Menu>
         <Button
           variant="ghost"
           size="icon"

@@ -228,15 +228,52 @@ async fn plugin_invoke(
 }
 #[tauri::command]
 fn plugin_status() -> Vec<(String, bool)> {
-    ["org.fiex.webdav", "org.fiex.smb", "org.fiex.git"]
-        .iter()
-        .map(|id| {
-            (
-                id.to_string(),
-                crate::plugin_host::global().is_installed(id),
-            )
-        })
-        .collect()
+    crate::plugin_host::catalog().into_iter()
+        .map(|item| (item.id,item.backend_available)).collect()
+}
+#[tauri::command]
+fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
+    crate::plugin_host::catalog()
+}
+fn ensure_plugin(id: &str) -> Result<(), String> {
+    if crate::plugin_host::exists(id) { Ok(()) }
+    else { Err("plugin is not installed".into()) }
+}
+#[tauri::command]
+fn plugin_storage_get(plugin_id: String, scope: String, key: String)
+    -> Result<Option<serde_json::Value>, String> {
+    ensure_plugin(&plugin_id)?;
+    crate::plugin_storage::get(&plugin_id,&scope,&key)
+}
+#[tauri::command]
+fn plugin_storage_set(plugin_id: String, scope: String, key: String, value: serde_json::Value)
+    -> Result<(), String> {
+    ensure_plugin(&plugin_id)?;
+    crate::plugin_storage::set(&plugin_id,&scope,&key,value)
+}
+#[tauri::command]
+fn plugin_storage_delete(plugin_id: String, scope: String, key: String)
+    -> Result<(), String> {
+    ensure_plugin(&plugin_id)?;
+    crate::plugin_storage::delete(&plugin_id,&scope,&key)
+}
+#[tauri::command]
+fn plugin_secret_set(plugin_id: String, scope: String, key: String, value: String)
+    -> Result<(), String> {
+    ensure_plugin(&plugin_id)?;
+    let permitted=crate::plugin_host::catalog().into_iter()
+        .find(|p|p.id==plugin_id)
+        .and_then(|p|p.contributes.get("settings").cloned())
+        .and_then(|v|v.as_array().cloned())
+        .is_some_and(|fields|fields.iter().any(|f|
+            f.get("id").and_then(|v|v.as_str())==Some(key.as_str()) &&
+            f.get("type").and_then(|v|v.as_str())==Some("secret")));
+    if !permitted || scope != "global" { return Err("secret setting is not declared".into()); }
+    crate::plugin_storage::secret_set(&plugin_id,&scope,&key,&value)
+}
+#[tauri::command]
+fn plugin_secret_available() -> bool {
+    crate::plugin_storage::secret_available()
 }
 
 /// Temporary v0.2.7 compatibility path: prefer external plugin whenever
@@ -1212,6 +1249,12 @@ pub fn run() {
             platform,
             plugin_invoke,
             plugin_status,
+            plugins_list,
+            plugin_storage_get,
+            plugin_storage_set,
+            plugin_storage_delete,
+            plugin_secret_set,
+            plugin_secret_available,
             ci_reply,
             ci_log,
             register_drag,

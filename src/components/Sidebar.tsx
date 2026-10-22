@@ -212,15 +212,15 @@ export function Sidebar({
                   <span className="sidebar-label">连接</span>
                   <button
                     className="icon-button"
-                    title="添加 WebDAV 或 SMB 连接"
-                    aria-label="添加 WebDAV 或 SMB 连接"
+                    title="添加连接"
+                    aria-label="添加连接"
                     onClick={onAddConnection}
                   >
                     <Plus size={14} />
                   </button>
                 </div>
                 {x.connections.length === 0 ? (
-                  <p className="sidebar-hint">WebDAV · SMB</p>
+                  <p className="sidebar-hint">点击 + 添加连接</p>
                 ) : (
                   x.connections.map((connection) => (
                     <div className="device-row" key={connection.id}>
@@ -231,7 +231,7 @@ export function Sidebar({
                         <Server />
                         <span>
                           <span>{connection.name}</span>
-                          <small>{connection.kind === 'webdav' ? 'WebDAV' : 'SMB'}</small>
+                          <small>{connection.kind}</small>
                         </span>
                       </button>
                       <button

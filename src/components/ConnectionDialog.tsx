@@ -1,173 +1,130 @@
-import { useEffect, useState } from 'react'
-import { Cloud, HardDrive } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Cloud, HardDrive, Plug, Server } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call } from '@/lib/api'
+import { usePluginCatalog, type PluginField } from '@/lib/plugins'
 import type { RemoteConnection } from '@/lib/types'
 
 export function ConnectionDialog({
-  open,
-  onClose,
-  onSaved,
-}: {
-  open: boolean
-  onClose: () => void
-  onSaved: (connection: RemoteConnection) => void
-}) {
-  const [kind, setKind] = useState<'webdav' | 'smb'>('webdav')
+  open, onClose, onSaved,
+}: { open: boolean; onClose: () => void; onSaved: (connection: RemoteConnection) => void }) {
+  const plugins = usePluginCatalog()
+  const choices = useMemo(
+    () => plugins.flatMap(plugin =>
+      plugin.enabled && plugin.capabilities.includes('connectionFactory')
+        ? (plugin.contributes?.connectionFactories || []).map(factory => ({ plugin, factory }))
+        : [],
+    ), [plugins],
+  )
+  const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [url, setUrl] = useState('')
-  const [host, setHost] = useState('')
-  const [port, setPort] = useState(445)
-  const [share, setShare] = useState('')
-  const [base, setBase] = useState('')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [invalidCerts, setInvalidCerts] = useState(false)
+  const [values, setValues] = useState<Record<string, string | boolean>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const current = choices.find(({ plugin, factory }) => plugin.id + ':' + factory.id === selected)
 
   useEffect(() => {
     if (!open) return
-    setKind('webdav')
-    setName('')
-    setUrl('')
-    setHost('')
-    setPort(445)
-    setShare('')
-    setBase('')
-    setUsername('')
-    setPassword('')
-    setInvalidCerts(false)
-    setError('')
+    setSelected(null); setName(''); setValues({}); setBusy(false); setError('')
   }, [open])
 
+  const choose = (key: string, fields: PluginField[]) => {
+    setSelected(key)
+    setValues(Object.fromEntries(fields.map(field => [
+      field.id, field.defaultValue ?? (field.type === 'checkbox' ? false : ''),
+    ])))
+    setError('')
+  }
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
-    setBusy(true)
-    setError('')
+    if (!current || busy) return
+    setBusy(true); setError('')
     try {
+      // Legacy connection persistence is temporary. Unknown providers must
+      // not be misrepresented as WebDAV/SMB.
+      const kind = current.factory.id
+      if (kind !== 'webdav' && kind !== 'smb')
+        throw new Error('该连接插件尚未提供兼容的连接保存接口')
       const connection = await call<RemoteConnection>('save_remote_connection', {
         input: {
-          name,
-          kind,
-          url,
-          host,
-          port,
-          share,
-          base,
-          username,
-          password,
-          allowInvalidCerts: invalidCerts,
+          name, kind,
+          url: String(values.url || ''), host: String(values.host || ''),
+          port: Number(values.port || 445), share: String(values.share || ''),
+          base: String(values.base || ''), username: String(values.username || ''),
+          password: String(values.password || ''), allowInvalidCerts: Boolean(values.allowInvalidCerts),
         },
       })
       onSaved(connection)
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setBusy(false)
-    }
+    } catch (cause) { setError(String(cause)) }
+    finally { setBusy(false) }
   }
-
   return (
-    <Modal open={open} onClose={onClose} title="添加连接">
-      <form className="connection-form" onSubmit={save}>
-        <div className="connection-kinds">
-          <button
-            type="button"
-            className={kind === 'webdav' ? 'active' : ''}
-            onClick={() => setKind('webdav')}
-          >
-            <Cloud size={15} />
-            WebDAV
-          </button>
-          <button
-            type="button"
-            className={kind === 'smb' ? 'active' : ''}
-            onClick={() => setKind('smb')}
-          >
-            <HardDrive size={15} />
-            SMB
-          </button>
-        </div>
-        <label>
-          <span>名称</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-        </label>
-        {kind === 'webdav' ? (
-          <>
-            <label>
-              <span>地址</span>
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/dav"
-              />
-            </label>
-            <label className="connection-check">
-              <input
-                type="checkbox"
-                checked={invalidCerts}
-                onChange={(e) => setInvalidCerts(e.target.checked)}
-              />
-              允许自签名证书
-            </label>
-          </>
-        ) : (
-          <div className="connection-grid">
-            <label>
-              <span>主机</span>
-              <input
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder="nas.local"
-              />
-            </label>
-            <label>
-              <span>端口</span>
-              <input
-                type="number"
-                min="1"
-                max="65535"
-                aria-label="SMB 端口"
-                value={port}
-                onChange={(e) => setPort(+e.target.value)}
-              />
-            </label>
-            <label>
-              <span>共享名</span>
-              <input
-                value={share}
-                onChange={(e) => setShare(e.target.value)}
-                placeholder="Public"
-              />
-            </label>
-            <label className="connection-wide">
-              <span>子路径</span>
-              <input value={base} onChange={(e) => setBase(e.target.value)} placeholder="可选" />
-            </label>
+    <Modal open={open} onClose={onClose} title={current ? '配置 ' + current.plugin.name : '添加连接'}>
+      {!current ? (
+        <div className="connection-form">
+          <p className="sidebar-hint">选择已安装的连接插件</p>
+          <div className="connection-plugin-picker">
+            {choices.map(({ plugin, factory }) => (
+              <button
+                key={plugin.id + ':' + factory.id} type="button"
+                className="connection-plugin-choice"
+                onClick={() => choose(plugin.id + ':' + factory.id, factory.fields)}
+              >
+                {factory.id === 'webdav' ? <Cloud size={20} /> :
+                  factory.id === 'smb' ? <HardDrive size={20} /> : <Plug size={20} />}
+                <span>
+                  <strong>{factory.title || plugin.name}</strong>
+                  <small>{plugin.name} · {plugin.version}</small>
+                </span>
+                <Server size={14} />
+              </button>
+            ))}
+            {!choices.length && <p className="sidebar-hint">没有已安装的连接插件。请先在设置 → 插件中安装或启用插件。</p>}
           </div>
-        )}
-        <div className="connection-grid">
-          <label>
-            <span>用户名</span>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} />
-          </label>
-          <label>
-            <span>密码</span>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </label>
+          <footer><Button type="button" onClick={onClose}>取消</Button></footer>
         </div>
-        {error && <p className="connection-error">{error}</p>}
-        <footer>
-          <Button type="button" onClick={onClose}>
-            取消
-          </Button>
-          <Button type="submit" disabled={busy || !name.trim()}>
-            {busy ? '连接中…' : '添加'}
-          </Button>
-        </footer>
-      </form>
+      ) : (
+        <form className="connection-form" onSubmit={save}>
+          <button
+            type="button" className="connection-back"
+            onClick={() => { setSelected(null); setError('') }}
+          >
+            <ArrowLeft size={15} /> 选择其他插件
+          </button>
+          <p className="sidebar-hint">{current.factory.title}</p>
+          <label>
+            <span>连接名称</span>
+            <input value={name} onChange={event => setName(event.target.value)} autoFocus required />
+          </label>
+          {current.factory.fields.map(field => (
+            <label key={field.id} className={field.type === 'checkbox' ? 'connection-check' : undefined}>
+              {field.type !== 'checkbox' && <span>{field.label}</span>}
+              <input
+                type={field.type === 'secret' ? 'password' : field.type}
+                checked={field.type === 'checkbox' ? Boolean(values[field.id]) : undefined}
+                value={field.type === 'checkbox' ? undefined : String(values[field.id] ?? '')}
+                required={field.required}
+                placeholder={field.placeholder}
+                min={field.type === 'number' ? 1 : undefined}
+                max={field.type === 'number' ? 65535 : undefined}
+                onChange={event => setValues(prev => ({
+                  ...prev,
+                  [field.id]: field.type === 'checkbox' ? event.target.checked : event.target.value,
+                }))}
+              />
+              {field.type === 'checkbox' && <span>{field.label}</span>}
+            </label>
+          ))}
+          {error && <p className="connection-error" role="alert">{error}</p>}
+          <footer>
+            <Button type="button" onClick={onClose}>取消</Button>
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy ? '连接中…' : '添加连接'}
+            </Button>
+          </footer>
+        </form>
+      )}
     </Modal>
   )
 }

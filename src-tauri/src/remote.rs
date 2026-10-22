@@ -30,7 +30,8 @@ struct StoredConnection {
     base: String,
     #[serde(default)]
     username: String,
-    #[serde(default)]
+    // Historical JSON may include a password; never serialize one again.
+    #[serde(default, skip_serializing)]
     password: String,
     #[serde(default)]
     allow_invalid_certs: bool,
@@ -117,10 +118,38 @@ fn meta_dir() -> PathBuf {
 }
 
 fn load_stored() -> Vec<StoredConnection> {
-    fs::read(connections_path())
+    let mut items: Vec<StoredConnection> = fs::read(connections_path())
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let mut migrated = false;
+    for item in &mut items {
+        if !item.password.is_empty() {
+            if crate::plugin_storage::secret_set(
+                &format!("org.fiex.{}", item.kind),
+                &format!("connection-{}", item.id),
+                "password",
+                &item.password,
+            ).is_ok() {
+                item.password.clear();
+                migrated = true;
+            }
+        }
+    }
+    // Commit sanitized legacy data before populating in-memory credentials.
+    if migrated {
+        let _ = save_stored(&items);
+    }
+    for item in &mut items {
+        if item.password.is_empty() {
+            item.password = crate::plugin_storage::secret_get(
+                &format!("org.fiex.{}", item.kind),
+                &format!("connection-{}", item.id),
+                "password",
+            ).unwrap_or_default();
+        }
+    }
+    items
 }
 
 fn save_stored(items: &[StoredConnection]) -> Result<(), String> {
@@ -250,6 +279,14 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         id
     };
     let conn = items.iter().find(|c| c.id == id).ok_or("连接不存在")?;
+    if !conn.password.is_empty() {
+        crate::plugin_storage::secret_set(
+            &format!("org.fiex.{kind}"),
+            &format!("connection-{id}"),
+            "password",
+            &conn.password,
+        )?;
+    }
     fs::create_dir_all(mount_path(conn)).map_err(|e| e.to_string())?;
     save_stored(&items)?;
     Ok(public(conn))

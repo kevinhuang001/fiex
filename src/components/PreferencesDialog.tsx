@@ -4,6 +4,7 @@ import {
   Info,
   Keyboard,
   Palette,
+  Puzzle,
   PanelLeft,
   Search,
   Tags,
@@ -19,6 +20,7 @@ import { ShortcutSettings } from './settings/ShortcutSettings'
 import { SidebarSettings } from './settings/SidebarSettings'
 import { TagSettings } from './settings/TagSettings'
 import { Modal } from './ui/Modal'
+import { PluginSettings } from './settings/PluginSettings'
 
 interface Props {
   open: boolean
@@ -31,7 +33,7 @@ interface Props {
   onError: (s: string) => void
 }
 
-type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about'
+type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about' | 'plugins'
 
 interface Section {
   id: SectionId
@@ -83,6 +85,13 @@ const sections: Section[] = [
     icon: TerminalSquare,
     color: '#10b981',
     keywords: ['terminal', 'shell', 'ide', '终端', '命令行', '启动', '编辑器'],
+  },
+  {
+    id: 'plugins',
+    label: '插件',
+    icon: Puzzle,
+    color: '#64748b',
+    keywords: ['插件', 'plugin', '扩展', '配置', '权限', 'OAuth'],
   },
   {
     id: 'about',
@@ -207,6 +216,8 @@ export function PreferencesDialog({
                 onHelp={() => setIntegrationsOpen(true)}
               />
             )}
+
+            {section === 'plugins' && <PluginSettings />}
 
             {section === 'about' && <AboutSettings onError={onError} />}
             <footer className="settings-actions">

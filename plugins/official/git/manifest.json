@@ -24,6 +24,18 @@
         "icon": "git-branch",
         "command": "git.status"
       }
+    ],
+    "settings": [
+      {
+        "id": "historyLimit",
+        "label": "历史提交显示条数",
+        "type": "number",
+        "defaultValue": "50"
+      }
     ]
+  },
+  "permissions": {
+    "storage": true,
+    "secrets": false
   }
 }
