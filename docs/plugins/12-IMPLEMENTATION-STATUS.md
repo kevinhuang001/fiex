@@ -4,11 +4,9 @@
 
 ## 已落地的仓库边界
 
-| 仓库 | 职责与测试 |
-| --- | --- |
-| [fiex](https://github.com/kevinhuang001/fiex) | Core 文件操作、通用插件安装和权限、原生进程宿主、UI、模拟 IPC 测试；仅引入 `sdk/` 子模块 |
-| [fiex-sdk](https://github.com/kevinhuang001/fiex-sdk) | Rust JSON-RPC 协议、Native SDK、TypeScript UI SDK，独立 CI |
-| [fiex-official-plugins](https://github.com/kevinhuang001/fiex-official-plugins) | Git、WebDAV、SMB、Archive、Checksum 插件实现及 Linux/macOS/Windows 打包；真实 WebDAV/SMB 服务器功能测试和调用真实 Core 宿主的集成测试 |
+- [fiex](https://github.com/kevinhuang001/fiex)：Core 文件操作、通用插件安装和权限、原生进程宿主、UI、模拟 IPC 测试；仅引入 `sdk/` 子模块。
+- [fiex-sdk](https://github.com/kevinhuang001/fiex-sdk)：Rust JSON-RPC 协议、Native SDK、TypeScript UI SDK，独立 CI。
+- [fiex-official-plugins](https://github.com/kevinhuang001/fiex-official-plugins)：Git、WebDAV、SMB、Archive、Checksum 插件实现及 Linux/macOS/Windows 打包；真实 WebDAV/SMB 服务器功能测试和调用真实 Core 宿主的集成测试。
 
 不内置、预安装、特殊信任任何官方插件。安装从 GitHub Release 手动选择 `.fiexplugin`，预览并确认权限，卸载、禁用、权限撤销均由 Core 统一管理。Native 插件仍是**未受操作系统强制沙箱隔离的进程**，宿主侧权限门控不能防止恶意插件直接使用进程的 OS 用户权限。
 
