@@ -1,5 +1,7 @@
 # Code structure
 
+> **当前实现（Fiex v0.2.7）**：本文件记录已合并代码的现状。计划中的进程隔离插件、统一 VFS、内核缓存/同步与公共 SDK 尚未实现；目标方案详见 [插件系统技术规格](plugins/README.md)，请勿将设计文档误认作当前已发布功能。
+
 Fiex has one React frontend and one Rust library. Tauri commands form the boundary between them; command names and serialized payloads remain stable when implementation modules move.
 
 ## Frontend
