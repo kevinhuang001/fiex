@@ -131,18 +131,26 @@ pub fn write_frame(writer: &mut impl Write, value: &Value) -> io::Result<()> {
 pub trait HostServices {
     fn invoke(&mut self, method: &str, params: Value) -> Result<Value, RpcError>;
     fn storage_get(&mut self, scope: &str, key: &str) -> Result<Value, RpcError> {
-        self.invoke("host.storage.get",json!({"scope":scope,"key":key}))
+        self.invoke("host.storage.get", json!({"scope":scope,"key":key}))
     }
     fn storage_set(&mut self, scope: &str, key: &str, value: Value) -> Result<(), RpcError> {
-        self.invoke("host.storage.set",json!({"scope":scope,"key":key,"value":value}))?;
+        self.invoke(
+            "host.storage.set",
+            json!({"scope":scope,"key":key,"value":value}),
+        )?;
         Ok(())
     }
     fn secret_get(&mut self, scope: &str, key: &str) -> Result<String, RpcError> {
-        self.invoke("host.secret.get",json!({"scope":scope,"key":key}))?
-            .as_str().map(str::to_string).ok_or_else(||RpcError::internal("secret response not string"))
+        self.invoke("host.secret.get", json!({"scope":scope,"key":key}))?
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| RpcError::internal("secret response not string"))
     }
     fn secret_set(&mut self, scope: &str, key: &str, value: &str) -> Result<(), RpcError> {
-        self.invoke("host.secret.set",json!({"scope":scope,"key":key,"value":value}))?;
+        self.invoke(
+            "host.secret.set",
+            json!({"scope":scope,"key":key,"value":value}),
+        )?;
         Ok(())
     }
 }
@@ -158,9 +166,12 @@ impl<R: BufRead, W: Write> HostServices for HostClient<'_, R, W> {
         }
         self.sequence += 1;
         let id = format!("host-{}", self.sequence);
-        write_frame(self.writer, &json!({
-            "jsonrpc": "2.0", "id": id, "method": method, "params": params
-        }))
+        write_frame(
+            self.writer,
+            &json!({
+                "jsonrpc": "2.0", "id": id, "method": method, "params": params
+            }),
+        )
         .map_err(|e| RpcError::internal(e.to_string()))?;
         let response = read_frame(self.reader)
             .map_err(|e| RpcError::internal(e.to_string()))?
@@ -169,13 +180,14 @@ impl<R: BufRead, W: Write> HostServices for HostClient<'_, R, W> {
             return Err(RpcError::internal("host response ID mismatch"));
         }
         if let Some(error) = response.get("error") {
-            return Err(serde_json::from_value(error.clone()).unwrap_or_else(|_| {
-                RpcError::internal("host returned malformed error")
-            }));
+            return Err(serde_json::from_value(error.clone())
+                .unwrap_or_else(|_| RpcError::internal("host returned malformed error")));
         }
-        response.get("result").cloned().ok_or_else(|| RpcError::internal("host result missing"))
+        response
+            .get("result")
+            .cloned()
+            .ok_or_else(|| RpcError::internal("host result missing"))
     }
-
 }
 
 /// Same external process protocol for all implementations, including third parties.
@@ -191,7 +203,9 @@ pub fn serve_with_host(
     let mut output = stdout.lock();
     let mut initialized = false;
     while let Some(request) = read_frame(&mut input)? {
-        let Some(id) = request.get("id").cloned() else { continue; };
+        let Some(id) = request.get("id").cloned() else {
+            continue;
+        };
         let method = request.get("method").and_then(Value::as_str).unwrap_or("");
         let params = request.get("params").cloned().unwrap_or(Value::Null);
         let response = match method {
@@ -201,7 +215,9 @@ pub fn serve_with_host(
                     Err(RpcError::invalid_params("unsupported protocol version"))
                 } else {
                     initialized = true;
-                    Ok(json!({"pluginId":plugin_id,"protocolVersion":PROTOCOL_VERSION,"ready":true}))
+                    Ok(
+                        json!({"pluginId":plugin_id,"protocolVersion":PROTOCOL_VERSION,"ready":true}),
+                    )
                 }
             }
             "plugin.ping" if initialized => Ok(json!({"alive":true})),
@@ -211,8 +227,12 @@ pub fn serve_with_host(
             }
             _ if !initialized => Err(RpcError::invalid_params("initialize required")),
             other => {
-                let mut host = HostClient { reader: &mut input, writer: &mut output, sequence: 0 };
-                dispatch(other,params,&mut host)
+                let mut host = HostClient {
+                    reader: &mut input,
+                    writer: &mut output,
+                    sequence: 0,
+                };
+                dispatch(other, params, &mut host)
             }
         };
         let message = match response {
@@ -229,7 +249,7 @@ pub fn serve(
     plugin_id: &str,
     mut dispatch: impl FnMut(&str, Value) -> Result<Value, RpcError>,
 ) -> io::Result<()> {
-    serve_with_host(plugin_id,|method,params,_host|dispatch(method,params))
+    serve_with_host(plugin_id, |method, params, _host| dispatch(method, params))
 }
 
 /// Single threaded, deterministic in-memory harness for parser and SDK tests.

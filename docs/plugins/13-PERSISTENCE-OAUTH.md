@@ -14,12 +14,12 @@
 
 所有键空间按 `(pluginId,scope,key)` 隔离。`pluginId` 由可信安装记录绑定；`scope` 是 `global`、`connection-<opaque-id>`、`account-<opaque-id>` 或其他被宿主授权的命名空间，不能包含路径分隔符。
 
-| 接口 | 用途 | 存储 |
-| --- | --- | --- |
-| `host.storage.get/set/delete/keys` | 公开配置、游标、用户规则、短期状态等 JSON | Fiex app data 下的插件专有 KV |
-| `host.secret.get/set/delete/available` | WebDAV/SMB 密码、OAuth refresh/access token、API Key | macOS Keychain / Windows Credential Manager / Linux Secret Service |
-| `host.settings.*`（后续约定） | 按 manifest settings schema 的设置校验、迁移、主题/展示 | Host 的设置 API |
-| `host.auth.*`（后续实现） | OAuth PKCE 登录、重定向回调、Token 生命周期 | Host + 服务商协议 |
+| 接口                                   | 用途                                                    | 存储                                                               |
+| -------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `host.storage.get/set/delete/keys`     | 公开配置、游标、用户规则、短期状态等 JSON               | Fiex app data 下的插件专有 KV                                      |
+| `host.secret.get/set/delete/available` | WebDAV/SMB 密码、OAuth refresh/access token、API Key    | macOS Keychain / Windows Credential Manager / Linux Secret Service |
+| `host.settings.*`（后续约定）          | 按 manifest settings schema 的设置校验、迁移、主题/展示 | Host 的设置 API                                                    |
+| `host.auth.*`（后续实现）              | OAuth PKCE 登录、重定向回调、Token 生命周期             | Host + 服务商协议                                                  |
 
 初版普通存储每个 value 最多 **1 MiB**，一个 scope 合计最多 **16 MiB**。二进制大数据不应放入 JSON KV，需申请受限文件存储 API；缓存数据走 CacheManager。
 

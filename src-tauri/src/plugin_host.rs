@@ -165,71 +165,96 @@ impl Running {
     /// All host.* requests are authenticated by the Running process identity,
     /// never by a pluginId supplied in the message.
     fn host_method(&self, method: &str, p: &Value) -> Result<Value, String> {
-        let permitted = |name: &str| self.permissions.get(name).and_then(Value::as_bool) == Some(true);
-        let arg = |key: &str| p.get(key).and_then(Value::as_str)
-            .ok_or_else(|| format!("missing {key}"));
+        let permitted =
+            |name: &str| self.permissions.get(name).and_then(Value::as_bool) == Some(true);
+        let arg = |key: &str| {
+            p.get(key)
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!("missing {key}"))
+        };
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
-            "host.storage.get" if permitted("storage") =>
-                Ok(crate::plugin_storage::get(&self.plugin_id,scope()?,key()?)?.unwrap_or(Value::Null)),
+            "host.storage.get" if permitted("storage") => {
+                Ok(
+                    crate::plugin_storage::get(&self.plugin_id, scope()?, key()?)?
+                        .unwrap_or(Value::Null),
+                )
+            }
             "host.storage.set" if permitted("storage") => {
                 let value = p.get("value").cloned().ok_or("missing value")?;
-                crate::plugin_storage::set(&self.plugin_id,scope()?,key()?,value)?;
+                crate::plugin_storage::set(&self.plugin_id, scope()?, key()?, value)?;
                 Ok(Value::Null)
             }
             "host.storage.delete" if permitted("storage") => {
-                crate::plugin_storage::delete(&self.plugin_id,scope()?,key()?)?;
+                crate::plugin_storage::delete(&self.plugin_id, scope()?, key()?)?;
                 Ok(Value::Null)
             }
-            "host.storage.keys" if permitted("storage") =>
-                Ok(json!(crate::plugin_storage::list_keys(&self.plugin_id,scope()?)?)),
-            "host.secret.get" if permitted("secrets") =>
-                Ok(json!(crate::plugin_storage::secret_get(&self.plugin_id,scope()?,key()?)?)),
+            "host.storage.keys" if permitted("storage") => Ok(json!(
+                crate::plugin_storage::list_keys(&self.plugin_id, scope()?)?
+            )),
+            "host.secret.get" if permitted("secrets") => Ok(json!(
+                crate::plugin_storage::secret_get(&self.plugin_id, scope()?, key()?)?
+            )),
             "host.secret.set" if permitted("secrets") => {
-                crate::plugin_storage::secret_set(&self.plugin_id,scope()?,key()?,arg("value")?)?;
+                crate::plugin_storage::secret_set(
+                    &self.plugin_id,
+                    scope()?,
+                    key()?,
+                    arg("value")?,
+                )?;
                 Ok(Value::Null)
             }
             "host.secret.delete" if permitted("secrets") => {
-                crate::plugin_storage::secret_delete(&self.plugin_id,scope()?,key()?)?;
+                crate::plugin_storage::secret_delete(&self.plugin_id, scope()?, key()?)?;
                 Ok(Value::Null)
             }
-            "host.secret.available" if permitted("secrets") =>
-                Ok(json!(crate::plugin_storage::secret_available())),
+            "host.secret.available" if permitted("secrets") => {
+                Ok(json!(crate::plugin_storage::secret_available()))
+            }
             _ => Err("host method not available or permission denied".into()),
         }
     }
     fn rpc(&mut self, method: &str, params: Value) -> Result<Value, String> {
         self.next_id += 1;
         let id = self.next_id;
-        plugin_sdk::write_frame(&mut self.stdin, &json!({
-            "jsonrpc":"2.0","id":id,"method":method,"params":params
-        })).map_err(|e| e.to_string())?;
+        plugin_sdk::write_frame(
+            &mut self.stdin,
+            &json!({
+                "jsonrpc":"2.0","id":id,"method":method,"params":params
+            }),
+        )
+        .map_err(|e| e.to_string())?;
         loop {
-            let response=plugin_sdk::read_frame(&mut self.stdout)
-                .map_err(|e| e.to_string())?.ok_or("plugin exited during request")?;
+            let response = plugin_sdk::read_frame(&mut self.stdout)
+                .map_err(|e| e.to_string())?
+                .ok_or("plugin exited during request")?;
             // Re-entrant plugin→host request while host awaits a plugin response.
             if let Some(host_method) = response.get("method").and_then(Value::as_str) {
-                let Some(reverse_id)=response.get("id").cloned() else { continue; };
-                let parameters=response.get("params").cloned().unwrap_or(Value::Null);
-                let reply=match self.host_method(host_method,&parameters) {
-                    Ok(value)=>json!({"jsonrpc":"2.0","id":reverse_id,"result":value}),
-                    Err(message)=>json!({"jsonrpc":"2.0","id":reverse_id,
+                let Some(reverse_id) = response.get("id").cloned() else {
+                    continue;
+                };
+                let parameters = response.get("params").cloned().unwrap_or(Value::Null);
+                let reply = match self.host_method(host_method, &parameters) {
+                    Ok(value) => json!({"jsonrpc":"2.0","id":reverse_id,"result":value}),
+                    Err(message) => json!({"jsonrpc":"2.0","id":reverse_id,
                         "error":{"code":-32001,"message":message}}),
                 };
-                plugin_sdk::write_frame(&mut self.stdin,&reply).map_err(|e|e.to_string())?;
+                plugin_sdk::write_frame(&mut self.stdin, &reply).map_err(|e| e.to_string())?;
                 continue;
             }
-            if response.get("id").and_then(Value::as_u64)!=Some(id) {
+            if response.get("id").and_then(Value::as_u64) != Some(id) {
                 return Err("plugin response ID mismatch".into());
             }
-            if let Some(error)=response.get("error"){
+            if let Some(error) = response.get("error") {
                 return Err(format!("plugin error: {error}"));
             }
-            return response.get("result").cloned().ok_or_else(||"plugin response missing result".into());
+            return response
+                .get("result")
+                .cloned()
+                .ok_or_else(|| "plugin response missing result".into());
         }
     }
-
 }
 impl Drop for Running {
     fn drop(&mut self) {
