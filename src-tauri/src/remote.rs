@@ -1,13 +1,9 @@
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use smb::ReadAt;
 use std::{
     collections::HashMap,
     fs,
-    io::Write,
     path::{Path, PathBuf},
-    str::FromStr,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -371,17 +367,6 @@ fn rel_string(rel: &Path) -> String {
         .join("/")
 }
 
-fn remote_join(base: &str, rel: &str) -> String {
-    let mut out = base.trim_matches('/').to_string();
-    if !rel.is_empty() {
-        if !out.is_empty() {
-            out.push('/');
-        }
-        out.push_str(rel);
-    }
-    out
-}
-
 fn safe_child_name(name: &str) -> Option<&str> {
     let name = name.trim();
     if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\\') {
@@ -536,18 +521,29 @@ pub async fn list_listing(
     }))
 }
 
+/// Staging file transfer is performed entirely by the approved provider.
+/// This is an interim file-backed IPC operation pending the SDK's binary
+/// stream channel; Core does not link WebDAV or SMB client implementations.
 async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
-    // Legacy download transport cannot bypass a revoked plugin authorization.
-    // It will be removed when the SDK binary stream transport is in place.
     let plugin_id = format!("org.fiex.{}", conn.kind);
-    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
-        return Err("remote plugin network permission not granted".into());
+    for permission in ["network", "filesystem.write"] {
+        if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
+            return Err(format!("remote plugin permission not granted: {permission}"));
+        }
     }
-    if conn.kind == "webdav" {
-        webdav_get(conn, rel, dest).await
-    } else {
-        smb_get(conn, rel, dest).await
-    }
+    let result = crate::plugin_host::global().invoke(
+        &plugin_id,
+        "fs.download",
+        serde_json::json!({
+            "connection": provider_config(conn),
+            "nodeId": rel,
+            "destination": dest.to_string_lossy()
+        }),
+    )?;
+    result
+        .get("bytesWritten")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| "provider did not return transfer size".into())
 }
 
 /// Native provider-backed listing. Protocol I/O is owned by the installed,
@@ -610,7 +606,13 @@ pub async fn download(path: &str) -> Result<String, String> {
             .map(|d| d.as_millis())
             .unwrap_or_default()
     ));
-    let size = fetch_remote(&conn, &rel, &temp).await?;
+    let size = match fetch_remote(&conn, &rel, &temp).await {
+        Ok(size) => size,
+        Err(error) => {
+            let _ = fs::remove_file(&temp);
+            return Err(error);
+        }
+    };
     fs::rename(&temp, &local).map_err(|e| e.to_string())?;
     let modified = meta.files.get(&rel).map(|m| m.modified).unwrap_or_default();
     meta.files.insert(
@@ -668,7 +670,13 @@ pub async fn download_dir(path: &str) -> Result<(), String> {
                     meta.files.get(&child).is_some_and(|m| m.downloaded) && local.is_file();
                 if !cached {
                     let temp = local.with_extension("fiex-download");
-                    let size = fetch_remote(&conn, &child, &temp).await?;
+                    let size = match fetch_remote(&conn, &child, &temp).await {
+                        Ok(size) => size,
+                        Err(error) => {
+                            let _ = fs::remove_file(&temp);
+                            return Err(error);
+                        }
+                    };
                     fs::rename(&temp, &local).map_err(|e| e.to_string())?;
                     meta.files.insert(
                         child,
@@ -693,111 +701,6 @@ pub async fn ensure_downloaded(path: &str) -> Result<String, String> {
     } else {
         Ok(path.into())
     }
-}
-
-fn webdav_client(conn: &StoredConnection) -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .danger_accept_invalid_certs(conn.allow_invalid_certs)
-        .timeout(Duration::from_secs(90))
-        .build()
-        .map_err(|e| e.to_string())
-}
-
-fn webdav_url(conn: &StoredConnection, rel: &str) -> String {
-    let base = conn.url.trim_end_matches('/');
-    if rel.is_empty() {
-        format!("{base}/")
-    } else {
-        let path = rel
-            .split('/')
-            .filter(|part| !part.is_empty())
-            .map(|part| urlencoding::encode(part).into_owned())
-            .collect::<Vec<_>>()
-            .join("/");
-        format!("{base}/{path}")
-    }
-}
-
-fn auth(req: reqwest::RequestBuilder, conn: &StoredConnection) -> reqwest::RequestBuilder {
-    if conn.username.is_empty() {
-        req
-    } else {
-        req.basic_auth(&conn.username, Some(&conn.password))
-    }
-}
-
-async fn webdav_get(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
-    let client = webdav_client(conn)?;
-    let request = client.get(webdav_url(conn, rel));
-    let response = auth(request, conn)
-        .send()
-        .await
-        .map_err(|e| format!("WebDAV 下载失败：{e}"))?;
-    let response = response.error_for_status().map_err(|e| e.to_string())?;
-    let mut file = fs::File::create(dest).map_err(|e| e.to_string())?;
-    let mut stream = response.bytes_stream();
-    let mut size = 0u64;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| e.to_string())?;
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
-        size += chunk.len() as u64;
-    }
-    Ok(size)
-}
-
-async fn smb_client(conn: &StoredConnection) -> Result<(smb::Client, smb::UncPath), String> {
-    let mut config = smb::ClientConfig::default();
-    if let Some(port) = conn.port {
-        config.connection.port = Some(port);
-    }
-    let client = smb::Client::new(config);
-    let unc = smb::UncPath::from_str(&format!("\\\\{}\\{}", conn.host, conn.share))
-        .map_err(|e| e.to_string())?;
-    client
-        .share_connect(&unc, &conn.username, conn.password.clone())
-        .await
-        .map_err(|e| format!("SMB 连接失败：{e}"))?;
-    Ok((client, unc))
-}
-
-fn smb_path(conn: &StoredConnection, rel: &str) -> String {
-    let joined = remote_join(&conn.base, rel).replace('/', "\\");
-    joined.trim_matches('\\').to_string()
-}
-
-async fn smb_get(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
-    let (client, unc) = smb_client(conn).await?;
-    let path = smb_path(conn, rel);
-    let file = client
-        .create_file(
-            &unc.with_path(&path),
-            &smb::FileCreateArgs::make_open_existing(
-                smb::FileAccessMask::new().with_generic_read(true),
-            ),
-        )
-        .await
-        .map_err(|e| e.to_string())?
-        .unwrap_file();
-    let mut output = fs::File::create(dest).map_err(|e| e.to_string())?;
-    let mut offset = 0u64;
-    let mut buffer = vec![0u8; 1024 * 1024];
-    let mut total = 0u64;
-    loop {
-        let read = file
-            .read_at(&mut buffer, offset)
-            .await
-            .map_err(|e| e.to_string())?;
-        if read == 0 {
-            break;
-        }
-        output
-            .write_all(&buffer[..read])
-            .map_err(|e| e.to_string())?;
-        offset += read as u64;
-        total += read as u64;
-    }
-    let _ = file.close().await;
-    Ok(total)
 }
 
 pub fn eject(path: &str) -> Result<(), String> {
