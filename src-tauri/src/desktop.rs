@@ -674,21 +674,16 @@ async fn list_directory(
         .await
         .map_err(|error| error.to_string())?;
     }
-    let warning = remote::sync_dir(&path).await.err();
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut listing = files::list(&path, hidden, &ignores)?;
-        listing.read_only = remote::is_remote(&path);
-        remote::apply_meta(&mut listing.entries);
-        if let Some(warning) = warning {
-            listing
-                .entries
-                .retain(|entry| entry.sync.as_deref() != Some("cloud"));
-            listing.warnings.push(format!("远程刷新失败：{warning}"));
-        }
-        Ok(listing)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    // Plugin-backed remote directories contain virtual entries, not zero-byte
+    // mirror placeholders. Only explicit reads materialize a local file.
+    if remote::is_remote(&path) {
+        return remote::list_listing(&path, hidden, &ignores)
+            .await?
+            .ok_or_else(|| "remote connection not found".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || files::list(&path, hidden, &ignores))
+        .await
+        .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn remote_connections() -> Vec<remote::ConnectionInfo> {

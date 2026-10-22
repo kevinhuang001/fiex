@@ -304,8 +304,34 @@ pub fn is_remote(path: &str) -> bool {
     connection_for_path(path).is_some()
 }
 
+/// Canonicalize the nearest existing ancestor, then append validated missing
+/// components. Remote entries are virtual and must not require placeholder
+/// files simply to resolve their mount path.
+fn virtual_target(path: &str) -> Option<PathBuf> {
+    let mut ancestor = PathBuf::from(path);
+    if !ancestor.is_absolute() {
+        ancestor = std::env::current_dir().ok()?.join(ancestor);
+    }
+    let mut missing = Vec::new();
+    while !ancestor.exists() {
+        let component = ancestor.file_name()?.to_os_string();
+        if component == "." || component == ".." {
+            return None;
+        }
+        missing.push(component);
+        if !ancestor.pop() {
+            return None;
+        }
+    }
+    let mut target = dunce::canonicalize(ancestor).ok()?;
+    for part in missing.into_iter().rev() {
+        target.push(part);
+    }
+    Some(target)
+}
+
 fn connection_for_path(path: &str) -> Option<(StoredConnection, PathBuf)> {
-    let target = dunce::canonicalize(path).ok()?;
+    let target = virtual_target(path)?;
     for conn in load_stored() {
         let Ok(root) = dunce::canonicalize(mount_path(&conn)) else {
             continue;
@@ -503,6 +529,70 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
         cursor = next;
     }
     Ok(files)
+}
+
+/// Directory listing rendered from the plugin's VFS metadata. A virtual
+/// remote item is represented by a stable logical mount path, not an empty
+/// file on disk. Materialization happens only when the user opens/downloads.
+pub async fn list_listing(
+    path: &str,
+    hidden: bool,
+    ignores: &[String],
+) -> Result<Option<crate::files::Listing>, String> {
+    let Some((conn, relative)) = connection_for_path(path) else {
+        return Ok(None);
+    };
+    let files = list_remote(&conn, &rel_string(&relative)).await?;
+    let metadata = load_meta(&conn);
+    let filters = crate::ignores::IgnoreSet::new(ignores);
+    let mut entries = Vec::new();
+    for file in files {
+        if (!hidden && file.name.starts_with('.'))
+            || filters.is_ignored(Path::new(&file.name))
+        {
+            continue;
+        }
+        let child = if relative.as_os_str().is_empty() {
+            file.name.clone()
+        } else {
+            format!("{}/{}", rel_string(&relative), file.name)
+        };
+        let local = local_for(&conn, &child);
+        let downloaded = metadata
+            .files
+            .get(&child)
+            .is_some_and(|meta| meta.downloaded)
+            && local.is_file();
+        entries.push(crate::files::Entry {
+            path: local.to_string_lossy().into_owned(),
+            name: file.name,
+            is_dir: file.is_dir,
+            is_symlink: false,
+            size: file.size,
+            modified: file.modified,
+            created: 0,
+            extension: local
+                .extension()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_lowercase(),
+            mime: mime_guess::from_path(&local)
+                .first_or_octet_stream()
+                .to_string(),
+            readonly: true,
+            link_target: None,
+            tags: Vec::new(),
+            sync: Some(if downloaded { "synced" } else { "cloud" }.into()),
+        });
+    }
+    entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
+    Ok(Some(crate::files::Listing {
+        read_only: true,
+        virtual_volume: true,
+        path: path.into(),
+        entries,
+        warnings: Vec::new(),
+    }))
 }
 
 async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
