@@ -273,8 +273,8 @@ fn plugin_status() -> Vec<(String, bool)> {
         .collect()
 }
 #[tauri::command]
-fn plugin_permission_allowed(plugin_id:String, permission:String)->Result<bool,String>{
-    crate::plugin_host::permission_allowed(&plugin_id,&permission)
+fn plugin_permission_allowed(plugin_id: String, permission: String) -> Result<bool, String> {
+    crate::plugin_host::permission_allowed(&plugin_id, &permission)
 }
 #[tauri::command]
 fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<String, String> {
