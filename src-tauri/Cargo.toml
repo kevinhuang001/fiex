@@ -49,9 +49,9 @@ dirs = "6"
 keyring = { version = "4.2", default-features = false, features = ["v1"] }
 dunce = "1"
 ignore = "0.4"
+reflink-copy = "0.1"
+rayon = "1"
 globset = "0.4"
-tantivy = "0.27"
-regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "blocking", "json"] }
 urlencoding = "2"
 notify = "8"
@@ -90,8 +90,14 @@ lnk = "0.5"
 
 [profile.release]
 strip = true
+lto = "fat"
+codegen-units = 1
 opt-level = 2
 
 [dev-dependencies]
 futures = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[package.metadata.cargo-machete]
+# Imported under their facade names (`fs_ntfs`, `fs_ext4`, `fs_btrfs`).
+ignored = ["rust-fs-btrfs", "rust-fs-ext4", "rust-fs-ntfs"]

@@ -107,6 +107,88 @@ pub fn unique(path: &Path) -> PathBuf {
     }
     unreachable!()
 }
+struct CopyFile {
+    src: PathBuf,
+    dest: PathBuf,
+    permissions: fs::Permissions,
+}
+
+#[derive(Default)]
+struct CopyPlan {
+    dirs: Vec<(PathBuf, PathBuf)>,
+    files: Vec<CopyFile>,
+    skipped: usize,
+}
+
+fn collect_copy(
+    src: &Path,
+    dest: &Path,
+    ignore: &IgnoreSet,
+    relative: &Path,
+    plan: &mut CopyPlan,
+) -> Result<(), String> {
+    if ignore.is_ignored(relative) {
+        plan.skipped += 1;
+        return Ok(());
+    }
+    let meta = fs::symlink_metadata(src).map_err(|e| e.to_string())?;
+    if meta.file_type().is_symlink() {
+        return Err("为避免复制到意外位置，请单独处理符号链接".into());
+    }
+    if meta.is_dir() {
+        plan.dirs.push((src.into(), dest.into()));
+        for item in fs::read_dir(src).map_err(|e| e.to_string())? {
+            let item = item.map_err(|e| e.to_string())?;
+            collect_copy(
+                &item.path(),
+                &dest.join(item.file_name()),
+                ignore,
+                &relative.join(item.file_name()),
+                plan,
+            )?;
+        }
+    } else if meta.is_file() {
+        plan.files.push(CopyFile {
+            src: src.into(),
+            dest: dest.into(),
+            permissions: meta.permissions(),
+        });
+    } else {
+        return Err("不能复制设备或特殊文件".into());
+    }
+    Ok(())
+}
+
+fn fast_copy_file(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<(), String> {
+    check_cancelled(cancel)?;
+    // CoW clone is effectively instant on APFS, Btrfs, XFS and ReFS.
+    if reflink_copy::reflink(src, dest).is_ok() {
+        return Ok(());
+    }
+    // A failed clone can leave its temporary destination behind.
+    if dest.exists() {
+        let _ = fs::remove_file(dest);
+    }
+    let mut input = fs::File::open(src).map_err(|e| e.to_string())?;
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dest)
+        .map_err(|e| e.to_string())?;
+    let mut buffer = vec![0u8; 4 * 1024 * 1024];
+    loop {
+        check_cancelled(cancel)?;
+        let read = input.read(&mut buffer).map_err(|e| e.to_string())?;
+        if read == 0 {
+            break;
+        }
+        output
+            .write_all(&buffer[..read])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 pub(crate) fn copy_tree(
     src: &Path,
     dest: &Path,
@@ -115,40 +197,28 @@ pub(crate) fn copy_tree(
     cancel: &AtomicBool,
 ) -> Result<usize, String> {
     check_cancelled(cancel)?;
-    if ignore.is_ignored(relative) {
-        return Ok(1);
+    let mut plan = CopyPlan::default();
+    collect_copy(src, dest, ignore, relative, &mut plan)?;
+    for (_, dir) in &plan.dirs {
+        fs::create_dir(dir).map_err(|e| e.to_string())?;
     }
-    let meta = fs::symlink_metadata(src).map_err(|e| e.to_string())?;
-    if meta.file_type().is_symlink() {
-        return Err("为避免复制到意外位置，请单独处理符号链接".into());
-    }
-    let mut skipped = 0;
-    if meta.is_dir() {
-        fs::create_dir(dest).map_err(|e| e.to_string())?;
-        for item in fs::read_dir(src).map_err(|e| e.to_string())? {
-            let item = item.map_err(|e| e.to_string())?;
-            skipped += copy_tree(
-                &item.path(),
-                &dest.join(item.file_name()),
-                ignore,
-                &relative.join(item.file_name()),
-                cancel,
-            )?;
-        }
-    } else if meta.is_file() {
-        let mut input = fs::File::open(src).map_err(|e| e.to_string())?;
-        let mut output = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(dest)
-            .map_err(|e| e.to_string())?;
-        copy_stream(&mut input, &mut output, cancel)?;
-        fs::set_permissions(dest, meta.permissions()).map_err(|e| e.to_string())?;
-    } else {
-        return Err("不能复制设备或特殊文件".into());
-    }
-    Ok(skipped)
+    let workers = std::thread::available_parallelism()
+        .map(|value| value.get().min(8))
+        .unwrap_or(4);
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(workers)
+        .build()
+        .map_err(|e| e.to_string())?;
+    pool.install(|| {
+        use rayon::prelude::*;
+        plan.files.par_iter().try_for_each(|file| {
+            fast_copy_file(&file.src, &file.dest, cancel)?;
+            fs::set_permissions(&file.dest, file.permissions.clone()).map_err(|e| e.to_string())
+        })
+    })?;
+    Ok(plan.skipped)
 }
+
 impl Operations {
     pub fn record_created(&self, path: PathBuf) {
         self.undo.lock().unwrap().push(vec![Undo::Created(path)]);
@@ -370,6 +440,37 @@ mod tests {
                 &AtomicBool::new(false)
             )
             .is_err());
+    }
+    #[test]
+    fn parallel_copy_preserves_every_file() {
+        let t = tempfile::tempdir().unwrap();
+        let src = t.path().join("tree");
+        let dest = t.path().join("copy");
+        fs::create_dir_all(src.join("nested")).unwrap();
+        for index in 0..64 {
+            let path = if index % 2 == 0 {
+                src.join(format!("file-{index}.bin"))
+            } else {
+                src.join("nested").join(format!("file-{index}.bin"))
+            };
+            fs::write(path, vec![index as u8; 128 * 1024]).unwrap();
+        }
+        copy_tree(
+            &src,
+            &dest,
+            &IgnoreSet::new(&[]),
+            Path::new("tree"),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        for index in 0..64 {
+            let path = if index % 2 == 0 {
+                dest.join(format!("file-{index}.bin"))
+            } else {
+                dest.join("nested").join(format!("file-{index}.bin"))
+            };
+            assert_eq!(fs::read(path).unwrap(), vec![index as u8; 128 * 1024]);
+        }
     }
     #[test]
     fn operation_cancel_flag_roundtrip() {

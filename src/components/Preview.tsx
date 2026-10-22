@@ -5,6 +5,7 @@ import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
 import { call, asset, native } from '@/lib/api'
 import { date, isImage, isText, kind, size } from '@/lib/files'
+import { highlightCode } from '@/lib/highlight'
 import type { Entry } from '@/lib/types'
 const PdfPreview = lazy(() => import('./PdfPreview'))
 export function Preview({
@@ -23,6 +24,10 @@ export function Preview({
   const [source, setSource] = useState('')
   const [loading, setLoading] = useState(false)
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
+  const highlighted = useMemo(
+    () => (entry && isText(entry) ? highlightCode(text, entry.extension, entry.name) : null),
+    [entry, text],
+  )
   // Quick Look sizing: the sheet hugs the media so a photo is not surrounded by
   // an oversized empty canvas, while huge images still fit inside the window.
   const fit = useMemo(() => {
@@ -112,9 +117,19 @@ export function Preview({
                 <p>文件夹 · {entry.path}</p>
               </div>
             ) : isText(entry) ? (
-              <pre>
-                {loading ? '正在读取…' : text || '（空文件）'}
-                {entry.size > 256 * 1024 && '\n\n…仅预览前 256 KiB'}
+              <pre className={highlighted ? 'preview-code' : undefined}>
+                {loading ? (
+                  '正在读取…'
+                ) : highlighted ? (
+                  <code
+                    className="hljs"
+                    // highlight.js escapes the source before adding spans.
+                    dangerouslySetInnerHTML={{ __html: highlighted }}
+                  />
+                ) : (
+                  text || '（空文件）'
+                )}
+                {!loading && entry.size > 256 * 1024 && '\n\n…仅预览前 256 KiB'}
               </pre>
             ) : entry.path.startsWith('history://') && !source ? (
               <p>正在读取历史文件…</p>

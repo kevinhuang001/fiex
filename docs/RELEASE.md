@@ -14,10 +14,20 @@
 - Plugin dropdown shows manifest-provided icons.
 - App-store style catalog reads `fiex-catalog.json` from the latest official plugin release.
 
-## Search
+## Search and preview
 
+- Built-in search is a live ripgrep walker: no Tantivy index, no background reindexing, no `~/.fiex/index`.
 - Core merges local filename search with plugin search providers.
 - Everything plugin queries the existing Windows Everything index; indexing stays owned by Everything.
+- Text preview highlights source code with a bundled highlight.js core and selected languages.
+- Image, PDF, audio, video and text preview remain in Core.
+
+## Performance and size
+
+- File copies use copy-on-write reflinks when the filesystem supports them, then a parallel chunked fallback.
+- Multi-file copies run on a bounded Rayon pool.
+- Release builds use `strip`, fat LTO and a single codegen unit; the Linux binary is about 16 MiB.
+- Tantivy and the unused `regex` dependency were removed.
 
 ## Compatibility
 

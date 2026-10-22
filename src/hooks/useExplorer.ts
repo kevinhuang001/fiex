@@ -240,35 +240,6 @@ export function useExplorer(
     }
   }, [enabled, refresh, refreshGit])
   useEffect(() => {
-    if (
-      !enabled ||
-      !path ||
-      virtualVolume ||
-      path.startsWith('remote://') ||
-      path.startsWith('history://') ||
-      path.startsWith('recent://')
-    )
-      return
-    // Warming walks the whole folder tree. Handing it to the idle queue keeps
-    // the first paint and the first listing responsive on large folders.
-    let idle = 0
-    const timer = window.setTimeout(() => {
-      const warm = () =>
-        void call('warm_index', {
-          path,
-          hidden: prefs.hidden,
-          ignores: prefs.displayIgnore,
-        }).catch(() => {})
-      idle = window.requestIdleCallback
-        ? window.requestIdleCallback(warm, { timeout: 4000 })
-        : window.setTimeout(warm, 0)
-    }, 5000)
-    return () => {
-      window.clearTimeout(timer)
-      if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle)
-    }
-  }, [enabled, path, prefs.hidden, prefs.displayIgnore, virtualVolume])
-  useEffect(() => {
     if (!enabled) return
     const generation = ++searchRequest.current
     void call('cancel_search', { pane }).catch(() => {})

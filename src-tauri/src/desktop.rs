@@ -1028,25 +1028,6 @@ async fn search_files(
     Ok(())
 }
 #[tauri::command]
-async fn warm_index(
-    root: String,
-    hidden: bool,
-    ignores: Vec<String>,
-    state: tauri::State<'_, SearchState>,
-) -> Result<(), String> {
-    if root == "everywhere://"
-        || crate::usbfs::route(&root).is_some()
-        || crate::plugin_vfs::handles(&root)
-    {
-        return Ok(());
-    }
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || state.warm(&root, hidden, &ignores))
-        .await
-        .map_err(|e| e.to_string())??;
-    Ok(())
-}
-#[tauri::command]
 fn cancel_search(window: tauri::Window, pane: String, state: tauri::State<'_, SearchState>) {
     state.cancel(&format!("{}:{pane}", window.label()));
 }
@@ -1455,7 +1436,6 @@ pub fn run() {
             recycle,
             undo,
             search_files,
-            warm_index,
             cancel_search,
             begin_operation,
             cancel_operation,
@@ -1520,12 +1500,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            // Maintain per-volume Tantivy indices in the background throughout
-            // this application session. Permission-denied paths are skipped.
-            app.state::<SearchState>()
-                .inner()
-                .clone()
-                .start_global_daemon();
+            crate::search::remove_legacy_index();
             #[cfg(feature = "ci-driver")]
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
