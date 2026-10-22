@@ -226,6 +226,37 @@ async fn plugin_invoke(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+async fn plugin_prepare_install(repository:String)->Result<crate::plugin_installer::InstallPreview,String>{
+    tauri::async_runtime::spawn_blocking(move||crate::plugin_installer::prepare(&repository))
+        .await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+async fn plugin_confirm_install(ticket:String)->Result<String,String>{
+    tauri::async_runtime::spawn_blocking(move||crate::plugin_installer::install(&ticket))
+        .await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+fn plugin_cancel_install(ticket:String)->Result<(),String>{
+    crate::plugin_installer::cancel(&ticket)
+}
+#[tauri::command]
+async fn plugin_uninstall(plugin_id:String)->Result<(),String>{
+    tauri::async_runtime::spawn_blocking(move||crate::plugin_installer::uninstall(&plugin_id))
+        .await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+fn plugin_set_enabled(plugin_id:String,enabled:bool)->Result<(),String>{
+    crate::plugin_host::set_enabled(&plugin_id,enabled)
+}
+#[tauri::command]
+fn plugin_set_permission(plugin_id:String,permission:String,granted:bool)->Result<(),String>{
+    crate::plugin_host::set_permission(&plugin_id,&permission,granted)
+}
+#[tauri::command]
+fn plugin_approve_install(plugin_id:String)->Result<(),String>{
+    crate::plugin_host::approve_install(&plugin_id)
+}
+#[tauri::command]
 fn plugin_status() -> Vec<(String, bool)> {
     crate::plugin_host::catalog()
         .into_iter()
@@ -1273,6 +1304,13 @@ pub fn run() {
             plugin_invoke,
             plugin_status,
             plugins_list,
+            plugin_prepare_install,
+            plugin_confirm_install,
+            plugin_cancel_install,
+            plugin_uninstall,
+            plugin_set_enabled,
+            plugin_set_permission,
+            plugin_approve_install,
             plugin_storage_get,
             plugin_storage_set,
             plugin_storage_delete,

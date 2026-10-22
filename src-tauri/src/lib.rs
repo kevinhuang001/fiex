@@ -17,6 +17,8 @@ mod macos_material;
 mod native_drag;
 #[path = "core/operations.rs"]
 pub mod operations;
+#[path = "plugins/installer.rs"]
+pub mod plugin_installer;
 #[path = "plugins/host.rs"]
 pub mod plugin_host;
 #[path = "plugins/permissions.rs"]

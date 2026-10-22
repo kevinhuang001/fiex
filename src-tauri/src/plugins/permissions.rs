@@ -67,6 +67,8 @@ fn save(state: &PolicyStore) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         f.write_all(&bytes).map_err(|e| e.to_string())?;
         f.sync_all().map_err(|e| e.to_string())?;
+        #[cfg(windows)]
+        if target.exists(){fs::remove_file(&target).map_err(|e|e.to_string())?;}
         fs::rename(&staging, &target).map_err(|e| e.to_string())
     })();
     if result.is_err() {
@@ -114,6 +116,12 @@ pub fn allowed(id: &str, declared: &BTreeSet<String>, permission: &str) -> Resul
     }
     let grant = status(id, declared)?;
     Ok(grant.approved && grant.enabled && grant.granted.contains(permission))
+}
+pub fn revoke_install(id:&str)->Result<(),String>{
+    let _guard=gate().lock().map_err(|_|"permission store locked")?;
+    let mut state=load()?;
+    state.plugins.insert(id.to_owned(),PluginGrant::default());
+    save(&state)
 }
 pub fn approve_install(id: &str, declared: &BTreeSet<String>) -> Result<PluginGrant, String> {
     mutate(id, declared, |current| {

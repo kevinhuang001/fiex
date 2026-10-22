@@ -4,6 +4,7 @@ import { call } from '@/lib/api'
 import { usePluginCatalog, refreshPluginCatalog, type PluginField } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
+import { PluginInstaller } from './PluginInstaller'
 
 const permissionLabels: Record<string, string> = {
   storage: '插件私有数据存储',
@@ -22,6 +23,7 @@ export function PluginSettings() {
   const [message, setMessage] = useState('')
   const [permissionToApprove, setPermissionToApprove] = useState<string | null>(null)
   const [confirmInstall, setConfirmInstall] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const active = plugins.find((p) => p.id === selected) || plugins[0]
   const fields = active?.contributes?.settings || []
 
@@ -82,6 +84,18 @@ export function PluginSettings() {
     } finally {
       setBusy(false)
     }
+  }
+  const uninstall = async () => {
+    if (!active || busy) return
+    setBusy(true)
+    try {
+      await call('plugin_uninstall', { pluginId: active.id })
+      setConfirmRemove(false)
+      setSelected('')
+      refreshPluginCatalog()
+      setMessage('插件已卸载，插件配置与同步目录未删除。')
+    } catch (error) { setMessage(String(error)) }
+    finally { setBusy(false) }
   }
   const install = async () => {
     if (!active) return
@@ -145,6 +159,7 @@ export function PluginSettings() {
             <p>管理已安装的插件及其设置</p>
           </div>
         </header>
+        <PluginInstaller onChanged={refreshPluginCatalog} />
         <div className="plugin-settings-grid">
           <div className="plugin-settings-list">
             {plugins.map((plugin) => (
@@ -171,7 +186,7 @@ export function PluginSettings() {
                 </small>
                 <p className="sidebar-hint">{active.capabilities.join(' · ')}</p>
                 <div className="plugin-permission-heading">
-                  <strong>{active.official ? 'Fiex 官方插件' : '第三方插件'}</strong>
+                  <strong>{active.author?.name || '未知开发者'}</strong>
                   <label>
                     <span>启用插件</span>
                     <input
@@ -183,7 +198,7 @@ export function PluginSettings() {
                     />
                   </label>
                 </div>
-                {!active.approved && !active.official && (
+                {!active.approved && (
                   <div className="plugin-install-consent">
                     <p>此插件尚未授权。安装时确认声明的权限后即可启用。</p>
                     <Button type="button" disabled={busy} onClick={() => setConfirmInstall(true)}>
@@ -194,7 +209,7 @@ export function PluginSettings() {
                 <div className="plugin-permissions">
                   <strong>权限管理</strong>
                   <p className="sidebar-hint">
-                    官方插件首次默认同意声明的权限；关闭后不会自动恢复。重新开启权限需要确认。
+                    所有插件安装时都需权限授权，撤销权限后再次启用需要明确确认。
                   </p>
                   {(active.declaredPermissions || []).map((permission) => (
                     <label key={permission} className="plugin-permission-item">
@@ -246,6 +261,9 @@ export function PluginSettings() {
                   <ShieldCheck size={13} /> 敏感凭据由系统凭据库管理，不会回显。
                 </p>
                 {message && <p role="status">{message}</p>}
+                <Button type="button" variant="outline" onClick={() => setConfirmRemove(true)} disabled={busy}>
+                  卸载插件
+                </Button>
                 <Button type="button" onClick={() => void save()} disabled={busy || !fields.length}>
                   {busy ? '保存中…' : '保存插件设置'}
                 </Button>
@@ -275,6 +293,13 @@ export function PluginSettings() {
           >
             允许
           </Button>
+        </footer>
+      </Modal>
+      <Modal open={confirmRemove} title="卸载插件" onClose={() => setConfirmRemove(false)}>
+        <p>确定卸载「{active?.name}」吗？将停止插件进程并删除程序文件，插件数据和用户同步目录会保留。</p>
+        <footer className="plugin-consent-actions">
+          <Button variant="outline" onClick={() => setConfirmRemove(false)}>取消</Button>
+          <Button disabled={busy} onClick={() => void uninstall()}>卸载</Button>
         </footer>
       </Modal>
       <Modal

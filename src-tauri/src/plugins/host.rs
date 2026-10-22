@@ -51,14 +51,6 @@ pub struct PluginInfo {
     pub declared_permissions: Vec<String>,
     pub granted_permissions: Vec<String>,
 }
-fn valid_id(s: &str) -> bool {
-    s.len() > 2
-        && s.len() < 128
-        && !s.starts_with('.')
-        && s.contains('.')
-        && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
-}
 fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>, String> {
     crate::plugin_permissions::declaration(&manifest.permissions)
 }
@@ -143,6 +135,17 @@ fn platform() -> String {
         s => s,
     };
     format!("{os}-{}", std::env::consts::ARCH)
+}
+pub fn valid_id(id:&str)->bool{
+    id.len()>2 && id.len()<128 && id.contains('.') &&
+        !id.starts_with('.') && !id.contains("..") &&
+        id.bytes().all(|b|b.is_ascii_alphanumeric()||b"._-".contains(&b))
+}
+fn canonical_under(candidate:&Path, root:&Path)->bool{
+    match (fs::canonicalize(candidate),fs::canonicalize(root)){
+        (Ok(candidate),Ok(root)) => candidate.starts_with(&root) && candidate != root,
+        _=>false
+    }
 }
 fn executable(manifest: &PluginManifest, dir: &Path) -> Result<PathBuf, String> {
     let key = platform();
