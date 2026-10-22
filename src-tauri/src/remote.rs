@@ -12,6 +12,15 @@ struct StoredConnection {
     id: String,
     name: String,
     kind: String,
+    /// The exact installed provider ID, never derived from publisher privilege.
+    #[serde(default)]
+    plugin_id: String,
+    /// Non-secret manifest-declared connection configuration.
+    #[serde(default)]
+    settings: serde_json::Map<String, serde_json::Value>,
+    /// Secret field identifiers whose values are persisted in the OS keyring.
+    #[serde(default)]
+    secret_keys: Vec<String>,
     #[serde(default)]
     url: String,
     #[serde(default)]
@@ -38,6 +47,10 @@ pub struct ConnectionInput {
     pub name: String,
     pub kind: String,
     #[serde(default)]
+    pub plugin_id: Option<String>,
+    #[serde(default)]
+    pub settings: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
     pub url: String,
     #[serde(default)]
     pub host: String,
@@ -61,6 +74,7 @@ pub struct ConnectionInfo {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub plugin_id: String,
     pub mount_path: String,
     pub host: String,
     pub url: String,
@@ -108,6 +122,60 @@ fn meta_dir() -> PathBuf {
     fiex_dir().join("remote-meta")
 }
 
+fn connection_plugin_id(conn: &StoredConnection) -> String {
+    if conn.plugin_id.is_empty() {
+        // Migrate v0.2.7 connection records that predate provider IDs.
+        format!("org.fiex.{}", conn.kind)
+    } else {
+        conn.plugin_id.clone()
+    }
+}
+
+/// Find the user-installed and approved provider that declares this factory.
+/// No official or trusted-publisher shortcut is permitted.
+fn declared_connection_fields(
+    plugin_id: &str,
+    kind: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let plugin = crate::plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
+        .ok_or("连接插件尚未安装、启用或授权")?;
+    let factory = plugin
+        .contributes
+        .get("connectionFactories")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|factories| {
+            factories.iter().find(|factory| {
+                factory.get("id").and_then(serde_json::Value::as_str) == Some(kind)
+            })
+        })
+        .ok_or("插件未声明请求的连接类型")?;
+    let mut fields = Vec::new();
+    for field in factory
+        .get("fields")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("连接插件的字段声明无效")?
+    {
+        let key = field
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("连接字段缺少 ID")?;
+        let ty = field
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("连接字段缺少类型")?;
+        if key.is_empty() || key.len() > 80 || fields.iter().any(|(id, _)| id == key) {
+            return Err("连接字段 ID 无效或重复".into());
+        }
+        if !matches!(ty, "text" | "url" | "number" | "checkbox" | "secret") {
+            return Err("连接字段类型不支持".into());
+        }
+        fields.push((key.to_string(), ty.to_string()));
+    }
+    Ok(fields)
+}
+
 fn load_stored() -> Vec<StoredConnection> {
     let mut items: Vec<StoredConnection> = fs::read(connections_path())
         .ok()
@@ -117,7 +185,7 @@ fn load_stored() -> Vec<StoredConnection> {
     for item in &mut items {
         if !item.password.is_empty()
             && crate::plugin_storage::secret_set(
-                &format!("org.fiex.{}", item.kind),
+                &connection_plugin_id(item),
                 &format!("connection-{}", item.id),
                 "password",
                 &item.password,
@@ -135,11 +203,20 @@ fn load_stored() -> Vec<StoredConnection> {
     for item in &mut items {
         if item.password.is_empty() {
             item.password = crate::plugin_storage::secret_get(
-                &format!("org.fiex.{}", item.kind),
+                &connection_plugin_id(item),
                 &format!("connection-{}", item.id),
                 "password",
             )
             .unwrap_or_default();
+        }
+        for field in &item.secret_keys {
+            if let Ok(value) = crate::plugin_storage::secret_get(
+                &connection_plugin_id(item),
+                &format!("connection-{}", item.id),
+                field,
+            ) {
+                item.settings.insert(field.clone(), value.into());
+            }
         }
     }
     items
@@ -148,9 +225,22 @@ fn load_stored() -> Vec<StoredConnection> {
 fn save_stored(items: &[StoredConnection]) -> Result<(), String> {
     fs::create_dir_all(fiex_dir()).map_err(|e| e.to_string())?;
     let path = connections_path();
+    // Fail closed: in-memory credentials may have been rehydrated from the
+    // keyring. Strip every declared secret before writing the registry.
+    let safe = items
+        .iter()
+        .cloned()
+        .map(|mut item| {
+            for key in &item.secret_keys {
+                item.settings.remove(key);
+            }
+            item.password.clear();
+            item
+        })
+        .collect::<Vec<_>>();
     fs::write(
         &path,
-        serde_json::to_vec_pretty(items).map_err(|e| e.to_string())?,
+        serde_json::to_vec_pretty(&safe).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
     #[cfg(unix)]
@@ -188,7 +278,7 @@ fn save_meta(conn: &StoredConnection, meta: &RemoteMeta) -> Result<(), String> {
 /// Explicitly pass credentials only to the selected, authorized provider
 /// subprocess; the connection registry itself never serializes passwords.
 fn provider_config(conn: &StoredConnection) -> serde_json::Value {
-    serde_json::json!({
+    let mut config = serde_json::json!({
         "url": conn.url,
         "host": conn.host,
         "port": conn.port,
@@ -197,7 +287,11 @@ fn provider_config(conn: &StoredConnection) -> serde_json::Value {
         "username": conn.username,
         "password": conn.password,
         "allowInvalidCerts": conn.allow_invalid_certs
-    })
+    });
+    if let Some(map) = config.as_object_mut() {
+        map.extend(conn.settings.clone());
+    }
+    config
 }
 
 fn public(conn: &StoredConnection) -> ConnectionInfo {
@@ -207,6 +301,7 @@ fn public(conn: &StoredConnection) -> ConnectionInfo {
         id: conn.id.clone(),
         name: conn.name.clone(),
         kind: conn.kind.clone(),
+        plugin_id: connection_plugin_id(conn),
         mount_path: mount.to_string_lossy().into_owned(),
         host: conn.host.clone(),
         url: conn.url.clone(),
@@ -287,7 +382,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         id
     };
     let conn = items.iter().find(|c| c.id == id).ok_or("连接不存在")?;
-    let plugin_id = format!("org.fiex.{}", conn.kind);
+    let plugin_id = connection_plugin_id(conn);
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("连接插件尚未安装、启用或未获得网络授权".into());
     }
@@ -383,7 +478,7 @@ fn local_for(conn: &StoredConnection, rel: &str) -> PathBuf {
 }
 
 async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
-    let plugin_id = format!("org.fiex.{}", conn.kind);
+    let plugin_id = connection_plugin_id(conn);
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("remote plugin network permission not granted".into());
     }
@@ -519,7 +614,7 @@ pub async fn list_listing(
 /// This is an interim file-backed IPC operation pending the SDK's binary
 /// stream channel; Core does not link WebDAV or SMB client implementations.
 async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
-    let plugin_id = format!("org.fiex.{}", conn.kind);
+    let plugin_id = connection_plugin_id(conn);
     for permission in ["network", "filesystem.write"] {
         if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
             return Err(format!(
@@ -565,7 +660,7 @@ pub async fn provider_list(
         .ok_or("connection not found")?;
     // The manifest and actual user-granted permission gate every request.
     // No built-in provider is trusted implicitly, including the official ones.
-    let plugin_id = format!("org.fiex.{}", conn.kind);
+    let plugin_id = connection_plugin_id(&conn);
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("remote plugin network permission not granted".into());
     }
