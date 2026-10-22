@@ -403,7 +403,7 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("remote plugin network permission not granted".into());
     }
-    let config = provider_config(conn);
+    let config = provider_config(&conn);
     let mut files = Vec::new();
     let mut cursor: Option<String> = None;
     let mut page_count = 0usize;
@@ -490,9 +490,7 @@ pub async fn list_listing(
     let filters = crate::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
     for file in files {
-        if (!hidden && file.name.starts_with('.'))
-            || filters.is_ignored(Path::new(&file.name))
-        {
+        if (!hidden && file.name.starts_with('.')) || filters.is_ignored(Path::new(&file.name)) {
             continue;
         }
         let child = if relative.as_os_str().is_empty() {
@@ -891,7 +889,6 @@ pub fn unsync(paths: &[String]) -> Result<(), String> {
                 let child = local_for(&conn, &key);
                 if meta.files.get(&key).is_some_and(|file| !file.is_dir) {
                     let _ = fs::remove_file(&child);
-
                 }
                 if let Some(file) = meta.files.get_mut(&key) {
                     file.downloaded = false;
