@@ -21,9 +21,9 @@ pub struct Policy {
 }
 
 fn system_read_roots() -> Vec<std::path::PathBuf> {
-    let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
     #[cfg(unix)]
     {
+        let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
         [
             "/usr",
             "/lib",
