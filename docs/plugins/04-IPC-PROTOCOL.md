@@ -18,7 +18,7 @@ Core 在启动插件后发送：
   "jsonrpc": "2.0",
   "id": 1,
   "method": "plugin.initialize",
-  "params": { "protocolVersion": "2.0", "hostVersion": "0.2.7" }
+  "params": { "protocolVersion": "2.0", "hostVersion": "0.3.0" }
 }
 ```
 

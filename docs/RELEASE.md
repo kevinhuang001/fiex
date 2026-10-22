@@ -1,10 +1,25 @@
-# Fiex 0.2.7
+# Fiex 0.3.0
 
-- Windows/Linux 改为无边框窗口，最小化、最大化/还原和关闭按钮放到标签栏右侧；macOS 继续使用原生 traffic lights，侧边栏收起时标签栏会避开它们。
-- 标签栏支持横向滚动，当前标签自动滚到完整可见；新建标签按钮加大并去掉背景；标签拖拽改为悬起跟手、其余标签滑动让位的动画。
-- 标签管理移入设置：统一竖排列表，支持新增、重命名、换色和删除，删除前二次确认；侧边栏标签旁的 `+` 已移除。
-- 设置弹窗整体收窄；侧边栏区域顺序与常用位置的拖拽改为和标签栏一致的让位动画。
-- 状态中心新增同步操作（WebDAV/SMB 同步、Git 拉取/推送）；复制、移动、创建副本和移到废纸篓会显示真实进度、当前文件和预计剩余时间。
-- 侧边栏内容下移到标签栏下方，并为 macOS traffic lights 保留顶部空间。
+## Plugins
 
-提供 macOS Apple Silicon DMG、Windows EXE 和 MSI、Linux DEB、RPM 和 AppImage。
+- Optional Git, WebDAV, SMB, Archive, Checksum and Windows Everything search plugins.
+- Nothing is preinstalled; install from **Settings → Plugins** and approve permissions.
+- Permissions are limited to file read/write and network domains; loopback addresses are always allowed.
+- Plugins run as independent processes in an Arapuca sandbox (Landlock + seccomp on Linux, Seatbelt on macOS, AppContainer on Windows).
+
+## Plugin UI
+
+- One row per installed plugin; hover actions for permissions and settings.
+- Pin plugin actions into the toolbar, reorder them with the same animated drag used by tabs.
+- Plugin dropdown shows manifest-provided icons.
+- App-store style catalog reads `fiex-catalog.json` from the latest official plugin release.
+
+## Search
+
+- Core merges local filename search with plugin search providers.
+- Everything plugin queries the existing Windows Everything index; indexing stays owned by Everything.
+
+## Compatibility
+
+- Local file browsing, file operations, tabs, tags, Git source control, WebDAV/SMB and archive/checksum UI match the 0.2.7 behavior when the corresponding plugin is installed.
+- Plugin protocol is 2.0 and manifest schema is 1. Both remain experimental until the Windows sandbox and task-progress work is complete.
