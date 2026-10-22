@@ -21,17 +21,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - run: npx prettier --write plugins/official/*/manifest.json scripts/package-plugins.mjs src-tauri/tauri.conf.json src/components src/lib src/styles docs/plugins sdk/ui
+      - run: npx prettier --write plugins/official/*/manifest.json src-tauri/tauri.conf.json src/components src/lib src/styles docs/plugins sdk/ui
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml
       - run: cargo fmt --manifest-path sdk/rust/Cargo.toml
       - run: cargo fmt --manifest-path plugins/official/git/Cargo.toml
       - run: cargo fmt --manifest-path plugins/official/webdav/Cargo.toml
       - run: cargo fmt --manifest-path plugins/official/smb/Cargo.toml
+      - run: cargo fmt --manifest-path plugins/official/archive/Cargo.toml
+      - run: cargo fmt --manifest-path plugins/official/checksum/Cargo.toml
       - name: Commit formatting
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scripts src-tauri src docs/plugins sdk plugins/official
+          git add src-tauri src docs/plugins sdk plugins/official
           if ! git diff --cached --quiet; then
             git commit -m 'style: format plugin work in progress'
             git push origin HEAD:feat/plugin-sdk-extraction
