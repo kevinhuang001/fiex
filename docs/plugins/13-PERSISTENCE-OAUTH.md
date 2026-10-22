@@ -39,7 +39,7 @@ fn handle(host: &mut dyn fiex_plugin_sdk::HostServices) {
 
 ### 2.2 UI 设置集成
 
-`manifest.contributes.settings` 声明字段，Fiex 设置 → 插件中的宿主面板渲染与持久化。非敏感字段使用 `plugin_storage_*`，`secret` 字段使用 Host SecretStore，仅允许写入/清除或显示“已配置”，**不回显秘密**。
+`manifest.contributions.settings` 声明字段，Fiex 设置 → 插件中的宿主面板渲染与持久化。非敏感字段使用 `plugin_storage_*`，`secret` 字段使用 Host SecretStore，仅允许写入/清除或显示“已配置”，**不回显秘密**。
 
 工具栏的插件菜单、侧栏连接创建入口与设置插件列表都必须读取同一份验证后的 manifest，不得硬编码官方插件名。
 
