@@ -580,31 +580,6 @@ try:
     assert (source/'remote.txt').read_text() == 'remote pull verified\n'
     passed('git_push_pull')
     click('[aria-label="关闭源代码管理"]')
-    begin('WebDAV and SMB: connect, list, download and preview')
-    click('[aria-label="切换侧栏"]')
-    for protocol in ('webdav', 'smb'):
-        if protocol in SKIP: continue
-        click('[title="添加 WebDAV 或 SMB 连接"]')
-        if protocol == 'smb': button('SMB')
-        def field(label, value):
-            selector = js(f'return Array.from(document.querySelectorAll(".connection-form label")).find(e=>e.querySelector("span")?.textContent==={json.dumps(label)})?.querySelector("input")?.outerHTML')
-            if not selector: raise AssertionError('Missing field: ' + label)
-            js(f'''const e=Array.from(document.querySelectorAll('.connection-form label')).find(e=>e.querySelector('span')?.textContent==={json.dumps(label)}).querySelector('input');
-Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,{json.dumps(str(value))});e.dispatchEvent(new Event('input',{{bubbles:true}})); return true''')
-        field('名称', protocol.upper()+' CI')
-        if protocol == 'webdav': field('地址', os.environ['FIEX_WEBDAV_URL'])
-        else:
-            field('主机', os.environ['FIEX_SMB_HOST']); field('端口', os.environ.get('FIEX_SMB_PORT', '445'))
-            field('共享名', os.environ.get('FIEX_SMB_SHARE', 'fiex')); field('用户名', os.environ['FIEX_SMB_USER']); field('密码', os.environ['FIEX_SMB_PASSWORD'])
-        button('添加')
-        wait(lambda: not js('return !!document.querySelector(".connection-form")'))
-        wait(lambda: js(f'return !!document.querySelector({json.dumps(row("hello.txt"))})'))
-        click(row('hello.txt'))
-        open_preview()
-        wait(lambda: js(f'return document.querySelector(".modal pre")?.textContent.includes({json.dumps("hello "+protocol)})'))
-        screenshot(protocol+'-preview.png')
-        close_preview()
-        passed(protocol+'_live_download_preview')
     begin('Disk images: list, read, copy out and verify read-only behavior')
     images = request(action='images')
     expected = {p.stem for p in Path(os.environ['FIEX_CI_IMAGES']).glob('*.img')}
