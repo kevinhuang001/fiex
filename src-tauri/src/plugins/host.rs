@@ -195,25 +195,41 @@ pub fn catalog() -> Vec<PluginInfo> {
 }
 /// Host-approved precompiled, self-contained iframe HTML. Plugins cannot
 /// supply absolute paths or read unrelated files through this API.
-pub fn panel_html(plugin_id:&str,panel_id:&str)->Result<String,String> {
-    let (manifest,folder)=discover().into_iter().find(|(m,_)|m.id==plugin_id)
+pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
+    let (manifest, folder) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == plugin_id)
         .ok_or("plugin is not installed")?;
-    let rights=crate::plugin_permissions::status(plugin_id,&declared(&manifest)?)?;
-    if !rights.approved || !rights.enabled{return Err("plugin disabled or not approved".into());}
-    let panels=manifest.contributes.get("panels").and_then(Value::as_array)
+    let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
+    if !rights.approved || !rights.enabled {
+        return Err("plugin disabled or not approved".into());
+    }
+    let panels = manifest
+        .contributes
+        .get("panels")
+        .and_then(Value::as_array)
         .ok_or("plugin declares no panels")?;
-    let panel=panels.iter().find(|p|p.get("id").and_then(Value::as_str)==Some(panel_id))
+    let panel = panels
+        .iter()
+        .find(|p| p.get("id").and_then(Value::as_str) == Some(panel_id))
         .ok_or("unknown panel id")?;
-    let asset=panel.get("entry").and_then(Value::as_str).ok_or("panel entry missing")?;
-    let rel=Path::new(asset);
-    if !rel.components().all(|c|matches!(c,Component::Normal(_))) {
+    let asset = panel
+        .get("entry")
+        .and_then(Value::as_str)
+        .ok_or("panel entry missing")?;
+    let rel = Path::new(asset);
+    if !rel.components().all(|c| matches!(c, Component::Normal(_))) {
         return Err("invalid panel resource path".into());
     }
-    let file=folder.join(rel);
-    if !canonical_under(&file,&folder){return Err("panel resource outside plugin package".into());}
-    let info=fs::metadata(&file).map_err(|e|e.to_string())?;
-    if !info.is_file() || info.len()>1024*1024 {return Err("panel HTML exceeds size limit".into());}
-    fs::read_to_string(file).map_err(|e|e.to_string())
+    let file = folder.join(rel);
+    if !canonical_under(&file, &folder) {
+        return Err("panel resource outside plugin package".into());
+    }
+    let info = fs::metadata(&file).map_err(|e| e.to_string())?;
+    if !info.is_file() || info.len() > 1024 * 1024 {
+        return Err("panel HTML exceeds size limit".into());
+    }
+    fs::read_to_string(file).map_err(|e| e.to_string())
 }
 pub fn exists(id: &str) -> bool {
     discover().iter().any(|(m, _)| m.id == id)

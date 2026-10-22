@@ -3821,9 +3821,11 @@ body.dragging-reorder * {
   }
 }
 
-
 /* Unified sandboxed plugin modal and command results. */
-.plugin-iframe-modal { max-height: min(92vh, 1000px); overflow: hidden; }
+.plugin-iframe-modal {
+  max-height: min(92vh, 1000px);
+  overflow: hidden;
+}
 .plugin-iframe-modal iframe {
   display: block;
   background: #fafbfc;
@@ -3859,7 +3861,8 @@ body.dragging-reorder * {
   border-radius: 12px;
   background: var(--surface);
 }
-.plugin-install-title,.plugin-install-row {
+.plugin-install-title,
+.plugin-install-row {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -3874,15 +3877,40 @@ body.dragging-reorder * {
   padding: 9px 11px;
   font-size: 12px;
 }
-.plugin-install-review,.plugin-install-review-heading {
+.plugin-install-review,
+.plugin-install-review-heading {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.plugin-install-review-heading { flex-direction: row; align-items: center; }
-.plugin-install-review-heading > div { display: grid; gap: 4px; }
-.plugin-install-review-heading small,.plugin-install-meta { color: var(--muted); font-size: 11px; }
-.plugin-install-meta { display: grid; gap: 4px; }
-.plugin-install-permissions { display: grid; gap: 6px; }
-.plugin-install-permissions > div { display: flex; align-items: center; gap: 8px; }
-.plugin-consent-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.plugin-install-review-heading {
+  flex-direction: row;
+  align-items: center;
+}
+.plugin-install-review-heading > div {
+  display: grid;
+  gap: 4px;
+}
+.plugin-install-review-heading small,
+.plugin-install-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+.plugin-install-meta {
+  display: grid;
+  gap: 4px;
+}
+.plugin-install-permissions {
+  display: grid;
+  gap: 6px;
+}
+.plugin-install-permissions > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-consent-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

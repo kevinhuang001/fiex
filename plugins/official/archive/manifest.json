@@ -4,11 +4,7 @@
   "name": "压缩与解压",
   "version": "0.1.0",
   "protocolVersion": "1.0",
-  "capabilities": [
-    "commands",
-    "toolbar",
-    "contextMenu"
-  ],
+  "capabilities": ["commands", "toolbar", "contextMenu"],
   "entrypoints": {
     "windows-x86_64": "fiex-plugin-archive.exe",
     "macos-aarch64": "fiex-plugin-archive",
@@ -47,9 +43,7 @@
             "picker": {
               "mode": "saveFile",
               "suggestedName": "Archive.zip",
-              "extensions": [
-                "zip"
-              ],
+              "extensions": ["zip"],
               "param": "destination"
             }
           },
@@ -63,9 +57,7 @@
             "picker": {
               "mode": "saveFile",
               "suggestedName": "Archive.7z",
-              "extensions": [
-                "7z"
-              ],
+              "extensions": ["7z"],
               "param": "destination"
             }
           },
@@ -79,9 +71,7 @@
             "picker": {
               "mode": "saveFile",
               "suggestedName": "Archive.tar",
-              "extensions": [
-                "tar"
-              ],
+              "extensions": ["tar"],
               "param": "destination"
             }
           },
@@ -95,9 +85,7 @@
             "picker": {
               "mode": "saveFile",
               "suggestedName": "Archive.tar.gz",
-              "extensions": [
-                "gz"
-              ],
+              "extensions": ["gz"],
               "param": "destination"
             }
           },
@@ -111,9 +99,7 @@
             "picker": {
               "mode": "saveFile",
               "suggestedName": "Archive.tar.bz2",
-              "extensions": [
-                "bz2"
-              ],
+              "extensions": ["bz2"],
               "param": "destination"
             }
           },
@@ -127,9 +113,7 @@
             "picker": {
               "mode": "saveFile",
               "suggestedName": "Archive.tar.xz",
-              "extensions": [
-                "xz"
-              ],
+              "extensions": ["xz"],
               "param": "destination"
             }
           }

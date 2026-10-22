@@ -14,8 +14,8 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
-    time::{Duration, Instant},
     thread,
+    time::{Duration, Instant},
 };
 use tantivy::tokenizer::{LowerCaser, RawTokenizer, TextAnalyzer};
 use tantivy::{
@@ -450,10 +450,13 @@ fn ensure_index(
     let flooded = handle
         .as_ref()
         .is_some_and(|current| current.overflow.swap(false, Ordering::SeqCst));
-    let reconcile = handle.as_ref().is_some_and(|current|{
-        let interval = if current._watcher.is_some() { Duration::from_secs(6*3600) }
-            else {Duration::from_secs(5*60)};
-        current.last_full_scan.elapsed()>interval
+    let reconcile = handle.as_ref().is_some_and(|current| {
+        let interval = if current._watcher.is_some() {
+            Duration::from_secs(6 * 3600)
+        } else {
+            Duration::from_secs(5 * 60)
+        };
+        current.last_full_scan.elapsed() > interval
     });
     if !switched && !flooded && !reconcile {
         if let Some(current) = handle.as_mut() {
@@ -490,17 +493,22 @@ fn ensure_index(
 
 /// Only filesystem roots readable with the application's own user token are
 /// scanned; protected paths naturally fail and are recorded as skipped.
-pub fn accessible_roots()->Vec<String>{
-    let mut roots=Vec::new();
+pub fn accessible_roots() -> Vec<String> {
+    let mut roots = Vec::new();
     for location in crate::volumes::locations() {
-        if location.kind!="disk" || !location.mounted || location.usbfs ||
-            location.path.contains("://") {continue;}
-        let path=PathBuf::from(location.path);
-        if path.is_dir() && fs::read_dir(&path).is_ok(){
+        if location.kind != "disk"
+            || !location.mounted
+            || location.usbfs
+            || location.path.contains("://")
+        {
+            continue;
+        }
+        let path = PathBuf::from(location.path);
+        if path.is_dir() && fs::read_dir(&path).is_ok() {
             roots.push(path);
         }
     }
-    if let Some(home)=dirs::home_dir().filter(|p|p.is_dir()){
+    if let Some(home) = dirs::home_dir().filter(|p| p.is_dir()) {
         roots.push(home);
     }
     roots.sort();
@@ -508,31 +516,44 @@ pub fn accessible_roots()->Vec<String>{
     // Keep top-level mounted roots, plus user home on platforms where / is
     // system-protected. Independent mount roots retain filesystem-specific
     // indexing and do not require administrative privileges.
-    roots.into_iter().map(|p|p.to_string_lossy().into_owned()).collect()
+    roots
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
 }
 
 impl SearchState {
     /// Each disk/root keeps its own writer, watcher, and incremental event
     /// queue. Switching panes does not discard another root's live index.
-    fn index_slot(&self, root:&str, hidden:bool, ignores:&[String])
-        -> Arc<Mutex<Option<IndexHandle>>> {
-        let key=format!("{root}\u{1f}{}",signature(hidden,ignores));
-        self.indexes.lock().unwrap().entry(key)
-            .or_insert_with(||Arc::new(Mutex::new(None))).clone()
+    fn index_slot(
+        &self,
+        root: &str,
+        hidden: bool,
+        ignores: &[String],
+    ) -> Arc<Mutex<Option<IndexHandle>>> {
+        let key = format!("{root}\u{1f}{}", signature(hidden, ignores));
+        self.indexes
+            .lock()
+            .unwrap()
+            .entry(key)
+            .or_insert_with(|| Arc::new(Mutex::new(None)))
+            .clone()
     }
     /// Index every mounted filesystem accessible to the current user while
     /// the application is running. Refresh changes using notify/FSEvents/
     /// ReadDirectoryChangesW/inotify and reconcile every 60 seconds.
     pub fn start_global_daemon(&self) {
-        let search=self.clone();
-        let _=thread::Builder::new().name("fiex-global-index".into()).spawn(move||loop {
-            for root in accessible_roots() {
-                if let Err(error)=search.warm(&root,true,&[]) {
-                    eprintln!("Fiex index skipped {root}: {error}");
+        let search = self.clone();
+        let _ = thread::Builder::new()
+            .name("fiex-global-index".into())
+            .spawn(move || loop {
+                for root in accessible_roots() {
+                    if let Err(error) = search.warm(&root, true, &[]) {
+                        eprintln!("Fiex index skipped {root}: {error}");
+                    }
                 }
-            }
-            thread::sleep(Duration::from_secs(60));
-        });
+                thread::sleep(Duration::from_secs(60));
+            });
     }
     fn generation(&self, scope: &str) -> Arc<AtomicU64> {
         self.generations
@@ -548,8 +569,8 @@ impl SearchState {
     }
 
     pub fn warm(&self, root: &str, hidden: bool, ignores: &[String]) -> Result<(), String> {
-        let slot=self.index_slot(root,hidden,ignores);
-        let mut guard=slot.lock().unwrap();
+        let slot = self.index_slot(root, hidden, ignores);
+        let mut guard = slot.lock().unwrap();
         ensure_index(&mut guard, root, hidden, ignores)
     }
 
@@ -557,41 +578,61 @@ impl SearchState {
     /// result stream. Existing per-root Tantivy indices and watchers are reused.
     pub fn run_global(
         &self,
-        scope:&str,
-        query:&str,
-        hidden:bool,
-        ignores:&[String],
-        emit:impl Fn(SearchBatch)+Send+Sync,
-    )->Result<(),String>{
-        let started=Instant::now();
-        let generation=self.generation(scope);
-        let ticket=generation.fetch_add(1,Ordering::SeqCst)+1;
-        let entries=Mutex::new((Vec::<Entry>::new(),HashSet::<String>::new(),false,0usize));
-        let mut successful=0usize;
-        let mut last_error=String::new();
+        scope: &str,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        emit: impl Fn(SearchBatch) + Send + Sync,
+    ) -> Result<(), String> {
+        let started = Instant::now();
+        let generation = self.generation(scope);
+        let ticket = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let entries = Mutex::new((Vec::<Entry>::new(), HashSet::<String>::new(), false, 0usize));
+        let mut successful = 0usize;
+        let mut last_error = String::new();
         for root in accessible_roots() {
-            if generation.load(Ordering::Relaxed)!=ticket{return Ok(());}
-            let result=self.run(&format!("{scope}:disk:{root}"),&root,query,hidden,ignores,|batch|{
-                let mut collected=entries.lock().unwrap();
-                collected.2|=batch.truncated;
-                collected.3+=batch.skipped;
-                for item in batch.entries{
-                    if !collected.1.insert(item.path.clone()){continue;}
-                    if collected.0.len()>=RESULT_LIMIT{
-                        collected.2=true;continue;
+            if generation.load(Ordering::Relaxed) != ticket {
+                return Ok(());
+            }
+            let result = self.run(
+                &format!("{scope}:disk:{root}"),
+                &root,
+                query,
+                hidden,
+                ignores,
+                |batch| {
+                    let mut collected = entries.lock().unwrap();
+                    collected.2 |= batch.truncated;
+                    collected.3 += batch.skipped;
+                    for item in batch.entries {
+                        if !collected.1.insert(item.path.clone()) {
+                            continue;
+                        }
+                        if collected.0.len() >= RESULT_LIMIT {
+                            collected.2 = true;
+                            continue;
+                        }
+                        collected.0.push(item);
                     }
-                    collected.0.push(item);
-                }
-            });
+                },
+            );
             match result {
-                Ok(())=>successful+=1,
-                Err(e)=>last_error=e,
+                Ok(()) => successful += 1,
+                Err(e) => last_error = e,
             }
         }
-        if successful==0 {return Err(format!("no readable index roots: {last_error}"));}
-        let (entries,_,truncated,skipped)=entries.into_inner().map_err(|_|"index result lock poisoned")?;
+        if successful == 0 {
+            return Err(format!("no readable index roots: {last_error}"));
+        }
+        let (entries, _, truncated, skipped) = entries
+            .into_inner()
+            .map_err(|_| "index result lock poisoned")?;
         emit(SearchBatch {
-            entries,done:true,elapsed_ms:started.elapsed().as_millis(),truncated,skipped
+            entries,
+            done: true,
+            elapsed_ms: started.elapsed().as_millis(),
+            truncated,
+            skipped,
         });
         Ok(())
     }
@@ -609,8 +650,8 @@ impl SearchState {
         let generation = counter.fetch_add(1, Ordering::SeqCst) + 1;
         let started = Instant::now();
         let query = query.to_lowercase();
-        let slot=self.index_slot(root,hidden,ignores);
-        let mut guard=slot.lock().unwrap();
+        let slot = self.index_slot(root, hidden, ignores);
+        let mut guard = slot.lock().unwrap();
         ensure_index(&mut guard, root, hidden, ignores)?;
         let handle = guard.as_ref().ok_or("索引不可用")?;
         let searcher = handle.reader.searcher();
@@ -759,7 +800,13 @@ mod tests {
         {
             let slot = state.index_slot(t.path().to_str().unwrap(), false, &[]);
             let guard = slot.lock().unwrap();
-            guard.as_ref().unwrap().pending.lock().unwrap().insert(folder);
+            guard
+                .as_ref()
+                .unwrap()
+                .pending
+                .lock()
+                .unwrap()
+                .insert(folder);
         }
         let matches = Mutex::new(Vec::new());
         state

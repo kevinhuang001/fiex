@@ -286,9 +286,12 @@ export function FileContextMenu({
           )}
           <PluginContextActions
             paths={x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]}
-            path={x.path} isDirectory={menu.entry.isDir} readOnly={x.readOnly}
+            path={x.path}
+            isDirectory={menu.entry.isDir}
+            readOnly={x.readOnly}
             isRemote={isRemotePath(menu.entry.path)}
-            onClose={() => setMenu(null)} onError={x.setError}
+            onClose={() => setMenu(null)}
+            onError={x.setError}
           />
         </div>
       )}

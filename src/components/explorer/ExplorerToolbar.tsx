@@ -212,10 +212,17 @@ export function ExplorerToolbar({
                   // Built-in Git panel is a compatibility adapter until its
                   // iframe is bundled as a plugin UI contribution.
                   if (tool.openPanel) {
-                    window.dispatchEvent(new CustomEvent(OPEN_PLUGIN_PANEL, {detail:{
-                      pluginId:plugin.id,panelId:tool.openPanel,title:tool.title,
-                      selection:x.selected,directory:x.path
-                    }}))
+                    window.dispatchEvent(
+                      new CustomEvent(OPEN_PLUGIN_PANEL, {
+                        detail: {
+                          pluginId: plugin.id,
+                          panelId: tool.openPanel,
+                          title: tool.title,
+                          selection: x.selected,
+                          directory: x.path,
+                        },
+                      }),
+                    )
                   } else if (tool.id === 'git.main' && plugin.id === 'org.fiex.git') {
                     setGitOpen(true)
                   } else if (tool.command && plugin.backendAvailable) {
