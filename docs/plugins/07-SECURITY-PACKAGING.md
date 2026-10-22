@@ -50,9 +50,7 @@ my-plugin.fiexplugin
   },
   "ui": { "bridge": "1.0", "assetsRoot": "ui/" },
   "contributes": {
-    "panels": [
-      { "id": "webdav.settings", "entry": "ui/main/index.html", "placement": "modal" }
-    ]
+    "panels": [{ "id": "webdav.settings", "entry": "ui/main/index.html", "placement": "modal" }]
   }
 }
 ```
@@ -81,11 +79,11 @@ my-plugin.fiexplugin
 
 ## 5. 三个平台的实际约束
 
-| 平台 | 关键点 |
-| --- | --- |
-| Windows | PE 架构/ABI、受限 Named Pipe ACL、SmartScreen/代码签名策略、更新时 exe 文件锁 |
-| macOS | Apple Silicon/Intel、Gatekeeper/隔离属性、签名及 notarization、宿主签名包与动态插件关系；签名验证和运行授权不能靠删除 quarantine 绕过 |
-| Linux | glibc 最低版本或 musl 策略、桌面环境与动态库依赖、可执行位、Unix socket 文件权限；可选系统沙箱机制按发行版适配 |
+| 平台    | 关键点                                                                                                                                |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows | PE 架构/ABI、受限 Named Pipe ACL、SmartScreen/代码签名策略、更新时 exe 文件锁                                                         |
+| macOS   | Apple Silicon/Intel、Gatekeeper/隔离属性、签名及 notarization、宿主签名包与动态插件关系；签名验证和运行授权不能靠删除 quarantine 绕过 |
+| Linux   | glibc 最低版本或 musl 策略、桌面环境与动态库依赖、可执行位、Unix socket 文件权限；可选系统沙箱机制按发行版适配                        |
 
 在每个平台都要验证第三方安装与官方预装**同协议、同生命周期**。不要认为将二进制加入 Tauri `externalBin` 就等于实现动态插件管理：官方预装可通过构建脚本分发，但运行由 PluginHost 统一完成。
 

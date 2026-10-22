@@ -1,3 +1,5 @@
 #[path = "../plugin_entry.rs"]
 mod plugin_entry;
-fn main() { plugin_entry::run("smb"); }
+fn main() {
+    plugin_entry::run("smb");
+}

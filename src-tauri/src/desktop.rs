@@ -230,7 +230,12 @@ async fn plugin_invoke(
 fn plugin_status() -> Vec<(String, bool)> {
     ["org.fiex.webdav", "org.fiex.smb", "org.fiex.git"]
         .iter()
-        .map(|id| (id.to_string(), crate::plugin_host::global().is_installed(id)))
+        .map(|id| {
+            (
+                id.to_string(),
+                crate::plugin_host::global().is_installed(id),
+            )
+        })
         .collect()
 }
 
@@ -259,8 +264,17 @@ async fn git_remote_remove(root: String, name: String) -> Result<(), String> {
     if let Some(v) = tauri::async_runtime::spawn_blocking({
         let root = root.clone();
         let name = name.clone();
-        move || plugin_compat("org.fiex.git", "git.remoteRemove", serde_json::json!({"root":root,"name":name}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.remoteRemove",
+                serde_json::json!({"root":root,"name":name}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || git_remote::remove(&root, &name))
@@ -273,8 +287,17 @@ async fn git_remote_save(root: String, name: String, url: String) -> Result<(), 
         let root = root.clone();
         let name = name.clone();
         let url = url.clone();
-        move || plugin_compat("org.fiex.git", "git.remoteSave", serde_json::json!({"root":root,"name":name,"url":url}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.remoteSave",
+                serde_json::json!({"root":root,"name":name,"url":url}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || git_remote::save(&root, &name, &url))
@@ -292,8 +315,17 @@ async fn git_sync(
         let root = root.clone();
         let remote = remote.clone();
         let branch = branch.clone();
-        move || plugin_compat("org.fiex.git", "git.remoteSync", serde_json::json!({"root":root,"remote":remote,"push":push,"branch":branch}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.remoteSync",
+                serde_json::json!({"root":root,"remote":remote,"push":push,"branch":branch}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || {
@@ -329,8 +361,17 @@ async fn git_stage(root: String, paths: Vec<String>, all: bool) -> Result<(), St
     if let Some(v) = tauri::async_runtime::spawn_blocking({
         let root = root.clone();
         let paths = paths.clone();
-        move || plugin_compat("org.fiex.git", "git.stage", serde_json::json!({"root":root,"paths":paths,"all":all}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.stage",
+                serde_json::json!({"root":root,"paths":paths,"all":all}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || git::stage(&root, &paths, all))
@@ -342,8 +383,17 @@ async fn git_unstage(root: String, paths: Vec<String>, all: bool) -> Result<(), 
     if let Some(v) = tauri::async_runtime::spawn_blocking({
         let root = root.clone();
         let paths = paths.clone();
-        move || plugin_compat("org.fiex.git", "git.unstage", serde_json::json!({"root":root,"paths":paths,"all":all}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.unstage",
+                serde_json::json!({"root":root,"paths":paths,"all":all}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || git::unstage(&root, &paths, all))
@@ -368,8 +418,17 @@ async fn git_commit(
         let message = message.clone();
         let name = name.clone();
         let email = email.clone();
-        move || plugin_compat("org.fiex.git", "git.commit", serde_json::json!({"root":root,"message":message,"name":name,"email":email}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.commit",
+                serde_json::json!({"root":root,"message":message,"name":name,"email":email}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || git::commit(&root, &message, &name, &email))
@@ -393,8 +452,17 @@ async fn git_browse(root: String, reference: String) -> Result<String, String> {
     if let Some(v) = tauri::async_runtime::spawn_blocking({
         let root = root.clone();
         let reference = reference.clone();
-        move || plugin_compat("org.fiex.git", "git.browse", serde_json::json!({"root":root,"reference":reference}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.browse",
+                serde_json::json!({"root":root,"reference":reference}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || git_history::browse(&root, &reference))
@@ -405,8 +473,17 @@ async fn git_browse(root: String, reference: String) -> Result<String, String> {
 async fn git_history_asset(path: String) -> Result<String, String> {
     if let Some(v) = tauri::async_runtime::spawn_blocking({
         let path = path.clone();
-        move || plugin_compat("org.fiex.git", "git.historyAsset", serde_json::json!({"path":path}))
-    }).await.map_err(|e| e.to_string())?? {
+        move || {
+            plugin_compat(
+                "org.fiex.git",
+                "git.historyAsset",
+                serde_json::json!({"path":path}),
+            )
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??
+    {
         return serde_json::from_value(v).map_err(|e| e.to_string());
     }
     tauri::async_runtime::spawn_blocking(move || git_history::asset(&path))

@@ -28,20 +28,20 @@ Content-Length: 96\r\n
 
 ## 3. 方法命名空间（v1 草案）
 
-| 方向 | 方法 | 语义 |
-| --- | --- | --- |
-| Core→插件 | `plugin.initialize / ping / shutdown` | 协商与生命周期 |
-| Core→插件 | `plugin.connection.validate / open / close` | 可选连接工厂 |
-| Core→插件 | `plugin.fs.list / stat / openRead` | VFS 目录、元数据和内容流 |
-| Core→插件 | `plugin.fs.beginWrite / commitWrite / abortWrite` | 分阶段写入 |
-| Core→插件 | `plugin.fs.createDir / rename / delete / move / copy` | 按声明能力调用 |
-| Core→插件 | `plugin.fs.getChanges / watch / search` | 可选变化与搜索 |
-| Core→插件 | `plugin.command.execute` | UI 菜单/工具栏动作 |
-| Core→插件 | `plugin.task.cancel` | 取消长任务 |
-| 插件→Core | `host.mount.create / remove` | 注册 VFS 挂载 |
-| 插件→Core | `host.task.create / progress / complete / fail / cancelled` | 统一任务中心 |
-| 插件→Core | `host.secret.request` | 按授权获取凭据 |
-| 插件→Core | `host.context.get` | 受限访问当前选择上下文 |
+| 方向      | 方法                                                        | 语义                     |
+| --------- | ----------------------------------------------------------- | ------------------------ |
+| Core→插件 | `plugin.initialize / ping / shutdown`                       | 协商与生命周期           |
+| Core→插件 | `plugin.connection.validate / open / close`                 | 可选连接工厂             |
+| Core→插件 | `plugin.fs.list / stat / openRead`                          | VFS 目录、元数据和内容流 |
+| Core→插件 | `plugin.fs.beginWrite / commitWrite / abortWrite`           | 分阶段写入               |
+| Core→插件 | `plugin.fs.createDir / rename / delete / move / copy`       | 按声明能力调用           |
+| Core→插件 | `plugin.fs.getChanges / watch / search`                     | 可选变化与搜索           |
+| Core→插件 | `plugin.command.execute`                                    | UI 菜单/工具栏动作       |
+| Core→插件 | `plugin.task.cancel`                                        | 取消长任务               |
+| 插件→Core | `host.mount.create / remove`                                | 注册 VFS 挂载            |
+| 插件→Core | `host.task.create / progress / complete / fail / cancelled` | 统一任务中心             |
+| 插件→Core | `host.secret.request`                                       | 按授权获取凭据           |
+| 插件→Core | `host.context.get`                                          | 受限访问当前选择上下文   |
 
 **iframe ↔ UI Host 使用独立版本的 [UI Bridge](11-UI-SDK.md)**（MessageChannel），而不是本文件的 Native stdio JSON-RPC。UI Host 经过鉴权可将 `plugin.invoke` 路由为 `plugin.command.execute`。宿主可额外提供 `host.vfs.*` 以使功能插件通过授权访问别的挂载，但不能绕过本地路径/其他插件的数据授权。对于插件提供的缓存、同步诉求，不应出现 `plugin.cache.*` 或 `plugin.sync.*`：Core 通过通用 VFS 原语执行它们。
 

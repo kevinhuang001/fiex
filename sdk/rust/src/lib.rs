@@ -18,13 +18,25 @@ pub struct RpcError {
 }
 impl RpcError {
     pub fn method_not_found(method: &str) -> Self {
-        Self { code: -32601, message: format!("Unsupported method: {method}"), data: None }
+        Self {
+            code: -32601,
+            message: format!("Unsupported method: {method}"),
+            data: None,
+        }
     }
     pub fn invalid_params(message: impl Into<String>) -> Self {
-        Self { code: -32602, message: message.into(), data: None }
+        Self {
+            code: -32602,
+            message: message.into(),
+            data: None,
+        }
     }
     pub fn internal(message: impl Into<String>) -> Self {
-        Self { code: -32603, message: message.into(), data: None }
+        Self {
+            code: -32603,
+            message: message.into(),
+            data: None,
+        }
     }
 }
 impl std::fmt::Display for RpcError {
@@ -42,39 +54,70 @@ pub fn read_frame(reader: &mut impl BufRead) -> io::Result<Option<Value>> {
         let mut line = String::new();
         let count = reader.read_line(&mut line)?;
         if count == 0 {
-            if header_bytes == 0 { return Ok(None); }
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "incomplete frame header"));
+            if header_bytes == 0 {
+                return Ok(None);
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "incomplete frame header",
+            ));
         }
         header_bytes += count;
         if header_bytes > MAX_HEADER {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "header too large"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "header too large",
+            ));
         }
-        if line == "\r\n" { break; }
+        if line == "\r\n" {
+            break;
+        }
         if !line.ends_with("\r\n") {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid header terminator"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid header terminator",
+            ));
         }
-        let (name, value) = line.trim_end_matches("\r\n").split_once(':')
+        let (name, value) = line
+            .trim_end_matches("\r\n")
+            .split_once(':')
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid header"))?;
         if name.eq_ignore_ascii_case("Content-Length") {
             if length.is_some() {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "duplicate length"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "duplicate length",
+                ));
             }
-            let n = value.trim().parse::<usize>().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid length"))?;
-            if n > MAX_FRAME { return Err(io::Error::new(io::ErrorKind::InvalidData, "frame too large")); }
+            let n = value
+                .trim()
+                .parse::<usize>()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid length"))?;
+            if n > MAX_FRAME {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "frame too large",
+                ));
+            }
             length = Some(n);
         }
     }
-    let size = length.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing length"))?;
+    let size =
+        length.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing length"))?;
     let mut bytes = vec![0u8; size];
     reader.read_exact(&mut bytes)?;
-    let value = serde_json::from_slice(&bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let value = serde_json::from_slice(&bytes)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(Some(value))
 }
 
 pub fn write_frame(writer: &mut impl Write, value: &Value) -> io::Result<()> {
     let bytes = serde_json::to_vec(value).map_err(io::Error::other)?;
     if bytes.len() > MAX_FRAME {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "frame too large"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "frame too large",
+        ));
     }
     write!(writer, "Content-Length: {}\r\n\r\n", bytes.len())?;
     writer.write_all(&bytes)?;
@@ -93,7 +136,9 @@ pub fn serve(
     let mut output = stdout.lock();
     let mut initialized = false;
     while let Some(request) = read_frame(&mut input)? {
-        let Some(id) = request.get("id").cloned() else { continue; };
+        let Some(id) = request.get("id").cloned() else {
+            continue;
+        };
         let method = request.get("method").and_then(Value::as_str).unwrap_or("");
         let params = request.get("params").cloned().unwrap_or(Value::Null);
         let response = match method {
@@ -103,7 +148,9 @@ pub fn serve(
                     Err(RpcError::invalid_params("unsupported protocol version"))
                 } else {
                     initialized = true;
-                    Ok(json!({"pluginId":plugin_id,"protocolVersion":PROTOCOL_VERSION,"ready":true}))
+                    Ok(
+                        json!({"pluginId":plugin_id,"protocolVersion":PROTOCOL_VERSION,"ready":true}),
+                    )
                 }
             }
             "plugin.ping" if initialized => Ok(json!({"alive":true})),
@@ -132,7 +179,10 @@ mod tests {
         let value = json!({"jsonrpc":"2.0","id":"中文","result":{"name":"项目会议"}});
         let mut data = Vec::new();
         write_frame(&mut data, &value).unwrap();
-        assert_eq!(read_frame(&mut BufReader::new(data.as_slice())).unwrap(), Some(value));
+        assert_eq!(
+            read_frame(&mut BufReader::new(data.as_slice())).unwrap(),
+            Some(value)
+        );
     }
     #[test]
     fn oversized_frame_is_rejected() {
@@ -141,7 +191,10 @@ mod tests {
     }
     #[test]
     fn incomplete_body_is_rejected() {
-        assert!(read_frame(&mut BufReader::new(b"Content-Length: 20\r\n\r\n{}".as_slice())).is_err());
+        assert!(read_frame(&mut BufReader::new(
+            b"Content-Length: 20\r\n\r\n{}".as_slice()
+        ))
+        .is_err());
     }
     #[test]
     fn non_ascii_byte_lengths_are_correct() {

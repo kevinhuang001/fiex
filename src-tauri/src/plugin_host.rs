@@ -19,18 +19,26 @@ impl Running {
     fn rpc(&mut self, method: &str, params: Value) -> Result<Value, String> {
         self.next_id += 1;
         let id = self.next_id;
-        plugin_sdk::write_frame(&mut self.stdin, &json!({
-            "jsonrpc":"2.0","id":id,"method":method,"params":params
-        })).map_err(|e| e.to_string())?;
+        plugin_sdk::write_frame(
+            &mut self.stdin,
+            &json!({
+                "jsonrpc":"2.0","id":id,"method":method,"params":params
+            }),
+        )
+        .map_err(|e| e.to_string())?;
         let response = plugin_sdk::read_frame(&mut self.stdout)
-            .map_err(|e| e.to_string())?.ok_or("plugin exited during request")?;
+            .map_err(|e| e.to_string())?
+            .ok_or("plugin exited during request")?;
         if response.get("id").and_then(Value::as_u64) != Some(id) {
             return Err("plugin response ID mismatch".into());
         }
         if let Some(error) = response.get("error") {
             return Err(format!("plugin error: {error}"));
         }
-        response.get("result").cloned().ok_or_else(|| "plugin response missing result".into())
+        response
+            .get("result")
+            .cloned()
+            .ok_or_else(|| "plugin response missing result".into())
     }
 }
 impl Drop for Running {
@@ -55,7 +63,11 @@ impl PluginHost {
         let exe = format!("{name}{}", std::env::consts::EXE_SUFFIX);
         let dir = std::env::var_os("FIEX_PLUGIN_DIR")
             .map(std::path::PathBuf::from)
-            .or_else(|| std::env::current_exe().ok().and_then(|p| p.parent().map(std::path::Path::to_path_buf)))
+            .or_else(|| {
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+            })
             .ok_or("unable to locate plugin directory")?;
         Ok(dir.join(exe))
     }
@@ -63,23 +75,42 @@ impl PluginHost {
         Self::executable(plugin_id).is_ok_and(|p| p.is_file())
     }
     pub fn invoke(&self, plugin_id: &str, method: &str, params: Value) -> Result<Value, String> {
-        let mut guard = self.children.lock().map_err(|_| "plugin host lock is poisoned")?;
+        let mut guard = self
+            .children
+            .lock()
+            .map_err(|_| "plugin host lock is poisoned")?;
         if !guard.contains_key(plugin_id) {
             let path = Self::executable(plugin_id)?;
             let mut child = Command::new(&path)
-                .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
-                .spawn().map_err(|e| format!("plugin start failed: {e}"))?;
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .map_err(|e| format!("plugin start failed: {e}"))?;
             let stdin = child.stdin.take().ok_or("plugin stdin unavailable")?;
             let stdout = child.stdout.take().ok_or("plugin stdout unavailable")?;
-            let mut running = Running { child, stdin, stdout: BufReader::new(stdout), next_id: 0 };
-            let result = running.rpc("plugin.initialize", json!({"protocolVersion":plugin_sdk::PROTOCOL_VERSION}))?;
+            let mut running = Running {
+                child,
+                stdin,
+                stdout: BufReader::new(stdout),
+                next_id: 0,
+            };
+            let result = running.rpc(
+                "plugin.initialize",
+                json!({"protocolVersion":plugin_sdk::PROTOCOL_VERSION}),
+            )?;
             if result.get("pluginId").and_then(Value::as_str) != Some(plugin_id) {
                 return Err("plugin identity mismatch".into());
             }
             guard.insert(plugin_id.into(), running);
         }
-        let response = guard.get_mut(plugin_id).ok_or("plugin unavailable")?.rpc(method, params);
-        if response.is_err() { guard.remove(plugin_id); }
+        let response = guard
+            .get_mut(plugin_id)
+            .ok_or("plugin unavailable")?
+            .rpc(method, params);
+        if response.is_err() {
+            guard.remove(plugin_id);
+        }
         response
     }
 }

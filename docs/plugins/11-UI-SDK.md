@@ -6,10 +6,10 @@
 
 ## 1. 两套 SDK，两个版本化通道
 
-| SDK | 执行环境 | 传输边界 | 协议 |
-| --- | --- | --- | --- |
-| `fiex-sdk`（Rust crate） | 插件独立 Native 进程 | Core ↔ plugin process | Native Plugin IPC v1 |
-| `@fiex/ui-sdk`（npm package） | iframe 中的浏览器 JS | iframe ↔ UI Host（隔离 MessagePort） | UI Bridge v1 |
+| SDK                           | 执行环境             | 传输边界                             | 协议                 |
+| ----------------------------- | -------------------- | ------------------------------------ | -------------------- |
+| `fiex-sdk`（Rust crate）      | 插件独立 Native 进程 | Core ↔ plugin process                | Native Plugin IPC v1 |
+| `@fiex/ui-sdk`（npm package） | iframe 中的浏览器 JS | iframe ↔ UI Host（隔离 MessagePort） | UI Bridge v1         |
 
 **UI Bridge 与 Native Plugin IPC 不能混为一套线协议**：二者可共用资源引用和错误分类的概念，但有独立版本协商、权限作用域和生命周期。iframe 不能直接打开 Native IPC socket/stdio，不能直接调用 Tauri invoke。
 
@@ -35,22 +35,21 @@ npm run build  # 由插件开发者执行，产物交付给 Fiex
 以 Vite 为例：`base: "./"`，构建输出包含 `index.html`、本地 JS/CSS/assets，禁止远程 dev server、远程 CDN 和 Node 专用运行时 API。SDK 可提供 TypeScript 类型、自动 Bridge 握手、取消/超时封装、React hook 适配（独立可选包）和开发测试模拟 Host。**SDK 必须是框架无关的**，不能强迫第三方使用 React。
 
 ```typescript
-import { fiex } from "@fiex/ui-sdk";
+import { fiex } from '@fiex/ui-sdk'
 
-await fiex.ready();
+await fiex.ready()
 
-const context = await fiex.context.get();
-const result = await fiex.plugin.invoke<{ branch: string }>(
-  "git.status",
-  { directory: context.directory }
-);
-const unsubscribe = fiex.events.on("git.statusChanged", event => {
-  console.log(event);
-});
+const context = await fiex.context.get()
+const result = await fiex.plugin.invoke<{ branch: string }>('git.status', {
+  directory: context.directory,
+})
+const unsubscribe = fiex.events.on('git.statusChanged', (event) => {
+  console.log(event)
+})
 
-await fiex.panel.resize({ width: 420, height: 560 });
+await fiex.panel.resize({ width: 420, height: 560 })
 // iframe 关闭前解除订阅
-unsubscribe();
+unsubscribe()
 ```
 
 `plugin.invoke` 只允许请求 **本插件**的 namespace 下、manifest 声明的命令；UI-only 插件无 Native 命令处理器时返回 `unsupported`，不能偷偷路由到其他插件。
@@ -71,6 +70,7 @@ unsubscribe();
 传输统一使用结构化可序列化对象；字段名和错误码在冻结协议前由 JSON Schema 校验。
 
 请求：
+
 ```json
 {
   "bridgeVersion": "1.0",
@@ -83,6 +83,7 @@ unsubscribe();
 ```
 
 成功响应：
+
 ```json
 {
   "bridgeVersion": "1.0",
@@ -94,6 +95,7 @@ unsubscribe();
 ```
 
 失败响应：
+
 ```json
 {
   "bridgeVersion": "1.0",
@@ -113,42 +115,41 @@ unsubscribe();
 
 ```typescript
 type FiexResourceRef = {
-  mountId: string;
-  nodeId: string;
-  version?: string;
-};
+  mountId: string
+  nodeId: string
+  version?: string
+}
 
 interface FiexUiSdk {
-  ready(): Promise<void>;
+  ready(): Promise<void>
   context: {
-    get(): Promise<ExplorerContext>;       // 最小授权快照
-    subscribe(handler: (ctx: ExplorerContext) => void): () => void;
-  };
+    get(): Promise<ExplorerContext> // 最小授权快照
+    subscribe(handler: (ctx: ExplorerContext) => void): () => void
+  }
   plugin: {
-    invoke<T>(command: string, args?: unknown,
-      options?: { signal?: AbortSignal }): Promise<T>;
-  };
+    invoke<T>(command: string, args?: unknown, options?: { signal?: AbortSignal }): Promise<T>
+  }
   vfs: {
-    stat(ref: FiexResourceRef): Promise<FileStat>;
-    list(ref: FiexResourceRef, options?: { cursor?: string; limit?: number }): Promise<ListPage>;
-    open(ref: FiexResourceRef): Promise<void>; // 由宿主打开、非任意 OS 文件句柄
-  };
+    stat(ref: FiexResourceRef): Promise<FileStat>
+    list(ref: FiexResourceRef, options?: { cursor?: string; limit?: number }): Promise<ListPage>
+    open(ref: FiexResourceRef): Promise<void> // 由宿主打开、非任意 OS 文件句柄
+  }
   events: {
-    on<T>(name: string, handler: (event: T) => void): () => void;
-  };
+    on<T>(name: string, handler: (event: T) => void): () => void
+  }
   tasks: {
-    list(): Promise<TaskSummary[]>;
-    cancel(taskId: string): Promise<void>; // 仅可取消授权范围内任务
-    create(options: { title: string; cancellable?: boolean }): Promise<TaskSummary>;
-  };
+    list(): Promise<TaskSummary[]>
+    cancel(taskId: string): Promise<void> // 仅可取消授权范围内任务
+    create(options: { title: string; cancellable?: boolean }): Promise<TaskSummary>
+  }
   panel: {
-    resize(size: { width?: number; height?: number }): Promise<void>;
-    close(): Promise<void>;
-  };
+    resize(size: { width?: number; height?: number }): Promise<void>
+    close(): Promise<void>
+  }
   theme: {
-    get(): Promise<ThemeSnapshot>;
-    subscribe(handler: (theme: ThemeSnapshot) => void): () => void;
-  };
+    get(): Promise<ThemeSnapshot>
+    subscribe(handler: (theme: ThemeSnapshot) => void): () => void
+  }
 }
 ```
 
@@ -168,11 +169,11 @@ interface FiexUiSdk {
 
 ## 7. UI-only、Native-only、Hybrid 三种包
 
-| 形态 | 必需资源 | 可以调用 |
-| --- | --- | --- |
-| UI-only | manifest + 编译好的 `ui/` | 授权后的 UI Host API；无 plugin Native command |
-| Native-only | manifest + `bin/<platform>` | Native IPC 提供 VFS/任务/后端命令；无 iframe |
-| Hybrid | manifest + `bin/` + `ui/` | UI Host API + 本插件 Native command |
+| 形态        | 必需资源                    | 可以调用                                       |
+| ----------- | --------------------------- | ---------------------------------------------- |
+| UI-only     | manifest + 编译好的 `ui/`   | 授权后的 UI Host API；无 plugin Native command |
+| Native-only | manifest + `bin/<platform>` | Native IPC 提供 VFS/任务/后端命令；无 iframe   |
+| Hybrid      | manifest + `bin/` + `ui/`   | UI Host API + 本插件 Native command            |
 
 Native 插件不得注入其 Native 进程中的网页服务来替换包内已编译静态页面。任何功能插件若想暴露虚拟目录树，必须在 Native 端实现规范 VFS 提供者或由 Core 提供明确的受控虚拟数据注册能力（后者不是 v1 必需）。
 

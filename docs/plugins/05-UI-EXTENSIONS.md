@@ -6,14 +6,14 @@
 
 ## 1. 扩展点
 
-| contribution | 宿主负责 | 插件负责 |
-| --- | --- | --- |
-| `toolbar` | 按钮尺寸、位置、排序、点击、可见性 | ID、标题、图标、动作 |
-| `contextMenus` | 文件/目录/多选右键、快捷键、权限 | 菜单项及命令 |
-| `panels` | iframe 容器、位置、主题、会话、焦点、关闭 | 已编译 UI 目录、入口、前端逻辑 |
-| `connectionFactories` | 标准连接入口、SecretStore、安全表单 | 字段定义与连接协议 |
-| `commands` | 权限和上下文校验、路由 | 插件自定义操作 |
-| `mounts` | 统一目录树、导航和缓存 | VFS 树节点和内容 |
+| contribution          | 宿主负责                                  | 插件负责                       |
+| --------------------- | ----------------------------------------- | ------------------------------ |
+| `toolbar`             | 按钮尺寸、位置、排序、点击、可见性        | ID、标题、图标、动作           |
+| `contextMenus`        | 文件/目录/多选右键、快捷键、权限          | 菜单项及命令                   |
+| `panels`              | iframe 容器、位置、主题、会话、焦点、关闭 | 已编译 UI 目录、入口、前端逻辑 |
+| `connectionFactories` | 标准连接入口、SecretStore、安全表单       | 字段定义与连接协议             |
+| `commands`            | 权限和上下文校验、路由                    | 插件自定义操作                 |
+| `mounts`              | 统一目录树、导航和缓存                    | VFS 树节点和内容               |
 
 连接/功能仅是 UI 分类，不是互斥运行时类型。**功能插件可以提供完整虚拟目录**；连接插件也可提供自定义工具面板。一个插件可贡献多个面板和按钮。
 
@@ -38,6 +38,7 @@ git.fiexplugin
 UI 项须指定本包内静态入口（如 `ui/main/index.html`）；资源必须留在当前插件包的 `ui/` 下，构建器使用相对路径。构建后的 JS 可以包含 React/Vue/Svelte 的浏览器 bundle，**不得依赖 Node globals (`process`、`require`、`fs`)、dev server、远程 CDN 或 npm 安装**。
 
 插件包可以：
+
 - **UI-only**：只有 `ui/`，不包含 Native 后端；仅能使用经授权的 Host UI Bridge。
 - **Native-only**：只有独立原生进程，无 UI。
 - **Hybrid**：同时有 UI iframe 和独立 Native 进程；UI 使用 Bridge 调用其后端。

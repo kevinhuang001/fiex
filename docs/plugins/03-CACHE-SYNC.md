@@ -29,17 +29,17 @@ FiexData/
 
 SQLite 建议启用 WAL，记录事务批次。表的逻辑模型（字段及索引可内部演进）：
 
-| 表 | 主要列 |
-| --- | --- |
-| `mounts` | mount_id, plugin_id, provider_config_ref, status |
-| `nodes` | mount_id, node_id, parent_id, name, kind, remote_version, snapshot_time |
-| `directory_snapshots` | mount_id, directory_id, snapshot_token, last_refresh, next_cursor |
-| `content_objects` | digest, length, integrity, last_access, pin_count |
-| `content_refs` | mount_id, node_id, version, object_digest, state |
-| `sync_rules` | rule_id, mount_id, node_id/path_fallback, action, recursive, mode, local_target |
-| `sync_baselines` | mapping_id, local_relpath, remote_ref, local_version, remote_version, last_success |
-| `sync_conflicts` | id, mapping_id, baseline, local_snapshot, remote_snapshot, resolution |
-| `change_cursors` | mount_id, cursor, committed_at |
+| 表                    | 主要列                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| `mounts`              | mount_id, plugin_id, provider_config_ref, status                                   |
+| `nodes`               | mount_id, node_id, parent_id, name, kind, remote_version, snapshot_time            |
+| `directory_snapshots` | mount_id, directory_id, snapshot_token, last_refresh, next_cursor                  |
+| `content_objects`     | digest, length, integrity, last_access, pin_count                                  |
+| `content_refs`        | mount_id, node_id, version, object_digest, state                                   |
+| `sync_rules`          | rule_id, mount_id, node_id/path_fallback, action, recursive, mode, local_target    |
+| `sync_baselines`      | mapping_id, local_relpath, remote_ref, local_version, remote_version, last_success |
+| `sync_conflicts`      | id, mapping_id, baseline, local_snapshot, remote_snapshot, resolution              |
+| `change_cursors`      | mount_id, cursor, committed_at                                                     |
 
 缓存对象应以不可变键存储；未完成的 staging 文件不进入可用缓存索引。私有数据不应跨权限域错误复用缓存条目。凭据不写入这些表。
 
@@ -54,11 +54,11 @@ SQLite 建议启用 WAL，记录事务批次。表的逻辑模型（字段及索
 
 ## 4. 三种用户行为
 
-| 行为 | 需要本地文件 | 自动上传本地变更 | 删除策略 |
-| --- | --- | --- | --- |
-| `browse` 远程浏览 | 不需要（可按需预览） | 否 | 缓存自由淘汰 |
-| `pinOffline` 离线可用 | 下载到私有缓存 | 否 | 取消钉选不删除用户内容 |
-| `mirrorOneWay` / `syncTwoWay` 目录同步 | 用户指定的同步目录 | 单向：否；双向：是 | 按规则、保护、确认传播删除 |
+| 行为                                   | 需要本地文件         | 自动上传本地变更   | 删除策略                   |
+| -------------------------------------- | -------------------- | ------------------ | -------------------------- |
+| `browse` 远程浏览                      | 不需要（可按需预览） | 否                 | 缓存自由淘汰               |
+| `pinOffline` 离线可用                  | 下载到私有缓存       | 否                 | 取消钉选不删除用户内容     |
+| `mirrorOneWay` / `syncTwoWay` 目录同步 | 用户指定的同步目录   | 单向：否；双向：是 | 按规则、保护、确认传播删除 |
 
 UI 必须清晰区分“离线可用”和“同步到本地文件夹”。**仅有 read 能力的挂载也可以钉选离线，不必具有写入能力。**
 
@@ -88,15 +88,15 @@ UI 必须清晰区分“离线可用”和“同步到本地文件夹”。**仅
 
 针对每个映射项执行**三方比较**：最后一次成功同步基线 B、当前本地 L、当前远端 R。版本可采用 ETag/对象版本/可靠哈希/时间大小组合，后者仅为弱判断，须在写入前尽可能重新核验。
 
-| L 相比 B | R 相比 B | 行为 |
-| --- | --- | --- |
-| 未变 | 未变 | 无操作 |
-| 变 | 未变 | 双向：条件上传；单向：保留/报告本地改动 |
-| 未变 | 变 | 安全下载至 staging 再提交 |
-| 变 | 变 | 冲突，不得静默覆盖 |
-| 删除 | 未变 | 双向允许经策略传播删除，先入保护期/确认 |
-| 未变 | 删除 | 默认保留本地/提示远端删除，待策略处理 |
-| 删除 | 变（或反向） | 删除-修改冲突，停下来处理 |
+| L 相比 B | R 相比 B     | 行为                                    |
+| -------- | ------------ | --------------------------------------- |
+| 未变     | 未变         | 无操作                                  |
+| 变       | 未变         | 双向：条件上传；单向：保留/报告本地改动 |
+| 未变     | 变           | 安全下载至 staging 再提交               |
+| 变       | 变           | 冲突，不得静默覆盖                      |
+| 删除     | 未变         | 双向允许经策略传播删除，先入保护期/确认 |
+| 未变     | 删除         | 默认保留本地/提示远端删除，待策略处理   |
+| 删除     | 变（或反向） | 删除-修改冲突，停下来处理               |
 
 下载/上传完成且条件校验通过，才更新同步基线。部分同步成功也必须逐项提交结果，重启时重放未提交任务不能重复应用破坏性操作。
 
