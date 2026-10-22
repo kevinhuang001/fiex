@@ -48,11 +48,17 @@ fn system_read_roots() -> Vec<std::path::PathBuf> {
             "ProgramData",
         ] {
             if let Some(path) = std::env::var_os(key) {
-                roots.push(canonical(Path::new(&path)));
+                let path = canonical(Path::new(&path));
+                if path.exists() {
+                    roots.push(path);
+                }
             }
         }
         if let Some(system_root) = std::env::var_os("SystemRoot") {
-            roots.push(canonical(Path::new(&system_root).join("System32")));
+            let path = canonical(Path::new(&system_root).join("System32"));
+            if path.exists() {
+                roots.push(path);
+            }
         }
         roots
     }
