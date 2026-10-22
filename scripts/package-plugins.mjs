@@ -6,7 +6,7 @@
  * Usage: node scripts/package-plugins.mjs [target-triple] [--debug]
  */
 import { execFileSync } from 'node:child_process'
-import { cpSync, copyFileSync, mkdirSync, rmSync } from 'node:fs'
+import { chmodSync, cpSync, copyFileSync, mkdirSync, rmSync } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -46,7 +46,9 @@ for (const { slug, id } of packages) {
   rmSync(dest, { recursive: true, force: true })
   mkdirSync(dest, { recursive: true })
   copyFileSync(join(packageDir, 'manifest.json'), join(dest, 'manifest.json'))
-  copyFileSync(src, join(dest, 'fiex-plugin-' + slug + suffix))
+  const executable = join(dest, 'fiex-plugin-' + slug + suffix)
+  copyFileSync(src, executable)
+  if (process.platform !== 'win32') chmodSync(executable, 0o755)
   // Developers provide compiled iframe assets if the plugin has a UI entry.
   try { cpSync(join(packageDir, 'ui', 'dist'), join(dest, 'ui'), { recursive: true }) }
   catch (error) { if (error.code !== 'ENOENT') throw error }

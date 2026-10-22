@@ -55,11 +55,13 @@ fn roots() -> Vec<PathBuf> {
     if let Some(v) = std::env::var_os("FIEX_PLUGIN_DIR") {
         all.push(PathBuf::from(v));
     }
-    if let Some(d) = dirs::data_local_dir() {
-        all.push(d.join("fiex").join("plugins"));
-    }
+    // Bundled, verified first-party IDs take precedence over user-directory
+    // name collisions. An explicit update needs a matching publisher identity.
     if let Some(bundled) = BUNDLED_ROOT.get() {
         all.push(bundled.clone());
+    }
+    if let Some(d) = dirs::data_local_dir() {
+        all.push(d.join("fiex").join("plugins"));
     }
     let dev_bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("plugins");
     if dev_bundled.is_dir() {
