@@ -28,6 +28,10 @@ jobs:
         run: cargo check --manifest-path plugins/official/webdav/Cargo.toml
       - name: Standalone SMB
         run: cargo check --manifest-path plugins/official/smb/Cargo.toml
+      - name: Standalone Archive
+        run: cargo test --manifest-path plugins/official/archive/Cargo.toml
+      - name: Standalone Checksum
+        run: cargo test --manifest-path plugins/official/checksum/Cargo.toml
   browser-sdk:
     name: Browser UI SDK types
     runs-on: ubuntu-latest

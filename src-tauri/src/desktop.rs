@@ -1,5 +1,4 @@
 use crate::{
-    archives,
     drag_session::{DragSessions, DropPlan},
     files, git, git_history, git_remote,
     operations::{self, OperationCancel, OperationResult, Operations},
@@ -1011,10 +1010,10 @@ fn cancel_operation(state: tauri::State<'_, OperationCancel>) {
     state.cancel();
 }
 #[tauri::command]
-async fn file_checksums(path: String) -> Result<Vec<crate::checksums::Checksum>, String> {
-    tauri::async_runtime::spawn_blocking(move || crate::checksums::calculate(&path))
-        .await
-        .map_err(|e| e.to_string())?
+async fn file_checksums(path: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_host::global().invoke("org.fiex.checksum", "checksum.calculate", serde_json::json!({"path":path}))
+    }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
 fn pick_folder(default: Option<String>) -> Option<String> {
@@ -1027,53 +1026,29 @@ fn pick_folder(default: Option<String>) -> Option<String> {
         .map(|path| path.to_string_lossy().into_owned())
 }
 #[tauri::command]
-async fn extract_archive(
-    app: tauri::AppHandle,
-    path: String,
-    destination: Option<String>,
-    cancel: tauri::State<'_, OperationCancel>,
-) -> Result<String, String> {
-    let cancel = cancel.inner().clone();
+async fn extract_archive(app: tauri::AppHandle, path: String, destination: Option<String>) -> Result<String,String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let flag = cancel.flag();
-        let result = archives::extract(&path, destination.as_deref(), &flag)?;
-        app.state::<Operations>()
-            .record_created(std::path::PathBuf::from(&result));
-        Ok(result)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+        let result=crate::plugin_host::global().invoke("org.fiex.archive", "archive.extract", serde_json::json!({"path":path,"destination":destination}))?;
+        let extracted: String=serde_json::from_value(result).map_err(|e|e.to_string())?;
+        app.state::<Operations>().record_created(std::path::PathBuf::from(&extracted));
+        Ok(extracted)
+    }).await.map_err(|e|e.to_string())?
 }
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn compress_archive(
-    app: tauri::AppHandle,
-    paths: Vec<String>,
-    destination: String,
-    format: String,
-    level: Option<u32>,
-    password: Option<String>,
+    app: tauri::AppHandle, paths: Vec<String>, destination: String,
+    format: String, level: Option<u32>, password: Option<String>,
     ignores: Vec<String>,
-    cancel: tauri::State<'_, OperationCancel>,
-) -> Result<String, String> {
-    let cancel = cancel.inner().clone();
+) -> Result<String,String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let flag = cancel.flag();
-        let result = archives::compress(
-            &paths,
-            &destination,
-            &format,
-            &ignores,
-            level,
-            password.as_deref(),
-            &flag,
-        )?;
-        app.state::<Operations>()
-            .record_created(std::path::PathBuf::from(&result));
-        Ok(result)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+        let response=crate::plugin_host::global().invoke("org.fiex.archive", "archive.compress",
+            serde_json::json!({"paths":paths,"destination":destination,"format":format,
+                "level":level,"password":password,"ignores":ignores}))?;
+        let created: String=serde_json::from_value(response).map_err(|e|e.to_string())?;
+        app.state::<Operations>().record_created(std::path::PathBuf::from(&created));
+        Ok(created)
+    }).await.map_err(|e|e.to_string())?
 }
 #[tauri::command]
 async fn detect_terminals() -> Result<Vec<terminals::Terminal>, String> {

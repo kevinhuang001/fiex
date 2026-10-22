@@ -31,6 +31,8 @@ const packages = [
   { slug: 'webdav', id: 'org.fiex.webdav' },
   { slug: 'smb', id: 'org.fiex.smb' },
   { slug: 'git', id: 'org.fiex.git' },
+  { slug: 'archive', id: 'org.fiex.archive' },
+  { slug: 'checksum', id: 'org.fiex.checksum' },
 ]
 for (const { slug, id } of packages) {
   const packageDir = join(srcDir, slug)

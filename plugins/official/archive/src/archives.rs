@@ -1,5 +1,5 @@
 use crate::ignores::IgnoreSet;
-use crate::operations::{check_cancelled, copy_stream, unique};
+use crate::common::{check_cancelled, copy_stream, unique};
 use std::{
     fs,
     io::{self, Read, Write},
@@ -439,7 +439,7 @@ fn write_7z(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operations::CANCELLED;
+    use crate::common::CANCELLED;
     #[test]
     fn cancelled_compress_leaves_no_archive() {
         let t = tempfile::tempdir().unwrap();

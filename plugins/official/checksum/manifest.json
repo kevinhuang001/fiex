@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "org.fiex.checksum",
+  "name": "校验和",
+  "version": "0.1.0",
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "commands",
+    "toolbar",
+    "contextMenu"
+  ],
+  "entrypoints": {
+    "windows-x86_64": "fiex-plugin-checksum.exe",
+    "macos-aarch64": "fiex-plugin-checksum",
+    "macos-x86_64": "fiex-plugin-checksum",
+    "linux-x86_64": "fiex-plugin-checksum"
+  },
+  "permissions": {
+    "storage": false,
+    "secrets": false,
+    "filesystem.read": true,
+    "filesystem.write": false,
+    "ui.dialog": true
+  },
+  "contributes": {
+    "toolbar": [
+      {
+        "id": "checksum.main",
+        "title": "校验和",
+        "icon": "hash",
+        "command": "checksum.calculate"
+      }
+    ],
+    "contextMenus": [
+      {
+        "id": "checksum.action",
+        "title": "校验和",
+        "command": "checksum.calculate"
+      }
+    ]
+  }
+}

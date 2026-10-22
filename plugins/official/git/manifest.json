@@ -4,7 +4,12 @@
   "name": "Git",
   "version": "0.1.0",
   "protocolVersion": "1.0",
-  "capabilities": ["filesystem", "toolbar", "commands", "panel"],
+  "capabilities": [
+    "filesystem",
+    "toolbar",
+    "commands",
+    "panel"
+  ],
   "entrypoints": {
     "windows-x86_64": "fiex-plugin-git.exe",
     "macos-aarch64": "fiex-plugin-git",
@@ -31,6 +36,11 @@
   },
   "permissions": {
     "storage": true,
-    "secrets": false
+    "secrets": false,
+    "network": false,
+    "filesystem.read": true,
+    "filesystem.write": true,
+    "externalCommands": true,
+    "ui.dialog": true
   }
 }

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "org.fiex.archive",
+  "name": "压缩与解压",
+  "version": "0.1.0",
+  "protocolVersion": "1.0",
+  "capabilities": [
+    "commands",
+    "toolbar",
+    "contextMenu"
+  ],
+  "entrypoints": {
+    "windows-x86_64": "fiex-plugin-archive.exe",
+    "macos-aarch64": "fiex-plugin-archive",
+    "macos-x86_64": "fiex-plugin-archive",
+    "linux-x86_64": "fiex-plugin-archive"
+  },
+  "permissions": {
+    "storage": false,
+    "secrets": false,
+    "filesystem.read": true,
+    "filesystem.write": true,
+    "ui.dialog": true
+  },
+  "contributes": {
+    "toolbar": [
+      {
+        "id": "archive.main",
+        "title": "压缩与解压",
+        "icon": "archive",
+        "command": "archive.compress"
+      }
+    ],
+    "contextMenus": [
+      {
+        "id": "archive.action",
+        "title": "压缩与解压",
+        "command": "archive.compress"
+      }
+    ]
+  }
+}

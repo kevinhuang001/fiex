@@ -22,6 +22,10 @@ export interface PluginInfo {
   version: string
   capabilities: string[]
   enabled: boolean
+  official: boolean
+  approved: boolean
+  declaredPermissions: string[]
+  grantedPermissions: string[]
   backendAvailable: boolean
   contributes?: {
     connectionFactories?: Array<{ id: string; title: string; fields: PluginField[] }>
@@ -38,14 +42,19 @@ export function usePluginCatalog(): PluginInfo[] {
   const [items, setItems] = useState<PluginInfo[]>([])
   useEffect(() => {
     let mounted = true
-    void pluginCatalog()
+    const refresh = () => void pluginCatalog()
       .then((plugins) => {
         if (mounted) setItems(plugins)
       })
       .catch(() => {})
+    refresh()
+    window.addEventListener('fiex:plugins-changed', refresh)
     return () => {
       mounted = false
+      window.removeEventListener('fiex:plugins-changed', refresh)
     }
   }, [])
   return items
 }
+
+export function refreshPluginCatalog() { window.dispatchEvent(new Event('fiex:plugins-changed')) }
