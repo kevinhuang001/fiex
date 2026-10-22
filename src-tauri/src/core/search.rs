@@ -63,7 +63,7 @@ struct IndexHandle {
 #[derive(Clone, Default)]
 pub struct SearchState {
     generations: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
-    indexes: Arc<Mutex<HashMap<String, Arc<Mutex<Option<IndexHandle>>>>>>>,
+    indexes: Arc<Mutex<HashMap<String, Arc<Mutex<Option<IndexHandle>>>>>>,
 }
 
 #[derive(Clone, Serialize)]
