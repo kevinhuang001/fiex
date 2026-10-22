@@ -1,7 +1,34 @@
-use std::{fs, io::{Read,Write},path::{Path,PathBuf},sync::atomic::{AtomicBool,Ordering}};
-pub const CANCELLED:&str="已取消";
-pub fn check_cancelled(c:&AtomicBool)->Result<(),String>{ if c.load(Ordering::Relaxed){Err(CANCELLED.into())}else{Ok(())}}
-pub fn copy_stream(input:&mut impl Read,output:&mut impl Write,c:&AtomicBool)->Result<u64,String>{let mut data=[0;262144];let mut total=0;loop{check_cancelled(c)?;let n=input.read(&mut data).map_err(|e|e.to_string())?;if n==0{return Ok(total)}output.write_all(&data[..n]).map_err(|e|e.to_string())?;total+=n as u64;}}
+use std::{
+    fs,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
+};
+pub const CANCELLED: &str = "已取消";
+pub fn check_cancelled(c: &AtomicBool) -> Result<(), String> {
+    if c.load(Ordering::Relaxed) {
+        Err(CANCELLED.into())
+    } else {
+        Ok(())
+    }
+}
+pub fn copy_stream(
+    input: &mut impl Read,
+    output: &mut impl Write,
+    c: &AtomicBool,
+) -> Result<u64, String> {
+    let mut data = [0; 262144];
+    let mut total = 0;
+    loop {
+        check_cancelled(c)?;
+        let n = input.read(&mut data).map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Ok(total);
+        }
+        output.write_all(&data[..n]).map_err(|e| e.to_string())?;
+        total += n as u64;
+    }
+}
 pub fn unique(path: &Path) -> PathBuf {
     if !exists(path) {
         return path.into();

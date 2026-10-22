@@ -1,5 +1,5 @@
-use crate::ignores::IgnoreSet;
 use crate::common::{check_cancelled, copy_stream, unique};
+use crate::ignores::IgnoreSet;
 use std::{
     fs,
     io::{self, Read, Write},

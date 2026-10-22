@@ -16,14 +16,14 @@
 
 ## 2. 里程碑和依赖
 
-| 阶段 | 改动                                                                                                    | 必需验收                                                   |
-| ---- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| M0   | 约定协议、manifest/schema、MockPlugin、静态架构依赖检查                                                 | MockPlugin 独立进程握手通过                                |
-| M1   | `VfsRouter` + LocalFsAdapter + NodeIndex，重构通用 list/stat/read/transfer                              | 本地四种视图、复制/移动、搜索、双面板拖拽不回归            |
-| M2   | `PluginHost`（发现、启动、IPC、能力/权限）；加入第三方样例 VFS                                          | 无插件时可启动；安装样例即可显示树                         |
-| M3   | `CacheManager` + `SyncEngine` + `TaskManager`                                                           | 选择性离线钉选、取消、崩溃恢复、冲突保护                   |
-| M4   | 把 WebDAV/SMB 打包为公共 SDK 官方插件、迁移连接数据                                                     | 无 `remote.rs` 业务路由；已有连接及离线状态可升级          |
-| M5   | Git 插件注册工具栏/右键/面板 + 只读历史 VFS                                                             | Git 完整功能回归；无 `history://` 内核专用分支             |
+| 阶段 | 改动                                                                                                        | 必需验收                                                   |
+| ---- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| M0   | 约定协议、manifest/schema、MockPlugin、静态架构依赖检查                                                     | MockPlugin 独立进程握手通过                                |
+| M1   | `VfsRouter` + LocalFsAdapter + NodeIndex，重构通用 list/stat/read/transfer                                  | 本地四种视图、复制/移动、搜索、双面板拖拽不回归            |
+| M2   | `PluginHost`（发现、启动、IPC、能力/权限）；加入第三方样例 VFS                                              | 无插件时可启动；安装样例即可显示树                         |
+| M3   | `CacheManager` + `SyncEngine` + `TaskManager`                                                               | 选择性离线钉选、取消、崩溃恢复、冲突保护                   |
+| M4   | 把 WebDAV/SMB 打包为公共 SDK 官方插件、迁移连接数据                                                         | 无 `remote.rs` 业务路由；已有连接及离线状态可升级          |
+| M5   | Git 插件注册工具栏/右键/面板 + 只读历史 VFS                                                                 | Git 完整功能回归；无 `history://` 内核专用分支             |
 | M6   | 预编译 iframe、`@fiex/ui-sdk`、隔离 origin/MessageChannel/CSP、插件设置、跨平台安装包校验与非 Rust 协议测试 | 三平台 UI-only/Native-only/Hybrid 安装、安全和崩溃测试通过 |
 
 可以按小 PR 分阶段，但最终合入后 Core 不能残留以官方插件 ID 区分行为的代码。临时旧路径兼容适配器须有明确删除时点和测试。
@@ -48,7 +48,7 @@
 | 跨源传输  | 本地↔WebDAV、SMB↔WebDAV、目录递归、冲突、拖拽到浏览器/OS、移动后删除源                                |
 | UI        | 工具栏/右键、多选、预编译 iframe、ESM/CSS、MessageChannel 握手和调用、隔离 origin/CSP、禁用后贡献消失 |
 | 任务      | 并行取消互不影响、插件 Push 中断、失败原因、重启历史恢复                                              |
-| 安全      | 伪造插件/挂载 ID、未授权路径、凭据脱敏、插件包路径逃逸、ABI/格式错误                                 |
+| 安全      | 伪造插件/挂载 ID、未授权路径、凭据脱敏、插件包路径逃逸、ABI/格式错误                                  |
 | 官方平权  | 拆除官方插件后安装第三方同能力插件，功能可用；不修改 Core 源码                                        |
 
 PR 级 CI 至少运行单测、`cargo fmt/clippy/test`、前端 lint/build、VFS 与 IPC 契约测试。集成测试应使用临时 WebDAV/SMB 服务与可控 FakeProvider，保证版本冲突场景可重复；三平台原生 CI 增加进程终止、外部拖拽视频或 E2E 核验。

@@ -4,10 +4,7 @@
   "name": "SMB / NAS",
   "version": "0.1.0",
   "protocolVersion": "1.0",
-  "capabilities": [
-    "filesystem",
-    "connectionFactory"
-  ],
+  "capabilities": ["filesystem", "connectionFactory"],
   "entrypoints": {
     "windows-x86_64": "fiex-plugin-smb.exe",
     "macos-aarch64": "fiex-plugin-smb",

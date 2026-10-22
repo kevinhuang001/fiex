@@ -4,11 +4,7 @@
   "name": "压缩与解压",
   "version": "0.1.0",
   "protocolVersion": "1.0",
-  "capabilities": [
-    "commands",
-    "toolbar",
-    "contextMenu"
-  ],
+  "capabilities": ["commands", "toolbar", "contextMenu"],
   "entrypoints": {
     "windows-x86_64": "fiex-plugin-archive.exe",
     "macos-aarch64": "fiex-plugin-archive",

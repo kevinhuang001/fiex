@@ -29,11 +29,12 @@ pub struct PluginManifest {
     #[serde(default)]
     pub author: Option<PluginAuthor>,
 }
-#[derive(Clone,Debug,Serialize,Deserialize)]
-#[serde(rename_all="camelCase")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginAuthor {
     pub name: String,
-    #[serde(default)] pub url: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,33 +62,43 @@ fn valid_id(s: &str) -> bool {
 fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>, String> {
     crate::plugin_permissions::declaration(&manifest.permissions)
 }
-pub fn set_enabled(id:&str,enabled:bool)->Result<(),String>{
-    let (manifest,_) = discover().into_iter().find(|(m,_)|m.id==id)
+pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
-    crate::plugin_permissions::set_enabled(id,&declared(&manifest)?,enabled)?;
+    crate::plugin_permissions::set_enabled(id, &declared(&manifest)?, enabled)?;
     global().stop(id);
     Ok(())
 }
-pub fn set_permission(id:&str,permission:&str,grant:bool)->Result<(),String>{
-    let (manifest,_) = discover().into_iter().find(|(m,_)|m.id==id)
+pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
-    crate::plugin_permissions::set_granted(id,&declared(&manifest)?,permission,grant)?;
+    crate::plugin_permissions::set_granted(id, &declared(&manifest)?, permission, grant)?;
     global().stop(id);
     Ok(())
 }
-pub fn approve_install(id:&str)->Result<(),String>{
-    let (manifest,_) = discover().into_iter().find(|(m,_)|m.id==id)
+pub fn approve_install(id: &str) -> Result<(), String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
-    crate::plugin_permissions::approve_install(id,&declared(&manifest)?)?;
+    crate::plugin_permissions::approve_install(id, &declared(&manifest)?)?;
     Ok(())
 }
-fn roots()->Vec<PathBuf>{
-    let mut roots=Vec::new();
+fn roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
     // The user-level plugin installation directory is the sole release source.
-    if let Some(data)=dirs::data_local_dir(){roots.push(data.join("fiex").join("plugins"));}
+    if let Some(data) = dirs::data_local_dir() {
+        roots.push(data.join("fiex").join("plugins"));
+    }
     // Test isolation override is unavailable in packaged release builds.
     #[cfg(debug_assertions)]
-    if let Some(path)=std::env::var_os("FIEX_PLUGIN_DIR"){roots.insert(0,PathBuf::from(path));}
+    if let Some(path) = std::env::var_os("FIEX_PLUGIN_DIR") {
+        roots.insert(0, PathBuf::from(path));
+    }
     roots
 }
 fn discover() -> Vec<(PluginManifest, PathBuf)> {
@@ -156,8 +167,8 @@ pub fn catalog() -> Vec<PluginInfo> {
         .map(|(manifest, folder)| {
             let backend = executable(&manifest, &folder).is_ok();
             let declared = declared(&manifest).unwrap_or_default();
-            let state = crate::plugin_permissions::status(&manifest.id, &declared)
-                .unwrap_or_default(); // unreadable policy fails closed
+            let state =
+                crate::plugin_permissions::status(&manifest.id, &declared).unwrap_or_default(); // unreadable policy fails closed
             PluginInfo {
                 id: manifest.id,
                 name: manifest.name,

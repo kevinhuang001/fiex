@@ -4,12 +4,7 @@
   "name": "Git",
   "version": "0.1.0",
   "protocolVersion": "1.0",
-  "capabilities": [
-    "filesystem",
-    "toolbar",
-    "commands",
-    "panel"
-  ],
+  "capabilities": ["filesystem", "toolbar", "commands", "panel"],
   "entrypoints": {
     "windows-x86_64": "fiex-plugin-git.exe",
     "macos-aarch64": "fiex-plugin-git",
