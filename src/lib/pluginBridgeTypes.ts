@@ -6,6 +6,6 @@ export type {
   BridgeError,
   ExplorerContext,
   ResourceRef,
-} from '../../sdk/ui/src/index'
+} from '../../sdk/src/index'
 
-export type { HostSession } from '../../sdk/ui/src/host'
+export type { HostSession } from '../../sdk/src/host'
