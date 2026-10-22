@@ -145,7 +145,11 @@ fn ensure_provider_access(conn: &StoredConnection, write_file: bool) -> Result<S
         required.push("network");
     }
     if write_file {
-        if !plugin.declared_permissions.iter().any(|p| p == "filesystem.write") {
+        if !plugin
+            .declared_permissions
+            .iter()
+            .any(|p| p == "filesystem.write")
+        {
             return Err("文件下载插件未声明写入权限".into());
         }
         required.push("filesystem.write");
