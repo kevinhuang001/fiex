@@ -4,7 +4,7 @@
 
 ## 1. 威胁模型
 
-安装任意原生可执行插件意味着可能运行第三方代码。**独立进程只提供崩溃/内存隔离，不等于权限隔离**；普通用户进程仍可直接访问该用户可访问的文件、环境变量和网络资源。Fiex 的 API 权限检查可以防止通过宿主 API 的越权，但不能据此声称杜绝恶意插件的 OS 直接访问。
+安装包含 Native 后端的插件意味着运行第三方代码；即使 UI-only 插件不含 Native 二进制，iframe JavaScript 也必须隔离并对每条 Host API 请求鉴权。**独立进程只提供崩溃/内存隔离，不等于权限隔离**；普通用户进程仍可直接访问该用户可访问的文件、环境变量和网络资源。Fiex 的 API 权限检查可以防止通过宿主 API 的越权，但不能据此声称杜绝恶意插件的 OS 直接访问。
 
 v1 必须清楚提示用户风险，执行来源/摘要校验、严格 IPC、最小化凭据暴露；真正的 OS 强制隔离（Windows AppContainer、macOS Sandbox、Linux 对应机制）应分平台实现、测试后再宣称具有沙箱。
 
@@ -23,11 +23,13 @@ my-plugin.fiexplugin
     macos-x86_64/plugin
     linux-x86_64-gnu/plugin
     linux-aarch64-gnu/plugin
-  resources/
-    ui.json
+  ui/                       # 可选的预编译静态 UI
+    main/index.html
+    main/assets/index.js
+    main/assets/index.css
 ```
 
-允许只包含一个平台的归档；不能要求每个作者一次发布所有二进制。安装时按 `OS + arch + ABI` 选择入口，二进制/资源路径必须是**包内相对路径**；防 ZIP Slip、软链接逃逸、异常压缩比及恶意大包。不可通过自报入口路径执行用户系统上的任意程序。
+允许只包含一个平台的归档；不能要求每个作者一次发布所有二进制。**UI-only 包允许没有 `bin/` 与 `entrypoints`；拥有 Native 后端的插件必须声明所支持平台的完整二进制入口。**安装时按 `OS + arch + ABI` 选择入口，二进制/资源路径必须是**包内相对路径**；防 ZIP Slip、软链接逃逸、异常压缩比及恶意大包。不可通过自报入口路径执行用户系统上的任意程序。
 
 ```json
 {
@@ -46,7 +48,12 @@ my-plugin.fiexplugin
     "macos-aarch64": "bin/macos-aarch64/plugin",
     "linux-x86_64-gnu": "bin/linux-x86_64-gnu/plugin"
   },
-  "contributes": {}
+  "ui": { "bridge": "1.0", "assetsRoot": "ui/" },
+  "contributes": {
+    "panels": [
+      { "id": "webdav.settings", "entry": "ui/main/index.html", "placement": "modal" }
+    ]
+  }
 }
 ```
 
@@ -87,4 +94,5 @@ my-plugin.fiexplugin
 - 不允许用户覆盖 `manifest.json` 后直接绕过版本/权限校验运行旧签名；摘要链校验所有二进制和资源。
 - 进程崩溃、恶意超长帧、路径穿越、伪造 mount/task ID、重复流票据、令牌过期、无权限的数据请求必须被拒绝。
 - Core 不应向插件进程传递整个用户环境（特别是敏感 token）、继承多余句柄或以 root/UAC 提权启动未经特殊审查的插件。
+- iframe 必须有与 Fiex 主窗口及其他插件不同的 origin，强 CSP 和受限 iframe sandbox；不得授予 Tauri 原生 capability。Host Bridge 采用专用 MessageChannel，按 iframe 实例与授权上下文绑定并限制请求频率。详见 [11 UI SDK](11-UI-SDK.md)。
 - 所有用户数据删除均遵循显式用户确认，特别是取消离线钉选、取消双向同步、卸载插件。

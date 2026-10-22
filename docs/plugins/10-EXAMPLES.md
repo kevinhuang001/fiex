@@ -30,7 +30,7 @@ NAS 上数十万文件时列表分页，避免连接即全盘递归。同步引�
 
 **声明能力**：`toolbar`、`contextMenu`、`panel`、`commands`、`filesystem`。Git 通过本机 `git` 命令操作授权的本地仓库路径，Fiex Core 不运行私有 `git_*` Tauri 命令。
 
-- 工具栏显示 Git 图标，打开声明式 Git 面板（分支、远端、提交输入、变更列表、历史）。
+- 工具栏显示 Git 图标，加载**Git 插件预编译 iframe 面板**（分支、远端、提交输入、变更列表、历史），经 `@fiex/ui-sdk` 调用 Git Native 命令，不得直接调用 Tauri invoke。
 - 右键提供“暂存/取消暂存”等操作，按上下文判断目录是否为本地仓库。
 - 用户选择历史 commit 后，Git 插件调用 `host.mount.create` 挂载只读提交树；目录 `fs.list/stat` 使用 Git 树对象，`fs.openRead` 返回对应 blob 流。
 - 历史树由通用 Fiex Explorer 展示；只读内容可以由 Core CacheManager 缓存，但无意义的双向同步选项不出现。
@@ -69,6 +69,7 @@ Google Calendar
   "version": "0.1.0",
   "pluginProtocol": { "min": "1.0", "max": "1.x" },
   "capabilities": ["filesystem", "toolbar", "panel"],
+  "ui": { "bridge": "1.0", "assetsRoot": "ui/" },
   "permissions": { "mount": true, "ui": true },
   "entrypoints": {
     "linux-x86_64-gnu": "bin/linux-x86_64-gnu/demo"
@@ -87,14 +88,16 @@ Google Calendar
         "id": "demo.panel",
         "title": "示例面板",
         "placement": "popover",
-        "schemaResource": "resources/panel.json"
+        "entry": "ui/main/index.html"
       }
     ]
   }
 }
 ```
 
-安装该包 → 接受授权 → 启动独立进程 → 自注册挂载 → 侧边栏出现虚拟目录 → 展开树/打开虚拟文本文件 → Core 自动缓存内容 → 点工具栏打开原生面板 → 运行命令创建 Core 任务并取消 → 禁用插件后虚拟挂载与按钮一起消失，不影响 LocalFsAdapter。
+安装该包 → 接受授权 → 启动独立 Native 进程 → 自注册挂载 → 侧边栏出现虚拟目录 → 展开树/打开虚拟文本文件 → Core 自动缓存内容 → 点击工具栏加载预编译 iframe 面板 → 通过 UI Bridge 运行命令和控制 Core 任务 → 禁用插件后虚拟挂载与按钮一起消失，不影响 LocalFsAdapter。
+
+额外提供**纯 UI 插件**测试：无 `bin/`，仅打包静态 `ui/main/index.html`、JS/CSS 与 manifest，验证 `@fiex/ui-sdk` 的主题、上下文和面板操作；由于没有后端，调用 `plugin.invoke` 必须得到 `unsupported`。
 
 **此流程作为最终验收“官方与第三方无特殊差别”的基准**，在至少两个不同操作系统上进行端到端自动化，并搭配单独编写的非 Rust 协议客户端验证语言独立性。
 

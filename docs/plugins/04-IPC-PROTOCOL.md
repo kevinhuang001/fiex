@@ -37,15 +37,13 @@ Content-Length: 96\r\n
 | Core→插件 | `plugin.fs.createDir / rename / delete / move / copy` | 按声明能力调用 |
 | Core→插件 | `plugin.fs.getChanges / watch / search` | 可选变化与搜索 |
 | Core→插件 | `plugin.command.execute` | UI 菜单/工具栏动作 |
-| Core→插件 | `plugin.panel.open / event / close` | 声明式面板实例 |
 | Core→插件 | `plugin.task.cancel` | 取消长任务 |
 | 插件→Core | `host.mount.create / remove` | 注册 VFS 挂载 |
 | 插件→Core | `host.task.create / progress / complete / fail / cancelled` | 统一任务中心 |
 | 插件→Core | `host.secret.request` | 按授权获取凭据 |
-| 插件→Core | `host.ui.patch` | 增量更新当前面板 |
 | 插件→Core | `host.context.get` | 受限访问当前选择上下文 |
 
-宿主可额外提供 `host.vfs.*` 以使功能插件通过授权访问别的挂载，但不能绕过本地路径/其他插件的数据授权。对于插件提供的缓存、同步诉求，不应出现 `plugin.cache.*` 或 `plugin.sync.*`：Core 通过通用 VFS 原语执行它们。
+**iframe ↔ UI Host 使用独立版本的 [UI Bridge](11-UI-SDK.md)**（MessageChannel），而不是本文件的 Native stdio JSON-RPC。UI Host 经过鉴权可将 `plugin.invoke` 路由为 `plugin.command.execute`。宿主可额外提供 `host.vfs.*` 以使功能插件通过授权访问别的挂载，但不能绕过本地路径/其他插件的数据授权。对于插件提供的缓存、同步诉求，不应出现 `plugin.cache.*` 或 `plugin.sync.*`：Core 通过通用 VFS 原语执行它们。
 
 ## 4. 目录列表请求与响应
 
@@ -117,4 +115,4 @@ rate_limited, invalid_cursor, partial_commit, internal
 
 `protocolVersion` 的 major 不兼容；minor 只增加可忽略字段/可选方法。插件 manifest 声明支持范围，协商取共同版本。Core 不得把未知方法当成成功响应；SDK/CI 使用 golden fixtures 和模拟独立进程互测，覆盖超长帧、错误 JSON、乱序响应、超时、进程崩溃以及网络中断。
 
-下一篇 [UI 扩展](05-UI-EXTENSIONS.md) 规定贡献项的结构及宿主渲染安全规则。
+下一篇 [UI 扩展](05-UI-EXTENSIONS.md) 规定插件预编译 iframe 资源；[11 UI SDK](11-UI-SDK.md) 独立定义 iframe ↔ Host Bridge 的版本与消息安全。
