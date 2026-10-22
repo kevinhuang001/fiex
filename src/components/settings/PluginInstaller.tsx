@@ -33,7 +33,7 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const [assets, setAssets] = useState<string[]>([])
   const [preview, setPreview] = useState<InstallPreview | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState('kevinhuang001/flex-official-plugins')
   const [message, setMessage] = useState('')
   const loadAssets = async () => {
     if (busy || !repository.trim()) return
@@ -101,7 +101,7 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
           <input
             value={repository}
             aria-label="GitHub 插件仓库"
-            placeholder="开发者/仓库名称，例如 owner/fiex-plugin"
+            placeholder="开发者/仓库名称，例如 kevinhuang001/flex-official-plugins"
             onChange={(event) => {
               setRepository(event.target.value)
               setAssets([])

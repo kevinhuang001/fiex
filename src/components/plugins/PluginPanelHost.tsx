@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import { call } from '@/lib/api'
-import { attachFiexPanel } from '../../../sdk/ui/src/host'
-import type { JsonValue } from '../../../sdk/ui/src/index'
+import { attachFiexPanel } from '../../../sdk/src/host'
+import type { JsonValue } from '../../../sdk/src/index'
 
 export interface PluginPanelRequest {
   pluginId: string
