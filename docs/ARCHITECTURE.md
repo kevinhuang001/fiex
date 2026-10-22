@@ -25,7 +25,7 @@ Fiex has one React frontend and one Rust library. Tauri commands form the bounda
 - `volumes.rs`: common locations, mounted/unmounted disks, device mounting and Trash discovery, with platform-specific implementations guarded by `cfg`.
 - `core/operations.rs`, `core/search.rs`, `remote.rs`, `usbfs.rs` and `core/terminals.rs` retain their focused domains.
 - `plugins/host.rs`, `plugins/installer.rs`, `plugins/permissions.rs`, `plugins/sandbox.rs` and `plugins/vfs.rs` own plugin lifecycle, installation, permissions, OS confinement and generic virtual paths.
-- Git, WebDAV, SMB, archive and checksum implementations live in the separate `fiex-official-plugins` repository. Core keeps only thin Tauri command adapters that forward to the Git plugin.
+- Git, WebDAV, SMB, archive, checksum and Everything search implementations live in the separate `fiex-official-plugins` repository. Core keeps only thin Tauri command adapters that forward to the Git plugin.
 - `desktop.rs`: Tauri command adapters and application startup. Callers reference the owning native module directly; moved APIs have no compatibility re-exports.
 
 The obsolete icon-size preference migration has been removed. PDF.js's `legacy/build` import is the upstream distribution used for WebView compatibility, not an old Fiex implementation.
