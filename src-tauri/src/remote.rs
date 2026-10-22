@@ -728,24 +728,58 @@ pub async fn list_listing(
     }))
 }
 
-/// Staging file transfer is performed entirely by the approved provider.
-/// This is an interim file-backed IPC operation pending the SDK's binary
-/// stream channel; Core does not link WebDAV or SMB client implementations.
+/// Plugins never receive absolute host paths, even for downloads.
+/// A bounded, offset-based byte stream crosses the control channel; only
+/// Core creates or commits destination files. A failed read drops staging.
 async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
-    let plugin_id = ensure_provider_access(conn, true)?;
-    let result = crate::plugin_host::global().invoke(
-        &plugin_id,
-        "fs.download",
-        serde_json::json!({
-            "connection": provider_config(conn),
-            "nodeId": rel,
-            "destination": dest.to_string_lossy()
-        }),
-    )?;
-    result
-        .get("bytesWritten")
-        .and_then(serde_json::Value::as_u64)
-        .ok_or_else(|| "provider did not return transfer size".into())
+    use base64::Engine;
+    use std::io::Write;
+
+    const CHUNK: u64 = 256 * 1024;
+    const MAX_TRANSFER: u64 = 16 * 1024 * 1024 * 1024;
+    let plugin_id = ensure_provider_access(conn, false)?;
+    let parent = dest.parent().ok_or("invalid download destination")?;
+    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let mut staging = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    let mut offset = 0u64;
+    loop {
+        if offset >= MAX_TRANSFER {
+            return Err("remote file exceeds maximum allowed transfer size".into());
+        }
+        let response = crate::plugin_host::global().invoke(
+            &plugin_id,
+            "fs.readChunk",
+            serde_json::json!({
+                "connection": provider_config(conn),
+                "nodeId": rel,
+                "offset": offset,
+                "maxBytes": CHUNK
+            }),
+        )?;
+        let encoded = response
+            .get("base64")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("provider returned no byte data")?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .map_err(|_| "provider returned invalid base64")?;
+        if bytes.len() > CHUNK as usize || offset + bytes.len() as u64 > MAX_TRANSFER {
+            return Err("provider exceeded the transfer frame size".into());
+        }
+        let eof = response.get("eof").and_then(serde_json::Value::as_bool)
+            .ok_or("provider returned no EOF flag")?;
+        if bytes.is_empty() && !eof {
+            return Err("provider returned an empty nonfinal chunk".into());
+        }
+        staging.write_all(&bytes).map_err(|e| e.to_string())?;
+        offset += bytes.len() as u64;
+        if eof {
+            break;
+        }
+    }
+    staging.as_file().sync_all().map_err(|e| e.to_string())?;
+    staging.persist(dest).map_err(|e| e.error.to_string())?;
+    Ok(offset)
 }
 
 /// Native provider-backed listing. Protocol I/O is owned by the installed,
