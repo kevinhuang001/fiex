@@ -40,27 +40,11 @@ fn system_read_roots() -> Vec<std::path::PathBuf> {
     }
     #[cfg(windows)]
     {
-        let mut roots = Vec::new();
-        for key in [
-            "SystemRoot",
-            "ProgramFiles",
-            "ProgramFiles(x86)",
-            "ProgramData",
-        ] {
-            if let Some(path) = std::env::var_os(key) {
-                let path = canonical(Path::new(&path));
-                if path.exists() {
-                    roots.push(path);
-                }
-            }
-        }
-        if let Some(system_root) = std::env::var_os("SystemRoot") {
-            let path = canonical(&Path::new(&system_root).join("System32"));
-            if path.exists() {
-                roots.push(path);
-            }
-        }
-        roots
+        // AppContainer grants read/execute to System32 and Program Files
+        // through the implicit ALL APPLICATION PACKAGES SID. Adding those
+        // trees as explicit DACL roots both is unnecessary and can stall
+        // CreateProcess while Windows propagates inheritance.
+        Vec::new()
     }
 }
 
