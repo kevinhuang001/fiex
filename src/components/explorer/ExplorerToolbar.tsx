@@ -251,7 +251,10 @@ export function ExplorerToolbar({
           title={gitSwitched ? `源代码管理 · ${x.git?.branch}` : '源代码管理'}
           aria-label="源代码管理"
           aria-pressed={gitOpen}
-          onClick={() => setGitOpen((value) => !value)}
+          onClick={() => {
+            if (!gitOpen) void x.refreshGit()
+            setGitOpen((value) => !value)
+          }}
         >
           <GitBranch weight="duotone" size={20} />
           {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}

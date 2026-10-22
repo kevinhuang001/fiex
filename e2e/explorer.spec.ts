@@ -409,6 +409,7 @@ test('initialize a non-Git folder and make its first commit', async ({ page }) =
   const input = page.getByRole('textbox', { name: /重命名 未命名.txt/ })
   await input.fill('hello.txt')
   await input.press('Enter')
+  await expect(page.getByText('hello.txt', { exact: true }).first()).toBeVisible()
   await page.getByRole('button', { name: '源代码管理', exact: true }).click()
   await panel.getByRole('button', { name: '暂存 hello.txt', exact: true }).click()
   await panel.getByRole('button', { name: '提交修改 · 1', exact: true }).click()
