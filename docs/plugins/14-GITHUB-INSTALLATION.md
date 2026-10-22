@@ -26,8 +26,19 @@
     "filesystem": { "read": true, "write": true },
     "network": { "enabled": true, "domains": ["github.com"] }
   },
-  "entrypoints": { "linux-x86_64": "bin/plugin" },
-  "contributes": { "contextMenus": [], "panels": [] }
+  "runtime": {
+    "protocolVersion": "2.0",
+    "entrypoints": { "linux-x86_64": "bin/plugin" }
+  },
+  "contributions": {
+    "contextMenus": [
+      {
+        "id": "example.run",
+        "title": "运行",
+        "command": "example.run"
+      }
+    ]
+  }
 }
 ```
 
@@ -39,19 +50,19 @@
 - 设置页可启用、停用和逐项撤销 `filesystem.read`、`filesystem.write`、`network` 及单个域名。撤销后插件进程会停止并在下次启用时重启。私有 KV 与凭据代理不依赖这些权限。
 - 新版本声明新增权限不会自动加入历史授权。
 - Node/JS 插件 UI 不获得 Tauri 全局 invoke；通过隔离 iframe 的 MessageChannel 请求宿主。
-- Linux 已有 Landlock + seccomp 沙箱，macOS 已生成 Seatbelt 配置；Windows AppContainer 尚未实现。域名白名单由插件进程校验，不等同于 OS 级网络过滤。
+- Linux/macOS/Windows 统一使用 Arapuca 进程沙箱；Windows AppContainer 启动器已接入，等待 CI 真机验证。域名白名单由插件进程校验，不等同于 OS 级网络过滤。
 
 ## 3. 官方功能插件
 
-`fiex-official-plugins/official/{git,webdav,smb,archive,checksum}` 是**外部仓库中的源码目录**，不属于 Fiex 应用的内置资源。客户端不读取它们或硬编码 ID。作者可以分别使用 CI 编译、测试，并将 `.fiexplugin` 发布为 GitHub Release 资产，用户手动选择安装。
+`fiex-official-plugins/official/{git,webdav,smb,archive,checksum,everything}` 是**外部仓库中的源码目录**，不属于 Fiex 应用的内置资源。客户端不读取它们或硬编码 ID。作者可以分别使用 CI 编译、测试，并将 `.fiexplugin` 发布为 GitHub Release 资产，用户手动选择安装。
 
-扩展开发者提供预编译平台 Native 二进制与 `manifest.json`。带交互 UI 的插件还可以提交自包含的 `ui/index.html`（单文件内联 CSS/JS），使用 `contributes.panels[].entry` 声明。Fiex 的宿主模态框把它加载到 `sandbox="allow-scripts"` 的 opaque-origin iframe 中。
+扩展开发者提供预编译平台 Native 二进制与 `manifest.json`。带交互 UI 的插件还可以提交自包含的 `ui/index.html`（单文件内联 CSS/JS），使用 `contributions` 条目内联的 `panel.entry` 声明。Fiex 的宿主模态框把它加载到 `sandbox="allow-scripts"` 的 opaque-origin iframe 中。
 
 ## 4. 文件菜单和文件选择器
 
-`contributes.contextMenus` 可以声明递归 `children`（建议最多四层）、`command` 或 `openPanel`。插件菜单是数据，宿主统一渲染；不能注入 JSX/HTML 到宿主上下文菜单。
+`contributions.contextMenus` 可以声明递归 `children`（建议最多四层）、`command` 或 `openPanel`。插件菜单是数据，宿主统一渲染；不能注入 JSX/HTML 到宿主上下文菜单。
 
-`openPanel` 对应宿主加载的 iframe 模态框。需要用户指定保存位置时，插件通过 `dialog.saveFile` 请求宿主的系统文件选择器，随后仅获得本次选择的目标文件路径。压缩插件的高级压缩 UI 是该机制的第一个参考实例。
+`panel` 对应宿主加载的 iframe 模态框。需要用户指定保存位置时，插件通过 `dialog.saveFile` 请求宿主的系统文件选择器，随后仅获得本次选择的目标文件路径。压缩插件的高级压缩 UI 是该机制的第一个参考实例。
 
 ## 5. 后续发布阻断
 
@@ -66,7 +77,7 @@
 
 `fiex-official-plugins` 仓库维护 `scripts/package-fiex-plugin.py` 和 `.github/workflows/ci.yml`，构建和打包与 Fiex 主程序安装包分离：
 
-- Rust 构建 `fiex-official-plugins/official/{git,webdav,smb,archive,checksum}`；`cargo test` 先于 `cargo build --release`。
+- Rust 构建 `fiex-official-plugins/official/{git,webdav,smb,archive,checksum,everything}`；`cargo test` 先于 `cargo build --release`。
 - Windows、macOS、Linux 各自输出类似 `archive-macos-aarch64.fiexplugin`、`git-windows-x86_64.fiexplugin`，ZIP 顶层只包含 Manifest、本平台二进制和可选预编译 `ui/`。
 - `workflow_dispatch` 可以生成供 CI 检查的工件；仅在推送 `plugins-v*` 标签且三个系统包构建成功后才创建 GitHub Release。
 - 用户自己在 Fiex 设置页输入 `kevinhuang001/fiex-official-plugins`，从匹配当前平台的可安装资产中选具体插件并授权。**插件从未自动预装，也没有签名特权。**

@@ -595,6 +595,30 @@ test('plugin actions can be pinned into the toolbar separator', async ({ page })
   await pinned.click({ button: 'right' })
   await expect(pinned).toHaveCount(0)
 })
+test('pinned plugin actions animate and reorder like tabs', async ({ page }) => {
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('button', { name: /固定 Git 源代码管理/ }).click()
+  await page.getByRole('button', { name: /固定 测试插件 测试工具/ }).click()
+  await page.keyboard.press('Escape')
+  const pins = page.locator('.plugin-tool-button')
+  await expect(pins).toHaveCount(2)
+  const first = await pins.nth(0).boundingBox()
+  const second = await pins.nth(1).boundingBox()
+  if (!first || !second) throw new Error('missing pinned buttons')
+  await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(second.x + second.width / 2 + 18, second.y + second.height / 2, {
+    steps: 10,
+  })
+  await page.mouse.up()
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('fiex:preferences') || '{}').pinnedPluginTools,
+      ),
+    )
+    .toEqual(['org.test.fixture::fixture.tool', 'org.fiex.git::git.main'])
+})
 test('plugin toolbar opens the Git source-control panel', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
   await page.getByRole('button', { name: '插件', exact: true }).click()

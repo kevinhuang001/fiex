@@ -67,35 +67,34 @@ Google Calendar
   "id": "org.example.demo",
   "name": "Demo Tree",
   "version": "0.1.0",
-  "pluginProtocol": { "min": "2.0", "max": "2.x" },
-  "capabilities": ["filesystem", "toolbar", "panel"],
-  "ui": { "bridge": "1.0", "assetsRoot": "ui/" },
-  "permissions": { "mount": true, "ui": true },
-  "entrypoints": {
-    "linux-x86_64-gnu": "bin/linux-x86_64-gnu/demo"
+  "description": "最小只读虚拟目录与 iframe 面板示例。",
+  "icon": "folder",
+  "runtime": {
+    "protocolVersion": "2.0",
+    "entrypoints": { "linux-x86_64": "bin/demo" }
   },
-  "contributes": {
+  "permissions": {
+    "filesystem": { "read": false, "write": false },
+    "network": { "enabled": false, "domains": [] }
+  },
+  "contributions": {
     "toolbar": [
       {
         "id": "demo.open",
         "title": "示例",
-        "icon": "folder",
-        "openPanel": "demo.panel"
-      }
-    ],
-    "panels": [
-      {
-        "id": "demo.panel",
-        "title": "示例面板",
-        "placement": "popover",
-        "entry": "ui/main/index.html"
+        "icon": "puzzle-piece",
+        "panel": {
+          "title": "示例面板",
+          "entry": "ui/main/index.html",
+          "defaultSize": { "width": 620, "height": 560 }
+        }
       }
     ]
   }
 }
 ```
 
-安装该包 → 接受授权 → 启动独立 Native 进程 → 自注册挂载 → 侧边栏出现虚拟目录 → 展开树/打开虚拟文本文件 → Core 自动缓存内容 → 点击工具栏加载预编译 iframe 面板 → 通过 UI Bridge 运行命令和控制 Core 任务 → 禁用插件后虚拟挂载与按钮一起消失，不影响 LocalFsAdapter。
+安装该包 → 接受授权 → 启动独立 Native 进程 → 自注册挂载 → 侧边栏出现虚拟目录 → 展开树/打开虚拟文本文件 → Core 自动缓存内容 → 点击工具栏加载 Core 承载的预编译 iframe 面板 → 通过 UI Bridge 运行命令和控制 Core 任务 → 禁用插件后虚拟挂载与按钮一起消失，不影响 LocalFsAdapter。
 
 额外提供**纯 UI 插件**测试：无 `bin/`，仅打包静态 `ui/main/index.html`、JS/CSS 与 manifest，验证 `@fiex/ui-sdk` 的主题、上下文和面板操作；由于没有后端，调用 `plugin.invoke` 必须得到 `unsupported`。
 

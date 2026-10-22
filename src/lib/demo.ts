@@ -150,6 +150,9 @@ const fixturePlugin: DemoPlugin = {
   allowedNetworkDomains: [],
   author: { name: 'Fiex Fixtures' },
   contributions: {
+    toolbar: [
+      { id: 'fixture.tool', title: '测试工具', icon: 'puzzle-piece', command: 'fixture.inspect' },
+    ],
     search: [
       {
         id: 'fixture.search',
