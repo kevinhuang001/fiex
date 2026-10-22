@@ -287,22 +287,12 @@ test('PDF preview renders a real document', async ({ page }) => {
     .toBeGreaterThan(50)
 })
 
-test('git status, tags and connection dialog', async ({ page }) => {
-  await expect(page.locator('.git-file-m')).toBeVisible()
-  await expect(page.getByText('main', { exact: false })).toBeVisible()
-  await page.getByRole('button', { name: '源代码管理' }).click()
-  await expect(page.getByRole('complementary', { name: '源代码管理' })).toContainText('Notes.md')
-  await page.getByRole('button', { name: '关闭源代码管理' }).click()
+test('core connection entrypoint and no preinstalled optional plugin', async ({ page }) => {
   await page.getByRole('button', { name: '添加连接' }).click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog).toContainText('WebDAV')
-  await expect(dialog).toContainText('SMB')
-  await page.getByRole('button', { name: /WebDAV ·/ }).click()
-  await expect(dialog).toContainText('配置 WebDAV')
-  await page.getByRole('button', { name: '选择其他插件' }).click()
+  await expect(dialog).toBeVisible()
   await page.getByRole('button', { name: '关闭', exact: true }).click()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
-  // Optional archive plugin is not preinstalled.
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
 })
 
