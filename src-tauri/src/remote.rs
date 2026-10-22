@@ -980,4 +980,3 @@ pub fn unsync(paths: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
-
