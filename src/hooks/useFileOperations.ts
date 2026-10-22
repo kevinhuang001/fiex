@@ -12,7 +12,7 @@ import type {
 import type { Dispatch, SetStateAction } from 'react'
 import { useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
-import { beginActivity, finishActivity } from './useActivity'
+import { beginActivity, finishActivity, progressChannel, type ActivityKind } from './useActivity'
 
 export function useFileOperations({
   x,
@@ -50,6 +50,8 @@ export function useFileOperations({
     fn: () => Promise<T>,
     detail?: string,
     cancellable = false,
+    activityKind?: ActivityKind,
+    onActivity?: (id: string) => void,
   ): Promise<T | undefined> => {
     if (running.current) return
     running.current = true
@@ -60,18 +62,22 @@ export function useFileOperations({
       // the operation we are about to start.
       await call('begin_operation').catch(() => {})
     }
-    const activity = beginActivity(
-      label,
-      detail,
-      cancellable
-        ? () => {
-            void call('cancel_operation').catch(() => {})
-          }
-        : undefined,
-    )
+    const activity = activityKind
+      ? beginActivity(
+          label,
+          detail,
+          cancellable
+            ? () => {
+                void call('cancel_operation').catch(() => {})
+              }
+            : undefined,
+          activityKind,
+        )
+      : undefined
+    if (activity) onActivity?.(activity)
     try {
       const result = await fn()
-      finishActivity(activity)
+      if (activity) finishActivity(activity)
       x.reload()
       return result
     } catch (e) {
@@ -83,7 +89,7 @@ export function useFileOperations({
       } else {
         x.setError(message)
       }
-      finishActivity(activity, message)
+      if (activity) finishActivity(activity, message)
       return undefined
     } finally {
       running.current = false
@@ -113,8 +119,8 @@ export function useFileOperations({
     if (x.query) x.setQuery('')
     x.beginRename(path)
   }
-  const moveToTrash = async (paths: string[]) => {
-    handleResult(await call<OperationResult>('recycle', { paths }))
+  const moveToTrash = async (paths: string[], onProgress?: ReturnType<typeof progressChannel>) => {
+    handleResult(await call<OperationResult>('recycle', { paths, onProgress }))
     x.setSelected([])
     x.reload()
   }
@@ -127,7 +133,21 @@ export function useFileOperations({
       deletePermanently(paths)
       return
     }
-    void run('正在移到废纸篓…', () => moveToTrash(paths), `${paths.length} 个项目 → 废纸篓`, true)
+    const shown = paths.slice(0, 5)
+    const source = `${shown.join('\n')}${
+      paths.length > shown.length ? `\n… 另有 ${paths.length - shown.length} 项` : ''
+    }`
+    let onProgress: ReturnType<typeof progressChannel> | undefined
+    void run(
+      '正在移到废纸篓…',
+      () => moveToTrash(paths, onProgress),
+      `删除来源：\n${source}\n\n目标：\n废纸篓`,
+      true,
+      'delete',
+      (id) => {
+        onProgress = progressChannel(id)
+      },
+    )
   }
   const deletePermanently = (paths: string[]) => {
     if (!paths.length) return
@@ -136,11 +156,16 @@ export function useFileOperations({
       submit: '彻底删除',
       danger: true,
       action: async () => {
+        const shown = paths.slice(0, 5)
+        const source = `${shown.join('\n')}${
+          paths.length > shown.length ? `\n… 另有 ${paths.length - shown.length} 项` : ''
+        }`
         await run(
           '正在彻底删除…',
           () => call<number>('delete_permanently', { paths }),
-          undefined,
+          `删除：\n${source}`,
           true,
+          'delete',
         )
         x.setSelected([])
       },
@@ -172,8 +197,9 @@ export function useFileOperations({
         const removed = await run(
           '正在清空废纸篓…',
           () => call<number>('empty_trash'),
-          undefined,
+          '删除：废纸篓中的所有项目',
           true,
+          'delete',
         )
         if (removed === undefined) return
         x.setSelected([])
@@ -187,6 +213,11 @@ export function useFileOperations({
     moving: boolean,
     resolutions: ConflictResolution[] = [],
   ) => {
+    const shown = paths.slice(0, 5)
+    const source = `${shown.join('\n')}${
+      paths.length > shown.length ? `\n… 另有 ${paths.length - shown.length} 项` : ''
+    }`
+    let onProgress: ReturnType<typeof progressChannel> | undefined
     const result = await run(
       moving ? '正在移动…' : '正在复制…',
       () =>
@@ -198,9 +229,14 @@ export function useFileOperations({
           // Copy and move always take everything; browsing filters stay visual.
           ignores: [],
           resolutions,
+          onProgress,
         }),
-      `${paths.length} 项 → ${destination}`,
+      `${moving ? '移动' : '复制'}来源：\n${source}\n\n目标：\n${destination}`,
       true,
+      'transfer',
+      (id) => {
+        onProgress = progressChannel(id)
+      },
     )
     if (!result) return
     if (result.conflicts?.length) {
@@ -232,6 +268,7 @@ export function useFileOperations({
   }
   const duplicate = () => {
     if (!writable()) return
+    let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
       '正在创建副本…',
       async () => {
@@ -242,11 +279,16 @@ export function useFileOperations({
             moving: false,
             keepBoth: true,
             ignores: [],
+            onProgress,
           }),
         )
       },
       undefined,
       true,
+      'transfer',
+      (id) => {
+        onProgress = progressChannel(id)
+      },
     )
   }
   const compress = (

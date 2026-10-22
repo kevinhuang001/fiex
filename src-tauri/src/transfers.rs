@@ -263,6 +263,7 @@ pub(crate) fn move_tree(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<
     Ok(0)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn execute(
     sources: &[String],
     destination: &str,
@@ -271,6 +272,7 @@ pub(crate) fn execute(
     ignores: &[String],
     resolutions: &[Resolution],
     cancel: &AtomicBool,
+    progress: &dyn Fn(u64, u64, Option<&str>),
 ) -> Result<(OperationResult, Vec<Undo>), String> {
     check_cancelled(cancel)?;
     let dest_dir = dunce::canonicalize(destination).map_err(|e| e.to_string())?;
@@ -309,10 +311,14 @@ pub(crate) fn execute(
         return Ok((result, vec![]));
     }
     let mut undo = vec![];
+    let total = plan.tasks.len() as u64;
+    let mut done = 0u64;
     for task in plan.tasks {
         // Cancellation stops at a file boundary; moved files are not rolled back.
         check_cancelled(cancel)?;
         let Task { src, dest, replace } = task;
+        done += 1;
+        progress(done, total, dest.file_name().and_then(|name| name.to_str()));
         // Re-check immediately before mutation: a new target must get a fresh dialog.
         if exists(&dest) && !replace {
             result
@@ -378,6 +384,9 @@ pub(crate) fn execute(
                 result.errors.push(format!("{}: {e}", src.display()));
             }
         }
+    }
+    if total > 0 {
+        progress(total, total, None);
     }
     if moving {
         for src in plan.merged.into_iter().rev() {

@@ -450,7 +450,7 @@
   width: 100%;
 }
 .git-picker-modal {
-  width: min(580px, calc(100vw - 40px));
+  width: min(500px, calc(100vw - 40px));
 }
 .git-picker-modal .git-history-list {
   max-height: min(480px, 55vh);
@@ -740,10 +740,10 @@
   flex: 1;
 }
 .git-remote-modal {
-  width: 560px;
+  width: 480px;
 }
 .git-remote-edit {
-  width: 440px;
+  width: 400px;
 }
 .git-remote-error {
   padding: 0 20px 14px;

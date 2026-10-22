@@ -216,3 +216,34 @@
   color: var(--text);
   font-size: 11px;
 }
+
+.activity-progress.determinate i {
+  animation: none;
+  transform: none;
+  transition: width 160ms linear;
+}
+.activity-step {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-detail-progress {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+}
+.activity-detail-progress .activity-progress {
+  flex: 1;
+}
+.activity-detail-progress > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.activity-detail-step {
+  overflow-wrap: anywhere;
+  text-align: right;
+}

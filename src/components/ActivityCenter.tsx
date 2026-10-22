@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Check, ChevronRight, CircleAlert, Clock3, LoaderCircle, X } from 'lucide-react'
 import { cancelActivity, isCancellable, useActivity, type ActivityItem } from '@/hooks/useActivity'
+import { activityEta as eta } from '@/lib/activity'
 
 const time = (value: number) =>
   new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -17,6 +18,8 @@ function StatusIcon({ item }: { item: ActivityItem }) {
 
 function ActivityDetails({ item }: { item: ActivityItem }) {
   const state = item.status === 'running' ? '进行中' : item.status === 'error' ? '失败' : '已完成'
+  const percent = item.progress === undefined ? null : Math.round(item.progress * 100)
+  const etaText = eta(item)
   return (
     <div className="activity-details">
       <div className={`activity-detail-hero ${item.status}`}>
@@ -31,6 +34,26 @@ function ActivityDetails({ item }: { item: ActivityItem }) {
           <dt>开始时间</dt>
           <dd>{new Date(item.startedAt).toLocaleString('zh-CN')}</dd>
         </div>
+        {percent !== null && (
+          <div>
+            <dt>进度</dt>
+            <dd>
+              {percent}%{item.total ? ` · ${item.done ?? 0}/${item.total}` : ''}
+            </dd>
+          </div>
+        )}
+        {etaText && (
+          <div>
+            <dt>预计剩余</dt>
+            <dd>{etaText}</dd>
+          </div>
+        )}
+        {item.step && (
+          <div>
+            <dt>当前</dt>
+            <dd className="activity-detail-step">{item.step}</dd>
+          </div>
+        )}
         {item.finishedAt && (
           <div>
             <dt>结束时间</dt>
@@ -44,6 +67,14 @@ function ActivityDetails({ item }: { item: ActivityItem }) {
           </div>
         )}
       </dl>
+      {item.status === 'running' && (
+        <div className="activity-detail-progress">
+          <div className={`activity-progress ${percent !== null ? 'determinate' : ''}`}>
+            <i style={percent !== null ? { width: `${percent}%` } : undefined} />
+          </div>
+          <span>{percent !== null ? `${percent}%` : '处理中'}</span>
+        </div>
+      )}
       {item.detail && <div className={`activity-detail-message ${item.status}`}>{item.detail}</div>}
       {item.status === 'running' && isCancellable(item.id) && (
         <button className="activity-detail-cancel" onClick={() => cancelActivity(item.id)}>
@@ -122,13 +153,37 @@ export function ActivityCenter() {
                         ? '进行中'
                         : item.status === 'error'
                           ? '失败'
-                          : '已完成'}{' '}
-                      · {time(item.finishedAt || item.startedAt)}
+                          : '已完成'}
+                      {item.status !== 'running' &&
+                        ` · 结束 ${time(item.finishedAt || item.startedAt)}`}
+                      {item.status === 'running' &&
+                        item.progress !== undefined &&
+                        ` · ${Math.round(item.progress * 100)}%`}
+                      {item.status === 'running' &&
+                        item.total !== undefined &&
+                        ` · ${item.done ?? 0}/${item.total}`}
+                      {item.status === 'running' && eta(item) && ` · 预计 ${eta(item)}`}
                     </small>
                     {item.status === 'running' && (
-                      <span className="activity-progress" aria-label="进行中">
-                        <i />
+                      <span
+                        className={`activity-progress ${item.progress !== undefined ? 'determinate' : ''}`}
+                        aria-label={
+                          item.progress !== undefined
+                            ? `进度 ${Math.round(item.progress * 100)}%`
+                            : '进行中'
+                        }
+                      >
+                        <i
+                          style={
+                            item.progress !== undefined
+                              ? { width: `${Math.round(item.progress * 100)}%` }
+                              : undefined
+                          }
+                        />
                       </span>
+                    )}
+                    {item.status === 'running' && item.step && (
+                      <small className="activity-step">{item.step}</small>
                     )}
                   </span>
                   <button

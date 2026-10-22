@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
+import { beginActivity, finishActivity, type ActivityKind } from './useActivity'
 import type { GitCommit, GitRefs, GitRemoteStatus } from '@/lib/types'
 
 export function useGitRepository(
@@ -87,17 +88,26 @@ export function useGitRepository(
     }, 5000)
     return () => window.clearInterval(timer)
   }, [open, root, refresh])
-  const run = async (label: string, action: () => Promise<unknown>) => {
+  const run = async (
+    label: string,
+    action: () => Promise<unknown>,
+    track = false,
+    detail?: string,
+    kind: ActivityKind = 'git',
+  ) => {
     if (running.current) return false
     running.current = true
     setBusy(label)
     setError('')
     setSuccess('')
+    const activity = track ? beginActivity(label, detail, undefined, kind) : undefined
     try {
       await action()
+      if (activity) finishActivity(activity)
       if (latest.current === scope) await refresh()
       return true
     } catch (e) {
+      if (activity) finishActivity(activity, String(e))
       if (latest.current === scope) setError(String(e))
       return false
     } finally {
@@ -111,26 +121,42 @@ export function useGitRepository(
     remote,
     setRemote,
     saveRemote: (name: string, url: string) =>
-      run('正在保存远程仓库', async () => {
-        await call('git_remote_save', { root, name, url })
-        await loadRemote()
-        setRemote(name)
-      }),
+      run(
+        '正在保存远程仓库',
+        async () => {
+          await call('git_remote_save', { root, name, url })
+          await loadRemote()
+          setRemote(name)
+        },
+        true,
+        `${name} · ${url}`,
+      ),
     removeRemote: (name: string) =>
-      run('正在移除远程仓库', async () => {
-        await call('git_remote_remove', { root, name })
-        await loadRemote()
-      }),
+      run(
+        '正在移除远程仓库',
+        async () => {
+          await call('git_remote_remove', { root, name })
+          await loadRemote()
+        },
+        true,
+        name,
+      ),
     sync: (push: boolean, branch?: string) =>
-      run(push ? '正在推送' : '正在拉取', async () => {
-        await call('git_sync', { root, remote, push, branch: branch || null })
-        await Promise.all([loadRefs(), loadRemote()])
-        const items = await call<GitCommit[]>('git_history', { root, skip: 0 })
-        if (latest.current === scope) {
-          setCommits(items)
-          setSuccess(push ? '推送完成' : '拉取完成')
-        }
-      }),
+      run(
+        push ? '正在推送' : '正在拉取',
+        async () => {
+          await call('git_sync', { root, remote, push, branch: branch || null })
+          await Promise.all([loadRefs(), loadRemote()])
+          const items = await call<GitCommit[]>('git_history', { root, skip: 0 })
+          if (latest.current === scope) {
+            setCommits(items)
+            setSuccess(push ? '推送完成' : '拉取完成')
+          }
+        },
+        true,
+        `${remote} · ${branch || '当前分支'}`,
+        'sync',
+      ),
     commits,
     moreHistory: () =>
       run('正在读取历史', async () => {
@@ -154,22 +180,39 @@ export function useGitRepository(
         ])
         if (latest.current === scope) setCommits(items)
       }),
-    initialize: () => run('正在初始化', () => call('git_init', { path })),
+    initialize: () => run('正在初始化', () => call('git_init', { path }), true, path),
     stage: (paths: string[], all = false) =>
-      run('正在暂存', () => call('git_stage', { root, paths, all })),
+      run(
+        '正在暂存',
+        () => call('git_stage', { root, paths, all }),
+        true,
+        all ? '全部文件' : `${paths.length} 个文件`,
+      ),
     unstage: (paths: string[], all = false) =>
-      run('正在取消暂存', () => call('git_unstage', { root, paths, all })),
+      run(
+        '正在取消暂存',
+        () => call('git_unstage', { root, paths, all }),
+        true,
+        all ? '全部文件' : `${paths.length} 个文件`,
+      ),
     browse: (reference: string) => run('正在打开历史版本', () => viewRevision(reference)),
-    commit: () =>
-      run('正在提交', async () => {
-        const hash = await call<string>('git_commit', { root, message, ...identity })
-        if (latest.current === scope) {
-          setMessage('')
-          setSuccess(`提交成功 · ${hash}`)
-          await Promise.all([loadRefs(), loadRemote()])
-          const items = await call<GitCommit[]>('git_history', { root, skip: 0 })
-          if (latest.current === scope) setCommits(items)
-        }
-      }),
+    commit: () => {
+      const commitMessage = message
+      return run(
+        '正在提交',
+        async () => {
+          const hash = await call<string>('git_commit', { root, message, ...identity })
+          if (latest.current === scope) {
+            setMessage('')
+            setSuccess(`提交成功 · ${hash}`)
+            await Promise.all([loadRefs(), loadRemote()])
+            const items = await call<GitCommit[]>('git_history', { root, skip: 0 })
+            if (latest.current === scope) setCommits(items)
+          }
+        },
+        true,
+        commitMessage,
+      )
+    },
   }
 }

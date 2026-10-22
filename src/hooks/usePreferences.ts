@@ -7,6 +7,7 @@ import {
   type ShortcutMap,
   type ShortcutStyle,
 } from '@/lib/shortcuts'
+import { TAG_PRESETS, normalizeTags } from '@/lib/tags'
 import type { Preferences, SidebarSection } from '@/lib/types'
 import { useEffect, useState } from 'react'
 
@@ -28,7 +29,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     placeOrder: [],
     hiddenPlaces: [],
     favorites: [],
-    customTags: [],
+    tags: TAG_PRESETS.map((tag) => ({ ...tag })),
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
   }
@@ -44,7 +45,7 @@ function load(): Preferences {
   try {
     const stored = JSON.parse(
       localStorage.getItem('fiex:preferences') || '{}',
-    ) as Partial<Preferences>
+    ) as Partial<Preferences> & { customTags?: unknown }
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
@@ -67,20 +68,22 @@ function load(): Preferences {
           stored.startPage === 'last'
         ? stored.startPage
         : 'recent'
+    // Profiles saved before the tag catalogue moved into Settings only have
+    // `customTags`; fold them into the new single list, in front of the
+    // built-in tags.
+    const legacyTags = normalizeTags(stored.customTags) ?? []
+    const tags = normalizeTags(stored.tags) ?? [
+      ...TAG_PRESETS.map((tag) => ({ ...tag })),
+      ...legacyTags,
+    ]
     return {
       ...fallback,
-      ...Object.fromEntries(Object.entries(stored).filter(([key]) => key !== 'copyIgnore')),
-      customTags: Array.isArray(stored.customTags)
-        ? stored.customTags.filter(
-            (tag) =>
-              tag &&
-              typeof tag.name === 'string' &&
-              tag.name.trim() &&
-              Number.isInteger(tag.color) &&
-              tag.color >= 1 &&
-              tag.color <= 7,
-          )
-        : [],
+      ...Object.fromEntries(
+        Object.entries(stored).filter(
+          ([key]) => key !== 'copyIgnore' && key !== 'customTags' && key !== 'tags',
+        ),
+      ),
+      tags,
       startPage,
       fontSize,
       displayIgnore: Array.isArray(stored.displayIgnore)

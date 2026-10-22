@@ -120,8 +120,12 @@ for (let i = 0; i < bulkCount; i++)
 const snapshotEntries = structuredClone(entries)
 export async function mock(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
-    case 'platform':
-      return 'macos'
+    case 'platform': {
+      // `?platform=windows|linux` lets the browser fixture preview the
+      // frameless window chrome without rebuilding the desktop app.
+      const requested = new URLSearchParams(location.search).get('platform')
+      return requested === 'windows' || requested === 'linux' ? requested : 'macos'
+    }
     case 'locations':
       return [
         {

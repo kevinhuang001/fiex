@@ -15,9 +15,8 @@ import {
   Music,
   RotateCcw,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ReactNode } from 'react'
 function placeIcon(name: string) {
   if (name === '最近使用') return <Clock size={14} />
   if (name === '废纸篓') return <Trash2 size={14} />
@@ -40,6 +39,20 @@ const SIDEBAR_LABELS: Record<SidebarSection, string> = {
   connections: '连接',
 }
 
+type ReorderKind = 'section' | 'place'
+type ReorderBox = { top: number; left: number; width: number; height: number; center: number }
+type ReorderDrag = {
+  kind: ReorderKind
+  from: number
+  to: number
+  left: number
+  top: number
+  width: number
+  height: number
+  gap: number
+  settling: boolean
+}
+
 export function SidebarSettings({
   prefs,
   update,
@@ -49,77 +62,103 @@ export function SidebarSettings({
   update: (p: Partial<Preferences>) => void
   locations: Location[]
 }) {
-  const [draggingRow, setDraggingRow] = useState<string | null>(null)
-  const [dropRow, setDropRow] = useState<string | null>(null)
-  const [ghost, setGhost] = useState<{
-    kind: 'section' | 'place'
-    label: string
-    icon?: ReactNode
-    hidden?: boolean
-    width: number
-    x: number
-    y: number
-  } | null>(null)
+  const [drag, setDrag] = useState<ReorderDrag | null>(null)
+  const detach = useRef<(() => void) | null>(null)
+  const dropTimer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      detach.current?.()
+      document.body.classList.remove('dragging-reorder')
+      if (dropTimer.current !== null) window.clearTimeout(dropTimer.current)
+    },
+    [],
+  )
   const reorder = <T,>(items: T[], from: number, to: number) => {
     const next = [...items]
     const [item] = next.splice(from, 1)
     next.splice(to, 0, item)
     return next
   }
-  const beginReorder = (
-    event: React.PointerEvent,
-    kind: 'section' | 'place',
-    index: number,
-    preview: { label: string; icon?: ReactNode; hidden?: boolean },
-  ) => {
-    if ((event.target as Element).closest('input,button')) return
+  const beginReorder = (event: React.PointerEvent, kind: ReorderKind, index: number) => {
+    if ((event.target as Element).closest('input,button') || drag) return
+    const row = event.currentTarget as HTMLElement
+    const box = row.getBoundingClientRect()
+    const rects: ReorderBox[] = Array.from(
+      row.parentElement?.querySelectorAll<HTMLElement>(`[data-reorder="${kind}"]`) ?? [],
+    ).map((element) => {
+      const rect = element.getBoundingClientRect()
+      return {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+        center: rect.top + rect.height / 2,
+      }
+    })
+    const gap = rects.length > 1 ? Math.max(0, rects[1].top - (rects[0].top + rects[0].height)) : 0
     const startX = event.clientX
     const startY = event.clientY
-    const width = Math.min(event.currentTarget.getBoundingClientRect().width, 260)
-    let active = false
-    let target = index
-    const move = (moveEvent: PointerEvent) => {
-      if (!active) {
-        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
-        active = true
-        setDraggingRow(`${kind}:${index}`)
+    const grab = event.clientY - box.top
+    let started = false
+    let to = index
+    const move = (next: PointerEvent) => {
+      if (!started) {
+        if (Math.hypot(next.clientX - startX, next.clientY - startY) < 5) return
+        started = true
         document.body.classList.add('dragging-reorder')
       }
-      moveEvent.preventDefault()
-      setGhost({
-        ...preview,
-        kind,
-        width,
-        x: moveEvent.clientX,
-        y: moveEvent.clientY,
-      })
-      const row = document
-        .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
-        ?.closest<HTMLElement>(`[data-reorder="${kind}"]`)
-      if (row) {
-        const next = Number(row.dataset.reorderIndex)
-        if (Number.isFinite(next)) {
-          target = next
-          setDropRow(`${kind}:${next}`)
-        }
+      next.preventDefault()
+      const top = next.clientY - grab
+      // Insert after every row whose centre the lifted row has passed. The
+      // source row is excluded so the count is the final array index.
+      const center = top + box.height / 2
+      let nextTo = 0
+      for (let i = 0; i < rects.length; i++) {
+        if (i !== index && center > rects[i].center) nextTo++
       }
+      to = nextTo
+      setDrag({
+        kind,
+        from: index,
+        to,
+        left: box.left,
+        top,
+        width: box.width,
+        height: box.height,
+        gap,
+        settling: false,
+      })
     }
-    const finish = () => {
+    const finish = (next: Event) => {
+      detach.current?.()
+      document.body.classList.remove('dragging-reorder')
+      if (!started || next.type === 'pointercancel') {
+        setDrag(null)
+        return
+      }
+      const target = to
+      setDrag((current) =>
+        current ? { ...current, top: rects[target].top, settling: true } : current,
+      )
+      dropTimer.current = window.setTimeout(() => {
+        dropTimer.current = null
+        setDrag(null)
+        if (target === index) return
+        if (kind === 'section') {
+          update({ sidebarOrder: reorder(prefs.sidebarOrder, index, target) })
+        } else {
+          const keys = orderedPlaces.map((location) => location.path || location.name)
+          update({ placeOrder: reorder(keys, index, target) })
+        }
+      }, 160)
+    }
+    const cleanup = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', finish)
       window.removeEventListener('pointercancel', finish)
-      document.body.classList.remove('dragging-reorder')
-      setDraggingRow(null)
-      setDropRow(null)
-      setGhost(null)
-      if (!active || target === index) return
-      if (kind === 'section') {
-        update({ sidebarOrder: reorder(prefs.sidebarOrder, index, target) })
-      } else {
-        const keys = orderedPlaces.map((location) => location.path || location.name)
-        update({ placeOrder: reorder(keys, index, target) })
-      }
+      detach.current = null
     }
+    detach.current = cleanup
     window.addEventListener('pointermove', move, { passive: false })
     window.addEventListener('pointerup', finish)
     window.addEventListener('pointercancel', finish)
@@ -135,6 +174,58 @@ export function SidebarSettings({
     .map((key) => commonPlaces.find((location) => (location.path || location.name) === key))
     .filter((location): location is Location => Boolean(location))
 
+  const sectionRow = (id: SidebarSection) => (
+    <>
+      <GripVertical size={13} className="drag-handle" />
+      <span>{SIDEBAR_LABELS[id]}</span>
+    </>
+  )
+  const placeRow = (location: Location, ghost = false) => {
+    const key = location.path || location.name
+    const hidden = prefs.hiddenPlaces.includes(key)
+    return (
+      <>
+        <GripVertical size={13} className="drag-handle" />
+        <span className="settings-choice-icon place-icon">{placeIcon(location.name)}</span>
+        <span className="place-name">{location.name}</span>
+        <input
+          type="checkbox"
+          checked={!hidden}
+          aria-label={ghost ? undefined : `显示${location.name}`}
+          readOnly={ghost}
+          tabIndex={ghost ? -1 : undefined}
+          onChange={
+            ghost
+              ? undefined
+              : () =>
+                  update({
+                    hiddenPlaces: hidden
+                      ? prefs.hiddenPlaces.filter((item) => item !== key)
+                      : [...prefs.hiddenPlaces, key],
+                  })
+          }
+        />
+      </>
+    )
+  }
+  // While a row is lifted the rest of the list slides by the height of the
+  // vacated slot, opening a gap under the pointer for the row to land in.
+  const shift = (kind: ReorderKind, index: number) => {
+    if (!drag || drag.kind !== kind || index === drag.from) return undefined
+    const distance = drag.height + drag.gap
+    if (drag.from < drag.to && index > drag.from && index <= drag.to)
+      return `translate3d(0, -${distance}px, 0)`
+    if (drag.to < drag.from && index >= drag.to && index < drag.from)
+      return `translate3d(0, ${distance}px, 0)`
+    return undefined
+  }
+  const lifted = drag
+  const liftedPlace =
+    lifted?.kind === 'place' && orderedPlaces[lifted.from] ? orderedPlaces[lifted.from] : null
+  const liftedSection =
+    lifted?.kind === 'section' && prefs.sidebarOrder[lifted.from]
+      ? prefs.sidebarOrder[lifted.from]
+      : null
   return (
     <>
       <div className="settings-card">
@@ -154,19 +245,17 @@ export function SidebarSettings({
             恢复预设
           </button>
         </div>
-        <div className="sidebar-order">
+        <div className={`sidebar-order ${drag?.kind === 'section' ? 'reordering' : ''}`}>
           {prefs.sidebarOrder.map((id, index) => (
             <div
-              className={`sidebar-order-row ${draggingRow === `section:${index}` ? 'dragging' : ''} ${dropRow === `section:${index}` ? 'reorder-target' : ''}`}
+              className={`sidebar-order-row ${drag?.kind === 'section' && drag.from === index ? 'reorder-source' : ''}`}
               key={id}
               data-reorder="section"
               data-reorder-index={index}
-              onPointerDown={(event) =>
-                beginReorder(event, 'section', index, { label: SIDEBAR_LABELS[id] })
-              }
+              style={{ transform: shift('section', index) }}
+              onPointerDown={(event) => beginReorder(event, 'section', index)}
             >
-              <GripVertical size={13} className="drag-handle" />
-              <span>{SIDEBAR_LABELS[id]}</span>
+              {sectionRow(id)}
             </div>
           ))}
         </div>
@@ -175,57 +264,35 @@ export function SidebarSettings({
         <div className="settings-card-header">
           <span>常用位置</span>
         </div>
-        <div className="place-order">
-          {orderedPlaces.map((location, index) => {
-            const key = location.path || location.name
-            const hidden = prefs.hiddenPlaces.includes(key)
-            return (
-              <div
-                className={`place-row ${draggingRow === `place:${index}` ? 'dragging' : ''} ${dropRow === `place:${index}` ? 'reorder-target' : ''}`}
-                key={key}
-                data-reorder="place"
-                data-reorder-index={index}
-                onPointerDown={(event) =>
-                  beginReorder(event, 'place', index, {
-                    label: location.name,
-                    icon: placeIcon(location.name),
-                    hidden,
-                  })
-                }
-              >
-                <GripVertical size={13} className="drag-handle" />
-                <span className="settings-choice-icon place-icon">{placeIcon(location.name)}</span>
-                <span className="place-name">{location.name}</span>
-                <input
-                  type="checkbox"
-                  checked={!hidden}
-                  aria-label={`显示${location.name}`}
-                  onChange={() =>
-                    update({
-                      hiddenPlaces: hidden
-                        ? prefs.hiddenPlaces.filter((item) => item !== key)
-                        : [...prefs.hiddenPlaces, key],
-                    })
-                  }
-                />
-              </div>
-            )
-          })}
+        <div className={`place-order ${drag?.kind === 'place' ? 'reordering' : ''}`}>
+          {orderedPlaces.map((location, index) => (
+            <div
+              className={`place-row ${drag?.kind === 'place' && drag.from === index ? 'reorder-source' : ''}`}
+              key={location.path || location.name}
+              data-reorder="place"
+              data-reorder-index={index}
+              style={{ transform: shift('place', index) }}
+              onPointerDown={(event) => beginReorder(event, 'place', index)}
+            >
+              {placeRow(location)}
+            </div>
+          ))}
         </div>
       </div>
-      {ghost &&
+      {lifted &&
         createPortal(
           <div
-            className="reorder-ghost"
-            style={{ left: ghost.x, top: ghost.y, width: ghost.width }}
+            className={`reorder-ghost ${lifted.kind === 'section' ? 'sidebar-order-row' : 'place-row'} ${lifted.settling ? 'settling' : ''}`}
+            style={{
+              left: lifted.left,
+              width: lifted.width,
+              height: lifted.height,
+              transform: `translate3d(0, ${lifted.top}px, 0) scale(1.01)`,
+            }}
             aria-hidden="true"
           >
-            <GripVertical size={13} className="drag-handle" />
-            {ghost.icon && <span className="reorder-ghost-icon">{ghost.icon}</span>}
-            <span className="reorder-ghost-label">{ghost.label}</span>
-            {ghost.kind === 'place' && (
-              <span className="reorder-ghost-state">{ghost.hidden ? '隐藏' : '显示'}</span>
-            )}
+            {liftedSection && sectionRow(liftedSection)}
+            {liftedPlace && placeRow(liftedPlace, true)}
           </div>,
           document.body,
         )}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Fiex",
+        "width": 1200,
+        "height": 780,
+        "minWidth": 820,
+        "minHeight": 540,
+        "center": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "shadow": true,
+        "noRedirectionBitmap": true,
+        "dragDropEnabled": true,
+        "windowEffects": {
+          "effects": ["sidebar", "acrylic"],
+          "state": "active",
+          "radius": 16,
+          "color": [235, 240, 248, 75]
+        }
+      }
+    ]
+  }
+}

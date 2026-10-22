@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
-import { TAG_PRESETS, tagHex } from '@/lib/tags'
+import { tagHex } from '@/lib/tags'
 import type { Tag } from '@/lib/types'
 
 interface Props {
@@ -35,10 +35,7 @@ export function TagDialog({ open, initial, available = [], onClose, onApply }: P
         <div className="tag-presets">
           {Array.from(
             new Map(
-              [...TAG_PRESETS, ...available, ...initial].map((tag) => [
-                `${tag.name}:${tag.color}`,
-                tag,
-              ]),
+              [...available, ...initial].map((tag) => [`${tag.name}:${tag.color}`, tag]),
             ).values(),
           ).map((preset) => {
             const active = tags.some(

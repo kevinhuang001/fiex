@@ -93,7 +93,7 @@ export type Sort = 'name' | 'modified' | 'size' | 'kind'
 export type StartPage = 'recent' | 'home' | 'documents' | 'last'
 
 export interface Preferences {
-  customTags: Tag[]
+  tags: Tag[]
   view: View
   group: Group
   sort: Sort
@@ -112,6 +112,12 @@ export interface Preferences {
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap
+}
+
+export interface OperationProgress {
+  done: number
+  total: number
+  step?: string
 }
 
 export interface GitStatus {

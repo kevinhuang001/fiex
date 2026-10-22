@@ -10,7 +10,7 @@ use crate::{
     volumes,
 };
 use notify::Watcher;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{
@@ -25,6 +25,28 @@ use tauri::{
     Emitter, Manager,
 };
 static QUITTING: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationProgress {
+    done: u64,
+    total: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    step: Option<String>,
+}
+
+fn progress_emitter(
+    channel: Channel<OperationProgress>,
+) -> impl Fn(u64, u64, Option<&str>) + Send + Sync + 'static {
+    move |done, total, step| {
+        let _ = channel.send(OperationProgress {
+            done,
+            total,
+            step: step.map(str::to_string),
+        });
+    }
+}
+
 fn show_main(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -403,8 +425,23 @@ async fn remote_download_dir(path: String) -> Result<(), String> {
     remote::download_dir(&path).await
 }
 #[tauri::command]
-async fn remote_sync(paths: Vec<String>) -> Result<(), String> {
-    remote::sync(&paths).await
+async fn remote_sync(
+    paths: Vec<String>,
+    on_progress: Channel<OperationProgress>,
+) -> Result<(), String> {
+    let emit = progress_emitter(on_progress);
+    let total = paths.len() as u64;
+    for (index, path) in paths.iter().enumerate() {
+        remote::sync_one(path).await?;
+        let step = std::path::Path::new(path)
+            .file_name()
+            .and_then(|name| name.to_str());
+        emit(index as u64 + 1, total, step);
+    }
+    if total > 0 {
+        emit(total, total, None);
+    }
+    Ok(())
 }
 #[tauri::command]
 async fn remote_unsync(paths: Vec<String>) -> Result<(), String> {
@@ -523,6 +560,7 @@ async fn transfer(
     keep_both: bool,
     ignores: Vec<String>,
     resolutions: Option<Vec<Resolution>>,
+    on_progress: Channel<OperationProgress>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
     if remote::is_remote(&destination) {
@@ -566,9 +604,10 @@ async fn transfer(
     }
     let events = app.clone();
     let cancel = cancel.inner().clone();
+    let emit = progress_emitter(on_progress);
     let result = tauri::async_runtime::spawn_blocking(move || {
         let flag = cancel.flag();
-        app.state::<Operations>().transfer_resolved(
+        app.state::<Operations>().transfer_resolved_with_progress(
             &paths,
             &destination,
             moving,
@@ -576,6 +615,7 @@ async fn transfer(
             &ignores,
             &resolutions.unwrap_or_default(),
             &flag,
+            &emit,
         )
     })
     .await
@@ -589,9 +629,12 @@ async fn transfer(
 async fn recycle(
     app: tauri::AppHandle,
     paths: Vec<String>,
+    on_progress: Channel<OperationProgress>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
     let cancel = cancel.inner().clone();
+    let emit = progress_emitter(on_progress);
+    let total = paths.len() as u64;
     tauri::async_runtime::spawn_blocking(move || {
         let mut result = OperationResult {
             paths: vec![],
@@ -599,7 +642,7 @@ async fn recycle(
             skipped: 0,
             conflicts: vec![],
         };
-        for path in paths {
+        for (index, path) in paths.into_iter().enumerate() {
             if cancel.is_cancelled() {
                 // Keep the undo history consistent with the items that did move.
                 if !result.paths.is_empty() {
@@ -607,6 +650,10 @@ async fn recycle(
                 }
                 return Err(operations::CANCELLED.into());
             }
+            let step = std::path::Path::new(&path)
+                .file_name()
+                .and_then(|name| name.to_str());
+            emit(index as u64 + 1, total, step);
             if let Some(route) = crate::usbfs::route(&path) {
                 match crate::usbfs::remove(&route) {
                     Ok(()) => result.paths.push(path),
@@ -621,6 +668,9 @@ async fn recycle(
                     Err(error) => result.errors.push(format!("{path}: {error}")),
                 }
             }
+        }
+        if total > 0 {
+            emit(total, total, None);
         }
         if !result.paths.is_empty() {
             app.state::<Operations>().clear_undo();
