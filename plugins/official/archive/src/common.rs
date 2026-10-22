@@ -29,6 +29,7 @@ pub fn copy_stream(
         total += n as u64;
     }
 }
+fn exists(path: &Path) -> bool { fs::symlink_metadata(path).is_ok() }
 pub fn unique(path: &Path) -> PathBuf {
     if !exists(path) {
         return path.into();
