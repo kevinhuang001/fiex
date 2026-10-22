@@ -422,12 +422,87 @@ pub fn apply_meta(entries: &mut [crate::files::Entry]) {
     }
 }
 
+/// Use the approved provider plugin even for existing mirror-based views.
+/// A missing, disabled or unapproved provider cannot silently fall back to an
+/// embedded WebDAV/SMB client.
 async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
-    if conn.kind == "webdav" {
-        webdav_list(conn, rel).await
-    } else {
-        smb_list(conn, rel).await
+    let plugin_id = format!("org.fiex.{}", conn.kind);
+    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
+        return Err("remote plugin network permission not granted".into());
     }
+    let config = serde_json::json!({
+        "url": conn.url,
+        "host": conn.host,
+        "port": conn.port,
+        "share": conn.share,
+        "base": conn.base,
+        "username": conn.username,
+        "password": conn.password,
+        "allowInvalidCerts": conn.allow_invalid_certs
+    });
+    let mut files = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let page = crate::plugin_host::global().invoke(
+            &plugin_id,
+            "fs.list",
+            serde_json::json!({
+                "connection": config,
+                "directoryId": rel,
+                "cursor": cursor.as_deref().unwrap_or("0"),
+                "limit": 500
+            }),
+        )?;
+        let entries = page
+            .get("entries")
+            .and_then(serde_json::Value::as_array)
+            .ok_or("provider response missing entries")?;
+        for entry in entries {
+            let name = entry
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("provider entry missing name")?;
+            if safe_child_name(name).is_none() {
+                return Err("provider returned an unsafe child name".into());
+            }
+            let kind = entry
+                .get("kind")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("provider entry missing kind")?;
+            if kind != "directory" && kind != "file" {
+                return Err("provider returned an unknown node kind".into());
+            }
+            files.push(RemoteFile {
+                name: name.into(),
+                path: entry
+                    .get("nodeId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(name)
+                    .into(),
+                is_dir: kind == "directory",
+                size: entry
+                    .get("size")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default(),
+                modified: entry
+                    .get("modified")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default(),
+            });
+        }
+        let next = page
+            .get("nextCursor")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        if next.is_none() {
+            break;
+        }
+        if next == cursor || files.len() > 100_000 {
+            return Err("provider pagination is invalid or too large".into());
+        }
+        cursor = next;
+    }
+    Ok(files)
 }
 
 async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
@@ -451,7 +526,12 @@ pub async fn provider_list(
     if relative.starts_with('/')
         || relative
             .split('/')
-            .any(|segment| segment == ".." || segment == "." || segment.contains('\\') || segment.contains('\0'))
+            .any(|segment| {
+                segment == ".."
+                    || segment == "."
+                    || segment.contains('\\')
+                    || segment.contains('\0')
+            })
     {
         return Err("invalid remote relative path".into());
     }
