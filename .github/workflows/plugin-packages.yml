@@ -1,6 +1,12 @@
 name: Build optional Fiex plugin packages
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'plugins/official/**'
+      - 'sdk/rust/**'
+      - 'scripts/package-fiex-plugin.py'
+      - '.github/workflows/plugin-packages.yml'
   push:
     tags:
       - 'plugins-v*'
@@ -38,6 +44,7 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
         run: |
           set -euo pipefail
+          python -m py_compile scripts/package-fiex-plugin.py
           for slug in git webdav smb archive checksum; do
             cargo test --manifest-path "plugins/official/${slug}/Cargo.toml" --target "${{ matrix.target }}"
             cargo build --release --manifest-path "plugins/official/${slug}/Cargo.toml" --target "${{ matrix.target }}"
