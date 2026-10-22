@@ -63,9 +63,9 @@
 
 `fiex-official-plugins` 仓库维护 `scripts/package-fiex-plugin.py` 和 `.github/workflows/ci.yml`，构建和打包与 Fiex 主程序安装包分离：
 
-- Rust 构建 `plugins/official/{git,webdav,smb,archive,checksum}`；`cargo test` 先于 `cargo build --release`。
+- Rust 构建 `fiex-official-plugins/official/{git,webdav,smb,archive,checksum}`；`cargo test` 先于 `cargo build --release`。
 - Windows、macOS、Linux 各自输出类似 `archive-macos-aarch64.fiexplugin`、`git-windows-x86_64.fiexplugin`，ZIP 顶层只包含 Manifest、本平台二进制和可选预编译 `ui/`。
 - `workflow_dispatch` 可以生成供 CI 检查的工件；仅在推送 `plugins-v*` 标签且三个系统包构建成功后才创建 GitHub Release。
 - 用户自己在 Fiex 设置页输入 `kevinhuang001/fiex-official-plugins`，从匹配当前平台的可安装资产中选具体插件并授权。**插件从未自动预装，也没有签名特权。**
 
-CI 已分别验证 Windows x86-64、macOS ARM64 和 Linux x86-64 插件包的构建及工件上传；实际安装/卸载运行测试与操作系统原生沙箱仍属发布阻断项。主程序的 Rust 依赖锁文件由开发分支 CI 维护，桌面构建必须使用 `--locked` 验证。
+CI 已分别验证 Windows x86-64、macOS ARM64 和 Linux x86-64 插件包的构建及工件上传；实际安装/卸载运行测试与操作系统原生沙箱仍属发布阻断项。主程序的 Rust 依赖锁文件由 Fiex Core 维护，桌面构建必须使用 `--locked` 验证。
