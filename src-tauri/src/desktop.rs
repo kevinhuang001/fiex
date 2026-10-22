@@ -1061,6 +1061,62 @@ async fn file_checksums(path: String) -> Result<serde_json::Value, String> {
     .await
     .map_err(|e| e.to_string())?
 }
+/// Host-owned native file chooser. Returns only a selected path; plugin
+/// code never gets a handle to the chooser UI or a directory browsing grant.
+#[tauri::command]
+fn plugin_file_dialog(
+    mode: String,
+    directory: Option<String>,
+    suggested_name: Option<String>,
+    extensions: Option<Vec<String>>,
+) -> Result<Option<String>,String> {
+    let mut dialog = rfd::FileDialog::new();
+    if let Some(path)=directory.filter(|v|std::path::Path::new(v).is_dir()){
+        dialog=dialog.set_directory(path);
+    }
+    if let Some(name)=suggested_name {
+        let path=std::path::Path::new(&name);
+        if path.file_name().is_none() || path.components().count()!=1 || name.contains(['\\','/','\0']){
+            return Err("invalid suggested filename".into());
+        }
+        dialog=dialog.set_file_name(name);
+    }
+    if let Some(exts)=extensions {
+        if exts.len()>20 || exts.iter().any(|v|v.is_empty()||v.len()>16||
+            !v.chars().all(|c|c.is_ascii_alphanumeric())) {
+            return Err("invalid file extension filter".into());
+        }
+        if !exts.is_empty() {
+            let refs=exts.iter().map(String::as_str).collect::<Vec<_>>();
+            dialog=dialog.add_filter("文件类型",&refs);
+        }
+    }
+    let selection=match mode.as_str(){
+        "openFile"=>dialog.pick_file(),
+        "openDirectory"=>dialog.pick_folder(),
+        "saveFile"=>dialog.save_file(),
+        _=>return Err("unsupported file picker mode".into())
+    };
+    Ok(selection.map(|p|p.to_string_lossy().into_owned()))
+}
+#[tauri::command]
+fn plugin_files_dialog(directory:Option<String>,extensions:Option<Vec<String>>)
+    ->Result<Option<Vec<String>>,String> {
+    let mut dialog=rfd::FileDialog::new();
+    if let Some(path)=directory.filter(|v|std::path::Path::new(v).is_dir()){
+        dialog=dialog.set_directory(path);
+    }
+    if let Some(exts)=extensions {
+        if exts.len()>20 || exts.iter().any(|v|v.is_empty()||v.len()>16||
+            !v.chars().all(|c|c.is_ascii_alphanumeric())) {return Err("invalid extension filter".into());}
+        if !exts.is_empty(){
+            let refs=exts.iter().map(String::as_str).collect::<Vec<_>>();
+            dialog=dialog.add_filter("文件类型",&refs);
+        }
+    }
+    Ok(dialog.pick_files().map(|paths|paths.into_iter().map(|p|p.to_string_lossy().into_owned()).collect()))
+}
+
 #[tauri::command]
 fn pick_folder(default: Option<String>) -> Option<String> {
     let mut dialog = rfd::FileDialog::new();
@@ -1364,6 +1420,8 @@ pub fn run() {
             cancel_operation,
             extract_archive,
             pick_folder,
+            plugin_file_dialog,
+            plugin_files_dialog,
             file_checksums,
             compress_archive,
             detect_terminals,

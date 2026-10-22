@@ -208,6 +208,19 @@ export class FiexUiClient {
       cancel: (taskId: string) => this.invoke('tasks.cancel', { taskId }),
     }
   }
+  /** Native file chooser is rendered by Fiex, never by plugin HTML. */
+  get dialog() {
+    return {
+      openFile: (options: { title?: string; directory?: string; extensions?: string[] } = {}) =>
+        this.invoke<string | null>('dialog.openFile', options),
+      openFiles: (options: { title?: string; directory?: string; extensions?: string[] } = {}) =>
+        this.invoke<string[] | null>('dialog.openFiles', options),
+      openDirectory: (options: { title?: string; directory?: string } = {}) =>
+        this.invoke<string | null>('dialog.openDirectory', options),
+      saveFile: (options: { title?: string; directory?: string; suggestedName?: string; extensions?: string[] } = {}) =>
+        this.invoke<string | null>('dialog.saveFile', options),
+    }
+  }
   get panel() {
     return {
       resize: (width: number, height: number) => this.invoke('panel.resize', { width, height }),
