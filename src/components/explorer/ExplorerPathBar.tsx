@@ -85,11 +85,15 @@ export function ExplorerPathBar({
           )}
         </nav>
         <div className="search-box">
-          <Search size={15} />
+          <button className="search-scope" title={x.globalSearch ? '切换为当前文件夹搜索' : '搜索所有可访问的文件'}
+            aria-label="全局搜索" aria-pressed={x.globalSearch}
+            onClick={() => x.setGlobalSearch(!x.globalSearch)}>
+            <Search size={15} />
+          </button>
           <input
             ref={searchInput}
             aria-label="搜索文件"
-            placeholder="搜索此文件夹"
+            placeholder={x.globalSearch ? "搜索所有可访问位置" : "搜索此文件夹"}
             value={x.query}
             onChange={(e) => x.setQuery(e.target.value)}
             onKeyDown={(e) => {

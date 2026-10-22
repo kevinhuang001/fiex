@@ -14,7 +14,8 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
-    time::Instant,
+    time::{Duration, Instant},
+    thread,
 };
 use tantivy::tokenizer::{LowerCaser, RawTokenizer, TextAnalyzer};
 use tantivy::{
@@ -29,10 +30,10 @@ use tantivy::{
 };
 
 const RESULT_LIMIT: usize = 500;
-const INDEX_LIMIT: usize = 1_000_000;
+const INDEX_LIMIT: usize = 20_000_000;
 // A burst larger than this is cheaper to rebuild than to patch file by file.
 const PENDING_LIMIT: usize = 20_000;
-const INDEX_VERSION: u32 = 3;
+const INDEX_VERSION: u32 = 4;
 
 #[derive(Serialize, serde::Deserialize)]
 struct IndexMeta {
@@ -51,6 +52,7 @@ struct IndexHandle {
     path: Field,
     path_id: Field,
     skipped: usize,
+    last_full_scan: Instant,
     // Files touched since the last search. Applying them incrementally keeps a
     // busy home folder from rebuilding the whole index on every keystroke.
     pending: Arc<Mutex<HashSet<PathBuf>>>,
@@ -61,7 +63,7 @@ struct IndexHandle {
 #[derive(Clone, Default)]
 pub struct SearchState {
     generations: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
-    index: Arc<Mutex<Option<IndexHandle>>>,
+    indexes: Arc<Mutex<HashMap<String, Arc<Mutex<Option<IndexHandle>>>>>>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -141,6 +143,7 @@ fn open_index(dir: &Path, root: &str, signature: &str) -> Option<IndexHandle> {
         path,
         path_id,
         skipped: 0,
+        last_full_scan: Instant::now(),
         pending,
         overflow,
         _watcher: watcher,
@@ -238,6 +241,7 @@ fn build_index(
         .git_exclude(false)
         .parents(false)
         .follow_links(false)
+        .same_file_system(true)
         .threads(1)
         .filter_entry(move |item| {
             if item.depth() == 0 {
@@ -306,6 +310,7 @@ fn build_index(
         path,
         path_id,
         skipped,
+        last_full_scan: Instant::now(),
         pending,
         overflow,
         _watcher: watcher,
@@ -445,13 +450,18 @@ fn ensure_index(
     let flooded = handle
         .as_ref()
         .is_some_and(|current| current.overflow.swap(false, Ordering::SeqCst));
-    if !switched && !flooded {
+    let reconcile = handle.as_ref().is_some_and(|current|{
+        let interval = if current._watcher.is_some() { Duration::from_secs(6*3600) }
+            else {Duration::from_secs(5*60)};
+        current.last_full_scan.elapsed()>interval
+    });
+    if !switched && !flooded && !reconcile {
         if let Some(current) = handle.as_mut() {
             apply_pending(current, hidden, ignores)?;
         }
         return Ok(());
     }
-    let rebuild = switched || flooded;
+    let rebuild = switched || flooded || reconcile;
     let dir = index_dir(root, &signature);
     fs::create_dir_all(dir.parent().ok_or("无效索引目录")?).map_err(|e| e.to_string())?;
     let opened = if handle.is_some() {
@@ -478,7 +488,52 @@ fn ensure_index(
     Ok(())
 }
 
+/// Only filesystem roots readable with the application's own user token are
+/// scanned; protected paths naturally fail and are recorded as skipped.
+pub fn accessible_roots()->Vec<String>{
+    let mut roots=Vec::new();
+    for location in crate::volumes::locations() {
+        if location.kind!="disk" || !location.mounted || location.usbfs ||
+            location.path.contains("://") {continue;}
+        let path=PathBuf::from(location.path);
+        if path.is_dir() && fs::read_dir(&path).is_ok(){
+            roots.push(path);
+        }
+    }
+    if let Some(home)=dirs::home_dir().filter(|p|p.is_dir()){
+        roots.push(home);
+    }
+    roots.sort();
+    roots.dedup();
+    // Keep top-level mounted roots, plus user home on platforms where / is
+    // system-protected. Independent mount roots retain filesystem-specific
+    // indexing and do not require administrative privileges.
+    roots.into_iter().map(|p|p.to_string_lossy().into_owned()).collect()
+}
+
 impl SearchState {
+    /// Each disk/root keeps its own writer, watcher, and incremental event
+    /// queue. Switching panes does not discard another root's live index.
+    fn index_slot(&self, root:&str, hidden:bool, ignores:&[String])
+        -> Arc<Mutex<Option<IndexHandle>>> {
+        let key=format!("{root}\u{1f}{}",signature(hidden,ignores));
+        self.indexes.lock().unwrap().entry(key)
+            .or_insert_with(||Arc::new(Mutex::new(None))).clone()
+    }
+    /// Index every mounted filesystem accessible to the current user while
+    /// the application is running. Refresh changes using notify/FSEvents/
+    /// ReadDirectoryChangesW/inotify and reconcile every 60 seconds.
+    pub fn start_global_daemon(&self) {
+        let search=self.clone();
+        let _=thread::Builder::new().name("fiex-global-index".into()).spawn(move||loop {
+            for root in accessible_roots() {
+                if let Err(error)=search.warm(&root,true,&[]) {
+                    eprintln!("Fiex index skipped {root}: {error}");
+                }
+            }
+            thread::sleep(Duration::from_secs(60));
+        });
+    }
     fn generation(&self, scope: &str) -> Arc<AtomicU64> {
         self.generations
             .lock()
@@ -493,8 +548,52 @@ impl SearchState {
     }
 
     pub fn warm(&self, root: &str, hidden: bool, ignores: &[String]) -> Result<(), String> {
-        let mut guard = self.index.lock().unwrap();
+        let slot=self.index_slot(root,hidden,ignores);
+        let mut guard=slot.lock().unwrap();
         ensure_index(&mut guard, root, hidden, ignores)
+    }
+
+    /// Search each readable mounted root, merging results into one capped
+    /// result stream. Existing per-root Tantivy indices and watchers are reused.
+    pub fn run_global(
+        &self,
+        scope:&str,
+        query:&str,
+        hidden:bool,
+        ignores:&[String],
+        emit:impl Fn(SearchBatch)+Send+Sync,
+    )->Result<(),String>{
+        let started=Instant::now();
+        let generation=self.generation(scope);
+        let ticket=generation.fetch_add(1,Ordering::SeqCst)+1;
+        let entries=Mutex::new((Vec::<Entry>::new(),HashSet::<String>::new(),false,0usize));
+        let mut successful=0usize;
+        let mut last_error=String::new();
+        for root in accessible_roots() {
+            if generation.load(Ordering::Relaxed)!=ticket{return Ok(());}
+            let result=self.run(&format!("{scope}:disk:{root}"),&root,query,hidden,ignores,|batch|{
+                let mut collected=entries.lock().unwrap();
+                collected.2|=batch.truncated;
+                collected.3+=batch.skipped;
+                for item in batch.entries{
+                    if !collected.1.insert(item.path.clone()){continue;}
+                    if collected.0.len()>=RESULT_LIMIT{
+                        collected.2=true;continue;
+                    }
+                    collected.0.push(item);
+                }
+            });
+            match result {
+                Ok(())=>successful+=1,
+                Err(e)=>last_error=e,
+            }
+        }
+        if successful==0 {return Err(format!("no readable index roots: {last_error}"));}
+        let (entries,_,truncated,skipped)=entries.into_inner().map_err(|_|"index result lock poisoned")?;
+        emit(SearchBatch {
+            entries,done:true,elapsed_ms:started.elapsed().as_millis(),truncated,skipped
+        });
+        Ok(())
     }
 
     pub fn run(
@@ -510,7 +609,8 @@ impl SearchState {
         let generation = counter.fetch_add(1, Ordering::SeqCst) + 1;
         let started = Instant::now();
         let query = query.to_lowercase();
-        let mut guard = self.index.lock().unwrap();
+        let slot=self.index_slot(root,hidden,ignores);
+        let mut guard=slot.lock().unwrap();
         ensure_index(&mut guard, root, hidden, ignores)?;
         let handle = guard.as_ref().ok_or("索引不可用")?;
         let searcher = handle.reader.searcher();
@@ -657,14 +757,9 @@ mod tests {
         state.warm(t.path().to_str().unwrap(), false, &[]).unwrap();
         fs::remove_dir_all(&folder).unwrap();
         {
-            let guard = state.index.lock().unwrap();
-            guard
-                .as_ref()
-                .unwrap()
-                .pending
-                .lock()
-                .unwrap()
-                .insert(folder);
+            let slot = state.index_slot(t.path().to_str().unwrap(), false, &[]);
+            let guard = slot.lock().unwrap();
+            guard.as_ref().unwrap().pending.lock().unwrap().insert(folder);
         }
         let matches = Mutex::new(Vec::new());
         state
@@ -680,7 +775,8 @@ mod tests {
             )
             .unwrap();
         assert!(matches.lock().unwrap().is_empty());
-        let guard = state.index.lock().unwrap();
+        let slot = state.index_slot(t.path().to_str().unwrap(), false, &[]);
+        let guard = slot.lock().unwrap();
         let handle = guard.as_ref().unwrap();
         let searcher = handle.reader.searcher();
         let query = RegexQuery::from_pattern(".*Needle.*", handle.path_id).unwrap();

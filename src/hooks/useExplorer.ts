@@ -27,6 +27,7 @@ export function useExplorer(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [globalSearch, setGlobalSearch] = useState(false)
   const [searching, setSearching] = useState(false)
   const [searchStats, setSearchStats] = useState('')
   const [history, setHistory] = useState<string[]>([])
@@ -282,7 +283,7 @@ export function useExplorer(
     setSelected([])
     setError('')
     const timer = setTimeout(() => {
-      void search(pane, path, query, prefs.hidden, prefs.displayIgnore, (b) => {
+      void search(pane, globalSearch ? 'everywhere://' : path, query, prefs.hidden, prefs.displayIgnore, (b) => {
         if (generation !== searchRequest.current) return
         startTransition(() => setEntries((v) => [...v, ...b.entries]))
         if (b.done) {
@@ -303,7 +304,7 @@ export function useExplorer(
       ++searchRequest.current
       void call('cancel_search', { pane }).catch(() => {})
     }
-  }, [enabled, pane, query, path, prefs.hidden, prefs.displayIgnore, refresh])
+  }, [enabled, pane, query, globalSearch, path, prefs.hidden, prefs.displayIgnore, refresh])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])
@@ -467,6 +468,8 @@ export function useExplorer(
     warnings,
     query,
     setQuery,
+    globalSearch,
+    setGlobalSearch,
     searching,
     searchStats,
     navigate,
