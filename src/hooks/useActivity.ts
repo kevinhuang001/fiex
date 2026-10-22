@@ -1,15 +1,23 @@
+import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
+import { native } from '@/lib/api'
+import type { OperationProgress } from '@/lib/types'
 
 export type ActivityStatus = 'running' | 'done' | 'error'
+export type ActivityKind = 'transfer' | 'git' | 'delete' | 'sync'
 
 export interface ActivityItem {
   id: string
+  kind: ActivityKind
   label: string
   status: ActivityStatus
   startedAt: number
   finishedAt?: number
   detail?: string
   progress?: number
+  done?: number
+  total?: number
+  step?: string
 }
 
 const LIMIT = 60
@@ -27,10 +35,19 @@ function load(): ActivityItem[] {
     if (!Array.isArray(parsed)) return []
     // Anything that was running when the window closed is history now.
     return parsed
-      .filter((item) => item && typeof item.label === 'string')
+      .filter(
+        (item) =>
+          item &&
+          typeof item.label === 'string' &&
+          (item.kind === 'transfer' ||
+            item.kind === 'git' ||
+            item.kind === 'delete' ||
+            item.kind === 'sync'),
+      )
       .slice(0, LIMIT)
       .map((item): ActivityItem => ({
         id: String(item.id ?? Math.random()),
+        kind: item.kind as ActivityKind,
         label: String(item.label),
         status: item.status === 'running' ? 'error' : (item.status as ActivityStatus),
         startedAt: Number(item.startedAt) || Date.now(),
@@ -59,20 +76,60 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener)
 }
 
-export function beginActivity(rawLabel: string, detail?: string, cancel?: () => void): string {
+export function beginActivity(
+  rawLabel: string,
+  detail?: string,
+  cancel?: () => void,
+  kind: ActivityKind = 'transfer',
+): string {
   const label = rawLabel.replace(/^正在/, '').replace(/…$/, '')
   const id = `${Date.now()}-${++seq}`
   items = [
-    { id, label, detail, status: 'running' as const, startedAt: Date.now() },
+    { id, kind, label, detail, status: 'running' as const, startedAt: Date.now() },
     ...items,
   ].slice(0, LIMIT)
-  // Transfers and archive work show their progress by default; quick commands
-  // stay in the history without covering the window.
-  if (/复制|移动|压缩|解压/.test(label)) open = true
+  // Transfers and syncs surface their progress; other operations stay in
+  // history without covering the window.
+  if (kind === 'transfer' || kind === 'sync') open = true
   if (cancel) cancellers.set(id, cancel)
   persist()
   emit()
   return id
+}
+
+export function updateActivity(
+  id: string,
+  patch: Partial<Pick<ActivityItem, 'progress' | 'done' | 'total' | 'step' | 'detail'>>,
+) {
+  let changed = false
+  items = items.map((item) => {
+    if (item.id !== id || item.status !== 'running') return item
+    changed = true
+    return {
+      ...item,
+      ...patch,
+      progress:
+        patch.progress === undefined ? item.progress : Math.max(0, Math.min(1, patch.progress)),
+    }
+  })
+  // Progress arrives once per file; keep it in memory and persist only the
+  // lifecycle changes to avoid a localStorage write on every tick.
+  if (changed) emit()
+}
+
+export function progressChannel(id: string) {
+  // The browser fixture has no Tauri internals; channels only exist in the
+  // desktop webview.
+  if (!native) return undefined
+  const channel = new Channel<OperationProgress>()
+  channel.onmessage = ({ done, total, step }) =>
+    updateActivity(id, {
+      done,
+      total,
+      progress: total > 0 ? done / total : undefined,
+      step: step || undefined,
+    })
+  return channel
 }
 
 export function cancelActivity(id: string) {

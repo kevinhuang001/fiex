@@ -24,8 +24,7 @@ import { size } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { Preferences } from '@/lib/types'
 import { fileVisual } from '@/lib/fileIcons'
-import { CreateTagDialog } from './CreateTagDialog'
-import { TAG_PRESETS, tagHex } from '@/lib/tags'
+import { tagHex } from '@/lib/tags'
 interface Props {
   x: Explorer
   prefs: Preferences
@@ -56,8 +55,7 @@ export function Sidebar({
   onMount,
   trashPath,
 }: Props) {
-  const [creatingTag, setCreatingTag] = useState(false)
-  const allTags = [...TAG_PRESETS, ...prefs.customTags]
+  const allTags = prefs.tags
   const [menu, setMenu] = useState<
     | { kind: 'trash'; x: number; y: number }
     | { kind: 'favorite'; x: number; y: number; path: string }
@@ -193,14 +191,6 @@ export function Sidebar({
               <Fragment key="tags">
                 <div className="sidebar-section-title">
                   <span className="sidebar-label">标签</span>
-                  <button
-                    className="icon-button"
-                    aria-label="添加标签"
-                    title="添加标签"
-                    onClick={() => setCreatingTag(true)}
-                  >
-                    <Plus size={14} />
-                  </button>
                 </div>
                 {allTags.map((tag) => (
                   <button
@@ -394,16 +384,6 @@ export function Sidebar({
             </button>
           )}
         </div>
-      )}
-      {creatingTag && (
-        <CreateTagDialog
-          existing={allTags}
-          onClose={() => setCreatingTag(false)}
-          onCreate={(tag) => {
-            update({ customTags: [...prefs.customTags, tag] })
-            setCreatingTag(false)
-          }}
-        />
       )}
     </aside>
   )

@@ -825,18 +825,22 @@ pub fn eject(path: &str) -> Result<(), String> {
     Err("当前平台不支持弹出设备".into())
 }
 
+pub async fn sync_one(path: &str) -> Result<(), String> {
+    let Some((conn, rel)) = connection_for_path(path) else {
+        return Ok(());
+    };
+    let rel = rel_string(&rel);
+    let meta = load_meta(&conn);
+    if meta.files.get(&rel).is_some_and(|file| file.is_dir) {
+        download_dir(path).await
+    } else {
+        download(path).await.map(|_| ())
+    }
+}
+
 pub async fn sync(paths: &[String]) -> Result<(), String> {
     for path in paths {
-        let Some((conn, rel)) = connection_for_path(path) else {
-            continue;
-        };
-        let rel = rel_string(&rel);
-        let meta = load_meta(&conn);
-        if meta.files.get(&rel).is_some_and(|file| file.is_dir) {
-            download_dir(path).await?;
-        } else {
-            download(path).await?;
-        }
+        sync_one(path).await?;
     }
     Ok(())
 }

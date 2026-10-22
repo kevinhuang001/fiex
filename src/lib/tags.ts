@@ -82,3 +82,23 @@ export function nearestFinderColor(hex: string): number {
 export function tagHex(tag: { color: number; hex?: string }): string {
   return tag.hex || tagColor(tag.color)
 }
+
+/** Validate a persisted tag catalogue, dropping invalid or duplicate names. */
+export function normalizeTags(value: unknown): Tag[] | null {
+  if (!Array.isArray(value)) return null
+  const seen = new Set<string>()
+  const tags: Tag[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const { name, color, hex } = item as Partial<Tag>
+    if (typeof name !== 'string' || !name.trim()) continue
+    if (typeof color !== 'number' || !Number.isInteger(color) || color < 1 || color > 7) continue
+    const clean = name.trim()
+    if (seen.has(clean)) continue
+    seen.add(clean)
+    const tag: Tag = { name: clean, color }
+    if (typeof hex === 'string' && /^#[0-9a-f]{6}$/i.test(hex)) tag.hex = hex.toLowerCase()
+    tags.push(tag)
+  }
+  return tags
+}

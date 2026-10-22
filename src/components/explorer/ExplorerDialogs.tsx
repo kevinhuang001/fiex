@@ -234,7 +234,7 @@ export function ExplorerDialogs({
       <TagDialog
         open={tagOpen}
         initial={tagInitial}
-        available={prefs.customTags}
+        available={prefs.tags}
         onClose={() => setTagOpen(false)}
         onApply={applyTags}
       />

@@ -201,7 +201,7 @@ impl Operations {
         ignores: &[String],
         cancel: &AtomicBool,
     ) -> Result<OperationResult, String> {
-        let (result, undo) = crate::transfers::execute(
+        self.transfer_resolved_with_progress(
             sources,
             destination,
             moving,
@@ -209,11 +209,8 @@ impl Operations {
             ignores,
             &[],
             cancel,
-        )?;
-        if !undo.is_empty() {
-            self.undo.lock().unwrap().push(undo);
-        }
-        Ok(result)
+            &|_: u64, _: u64, _: Option<&str>| {},
+        )
     }
     #[allow(clippy::too_many_arguments)]
     pub fn transfer_resolved(
@@ -226,6 +223,29 @@ impl Operations {
         resolutions: &[crate::transfers::Resolution],
         cancel: &AtomicBool,
     ) -> Result<OperationResult, String> {
+        self.transfer_resolved_with_progress(
+            sources,
+            destination,
+            moving,
+            keep_both,
+            ignores,
+            resolutions,
+            cancel,
+            &|_: u64, _: u64, _: Option<&str>| {},
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn transfer_resolved_with_progress(
+        &self,
+        sources: &[String],
+        destination: &str,
+        moving: bool,
+        keep_both: bool,
+        ignores: &[String],
+        resolutions: &[crate::transfers::Resolution],
+        cancel: &AtomicBool,
+        progress: &dyn Fn(u64, u64, Option<&str>),
+    ) -> Result<OperationResult, String> {
         let (result, undo) = crate::transfers::execute(
             sources,
             destination,
@@ -234,6 +254,7 @@ impl Operations {
             ignores,
             resolutions,
             cancel,
+            progress,
         )?;
         if !undo.is_empty() {
             self.undo.lock().unwrap().push(undo);

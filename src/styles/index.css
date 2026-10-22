@@ -43,17 +43,17 @@
   color-scheme: light;
 }
 :root.dark {
-  --text: #dce6ef;
-  --muted: #8696a7;
-  --surface: #202a34;
-  --canvas: #1b242d;
-  --hover: #2b3947;
-  --line: #36424e;
-  --accent: #75b6e1;
-  --selected: #2b4b65;
-  --glass: rgba(29, 42, 54, 0.5);
-  --shadow: 0 20px 80px #0005;
-  --overlay: #0006;
+  --text: #e8f1f8;
+  --muted: #9db0c1;
+  --surface: #22303c;
+  --canvas: #18232d;
+  --hover: #30404f;
+  --line: #415263;
+  --accent: #8ac9ef;
+  --selected: #345a77;
+  --glass: rgba(26, 38, 48, 0.9);
+  --shadow: 0 20px 80px #0007;
+  --overlay: #0009;
   color-scheme: dark;
 }
 * {
@@ -126,25 +126,8 @@ button[data-slot='button'][data-variant='default'] {
 .sidebar-hidden .sidebar {
   display: none;
 }
-.app[data-platform='macos'] .sidebar-title {
-  padding-left: 84px;
-}
 .app[data-platform='macos'] .toolbar {
   padding-left: 12px;
-}
-.sidebar-title {
-  height: 69px;
-  display: flex;
-  align-items: center;
-  gap: 31px;
-  padding: 0 20px;
-  flex-shrink: 0;
-}
-.sidebar-title > span {
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.6px;
-  color: var(--text);
 }
 .traffic {
   display: flex;
@@ -1255,7 +1238,7 @@ button[data-slot='button'][data-variant='default'] {
   transform: translate(-50%, -50%);
   z-index: 51;
   background: var(--surface);
-  width: 480px;
+  width: 420px;
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - 60px);
   overflow: auto;
@@ -1330,7 +1313,7 @@ button[data-slot='button'][data-variant='default'] {
   border: 0;
 }
 .settings-modal {
-  width: 920px;
+  width: 760px;
   height: min(680px, calc(100vh - 48px));
   padding: 0;
   overflow: hidden;
@@ -1705,7 +1688,7 @@ button[data-slot='button'][data-variant='default'] {
   }
 }
 .modal-wide {
-  width: 850px;
+  width: 720px;
   padding: 0;
   overflow: hidden;
 }
@@ -2544,7 +2527,7 @@ body.dragging-file * {
 }
 
 .conflict-modal {
-  width: min(780px, calc(100vw - 48px));
+  width: min(680px, calc(100vw - 48px));
 }
 .conflict-summary {
   display: flex;
@@ -2652,7 +2635,7 @@ body.dragging-file * {
 }
 
 .compress-dialog {
-  width: 460px;
+  width: 430px;
 }
 .compress-form {
   display: flex;
@@ -3022,7 +3005,7 @@ body.dragging-file * {
 
 /* Compact task sheets share the same rhythm and neutral surfaces. */
 .compress-dialog {
-  width: 480px;
+  width: 430px;
 }
 .archive-form {
   padding: 20px;
@@ -3103,7 +3086,7 @@ body.dragging-file * {
   justify-content: center;
 }
 .checksum-dialog {
-  width: 620px;
+  width: 560px;
 }
 .checksum-file {
   display: flex;
@@ -3170,7 +3153,7 @@ body.dragging-file * {
   padding: 16px 20px;
 }
 .preview-compact {
-  width: 520px;
+  width: 480px;
 }
 .preview-compact .preview-body {
   height: auto;
@@ -3185,21 +3168,20 @@ body.dragging-file * {
 }
 
 /* --- Desktop polish pass -------------------------------------------------- */
-/* The sidebar starts at the top edge now; macOS keeps a slim drag strip for
-   its native traffic lights, everywhere else the title block is gone. */
+/* The sidebar keeps its own top strip: macOS puts the native traffic lights
+   there, and every platform uses it to start the sidebar content just below
+   the tab strip instead of touching the window's top edge. */
 .sidebar {
   position: relative;
   z-index: 30;
 }
 .sidebar-title {
-  height: 0;
+  height: 34px;
   padding: 0;
-  gap: 0;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 .app[data-platform='macos'] .sidebar-title {
-  height: 34px;
-  padding: 0 0 0 84px;
+  padding-left: 84px;
 }
 .sidebar-content {
   padding-top: 8px;
@@ -3478,57 +3460,231 @@ body.dragging-file * {
   margin-left: 2px;
 }
 
-/* Reordering in settings lifts a translucent copy of the row ("ghost") under
-   the pointer while the original row stays dimmed and the target is outlined. */
-.sidebar-order-row.dragging,
-.place-row.dragging {
-  opacity: 0.35;
+/* Reordering in settings lifts the row itself; the other rows slide over the
+   vacated slot with the same easing as the tab strip. */
+.sidebar-order.reordering .sidebar-order-row,
+.place-order.reordering .place-row {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
 }
-.sidebar-order-row.reorder-target,
-.place-row.reorder-target {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+.sidebar-order-row.reorder-source,
+.place-row.reorder-source {
+  visibility: hidden;
 }
 .reorder-ghost {
   position: fixed;
+  top: 0;
   z-index: 200;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 4px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  box-shadow: 0 18px 40px color-mix(in srgb, var(--text) 22%, transparent);
-  backdrop-filter: blur(12px);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  opacity: 0.92;
+  margin: 0;
+  background: var(--surface);
+  box-shadow:
+    0 16px 36px color-mix(in srgb, var(--text) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 35%, var(--line));
   pointer-events: none;
-  transform: translate(16px, -50%);
+  will-change: transform;
 }
-.reorder-ghost .drag-handle {
-  opacity: 0.55;
+.reorder-ghost.settling {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
 }
-.reorder-ghost-icon {
-  display: inline-flex;
-  color: var(--accent);
-}
-.reorder-ghost-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.reorder-ghost-state {
-  color: var(--muted);
-  font-size: 10px;
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-order.reordering .sidebar-order-row,
+  .place-order.reordering .place-row,
+  .reorder-ghost.settling {
+    transition: none;
+  }
 }
 body.dragging-reorder,
 body.dragging-reorder * {
   cursor: grabbing !important;
   user-select: none !important;
+}
+
+/* Keep the new-tab control centred instead of bottom-aligned with the tabs. */
+.tabs > .icon-button {
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+/* The left rail is a frosted surface, not a window onto the desktop. */
+.sidebar {
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
+    color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  backdrop-filter: blur(30px) saturate(140%);
+  border-right-color: color-mix(in srgb, var(--line) 70%, transparent);
+}
+.dark .sidebar {
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
+    color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  border-right-color: color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+/* Context menus sit above the workspace dock but below modal sheets. */
+.context-menu {
+  z-index: 55;
+}
+
+/* Lift settings cards and shortcut pills off the dark canvas. */
+.dark .settings-card {
+  background: color-mix(in srgb, var(--surface) 86%, var(--canvas));
+  border-color: color-mix(in srgb, var(--line) 82%, transparent);
+}
+.dark .shortcut-pill {
+  background: color-mix(in srgb, var(--canvas) 78%, var(--surface));
+  border-color: color-mix(in srgb, var(--line) 88%, transparent);
+}
+
+/* --- Platform window chrome --------------------------------------------- */
+/* Windows and Linux are frameless; their caption buttons live at the end of
+   the tab strip. Only the tab list scrolls, so a long row of tabs can never
+   slide underneath the close button. */
+.tabs {
+  overflow: hidden;
+}
+.tabs-scroll {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-self: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+.tabs-new {
+  align-self: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  margin-left: 2px;
+  border-radius: 8px;
+}
+.tabs-new,
+.tabs-new:hover,
+.tabs-new:active {
+  background: transparent;
+}
+.tabs-new svg {
+  width: 18px;
+  height: 18px;
+}
+/* The lifted tab follows the pointer while the rest of the strip slides over
+   the vacated slot, matching the way Chrome's tab strip reorders. */
+.tabs-dragging .tab {
+  transition:
+    transform 170ms cubic-bezier(0.2, 0, 0, 1),
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.tabs-dragging .tab-source {
+  visibility: hidden;
+}
+.tab.tab-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  margin: 0;
+  background: var(--canvas);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 20%, transparent);
+  pointer-events: none;
+  will-change: transform;
+}
+.tab-ghost.settling {
+  transition: transform 170ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs-dragging .tab,
+  .tab-ghost.settling {
+    transition: none;
+  }
+}
+.window-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: stretch;
+  height: 40px;
+  margin: -6px -12px 0 0;
+}
+.window-controls button {
+  width: 46px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  color: var(--muted);
+}
+.window-controls button:hover {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+}
+.window-controls button:active {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+.window-controls button:focus-visible {
+  outline-offset: -2px;
+}
+.window-controls .window-close:hover,
+.window-controls .window-close:active {
+  background: #c42b1c;
+  color: #fff;
+}
+/* macOS keeps its native traffic lights in the sidebar's top strip; when the
+   sidebar is collapsed they sit over the tab strip, so leave room for them. */
+.app[data-platform='macos'].sidebar-hidden .tabs {
+  padding-left: 84px;
+}
+
+/* Tags now live in Settings; the sidebar keeps the list but no longer owns
+   creation. */
+.settings-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 8px;
+  text-align: center;
+}
+.tag-settings-row .settings-row-label > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-settings-dot {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px #00000014;
+}
+.tag-settings-action {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+.tag-settings-action:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.tag-settings-delete:hover {
+  background: color-mix(in srgb, #c66c60 14%, transparent);
+  color: #c66c60;
+}
+
+.tag-delete-confirm {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
 }

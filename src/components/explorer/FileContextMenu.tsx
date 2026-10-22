@@ -1,4 +1,5 @@
 import type { AppController } from '@/hooks/useAppController'
+import { progressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
 import { archiveFormats } from '@/lib/archives'
 import { isArchive } from '@/lib/files'
@@ -100,7 +101,7 @@ export function FileContextMenu({
           className="context-menu"
           style={{
             left: Math.min(menu.x, innerWidth - 360),
-            top: Math.max(8, Math.min(menu.y, innerHeight - 380)),
+            top: Math.max(8, Math.min(menu.y, innerHeight - 440)),
           }}
         >
           {(
@@ -143,17 +144,29 @@ export function FileContextMenu({
                       label: menu.entry.sync === 'synced' ? '取消同步' : '同步',
                       icon: menu.entry.sync === 'synced' ? <CloudCheck /> : <CloudDownload />,
                       hint: '',
-                      action: () =>
-                        void run('正在同步…', async () => {
-                          const paths = x.selected.includes(menu.entry.path)
-                            ? x.selected
-                            : [menu.entry.path]
-                          await call(
-                            menu.entry.sync === 'synced' ? 'remote_unsync' : 'remote_sync',
-                            { paths },
-                          )
-                          x.reload()
-                        }),
+                      action: () => {
+                        const paths = x.selected.includes(menu.entry.path)
+                          ? x.selected
+                          : [menu.entry.path]
+                        const synced = menu.entry.sync === 'synced'
+                        let onProgress: ReturnType<typeof progressChannel> | undefined
+                        void run(
+                          synced ? '正在取消同步…' : '正在同步…',
+                          async () => {
+                            await call(
+                              synced ? 'remote_unsync' : 'remote_sync',
+                              synced ? { paths } : { paths, onProgress },
+                            )
+                            x.reload()
+                          },
+                          `${paths.length} 个项目`,
+                          false,
+                          'sync',
+                          (id) => {
+                            if (!synced) onProgress = progressChannel(id)
+                          },
+                        )
+                      },
                     },
                   ]
                 : []),

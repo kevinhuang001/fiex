@@ -59,16 +59,26 @@ test('each tab keeps its own one or two panes', async ({ page }) => {
   await expect(page.getByRole('complementary', { name: '第二个面板' })).toHaveCount(0)
   await expect(page.getByRole('navigation', { name: '当前位置' })).toContainText('Research')
 })
-test('status center shows summaries and opens an operation detail', async ({ page }) => {
+test('status center records transfers and shows source and destination', async ({ page }) => {
+  // Creates are intentionally not recorded, so they must not appear here.
   await page.getByRole('button', { name: '新建文件夹', exact: true }).click()
-  await page.getByRole('textbox', { name: /重命名 未命名文件夹/ }).fill('Status sample')
-  await page.keyboard.press('Enter')
-  await page.getByRole('button', { name: '状态中心' }).click()
+  await page.keyboard.press('Escape')
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click()
+  await page.keyboard.press('Control+c')
+  await page.getByText('Projects', { exact: true }).dblclick()
+  await page.keyboard.press('Control+v')
   const center = page.getByRole('complementary', { name: '状态中心' })
-  await expect(center.getByText('新建文件夹', { exact: true })).toBeVisible()
-  await expect(center.getByText('开始时间')).toHaveCount(0)
-  await center.getByRole('button', { name: /查看详情：新建文件夹/ }).click()
-  await expect(center.getByText('开始时间')).toBeVisible()
+  if (!(await center.isVisible())) await page.getByRole('button', { name: '状态中心' }).click()
+  await expect(center.getByText('复制', { exact: true })).toBeVisible()
+  await expect(center.getByText('新建文件夹', { exact: true })).toHaveCount(0)
+  await center.getByRole('button', { name: /查看详情：复制/ }).click()
+  await expect(center.getByText('复制来源：')).toBeVisible()
+  await expect(center.locator('.activity-detail-message')).toContainText(
+    '/Users/kevin/Documents/Notes.md',
+  )
+  await expect(center.locator('.activity-detail-message')).toContainText(
+    '/Users/kevin/Documents/Projects',
+  )
   await center.getByRole('button', { name: '返回操作列表' }).click()
   await expect(center.getByText('开始时间')).toHaveCount(0)
 })
@@ -172,10 +182,14 @@ test('dragging moves files and bookmarks folders', async ({ page }) => {
     page.locator('.favorite-row .nav-item').filter({ hasText: 'Research' }),
   ).toBeVisible()
 })
-test('sidebar creates tags and the file dialog only applies them', async ({ page }) => {
+test('settings creates tags and the file dialog only applies them', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.locator('.settings-sidebar').getByText('标签', { exact: true }).click()
   await page.getByRole('button', { name: '添加标签', exact: true }).click()
-  await page.getByRole('textbox', { name: '标签名称', exact: true }).fill('验收')
-  await page.getByRole('button', { name: '添加', exact: true }).click()
+  const create = page.getByRole('dialog', { name: '添加标签' })
+  await create.getByRole('textbox', { name: '标签名称', exact: true }).fill('验收')
+  await create.getByRole('button', { name: '添加', exact: true }).click()
+  await page.getByRole('button', { name: '确认', exact: true }).click()
   await expect(
     page.locator('.sidebar').getByRole('button', { name: '验收', exact: true }),
   ).toBeVisible()
@@ -579,4 +593,78 @@ test('tab dragging preserves the active folder', async ({ page }) => {
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true')
   await tabs.nth(1).click()
   await expect(page.getByText('Notes.md', { exact: true })).toBeVisible()
+})
+
+test('settings creates, edits and deletes tags through the confirmation', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.locator('.settings-sidebar').getByText('标签', { exact: true }).click()
+
+  await page.getByRole('button', { name: '添加标签', exact: true }).click()
+  const create = page.getByRole('dialog', { name: '添加标签' })
+  await create.getByRole('textbox', { name: '标签名称' }).fill('审阅')
+  await create.getByRole('button', { name: '选择颜色 #34c759' }).click()
+  await create.getByRole('button', { name: '添加', exact: true }).click()
+  await expect(page.getByRole('button', { name: '编辑标签 审阅' })).toBeVisible()
+
+  await page.getByRole('button', { name: '编辑标签 审阅' }).click()
+  const edit = page.getByRole('dialog', { name: '编辑标签' })
+  await edit.getByRole('textbox', { name: '标签名称' }).fill('审阅中')
+  await edit.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.getByRole('button', { name: '编辑标签 审阅中' })).toBeVisible()
+
+  await page.getByRole('button', { name: '删除标签 审阅中' }).click()
+  const confirm = page.getByRole('dialog', { name: '删除标签' })
+  await expect(confirm).toContainText('确定删除标签「审阅中」吗？')
+  await confirm.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(page.getByRole('button', { name: '删除标签 审阅中' })).toBeVisible()
+
+  await page.getByRole('button', { name: '删除标签 审阅中' }).click()
+  await page
+    .getByRole('dialog', { name: '删除标签' })
+    .getByRole('button', { name: '删除', exact: true })
+    .click()
+  await expect(page.getByRole('button', { name: '删除标签 审阅中' })).toHaveCount(0)
+  await page.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.locator('.sidebar').getByRole('button', { name: '审阅中' })).toHaveCount(0)
+})
+
+test('caption buttons stay clear of tabs and the sidebar starts below the tab strip', async ({
+  page,
+}) => {
+  await page.goto('/?demo&platform=windows')
+  await expect(page.getByText('Fiex — 产品设计.pdf', { exact: true })).toBeVisible()
+  for (let i = 0; i < 12; i += 1)
+    await page.getByRole('button', { name: '新建标签页', exact: true }).click()
+  const metrics = await page.evaluate(() => {
+    const box = (selector: string) => document.querySelector(selector)?.getBoundingClientRect()
+    const controls = box('.window-controls')
+    const strip = box('.tabs-scroll')
+    const tabs = box('.tabs')
+    const label = box('.sidebar-content .sidebar-label')
+    const plus = document.querySelector('.tabs-new')
+    return {
+      controlsLeft: controls?.left ?? 0,
+      stripRight: strip?.right ?? 0,
+      tabsBottom: tabs?.bottom ?? 0,
+      labelTop: label?.top ?? 0,
+      plusBackground: plus ? getComputedStyle(plus).backgroundColor : '',
+    }
+  })
+  expect(metrics.controlsLeft).toBeGreaterThanOrEqual(metrics.stripRight)
+  expect(metrics.labelTop).toBeGreaterThan(metrics.tabsBottom)
+  expect(metrics.plusBackground).toBe('rgba(0, 0, 0, 0)')
+})
+
+test('settings and tag dialogs keep their compact widths', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).click()
+  await page.locator('.settings-sidebar').getByText('标签', { exact: true }).click()
+  const settingsWidth = await page
+    .locator('.settings-modal')
+    .evaluate((element) => element.getBoundingClientRect().width)
+  expect(settingsWidth).toBeLessThanOrEqual(760)
+  await page.getByRole('button', { name: '添加标签', exact: true }).click()
+  const dialogWidth = await page
+    .getByRole('dialog', { name: '添加标签' })
+    .evaluate((element) => element.getBoundingClientRect().width)
+  expect(dialogWidth).toBeLessThanOrEqual(420)
 })

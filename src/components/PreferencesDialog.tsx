@@ -6,6 +6,7 @@ import {
   Palette,
   PanelLeft,
   Search,
+  Tags,
   TerminalSquare,
   type LucideIcon,
 } from 'lucide-react'
@@ -16,6 +17,7 @@ import { IgnoreSettings } from './settings/IgnoreSettings'
 import { IntegrationSettings } from './settings/IntegrationSettings'
 import { ShortcutSettings } from './settings/ShortcutSettings'
 import { SidebarSettings } from './settings/SidebarSettings'
+import { TagSettings } from './settings/TagSettings'
 import { Modal } from './ui/Modal'
 
 interface Props {
@@ -29,7 +31,7 @@ interface Props {
   onError: (s: string) => void
 }
 
-type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'terminal' | 'about'
+type SectionId = 'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about'
 
 interface Section {
   id: SectionId
@@ -60,6 +62,13 @@ const sections: Section[] = [
     icon: PanelLeft,
     color: '#5b9cf8',
     keywords: ['sidebar', '侧边栏', '常用位置', '收藏', '设备', '连接', '标签', '顺序'],
+  },
+  {
+    id: 'tags',
+    label: '标签',
+    icon: Tags,
+    color: '#ec4899',
+    keywords: ['tag', 'tags', '标签', '颜色', '自定义'],
   },
   {
     id: 'ignore',
@@ -184,6 +193,8 @@ export function PreferencesDialog({
             {section === 'sidebar' && (
               <SidebarSettings prefs={prefs} update={update} locations={locations} />
             )}
+
+            {section === 'tags' && <TagSettings prefs={prefs} update={update} />}
 
             {section === 'ignore' && <IgnoreSettings prefs={prefs} update={update} />}
 

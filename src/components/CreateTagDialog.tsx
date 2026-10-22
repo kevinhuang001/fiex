@@ -2,23 +2,25 @@ import { useState } from 'react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { ColorPicker } from './ui/ColorPicker'
-import { TAG_PALETTE, nearestFinderColor } from '@/lib/tags'
+import { TAG_PALETTE, nearestFinderColor, tagHex } from '@/lib/tags'
 import type { Tag } from '@/lib/types'
 export function CreateTagDialog({
   onClose,
   onCreate,
   existing,
+  editing,
 }: {
   onClose: () => void
   onCreate: (tag: Tag) => void
   existing: Tag[]
+  editing?: Tag
 }) {
-  const [name, setName] = useState('')
-  const [hex, setHex] = useState('#007aff')
+  const [name, setName] = useState(editing?.name ?? '')
+  const [hex, setHex] = useState(editing ? tagHex(editing) : '#007aff')
   const duplicate = existing.some((tag) => tag.name === name.trim())
   const choose = (value: string) => setHex(value.toLowerCase())
   return (
-    <Modal open onClose={onClose} title="添加标签">
+    <Modal open onClose={onClose} title={editing ? '编辑标签' : '添加标签'}>
       <form
         className="create-tag-form"
         onSubmit={(e) => {
@@ -57,7 +59,7 @@ export function CreateTagDialog({
             取消
           </Button>
           <Button type="submit" disabled={!name.trim() || duplicate}>
-            添加
+            {editing ? '保存' : '添加'}
           </Button>
         </div>
       </form>
