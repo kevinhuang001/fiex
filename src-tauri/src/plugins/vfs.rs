@@ -1,7 +1,7 @@
 //! Generic plugin-owned virtual filesystems.
 //!
-//! A plugin may declare one or more path schemes in
-//! `contributes.vfs.schemes`. Core never branches on a specific plugin ID:
+//! A plugin declares path schemes on its `connections` or `toolbar`
+//! contributions. Core never branches on a specific plugin ID:
 //! it resolves the scheme to the installed, approved plugin and forwards
 //! listing/stat/read/search requests over the same IPC used by every plugin.
 use crate::{

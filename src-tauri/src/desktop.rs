@@ -1500,7 +1500,6 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            crate::search::remove_legacy_index();
             #[cfg(feature = "ci-driver")]
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]

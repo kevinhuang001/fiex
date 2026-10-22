@@ -5,6 +5,7 @@ describe('code highlighting', () => {
     expect(codeLanguage('rs')).toBe('rust')
     expect(codeLanguage('tsx')).toBe('typescript')
     expect(codeLanguage('yml')).toBe('yaml')
+    expect(codeLanguage('json')).toBe('json')
     expect(codeLanguage('txt')).toBeNull()
   })
   it('highlights Rust and escapes source HTML', () => {

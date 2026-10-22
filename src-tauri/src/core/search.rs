@@ -36,14 +36,6 @@ pub struct SearchBatch {
     pub skipped: usize,
 }
 
-/// Delete the old Tantivy index from previous releases. It is no longer read
-/// and can safely be regenerated from the live filesystem.
-pub fn remove_legacy_index() {
-    if let Some(home) = dirs::home_dir() {
-        let _ = std::fs::remove_dir_all(home.join(".fiex").join("index"));
-    }
-}
-
 impl SearchState {
     fn generation(&self, scope: &str) -> Arc<AtomicU64> {
         self.generations
@@ -56,12 +48,6 @@ impl SearchState {
 
     pub fn cancel(&self, scope: &str) {
         self.generation(scope).fetch_add(1, Ordering::SeqCst);
-    }
-
-    /// Kept for the existing Tauri command/API shape. Live search has no
-    /// index to warm.
-    pub fn warm(&self, _root: &str, _hidden: bool, _ignores: &[String]) -> Result<(), String> {
-        Ok(())
     }
 
     pub fn run_global(
@@ -80,8 +66,8 @@ impl SearchState {
         let mut truncated = false;
         let mut skipped = 0usize;
         for root in accessible_roots() {
-            if generation.load(Ordering::Relaxed) != ticket {
-                return Ok(());
+            if generation.load(Ordering::Relaxed) != ticket || entries.len() >= RESULT_LIMIT {
+                break;
             }
             let (found, root_truncated, root_skipped) = search_root(
                 Path::new(&root),
@@ -223,6 +209,7 @@ fn search_root(
 /// Only filesystem roots readable with the application's own user token are
 /// scanned; protected paths naturally fail and are recorded as skipped.
 pub fn accessible_roots() -> Vec<String> {
+    let home = dirs::home_dir().filter(|path| path.is_dir());
     let mut roots = Vec::new();
     for location in crate::volumes::locations() {
         if location.kind != "disk"
@@ -233,11 +220,18 @@ pub fn accessible_roots() -> Vec<String> {
             continue;
         }
         let path = PathBuf::from(location.path);
-        if path.is_dir() && std::fs::read_dir(&path).is_ok() {
-            roots.push(path);
+        if !path.is_dir() || std::fs::read_dir(&path).is_err() {
+            continue;
         }
+        // Searching `/` (or the Windows system drive) would traverse the
+        // whole OS for every keystroke. Prefer the user's home directory and
+        // only add independent mounts outside it.
+        if home.as_ref().is_some_and(|home| home.starts_with(&path)) {
+            continue;
+        }
+        roots.push(path);
     }
-    if let Some(home) = dirs::home_dir().filter(|p| p.is_dir()) {
+    if let Some(home) = home {
         roots.push(home);
     }
     roots.sort();
@@ -247,7 +241,6 @@ pub fn accessible_roots() -> Vec<String> {
         .map(|p| p.to_string_lossy().into_owned())
         .collect()
 }
-
 const BUNDLE_EXTENSIONS: [&str; 5] = ["app", "bundle", "framework", "plugin", "xpc"];
 
 fn is_bundle(path: &Path) -> bool {

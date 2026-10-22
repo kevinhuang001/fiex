@@ -654,6 +654,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
     case 'file_info':
       return entries.find((e) => e.path === a.path)
     case 'read_preview':
+      if (String(a.path).endsWith('/Palette.json'))
+        return '{\n  "accent": "#387ca8",\n  "surface": "#f8fafc",\n  "radius": 12\n}'
       if (String(a.path).startsWith('history://'))
         return '# Fiex · 历史版本\n\n这是提交时保存的内容，当前工作区没有改变。'
       return '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'

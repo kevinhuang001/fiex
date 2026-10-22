@@ -272,7 +272,7 @@ pub(crate) fn execute(
     ignores: &[String],
     resolutions: &[Resolution],
     cancel: &AtomicBool,
-    progress: &dyn Fn(u64, u64, Option<&str>),
+    progress: &(dyn Fn(u64, u64, Option<&str>) + Sync),
 ) -> Result<(OperationResult, Vec<Undo>), String> {
     check_cancelled(cancel)?;
     let dest_dir = dunce::canonicalize(destination).map_err(|e| e.to_string())?;
@@ -312,6 +312,66 @@ pub(crate) fn execute(
     }
     let mut undo = vec![];
     let total = plan.tasks.len() as u64;
+    if !moving && plan.tasks.iter().all(|task| !task.replace) {
+        let ignore = &plan.ignore;
+        let tasks = std::mem::take(&mut plan.tasks);
+        let workers = std::thread::available_parallelism()
+            .map(|value| value.get().min(8))
+            .unwrap_or(4);
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .map_err(|e| e.to_string())?;
+        let done = std::sync::atomic::AtomicU64::new(0);
+        let outcomes = pool.install(|| {
+            use rayon::prelude::*;
+            tasks
+                .into_par_iter()
+                .map(|task| {
+                    let current = done.fetch_add(1, Ordering::Relaxed) + 1;
+                    progress(
+                        current,
+                        total,
+                        task.dest.file_name().and_then(|name| name.to_str()),
+                    );
+                    let result = if cancel.load(Ordering::Relaxed) {
+                        Err(CANCELLED.into())
+                    } else if exists(&task.dest) {
+                        Err("目标已改变，请重试".into())
+                    } else {
+                        install_copy(&task.src, &task.dest, ignore, cancel)
+                    };
+                    (task, result)
+                })
+                .collect::<Vec<_>>()
+        });
+        let mut cancelled = false;
+        for (task, outcome) in outcomes {
+            match outcome {
+                Ok(skipped) => {
+                    result.skipped += skipped;
+                    result.paths.push(task.dest.to_string_lossy().into_owned());
+                    undo.push(Undo::Created(task.dest));
+                }
+                Err(error) => {
+                    if cancel.load(Ordering::Relaxed) || error == CANCELLED {
+                        cancelled = true;
+                    } else {
+                        result
+                            .errors
+                            .push(format!("{}: {error}", task.src.display()));
+                    }
+                }
+            }
+        }
+        if cancelled {
+            return Err(CANCELLED.into());
+        }
+        if total > 0 {
+            progress(total, total, None);
+        }
+        return Ok((result, undo));
+    }
     let mut done = 0u64;
     for task in plan.tasks {
         // Cancellation stops at a file boundary; moved files are not rolled back.

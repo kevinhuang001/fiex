@@ -80,24 +80,6 @@ fn save(state: &PolicyStore) -> Result<(), String> {
     }
     result
 }
-pub fn declaration(raw: &serde_json::Value) -> Result<BTreeSet<String>, String> {
-    let object = raw
-        .as_object()
-        .ok_or("manifest.permissions must be an object")?;
-    let mut declared = BTreeSet::new();
-    for (name, value) in object {
-        if !PERMISSIONS.contains(&name.as_str()) {
-            return Err(format!("unknown permission: {name}"));
-        }
-        if !value.is_boolean() {
-            return Err(format!("permission must be boolean: {name}"));
-        }
-        if value == true {
-            declared.insert(name.clone());
-        }
-    }
-    Ok(declared)
-}
 fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String>) -> PluginGrant {
     match record {
         Some(r) if r.approved => PluginGrant {
@@ -297,32 +279,31 @@ fn mutate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn declared(values: &[&str]) -> BTreeSet<String> {
+        values.iter().map(|value| (*value).to_string()).collect()
+    }
     #[test]
     fn all_plugins_start_unapproved() {
-        let requested = declaration(
-            &serde_json::json!({"filesystem.read":true,"filesystem.write":true,"network":true}),
-        )
-        .unwrap();
+        let requested = declared(&["filesystem.read", "filesystem.write", "network"]);
         let state = effective(None, &requested);
         assert!(!state.approved && !state.enabled && state.granted.is_empty());
     }
     #[test]
     fn removed_grants_stay_removed_and_new_scopes_never_auto_grant() {
-        let old = declaration(&serde_json::json!({"filesystem.read":true})).unwrap();
+        let old = declared(&["filesystem.read"]);
         let current = PluginGrant {
             approved: true,
             enabled: true,
             granted: old,
             network_domains: BTreeSet::new(),
         };
-        let new = declaration(&serde_json::json!({"filesystem.read":true,"filesystem.write":true}))
-            .unwrap();
+        let new = declared(&["filesystem.read", "filesystem.write"]);
         let s = effective(Some(&current), &new);
         assert!(s.granted.contains("filesystem.read") && !s.granted.contains("filesystem.write"));
     }
     #[test]
     fn domain_scopes_are_exact_and_require_explicit_grants() {
-        let declared = declaration(&serde_json::json!({"network": true})).unwrap();
+        let declared = declared(&["network"]);
         assert_eq!(normalize_domain("Example.COM").unwrap(), "example.com");
         for value in [
             "*.example.com",
@@ -351,11 +332,5 @@ mod tests {
         assert!(is_loopback_domain("127.0.0.1"));
         assert!(is_loopback_domain("::1"));
         assert!(!is_loopback_domain("192.168.1.2"));
-    }
-    #[test]
-    fn invalid_permissions_fail_closed() {
-        assert!(declaration(&serde_json::json!({"root":true})).is_err());
-        assert!(declaration(&serde_json::json!({"filesystem":"yes"})).is_err());
-        assert!(declaration(&serde_json::json!({"storage":true})).is_err());
     }
 }

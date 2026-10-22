@@ -25,6 +25,15 @@ test('four views, grouping, and keyboard preview', async ({ page }) => {
   await expect(page.locator('.group-heading').filter({ hasText: '文件夹' })).toBeVisible()
   await page.screenshot({ path: 'artifacts/list.png' })
 })
+test('code preview highlights JSON', async ({ page }) => {
+  await page.getByText('Palette.json', { exact: true }).first().click()
+  await page.keyboard.press('Space')
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('pre.preview-code .hljs-attr').first()).toBeVisible()
+  await expect(dialog.locator('pre.preview-code .hljs-string').first()).toBeVisible()
+  await page.keyboard.press('Space')
+})
 test('folder navigation, tabs and fast search', async ({ page }) => {
   await page.getByText('Research', { exact: true }).dblclick()
   await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()

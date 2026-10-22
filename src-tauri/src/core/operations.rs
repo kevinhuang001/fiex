@@ -202,20 +202,32 @@ pub(crate) fn copy_tree(
     for (_, dir) in &plan.dirs {
         fs::create_dir(dir).map_err(|e| e.to_string())?;
     }
-    let workers = std::thread::available_parallelism()
-        .map(|value| value.get().min(8))
-        .unwrap_or(4);
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(workers)
-        .build()
-        .map_err(|e| e.to_string())?;
-    pool.install(|| {
+    if plan.files.len() <= 1 {
+        for file in &plan.files {
+            fast_copy_file(&file.src, &file.dest, cancel)?;
+            fs::set_permissions(&file.dest, file.permissions.clone()).map_err(|e| e.to_string())?;
+        }
+        return Ok(plan.skipped);
+    }
+    let copy_files = || {
         use rayon::prelude::*;
         plan.files.par_iter().try_for_each(|file| {
             fast_copy_file(&file.src, &file.dest, cancel)?;
             fs::set_permissions(&file.dest, file.permissions.clone()).map_err(|e| e.to_string())
         })
-    })?;
+    };
+    if rayon::current_thread_index().is_some() {
+        copy_files()?;
+    } else {
+        let workers = std::thread::available_parallelism()
+            .map(|value| value.get().min(8))
+            .unwrap_or(4);
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .map_err(|e| e.to_string())?
+            .install(copy_files)?;
+    }
     Ok(plan.skipped)
 }
 
@@ -314,7 +326,7 @@ impl Operations {
         ignores: &[String],
         resolutions: &[crate::transfers::Resolution],
         cancel: &AtomicBool,
-        progress: &dyn Fn(u64, u64, Option<&str>),
+        progress: &(dyn Fn(u64, u64, Option<&str>) + Sync),
     ) -> Result<OperationResult, String> {
         let (result, undo) = crate::transfers::execute(
             sources,
@@ -470,6 +482,40 @@ mod tests {
                 dest.join("nested").join(format!("file-{index}.bin"))
             };
             assert_eq!(fs::read(path).unwrap(), vec![index as u8; 128 * 1024]);
+        }
+    }
+    #[test]
+    fn multiple_selected_files_copy_through_the_parallel_path() {
+        let t = tempfile::tempdir().unwrap();
+        let src = t.path().join("a");
+        let dest = t.path().join("b");
+        fs::create_dir(&src).unwrap();
+        fs::create_dir(&dest).unwrap();
+        let sources = (0..32)
+            .map(|index| {
+                let path = src.join(format!("file-{index}.txt"));
+                fs::write(&path, format!("content-{index}")).unwrap();
+                path.to_string_lossy().into_owned()
+            })
+            .collect::<Vec<_>>();
+        let op = Operations::default();
+        let result = op
+            .transfer(
+                &sources,
+                dest.to_str().unwrap(),
+                false,
+                false,
+                &[],
+                &AtomicBool::new(false),
+            )
+            .unwrap();
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.paths.len(), 32);
+        for index in 0..32 {
+            assert_eq!(
+                fs::read_to_string(dest.join(format!("file-{index}.txt"))).unwrap(),
+                format!("content-{index}")
+            );
         }
     }
     #[test]

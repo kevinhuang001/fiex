@@ -84,7 +84,6 @@ export function ConnectionDialog({
           share: String(values.share || ''),
           base: String(values.base || ''),
           username: String(values.username || ''),
-          password: String(values.password || ''),
           allowInvalidCerts: Boolean(values.allowInvalidCerts),
         },
       })

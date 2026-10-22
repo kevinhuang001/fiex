@@ -53,6 +53,7 @@ const aliases: Record<string, string> = {
   cjs: 'javascript',
   rs: 'rust',
   py: 'python',
+  json: 'json',
   jsonc: 'json',
   sh: 'bash',
   zsh: 'bash',

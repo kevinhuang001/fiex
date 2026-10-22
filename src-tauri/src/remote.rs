@@ -35,9 +35,6 @@ struct StoredConnection {
     base: String,
     #[serde(default)]
     username: String,
-    // Historical JSON may include a password; never serialize one again.
-    #[serde(default, skip_serializing)]
-    password: String,
     #[serde(default)]
     allow_invalid_certs: bool,
     #[serde(default)]
@@ -66,8 +63,6 @@ pub struct ConnectionInput {
     pub base: String,
     #[serde(default)]
     pub username: String,
-    #[serde(default)]
-    pub password: String,
     #[serde(default)]
     pub allow_invalid_certs: bool,
 }
@@ -205,34 +200,7 @@ fn load_stored() -> Vec<StoredConnection> {
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
-    let mut migrated = false;
     for item in &mut items {
-        if !item.password.is_empty()
-            && crate::plugin_storage::secret_set(
-                &connection_plugin_id(item),
-                &format!("connection-{}", item.id),
-                "password",
-                &item.password,
-            )
-            .is_ok()
-        {
-            item.password.clear();
-            migrated = true;
-        }
-    }
-    // Commit sanitized legacy data before populating in-memory credentials.
-    if migrated {
-        let _ = save_stored(&items);
-    }
-    for item in &mut items {
-        if item.password.is_empty() {
-            item.password = crate::plugin_storage::secret_get(
-                &connection_plugin_id(item),
-                &format!("connection-{}", item.id),
-                "password",
-            )
-            .unwrap_or_default();
-        }
         for field in &item.secret_keys {
             if let Ok(value) = crate::plugin_storage::secret_get(
                 &connection_plugin_id(item),
@@ -258,7 +226,6 @@ fn save_stored(items: &[StoredConnection]) -> Result<(), String> {
             for key in &item.secret_keys {
                 item.settings.remove(key);
             }
-            item.password.clear();
             item
         })
         .collect::<Vec<_>>();
@@ -332,7 +299,6 @@ fn provider_config(conn: &StoredConnection) -> serde_json::Value {
         "share": conn.share,
         "base": conn.base,
         "username": conn.username,
-        "password": conn.password,
         "allowInvalidCerts": conn.allow_invalid_certs
     });
     if let Some(map) = config.as_object_mut() {
@@ -490,14 +456,6 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             }
         }
     }
-    let password = settings
-        .get("password")
-        .and_then(serde_json::Value::as_str)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .or_else(|| (!input.password.is_empty()).then_some(input.password.clone()))
-        .or_else(|| previous.as_ref().map(|conn| conn.password.clone()))
-        .unwrap_or_default();
     let record = StoredConnection {
         id: id.clone(),
         name: name.into(),
@@ -510,7 +468,6 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         share,
         base: input.base.trim().into(),
         username: input.username.trim().into(),
-        password,
         allow_invalid_certs: input.allow_invalid_certs,
         port: input.port,
     };
@@ -538,10 +495,6 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
                 crate::plugin_storage::secret_set(&plugin_id, &scope, field, value)?;
             }
         }
-    }
-    // Old records may still supply their password through legacy UI arguments.
-    if !record.password.is_empty() && !record.secret_keys.iter().any(|key| key == "password") {
-        crate::plugin_storage::secret_set(&plugin_id, &scope, "password", &record.password)?;
     }
     fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
     if let Some(index) = existing {
