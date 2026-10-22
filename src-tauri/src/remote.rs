@@ -438,11 +438,9 @@ async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result
     }
 }
 
-/// Provider-only listing. Unlike the legacy mirror this does not create empty
-/// placeholder files or mutate the core's cache/sync baseline.
-/// List remote metadata without touching the local mirror. Cursor pagination
-/// is an interim adapter: the provider scans each directory for every page.
-/// No snapshot token is promised, so callers must de-duplicate node IDs.
+/// Native provider-backed listing. Protocol I/O is owned by the installed,
+/// explicitly approved plugin; Core only resolves an existing connection and
+/// forwards a page request. This path never creates placeholder files.
 pub async fn provider_list(
     kind: &str,
     connection_id: &str,
@@ -450,47 +448,43 @@ pub async fn provider_list(
     cursor: Option<&str>,
     limit: usize,
 ) -> Result<serde_json::Value, String> {
-    if relative
-        .split('/')
-        .any(|segment| segment == ".." || segment.contains('\\') || segment.contains('\0'))
+    if relative.starts_with('/')
+        || relative
+            .split('/')
+            .any(|segment| segment == ".." || segment == "." || segment.contains('\\') || segment.contains('\0'))
     {
         return Err("invalid remote relative path".into());
     }
-    let start = cursor
-        .unwrap_or("0")
-        .parse::<usize>()
-        .map_err(|_| "invalid cursor")?;
     let conn = load_stored()
         .into_iter()
         .find(|c| c.id == connection_id && c.kind == kind)
         .ok_or("connection not found")?;
-    let mut files = list_remote(&conn, relative).await?;
-    files.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.path.cmp(&b.path)));
-    let total = files.len();
-    if start > total {
-        return Err("invalid cursor".into());
+    // The manifest and actual user-granted permission gate every request.
+    // No built-in provider is trusted implicitly, including the official ones.
+    let plugin_id = format!("org.fiex.{}", conn.kind);
+    if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
+        return Err("remote plugin network permission not granted".into());
     }
-    let end = start.saturating_add(limit.clamp(1, 500)).min(total);
-    let entries = files
-        .into_iter()
-        .skip(start)
-        .take(end - start)
-        .map(|file| {
-            serde_json::json!({
-                "nodeId": file.path,
-                "name": file.name,
-                "kind": if file.is_dir { "directory" } else { "file" },
-                "size": file.size,
-                "modified": file.modified
-            })
-        })
-        .collect::<Vec<_>>();
-    Ok(serde_json::json!({
-        "entries": entries,
-        "nextCursor": if end < total { Some(end.to_string()) } else { None },
-        "snapshotToken": null,
-        "identityStability": "path"
-    }))
+    let config = serde_json::json!({
+        "url": conn.url,
+        "host": conn.host,
+        "port": conn.port,
+        "share": conn.share,
+        "base": conn.base,
+        "username": conn.username,
+        "password": conn.password,
+        "allowInvalidCerts": conn.allow_invalid_certs
+    });
+    crate::plugin_host::global().invoke(
+        &plugin_id,
+        "fs.list",
+        serde_json::json!({
+            "connection": config,
+            "directoryId": relative,
+            "cursor": cursor.unwrap_or("0"),
+            "limit": limit.clamp(1, 500)
+        }),
+    )
 }
 
 pub async fn download(path: &str) -> Result<String, String> {
