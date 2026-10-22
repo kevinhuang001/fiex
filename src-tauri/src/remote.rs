@@ -573,7 +573,7 @@ pub async fn provider_list(
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
         return Err("remote plugin network permission not granted".into());
     }
-    let config = provider_config(conn);
+    let config = provider_config(&conn);
     crate::plugin_host::global().invoke(
         &plugin_id,
         "fs.list",
