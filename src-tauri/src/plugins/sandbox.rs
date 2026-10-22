@@ -55,7 +55,7 @@ fn system_read_roots() -> Vec<std::path::PathBuf> {
             }
         }
         if let Some(system_root) = std::env::var_os("SystemRoot") {
-            let path = canonical(Path::new(&system_root).join("System32"));
+            let path = canonical(&Path::new(&system_root).join("System32"));
             if path.exists() {
                 roots.push(path);
             }
@@ -65,9 +65,9 @@ fn system_read_roots() -> Vec<std::path::PathBuf> {
 }
 
 fn media_roots() -> Vec<std::path::PathBuf> {
-    let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
     #[cfg(unix)]
     {
+        let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
         ["/media", "/mnt", "/run/media", "/Volumes"]
             .iter()
             .map(|path| canonical(Path::new(path)))
