@@ -401,10 +401,15 @@ async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result
 
 /// Provider-only listing. Unlike the legacy mirror this does not create empty
 /// placeholder files or mutate the core's cache/sync baseline.
+/// List remote metadata without touching the local mirror. Cursor pagination
+/// is an interim adapter: the provider scans each directory for every page.
+/// No snapshot token is promised, so callers must de-duplicate node IDs.
 pub async fn provider_list(
     kind: &str,
     connection_id: &str,
     relative: &str,
+    cursor: Option<&str>,
+    limit: usize,
 ) -> Result<serde_json::Value, String> {
     if relative
         .split('/')
@@ -412,25 +417,41 @@ pub async fn provider_list(
     {
         return Err("invalid remote relative path".into());
     }
+    let start = cursor
+        .unwrap_or("0")
+        .parse::<usize>()
+        .map_err(|_| "invalid cursor")?;
     let conn = load_stored()
         .into_iter()
         .find(|c| c.id == connection_id && c.kind == kind)
         .ok_or("connection not found")?;
-    let files = list_remote(&conn, relative).await?;
-    Ok(serde_json::Value::Array(
-        files
-            .into_iter()
-            .map(|file| {
-                serde_json::json!({
-                    "nodeId":file.path,
-                    "name":file.name,
-                    "kind":if file.is_dir {"directory"} else {"file"},
-                    "size":file.size,
-                    "modified":file.modified
-                })
+    let mut files = list_remote(&conn, relative).await?;
+    files.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.path.cmp(&b.path)));
+    let total = files.len();
+    if start > total {
+        return Err("invalid cursor".into());
+    }
+    let end = start.saturating_add(limit.clamp(1, 500)).min(total);
+    let entries = files
+        .into_iter()
+        .skip(start)
+        .take(end - start)
+        .map(|file| {
+            serde_json::json!({
+                "nodeId": file.path,
+                "name": file.name,
+                "kind": if file.is_dir { "directory" } else { "file" },
+                "size": file.size,
+                "modified": file.modified
             })
-            .collect(),
-    ))
+        })
+        .collect::<Vec<_>>();
+    Ok(serde_json::json!({
+        "entries": entries,
+        "nextCursor": if end < total { Some(end.to_string()) } else { None },
+        "snapshotToken": null,
+        "identityStability": "path"
+    }))
 }
 
 pub async fn download(path: &str) -> Result<String, String> {

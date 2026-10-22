@@ -3,7 +3,7 @@
 //! Never use stdout for logging; stderr is available for diagnostics.
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, BufReader, Write};
 
 pub const PROTOCOL_VERSION: &str = "1.0";
 pub const MAX_FRAME: usize = 4 * 1024 * 1024;
@@ -174,7 +174,6 @@ pub fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::BufReader;
     #[test]
     fn utf8_round_trip() {
         let value = json!({"jsonrpc":"2.0","id":"中文","result":{"name":"项目会议"}});
