@@ -41,6 +41,7 @@ pub struct InstallPreview {
     pub version: String,
     pub author: Option<plugin_host::PluginAuthor>,
     pub permissions: Vec<String>,
+    pub requested_network_domains: Vec<String>,
     pub repository: String,
 }
 fn parse_repo(value: &str) -> Result<(&str, &str), String> {
@@ -237,9 +238,14 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
     if !plugin_host::valid_id(&manifest.id) {
         return Err("invalid plugin id".into());
     }
-    let permissions = plugin_permissions::declaration(&manifest.permissions)?
-        .into_iter()
-        .collect::<Vec<_>>();
+    let declared = plugin_permissions::declaration(&manifest.permissions)?;
+    let requested_network_domains = plugin_permissions::validate_network_domains(
+        &declared,
+        &manifest.network_domains,
+    )?
+    .into_iter()
+    .collect::<Vec<_>>();
+    let permissions = declared.into_iter().collect::<Vec<_>>();
     if install_root()?.join(&manifest.id).exists() {
         return Err("plugin already installed; uninstall before installing another version".into());
     }
@@ -278,6 +284,7 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
         version: manifest.version.clone(),
         author: manifest.author.clone(),
         permissions,
+        requested_network_domains,
         repository: repository.into(),
     };
     let mut map = pending().lock().map_err(|_| "installer locked")?;
@@ -306,7 +313,11 @@ pub fn install(ticket: &str) -> Result<String, String> {
     fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
     fs::rename(staged.dir.path(), &destination).map_err(|e| e.to_string())?;
     // If persistence of the approval fails, remove the newly installed files.
-    if let Err(error) = plugin_permissions::approve_install(&id, &declared) {
+    if let Err(error) = plugin_permissions::approve_install_with_domains(
+        &id,
+        &declared,
+        &staged.manifest.network_domains,
+    ) {
         let _ = fs::remove_dir_all(&destination);
         return Err(error);
     }

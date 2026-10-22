@@ -26,6 +26,10 @@ pub struct PluginManifest {
     pub contributes: Value,
     #[serde(default)]
     pub permissions: Value,
+    /// Exact DNS names requested by the plugin. Users can grant fewer,
+    /// revoke individual names, or explicitly add a connection hostname.
+    #[serde(default)]
+    pub network_domains: Vec<String>,
     #[serde(default)]
     pub author: Option<PluginAuthor>,
 }
@@ -50,6 +54,8 @@ pub struct PluginInfo {
     pub approved: bool,
     pub declared_permissions: Vec<String>,
     pub granted_permissions: Vec<String>,
+    pub requested_network_domains: Vec<String>,
+    pub allowed_network_domains: Vec<String>,
 }
 fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>, String> {
     crate::plugin_permissions::declaration(&manifest.permissions)
@@ -70,6 +76,15 @@ pub fn permission_allowed(id: &str, permission: &str) -> Result<bool, String> {
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::allowed(id, &declared(&manifest)?, permission)
 }
+pub fn set_network_domain(id: &str, domain: &str, grant: bool) -> Result<(), String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
+        .ok_or("plugin not installed")?;
+    crate::plugin_permissions::set_domain(id, &declared(&manifest)?, domain, grant)?;
+    global().stop(id);
+    Ok(())
+}
 pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), String> {
     let (manifest, _) = discover()
         .into_iter()
@@ -84,7 +99,11 @@ pub fn approve_install(id: &str) -> Result<(), String> {
         .into_iter()
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
-    crate::plugin_permissions::approve_install(id, &declared(&manifest)?)?;
+    crate::plugin_permissions::approve_install_with_domains(
+        id,
+        &declared(&manifest)?,
+        &manifest.network_domains,
+    )?;
     Ok(())
 }
 fn roots() -> Vec<PathBuf> {
@@ -121,7 +140,14 @@ fn discover() -> Vec<(PluginManifest, PathBuf)> {
             let Ok(manifest) = serde_json::from_slice::<PluginManifest>(&bytes) else {
                 continue;
             };
-            if !valid_id(&manifest.id) || manifest.name.len() > 128 || declared(&manifest).is_err()
+            if !valid_id(&manifest.id)
+                || manifest.name.len() > 128
+                || declared(&manifest).is_err()
+                || crate::plugin_permissions::validate_network_domains(
+                    &declared(&manifest).unwrap_or_default(),
+                    &manifest.network_domains,
+                )
+                .is_err()
             {
                 continue;
             }
@@ -190,6 +216,8 @@ pub fn catalog() -> Vec<PluginInfo> {
                 approved: state.approved,
                 declared_permissions: declared.into_iter().collect(),
                 granted_permissions: state.granted.into_iter().collect(),
+                requested_network_domains: manifest.network_domains,
+                allowed_network_domains: state.network_domains.into_iter().collect(),
             }
         })
         .collect()
