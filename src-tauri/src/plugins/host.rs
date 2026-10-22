@@ -63,6 +63,11 @@ pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
     global().stop(id);
     Ok(())
 }
+pub fn permission_allowed(id:&str, permission:&str)->Result<bool,String>{
+    let (manifest,_)=discover().into_iter().find(|(m,_)|m.id==id)
+        .ok_or("plugin not installed")?;
+    crate::plugin_permissions::allowed(id,&declared(&manifest)?,permission)
+}
 pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), String> {
     let (manifest, _) = discover()
         .into_iter()

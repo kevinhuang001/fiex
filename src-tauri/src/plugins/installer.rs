@@ -130,14 +130,20 @@ pub fn prepare(repository: &str) -> Result<InstallPreview, String> {
         .get("assets")
         .and_then(serde_json::Value::as_array)
         .ok_or("release has no downloadable assets")?;
-    let asset = assets
-        .iter()
-        .find(|a| {
-            a.get("name")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|n| n.ends_with(".fiexplugin"))
-        })
-        .ok_or("release does not contain a .fiexplugin asset")?;
+    let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    let matches:Vec<_>=assets.iter().filter(|a|{
+        a.get("name").and_then(serde_json::Value::as_str).is_some_and(|n|
+            n.ends_with(".fiexplugin") && n.contains(&platform))
+    }).collect();
+    let asset=if matches.len()==1 {
+        matches[0]
+    } else if matches.is_empty(){
+        let packages:Vec<_>=assets.iter().filter(|a|a.get("name")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|n|n.ends_with(".fiexplugin"))).collect();
+        if packages.len()!=1{return Err(format!("release requires one .fiexplugin asset for {platform}").into());}
+        packages[0]
+    } else { return Err("multiple matching platform plugin packages".into()); };
     let url = asset
         .get("browser_download_url")
         .and_then(serde_json::Value::as_str)
@@ -168,9 +174,11 @@ pub fn prepare(repository: &str) -> Result<InstallPreview, String> {
     if download.len() as u64 > MAX_DOWNLOAD {
         return Err("plugin package exceeds size limit".into());
     }
+    let staging_parent=install_root()?.join(".staging");
+    fs::create_dir_all(&staging_parent).map_err(|e|e.to_string())?;
     let staging = tempfile::Builder::new()
         .prefix("fiex-plugin-")
-        .tempdir()
+        .tempdir_in(&staging_parent)
         .map_err(|e| e.to_string())?;
     unpack(&download, staging.path())?;
     let manifest_bytes = fs::read(staging.path().join("manifest.json"))
@@ -191,21 +199,19 @@ pub fn prepare(repository: &str) -> Result<InstallPreview, String> {
     }
     // Make only the manifest-declared native executable runnable. No other
     // executable permission is accepted from the downloaded archive.
+    let platform=format!("{}-{}",std::env::consts::OS,std::env::consts::ARCH);
+    let current=manifest.entrypoints.get(&platform)
+        .ok_or("plugin has no executable for this operating system / architecture")?;
     for relative in manifest.entrypoints.values() {
-        let relative = Path::new(relative);
-        if !normal_relative(relative) {
-            return Err("unsafe executable path".into());
-        }
-        let path = staging.path().join(relative);
-        if !path.is_file() {
-            return Err("manifest executable is missing".into());
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
-                .map_err(|e| e.to_string())?;
-        }
+        if !normal_relative(Path::new(relative)){return Err("unsafe executable path".into());}
+    }
+    let executable=staging.path().join(current);
+    if !executable.is_file(){return Err("missing native backend for current platform".into());}
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&executable,fs::Permissions::from_mode(0o700))
+            .map_err(|e|e.to_string())?;
     }
     let ticket = staging
         .path()

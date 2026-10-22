@@ -1,7 +1,7 @@
 import { call } from '@/lib/api'
 import type { ArchiveFormat } from '@/lib/archives'
 import type { DialogState } from '@/lib/dialogs'
-import { basename, join, uniqueName } from '@/lib/files'
+import { basename, uniqueName } from '@/lib/files'
 import type {
   Entry,
   OperationResult,

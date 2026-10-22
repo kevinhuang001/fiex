@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Github, Shield, Trash2 } from 'lucide-react'
+import { Download, Github, Shield } from 'lucide-react'
 import { call } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
