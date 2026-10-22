@@ -658,3 +658,15 @@ test('settings and tag dialogs keep their compact widths', async ({ page }) => {
     .evaluate((element) => element.getBoundingClientRect().width)
   expect(dialogWidth).toBeLessThanOrEqual(420)
 })
+
+test('installed plugin contributes submenu and isolated iframe modal with context bridge', async ({ page }) => {
+  await page.goto('/?demo&pluginFixture')
+  await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '测试插件', exact: true }).hover()
+  await page.getByRole('menuitem', { name: '信息面板', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: '信息面板' })).toBeVisible()
+  const frame = page.frameLocator('iframe[title="信息面板"]')
+  await expect(frame.getByText('示例插件面板')).toBeVisible()
+  await expect(frame.locator('#selected')).toContainText('Notes.md')
+})
