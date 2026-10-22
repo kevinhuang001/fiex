@@ -1,9 +1,8 @@
 //! OS-level plugin confinement.
 //!
-//! Unix builds delegate to [`arapuca`], which applies Landlock + seccomp on
-//! Linux and a deny-default Seatbelt profile on macOS. Windows currently uses
-//! a normal child process with the host permission checks; AppContainer
-//! integration is the remaining platform blocker.
+//! All desktop builds delegate to [`arapuca`]: Landlock + seccomp on Linux,
+//! a deny-default Seatbelt profile on macOS, and AppContainer + a Job Object on
+//! Windows. Fiex refuses to launch a plugin if the sandbox cannot be applied.
 //!
 //! A failed sandbox setup is fatal: a plugin is never launched unsandboxed
 //! when the host believes a policy is active.
@@ -21,6 +20,60 @@ pub struct Policy {
     pub network: bool,
 }
 
+fn system_read_roots() -> Vec<std::path::PathBuf> {
+    let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
+    #[cfg(unix)]
+    {
+        [
+            "/usr",
+            "/lib",
+            "/lib64",
+            "/bin",
+            "/sbin",
+            "/etc",
+            "/dev/urandom",
+            "/dev/null",
+        ]
+        .iter()
+        .map(|path| canonical(Path::new(path)))
+        .collect()
+    }
+    #[cfg(windows)]
+    {
+        let mut roots = Vec::new();
+        for key in [
+            "SystemRoot",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "ProgramData",
+        ] {
+            if let Some(path) = std::env::var_os(key) {
+                roots.push(canonical(Path::new(&path)));
+            }
+        }
+        if let Some(system_root) = std::env::var_os("SystemRoot") {
+            roots.push(canonical(Path::new(&system_root).join("System32")));
+        }
+        roots
+    }
+}
+
+fn media_roots() -> Vec<std::path::PathBuf> {
+    let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
+    #[cfg(unix)]
+    {
+        ["/media", "/mnt", "/run/media", "/Volumes"]
+            .iter()
+            .map(|path| canonical(Path::new(path)))
+            .filter(|path| path.exists())
+            .collect()
+    }
+    #[cfg(windows)]
+    {
+        Vec::new()
+    }
+}
+
 impl Policy {
     pub fn new(
         executable: &Path,
@@ -33,44 +86,20 @@ impl Policy {
         let install_dir = canonical(install_dir);
         let readable = declared.contains("filesystem.read");
         let writable = declared.contains("filesystem.write");
-        let mut read_roots = vec![
-            executable.clone(),
-            install_dir.clone(),
-            canonical(Path::new("/usr")),
-            canonical(Path::new("/lib")),
-            canonical(Path::new("/lib64")),
-            canonical(Path::new("/bin")),
-            canonical(Path::new("/sbin")),
-            canonical(Path::new("/etc")),
-            canonical(Path::new("/dev/urandom")),
-            canonical(Path::new("/dev/null")),
-        ];
-        let mut write_roots = vec![
-            canonical(&std::env::temp_dir()),
-            canonical(&install_dir),
-            canonical(Path::new("/dev/null")),
-        ];
+        let mut read_roots = vec![executable.clone(), install_dir.clone()];
+        read_roots.extend(system_read_roots());
+        let mut write_roots = vec![canonical(&std::env::temp_dir()), canonical(&install_dir)];
         if readable {
             if let Some(home) = dirs::home_dir() {
                 read_roots.push(canonical(&home));
             }
-            for root in ["/media", "/mnt", "/run/media", "/Volumes"] {
-                let path = canonical(Path::new(root));
-                if path.exists() {
-                    read_roots.push(path);
-                }
-            }
+            read_roots.extend(media_roots());
         }
         if writable {
             if let Some(home) = dirs::home_dir() {
                 write_roots.push(canonical(&home));
             }
-            for root in ["/media", "/mnt", "/run/media", "/Volumes"] {
-                let path = canonical(Path::new(root));
-                if path.exists() {
-                    write_roots.push(path);
-                }
-            }
+            write_roots.extend(media_roots());
         }
         read_roots.sort();
         read_roots.dedup();
@@ -397,6 +426,16 @@ pub fn run_wrapper_if_requested() {
         Err(error) => {
             eprintln!("fiex-plugin-sandbox: wait failed: {error}");
             std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    #[test]
+    fn sandbox_system_roots_exist() {
+        for root in super::system_read_roots() {
+            assert!(root.exists(), "missing sandbox root: {}", root.display());
         }
     }
 }
