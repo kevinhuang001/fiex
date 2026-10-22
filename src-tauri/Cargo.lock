@@ -94,7 +94,6 @@ dependencies = [
 [[package]]
 name = "arapuca"
 version = "0.2.9"
-source = "git+https://github.com/sergio-correia/arapuca.git?rev=55e40035fb87ef766eedf23bd1c01fd91261c447#55e40035fb87ef766eedf23bd1c01fd91261c447"
 dependencies = [
  "landlock",
  "libc",

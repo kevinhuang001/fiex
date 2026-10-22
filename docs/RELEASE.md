@@ -4,7 +4,8 @@
 
 - Optional Git, WebDAV, SMB, Archive, Checksum and Windows Everything search plugins.
 - Nothing is preinstalled; install from **Settings → Plugins** and approve permissions.
-- Permissions are limited to file read/write and network domains; loopback addresses are always allowed.
+- Permissions are file read/write, network domains, and explicit command names. Loopback addresses are always allowed.
+- Plugin processes cannot execute programs. Commands such as `git` run through the host `host.exec` proxy after the user approves the exact executable name; users can add or remove commands in Settings.
 - Plugins run as independent processes in an Arapuca sandbox (Landlock + seccomp on Linux, Seatbelt on macOS, AppContainer on Windows).
 
 ## Plugin UI
