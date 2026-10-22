@@ -31,6 +31,7 @@
 | [10 插件场景和完整示例](10-EXAMPLES.md)          | WebDAV、SMB、Git、Google Calendar、样例消息              |
 | [11 iframe UI SDK](11-UI-SDK.md)                 | `@fiex/ui-sdk`、iframe 安全 MessageChannel、UI-only 插件 |
 | [13 插件持久化与 OAuth](13-PERSISTENCE-OAUTH.md) | 内核 KV、SecretStore、账户作用域、Token 生命周期与迁移   |
+| [14 GitHub 安装与权限](14-GITHUB-INSTALLATION.md) | 下载审核、安装授权、作者信息、iframe 菜单与待实现安全约束 |
 
 ## 设计的不变量
 
