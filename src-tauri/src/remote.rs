@@ -524,14 +524,9 @@ pub async fn provider_list(
     limit: usize,
 ) -> Result<serde_json::Value, String> {
     if relative.starts_with('/')
-        || relative
-            .split('/')
-            .any(|segment| {
-                segment == ".."
-                    || segment == "."
-                    || segment.contains('\\')
-                    || segment.contains('\0')
-            })
+        || relative.split('/').any(|segment| {
+            segment == ".." || segment == "." || segment.contains('\\') || segment.contains('\0')
+        })
     {
         return Err("invalid remote relative path".into());
     }
