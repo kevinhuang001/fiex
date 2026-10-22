@@ -112,6 +112,7 @@ export interface Preferences {
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap
+  pinnedPluginTools: string[]
 }
 
 export interface OperationProgress {

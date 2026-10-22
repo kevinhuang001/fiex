@@ -1,6 +1,11 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
+async function openGit(page: Page) {
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: /Git · 源代码管理/ }).click()
+  await expect(page.getByRole('complementary', { name: '源代码管理' })).toBeVisible()
+}
 test.beforeEach(async ({ page }) => {
-  await page.goto('/?demo')
+  await page.goto('/?demo&pluginFixture')
   await expect(page.getByText('Fiex — 产品设计.pdf', { exact: true })).toBeVisible()
 })
 test('four views, grouping, and keyboard preview', async ({ page }) => {
@@ -288,6 +293,7 @@ test('PDF preview renders a real document', async ({ page }) => {
 })
 
 test('core connection entrypoint and no preinstalled optional plugin', async ({ page }) => {
+  await page.goto('/?demo')
   await page.getByRole('button', { name: '添加连接' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
@@ -307,7 +313,7 @@ test('multi-select and select all', async ({ page }) => {
 })
 
 test('selected commit is read-only and hides worktree changes', async ({ page }) => {
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   await page.getByRole('button', { name: '选择 commit' }).click()
   await page.getByRole('button', { name: '查看提交 bbbbbbbb', exact: true }).click()
   await expect(page.locator('.git-branch-hint')).toHaveText('bbbbbbbb')
@@ -350,7 +356,7 @@ test('settings sections keep preferences and release shortcut recording on exit'
 test('read-only commit disables destructive context actions and archive submenu', async ({
   page,
 }) => {
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   await page.getByRole('button', { name: '选择 commit' }).click()
   await page.getByRole('button', { name: '查看提交 bbbbbbbb', exact: true }).click()
   await expect(page.getByRole('button', { name: '新建文件夹', exact: true })).toBeDisabled()
@@ -363,7 +369,7 @@ test('read-only commit disables destructive context actions and archive submenu'
 })
 
 test('stage, unstage and commit only staged changes', async ({ page }) => {
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   const panel = page.getByRole('complementary', { name: '源代码管理' })
   await expect(
     panel.getByRole('button', { name: '先暂存要提交的文件', exact: true }),
@@ -389,7 +395,7 @@ test('stage, unstage and commit only staged changes', async ({ page }) => {
 
 test('initialize a non-Git folder and make its first commit', async ({ page }) => {
   await page.locator('.sidebar').getByRole('button', { name: '下载', exact: true }).click()
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   const panel = page.getByRole('complementary', { name: '源代码管理' })
   await panel.getByRole('button', { name: '初始化 Git 仓库', exact: true }).click()
   await expect(panel.getByRole('button', { name: '选择 commit' })).toContainText('main')
@@ -400,7 +406,7 @@ test('initialize a non-Git folder and make its first commit', async ({ page }) =
   await input.fill('hello.txt')
   await input.press('Enter')
   await expect(page.getByText('hello.txt', { exact: true }).first()).toBeVisible()
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   await panel.getByRole('button', { name: '暂存 hello.txt', exact: true }).click()
   await panel.getByRole('button', { name: '提交修改 · 1', exact: true }).click()
   await page.getByRole('dialog').getByRole('textbox', { name: '提交说明' }).fill('Initial commit')
@@ -427,7 +433,7 @@ test('ten thousand icons stay virtualized and support end selection and rename',
 })
 
 test('browse a commit read-only and return to the unchanged worktree', async ({ page }) => {
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   await expect(page.getByRole('button', { name: '选择 commit', exact: true })).toContainText(
     'main · aaaaaaaa',
   )
@@ -508,7 +514,7 @@ test('copy conflicts offer compare and keep both, ordinary pastes need no confir
 })
 
 test('remotes are read and managed from the Git panel dialog', async ({ page }) => {
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   // A CSS locator keeps working while Radix hides the page behind the dialog.
   const panel = page.locator('.git-panel')
   // The panel itself no longer hosts remote management.
@@ -542,7 +548,7 @@ test('remotes are read and managed from the Git panel dialog', async ({ page }) 
 
 test('non Git welcome contains only its icon and action', async ({ page }) => {
   await page.locator('.sidebar').getByRole('button', { name: '下载', exact: true }).click()
-  await page.getByRole('button', { name: '源代码管理', exact: true }).click()
+  await openGit(page)
   const welcome = page.locator('.git-welcome')
   await expect(welcome).toHaveText('初始化 Git 仓库')
   await expect(welcome.locator('p, h2, code')).toHaveCount(0)
@@ -550,6 +556,7 @@ test('non Git welcome contains only its icon and action', async ({ page }) => {
 })
 
 test('optional archive and checksum features are not preinstalled', async ({ page }) => {
+  await page.goto('/?demo')
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
@@ -571,6 +578,17 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
   await expect(review).toContainText('读取文件')
   await review.getByRole('button', { name: '同意权限并安装' }).click()
   await expect(page.locator('.plugin-row').filter({ hasText: '校验和' })).toBeVisible()
+})
+test('plugin actions can be pinned into the toolbar separator', async ({ page }) => {
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('button', { name: /固定 Git 源代码管理/ }).click()
+  const pinned = page.getByRole('button', { name: 'Git 源代码管理' })
+  await expect(pinned).toBeVisible()
+  await page.keyboard.press('Escape')
+  await pinned.click()
+  await expect(page.getByRole('complementary', { name: '源代码管理' })).toBeVisible()
+  await pinned.click({ button: 'right' })
+  await expect(pinned).toHaveCount(0)
 })
 test('plugin toolbar opens the Git source-control panel', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')

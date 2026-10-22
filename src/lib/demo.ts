@@ -181,7 +181,7 @@ const fixturePlugins: DemoPlugin[] = [
     allowedNetworkDomains: ['github.com'],
     author: { name: 'Fiex Contributors' },
     contributes: {
-      toolbar: [{ id: 'git.main', title: '源代码管理', command: 'git.status' }],
+      toolbar: [{ id: 'git.main', title: '源代码管理', icon: 'git-branch', command: 'git.status' }],
       settings: [
         { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
       ],
@@ -229,7 +229,7 @@ const marketplace = [
     asset: 'git-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
     contributes: {
-      toolbar: [{ id: 'git.main', title: '源代码管理', command: 'git.status' }],
+      toolbar: [{ id: 'git.main', title: '源代码管理', icon: 'git-branch', command: 'git.status' }],
       settings: [
         { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
       ],

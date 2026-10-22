@@ -32,6 +32,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     tags: TAG_PRESETS.map((tag) => ({ ...tag })),
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
+    pinnedPluginTools: [],
   }
 }
 

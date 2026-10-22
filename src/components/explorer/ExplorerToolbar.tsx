@@ -17,9 +17,20 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
 import { useEffect, useState } from 'react'
-import { Columns2, Puzzle, RefreshCw, ScrollText, Trash2 } from 'lucide-react'
+import {
+  Archive,
+  Cloud,
+  Columns2,
+  HardDrive,
+  Hash,
+  Pin,
+  Puzzle,
+  RefreshCw,
+  ScrollText,
+  Trash2,
+} from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
-import { usePluginCatalog } from '@/lib/plugins'
+import { usePluginCatalog, type PluginContribution } from '@/lib/plugins'
 import { call } from '@/lib/api'
 import { OPEN_PLUGIN_PANEL } from '@/components/plugins/PluginPanelHost'
 import type { ReactNode } from 'react'
@@ -42,6 +53,18 @@ const sortOptions: [Sort, string][] = [
   ['size', '大小'],
   ['kind', '种类'],
 ]
+const pluginIconMap: Record<string, ReactNode> = {
+  'git-branch': <GitBranch weight="regular" size={20} />,
+  archive: <Archive size={18} />,
+  hash: <Hash size={18} />,
+  cloud: <Cloud size={18} />,
+  'hard-drive': <HardDrive size={18} />,
+}
+function pluginIcon(name?: string) {
+  return pluginIconMap[name || ''] || <Puzzle size={17} />
+}
+const pluginKey = (pluginId: string, toolId: string) => pluginId + '::' + toolId
+
 export function ExplorerToolbar({
   sidebar,
   setSidebar,
@@ -89,6 +112,51 @@ export function ExplorerToolbar({
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
   const plugins = usePluginCatalog()
+  const pinnedKeys = prefs.pinnedPluginTools || []
+  const availableTools = plugins.flatMap((plugin) =>
+    plugin.enabled ? (plugin.contributes?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
+  )
+  const pinnedTools = pinnedKeys.flatMap((key) => {
+    const found = availableTools.find(({ plugin, tool }) => pluginKey(plugin.id, tool.id) === key)
+    return found ? [found] : []
+  })
+  const pinTool = (key: string) => {
+    if (pinnedKeys.includes(key)) return
+    update({ pinnedPluginTools: [...pinnedKeys, key] })
+  }
+  const unpinTool = (key: string) => {
+    update({ pinnedPluginTools: pinnedKeys.filter((item) => item !== key) })
+  }
+  const runTool = (plugin: (typeof plugins)[number], tool: PluginContribution) => {
+    if (tool.openPanel) {
+      window.dispatchEvent(
+        new CustomEvent(OPEN_PLUGIN_PANEL, {
+          detail: {
+            pluginId: plugin.id,
+            panelId: tool.openPanel,
+            title: tool.title,
+            selection: x.selected,
+            directory: x.path,
+          },
+        }),
+      )
+      return
+    }
+    if (tool.id === 'git.main' && plugin.id === 'org.fiex.git') {
+      if (!gitOpen) void x.refreshGit()
+      setGitOpen(true)
+      return
+    }
+    if (tool.command && plugin.backendAvailable) {
+      void call('plugin_invoke', {
+        pluginId: plugin.id,
+        method: tool.command,
+        params: { root: x.path },
+      }).catch((error) => x.setError(String(error)))
+      return
+    }
+    x.setError('插件尚未提供可用的工具面板')
+  }
   const [refreshKey, setRefreshKey] = useState(0)
   const [picker, setPicker] = useState<{
     kind: 'terminal' | 'ide'
@@ -202,63 +270,6 @@ export function ExplorerToolbar({
         >
           <FolderPlus weight="duotone" size={20} />
         </Button>
-        <Menu label="插件" icon={<Puzzle size={20} />}>
-          <Label>插件工具</Label>
-          {plugins.flatMap((plugin) =>
-            (plugin.enabled ? plugin.contributes?.toolbar || [] : []).map((tool) => (
-              <Action
-                key={plugin.id + ':' + tool.id}
-                onClick={() => {
-                  // Built-in Git panel is a compatibility adapter until its
-                  // iframe is bundled as a plugin UI contribution.
-                  if (tool.openPanel) {
-                    window.dispatchEvent(
-                      new CustomEvent(OPEN_PLUGIN_PANEL, {
-                        detail: {
-                          pluginId: plugin.id,
-                          panelId: tool.openPanel,
-                          title: tool.title,
-                          selection: x.selected,
-                          directory: x.path,
-                        },
-                      }),
-                    )
-                  } else if (tool.id === 'git.main' && plugin.id === 'org.fiex.git') {
-                    setGitOpen(true)
-                  } else if (tool.command && plugin.backendAvailable) {
-                    void call('plugin_invoke', {
-                      pluginId: plugin.id,
-                      method: tool.command,
-                      params: { root: x.path },
-                    }).catch((error) => x.setError(String(error)))
-                  } else {
-                    x.setError('插件尚未提供可用的工具面板')
-                  }
-                }}
-              >
-                {plugin.name} · {tool.title}
-              </Action>
-            )),
-          )}
-          {!plugins.some(
-            (plugin) => plugin.enabled && (plugin.contributes?.toolbar?.length ?? 0) > 0,
-          ) && <Label>暂无可用的插件工具</Label>}
-        </Menu>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`git-toolbar-button ${gitOpen ? 'active' : ''} ${gitSwitched ? 'switched' : ''}`}
-          title={gitSwitched ? `源代码管理 · ${x.git?.branch}` : '源代码管理'}
-          aria-label="源代码管理"
-          aria-pressed={gitOpen}
-          onClick={() => {
-            if (!gitOpen) void x.refreshGit()
-            setGitOpen((value) => !value)
-          }}
-        >
-          <GitBranch weight="duotone" size={20} />
-          {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}
-        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -296,6 +307,61 @@ export function ExplorerToolbar({
           >
             <TerminalSquare weight="regular" size={20} />
           </Button>
+        </div>
+        <div className="toolbar-divider" />
+        <div className="plugin-toolbar-group" aria-label="插件工具">
+          {pinnedTools.map(({ plugin, tool }) => {
+            const key = pluginKey(plugin.id, tool.id)
+            return (
+              <Button
+                key={key}
+                variant="ghost"
+                size="icon"
+                title={`${plugin.name} · ${tool.title}（右键取消固定）`}
+                aria-label={`${plugin.name} ${tool.title}`}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  unpinTool(key)
+                }}
+                onClick={() => runTool(plugin, tool)}
+              >
+                {pluginIcon(tool.icon)}
+              </Button>
+            )
+          })}
+          {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}
+          <Menu label="插件" icon={<Puzzle size={20} />}>
+            <Label>插件工具</Label>
+            {availableTools.map(({ plugin, tool }) => {
+              const key = pluginKey(plugin.id, tool.id)
+              const pinned = pinnedKeys.includes(key)
+              return (
+                <Action
+                  key={key}
+                  onClick={() => runTool(plugin, tool)}
+                  trailing={
+                    <button
+                      type="button"
+                      className={`plugin-pin ${pinned ? 'active' : ''}`}
+                      aria-label={`${pinned ? '取消固定' : '固定'} ${plugin.name} ${tool.title}`}
+                      title={pinned ? '取消固定' : '固定到工具栏'}
+                      onClick={() => (pinned ? unpinTool(key) : pinTool(key))}
+                    >
+                      <Pin size={13} fill={pinned ? 'currentColor' : 'none'} />
+                    </button>
+                  }
+                >
+                  <span className="plugin-menu-entry">
+                    <span className="plugin-menu-icon">{pluginIcon(tool.icon)}</span>
+                    <span className="plugin-menu-label">
+                      {plugin.name} · {tool.title}
+                    </span>
+                  </span>
+                </Action>
+              )
+            })}
+            {!availableTools.length && <Label>暂无可用的插件工具</Label>}
+          </Menu>
         </div>
         <div className="toolbar-divider" />
         <Button

@@ -44,15 +44,24 @@ export function Action({
   children,
   onClick,
   disabled = false,
+  trailing,
 }: {
   children: ReactNode
   onClick: () => void
   disabled?: boolean
+  trailing?: ReactNode
 }) {
-  return (
+  const item = (
     <D.DropdownMenuItem disabled={disabled} onSelect={onClick}>
       {children}
     </D.DropdownMenuItem>
+  )
+  if (!trailing) return item
+  return (
+    <div className="menu-action-row">
+      {item}
+      {trailing}
+    </div>
   )
 }
 export const Separator = D.DropdownMenuSeparator
