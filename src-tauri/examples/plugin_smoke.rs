@@ -4,6 +4,7 @@ use fiex_lib::plugin_host;
 use serde_json::json;
 
 fn main() {
+    fiex_lib::plugin_sandbox::run_wrapper_if_requested();
     let id = std::env::args()
         .nth(1)
         .expect("usage: cargo run --example plugin_smoke -- <plugin-id>");
@@ -34,6 +35,10 @@ fn main() {
             .expect("mock plugin echo failed");
         assert_eq!(echoed["echo"]["message"], "中文 IPC");
         assert_eq!(echoed["echo"]["value"], 42);
+        let search = plugin_host::global()
+            .invoke(&id, "search.query", json!({"query":"mock"}))
+            .expect("mock search failed");
+        assert_eq!(search["entries"][0]["name"], "fiex-mock-search.txt");
     }
     plugin_host::set_enabled(&id, false).expect("disable failed");
     assert!(

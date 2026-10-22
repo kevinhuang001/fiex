@@ -41,6 +41,11 @@ test('folder navigation, tabs and fast search', async ({ page }) => {
   await page.getByRole('button', { name: '清除搜索' }).click()
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
 })
+test('plugin search providers add results to the same query', async ({ page }) => {
+  await page.getByRole('textbox', { name: '搜索文件' }).fill('plugin-index-hit')
+  await expect(page.getByText('Indexed result.txt', { exact: true })).toBeVisible()
+  await expect(page.locator('.statusbar')).toBeVisible()
+})
 test('each tab keeps its own one or two panes', async ({ page }) => {
   await page.getByRole('button', { name: '双面板' }).click()
   await expect(page.getByRole('complementary', { name: '第二个面板' })).toBeVisible()

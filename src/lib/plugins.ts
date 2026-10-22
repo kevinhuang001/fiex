@@ -9,12 +9,17 @@ export interface PluginField {
   defaultValue?: string
   required?: boolean
 }
+export interface PluginPanel {
+  entry: string
+  title?: string
+  defaultSize?: { width: number; height: number }
+}
 export interface PluginContribution {
   id: string
   title: string
   icon?: string
   command?: string
-  openPanel?: string
+  panel?: PluginPanel
 }
 export interface MarketplacePlugin {
   id: string
@@ -28,10 +33,12 @@ export interface MarketplacePlugin {
   repository: string
 }
 export interface PluginInfo {
+  schemaVersion: number
   id: string
   name: string
   version: string
   description?: string
+  icon?: string
   capabilities: string[]
   enabled: boolean
   author?: { name: string; url?: string }
@@ -41,10 +48,11 @@ export interface PluginInfo {
   requestedNetworkDomains: string[]
   allowedNetworkDomains: string[]
   backendAvailable: boolean
-  contributes?: {
-    connectionFactories?: Array<{ id: string; title: string; fields: PluginField[] }>
+  contributions?: {
+    connections?: Array<{ id: string; title: string; fields: PluginField[] }>
     toolbar?: PluginContribution[]
-    panels?: Array<{ id: string; title: string; entry: string }>
+    contextMenus?: PluginContribution[]
+    search?: Array<{ id: string; title: string; icon?: string }>
     settings?: PluginField[]
   }
 }

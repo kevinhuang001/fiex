@@ -23,6 +23,8 @@ pub mod plugin_permissions;
 pub use fiex_plugin_sdk as plugin_sdk;
 #[path = "plugins/sandbox.rs"]
 pub mod plugin_sandbox;
+#[path = "plugins/search.rs"]
+pub mod plugin_search;
 #[path = "plugins/storage.rs"]
 pub mod plugin_storage;
 #[path = "plugins/vfs.rs"]

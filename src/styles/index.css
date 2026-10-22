@@ -5077,3 +5077,50 @@ body.dragging-reorder * {
   flex: 1;
   min-width: 0;
 }
+
+.plugin-pinned-strip {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.plugin-tool-button {
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.plugin-tool-button.dragging {
+  opacity: 0.18;
+}
+.plugin-tool-ghost {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--text) 16%, transparent);
+  pointer-events: none;
+  color: var(--text);
+  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Plugin and settings-side controls use a slightly softer icon weight. */
+.plugin-toolbar-group button > svg,
+.toolbar button.toolbar-secondary > svg {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+.plugin-toolbar-group button:focus-visible,
+.toolbar button.toolbar-secondary:focus-visible {
+  box-shadow: none;
+  outline: none;
+  background: transparent;
+}
+.plugin-toolbar-group button,
+.plugin-toolbar-group button:hover,
+.plugin-toolbar-group button[data-state='open'] {
+  background: transparent;
+}
+.plugin-toolbar-group button:hover > svg {
+  color: var(--accent);
+}

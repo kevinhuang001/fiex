@@ -42,6 +42,7 @@ function pluginIcon(id: string) {
   if (id.includes('smb')) return <HardDrive size={21} />
   if (id.includes('archive')) return <Archive size={21} />
   if (id.includes('checksum')) return <Hash size={21} />
+  if (id.includes('everything')) return <Search size={21} />
   return <Puzzle size={21} />
 }
 

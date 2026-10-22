@@ -15,6 +15,7 @@ fn approve(id: &str) {
 }
 
 fn main() {
+    fiex_lib::plugin_sandbox::run_wrapper_if_requested();
     let root = std::env::temp_dir().join(format!("fiex-optional-e2e-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();

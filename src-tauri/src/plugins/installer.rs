@@ -444,11 +444,13 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
     if !plugin_host::valid_id(&manifest.id) {
         return Err("invalid plugin id".into());
     }
-    let declared = plugin_permissions::declaration(&manifest.permissions)?;
-    let requested_network_domains =
-        plugin_permissions::validate_network_domains(&declared, &manifest.network_domains)?
-            .into_iter()
-            .collect::<Vec<_>>();
+    let declared = plugin_host::declared_permissions(&manifest)?;
+    let requested_network_domains = plugin_permissions::validate_network_domains(
+        &declared,
+        &manifest.permissions.network.domains,
+    )?
+    .into_iter()
+    .collect::<Vec<_>>();
     let permissions = declared.into_iter().collect::<Vec<_>>();
     if install_root()?.join(&manifest.id).exists() {
         return Err("plugin already installed; uninstall before installing another version".into());
@@ -457,10 +459,11 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
     // executable permission is accepted from the downloaded archive.
     let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     let current = manifest
+        .runtime
         .entrypoints
         .get(&platform)
         .ok_or("plugin has no executable for this operating system / architecture")?;
-    for relative in manifest.entrypoints.values() {
+    for relative in manifest.runtime.entrypoints.values() {
         if !normal_relative(Path::new(relative)) {
             return Err("unsafe executable path".into());
         }
@@ -512,7 +515,7 @@ pub fn install(ticket: &str) -> Result<String, String> {
     if destination.exists() {
         return Err("plugin is already installed".into());
     }
-    let declared = plugin_permissions::declaration(&staged.manifest.permissions)?;
+    let declared = plugin_host::declared_permissions(&staged.manifest)?;
     let parent = install_root()?;
     fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
     fs::rename(staged.dir.path(), &destination).map_err(|e| e.to_string())?;
@@ -520,7 +523,7 @@ pub fn install(ticket: &str) -> Result<String, String> {
     if let Err(error) = plugin_permissions::approve_install_with_domains(
         &id,
         &declared,
-        &staged.manifest.network_domains,
+        &staged.manifest.permissions.network.domains,
     ) {
         let _ = fs::remove_dir_all(&destination);
         return Err(error);

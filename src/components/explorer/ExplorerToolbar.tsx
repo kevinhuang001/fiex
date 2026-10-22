@@ -16,19 +16,17 @@ import { RowsIcon as List } from '@phosphor-icons/react/dist/csr/Rows'
 import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/SidebarSimple'
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
-import { useEffect, useState } from 'react'
-import {
-  Archive,
-  Cloud,
-  Columns2,
-  HardDrive,
-  Hash,
-  Pin,
-  Puzzle,
-  RefreshCw,
-  ScrollText,
-  Trash2,
-} from 'lucide-react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { Pin, Trash2 } from 'lucide-react'
+import { ArchiveIcon as Archive } from '@phosphor-icons/react/dist/csr/Archive'
+import { ArrowsClockwiseIcon as RefreshCw } from '@phosphor-icons/react/dist/csr/ArrowsClockwise'
+import { CloudIcon as Cloud } from '@phosphor-icons/react/dist/csr/Cloud'
+import { ColumnsIcon as Columns2 } from '@phosphor-icons/react/dist/csr/Columns'
+import { HardDriveIcon as HardDrive } from '@phosphor-icons/react/dist/csr/HardDrive'
+import { HashIcon as Hash } from '@phosphor-icons/react/dist/csr/Hash'
+import { PuzzlePieceIcon as Puzzle } from '@phosphor-icons/react/dist/csr/PuzzlePiece'
+import { ScrollIcon as ScrollText } from '@phosphor-icons/react/dist/csr/Scroll'
 import { useActivity } from '@/hooks/useActivity'
 import { usePluginCatalog, type PluginContribution } from '@/lib/plugins'
 import { call } from '@/lib/api'
@@ -53,15 +51,33 @@ const sortOptions: [Sort, string][] = [
   ['size', '大小'],
   ['kind', '种类'],
 ]
+type PinBox = { left: number; top: number; width: number; height: number; center: number }
+type PinDrag = {
+  from: number
+  to: number
+  left: number
+  top: number
+  width: number
+  height: number
+  gap: number
+  settling: boolean
+}
+function reorder<T>(items: T[], from: number, to: number) {
+  const next = [...items]
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  return next
+}
+
 const pluginIconMap: Record<string, ReactNode> = {
-  'git-branch': <GitBranch weight="regular" size={20} />,
-  archive: <Archive size={18} />,
-  hash: <Hash size={18} />,
-  cloud: <Cloud size={18} />,
-  'hard-drive': <HardDrive size={18} />,
+  'git-branch': <GitBranch weight="duotone" size={20} />,
+  archive: <Archive weight="duotone" size={20} />,
+  hash: <Hash weight="duotone" size={20} />,
+  cloud: <Cloud weight="duotone" size={20} />,
+  'hard-drive': <HardDrive weight="duotone" size={20} />,
 }
 function pluginIcon(name?: string) {
-  return pluginIconMap[name || ''] || <Puzzle size={17} />
+  return pluginIconMap[name || ''] || <Puzzle weight="duotone" size={20} />
 }
 const pluginKey = (pluginId: string, toolId: string) => pluginId + '::' + toolId
 
@@ -114,7 +130,7 @@ export function ExplorerToolbar({
   const plugins = usePluginCatalog()
   const pinnedKeys = prefs.pinnedPluginTools || []
   const availableTools = plugins.flatMap((plugin) =>
-    plugin.enabled ? (plugin.contributes?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
+    plugin.enabled ? (plugin.contributions?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
   )
   const pinnedTools = pinnedKeys.flatMap((key) => {
     const found = availableTools.find(({ plugin, tool }) => pluginKey(plugin.id, tool.id) === key)
@@ -128,12 +144,12 @@ export function ExplorerToolbar({
     update({ pinnedPluginTools: pinnedKeys.filter((item) => item !== key) })
   }
   const runTool = (plugin: (typeof plugins)[number], tool: PluginContribution) => {
-    if (tool.openPanel) {
+    if (tool.panel) {
       window.dispatchEvent(
         new CustomEvent(OPEN_PLUGIN_PANEL, {
           detail: {
             pluginId: plugin.id,
-            panelId: tool.openPanel,
+            panelId: tool.id,
             title: tool.title,
             selection: x.selected,
             directory: x.path,
@@ -157,6 +173,119 @@ export function ExplorerToolbar({
     }
     x.setError('插件尚未提供可用的工具面板')
   }
+  const [pinDrag, setPinDrag] = useState<PinDrag | null>(null)
+  const pinDragged = useRef(false)
+  const pinOrigin = useRef<{
+    pointerX: number
+    grab: number
+    rects: PinBox[]
+    gap: number
+  } | null>(null)
+  const pinDetach = useRef<(() => void) | null>(null)
+  const pinDropTimer = useRef<number | null>(null)
+  const pinStrip = useRef<HTMLDivElement>(null)
+  useEffect(
+    () => () => {
+      pinDetach.current?.()
+      if (pinDropTimer.current !== null) window.clearTimeout(pinDropTimer.current)
+    },
+    [],
+  )
+  const beginPinDrag = (event: PointerEvent, from: number) => {
+    if (event.button !== 0 || pinDrag || !pinStrip.current || !prefs.pinnedPluginTools) return
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    const rects = Array.from(
+      pinStrip.current.querySelectorAll<HTMLElement>('.plugin-tool-button'),
+    ).map((element) => {
+      const box = element.getBoundingClientRect()
+      return {
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+        center: box.left + box.width / 2,
+      }
+    })
+    const gap = rects.length > 1 ? Math.max(0, rects[1].left - (rects[0].left + rects[0].width)) : 4
+    pinOrigin.current = { pointerX: event.clientX, grab: event.clientX - rect.left, rects, gap }
+    pinDragged.current = false
+    let started = false
+    let to = from
+    const move = (next: globalThis.PointerEvent) => {
+      const data = pinOrigin.current
+      if (!data) return
+      if (!started) {
+        if (Math.abs(next.clientX - data.pointerX) < 5) return
+        started = true
+        pinDragged.current = true
+      }
+      next.preventDefault()
+      const box = data.rects[from]
+      const left = next.clientX - data.grab
+      const center = left + box.width / 2
+      let nextTo = 0
+      for (let index = 0; index < data.rects.length; index++) {
+        if (index !== from && center > data.rects[index].center) nextTo++
+      }
+      to = nextTo
+      setPinDrag({
+        from,
+        to,
+        left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+        gap: data.gap,
+        settling: false,
+      })
+    }
+    const finish = (next: globalThis.PointerEvent) => {
+      pinDetach.current?.()
+      const data = pinOrigin.current
+      pinOrigin.current = null
+      if (!started || next.type === 'pointercancel' || !data) {
+        setPinDrag(null)
+        setTimeout(() => {
+          pinDragged.current = false
+        }, 0)
+        return
+      }
+      const target = to
+      setPinDrag((current) =>
+        current ? { ...current, left: data.rects[target].left, settling: true } : current,
+      )
+      pinDropTimer.current = window.setTimeout(() => {
+        pinDropTimer.current = null
+        setPinDrag(null)
+        if (target !== from) {
+          update({ pinnedPluginTools: reorder(pinnedKeys, from, target) })
+        }
+        setTimeout(() => {
+          pinDragged.current = false
+        }, 0)
+      }, 160)
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', finish)
+      pinDetach.current = null
+    }
+    pinDetach.current = cleanup
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', finish)
+    window.addEventListener('pointercancel', finish)
+  }
+  const pinShift = (index: number) => {
+    if (!pinDrag || index === pinDrag.from) return undefined
+    const distance = pinDrag.width + pinDrag.gap
+    if (pinDrag.from < pinDrag.to && index > pinDrag.from && index <= pinDrag.to)
+      return `translate3d(-${distance}px, 0, 0)`
+    if (pinDrag.to < pinDrag.from && index >= pinDrag.to && index < pinDrag.from)
+      return `translate3d(${distance}px, 0, 0)`
+    return undefined
+  }
+  const liftedPin = pinDrag && pinnedTools[pinDrag.from] ? pinDrag : null
   const [refreshKey, setRefreshKey] = useState(0)
   const [picker, setPicker] = useState<{
     kind: 'terminal' | 'ide'
@@ -308,65 +437,77 @@ export function ExplorerToolbar({
             <TerminalSquare weight="regular" size={20} />
           </Button>
         </div>
-        <div className="toolbar-divider" />
-        <div className="plugin-toolbar-group" aria-label="插件工具">
-          {pinnedTools.map(({ plugin, tool }) => {
-            const key = pluginKey(plugin.id, tool.id)
-            return (
-              <Button
-                key={key}
-                variant="ghost"
-                size="icon"
-                title={`${plugin.name} · ${tool.title}（右键取消固定）`}
-                aria-label={`${plugin.name} ${tool.title}`}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  unpinTool(key)
-                }}
-                onClick={() => runTool(plugin, tool)}
-              >
-                {pluginIcon(tool.icon)}
-              </Button>
-            )
-          })}
-          {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}
-          <Menu label="插件" icon={<Puzzle size={20} />}>
-            <Label>插件工具</Label>
-            {availableTools.map(({ plugin, tool }) => {
-              const key = pluginKey(plugin.id, tool.id)
-              const pinned = pinnedKeys.includes(key)
-              return (
-                <Action
-                  key={key}
-                  onClick={() => runTool(plugin, tool)}
-                  trailing={
-                    <button
-                      type="button"
-                      className={`plugin-pin ${pinned ? 'active' : ''}`}
-                      aria-label={`${pinned ? '取消固定' : '固定'} ${plugin.name} ${tool.title}`}
-                      title={pinned ? '取消固定' : '固定到工具栏'}
-                      onClick={() => (pinned ? unpinTool(key) : pinTool(key))}
+        {availableTools.length > 0 && (
+          <>
+            <div className="toolbar-divider" />
+            <div className="plugin-toolbar-group" aria-label="插件工具">
+              <div className="plugin-pinned-strip" ref={pinStrip}>
+                {pinnedTools.map(({ plugin, tool }, index) => {
+                  const key = pluginKey(plugin.id, tool.id)
+                  return (
+                    <Button
+                      key={key}
+                      variant="ghost"
+                      size="icon"
+                      className={`plugin-tool-button ${pinDrag?.from === index ? 'dragging' : ''}`}
+                      style={{ transform: pinShift(index) }}
+                      title={`${plugin.name} · ${tool.title}（拖动排序，右键取消固定）`}
+                      aria-label={`${plugin.name} ${tool.title}`}
+                      onPointerDown={(event) => beginPinDrag(event, index)}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        unpinTool(key)
+                      }}
+                      onClick={() => {
+                        if (!pinDragged.current) runTool(plugin, tool)
+                      }}
                     >
-                      <Pin size={13} fill={pinned ? 'currentColor' : 'none'} />
-                    </button>
-                  }
-                >
-                  <span className="plugin-menu-entry">
-                    <span className="plugin-menu-icon">{pluginIcon(tool.icon)}</span>
-                    <span className="plugin-menu-label">
-                      {plugin.name} · {tool.title}
-                    </span>
-                  </span>
-                </Action>
-              )
-            })}
-            {!availableTools.length && <Label>暂无可用的插件工具</Label>}
-          </Menu>
-        </div>
-        <div className="toolbar-divider" />
+                      {pluginIcon(tool.icon)}
+                    </Button>
+                  )
+                })}
+              </div>
+              {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}
+              <Menu label="插件" icon={<Puzzle weight="duotone" size={20} />}>
+                <Label>插件工具</Label>
+                {availableTools.map(({ plugin, tool }) => {
+                  const key = pluginKey(plugin.id, tool.id)
+                  const pinned = pinnedKeys.includes(key)
+                  return (
+                    <Action
+                      key={key}
+                      onClick={() => runTool(plugin, tool)}
+                      trailing={
+                        <button
+                          type="button"
+                          className={`plugin-pin ${pinned ? 'active' : ''}`}
+                          aria-label={`${pinned ? '取消固定' : '固定'} ${plugin.name} ${tool.title}`}
+                          title={pinned ? '取消固定' : '固定到工具栏'}
+                          onClick={() => (pinned ? unpinTool(key) : pinTool(key))}
+                        >
+                          <Pin size={13} fill={pinned ? 'currentColor' : 'none'} />
+                        </button>
+                      }
+                    >
+                      <span className="plugin-menu-entry">
+                        <span className="plugin-menu-icon">{pluginIcon(tool.icon)}</span>
+                        <span className="plugin-menu-label">
+                          {plugin.name} · {tool.title}
+                        </span>
+                      </span>
+                    </Action>
+                  )
+                })}
+                {!availableTools.length && <Label>暂无可用的插件工具</Label>}
+              </Menu>
+            </div>
+            <div className="toolbar-divider" />
+          </>
+        )}
         <Button
           variant="ghost"
           size="icon"
+          className="toolbar-secondary focus-visible:ring-0"
           title="刷新"
           aria-label="刷新"
           onClick={() => {
@@ -374,31 +515,39 @@ export function ExplorerToolbar({
             refreshAll()
           }}
         >
-          <RefreshCw key={refreshKey} size={20} className={refreshKey ? 'refresh-turn' : ''} />
+          <RefreshCw
+            key={refreshKey}
+            weight="duotone"
+            size={20}
+            className={refreshKey ? 'refresh-turn' : ''}
+          />
         </Button>
         <Button
           variant="ghost"
           size="icon"
+          className="toolbar-secondary focus-visible:ring-0"
           title={split ? '关闭当前面板' : '双面板'}
           aria-label={split ? '关闭当前面板' : '双面板'}
           aria-pressed={split}
           onClick={onToggleSplit}
         >
-          <Columns2 size={20} />
+          <Columns2 weight="duotone" size={20} />
         </Button>
 
         <Button
           variant="ghost"
           size="icon"
+          className="toolbar-secondary focus-visible:ring-0"
           title="状态中心"
           aria-label="状态中心"
           onClick={() => activity.setOpen(!activity.open)}
         >
-          <ScrollText size={20} />
+          <ScrollText weight="duotone" size={20} />
         </Button>
         <Button
           variant="ghost"
           size="icon"
+          className="toolbar-secondary focus-visible:ring-0"
           title="设置"
           aria-label="设置"
           onClick={() => setSettings(true)}
@@ -435,6 +584,20 @@ export function ExplorerToolbar({
           )}
         </div>
       )}
+      {liftedPin &&
+        createPortal(
+          <div
+            className={`plugin-tool-button plugin-tool-ghost ${liftedPin.settling ? 'settling' : ''}`}
+            style={{
+              width: liftedPin.width,
+              height: liftedPin.height,
+              transform: `translate3d(${liftedPin.left}px, ${liftedPin.top}px, 0) scale(1.08)`,
+            }}
+          >
+            {pluginIcon(pinnedTools[liftedPin.from]?.tool.icon)}
+          </div>,
+          document.body,
+        )}
     </>
   )
 }

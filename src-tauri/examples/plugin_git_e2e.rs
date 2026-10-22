@@ -4,6 +4,7 @@ use fiex_lib::{plugin_host, plugin_vfs};
 use serde_json::json;
 
 fn main() {
+    fiex_lib::plugin_sandbox::run_wrapper_if_requested();
     let id = "org.fiex.git";
     let entry = plugin_host::catalog()
         .into_iter()

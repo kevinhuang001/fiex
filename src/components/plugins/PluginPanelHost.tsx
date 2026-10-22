@@ -25,7 +25,7 @@ export function PluginPanelHost() {
   const [html, setHtml] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
-  const [size, setSize] = useState({ width: 620, height: 500 })
+  const [size, setSize] = useState({ width: 620, height: 560 })
   const frame = useRef<HTMLIFrameElement>(null)
   const dispose = useRef<null | (() => void)>(null)
   useEffect(() => {
@@ -37,7 +37,7 @@ export function PluginPanelHost() {
       setRequest(req)
       setHtml('')
       setError('')
-      setSize({ width: 620, height: 500 })
+      setSize({ width: 620, height: 560 })
       void call<string>('plugin_panel_html', { pluginId: req.pluginId, panelId: req.panelId })
         .then(setHtml)
         .catch((cause) => setError(String(cause)))

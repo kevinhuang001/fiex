@@ -8,6 +8,7 @@ use std::sync::{
 };
 
 fn main() {
+    fiex_lib::plugin_sandbox::run_wrapper_if_requested();
     let id = "org.fiex.webdav";
     let entry = plugin_host::catalog()
         .into_iter()

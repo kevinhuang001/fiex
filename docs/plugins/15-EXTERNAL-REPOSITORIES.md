@@ -2,11 +2,11 @@
 
 ## 仓库边界
 
-| 仓库                                                                            | 内容                                               |
-| ------------------------------------------------------------------------------- | -------------------------------------------------- |
-| [Fiex Core](https://github.com/kevinhuang001/fiex)                              | 文件管理、插件宿主、安装与权限、通用 VFS、React UI |
-| [Fiex SDK](https://github.com/kevinhuang001/fiex-sdk)                           | `rust/` Native IPC SDK；`ui/` iframe Bridge SDK    |
-| [Fiex Official Plugins](https://github.com/kevinhuang001/fiex-official-plugins) | Git/WebDAV/SMB/Archive/Checksum 独立 crate 与打包  |
+| 仓库                                                                            | 内容                                                         |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [Fiex Core](https://github.com/kevinhuang001/fiex)                              | 文件管理、插件宿主、安装与权限、通用 VFS、React UI           |
+| [Fiex SDK](https://github.com/kevinhuang001/fiex-sdk)                           | `rust/` Native IPC SDK；`ui/` iframe Bridge SDK              |
+| [Fiex Official Plugins](https://github.com/kevinhuang001/fiex-official-plugins) | Git/WebDAV/SMB/Archive/Checksum/Everything 独立 crate 与打包 |
 
 Core 的 `sdk/` 是指向 `kevinhuang001/fiex-sdk` 特定提交的 submodule。Core 不包含插件实现源码、插件编译产物或预装插件。
 
@@ -26,7 +26,7 @@ Release 必须包含：
 2. 每个插件/平台的 `.fiexplugin`：
    `<slug>-<platform>.fiexplugin`
 
-`slug`：`git | webdav | smb | archive | checksum`
+`slug`：`git | webdav | smb | archive | checksum | everything`
 
 `platform`：`linux-x86_64 | macos-aarch64 | macos-x86_64 | windows-x86_64`
 

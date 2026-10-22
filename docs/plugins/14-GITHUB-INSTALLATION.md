@@ -22,8 +22,10 @@
   "name": "Archive",
   "version": "1.0.0",
   "author": { "name": "Example Developer", "url": "https://github.com/example" },
-  "permissions": { "filesystem.read": true, "filesystem.write": true, "network": true },
-  "networkDomains": ["github.com"],
+  "permissions": {
+    "filesystem": { "read": true, "write": true },
+    "network": { "enabled": true, "domains": ["github.com"] }
+  },
   "entrypoints": { "linux-x86_64": "bin/plugin" },
   "contributes": { "contextMenus": [], "panels": [] }
 }

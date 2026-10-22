@@ -14,14 +14,22 @@ const MAX_PAGES: usize = 1000;
 const MAX_ENTRIES: usize = 100_000;
 
 fn declared_schemes(plugin: &PluginInfo) -> Vec<&str> {
-    plugin
-        .contributes
-        .get("vfs")
-        .and_then(|v| v.get("schemes"))
-        .and_then(Value::as_array)
+    let mut values = Vec::new();
+    for key in ["connections", "toolbar"] {
+        let Some(items) = plugin.contributions.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        for item in items {
+            if let Some(scheme) = item.get("scheme").and_then(Value::as_str) {
+                values.push(scheme);
+            }
+            if let Some(schemes) = item.get("schemes").and_then(Value::as_array) {
+                values.extend(schemes.iter().filter_map(Value::as_str));
+            }
+        }
+    }
+    values
         .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
         .filter(|scheme| {
             !scheme.is_empty()
                 && scheme.len() <= 32
@@ -77,7 +85,7 @@ fn invoke(plugin: &PluginInfo, method: &str, params: Value) -> Result<Value, Str
     plugin_host::global().invoke(&plugin.id, method, params)
 }
 
-fn entry_from(value: Value) -> Result<Entry, String> {
+pub fn entry_from(value: Value) -> Result<Entry, String> {
     serde_json::from_value(value).map_err(|error| format!("插件返回了无效的目录项：{error}"))
 }
 

@@ -166,8 +166,8 @@ fn declared_connection_fields(
         .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
         .ok_or("连接插件尚未安装、启用或授权")?;
     let factory = plugin
-        .contributes
-        .get("connectionFactories")
+        .contributions
+        .get("connections")
         .and_then(serde_json::Value::as_array)
         .and_then(|factories| {
             factories

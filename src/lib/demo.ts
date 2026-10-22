@@ -133,7 +133,7 @@ interface DemoPlugin {
   requestedNetworkDomains: string[]
   allowedNetworkDomains: string[]
   author?: { name: string; url?: string }
-  contributes?: Record<string, unknown>
+  contributions?: Record<string, unknown>
 }
 const fixturePlugin: DemoPlugin = {
   id: 'org.test.fixture',
@@ -143,25 +143,41 @@ const fixturePlugin: DemoPlugin = {
   enabled: true,
   approved: true,
   backendAvailable: true,
-  capabilities: ['commands', 'contextMenu', 'panel'],
+  capabilities: ['commands', 'contextMenu', 'panel', 'search'],
   declaredPermissions: [],
   grantedPermissions: [],
   requestedNetworkDomains: [],
   allowedNetworkDomains: [],
   author: { name: 'Fiex Fixtures' },
-  contributes: {
+  contributions: {
+    search: [
+      {
+        id: 'fixture.search',
+        title: 'Fixture Index',
+        icon: 'magnifying-glass',
+        scope: 'global',
+        command: 'search.query',
+      },
+    ],
     contextMenus: [
       {
         id: 'fixture.root',
         title: '测试插件',
         when: 'context.selection.count > 0',
         children: [
-          { id: 'fixture.panel', title: '信息面板', openPanel: 'fixture.details' },
+          {
+            id: 'fixture.panel',
+            title: '信息面板',
+            panel: {
+              entry: 'ui/index.html',
+              title: '信息面板',
+              defaultSize: { width: 620, height: 560 },
+            },
+          },
           { id: 'fixture.action', title: '检查文件', command: 'fixture.inspect' },
         ],
       },
     ],
-    panels: [{ id: 'fixture.details', title: '信息面板', entry: 'ui/index.html' }],
   },
 }
 const fixturePlugins: DemoPlugin[] = [
@@ -180,8 +196,16 @@ const fixturePlugins: DemoPlugin[] = [
     requestedNetworkDomains: ['github.com'],
     allowedNetworkDomains: ['github.com'],
     author: { name: 'Fiex Contributors' },
-    contributes: {
-      toolbar: [{ id: 'git.main', title: '源代码管理', icon: 'git-branch', command: 'git.status' }],
+    contributions: {
+      toolbar: [
+        {
+          id: 'git.main',
+          title: '源代码管理',
+          icon: 'git-branch',
+          command: 'git.status',
+          schemes: ['history'],
+        },
+      ],
       settings: [
         { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
       ],
@@ -196,12 +220,12 @@ const fixturePlugins: DemoPlugin[] = [
     approved: true,
     backendAvailable: true,
     capabilities: ['commands', 'contextMenu'],
-    declaredPermissions: ['filesystem.read', 'filesystem.write', 'network'],
-    grantedPermissions: ['filesystem.read', 'filesystem.write', 'network'],
-    requestedNetworkDomains: ['github.com'],
-    allowedNetworkDomains: ['github.com'],
+    declaredPermissions: ['filesystem.read'],
+    grantedPermissions: ['filesystem.read'],
+    requestedNetworkDomains: [],
+    allowedNetworkDomains: [],
     author: { name: 'Fiex Contributors' },
-    contributes: {
+    contributions: {
       contextMenus: [
         {
           id: 'checksum.calculate',
@@ -228,8 +252,16 @@ const marketplace = [
     requestedNetworkDomains: ['github.com'],
     asset: 'git-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    contributes: {
-      toolbar: [{ id: 'git.main', title: '源代码管理', icon: 'git-branch', command: 'git.status' }],
+    contributions: {
+      toolbar: [
+        {
+          id: 'git.main',
+          title: '源代码管理',
+          icon: 'git-branch',
+          command: 'git.status',
+          schemes: ['history'],
+        },
+      ],
       settings: [
         { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
       ],
@@ -246,9 +278,9 @@ const marketplace = [
     requestedNetworkDomains: [],
     asset: 'webdav-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    capabilities: ['filesystem', 'connectionFactory'],
-    contributes: {
-      connectionFactories: [
+    capabilities: ['filesystem', 'connection'],
+    contributions: {
+      connections: [
         {
           id: 'webdav',
           title: 'WebDAV',
@@ -271,9 +303,9 @@ const marketplace = [
     requestedNetworkDomains: [],
     asset: 'smb-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    capabilities: ['filesystem', 'connectionFactory'],
-    contributes: {
-      connectionFactories: [
+    capabilities: ['filesystem', 'connection'],
+    contributions: {
+      connections: [
         {
           id: 'smb',
           title: 'SMB 网络共享',
@@ -298,7 +330,7 @@ const marketplace = [
     asset: 'archive-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
     capabilities: ['commands', 'toolbar', 'contextMenu'],
-    contributes: {
+    contributions: {
       contextMenus: [
         {
           id: 'archive.compress',
@@ -327,7 +359,7 @@ const marketplace = [
     asset: 'checksum-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
     capabilities: ['commands', 'contextMenu'],
-    contributes: {
+    contributions: {
       contextMenus: [
         {
           id: 'checksum.calculate',
@@ -384,6 +416,26 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
         { algorithm: 'CRC32', value: '352441c2' },
       ]
+    case 'plugin_search':
+      if (String(a.query).toLowerCase().includes('plugin-index-hit'))
+        return [
+          {
+            path: '/Users/kevin/Documents/Indexed result.txt',
+            name: 'Indexed result.txt',
+            isDir: false,
+            isSymlink: false,
+            size: 42,
+            modified: 1770000000,
+            created: 1770000000,
+            extension: 'txt',
+            mime: 'text/plain',
+            readonly: false,
+            linkTarget: null,
+            tags: [],
+            sync: null,
+          },
+        ]
+      return []
     case 'plugin_marketplace':
       return marketplace
     case 'plugin_release_assets':
@@ -423,7 +475,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           requestedNetworkDomains: entry.requestedNetworkDomains,
           allowedNetworkDomains: entry.requestedNetworkDomains,
           author: entry.author,
-          contributes: entry.contributes || {},
+          contributions: entry.contributions || {},
         })
       }
       return entry.id

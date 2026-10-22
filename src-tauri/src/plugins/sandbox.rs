@@ -1,15 +1,16 @@
 //! OS-level plugin confinement.
 //!
-//! Linux uses Landlock for filesystem/TCP scopes and a small seccomp filter
-//! for syscalls Landlock cannot express (non-TCP sockets and process
-//! execution). macOS uses a generated Seatbelt profile through
-//! `/usr/bin/sandbox-exec`. Windows currently runs plugins in a normal child
-//! process; see the platform limitations in `docs/plugins/07-SECURITY-PACKAGING.md`.
+//! Unix builds delegate to [`arapuca`], which applies Landlock + seccomp on
+//! Linux and a deny-default Seatbelt profile on macOS. Windows currently uses
+//! a normal child process with the host permission checks; AppContainer
+//! integration is the remaining platform blocker.
 //!
 //! A failed sandbox setup is fatal: a plugin is never launched unsandboxed
 //! when the host believes a policy is active.
-use crate::plugin_permissions::PluginGrant;
-use std::path::Path;
+use std::{
+    io::{BufReader, Read, Write},
+    path::Path,
+};
 
 #[derive(Clone, Debug)]
 pub struct Policy {
@@ -17,7 +18,6 @@ pub struct Policy {
     pub install_dir: std::path::PathBuf,
     pub read_roots: Vec<std::path::PathBuf>,
     pub write_roots: Vec<std::path::PathBuf>,
-    pub execute_roots: Vec<std::path::PathBuf>,
     pub network: bool,
 }
 
@@ -25,7 +25,7 @@ impl Policy {
     pub fn new(
         executable: &Path,
         install_dir: &Path,
-        grant: &PluginGrant,
+        grant: &crate::plugin_permissions::PluginGrant,
         declared: &std::collections::BTreeSet<String>,
     ) -> Self {
         let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
@@ -42,8 +42,6 @@ impl Policy {
             canonical(Path::new("/bin")),
             canonical(Path::new("/sbin")),
             canonical(Path::new("/etc")),
-            canonical(Path::new("/proc")),
-            canonical(Path::new("/sys")),
             canonical(Path::new("/dev/urandom")),
             canonical(Path::new("/dev/null")),
         ];
@@ -52,32 +50,6 @@ impl Policy {
             canonical(&install_dir),
             canonical(Path::new("/dev/null")),
         ];
-        // The ELF interpreter lives under /lib or /lib64 and must be
-        // executable even when plugins may not spawn external commands.
-        let mut execute_roots = vec![
-            executable.clone(),
-            canonical(Path::new("/lib")),
-            canonical(Path::new("/lib64")),
-            canonical(Path::new("/usr/lib")),
-        ];
-        for loader in [
-            "/lib64/ld-linux-x86-64.so.2",
-            "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
-            "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
-            "/lib/ld-linux-aarch64.so.1",
-            "/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
-            "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1",
-        ] {
-            let path = Path::new(loader);
-            if path.exists() {
-                execute_roots.push(canonical(path));
-            }
-        }
-        execute_roots.extend([
-            canonical(Path::new("/usr")),
-            canonical(Path::new("/bin")),
-            canonical(Path::new("/sbin")),
-        ]);
         if readable {
             if let Some(home) = dirs::home_dir() {
                 read_roots.push(canonical(&home));
@@ -104,449 +76,314 @@ impl Policy {
         read_roots.dedup();
         write_roots.sort();
         write_roots.dedup();
-        execute_roots.sort();
-        execute_roots.dedup();
         Self {
             executable,
             install_dir,
             read_roots,
             write_roots,
-            execute_roots,
             network: grant.granted.contains("network"),
         }
     }
 }
 
+pub struct SandboxChild {
+    pub stdin: Box<dyn Write + Send>,
+    pub stdout: BufReader<Box<dyn Read + Send>>,
+    #[cfg(unix)]
+    _process: arapuca::Process,
+    #[cfg(unix)]
+    _socket_dir: tempfile::TempDir,
+    #[cfg(windows)]
+    process: std::process::Child,
+}
+
+#[cfg(windows)]
+impl Drop for SandboxChild {
+    fn drop(&mut self) {
+        let _ = self.process.kill();
+        let _ = self.process.wait();
+    }
+}
+
+/// When Fiex itself is re-executed as Arapuca's wrapper, apply the sandbox
+/// and `execve` the real plugin. Called before any runtime/thread starts.
 #[cfg(target_os = "linux")]
-mod linux {
-    use super::Policy;
+pub fn run_wrapper_if_requested() {
     use std::{
-        os::{fd::RawFd, unix::process::CommandExt},
-        process::Command,
-        sync::Arc,
+        ffi::{CString, OsStr},
+        os::unix::ffi::OsStrExt,
     };
-
-    const LANDLOCK_CREATE_RULESET_VERSION: u32 = 1;
-    const LANDLOCK_RULE_PATH_BENEATH: u32 = 1;
-
-    const FS_EXECUTE: u64 = 1 << 0;
-    const FS_WRITE_FILE: u64 = 1 << 1;
-    const FS_READ_FILE: u64 = 1 << 2;
-    const FS_READ_DIR: u64 = 1 << 3;
-    const FS_REMOVE_DIR: u64 = 1 << 4;
-    const FS_REMOVE_FILE: u64 = 1 << 5;
-    const FS_MAKE_DIR: u64 = 1 << 7;
-    const FS_MAKE_REG: u64 = 1 << 8;
-    const FS_MAKE_SOCK: u64 = 1 << 9;
-    const FS_MAKE_FIFO: u64 = 1 << 10;
-    const FS_MAKE_SYM: u64 = 1 << 12;
-    const FS_REFER: u64 = 1 << 13;
-    const FS_TRUNCATE: u64 = 1 << 14;
-
-    const NET_BIND_TCP: u64 = 1 << 0;
-    const NET_CONNECT_TCP: u64 = 1 << 1;
-
-    #[repr(C)]
-    struct RulesetAttr {
-        handled_access_fs: u64,
-        handled_access_net: u64,
+    if std::env::var_os("ARAPUCA_WRAPPER").as_deref() != Some(OsStr::new("1")) {
+        return;
     }
-    #[repr(C)]
-    struct PathBeneathAttr {
-        allowed_access: u64,
-        parent_fd: i32,
-    }
-
-    pub struct Plan {
-        ruleset: RulesetAttr,
-        ruleset_size: usize,
-        rules: Vec<(RawFd, u64)>,
-        network_denied: bool,
-        close: Vec<RawFd>,
-    }
-    impl Drop for Plan {
-        fn drop(&mut self) {
-            for fd in &self.close {
-                unsafe {
-                    libc::close(*fd);
-                }
-            }
-        }
-    }
-
-    fn abi() -> Result<i64, String> {
-        let value = unsafe {
-            libc::syscall(
-                libc::SYS_landlock_create_ruleset,
-                std::ptr::null::<RulesetAttr>(),
-                0usize,
-                LANDLOCK_CREATE_RULESET_VERSION,
-            )
-        };
-        if value < 0 {
-            let error = std::io::Error::last_os_error();
-            return Err(format!(
-                "Landlock is unavailable ({error}); this kernel cannot sandbox plugins"
-            ));
-        }
-        Ok(value)
-    }
-
-    fn fs_access(abi: i64, directory: bool, read: bool, write: bool, execute: bool) -> u64 {
-        if directory {
-            let mut access = FS_READ_DIR;
-            if read {
-                access |= FS_READ_FILE;
-            }
-            if execute {
-                access |= FS_EXECUTE;
-            }
-            if write {
-                access |= FS_WRITE_FILE
-                    | FS_REMOVE_DIR
-                    | FS_REMOVE_FILE
-                    | FS_MAKE_DIR
-                    | FS_MAKE_REG
-                    | FS_MAKE_SOCK
-                    | FS_MAKE_FIFO
-                    | FS_MAKE_SYM;
-                if abi >= 2 {
-                    access |= FS_REFER;
-                }
-            }
-            return access;
-        }
-        let mut access = 0;
-        if read {
-            access |= FS_READ_FILE;
-        }
-        if write {
-            access |= FS_WRITE_FILE;
-            if abi >= 3 {
-                access |= FS_TRUNCATE;
-            }
-        }
-        if execute {
-            access |= FS_EXECUTE;
-        }
-        access
-    }
-
-    fn open_path(path: &std::path::Path) -> Option<RawFd> {
-        use std::os::unix::ffi::OsStrExt;
-        let mut bytes = path.as_os_str().as_bytes().to_vec();
-        bytes.push(0);
-        let fd = unsafe { libc::open(bytes.as_ptr().cast(), libc::O_PATH | libc::O_CLOEXEC) };
-        (fd >= 0).then_some(fd)
-    }
-
-    pub fn prepare(policy: &Policy) -> Result<Arc<Plan>, String> {
-        let abi = abi()?;
-        let handled_fs = if abi >= 3 {
-            FS_EXECUTE
-                | FS_WRITE_FILE
-                | FS_READ_FILE
-                | FS_READ_DIR
-                | FS_REMOVE_DIR
-                | FS_REMOVE_FILE
-                | FS_MAKE_DIR
-                | FS_MAKE_REG
-                | FS_MAKE_SOCK
-                | FS_MAKE_FIFO
-                | FS_MAKE_SYM
-                | FS_REFER
-                | FS_TRUNCATE
-        } else if abi >= 2 {
-            FS_EXECUTE
-                | FS_WRITE_FILE
-                | FS_READ_FILE
-                | FS_READ_DIR
-                | FS_REMOVE_DIR
-                | FS_REMOVE_FILE
-                | FS_MAKE_DIR
-                | FS_MAKE_REG
-                | FS_MAKE_SOCK
-                | FS_MAKE_FIFO
-                | FS_MAKE_SYM
-                | FS_REFER
-        } else {
-            FS_EXECUTE
-                | FS_WRITE_FILE
-                | FS_READ_FILE
-                | FS_READ_DIR
-                | FS_REMOVE_DIR
-                | FS_REMOVE_FILE
-                | FS_MAKE_DIR
-                | FS_MAKE_REG
-                | FS_MAKE_SOCK
-                | FS_MAKE_FIFO
-                | FS_MAKE_SYM
-        };
-        let network_denied = !policy.network;
-        let handled_net = if network_denied && abi >= 4 {
-            NET_BIND_TCP | NET_CONNECT_TCP
-        } else {
-            0
-        };
-        let ruleset = RulesetAttr {
-            handled_access_fs: handled_fs,
-            handled_access_net: handled_net,
-        };
-        let ruleset_size = if abi >= 4 { 16 } else { 8 };
-        let mut rules = Vec::new();
-        let mut close = Vec::new();
-        let mut add = |path: &std::path::Path, read: bool, write: bool, execute: bool| {
-            let Ok(metadata) = std::fs::metadata(path) else {
-                return;
-            };
-            let Some(fd) = open_path(path) else {
-                return;
-            };
-            rules.push((fd, fs_access(abi, metadata.is_dir(), read, write, execute)));
-            close.push(fd);
-        };
-        // Narrow write roots also need read access to update existing files.
-        for root in &policy.write_roots {
-            add(root, true, true, false);
-        }
-        for root in &policy.read_roots {
-            add(root, true, false, false);
-        }
-        for root in &policy.execute_roots {
-            add(root, true, false, true);
-        }
-        Ok(Arc::new(Plan {
-            ruleset,
-            ruleset_size,
-            rules,
-            network_denied,
-            close,
-        }))
-    }
-
-    fn apply(plan: &Plan) -> Result<(), String> {
-        unsafe {
-            if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
-                return Err(format!(
-                    "cannot set no_new_privs: {}",
-                    std::io::Error::last_os_error()
-                ));
-            }
-        }
-        let ruleset_fd = unsafe {
-            libc::syscall(
-                libc::SYS_landlock_create_ruleset,
-                &plan.ruleset as *const RulesetAttr,
-                plan.ruleset_size,
-                0u32,
-            )
-        };
-        if ruleset_fd < 0 {
-            return Err(format!(
-                "cannot create Landlock ruleset: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        let ruleset_fd = ruleset_fd as RawFd;
-        for (parent_fd, access) in &plan.rules {
-            let attr = PathBeneathAttr {
-                allowed_access: *access,
-                parent_fd: *parent_fd,
-            };
-            let result = unsafe {
-                libc::syscall(
-                    libc::SYS_landlock_add_rule,
-                    ruleset_fd,
-                    LANDLOCK_RULE_PATH_BENEATH,
-                    &attr as *const PathBeneathAttr,
-                    0u32,
-                )
-            };
-            if result != 0 {
-                unsafe { libc::close(ruleset_fd) };
-                return Err(format!(
-                    "cannot add Landlock path rule: {}",
-                    std::io::Error::last_os_error()
-                ));
-            }
-        }
-        let result = unsafe { libc::syscall(libc::SYS_landlock_restrict_self, ruleset_fd, 0u32) };
-        unsafe { libc::close(ruleset_fd) };
-        if result != 0 {
-            return Err(format!(
-                "cannot apply Landlock restrictions: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        if plan.network_denied {
-            seccomp(plan.network_denied)?;
-        }
-        Ok(())
-    }
-
-    #[repr(C)]
-    struct SockFilter {
-        code: u16,
-        jt: u8,
-        jf: u8,
-        k: u32,
-    }
-    #[repr(C)]
-    struct SockFprog {
-        len: u16,
-        filter: *const SockFilter,
-    }
-    const BPF_LD_W_ABS: u16 = 0x20;
-    const BPF_JMP_JEQ_K: u16 = 0x15;
-    const BPF_RET_K: u16 = 0x06;
-    const SECCOMP_RET_ALLOW: u32 = 0x7fff_0000;
-    const SECCOMP_RET_ERRNO: u32 = 0x0005_0000;
-
-    fn seccomp(deny_network: bool) -> Result<(), String> {
-        let mut filter = vec![SockFilter {
-            code: BPF_LD_W_ABS,
-            jt: 0,
-            jf: 0,
-            k: 0,
-        }];
-        let mut deny = |syscall: libc::c_long| {
-            filter.push(SockFilter {
-                code: BPF_JMP_JEQ_K,
-                jt: 0,
-                jf: 1,
-                k: syscall as u32,
-            });
-            filter.push(SockFilter {
-                code: BPF_RET_K,
-                jt: 0,
-                jf: 0,
-                k: SECCOMP_RET_ERRNO | libc::EACCES as u32,
-            });
-        };
-        if deny_network {
-            deny(libc::SYS_socket);
-            deny(libc::SYS_connect);
-            deny(libc::SYS_socketpair);
-        }
-        filter.push(SockFilter {
-            code: BPF_RET_K,
-            jt: 0,
-            jf: 0,
-            k: SECCOMP_RET_ALLOW,
-        });
-        let program = SockFprog {
-            len: filter.len() as u16,
-            filter: filter.as_ptr(),
-        };
-        let result =
-            unsafe { libc::prctl(libc::PR_SET_SECCOMP, 2, &program as *const SockFprog, 0, 0) };
-        if result != 0 {
-            return Err(format!(
-                "cannot install seccomp filter: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        Ok(())
-    }
-
-    pub fn command(policy: &Policy) -> Result<Command, String> {
-        let plan = prepare(policy)?;
-        let mut command = Command::new(&policy.executable);
-        let plan_for_child = plan.clone();
-        unsafe {
-            command.pre_exec(move || {
-                apply(&plan_for_child).map_err(|error| {
-                    std::io::Error::new(std::io::ErrorKind::PermissionDenied, error)
-                })
-            });
-        }
-        drop(plan);
-        Ok(command)
-    }
+    let args = std::env::args_os()
+        .map(|arg| CString::new(arg.as_bytes()).unwrap_or_default())
+        .collect::<Vec<_>>();
+    let pointers = args.iter().map(|arg| arg.as_ptr()).collect::<Vec<_>>();
+    arapuca::selfexec::arapuca_handle_selfexec_if_wrapper(
+        pointers.len() as libc::c_int,
+        pointers.as_ptr(),
+    );
+    std::process::exit(1);
 }
 
 #[cfg(target_os = "macos")]
-mod macos {
-    use super::Policy;
-    use std::process::Command;
+pub fn run_wrapper_if_requested() {}
 
-    fn escape(path: &std::path::Path) -> String {
-        path.to_string_lossy().replace('"', "\\\"")
-    }
+#[cfg(unix)]
+pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
+    use arapuca::platform::{new, Sandbox};
+    use arapuca::{CgroupPolicy, Config, Profile, SeccompProfile};
+    use std::os::fd::{AsRawFd, FromRawFd};
 
-    fn profile(policy: &Policy) -> String {
-        let mut rules = String::from("(version 1)\n(deny default)\n");
-        rules.push_str("(allow process-fork)\n(allow signal (target self))\n(allow sysctl-read)\n");
-        rules.push_str("(allow mach-lookup)\n(allow ipc-posix-shm)\n");
-        rules.push_str(&format!(
-            "(allow process-exec (literal \"{}\"))\n",
-            escape(&policy.executable)
-        ));
-        rules.push_str("(allow process-exec (subpath \"/usr/bin\") (subpath \"/bin\") (subpath \"/usr/sbin\") (subpath \"/sbin\"))\n");
-        for root in &policy.read_roots {
-            rules.push_str(&format!(
-                "(allow file-read* (subpath \"{}\"))\n",
-                escape(root)
+    fn pipe() -> Result<(std::fs::File, std::fs::File), String> {
+        let mut fds = [0i32; 2];
+        let result = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
+        if result != 0 {
+            return Err(format!(
+                "cannot create plugin IPC pipe: {}",
+                std::io::Error::last_os_error()
             ));
         }
-        for root in &policy.write_roots {
-            rules.push_str(&format!(
-                "(allow file-read* file-write* (subpath \"{}\"))\n",
-                escape(root)
-            ));
-        }
-        if policy.network {
-            rules.push_str("(allow network-outbound)\n(allow network-bind)\n");
-        }
-        rules
+        // SAFETY: pipe2 returned two fresh descriptors owned by this process.
+        Ok(unsafe {
+            (
+                std::fs::File::from_raw_fd(fds[0]),
+                std::fs::File::from_raw_fd(fds[1]),
+            )
+        })
     }
 
-    pub fn command(policy: &Policy) -> Result<Command, String> {
-        let sandbox = std::path::Path::new("/usr/bin/sandbox-exec");
-        if !sandbox.is_file() {
-            return Err(
-                "macOS sandbox-exec is unavailable; refusing to run a plugin unsandboxed".into(),
-            );
-        }
-        let mut command = Command::new(sandbox);
-        command
-            .arg("-p")
-            .arg(profile(policy))
-            .arg(&policy.executable);
-        Ok(command)
-    }
-}
-
-#[cfg(target_os = "windows")]
-mod windows {
-    use super::Policy;
-    use std::process::Command;
-
-    pub fn command(policy: &Policy) -> Result<Command, String> {
-        // Windows AppContainer requires a custom token and handle-list spawn.
-        // Until that lands, plugins still run as child processes with explicit
-        // grant checks; this is documented as a platform limitation.
-        Ok(Command::new(&policy.executable))
-    }
-}
-
-/// Build a sandboxed command for a plugin process.
-pub fn command(policy: &Policy) -> Result<std::process::Command, String> {
+    let (child_stdin, parent_stdin) = pipe()?;
+    let (parent_stdout, child_stdout) = pipe()?;
     #[cfg(target_os = "linux")]
-    {
-        linux::command(policy)
+    arapuca::selfexec::enable_selfexec_mode();
+    let sandbox = new().map_err(|e| format!("cannot initialize plugin sandbox: {e}"))?;
+    sandbox
+        .available()
+        .map_err(|e| format!("plugin sandbox is unavailable: {e}"))?;
+
+    let profile = Profile {
+        read_paths: policy.read_roots.clone(),
+        write_paths: policy.write_roots.clone(),
+        allow_exec: true,
+        use_netns: false,
+        use_pidns: false,
+        seccomp_profile: if policy.network {
+            SeccompProfile::Baseline
+        } else {
+            SeccompProfile::Strict
+        },
+        cgroup_policy: CgroupPolicy::BestEffort,
+        max_open_files: 1024,
+        ..Profile::default()
+    };
+
+    let socket_dir = tempfile::Builder::new()
+        .prefix("fiex-plugin-sandbox-")
+        .tempdir()
+        .map_err(|e| e.to_string())?;
+    let task_id = format!(
+        "plugin-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or_default()
+    );
+    let mut env = vec![
+        (
+            "PATH".to_string(),
+            std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin:/usr/sbin:/sbin".into()),
+        ),
+        (
+            "LANG".to_string(),
+            std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into()),
+        ),
+        ("GIT_TERMINAL_PROMPT".to_string(), "0".to_string()),
+    ];
+    if let Some(home) = dirs::home_dir() {
+        env.push(("HOME".to_string(), home.to_string_lossy().into_owned()));
     }
-    #[cfg(target_os = "macos")]
-    {
-        macos::command(policy)
+    let config = Config {
+        profile,
+        socket_dir: socket_dir.path().to_path_buf(),
+        task_id,
+        phase: "plugin".into(),
+        work_dir: None,
+        stdin: Some(child_stdin.as_raw_fd()),
+        stdout: Some(child_stdout.as_raw_fd()),
+        stderr: None,
+        extra_fds: Vec::new(),
+        tty: false,
+        network_proxy_socket: None,
+        allowed_hosts: Vec::new(),
+        env,
+        audit_sink: None,
+        audit_verbosity: arapuca::audit::AuditVerbosity::Standard,
+        audit_principal: None,
+        audit_correlation_id: None,
+    };
+    let process = sandbox
+        .launch(&config, &policy.executable.to_string_lossy(), &[])
+        .map_err(|e| format!("plugin start failed: {e}"))?;
+    drop(child_stdin);
+    drop(child_stdout);
+    Ok(SandboxChild {
+        stdin: Box::new(parent_stdin),
+        stdout: BufReader::new(Box::new(parent_stdout) as Box<dyn Read + Send>),
+        _process: process,
+        _socket_dir: socket_dir,
+    })
+}
+
+#[cfg(windows)]
+pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
+    use std::process::{Command, Stdio};
+    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    let payload = serde_json::to_string(&LaunchPolicy::from(policy)).map_err(|e| e.to_string())?;
+    let mut child = Command::new(executable)
+        .arg("--fiex-plugin-sandbox")
+        .arg(payload)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("plugin sandbox launcher failed: {e}"))?;
+    let stdin = child.stdin.take().ok_or("plugin stdin unavailable")?;
+    let stdout = child.stdout.take().ok_or("plugin stdout unavailable")?;
+    Ok(SandboxChild {
+        stdin: Box::new(stdin),
+        stdout: BufReader::new(Box::new(stdout) as Box<dyn Read + Send>),
+        process: child,
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
+pub fn spawn(_policy: &Policy) -> Result<SandboxChild, String> {
+    Err("this platform has no plugin sandbox implementation".into())
+}
+
+#[cfg(windows)]
+#[derive(serde::Serialize, serde::Deserialize)]
+struct LaunchPolicy {
+    executable: String,
+    read_paths: Vec<String>,
+    write_paths: Vec<String>,
+    network: bool,
+}
+
+#[cfg(windows)]
+impl From<&Policy> for LaunchPolicy {
+    fn from(policy: &Policy) -> Self {
+        Self {
+            executable: policy.executable.to_string_lossy().into_owned(),
+            read_paths: policy
+                .read_roots
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+            write_paths: policy
+                .write_roots
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+            network: policy.network,
+        }
     }
-    #[cfg(target_os = "windows")]
-    {
-        windows::command(policy)
+}
+
+/// Windows: Fiex spawns a short-lived launcher of itself with inherited stdio,
+/// and the launcher uses Arapuca's AppContainer/Job Object support. Fiex's IPC
+/// pipes are inherited by the launcher and then by the plugin, so the control
+/// protocol never passes through a shell or an absolute-path handoff.
+#[cfg(windows)]
+pub fn run_wrapper_if_requested() {
+    let args = std::env::args().collect::<Vec<_>>();
+    if args.get(1).map(String::as_str) != Some("--fiex-plugin-sandbox") {
+        return;
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    let Some(payload) = args.get(2) else {
+        eprintln!("fiex-plugin-sandbox: missing policy");
+        std::process::exit(1);
+    };
+    let policy = match serde_json::from_str::<LaunchPolicy>(payload) {
+        Ok(policy) => policy,
+        Err(error) => {
+            eprintln!("fiex-plugin-sandbox: invalid policy: {error}");
+            std::process::exit(1);
+        }
+    };
+    let sandbox = match arapuca::platform::new() {
+        Ok(sandbox) => sandbox,
+        Err(error) => {
+            eprintln!("fiex-plugin-sandbox: unavailable: {error}");
+            std::process::exit(1);
+        }
+    };
+    use arapuca::platform::Sandbox;
+    if let Err(error) = sandbox.available() {
+        eprintln!("fiex-plugin-sandbox: unavailable: {error}");
+        std::process::exit(1);
+    }
+    let profile = arapuca::Profile {
+        read_paths: policy.read_paths.into_iter().map(Into::into).collect(),
+        write_paths: policy.write_paths.into_iter().map(Into::into).collect(),
+        allow_exec: true,
+        // On Windows, `use_netns` controls the AppContainer internet capability.
+        use_netns: !policy.network,
+        cgroup_policy: arapuca::CgroupPolicy::BestEffort,
+        max_open_files: 1024,
+        ..arapuca::Profile::default()
+    };
+    let socket_dir = match tempfile::Builder::new()
+        .prefix("fiex-plugin-sandbox-")
+        .tempdir()
     {
-        let _ = policy;
-        Err("this platform has no plugin sandbox implementation".into())
+        Ok(dir) => dir,
+        Err(error) => {
+            eprintln!("fiex-plugin-sandbox: temp dir: {error}");
+            std::process::exit(1);
+        }
+    };
+    let mut env = vec![
+        (
+            "PATH".to_string(),
+            std::env::var("PATH").unwrap_or_else(|_| String::new()),
+        ),
+        ("GIT_TERMINAL_PROMPT".to_string(), "0".to_string()),
+    ];
+    if let Some(home) = dirs::home_dir() {
+        env.push(("HOME".to_string(), home.to_string_lossy().into_owned()));
+    }
+    let config = arapuca::Config {
+        profile,
+        socket_dir: socket_dir.path().to_path_buf(),
+        task_id: format!("plugin-{}", std::process::id()),
+        phase: "plugin".into(),
+        work_dir: None,
+        network_proxy_socket: None,
+        env,
+        audit_sink: None,
+        audit_verbosity: arapuca::audit::AuditVerbosity::Standard,
+        audit_principal: None,
+        audit_correlation_id: None,
+    };
+    let mut process = match sandbox.launch(&config, &policy.executable, &[]) {
+        Ok(process) => process,
+        Err(error) => {
+            eprintln!("fiex-plugin-sandbox: launch failed: {error}");
+            std::process::exit(1);
+        }
+    };
+    let status = process.wait();
+    process.cleanup();
+    drop(socket_dir);
+    match status {
+        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+        Err(error) => {
+            eprintln!("fiex-plugin-sandbox: wait failed: {error}");
+            std::process::exit(1);
+        }
     }
 }

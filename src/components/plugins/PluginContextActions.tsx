@@ -9,7 +9,7 @@ interface Item {
   title: string
   when?: string
   command?: string
-  openPanel?: string
+  panel?: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
   resultView?: 'checksum' | 'json'
   children?: Item[]
   args?: Record<string, unknown>
@@ -58,7 +58,7 @@ function valid(nodes: Item[]): boolean {
       if (
         Number(Boolean(item.children)) +
           Number(Boolean(item.command)) +
-          Number(Boolean(item.openPanel)) !==
+          Number(Boolean(item.panel)) !==
         1
       )
         return false
@@ -131,12 +131,12 @@ export function PluginContextActions({
   const ctx: Context = { paths, path, isDirectory, readOnly, isRemote }
   const invoke = async (pluginId: string, item: Item) => {
     onClose()
-    if (item.openPanel) {
+    if (item.panel) {
       window.dispatchEvent(
         new CustomEvent(OPEN_PLUGIN_PANEL, {
           detail: {
             pluginId,
-            panelId: item.openPanel,
+            panelId: item.id,
             title: item.title,
             selection: paths,
             directory: path,
@@ -180,7 +180,7 @@ export function PluginContextActions({
         .filter((p) => p.enabled)
         .flatMap((plugin) => {
           const items =
-            (plugin.contributes as { contextMenus?: Item[] } | undefined)?.contextMenus || []
+            (plugin.contributions as { contextMenus?: Item[] } | undefined)?.contextMenus || []
           if (!valid(items)) return []
           return items.map((item) => (
             <MenuNode

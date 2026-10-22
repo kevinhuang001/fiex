@@ -1,63 +1,51 @@
-# Fiex 插件系统（实验性 2.0）
+# Fiex 插件系统（实验性 1.0）
 
-> **状态：开发分支已实现，协议仍可破坏性修改。** 基线为 `refactor/fiex-external-submodules`，Native IPC 版本为 **2.0**。本文档描述当前代码，而不是未发布承诺。SDK 与官方插件位于独立仓库。
+> **状态：开发分支已实现，协议与 manifest 仍可破坏性修改。** Native IPC 版本 **2.0**，manifest `schemaVersion: 1`。
 
-## 目标
+## 权限与注册分离
 
-把 WebDAV、SMB、Git、压缩、校验和等可选能力从 Core 移出，作为普通插件分发：
+- **权限**回答“插件能碰什么数据”，安装时由用户授权：`filesystem.read`、`filesystem.write`、`network`。
+- **注册**回答“插件向 Fiex 提供什么”，只影响 UI 和路由，不授予任何数据权限。
 
-- **Core**：文件浏览与操作、插件进程监管、安装与权限、通用插件 VFS 路由、远程目录渲染、凭据代理。
-- **Native 插件**：独立进程，通过 Content-Length + JSON-RPC 2.0 与 Core 通信。
-- **官方插件不享受特权**：与第三方使用相同 manifest、IPC、权限和安装流程。
+`manifest.json` 只有三块：身份、`permissions`、`contributions`。
 
-## 权限模型
+## 注册类别
 
-只保留与隐私直接相关的三项权限：
+| 类别           | 用途                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `connections`  | 远程连接类型；声明字段并实现 `connection.validate` / `fs.*`。注册连接即拥有远程 VFS 能力。 |
+| `toolbar`      | 工具栏动作；`command` 执行命令，`panel` 打开 iframe。                                      |
+| `contextMenus` | 右键菜单动作；同样支持 `command` / `panel`。                                               |
+| `search`       | 搜索来源；Core 查询所有启用来源并合并结果。                                                |
+| `settings`     | 插件配置字段，由 Core 渲染。                                                               |
 
-| 权限               | 含义                                               |
-| ------------------ | -------------------------------------------------- |
-| `filesystem.read`  | 读取用户文件                                       |
-| `filesystem.write` | 创建、修改、删除用户文件                           |
-| `network`          | 网络访问，只允许 manifest 申请或用户添加的精确域名 |
+不再有独立的 `panels` 或 `vfs` 注册：
 
-- `network` 可在设置中添加/删除域名；`localhost`、`127.0.0.1`、`::1` 等回环地址始终允许。
-- 插件私有 KV、系统凭据代理、宿主文件选择器、执行外部程序都不是权限项。
-- 私有 KV 按插件隔离；凭据由宿主代理；进程执行由 OS 沙箱约束。
+- iframe 面板直接内联在 `toolbar` / `contextMenus` 条目里；
+- 虚拟路径 scheme 直接内联在 `connections` / `toolbar` 条目里（`schemes: ["history"]`）。
+
+## 官方插件
+
+Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进程、独立 crate、独立 Release，不预装。
 
 ## 平台沙箱
 
-| 平台    | 状态                   | 机制                                                         |
-| ------- | ---------------------- | ------------------------------------------------------------ |
-| Linux   | 已实现                 | Landlock 文件系统限制 + seccomp 禁止无网络插件的 socket      |
-| macOS   | 已实现，待 CI 真机验证 | `sandbox-exec` Seatbelt 配置                                 |
-| Windows | 待实现                 | 计划 AppContainer + Job Object；当前仅有普通子进程和权限校验 |
+| 平台    | 机制                               | 状态                        |
+| ------- | ---------------------------------- | --------------------------- |
+| Linux   | Arapuca：Landlock + seccomp        | 已实现并集成测试            |
+| macOS   | Arapuca：Seatbelt                  | 已实现，待真机 CI           |
+| Windows | Arapuca：AppContainer + Job Object | 已接入启动器，待 Windows CI |
 
-沙箱失败时拒绝启动插件，不会静默降级。插件仍应被视为不完全可信代码；当前版本不宣称 Windows 具备 OS 级隔离。
+沙箱失败时拒绝启动。域名白名单由插件进程校验，不等同于 OS 级网络过滤。
 
-## 阅读顺序
+## 文档
 
-| 文档                                        | 内容                            |
-| ------------------------------------------- | ------------------------------- |
-| [01 架构](01-ARCHITECTURE.md)               | Core/插件边界、生命周期、VFS    |
-| [02 VFS](02-VFS.md)                         | 通用 `vfs.*` 与远程 `fs.*` 方法 |
-| [04 IPC](04-IPC-PROTOCOL.md)                | 协议 2.0 帧、握手、方法表       |
-| [05 UI](05-UI-EXTENSIONS.md)                | 右键菜单、工具栏、预编译 iframe |
-| [07 安全](07-SECURITY-PACKAGING.md)         | 权限、沙箱、打包与安装          |
-| [12 状态](12-IMPLEMENTATION-STATUS.md)      | 已实现与未完成项                |
-| [14 GitHub 安装](14-GITHUB-INSTALLATION.md) | 应用商店与 Release 契约         |
-| [15 仓库边界](15-EXTERNAL-REPOSITORIES.md)  | Core/SDK/官方插件仓库与 CI      |
-
-## 不变量
-
-1. 没有插件时，本地文件浏览和文件操作仍可用。
-2. 连接和功能都是插件贡献；Core 不按官方插件 ID 写业务分支。
-3. 远程目录是虚拟条目，不创建零字节占位文件。
-4. 远程下载由 Core 拉取受限块并写入暂存文件，插件不接收宿主绝对路径。
-5. 所有插件安装都需要用户确认权限；权限撤销后不能继续调用受控能力。
-6. 协议有版本、结构化错误和跨仓库契约测试。
-
-## 当前非目标
-
-- 双向同步与冲突解决引擎尚未完成。
-- 远程写入、OAuth Broker、可靠任务取消与进度仍待实现。
-- Windows OS 级沙箱仍待实现。
+- [01 架构](01-ARCHITECTURE.md)
+- [02 VFS 与连接](02-VFS.md)
+- [04 IPC](04-IPC-PROTOCOL.md)
+- [05 UI 扩展](05-UI-EXTENSIONS.md)
+- [07 安全](07-SECURITY-PACKAGING.md)
+- [12 状态](12-IMPLEMENTATION-STATUS.md)
+- [14 GitHub 安装](14-GITHUB-INSTALLATION.md)
+- [15 仓库边界](15-EXTERNAL-REPOSITORIES.md)
+- [16 搜索](16-SEARCH.md)

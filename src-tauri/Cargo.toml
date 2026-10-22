@@ -66,6 +66,12 @@ sysinfo = { version = "0.37", default-features = false, features = ["disk"] }
 file_icon_provider = { version = "1", optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
+[target.'cfg(unix)'.dependencies]
+arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e40035fb87ef766eedf23bd1c01fd91261c447", default-features = false }
+[target.'cfg(windows)'.dependencies]
+arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e40035fb87ef766eedf23bd1c01fd91261c447", default-features = false }
+
+
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
 gtk = { version = "0.18", optional = true }

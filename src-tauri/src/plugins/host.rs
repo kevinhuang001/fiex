@@ -6,32 +6,64 @@ use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs,
-    io::BufReader,
+    io::{BufReader, Read, Write},
     path::{Component, Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Stdio},
     sync::{Arc, Mutex, OnceLock},
 };
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginRuntime {
+    #[serde(default)]
+    pub protocol_version: String,
+    #[serde(default)]
+    pub entrypoints: HashMap<String, String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilesystemPermission {
+    #[serde(default)]
+    pub read: bool,
+    #[serde(default)]
+    pub write: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkPermission {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub domains: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginPermissions {
+    #[serde(default)]
+    pub filesystem: FilesystemPermission,
+    #[serde(default)]
+    pub network: NetworkPermission,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginManifest {
+    pub schema_version: u32,
     pub id: String,
     pub name: String,
     pub version: String,
     #[serde(default)]
     pub description: String,
     #[serde(default)]
-    pub capabilities: Vec<String>,
+    pub icon: Option<String>,
     #[serde(default)]
-    pub entrypoints: HashMap<String, String>,
+    pub runtime: PluginRuntime,
     #[serde(default)]
-    pub contributes: Value,
+    pub permissions: PluginPermissions,
     #[serde(default)]
-    pub permissions: Value,
-    /// Exact DNS names requested by the plugin. Users can grant fewer,
-    /// revoke individual names, or add their own server hostnames.
-    #[serde(default)]
-    pub network_domains: Vec<String>,
+    pub contributions: Value,
     #[serde(default)]
     pub author: Option<PluginAuthor>,
 }
@@ -45,12 +77,14 @@ pub struct PluginAuthor {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginInfo {
+    pub schema_version: u32,
     pub id: String,
     pub name: String,
     pub version: String,
     pub description: String,
+    pub icon: Option<String>,
     pub capabilities: Vec<String>,
-    pub contributes: Value,
+    pub contributions: Value,
     pub backend_available: bool,
     pub enabled: bool,
     pub author: Option<PluginAuthor>,
@@ -60,9 +94,76 @@ pub struct PluginInfo {
     pub requested_network_domains: Vec<String>,
     pub allowed_network_domains: Vec<String>,
 }
-fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>, String> {
-    crate::plugin_permissions::declaration(&manifest.permissions)
+pub fn declared_permissions(
+    manifest: &PluginManifest,
+) -> Result<std::collections::BTreeSet<String>, String> {
+    let mut declared = std::collections::BTreeSet::new();
+    if manifest.permissions.filesystem.read {
+        declared.insert("filesystem.read".to_string());
+    }
+    if manifest.permissions.filesystem.write {
+        declared.insert("filesystem.write".to_string());
+    }
+    if manifest.permissions.network.enabled {
+        declared.insert("network".to_string());
+    }
+    crate::plugin_permissions::validate_network_domains(
+        &declared,
+        &manifest.permissions.network.domains,
+    )?;
+    Ok(declared)
 }
+
+fn declared(manifest: &PluginManifest) -> Result<std::collections::BTreeSet<String>, String> {
+    declared_permissions(manifest)
+}
+
+fn capabilities(contributions: &Value) -> Vec<String> {
+    let mut values = Vec::new();
+    for (key, capability) in [
+        ("connections", "connection"),
+        ("toolbar", "toolbar"),
+        ("contextMenus", "contextMenu"),
+        ("search", "search"),
+        ("settings", "settings"),
+    ] {
+        let present = contributions
+            .get(key)
+            .and_then(Value::as_array)
+            .is_some_and(|items| !items.is_empty());
+        if present {
+            values.push(capability.to_string());
+        }
+    }
+    let has_scheme = ["connections", "toolbar"].iter().any(|key| {
+        contributions
+            .get(key)
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items.iter().any(|item| {
+                    item.get("scheme").and_then(Value::as_str).is_some()
+                        || item
+                            .get("schemes")
+                            .and_then(Value::as_array)
+                            .is_some_and(|values| !values.is_empty())
+                })
+            })
+    });
+    if has_scheme {
+        values.push("vfs".to_string());
+    }
+    let has_panel = ["toolbar", "contextMenus"].iter().any(|key| {
+        contributions
+            .get(key)
+            .and_then(Value::as_array)
+            .is_some_and(|items| items.iter().any(|item| item.get("panel").is_some()))
+    });
+    if has_panel {
+        values.push("panel".to_string());
+    }
+    values
+}
+
 pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
     let (manifest, _) = discover()
         .into_iter()
@@ -105,7 +206,7 @@ pub fn approve_install(id: &str) -> Result<(), String> {
     crate::plugin_permissions::approve_install_with_domains(
         id,
         &declared(&manifest)?,
-        &manifest.network_domains,
+        &manifest.permissions.network.domains,
     )?;
     Ok(())
 }
@@ -143,14 +244,11 @@ fn discover() -> Vec<(PluginManifest, PathBuf)> {
             let Ok(manifest) = serde_json::from_slice::<PluginManifest>(&bytes) else {
                 continue;
             };
-            if !valid_id(&manifest.id)
+            if manifest.schema_version != 1
+                || manifest.runtime.protocol_version != plugin_sdk::PROTOCOL_VERSION
+                || !valid_id(&manifest.id)
                 || manifest.name.len() > 128
                 || declared(&manifest).is_err()
-                || crate::plugin_permissions::validate_network_domains(
-                    &declared(&manifest).unwrap_or_default(),
-                    &manifest.network_domains,
-                )
-                .is_err()
             {
                 continue;
             }
@@ -185,6 +283,7 @@ fn canonical_under(candidate: &Path, root: &Path) -> bool {
 fn executable(manifest: &PluginManifest, dir: &Path) -> Result<PathBuf, String> {
     let key = platform();
     let rel = manifest
+        .runtime
         .entrypoints
         .get(&key)
         .ok_or("plugin has no native backend for platform")?;
@@ -207,20 +306,23 @@ pub fn catalog() -> Vec<PluginInfo> {
             let declared = declared(&manifest).unwrap_or_default();
             let state =
                 crate::plugin_permissions::status(&manifest.id, &declared).unwrap_or_default(); // unreadable policy fails closed
+            let capabilities = capabilities(&manifest.contributions);
             PluginInfo {
+                schema_version: manifest.schema_version,
                 id: manifest.id,
                 name: manifest.name,
                 version: manifest.version,
                 description: manifest.description,
-                capabilities: manifest.capabilities,
-                contributes: manifest.contributes,
+                icon: manifest.icon,
+                capabilities,
+                contributions: manifest.contributions,
                 backend_available: backend,
                 enabled: state.enabled && state.approved,
                 author: manifest.author,
                 approved: state.approved,
                 declared_permissions: declared.into_iter().collect(),
                 granted_permissions: state.granted.into_iter().collect(),
-                requested_network_domains: manifest.network_domains,
+                requested_network_domains: manifest.permissions.network.domains,
                 allowed_network_domains: state.network_domains.into_iter().collect(),
             }
         })
@@ -237,15 +339,13 @@ pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
     if !rights.approved || !rights.enabled {
         return Err("plugin disabled or not approved".into());
     }
-    let panels = manifest
-        .contributes
-        .get("panels")
-        .and_then(Value::as_array)
-        .ok_or("plugin declares no panels")?;
-    let panel = panels
+    let panel = ["toolbar", "contextMenus"]
         .iter()
-        .find(|p| p.get("id").and_then(Value::as_str) == Some(panel_id))
-        .ok_or("unknown panel id")?;
+        .filter_map(|key| manifest.contributions.get(key).and_then(Value::as_array))
+        .flatten()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(panel_id))
+        .and_then(|item| item.get("panel"))
+        .ok_or("plugin declares no such panel")?;
     let asset = panel
         .get("entry")
         .and_then(Value::as_str)
@@ -270,9 +370,9 @@ pub fn exists(id: &str) -> bool {
 struct Running {
     plugin_id: String,
     declared: std::collections::BTreeSet<String>,
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
+    child: crate::plugin_sandbox::SandboxChild,
+    stdin: Box<dyn Write + Send>,
+    stdout: BufReader<Box<dyn Read + Send>>,
     next_id: u64,
 }
 impl Running {
@@ -375,8 +475,8 @@ impl Running {
 }
 impl Drop for Running {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        // Dropping SandboxChild terminates the plugin and its process tree.
+        let _ = &self.child;
     }
 }
 #[derive(Default)]
@@ -417,21 +517,21 @@ impl PluginHost {
             }
             let path = executable(&manifest, &dir)?;
             let policy = crate::plugin_sandbox::Policy::new(&path, &dir, &state, &declared);
-            let mut command = crate::plugin_sandbox::command(&policy)?;
-            let mut child = command
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::inherit())
-                .spawn()
-                .map_err(|e| format!("plugin start failed: {e}"))?;
-            let stdin = child.stdin.take().ok_or("plugin stdin unavailable")?;
-            let stdout = child.stdout.take().ok_or("plugin stdout unavailable")?;
+            let mut sandbox = crate::plugin_sandbox::spawn(&policy)?;
+            let stdin = std::mem::replace(
+                &mut sandbox.stdin,
+                Box::new(std::io::sink()) as Box<dyn Write + Send>,
+            );
+            let stdout = std::mem::replace(
+                &mut sandbox.stdout,
+                BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
+            );
             let mut running = Running {
                 plugin_id: plugin_id.to_string(),
                 declared,
-                child,
+                child: sandbox,
                 stdin,
-                stdout: BufReader::new(stdout),
+                stdout,
                 next_id: 0,
             };
             let result = running.rpc(

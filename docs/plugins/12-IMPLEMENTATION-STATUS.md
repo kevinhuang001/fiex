@@ -6,16 +6,16 @@
 
 - **进程宿主**：manifest 发现、用户授权、独立进程、握手、身份校验、启用/停用、卸载。
 - **权限**：`filesystem.read`、`filesystem.write`、`network` + 精确域名白名单；回环地址始终允许。
-- **通用虚拟 VFS**：插件通过 `contributes.vfs.schemes` 注册 scheme；Core 用 `vfs.list/stat/readSmall/search` 路由，不再硬编码 `history://`。
+- **通用虚拟 VFS**：插件通过 `connections` / `toolbar` 的 `schemes` 注册虚拟路径；Core 用 `vfs.list/stat/readSmall/search` 路由，不再硬编码 `history://`。
 - **Git 插件化**：Core 删除 `git.rs`/`git_history.rs`/`git_remote.rs` 业务实现；专用命令只做插件代理。
 - **远程流**：WebDAV/SMB 使用 `fs.openRead/readStream/closeRead`，Core 负责暂存文件、块大小、EOF 和取消清理；不再交接绝对路径。
-- **官方插件**：Git、WebDAV、SMB、Archive、Checksum 独立 crate，独立构建与打包。
+- **官方插件**：Git、WebDAV、SMB、Archive、Checksum、Everything 搜索独立 crate，独立构建与打包。
 - **应用商店 UI**：设置 → 插件一行一个插件；权限管理按钮在行悬浮时显示；官方插件列表从 Release 的 `fiex-catalog.json` 读取；无手填仓库地址。
-- **沙箱**：Linux Landlock + seccomp 已落地；macOS Seatbelt 已实现待真机验证。
+- **沙箱**：统一使用 Arapuca 进程沙箱；Linux Landlock + seccomp 已集成测试，macOS Seatbelt 待真机验证，Windows AppContainer 已接入启动器。
 
 ## 未完成 / 发布阻断
 
-- Windows AppContainer + Job Object 沙箱。
+- Windows AppContainer 真机 CI 与 Everything 运行环境验证。
 - 任务级 `taskId` 取消与插件进度上报；目前下载在块之间取消，Archive/Checksum 无进度。
 - 内核级远程缓存/同步/冲突仲裁引擎；当前只做按需下载与本地镜像。
 - 远程写入、OAuth Broker、凭据轮换。

@@ -1059,6 +1059,15 @@ fn cancel_operation(state: tauri::State<'_, OperationCancel>) {
     state.cancel();
 }
 #[tauri::command]
+async fn plugin_search(
+    request: crate::plugin_search::PluginSearchInput,
+) -> Result<Vec<files::Entry>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(crate::plugin_search::query(&request)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn file_checksums(path: String) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         crate::plugin_host::global().invoke(
@@ -1454,6 +1463,7 @@ pub fn run() {
             pick_folder,
             plugin_file_dialog,
             plugin_files_dialog,
+            plugin_search,
             file_checksums,
             compress_archive,
             detect_terminals,

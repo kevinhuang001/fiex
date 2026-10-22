@@ -19,8 +19,11 @@ export function ConnectionDialog({
   const choices = useMemo(
     () =>
       plugins.flatMap((plugin) =>
-        plugin.enabled && plugin.capabilities.includes('connectionFactory')
-          ? (plugin.contributes?.connectionFactories || []).map((factory) => ({ plugin, factory }))
+        plugin.enabled && plugin.capabilities.includes('connection')
+          ? (plugin.contributions?.connections || []).map((factory) => ({
+              plugin,
+              factory,
+            }))
           : [],
       ),
     [plugins],

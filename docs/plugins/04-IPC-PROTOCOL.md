@@ -55,7 +55,7 @@ Core 在启动插件后发送：
 | `fs.closeRead`                       | 关闭读取流                                        |
 | `git.*` / `archive.*` / `checksum.*` | 插件自定义命令                                    |
 
-`vfs.*` 用于插件声明 `contributes.vfs.schemes` 的路径（例如 Git 的 `history://`）。Core 按 scheme 找到已安装、已授权的插件，不硬编码插件 ID。
+`vfs.*` 用于插件在 `connections` / `toolbar` 条目里通过 `schemes` 声明的虚拟路径（例如 Git 的 `history://`）。Core 按 scheme 找到已安装、已授权的插件，不硬编码插件 ID。
 
 `fs.*` 只用于远程只读连接。Core 负责暂存、目标文件和缓存；插件不接收宿主绝对路径。
 
