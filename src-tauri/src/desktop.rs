@@ -295,11 +295,11 @@ fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<String, Stri
 fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
     crate::plugin_host::catalog()
 }
-fn ensure_plugin(id: &str) -> Result<(), String> {
-    if crate::plugin_host::exists(id) {
+fn ensure_plugin_permission(id:&str,permission:&str)->Result<(),String>{
+    if crate::plugin_host::permission_allowed(id,permission)? {
         Ok(())
     } else {
-        Err("plugin is not installed".into())
+        Err(format!("plugin permission not granted: {permission}"))
     }
 }
 #[tauri::command]
@@ -308,7 +308,7 @@ fn plugin_storage_get(
     scope: String,
     key: String,
 ) -> Result<Option<serde_json::Value>, String> {
-    ensure_plugin(&plugin_id)?;
+    ensure_plugin_permission(&plugin_id,"storage")?;
     crate::plugin_storage::get(&plugin_id, &scope, &key)
 }
 #[tauri::command]
@@ -318,12 +318,12 @@ fn plugin_storage_set(
     key: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
-    ensure_plugin(&plugin_id)?;
+    ensure_plugin_permission(&plugin_id,"storage")?;
     crate::plugin_storage::set(&plugin_id, &scope, &key, value)
 }
 #[tauri::command]
 fn plugin_storage_delete(plugin_id: String, scope: String, key: String) -> Result<(), String> {
-    ensure_plugin(&plugin_id)?;
+    ensure_plugin_permission(&plugin_id,"storage")?;
     crate::plugin_storage::delete(&plugin_id, &scope, &key)
 }
 #[tauri::command]
@@ -333,7 +333,7 @@ fn plugin_secret_set(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    ensure_plugin(&plugin_id)?;
+    ensure_plugin_permission(&plugin_id,"secrets")?;
     let permitted = crate::plugin_host::catalog()
         .into_iter()
         .find(|p| p.id == plugin_id)
