@@ -16,10 +16,22 @@ export interface PluginContribution {
   command?: string
   openPanel?: string
 }
+export interface MarketplacePlugin {
+  id: string
+  name: string
+  version: string
+  description: string
+  author?: { name: string; url?: string }
+  permissions: string[]
+  requestedNetworkDomains: string[]
+  asset: string
+  repository: string
+}
 export interface PluginInfo {
   id: string
   name: string
   version: string
+  description?: string
   capabilities: string[]
   enabled: boolean
   author?: { name: string; url?: string }
@@ -62,4 +74,10 @@ export function usePluginCatalog(): PluginInfo[] {
 
 export function refreshPluginCatalog() {
   window.dispatchEvent(new Event('fiex:plugins-changed'))
+}
+
+export async function pluginMarketplace(): Promise<MarketplacePlugin[]> {
+  return call<MarketplacePlugin[]>('plugin_marketplace', {
+    repository: 'kevinhuang001/fiex-official-plugins',
+  })
 }

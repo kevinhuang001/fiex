@@ -3,6 +3,10 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -132,27 +136,16 @@ fn connection_plugin_id(conn: &StoredConnection) -> String {
 }
 
 /// Refuse requests when a provider has lost one of its declared permissions.
-/// A local-only provider need not ask for network access, but native staging
-/// downloads additionally require explicitly granted filesystem.write.
-fn ensure_provider_access(conn: &StoredConnection, write_file: bool) -> Result<String, String> {
+/// Remote providers may only read; Core owns the destination file and cache.
+fn ensure_provider_access(conn: &StoredConnection) -> Result<String, String> {
     let plugin_id = connection_plugin_id(conn);
     let plugin = crate::plugin_host::catalog()
         .into_iter()
         .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
         .ok_or("连接插件未安装、启用或已被撤销授权")?;
-    let mut required = Vec::new();
+    let mut required = vec!["filesystem.read"];
     if plugin.declared_permissions.iter().any(|p| p == "network") {
         required.push("network");
-    }
-    if write_file {
-        if !plugin
-            .declared_permissions
-            .iter()
-            .any(|p| p == "filesystem.write")
-        {
-            return Err("文件下载插件未声明写入权限".into());
-        }
-        required.push("filesystem.write");
     }
     for permission in required {
         if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
@@ -308,6 +301,29 @@ fn save_meta(conn: &StoredConnection, meta: &RemoteMeta) -> Result<(), String> {
 
 /// Explicitly pass credentials only to the selected, authorized provider
 /// subprocess; the connection registry itself never serializes passwords.
+fn allowed_network_domains(plugin_id: &str) -> Vec<String> {
+    let Some(plugin) = crate::plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == plugin_id)
+    else {
+        return Vec::new();
+    };
+    let declared = plugin
+        .declared_permissions
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut domains = crate::plugin_permissions::status(plugin_id, &declared)
+        .map(|state| state.network_domains.into_iter().collect::<Vec<_>>())
+        .unwrap_or_default();
+    for loopback in ["localhost", "127.0.0.1", "::1"] {
+        if !domains.iter().any(|domain| domain == loopback) {
+            domains.push(loopback.into());
+        }
+    }
+    domains
+}
+
 fn provider_config(conn: &StoredConnection) -> serde_json::Value {
     let mut config = serde_json::json!({
         "url": conn.url,
@@ -320,6 +336,10 @@ fn provider_config(conn: &StoredConnection) -> serde_json::Value {
         "allowInvalidCerts": conn.allow_invalid_certs
     });
     if let Some(map) = config.as_object_mut() {
+        map.insert(
+            "networkDomains".into(),
+            serde_json::json!(allowed_network_domains(&connection_plugin_id(conn))),
+        );
         map.extend(conn.settings.clone());
     }
     config
@@ -343,6 +363,17 @@ fn public(conn: &StoredConnection) -> ConnectionInfo {
 
 pub fn list_connections() -> Vec<ConnectionInfo> {
     load_stored().iter().map(public).collect()
+}
+
+fn connection_domain(kind: &str, url: &str, host: &str) -> Option<String> {
+    let value = match kind {
+        "webdav" => reqwest::Url::parse(url)
+            .ok()
+            .and_then(|url| url.host_str().map(str::to_owned))?,
+        "smb" => host.trim().to_owned(),
+        _ => return None,
+    };
+    crate::plugin_permissions::normalize_domain(&value).ok()
 }
 
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
@@ -483,7 +514,14 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         allow_invalid_certs: input.allow_invalid_certs,
         port: input.port,
     };
-    ensure_provider_access(&record, false)?;
+    ensure_provider_access(&record)?;
+    // Saving a connection is explicit user intent to reach this host. The
+    // exact hostname is added to the plugin's own allowlist before validation.
+    if let Some(domain) = connection_domain(&record.kind, &record.url, &record.host) {
+        if !crate::plugin_permissions::is_loopback_domain(&domain) {
+            crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
+        }
+    }
     crate::plugin_host::global().invoke(
         &plugin_id,
         "connection.validate",
@@ -599,7 +637,7 @@ fn local_for(conn: &StoredConnection, rel: &str) -> PathBuf {
 }
 
 async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
-    let plugin_id = ensure_provider_access(conn, false)?;
+    let plugin_id = ensure_provider_access(conn)?;
     let config = provider_config(conn);
     let mut files = Vec::new();
     let mut cursor: Option<String> = None;
@@ -729,33 +767,94 @@ pub async fn list_listing(
 }
 
 /// Plugins never receive absolute host paths, even for downloads.
-/// A bounded, offset-based byte stream crosses the control channel; only
-/// Core creates or commits destination files. A failed read drops staging.
-async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
+/// Core opens a bounded stream, pulls offset chunks over IPC, and only Core
+/// creates or commits the destination file. A failed or cancelled transfer
+/// drops its staging file. No provider can write into the host filesystem.
+pub type ProgressFn = dyn Fn(u64, Option<u64>) + Send + Sync;
+
+#[derive(Clone, Default)]
+pub struct TransferOptions {
+    pub cancel: Option<Arc<AtomicBool>>,
+    pub progress: Option<Arc<ProgressFn>>,
+}
+
+impl TransferOptions {
+    fn cancelled(&self) -> bool {
+        self.cancel
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    }
+    fn report(&self, done: u64, total: Option<u64>) {
+        if let Some(progress) = &self.progress {
+            progress(done, total);
+        }
+    }
+}
+
+async fn fetch_remote(
+    conn: &StoredConnection,
+    rel: &str,
+    dest: &Path,
+    options: &TransferOptions,
+) -> Result<u64, String> {
     use base64::Engine;
     use std::io::Write;
 
     const CHUNK: u64 = 256 * 1024;
     const MAX_TRANSFER: u64 = 16 * 1024 * 1024 * 1024;
-    let plugin_id = ensure_provider_access(conn, false)?;
+    let plugin_id = ensure_provider_access(conn)?;
+    if options.cancelled() {
+        return Err(crate::operations::CANCELLED.into());
+    }
     let parent = dest.parent().ok_or("invalid download destination")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let mut staging = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    let opened = crate::plugin_host::global().invoke(
+        &plugin_id,
+        "fs.openRead",
+        serde_json::json!({"connection": provider_config(conn), "nodeId": rel}),
+    )?;
+    let stream_id = opened
+        .get("streamId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("provider returned no read stream")?
+        .to_string();
+    let total = opened
+        .get("size")
+        .and_then(serde_json::Value::as_u64)
+        .filter(|size| *size > 0 && *size <= MAX_TRANSFER);
     let mut offset = 0u64;
+    let close = |stream: &str| {
+        let _ = crate::plugin_host::global().invoke(
+            &plugin_id,
+            "fs.closeRead",
+            serde_json::json!({ "streamId": stream }),
+        );
+    };
     loop {
+        if options.cancelled() {
+            close(&stream_id);
+            return Err(crate::operations::CANCELLED.into());
+        }
         if offset >= MAX_TRANSFER {
+            close(&stream_id);
             return Err("remote file exceeds maximum allowed transfer size".into());
         }
-        let response = crate::plugin_host::global().invoke(
+        let response = match crate::plugin_host::global().invoke(
             &plugin_id,
-            "fs.readChunk",
+            "fs.readStream",
             serde_json::json!({
-                "connection": provider_config(conn),
-                "nodeId": rel,
+                "streamId": &stream_id,
                 "offset": offset,
                 "maxBytes": CHUNK
             }),
-        )?;
+        ) {
+            Ok(response) => response,
+            Err(error) => {
+                close(&stream_id);
+                return Err(error);
+            }
+        };
         let encoded = response
             .get("base64")
             .and_then(serde_json::Value::as_str)
@@ -764,19 +863,25 @@ async fn fetch_remote(conn: &StoredConnection, rel: &str, dest: &Path) -> Result
             .decode(encoded)
             .map_err(|_| "provider returned invalid base64")?;
         if bytes.len() > CHUNK as usize || offset + bytes.len() as u64 > MAX_TRANSFER {
+            close(&stream_id);
             return Err("provider exceeded the transfer frame size".into());
         }
-        let eof = response.get("eof").and_then(serde_json::Value::as_bool)
+        let eof = response
+            .get("eof")
+            .and_then(serde_json::Value::as_bool)
             .ok_or("provider returned no EOF flag")?;
         if bytes.is_empty() && !eof {
+            close(&stream_id);
             return Err("provider returned an empty nonfinal chunk".into());
         }
         staging.write_all(&bytes).map_err(|e| e.to_string())?;
         offset += bytes.len() as u64;
+        options.report(offset, total);
         if eof {
             break;
         }
     }
+    close(&stream_id);
     staging.as_file().sync_all().map_err(|e| e.to_string())?;
     staging.persist(dest).map_err(|e| e.error.to_string())?;
     Ok(offset)
@@ -805,7 +910,7 @@ pub async fn provider_list(
         .ok_or("connection not found")?;
     // The manifest and actual user-granted permission gate every request.
     // No built-in provider is trusted implicitly, including the official ones.
-    let plugin_id = ensure_provider_access(&conn, false)?;
+    let plugin_id = ensure_provider_access(&conn)?;
     let config = provider_config(&conn);
     crate::plugin_host::global().invoke(
         &plugin_id,
@@ -819,7 +924,7 @@ pub async fn provider_list(
     )
 }
 
-pub async fn download(path: &str) -> Result<String, String> {
+pub async fn download(path: &str, options: &TransferOptions) -> Result<String, String> {
     let Some((conn, rel)) = connection_for_path(path) else {
         return Ok(path.into());
     };
@@ -839,7 +944,7 @@ pub async fn download(path: &str) -> Result<String, String> {
             .map(|d| d.as_millis())
             .unwrap_or_default()
     ));
-    let size = match fetch_remote(&conn, &rel, &temp).await {
+    let size = match fetch_remote(&conn, &rel, &temp, options).await {
         Ok(size) => size,
         Err(error) => {
             let _ = fs::remove_file(&temp);
@@ -861,7 +966,7 @@ pub async fn download(path: &str) -> Result<String, String> {
     Ok(local.to_string_lossy().into_owned())
 }
 
-pub async fn download_dir(path: &str) -> Result<(), String> {
+pub async fn download_dir(path: &str, options: &TransferOptions) -> Result<(), String> {
     let Some((conn, rel)) = connection_for_path(path) else {
         return Ok(());
     };
@@ -869,6 +974,9 @@ pub async fn download_dir(path: &str) -> Result<(), String> {
     let mut meta = load_meta(&conn);
     let mut pending = vec![rel];
     while let Some(current) = pending.pop() {
+        if options.cancelled() {
+            return Err(crate::operations::CANCELLED.into());
+        }
         meta.files.insert(
             current.clone(),
             RemoteMetaFile {
@@ -903,7 +1011,7 @@ pub async fn download_dir(path: &str) -> Result<(), String> {
                     meta.files.get(&child).is_some_and(|m| m.downloaded) && local.is_file();
                 if !cached {
                     let temp = local.with_extension("fiex-download");
-                    let size = match fetch_remote(&conn, &child, &temp).await {
+                    let size = match fetch_remote(&conn, &child, &temp, options).await {
                         Ok(size) => size,
                         Err(error) => {
                             let _ = fs::remove_file(&temp);
@@ -928,9 +1036,9 @@ pub async fn download_dir(path: &str) -> Result<(), String> {
     save_meta(&conn, &meta)
 }
 
-pub async fn ensure_downloaded(path: &str) -> Result<String, String> {
+pub async fn ensure_downloaded(path: &str, options: &TransferOptions) -> Result<String, String> {
     if connection_for_path(path).is_some() {
-        download(path).await
+        download(path, options).await
     } else {
         Ok(path.into())
     }
@@ -985,22 +1093,22 @@ pub fn eject(path: &str) -> Result<(), String> {
     Err("当前平台不支持弹出设备".into())
 }
 
-pub async fn sync_one(path: &str) -> Result<(), String> {
+pub async fn sync_one(path: &str, options: &TransferOptions) -> Result<(), String> {
     let Some((conn, rel)) = connection_for_path(path) else {
         return Ok(());
     };
     let rel = rel_string(&rel);
     let meta = load_meta(&conn);
     if meta.files.get(&rel).is_some_and(|file| file.is_dir) {
-        download_dir(path).await
+        download_dir(path, options).await
     } else {
-        download(path).await.map(|_| ())
+        download(path, options).await.map(|_| ())
     }
 }
 
-pub async fn sync(paths: &[String]) -> Result<(), String> {
+pub async fn sync(paths: &[String], options: &TransferOptions) -> Result<(), String> {
     for path in paths {
-        sync_one(path).await?;
+        sync_one(path, options).await?;
     }
     Ok(())
 }

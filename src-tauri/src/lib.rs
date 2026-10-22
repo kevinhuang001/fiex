@@ -6,9 +6,6 @@ mod desktop;
 pub mod drag_session;
 #[path = "core/files.rs"]
 pub mod files;
-pub mod git;
-pub mod git_history;
-pub mod git_remote;
 #[path = "core/ignores.rs"]
 pub mod ignores;
 #[cfg(all(feature = "desktop", target_os = "macos"))]
@@ -24,8 +21,12 @@ pub mod plugin_installer;
 #[path = "plugins/permissions.rs"]
 pub mod plugin_permissions;
 pub use fiex_plugin_sdk as plugin_sdk;
+#[path = "plugins/sandbox.rs"]
+pub mod plugin_sandbox;
 #[path = "plugins/storage.rs"]
 pub mod plugin_storage;
+#[path = "plugins/vfs.rs"]
+pub mod plugin_vfs;
 #[path = "core/recent.rs"]
 pub mod recent;
 pub mod remote;

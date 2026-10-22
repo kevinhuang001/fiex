@@ -48,13 +48,13 @@ URI 段进行百分号编码和严格规范化；拒绝 `..`、混用分隔符�
 
 每个挂载宣告 `read`、`write`、`create`、`delete`、`rename`、`move`、`serverCopy`、`search`、`watch`、`changeFeed`、`conditionalWrite`、`atomicCommit`、`stableIds` 等能力，且节点可以进一步缩小权限。能力不是自动授权；UI 菜单只有在能力和用户权限均允许时才启用。
 
-**协议中必需的基础读取能力**：`fs.list`（分页）、`fs.stat`；支持读取文件的挂载还实现 `fs.openRead`。所有写入/监听/搜索均按能力启用。只用于展示结构的虚拟目录可没有内容流。Git 历史 VFS 可只读。
+**通用插件 VFS** 使用 `vfs.list`（分页）、`vfs.stat`、`vfs.readSmall`、`vfs.search`。**远程只读连接**使用 `fs.list`、`fs.readSmall`、`fs.openRead/readStream/closeRead`。所有写入/监听/搜索均按能力启用。只用于展示结构的虚拟目录可没有内容流。Git 历史 VFS 可只读。
 
 ## 4. 列表与导航
 
 ```text
 Explorer navigate → Core VFS.resolve(uri) → NodeIndex cache lookup
-                 → (stale/absent) plugin.fs.list(mountId,nodeId,cursor,limit)
+                 → (stale/absent) vfs.list(nodeId,cursor,limit)
                  → Core validates + stores page → UI renders
                  → optional async refresh → diff UI update
 ```

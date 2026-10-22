@@ -1,18 +1,30 @@
-import { useState } from 'react'
-import { Download, Github, Shield } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  Archive,
+  Check,
+  Cloud,
+  Download,
+  GitBranch,
+  HardDrive,
+  Hash,
+  LoaderCircle,
+  Puzzle,
+  RefreshCw,
+  Search,
+  Shield,
+  Store,
+} from 'lucide-react'
 import { call } from '@/lib/api'
+import { pluginMarketplace, type MarketplacePlugin } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 
 export const permissionTitles: Record<string, string> = {
-  storage: '插件数据存储',
-  secrets: '系统凭据库（密码与 OAuth 凭据）',
-  network: '访问网络',
   'filesystem.read': '读取文件',
   'filesystem.write': '修改文件',
-  externalCommands: '执行外部程序',
-  'ui.dialog': '显示文件选择器',
+  network: '网络访问',
 }
+
 interface InstallPreview {
   ticket: string
   id: string
@@ -24,48 +36,75 @@ interface InstallPreview {
   repository: string
 }
 
+function pluginIcon(id: string) {
+  if (id.includes('git')) return <GitBranch size={21} />
+  if (id.includes('webdav')) return <Cloud size={21} />
+  if (id.includes('smb')) return <HardDrive size={21} />
+  if (id.includes('archive')) return <Archive size={21} />
+  if (id.includes('checksum')) return <Hash size={21} />
+  return <Puzzle size={21} />
+}
+
 /**
- * Two-step installation: downloaded packages remain inert in a temporary
- * staging directory until user confirms the exact permission declaration.
- * No plugin executable is started during preview.
+ * App-store style official plugin catalog. The repository and asset names are
+ * a fixed release contract: `fiex-catalog.json` plus
+ * `<slug>-<platform>.fiexplugin`. Nothing is started until the user reviews the
+ * exact permissions and confirms installation.
  */
-export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
-  const [repository, setRepository] = useState('kevinhuang001/fiex-official-plugins')
-  const [busy, setBusy] = useState(false)
-  const [assets, setAssets] = useState<string[]>([])
-  const [preview, setPreview] = useState<InstallPreview | null>(null)
+export function PluginInstaller({
+  open,
+  installedIds,
+  onClose,
+  onInstalled,
+}: {
+  open: boolean
+  installedIds: string[]
+  onClose: () => void
+  onInstalled: () => void
+}) {
+  const [entries, setEntries] = useState<MarketplacePlugin[]>([])
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState('')
+  const [preview, setPreview] = useState<InstallPreview | null>(null)
+  const [installing, setInstalling] = useState(false)
   const [message, setMessage] = useState('')
-  const loadAssets = async () => {
-    if (busy || !repository.trim()) return
-    setBusy(true)
+  const [query, setQuery] = useState('')
+
+  const load = () => {
+    if (loading) return
+    setLoading(true)
+    setError('')
+    setMessage('')
+    void pluginMarketplace()
+      .then(setEntries)
+      .catch((cause) => setError(String(cause)))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => {
+    if (!open) return
+    setPreview(null)
+    setMessage('')
+    if (!entries.length) load()
+    // The catalog is intentionally fetched once per settings session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const prepare = async (entry: MarketplacePlugin) => {
+    if (busyId) return
+    setBusyId(entry.id)
     setError('')
     setMessage('')
     try {
-      const names = await call<string[]>('plugin_release_assets', {
-        repository: repository.trim(),
-      })
-      setAssets(names)
-    } catch (cause) {
-      setError(String(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const prepare = async (assetName: string) => {
-    if (busy) return
-    setBusy(true)
-    setError('')
-    try {
       const data = await call<InstallPreview>('plugin_prepare_install', {
-        repository: repository.trim(),
-        assetName,
+        repository: entry.repository,
+        assetName: entry.asset,
       })
       setPreview(data)
     } catch (cause) {
       setError(String(cause))
     } finally {
-      setBusy(false)
+      setBusyId('')
     }
   }
   const discard = () => {
@@ -74,73 +113,127 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
     if (ticket) void call('plugin_cancel_install', { ticket }).catch(() => {})
   }
   const confirm = async () => {
-    if (!preview || busy) return
-    setBusy(true)
+    if (!preview || installing) return
+    setInstalling(true)
     setError('')
     try {
       await call('plugin_confirm_install', { ticket: preview.ticket })
+      const installed = preview
       setPreview(null)
-      setRepository('')
-      setAssets([])
-      setMessage('插件已安装并授权。可在下方配置或撤销权限。')
-      onChanged()
+      setMessage(`${installed.name} 已安装`)
+      onInstalled()
     } catch (cause) {
       setError(String(cause))
     } finally {
-      setBusy(false)
+      setInstalling(false)
     }
   }
+
+  const filtered = entries.filter((entry) => {
+    const term = query.trim().toLowerCase()
+    return (
+      !term ||
+      entry.name.toLowerCase().includes(term) ||
+      entry.id.toLowerCase().includes(term) ||
+      entry.description.toLowerCase().includes(term)
+    )
+  })
+
   return (
     <>
-      <div className="plugin-install-box">
-        <div className="plugin-install-title">
-          <Download size={16} />
-          <strong>从 GitHub 安装插件</strong>
-        </div>
-        <div className="plugin-install-row">
-          <Github size={17} />
-          <input
-            value={repository}
-            aria-label="GitHub 插件仓库"
-            placeholder="开发者/仓库名称，例如 owner/fiex-plugin"
-            onChange={(event) => {
-              setRepository(event.target.value)
-              setAssets([])
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void loadAssets()
-            }}
-          />
-          <Button
-            disabled={busy || !repository.trim()}
-            type="button"
-            onClick={() => void loadAssets()}
-          >
-            {busy ? '获取中…' : '获取插件'}
-          </Button>
-        </div>
-        <p className="sidebar-hint">
-          只支持 GitHub 最新 Release 中的 .fiexplugin
-          文件。下载后先检查插件信息和权限，再由你确认安装。
-        </p>
-        {assets.length > 0 && (
-          <div className="plugin-install-assets" aria-label="可安装插件">
-            {assets.map((asset) => (
-              <button type="button" key={asset} disabled={busy} onClick={() => void prepare(asset)}>
-                <Download size={15} />
-                <span>{asset}</span>
-                <strong>查看权限并安装</strong>
-              </button>
-            ))}
-          </div>
-        )}
-        {message && <p role="status">{message}</p>}
-        {error && !preview && (
-          <p role="alert" className="connection-error">
-            {error}
+      <Modal open={open} onClose={onClose} title="获取插件" wide className="plugin-store-modal">
+        <div className="plugin-store">
+          <header className="plugin-store-hero">
+            <div className="plugin-store-hero-icon">
+              <Store size={24} />
+            </div>
+            <div>
+              <strong>Fiex 官方插件</strong>
+              <p>按需安装。所有插件都需要你审核权限后才会运行。</p>
+            </div>
+            <Button variant="outline" size="sm" disabled={loading} onClick={load}>
+              {loading ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}
+              刷新
+            </Button>
+          </header>
+          <label className="plugin-store-search">
+            <Search size={15} />
+            <input
+              aria-label="搜索插件"
+              placeholder="搜索插件"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          {error && (
+            <p role="alert" className="connection-error">
+              {error}
+            </p>
+          )}
+          {message && (
+            <p role="status" className="plugin-store-message">
+              {message}
+            </p>
+          )}
+          {loading && !entries.length ? (
+            <div className="plugin-store-empty">
+              <LoaderCircle className="spin" size={20} /> 正在读取插件目录…
+            </div>
+          ) : (
+            <div className="plugin-store-grid">
+              {filtered.map((entry) => {
+                const installed = installedIds.includes(entry.id)
+                return (
+                  <article className="plugin-store-card" key={entry.id}>
+                    <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
+                      {pluginIcon(entry.id)}
+                    </div>
+                    <div className="plugin-store-main">
+                      <div className="plugin-store-title">
+                        <strong>{entry.name}</strong>
+                        <span className="plugin-pill">v{entry.version}</span>
+                        {installed && (
+                          <span className="plugin-pill success">
+                            <Check size={11} /> 已安装
+                          </span>
+                        )}
+                      </div>
+                      <p>{entry.description || '没有提供说明。'}</p>
+                      <div className="plugin-store-meta">
+                        <span>{entry.author?.name || 'Fiex Contributors'}</span>
+                        <span aria-hidden>·</span>
+                        <span>{entry.permissions.length} 项权限</span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={installed ? 'outline' : 'default'}
+                      disabled={installed || Boolean(busyId)}
+                      onClick={() => void prepare(entry)}
+                    >
+                      {busyId === entry.id ? (
+                        <LoaderCircle className="spin" size={14} />
+                      ) : (
+                        <Download size={14} />
+                      )}
+                      {installed ? '已安装' : busyId === entry.id ? '获取中…' : '获取'}
+                    </Button>
+                  </article>
+                )
+              })}
+              {!filtered.length && !loading && (
+                <div className="plugin-store-empty">
+                  <Puzzle size={22} />
+                  <span>{entries.length ? '没有匹配的插件' : '暂时没有可安装的插件'}</span>
+                </div>
+              )}
+            </div>
+          )}
+          <p className="plugin-store-footnote">
+            安装包来自 GitHub Release。插件以独立进程运行，权限由 Fiex 宿主校验。
           </p>
-        )}
-      </div>
+        </div>
+      </Modal>
       <Modal open={Boolean(preview)} title="确认插件安装及权限" onClose={discard}>
         <div className="plugin-install-review">
           <div className="plugin-install-review-heading">
@@ -172,12 +265,12 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
           {!!preview?.requestedNetworkDomains.length && (
             <>
               <strong>插件申请的网络域名</strong>
-              <div className="plugin-install-permissions">
+              <div className="plugin-install-domains">
                 {preview.requestedNetworkDomains.map((domain) => (
-                  <div key={domain}><Shield size={14} />{domain}</div>
+                  <span key={domain}>{domain}</span>
                 ))}
               </div>
-              <p className="sidebar-hint">安装确认会同时授权这些精确域名，之后可以在权限管理中逐一撤销。</p>
+              <p className="sidebar-hint">安装确认会同时授权这些精确域名，之后可以增删。</p>
             </>
           )}
           <p className="sidebar-hint">
@@ -190,11 +283,11 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
             </p>
           )}
           <footer className="plugin-consent-actions">
-            <Button variant="outline" type="button" disabled={busy} onClick={discard}>
+            <Button variant="outline" type="button" disabled={installing} onClick={discard}>
               取消
             </Button>
-            <Button type="button" disabled={busy} onClick={() => void confirm()}>
-              {busy ? '安装中…' : '同意权限并安装'}
+            <Button type="button" disabled={installing} onClick={() => void confirm()}>
+              {installing ? '安装中…' : '同意权限并安装'}
             </Button>
           </footer>
         </div>

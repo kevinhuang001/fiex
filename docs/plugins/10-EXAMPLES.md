@@ -67,7 +67,7 @@ Google Calendar
   "id": "org.example.demo",
   "name": "Demo Tree",
   "version": "0.1.0",
-  "pluginProtocol": { "min": "1.0", "max": "1.x" },
+  "pluginProtocol": { "min": "2.0", "max": "2.x" },
   "capabilities": ["filesystem", "toolbar", "panel"],
   "ui": { "bridge": "1.0", "assetsRoot": "ui/" },
   "permissions": { "mount": true, "ui": true },

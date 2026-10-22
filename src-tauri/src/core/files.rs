@@ -1,8 +1,8 @@
 use crate::tags::{read_tags, Tag};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     pub path: String,
@@ -101,7 +101,7 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
         sync: None,
     })
 }
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
     pub read_only: bool,

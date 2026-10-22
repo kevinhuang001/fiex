@@ -1,3 +1,5 @@
+> **实现状态**：进程宿主、通用插件 VFS、Git/WebDAV/SMB/Archive/Checksum 插件、Linux 沙箱已落地；Windows 沙箱与任务进度未完成。
+
 # 01 · 总体架构与职责边界
 
 [索引](README.md) · [下一篇：VFS](02-VFS.md)

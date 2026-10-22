@@ -1,6 +1,13 @@
-//! All installed plugins use identical host-authorized permissions.
-//! The publisher name, GitHub repository, and package location confer no
-//! privileges. Installation requires explicit approval of declared capabilities.
+//! Host-authorized plugin capabilities.
+//!
+//! The user-facing permission model is deliberately small:
+//! - `filesystem.read`: read user files;
+//! - `filesystem.write`: create, modify and remove user files;
+//! - `network`: open network connections to explicitly allowed domains.
+//!
+//! Private plugin storage, host-rendered file choosers and process execution
+//! are not permission items. Storage and choosers are brokered by the host;
+//! execution is constrained by the OS sandbox.
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -10,15 +17,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-pub const PERMISSIONS: &[&str] = &[
-    "storage",
-    "secrets",
-    "network",
-    "filesystem.read",
-    "filesystem.write",
-    "externalCommands",
-    "ui.dialog",
-];
+pub const PERMISSIONS: &[&str] = &["filesystem.read", "filesystem.write", "network"];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,7 +105,11 @@ fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String>) -> Plugi
             enabled: r.enabled,
             granted: r.granted.intersection(declared).cloned().collect(),
             network_domains: if declared.contains("network") {
-                r.network_domains.iter().filter(|d| normalize_domain(d).is_ok()).cloned().collect()
+                r.network_domains
+                    .iter()
+                    .filter(|d| normalize_domain(d).is_ok())
+                    .cloned()
+                    .collect()
             } else {
                 BTreeSet::new()
             },
@@ -128,23 +131,43 @@ pub fn allowed(id: &str, declared: &BTreeSet<String>, permission: &str) -> Resul
     Ok(grant.approved && grant.enabled && grant.granted.contains(permission))
 }
 
-/// Normalize an exact DNS hostname or IPv4 address. Patterns, schemes, URLs,
-/// ports and wildcard suffixes are not permission scopes.
+/// Normalize an exact DNS hostname, IPv4 or IPv6 address. Bracketed IPv6
+/// literals are accepted. Schemas, paths, ports, wildcards and leading dots
+/// are not permission scopes.
 pub fn normalize_domain(input: &str) -> Result<String, String> {
-    let domain = input.trim().to_ascii_lowercase();
+    let mut domain = input.trim().to_ascii_lowercase();
+    if domain.starts_with('[') && domain.ends_with(']') && domain.len() > 2 {
+        domain = domain[1..domain.len() - 1].to_string();
+    }
     if domain.is_empty() || domain.len() > 253 || !domain.is_ascii() {
-        return Err("domain must be a nonempty ASCII hostname (use IDNA/punycode)".into());
+        return Err("domain must be a nonempty ASCII hostname or IP address".into());
+    }
+    if let Ok(address) = domain.parse::<std::net::IpAddr>() {
+        return Ok(address.to_string());
     }
     if domain.split('.').any(|label| {
         label.is_empty()
             || label.len() > 63
             || label.starts_with('-')
             || label.ends_with('-')
-            || !label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            || !label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
     }) {
         return Err("invalid hostname: enter an exact domain without a wildcard or port".into());
     }
     Ok(domain)
+}
+
+/// `localhost` and loopback literals never need an explicit allowlist entry.
+pub fn is_loopback_domain(input: &str) -> bool {
+    let Ok(domain) = normalize_domain(input) else {
+        return false;
+    };
+    domain == "localhost"
+        || domain
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
 }
 
 pub fn validate_network_domains(
@@ -158,7 +181,7 @@ pub fn validate_network_domains(
 }
 
 /// Only a user action can extend the whitelist. Revoking a domain is immediate
-/// for future broker operations; the plugin launcher is restarted by the host.
+/// for future connections; the plugin process is restarted by the host.
 pub fn set_domain(
     id: &str,
     declared: &BTreeSet<String>,
@@ -185,17 +208,13 @@ pub fn set_domain(
     })
 }
 
-pub fn domain_allowed(
-    id: &str,
-    declared: &BTreeSet<String>,
-    domain: &str,
-) -> Result<bool, String> {
+pub fn domain_allowed(id: &str, declared: &BTreeSet<String>, domain: &str) -> Result<bool, String> {
     let domain = normalize_domain(domain)?;
     let policy = status(id, declared)?;
     Ok(policy.approved
         && policy.enabled
         && policy.granted.contains("network")
-        && policy.network_domains.contains(&domain))
+        && (is_loopback_domain(&domain) || policy.network_domains.contains(&domain)))
 }
 
 pub fn revoke_install(id: &str) -> Result<(), String> {
@@ -208,7 +227,7 @@ pub fn approve_install(id: &str, declared: &BTreeSet<String>) -> Result<PluginGr
     approve_install_with_domains(id, declared, &[])
 }
 
-/// The installation consent explicitly covers the requested exact domains.
+/// Installation consent explicitly covers the requested exact domains.
 pub fn approve_install_with_domains(
     id: &str,
     declared: &BTreeSet<String>,
@@ -280,28 +299,39 @@ mod tests {
     use super::*;
     #[test]
     fn all_plugins_start_unapproved() {
-        let requested = declaration(&serde_json::json!({"storage":true,"secrets":true})).unwrap();
+        let requested = declaration(
+            &serde_json::json!({"filesystem.read":true,"filesystem.write":true,"network":true}),
+        )
+        .unwrap();
         let state = effective(None, &requested);
         assert!(!state.approved && !state.enabled && state.granted.is_empty());
     }
     #[test]
     fn removed_grants_stay_removed_and_new_scopes_never_auto_grant() {
-        let old = declaration(&serde_json::json!({"storage":true})).unwrap();
+        let old = declaration(&serde_json::json!({"filesystem.read":true})).unwrap();
         let current = PluginGrant {
             approved: true,
             enabled: true,
             granted: old,
             network_domains: BTreeSet::new(),
         };
-        let new = declaration(&serde_json::json!({"storage":true,"secrets":true})).unwrap();
+        let new = declaration(&serde_json::json!({"filesystem.read":true,"filesystem.write":true}))
+            .unwrap();
         let s = effective(Some(&current), &new);
-        assert!(s.granted.contains("storage") && !s.granted.contains("secrets"));
+        assert!(s.granted.contains("filesystem.read") && !s.granted.contains("filesystem.write"));
     }
     #[test]
     fn domain_scopes_are_exact_and_require_explicit_grants() {
         let declared = declaration(&serde_json::json!({"network": true})).unwrap();
         assert_eq!(normalize_domain("Example.COM").unwrap(), "example.com");
-        for value in ["*.example.com", "https://example.com", "example.com:443", ".example.com", "evil/example.com", ""] {
+        for value in [
+            "*.example.com",
+            "https://example.com",
+            "example.com:443",
+            ".example.com",
+            "evil/example.com",
+            "",
+        ] {
             assert!(normalize_domain(value).is_err(), "{value}");
         }
         assert!(validate_network_domains(&BTreeSet::new(), &["example.com".into()]).is_err());
@@ -316,10 +346,16 @@ mod tests {
         );
         assert!(grant.network_domains.contains("example.com"));
         assert!(!grant.network_domains.contains("sub.example.com"));
+        assert_eq!(normalize_domain("[::1]").unwrap(), "::1");
+        assert!(is_loopback_domain("localhost"));
+        assert!(is_loopback_domain("127.0.0.1"));
+        assert!(is_loopback_domain("::1"));
+        assert!(!is_loopback_domain("192.168.1.2"));
     }
     #[test]
     fn invalid_permissions_fail_closed() {
         assert!(declaration(&serde_json::json!({"root":true})).is_err());
-        assert!(declaration(&serde_json::json!({"storage":"yes"})).is_err());
+        assert!(declaration(&serde_json::json!({"filesystem":"yes"})).is_err());
+        assert!(declaration(&serde_json::json!({"storage":true})).is_err());
     }
 }

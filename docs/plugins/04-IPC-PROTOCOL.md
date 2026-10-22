@@ -1,125 +1,88 @@
-# 04 · 插件 IPC 协议 v1（拟议）
+# 04 · Native 插件 IPC 协议 2.0
 
-[索引](README.md) · [上一篇：缓存与同步](03-CACHE-SYNC.md) · [下一篇：UI 扩展](05-UI-EXTENSIONS.md)
+> 状态：随代码实现，实验性接口。协议版本为 `2.0`；可以破坏性修改。
 
-> **这是一份待实现的线协议约定**，并非已经上线的 Fiex API。最终定版前应以契约测试覆盖所有消息和边界条件。
+## 1. 传输
 
-## 1. 控制通道与帧格式
+- 编码：UTF-8 JSON。
+- 帧：`Content-Length: <bytes>\r\n\r\n<json>`。
+- 单帧上限 4 MiB；stdout 只用于协议，诊断写 stderr。
+- 进程生命周期由 Core 管理；stdin/stdout 都是控制通道。
 
-插件是独立可执行进程。Core 启动后占用插件 `stdin/stdout` 作为双向 JSON-RPC 2.0 控制通道，`stderr` 专用于诊断日志。帧采用类似 LSP 的 **Content-Length**：
+## 2. 握手
 
-```text
-Content-Length: 96\r\n
-\r\n
-{"jsonrpc":"2.0","id":"req-1","method":"plugin.initialize","params":{...}}
-```
-
-`Content-Length` 是后续 UTF-8 JSON **字节长度**，不是字符数；示意的 96 不是上面内容的实际长度。必须有最大帧限制（建议默认 4 MiB）、头部上限、字段类型校验；禁止按换行拆 JSON。消息既可以由 Core 调插件，也可以由插件调 `host.*` 方法，因此两侧均实现 request/response/notification 和相关 ID 空间。响应携带 `result` 或 `error`，不得两者同时存在。
-
-## 2. 握手与生命周期
-
-1. Core 验证插件包后创建进程，启动计时器。
-2. Core 请求 `plugin.initialize`，携带 `protocolVersion="1.0"`、宿主版本、允许的 capability/权限、`processInstanceId`、transport 限额及 locale。
-3. 插件返回实际 `protocolVersion`、`pluginId`、`capabilities`、`contributions` 与 `ready=true`；不得声明不在已授权 manifest 中的功能。
-4. Core 登记贡献，启用 `plugin.ping` / `plugin.shutdown`，保持重启时挂载 ID/配置不变。退出前收敛任务/流。
-5. 超时、异常退出时所有 in-flight 请求标记失败或可恢复中断，不得自动视为成功。重复初始化必须幂等。
-
-`pluginId` 在运行时由**已验证安装记录**绑定，不能仅相信插件握手自称的 ID。
-
-## 3. 方法命名空间（v1 草案）
-
-| 方向      | 方法                                                        | 语义                         |
-| --------- | ----------------------------------------------------------- | ---------------------------- |
-| Core→插件 | `plugin.initialize / ping / shutdown`                       | 协商与生命周期               |
-| Core→插件 | `plugin.connection.validate / open / close`                 | 可选连接工厂                 |
-| Core→插件 | `plugin.fs.list / stat / openRead`                          | VFS 目录、元数据和内容流     |
-| Core→插件 | `plugin.fs.beginWrite / commitWrite / abortWrite`           | 分阶段写入                   |
-| Core→插件 | `plugin.fs.createDir / rename / delete / move / copy`       | 按声明能力调用               |
-| Core→插件 | `plugin.fs.getChanges / watch / search`                     | 可选变化与搜索               |
-| Core→插件 | `plugin.command.execute`                                    | UI 菜单/工具栏动作           |
-| Core→插件 | `plugin.task.cancel`                                        | 取消长任务                   |
-| 插件→Core | `host.mount.create / remove`                                | 注册 VFS 挂载                |
-| 插件→Core | `host.task.create / progress / complete / fail / cancelled` | 统一任务中心                 |
-| 插件→Core | `host.storage.get/set/delete/keys`                          | 插件与账户隔离的普通 JSON KV |
-| 插件→Core | `host.secret.get/set/delete/available`                      | 按授权获取凭据               |
-| 插件→Core | `host.context.get`                                          | 受限访问当前选择上下文       |
-
-**iframe ↔ UI Host 使用独立版本的 [UI Bridge](11-UI-SDK.md)**（MessageChannel），而不是本文件的 Native stdio JSON-RPC。UI Host 经过鉴权可将 `plugin.invoke` 路由为 `plugin.command.execute`。宿主可额外提供 `host.vfs.*` 以使功能插件通过授权访问别的挂载，但不能绕过本地路径/其他插件的数据授权。对于插件提供的缓存、同步诉求，不应出现 `plugin.cache.*` 或 `plugin.sync.*`：Core 通过通用 VFS 原语执行它们。
-
-## 4. 目录列表请求与响应
+Core 在启动插件后发送：
 
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "req-42",
-  "method": "plugin.fs.list",
-  "params": {
-    "mountId": "dav-001",
-    "directoryId": "root",
-    "cursor": null,
-    "limit": 200
-  }
+  "id": 1,
+  "method": "plugin.initialize",
+  "params": { "protocolVersion": "2.0", "hostVersion": "0.2.7" }
 }
 ```
+
+插件返回：
 
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "req-42",
-  "result": {
-    "entries": [
-      {
-        "nodeId": "doc-1",
-        "parentId": "root",
-        "name": "Documents",
-        "kind": "directory",
-        "size": null,
-        "version": null
-      }
-    ],
-    "nextCursor": null,
-    "snapshotToken": "etag-directory-1"
-  }
+  "id": 1,
+  "result": { "pluginId": "org.fiex.git", "protocolVersion": "2.0", "ready": true }
 }
 ```
 
-Core 对挂载归属、页大小、节点类型、名称长度和合法 parent 进行验证；一页中的节点 ID 不能重复。未知字段按协议的可扩展字段策略安全忽略，不允许插件通过数据 JSON 嵌入可执行指令。
+版本不匹配、身份不匹配或握手失败时 Core 终止进程。
 
-## 5. 数据通道与背压
+## 3. 方法与命名空间
 
-大文件不能 base64 塞进控制 JSON。`fs.openRead` 和 `fs.beginWrite` 返回一次性 `streamTicket`（包含 `streamId`、过期时间、允许方向、最大范围），Core 在仅本机可连接的 Unix Domain Socket（macOS/Linux）或 Windows Named Pipe 打开二进制分块通道。
+### 宿主 → 插件
 
-- 票据只属于当前进程实例和任务，单次/限时使用；绑定权限与 `mountId/nodeId`，不得连接任意 TCP 地址。
-- 数据块采用 `length + sequence + flags + payload` 帧格式；双方处理读写背压，缓存不无限累积，支持取消和超时。
-- 完整度依赖长度、校验和（可选但推荐）、写入完成确认。连接中断时不得提交半成品内容。
-- 重试/断点续传能力由插件声明 `rangeRead` / `resumableWrite`；不能假定所有协议都支持。
+| 方法                                 | 说明                                              |
+| ------------------------------------ | ------------------------------------------------- |
+| `plugin.initialize`                  | 握手                                              |
+| `plugin.ping`                        | 存活检查                                          |
+| `plugin.shutdown`                    | 正常退出                                          |
+| `vfs.list`                           | 插件自有虚拟文件系统分页目录                      |
+| `vfs.stat`                           | 虚拟节点元数据                                    |
+| `vfs.readSmall`                      | 小文件预览，返回 Base64                           |
+| `vfs.search`                         | 虚拟文件系统内搜索                                |
+| `connection.validate`                | 验证远程连接配置                                  |
+| `fs.list`                            | 远程目录分页                                      |
+| `fs.readSmall`                       | 远程小文件预览                                    |
+| `fs.openRead`                        | 打开远程读取流，返回 `streamId`                   |
+| `fs.readStream`                      | 按 offset 读取流块，返回 `{base64,bytesRead,eof}` |
+| `fs.closeRead`                       | 关闭读取流                                        |
+| `git.*` / `archive.*` / `checksum.*` | 插件自定义命令                                    |
 
-初版可实现宿主创建临时受限管道并在 IPC 传票据，后续可改内部传输实现，但不能破坏上层 FS 原语。
+`vfs.*` 用于插件声明 `contributes.vfs.schemes` 的路径（例如 Git 的 `history://`）。Core 按 scheme 找到已安装、已授权的插件，不硬编码插件 ID。
 
-## 6. 请求取消与任务取消
+`fs.*` 只用于远程只读连接。Core 负责暂存、目标文件和缓存；插件不接收宿主绝对路径。
 
-短 RPC 可使用 `$/cancelRequest`（通知，携带请求 ID）；长操作必须映射到 Core 拥有的 `taskId` 并通过 `plugin.task.cancel` 协商终止。Core 先标记 `cancel_requested`，插件清理后发送 `host.task.cancelled`，然后才能在 UI 展示终止完成；无响应时可超时终止进程，并将任务状态设为 `interrupted`，而不能谎报“安全取消”。
+### 插件 → 宿主
 
-## 7. 错误契约
+| 方法                                   | 说明                          |
+| -------------------------------------- | ----------------------------- |
+| `host.storage.get/set/delete/keys`     | 插件私有 KV，按 pluginId 隔离 |
+| `host.secret.get/set/delete/available` | 系统凭据代理                  |
 
-JSON-RPC `error` 采用标准 `code/message/data`，`data` 包含稳定的 `reason`、`retryable`、`taskId` 与可选 `retryAfterMs`。推荐 `reason`：
+这些方法绑定到已认证的进程身份，请求体中的 pluginId 不被信任。插件私有存储和凭据不需要额外权限；凭据不会回显到 iframe。
 
-```text
-not_found, permission_denied, auth_required, offline,
-unsupported, version_conflict, cancelled, timeout,
-rate_limited, invalid_cursor, partial_commit, internal
-```
+## 4. 分页与流
 
-`message` 是面向开发者的诊断，不得包含明文 token/密码。UI 用本地化 reason 提示。可重试错误需有上限和退避，不能对提交、删除等非幂等操作盲重试。
+- `vfs.list` / `fs.list` 返回 `{entries,nextCursor,snapshotToken?,warnings?}`。
+- 条目字段：`nodeId,name,kind,size,modified,capabilities?`。
+- Core 每次请求最多 500 条，拒绝游标不前进或条目过多。
+- `fs.openRead` 返回 `{streamId,size?}`。`fs.readStream` 每次最多 256 KiB，必须返回 `eof`。
+- 传输上限 16 GiB；Core 在取消或失败时删除暂存文件。
+- 取消：Core 在块之间检查取消标志并关闭流；长任务级 `taskId` 协议尚未实现。
 
-## 8. 版本兼容策略
+## 5. 错误
 
-`protocolVersion` 的 major 不兼容；minor 只增加可忽略字段/可选方法。插件 manifest 声明支持范围，协商取共同版本。Core 不得把未知方法当成成功响应；SDK/CI 使用 golden fixtures 和模拟独立进程互测，覆盖超长帧、错误 JSON、乱序响应、超时、进程崩溃以及网络中断。
+JSON-RPC 标准错误码：
 
-下一篇 [UI 扩展](05-UI-EXTENSIONS.md) 规定插件预编译 iframe 资源；[11 UI SDK](11-UI-SDK.md) 独立定义 iframe ↔ Host Bridge 的版本与消息安全。
+- `-32601` 方法不存在
+- `-32602` 参数无效
+- `-32603` 插件内部错误
 
-## 9. 反向 IPC 与持久化（已实现实验原型）
-
-插件处理宿主请求期间，可以在同一 `stdin/stdout` 控制通道发出带字符串请求 ID 的 `host.*` JSON-RPC 请求。宿主在等待插件原请求响应时必须处理这一反向消息，再继续等待原响应；不能把反向调用错判为不匹配的响应 ID。每次宿主请求都以**实际已认证进程的插件 ID**作为权限主体，不信任 JSON 请求体中的插件 ID。
-
-`host.storage.*` 依据 `permissions.storage` 限制，`host.secret.*` 依据 `permissions.secrets` 限制，所有数据由内核持有。错误使用 JSON-RPC 结构化错误，不经 stdout 日志传送。反向调用暂为**同步嵌套单请求**，不表示已经支持任意双向并发推送或二进制数据流。详见 [13 插件持久化与 OAuth](13-PERSISTENCE-OAUTH.md)。
+Core 把插件错误包装为稳定文本，不把原始 stdout/stderr 注入 UI。协议版本不匹配、身份不匹配、帧过大、响应 ID 不匹配都会终止进程。

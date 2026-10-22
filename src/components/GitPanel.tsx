@@ -108,12 +108,10 @@ export function GitPanel({
       if (!pickerOpen && !commitOpen && !remoteOpen) onClose()
     }
     document.addEventListener('pointerdown', outside)
-    document.addEventListener('focusin', outside)
     window.addEventListener('blur', blur)
     window.addEventListener('resize', position)
     return () => {
       document.removeEventListener('pointerdown', outside)
-      document.removeEventListener('focusin', outside)
       window.removeEventListener('blur', blur)
       window.removeEventListener('resize', position)
     }

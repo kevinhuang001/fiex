@@ -22,7 +22,8 @@
   "name": "Archive",
   "version": "1.0.0",
   "author": { "name": "Example Developer", "url": "https://github.com/example" },
-  "permissions": { "filesystem.read": true, "filesystem.write": true, "ui.dialog": true },
+  "permissions": { "filesystem.read": true, "filesystem.write": true, "network": true },
+  "networkDomains": ["github.com"],
   "entrypoints": { "linux-x86_64": "bin/plugin" },
   "contributes": { "contextMenus": [], "panels": [] }
 }
@@ -33,10 +34,10 @@
 ## 2. 权限行为
 
 - 所有插件都必须安装授权，不预置任何同意状态；首次安装批准的是当前 Manifest **已声明的权限**。
-- 设置页可启用、停用和逐项撤销权限。撤销后 Core 反向 IPC 的 `host.storage.*` / `host.secret.*` 会立即拒绝新请求，旧进程应停止或重启。
+- 设置页可启用、停用和逐项撤销 `filesystem.read`、`filesystem.write`、`network` 及单个域名。撤销后插件进程会停止并在下次启用时重启。私有 KV 与凭据代理不依赖这些权限。
 - 新版本声明新增权限不会自动加入历史授权。
 - Node/JS 插件 UI 不获得 Tauri 全局 invoke；通过隔离 iframe 的 MessageChannel 请求宿主。
-- **当前原生插件进程启动仍未实现操作系统强制沙箱。** 普通 Rust 子进程可能绕过 Fiex API 直接使用系统调用。未在 Windows AppContainer、macOS App Sandbox/XPC 和 Linux seccomp/Landlock 分别实现前，不得宣称可以隔离恶意 Native 插件。
+- Linux 已有 Landlock + seccomp 沙箱，macOS 已生成 Seatbelt 配置；Windows AppContainer 尚未实现。域名白名单由插件进程校验，不等同于 OS 级网络过滤。
 
 ## 3. 官方功能插件
 

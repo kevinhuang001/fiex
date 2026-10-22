@@ -8,7 +8,7 @@ use std::{
     fs,
     io::BufReader,
     path::{Component, Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Stdio},
     sync::{Arc, Mutex, OnceLock},
 };
 
@@ -19,6 +19,8 @@ pub struct PluginManifest {
     pub name: String,
     pub version: String,
     #[serde(default)]
+    pub description: String,
+    #[serde(default)]
     pub capabilities: Vec<String>,
     #[serde(default)]
     pub entrypoints: HashMap<String, String>,
@@ -27,7 +29,7 @@ pub struct PluginManifest {
     #[serde(default)]
     pub permissions: Value,
     /// Exact DNS names requested by the plugin. Users can grant fewer,
-    /// revoke individual names, or explicitly add a connection hostname.
+    /// revoke individual names, or add their own server hostnames.
     #[serde(default)]
     pub network_domains: Vec<String>,
     #[serde(default)]
@@ -46,6 +48,7 @@ pub struct PluginInfo {
     pub id: String,
     pub name: String,
     pub version: String,
+    pub description: String,
     pub capabilities: Vec<String>,
     pub contributes: Value,
     pub backend_available: bool,
@@ -208,6 +211,7 @@ pub fn catalog() -> Vec<PluginInfo> {
                 id: manifest.id,
                 name: manifest.name,
                 version: manifest.version,
+                description: manifest.description,
                 capabilities: manifest.capabilities,
                 contributes: manifest.contributes,
                 backend_available: backend,
@@ -287,24 +291,25 @@ impl Running {
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
-            "host.storage.get" if permitted("storage") => {
+            "host.storage.get" => {
                 Ok(
                     crate::plugin_storage::get(&self.plugin_id, scope()?, key()?)?
                         .unwrap_or(Value::Null),
                 )
             }
-            "host.storage.set" if permitted("storage") => {
+            "host.storage.set" => {
                 let value = p.get("value").cloned().ok_or("missing value")?;
                 crate::plugin_storage::set(&self.plugin_id, scope()?, key()?, value)?;
                 Ok(Value::Null)
             }
-            "host.storage.delete" if permitted("storage") => {
+            "host.storage.delete" => {
                 crate::plugin_storage::delete(&self.plugin_id, scope()?, key()?)?;
                 Ok(Value::Null)
             }
-            "host.storage.keys" if permitted("storage") => Ok(json!(
-                crate::plugin_storage::list_keys(&self.plugin_id, scope()?)?
-            )),
+            "host.storage.keys" => Ok(json!(crate::plugin_storage::list_keys(
+                &self.plugin_id,
+                scope()?
+            )?)),
             "host.secret.get" if permitted("secrets") => Ok(json!(
                 crate::plugin_storage::secret_get(&self.plugin_id, scope()?, key()?)?
             )),
@@ -411,7 +416,9 @@ impl PluginHost {
                 return Err("plugin is disabled or installation consent is pending".into());
             }
             let path = executable(&manifest, &dir)?;
-            let mut child = Command::new(&path)
+            let policy = crate::plugin_sandbox::Policy::new(&path, &dir, &state, &declared);
+            let mut command = crate::plugin_sandbox::command(&policy)?;
+            let mut child = command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::inherit())

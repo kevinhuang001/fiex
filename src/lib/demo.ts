@@ -119,111 +119,357 @@ for (let i = 0; i < bulkCount; i++)
     ),
   )
 const snapshotEntries = structuredClone(entries)
+interface DemoPlugin {
+  id: string
+  name: string
+  version: string
+  description?: string
+  enabled: boolean
+  approved: boolean
+  backendAvailable: boolean
+  capabilities: string[]
+  declaredPermissions: string[]
+  grantedPermissions: string[]
+  requestedNetworkDomains: string[]
+  allowedNetworkDomains: string[]
+  author?: { name: string; url?: string }
+  contributes?: Record<string, unknown>
+}
+const fixturePlugin: DemoPlugin = {
+  id: 'org.test.fixture',
+  name: '测试插件',
+  version: '1.0.0',
+  description: '用于验证右键子菜单、隔离 iframe 与上下文桥。',
+  enabled: true,
+  approved: true,
+  backendAvailable: true,
+  capabilities: ['commands', 'contextMenu', 'panel'],
+  declaredPermissions: [],
+  grantedPermissions: [],
+  requestedNetworkDomains: [],
+  allowedNetworkDomains: [],
+  author: { name: 'Fiex Fixtures' },
+  contributes: {
+    contextMenus: [
+      {
+        id: 'fixture.root',
+        title: '测试插件',
+        when: 'context.selection.count > 0',
+        children: [
+          { id: 'fixture.panel', title: '信息面板', openPanel: 'fixture.details' },
+          { id: 'fixture.action', title: '检查文件', command: 'fixture.inspect' },
+        ],
+      },
+    ],
+    panels: [{ id: 'fixture.details', title: '信息面板', entry: 'ui/index.html' }],
+  },
+}
+const fixturePlugins: DemoPlugin[] = [
+  fixturePlugin,
+  {
+    id: 'org.fiex.git',
+    name: 'Git',
+    version: '0.1.0',
+    description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
+    enabled: true,
+    approved: true,
+    backendAvailable: true,
+    capabilities: ['filesystem', 'toolbar', 'commands'],
+    declaredPermissions: ['filesystem.read', 'filesystem.write', 'network'],
+    grantedPermissions: ['filesystem.read', 'filesystem.write', 'network'],
+    requestedNetworkDomains: ['github.com'],
+    allowedNetworkDomains: ['github.com'],
+    author: { name: 'Fiex Contributors' },
+    contributes: {
+      toolbar: [{ id: 'git.main', title: '源代码管理', command: 'git.status' }],
+      settings: [
+        { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
+      ],
+    },
+  },
+  {
+    id: 'org.fiex.checksum',
+    name: '校验和',
+    version: '0.1.0',
+    description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
+    enabled: true,
+    approved: true,
+    backendAvailable: true,
+    capabilities: ['commands', 'contextMenu'],
+    declaredPermissions: ['filesystem.read', 'filesystem.write', 'network'],
+    grantedPermissions: ['filesystem.read', 'filesystem.write', 'network'],
+    requestedNetworkDomains: ['github.com'],
+    allowedNetworkDomains: ['github.com'],
+    author: { name: 'Fiex Contributors' },
+    contributes: {
+      contextMenus: [
+        {
+          id: 'checksum.calculate',
+          title: '查看校验和',
+          when: 'context.selection.isFile',
+          command: 'checksum.calculate',
+          resultView: 'checksum',
+        },
+      ],
+    },
+  },
+]
+const demoPlugins: DemoPlugin[] = new URLSearchParams(location.search).has('pluginFixture')
+  ? structuredClone(fixturePlugins)
+  : []
+const marketplace = [
+  {
+    id: 'org.fiex.git',
+    name: 'Git',
+    version: '0.1.0',
+    description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
+    author: { name: 'Fiex Contributors' },
+    permissions: ['filesystem.read', 'filesystem.write', 'network'],
+    requestedNetworkDomains: ['github.com'],
+    asset: 'git-linux-x86_64.fiexplugin',
+    repository: 'kevinhuang001/fiex-official-plugins',
+    contributes: {
+      toolbar: [{ id: 'git.main', title: '源代码管理', command: 'git.status' }],
+      settings: [
+        { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
+      ],
+    },
+    capabilities: ['filesystem', 'toolbar', 'commands'],
+  },
+  {
+    id: 'org.fiex.webdav',
+    name: 'WebDAV',
+    version: '0.1.0',
+    description: '连接 WebDAV 服务器，目录按需读取，不落地零字节占位文件。',
+    author: { name: 'Fiex Contributors' },
+    permissions: ['filesystem.read', 'network'],
+    requestedNetworkDomains: [],
+    asset: 'webdav-linux-x86_64.fiexplugin',
+    repository: 'kevinhuang001/fiex-official-plugins',
+    capabilities: ['filesystem', 'connectionFactory'],
+    contributes: {
+      connectionFactories: [
+        {
+          id: 'webdav',
+          title: 'WebDAV',
+          fields: [
+            { id: 'url', label: '服务器地址', type: 'url', required: true },
+            { id: 'username', label: '用户名', type: 'text' },
+            { id: 'password', label: '密码', type: 'secret' },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    id: 'org.fiex.smb',
+    name: 'SMB / NAS',
+    version: '0.1.0',
+    description: '通过独立进程连接 SMB / NAS 共享。',
+    author: { name: 'Fiex Contributors' },
+    permissions: ['filesystem.read', 'network'],
+    requestedNetworkDomains: [],
+    asset: 'smb-linux-x86_64.fiexplugin',
+    repository: 'kevinhuang001/fiex-official-plugins',
+    capabilities: ['filesystem', 'connectionFactory'],
+    contributes: {
+      connectionFactories: [
+        {
+          id: 'smb',
+          title: 'SMB 网络共享',
+          fields: [
+            { id: 'host', label: '主机', type: 'text', required: true },
+            { id: 'share', label: '共享名', type: 'text', required: true },
+            { id: 'username', label: '用户名', type: 'text' },
+            { id: 'password', label: '密码', type: 'secret' },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    id: 'org.fiex.archive',
+    name: '压缩与解压',
+    version: '0.1.0',
+    description: '压缩与解压 ZIP、7z、TAR 等格式。',
+    author: { name: 'Fiex Contributors' },
+    permissions: ['filesystem.read', 'filesystem.write'],
+    requestedNetworkDomains: [],
+    asset: 'archive-linux-x86_64.fiexplugin',
+    repository: 'kevinhuang001/fiex-official-plugins',
+    capabilities: ['commands', 'toolbar', 'contextMenu'],
+    contributes: {
+      contextMenus: [
+        {
+          id: 'archive.compress',
+          title: '压缩为…',
+          when: 'context.selection.count > 0',
+          children: [
+            {
+              id: 'archive.zip',
+              title: 'ZIP',
+              command: 'archive.compress',
+              args: { format: 'zip' },
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    id: 'org.fiex.checksum',
+    name: '校验和',
+    version: '0.1.0',
+    description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
+    author: { name: 'Fiex Contributors' },
+    permissions: ['filesystem.read'],
+    requestedNetworkDomains: [],
+    asset: 'checksum-linux-x86_64.fiexplugin',
+    repository: 'kevinhuang001/fiex-official-plugins',
+    capabilities: ['commands', 'contextMenu'],
+    contributes: {
+      contextMenus: [
+        {
+          id: 'checksum.calculate',
+          title: '查看校验和',
+          when: 'context.selection.isFile',
+          command: 'checksum.calculate',
+          resultView: 'checksum',
+        },
+      ],
+    },
+  },
+]
+const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
+
 export async function mock(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
     case 'plugins_list':
-      return [
-        ...(new URLSearchParams(location.search).has('pluginFixture')
-          ? [
-              {
-                id: 'org.test.fixture',
-                name: '测试插件',
-                version: '1.0.0',
-                enabled: true,
-                approved: true,
-                backendAvailable: true,
-                capabilities: ['commands', 'contextMenu', 'panel'],
-                declaredPermissions: ['ui.dialog'],
-                grantedPermissions: ['ui.dialog'],
-                contributes: {
-                  contextMenus: [
-                    {
-                      id: 'fixture.root',
-                      title: '测试插件',
-                      when: 'context.selection.count > 0',
-                      children: [
-                        { id: 'fixture.panel', title: '信息面板', openPanel: 'fixture.details' },
-                        { id: 'fixture.action', title: '检查文件', command: 'fixture.inspect' },
-                      ],
-                    },
-                  ],
-                  panels: [{ id: 'fixture.details', title: '信息面板', entry: 'ui/index.html' }],
-                },
-              },
-            ]
-          : []),
-        {
-          id: 'org.fiex.webdav',
-          name: 'WebDAV',
-          version: '0.1.0',
-          enabled: true,
-          backendAvailable: true,
-          capabilities: ['filesystem', 'connectionFactory'],
-          contributes: {
-            connectionFactories: [
-              {
-                id: 'webdav',
-                title: 'WebDAV',
-                fields: [
-                  { id: 'url', label: '地址', type: 'url', required: true },
-                  { id: 'username', label: '用户名', type: 'text' },
-                  { id: 'password', label: '密码', type: 'secret' },
-                  { id: 'allowInvalidCerts', label: '允许自签名证书', type: 'checkbox' },
-                ],
-              },
-            ],
-            settings: [
-              { id: 'timeout', label: '连接超时（秒）', type: 'number', defaultValue: '90' },
-            ],
-          },
-        },
-        {
-          id: 'org.fiex.smb',
-          name: 'SMB / NAS',
-          version: '0.1.0',
-          enabled: true,
-          backendAvailable: true,
-          capabilities: ['filesystem', 'connectionFactory'],
-          contributes: {
-            connectionFactories: [
-              {
-                id: 'smb',
-                title: 'SMB 网络共享',
-                fields: [
-                  { id: 'host', label: '主机', type: 'text', required: true },
-                  { id: 'port', label: '端口', type: 'number', defaultValue: '445' },
-                  { id: 'share', label: '共享名', type: 'text', required: true },
-                  { id: 'base', label: '子路径', type: 'text' },
-                  { id: 'username', label: '用户名', type: 'text' },
-                  { id: 'password', label: '密码', type: 'secret' },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          id: 'org.fiex.git',
-          name: 'Git',
-          version: '0.1.0',
-          enabled: true,
-          backendAvailable: true,
-          capabilities: ['toolbar', 'filesystem', 'commands'],
-          contributes: {
-            toolbar: [{ id: 'git.main', title: '源代码管理', command: 'git.status' }],
-            settings: [
-              { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
-            ],
-          },
-        },
-      ]
+      return demoPlugins
     case 'plugin_panel_html':
       if (new URLSearchParams(location.search).has('pluginFixture'))
         return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selection||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
       throw new Error('No installed fixture plugin')
     case 'plugin_invoke':
+      if (a.method === 'checksum.calculate')
+        return [
+          {
+            algorithm: 'SHA-256',
+            value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+          },
+          {
+            algorithm: 'SHA-512',
+            value:
+              'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
+          },
+          { algorithm: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d' },
+          { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
+          { algorithm: 'CRC32', value: '352441c2' },
+        ]
       return { ok: true, method: a.method, params: a.params }
     case 'plugin_permission_allowed':
       return new URLSearchParams(location.search).has('pluginFixture')
+    case 'file_checksums':
+      return [
+        {
+          algorithm: 'SHA-256',
+          value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+        },
+        {
+          algorithm: 'SHA-512',
+          value:
+            'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
+        },
+        { algorithm: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d' },
+        { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
+        { algorithm: 'CRC32', value: '352441c2' },
+      ]
+    case 'plugin_marketplace':
+      return marketplace
+    case 'plugin_release_assets':
+      return marketplace.map((entry) => entry.asset)
+    case 'plugin_prepare_install': {
+      const entry = marketplace.find((item) => item.asset === a.assetName)
+      if (!entry) throw new Error('插件包不存在')
+      const ticket = entry.id
+      preparedInstalls.set(ticket, entry)
+      return {
+        ticket,
+        id: entry.id,
+        name: entry.name,
+        version: entry.version,
+        author: entry.author,
+        permissions: entry.permissions,
+        requestedNetworkDomains: entry.requestedNetworkDomains,
+        repository: entry.repository,
+      }
+    }
+    case 'plugin_confirm_install': {
+      const entry = preparedInstalls.get(String(a.ticket))
+      if (!entry) throw new Error('安装预览已过期')
+      preparedInstalls.delete(String(a.ticket))
+      if (!demoPlugins.some((plugin) => plugin.id === entry.id)) {
+        demoPlugins.push({
+          id: entry.id,
+          name: entry.name,
+          version: entry.version,
+          description: entry.description,
+          enabled: true,
+          approved: true,
+          backendAvailable: true,
+          capabilities: entry.capabilities || [],
+          declaredPermissions: entry.permissions,
+          grantedPermissions: entry.permissions,
+          requestedNetworkDomains: entry.requestedNetworkDomains,
+          allowedNetworkDomains: entry.requestedNetworkDomains,
+          author: entry.author,
+          contributes: entry.contributes || {},
+        })
+      }
+      return entry.id
+    }
+    case 'plugin_cancel_install':
+      preparedInstalls.delete(String(a.ticket))
+      return null
+    case 'plugin_uninstall': {
+      const index = demoPlugins.findIndex((plugin) => plugin.id === a.pluginId)
+      if (index >= 0) demoPlugins.splice(index, 1)
+      return null
+    }
+    case 'plugin_set_enabled': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      if (plugin) plugin.enabled = Boolean(a.enabled)
+      return null
+    }
+    case 'plugin_set_permission': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      if (plugin) {
+        const permission = String(a.permission)
+        plugin.grantedPermissions = a.granted
+          ? [...new Set([...plugin.grantedPermissions, permission])]
+          : plugin.grantedPermissions.filter((value) => value !== permission)
+      }
+      return null
+    }
+    case 'plugin_set_network_domain': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      if (plugin) {
+        const domain = String(a.domain)
+        plugin.allowedNetworkDomains = a.granted
+          ? [...new Set([...plugin.allowedNetworkDomains, domain])]
+          : plugin.allowedNetworkDomains.filter((value) => value !== domain)
+      }
+      return null
+    }
+    case 'plugin_approve_install': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      if (plugin) {
+        plugin.approved = true
+        plugin.enabled = true
+        plugin.grantedPermissions = [...plugin.declaredPermissions]
+      }
+      return null
+    }
     case 'plugin_storage_get':
       return (
         pluginSettings.get(String(a.pluginId) + ':' + String(a.scope) + ':' + String(a.key)) ?? null

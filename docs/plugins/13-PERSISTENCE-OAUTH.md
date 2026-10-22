@@ -2,7 +2,7 @@
 
 [索引](README.md) · [IPC](04-IPC-PROTOCOL.md) · [SDK](08-SDK.md)
 
-> **状态：正在实施（非冻结 v1 协议）。** 下面的 Host 存储接口已具有初版代码；完整 OAuth 授权回调服务、安装时权限授权、存储 schema 迁移和跨平台真实沙箱仍未实现。
+> **状态：初版已实现（非冻结协议）。** `host.storage.*` 与 `host.secret.*` 已可用；完整 OAuth 回调服务、存储 schema 迁移和 Windows 沙箱仍未实现。
 
 ## 1. 职责
 

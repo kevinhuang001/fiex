@@ -113,11 +113,8 @@ export function PluginPanelHost() {
             })
           }
           if (method.startsWith('dialog.')) {
-            const granted = await call<boolean>('plugin_permission_allowed', {
-              pluginId: current.pluginId,
-              permission: 'ui.dialog',
-            })
-            if (!granted) throw new Error('插件文件选择权限未获授权，请在设置中重新授予')
+            // The chooser is rendered by the host and only returns the path the
+            // user explicitly picks; it never grants directory browsing.
             const p = (params || {}) as {
               directory?: string
               suggestedName?: string

@@ -1,6 +1,6 @@
 use crate::{
     drag_session::{DragSessions, DropPlan},
-    files, git, git_history, git_remote,
+    files,
     operations::{self, OperationCancel, OperationResult, Operations},
     recent, remote,
     search::{SearchBatch, SearchState},
@@ -226,6 +226,17 @@ async fn plugin_invoke(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+async fn plugin_marketplace(
+    repository: Option<String>,
+) -> Result<Vec<crate::plugin_installer::MarketplacePlugin>, String> {
+    let repository = repository
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "kevinhuang001/fiex-official-plugins".into());
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::marketplace(&repository))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
 async fn plugin_release_assets(repository: String) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         crate::plugin_installer::release_assets(&repository)
@@ -303,20 +314,12 @@ fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<String, Stri
 fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
     crate::plugin_host::catalog()
 }
-fn ensure_plugin_permission(id: &str, permission: &str) -> Result<(), String> {
-    if crate::plugin_host::permission_allowed(id, permission)? {
-        Ok(())
-    } else {
-        Err(format!("plugin permission not granted: {permission}"))
-    }
-}
 #[tauri::command]
 fn plugin_storage_get(
     plugin_id: String,
     scope: String,
     key: String,
 ) -> Result<Option<serde_json::Value>, String> {
-    ensure_plugin_permission(&plugin_id, "storage")?;
     crate::plugin_storage::get(&plugin_id, &scope, &key)
 }
 #[tauri::command]
@@ -326,12 +329,10 @@ fn plugin_storage_set(
     key: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
-    ensure_plugin_permission(&plugin_id, "storage")?;
     crate::plugin_storage::set(&plugin_id, &scope, &key, value)
 }
 #[tauri::command]
 fn plugin_storage_delete(plugin_id: String, scope: String, key: String) -> Result<(), String> {
-    ensure_plugin_permission(&plugin_id, "storage")?;
     crate::plugin_storage::delete(&plugin_id, &scope, &key)
 }
 #[tauri::command]
@@ -341,7 +342,6 @@ fn plugin_secret_set(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    ensure_plugin_permission(&plugin_id, "secrets")?;
     let permitted = crate::plugin_host::catalog()
         .into_iter()
         .find(|p| p.id == plugin_id)
@@ -363,70 +363,72 @@ fn plugin_secret_available() -> bool {
     crate::plugin_storage::secret_available()
 }
 
-/// Temporary v0.2.7 compatibility path: prefer external plugin whenever
-/// installed. A plugin RPC error must not silently fall back to legacy code.
-fn plugin_compat(
-    id: &str,
-    method: &str,
-    params: serde_json::Value,
-) -> Result<Option<serde_json::Value>, String> {
-    let host = crate::plugin_host::global();
-    if !host.is_installed(id) {
-        return Ok(None);
+const GIT_PLUGIN: &str = "org.fiex.git";
+
+fn git_network_domains() -> Vec<String> {
+    let Some(plugin) = crate::plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == GIT_PLUGIN)
+    else {
+        return Vec::new();
+    };
+    let declared = plugin
+        .declared_permissions
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut domains = crate::plugin_permissions::status(GIT_PLUGIN, &declared)
+        .map(|state| state.network_domains.into_iter().collect::<Vec<_>>())
+        .unwrap_or_default();
+    for loopback in ["localhost", "127.0.0.1", "::1"] {
+        if !domains.iter().any(|domain| domain == loopback) {
+            domains.push(loopback.into());
+        }
     }
-    host.invoke(id, method, params).map(Some)
+    domains
+}
+
+fn git_proxy(method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    if !crate::plugin_host::global().is_installed(GIT_PLUGIN) {
+        return Err("Git 插件未安装，请先在设置 → 插件中安装并授权".into());
+    }
+    crate::plugin_host::global().invoke(GIT_PLUGIN, method, params)
 }
 
 #[tauri::command]
-async fn git_remote_status(root: String) -> Result<git_remote::RemoteStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || git_remote::status(&root))
-        .await
-        .map_err(|e| e.to_string())?
+async fn git_remote_status(root: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy("git.remoteStatus", serde_json::json!({"root":root}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_remote_remove(root: String, name: String) -> Result<(), String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let root = root.clone();
-        let name = name.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.remoteRemove",
-                serde_json::json!({"root":root,"name":name}),
-            )
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy(
+            "git.remoteRemove",
+            serde_json::json!({"root":root,"name":name}),
+        )
+        .map(|_| ())
     })
     .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || git_remote::remove(&root, &name))
-        .await
-        .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_remote_save(root: String, name: String, url: String) -> Result<(), String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let root = root.clone();
-        let name = name.clone();
-        let url = url.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.remoteSave",
-                serde_json::json!({"root":root,"name":name,"url":url}),
-            )
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy(
+            "git.remoteSave",
+            serde_json::json!({
+                "root":root,"name":name,"url":url,
+                "networkDomains": git_network_domains()
+            }),
+        )
+        .map(|_| ())
     })
     .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || git_remote::save(&root, &name, &url))
-        .await
-        .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_sync(
@@ -435,25 +437,15 @@ async fn git_sync(
     push: bool,
     branch: Option<String>,
 ) -> Result<String, String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let root = root.clone();
-        let remote = remote.clone();
-        let branch = branch.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.remoteSync",
-                serde_json::json!({"root":root,"remote":remote,"push":push,"branch":branch}),
-            )
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
     tauri::async_runtime::spawn_blocking(move || {
-        git_remote::sync(&root, &remote, push, branch.as_deref())
+        let value = git_proxy(
+            "git.remoteSync",
+            serde_json::json!({
+                "root":root,"remote":remote,"push":push,"branch":branch,
+                "networkDomains": git_network_domains()
+            }),
+        )?;
+        serde_json::from_value(value).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -475,60 +467,44 @@ async fn drag_files(
     }
 }
 #[tauri::command]
-async fn git_init(path: String) -> Result<git::GitStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || git::init(&path))
-        .await
-        .map_err(|e| e.to_string())?
+async fn git_init(path: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy("git.init", serde_json::json!({"root":path}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_stage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let root = root.clone();
-        let paths = paths.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.stage",
-                serde_json::json!({"root":root,"paths":paths,"all":all}),
-            )
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy(
+            "git.stage",
+            serde_json::json!({"root":root,"paths":paths,"all":all}),
+        )
+        .map(|_| ())
     })
     .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || git::stage(&root, &paths, all))
-        .await
-        .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_unstage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let root = root.clone();
-        let paths = paths.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.unstage",
-                serde_json::json!({"root":root,"paths":paths,"all":all}),
-            )
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy(
+            "git.unstage",
+            serde_json::json!({"root":root,"paths":paths,"all":all}),
+        )
+        .map(|_| ())
     })
     .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || git::unstage(&root, &paths, all))
-        .await
-        .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn git_identity(root: String) -> Result<git::GitIdentity, String> {
-    tauri::async_runtime::spawn_blocking(move || git::identity(&root))
-        .await
-        .map_err(|e| e.to_string())
+async fn git_identity(root: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy("git.identity", serde_json::json!({"root":root}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_commit(
@@ -537,89 +513,64 @@ async fn git_commit(
     name: String,
     email: String,
 ) -> Result<String, String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let root = root.clone();
-        let message = message.clone();
-        let name = name.clone();
-        let email = email.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.commit",
-                serde_json::json!({"root":root,"message":message,"name":name,"email":email}),
-            )
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        let value = git_proxy(
+            "git.commit",
+            serde_json::json!({"root":root,"message":message,"name":name,"email":email}),
+        )?;
+        serde_json::from_value(value).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || git::commit(&root, &message, &name, &email))
-        .await
-        .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn git_refs(root: String) -> Result<git::GitRefs, String> {
-    tauri::async_runtime::spawn_blocking(move || git::refs(&root))
-        .await
-        .map_err(|error| error.to_string())?
+async fn git_refs(root: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy("git.refs", serde_json::json!({"root":root}))
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 #[tauri::command]
-async fn git_history(root: String, skip: usize) -> Result<Vec<git_history::Commit>, String> {
-    tauri::async_runtime::spawn_blocking(move || git_history::history(&root, skip))
-        .await
-        .map_err(|e| e.to_string())?
+async fn git_history(root: String, skip: usize) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy("git.history", serde_json::json!({"root":root,"skip":skip}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_browse(root: String, reference: String) -> Result<String, String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let root = root.clone();
-        let reference = reference.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.browse",
-                serde_json::json!({"root":root,"reference":reference}),
-            )
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        let value = git_proxy(
+            "git.browse",
+            serde_json::json!({"root":root,"reference":reference}),
+        )?;
+        serde_json::from_value(value).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || git_history::browse(&root, &reference))
-        .await
-        .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn git_history_asset(path: String) -> Result<String, String> {
-    if let Some(v) = tauri::async_runtime::spawn_blocking({
-        let path = path.clone();
-        move || {
-            plugin_compat(
-                "org.fiex.git",
-                "git.historyAsset",
-                serde_json::json!({"path":path}),
-            )
-        }
+    tauri::async_runtime::spawn_blocking(move || {
+        let value = git_proxy("git.historyAsset", serde_json::json!({"path":path}))?;
+        serde_json::from_value(value).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| e.to_string())??
-    {
-        return serde_json::from_value(v).map_err(|e| e.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || git_history::asset(&path))
-        .await
-        .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn git_status(path: String) -> Option<git::GitStatus> {
-    tauri::async_runtime::spawn_blocking(move || git::status(&path))
-        .await
-        .ok()
-        .flatten()
+async fn git_status(path: String) -> Option<serde_json::Value> {
+    if !crate::plugin_host::global().is_installed(GIT_PLUGIN) {
+        return None;
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        git_proxy("git.status", serde_json::json!({"root":path}))
+    })
+    .await
+    .ok()
+    .and_then(Result::ok)
 }
 #[tauri::command]
 fn platform() -> &'static str {
@@ -649,9 +600,9 @@ async fn list_directory(
             warnings: vec![],
         });
     }
-    if path.starts_with("history://") {
+    if crate::plugin_vfs::handles(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
-            git_history::list(&path, hidden, &ignores)
+            crate::plugin_vfs::list(&path, hidden, &ignores)
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -708,22 +659,41 @@ fn remove_remote_connection(id: String) -> Result<(), String> {
     remote::remove_connection(&id)
 }
 #[tauri::command]
-async fn remote_download(path: String) -> Result<String, String> {
-    remote::download(&path).await
+async fn remote_download(
+    path: String,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<String, String> {
+    let options = remote::TransferOptions {
+        cancel: Some(cancel.flag()),
+        progress: None,
+    };
+    remote::download(&path, &options).await
 }
 #[tauri::command]
-async fn remote_download_dir(path: String) -> Result<(), String> {
-    remote::download_dir(&path).await
+async fn remote_download_dir(
+    path: String,
+    cancel: tauri::State<'_, OperationCancel>,
+) -> Result<(), String> {
+    let options = remote::TransferOptions {
+        cancel: Some(cancel.flag()),
+        progress: None,
+    };
+    remote::download_dir(&path, &options).await
 }
 #[tauri::command]
 async fn remote_sync(
     paths: Vec<String>,
     on_progress: Channel<OperationProgress>,
+    cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<(), String> {
     let emit = progress_emitter(on_progress);
     let total = paths.len() as u64;
+    let options = remote::TransferOptions {
+        cancel: Some(cancel.flag()),
+        progress: None,
+    };
     for (index, path) in paths.iter().enumerate() {
-        remote::sync_one(path).await?;
+        remote::sync_one(path, &options).await?;
         let step = std::path::Path::new(path)
             .file_name()
             .and_then(|name| name.to_str());
@@ -782,8 +752,8 @@ async fn mount_device(device: String) -> Result<String, String> {
 }
 #[tauri::command]
 fn file_info(path: String) -> Result<files::Entry, String> {
-    if path.starts_with("history://") {
-        return git_history::info(&path);
+    if crate::plugin_vfs::handles(&path) {
+        return crate::plugin_vfs::stat(&path);
     }
     if let Some(route) = crate::usbfs::route(&path) {
         return crate::usbfs::entry(&route);
@@ -792,10 +762,13 @@ fn file_info(path: String) -> Result<files::Entry, String> {
 }
 #[tauri::command]
 async fn read_preview(path: String) -> Result<String, String> {
-    if path.starts_with("history://") {
-        return tauri::async_runtime::spawn_blocking(move || git_history::preview(&path))
-            .await
-            .map_err(|e| e.to_string())?;
+    if crate::plugin_vfs::handles(&path) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            let bytes = crate::plugin_vfs::read_small(&path, 512 * 1024)?;
+            Ok(String::from_utf8_lossy(&bytes).into_owned())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
     }
     if let Some(route) = crate::usbfs::route(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
@@ -857,15 +830,19 @@ async fn transfer(
     if remote::is_remote(&destination) {
         return Err("远程连接只读".into());
     }
+    let transfer_options = remote::TransferOptions {
+        cancel: Some(cancel.flag()),
+        progress: None,
+    };
     for source in &paths {
         if remote::is_remote(source) {
             if moving {
                 return Err("远程连接只读，请复制文件".into());
             }
             if std::path::Path::new(source).is_dir() {
-                remote::download_dir(source).await?;
+                remote::download_dir(source, &transfer_options).await?;
             } else {
-                remote::ensure_downloaded(source).await?;
+                remote::ensure_downloaded(source, &transfer_options).await?;
             }
         }
     }
@@ -1000,15 +977,16 @@ async fn search_files(
         hidden,
         ignores,
     } = request;
-    if root.starts_with("history://") {
+    if crate::plugin_vfs::handles(&root) {
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
-            let entries = git_history::search(&root, &query, hidden, &ignores)?;
+            let (entries, truncated) =
+                crate::plugin_vfs::search(&root, &query, hidden, &ignores, 500)?;
             let _ = on_batch.send(SearchBatch {
-                truncated: entries.len() >= 500,
                 entries,
                 done: true,
                 elapsed_ms: started.elapsed().as_millis(),
+                truncated,
                 skipped: 0,
             });
             Ok(())
@@ -1056,7 +1034,10 @@ async fn warm_index(
     ignores: Vec<String>,
     state: tauri::State<'_, SearchState>,
 ) -> Result<(), String> {
-    if root == "everywhere://" || crate::usbfs::route(&root).is_some() {
+    if root == "everywhere://"
+        || crate::usbfs::route(&root).is_some()
+        || crate::plugin_vfs::handles(&root)
+    {
         return Ok(());
     }
     let state = state.inner().clone();
@@ -1268,7 +1249,7 @@ async fn open_path(path: String, recent: tauri::State<'_, recent::Recent>) -> Re
         .await
         .map_err(|e| e.to_string())?;
     }
-    let path = remote::ensure_downloaded(&path).await?;
+    let path = remote::ensure_downloaded(&path, &remote::TransferOptions::default()).await?;
     tauri::async_runtime::spawn_blocking(move || terminals::open_path(&path))
         .await
         .map_err(|e| e.to_string())?
@@ -1417,6 +1398,7 @@ pub fn run() {
             plugins_list,
             plugin_panel_html,
             plugin_permission_allowed,
+            plugin_marketplace,
             plugin_release_assets,
             plugin_prepare_install,
             plugin_confirm_install,

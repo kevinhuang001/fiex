@@ -56,6 +56,7 @@ export function FileContextMenu({
   setCompressOpen,
   compressOpen,
   setMenu,
+  checksum,
 }: Pick<
   AppController,
   | 'menu'
@@ -80,6 +81,7 @@ export function FileContextMenu({
   | 'setCompressOpen'
   | 'compressOpen'
   | 'setMenu'
+  | 'checksum'
 >) {
   return (
     <>
@@ -292,6 +294,7 @@ export function FileContextMenu({
             isRemote={isRemotePath(menu.entry.path)}
             onClose={() => setMenu(null)}
             onError={x.setError}
+            onChecksum={checksum}
           />
         </div>
       )}

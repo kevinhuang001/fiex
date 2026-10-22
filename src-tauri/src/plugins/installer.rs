@@ -3,7 +3,7 @@
 //! Download sources must be public GitHub Releases containing .fiexplugin ZIPs.
 //! No plugin author/signature automatically grants permission.
 use crate::{plugin_host, plugin_permissions};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
@@ -42,6 +42,23 @@ pub struct InstallPreview {
     pub author: Option<plugin_host::PluginAuthor>,
     pub permissions: Vec<String>,
     pub requested_network_domains: Vec<String>,
+    pub repository: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketplacePlugin {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub author: Option<plugin_host::PluginAuthor>,
+    pub permissions: Vec<String>,
+    #[serde(default)]
+    pub requested_network_domains: Vec<String>,
+    pub asset: String,
     pub repository: String,
 }
 fn parse_repo(value: &str) -> Result<(&str, &str), String> {
@@ -180,6 +197,195 @@ pub fn release_assets(repository: &str) -> Result<Vec<String>, String> {
     names.sort();
     Ok(names)
 }
+/// Official marketplace. The repository is only a content source: every
+/// package still goes through the same download, manifest validation and
+/// explicit permission consent as a manually supplied plugin.
+pub fn marketplace(repository: &str) -> Result<Vec<MarketplacePlugin>, String> {
+    let (owner, repo) = parse_repo(repository)?;
+    let client = request_client()?;
+    let release = plugin_release(repository, &client)?;
+    let assets = release
+        .get("assets")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("release has no assets")?;
+    let catalog = assets.iter().find(|asset| {
+        asset
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|name| name == "fiex-catalog.json" || name == "catalog.json")
+    });
+    if let Some(catalog) = catalog {
+        let url = catalog
+            .get("browser_download_url")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("catalog URL missing")?;
+        if !url.starts_with(&format!(
+            "https://github.com/{owner}/{repo}/releases/download/"
+        )) {
+            return Err("catalog URL has unexpected origin".into());
+        }
+        let response = client
+            .get(url)
+            .send()
+            .and_then(reqwest::blocking::Response::error_for_status)
+            .map_err(|e| format!("cannot download plugin catalog: {e}"))?;
+        let mut bytes = Vec::new();
+        response
+            .take(2 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if bytes.len() > 2 * 1024 * 1024 {
+            return Err("plugin catalog is too large".into());
+        }
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| format!("plugin catalog invalid: {e}"))?;
+        return catalog_entries(&value, assets, &release, repository);
+    }
+    fallback_marketplace(assets, &release, repository)
+}
+
+fn platform_key() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+fn catalog_entries(
+    value: &serde_json::Value,
+    release_assets: &[serde_json::Value],
+    release: &serde_json::Value,
+    repository: &str,
+) -> Result<Vec<MarketplacePlugin>, String> {
+    let platform = platform_key();
+    let names = release_assets
+        .iter()
+        .filter_map(|asset| asset.get("name").and_then(serde_json::Value::as_str))
+        .collect::<std::collections::HashSet<_>>();
+    let plugins = value
+        .get("plugins")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("plugin catalog has no plugins array")?;
+    let version = release
+        .get("tag_name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let mut entries = Vec::new();
+    for plugin in plugins {
+        let id = plugin
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("catalog plugin has no id")?;
+        if !plugin_host::valid_id(id) {
+            continue;
+        }
+        let Some(asset) = plugin
+            .get("assets")
+            .and_then(|assets| assets.get(&platform))
+            .and_then(serde_json::Value::as_str)
+        else {
+            continue;
+        };
+        if !asset.ends_with(".fiexplugin") || asset.len() > 160 || !names.contains(asset) {
+            continue;
+        }
+        let permissions = plugin
+            .get("permissions")
+            .and_then(serde_json::Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .filter(|permission| plugin_permissions::PERMISSIONS.contains(permission))
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let requested_network_domains = plugin
+            .get("networkDomains")
+            .and_then(serde_json::Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let declared_domains = permissions
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<String>>();
+        let requested_network_domains = plugin_permissions::validate_network_domains(
+            &declared_domains,
+            &requested_network_domains,
+        )
+        .map(|set| set.into_iter().collect::<Vec<_>>())
+        .unwrap_or_default();
+        entries.push(MarketplacePlugin {
+            id: id.into(),
+            name: plugin
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(id)
+                .into(),
+            version: plugin
+                .get("version")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .unwrap_or(version)
+                .into(),
+            description: plugin
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .into(),
+            author: plugin
+                .get("author")
+                .cloned()
+                .and_then(|value| serde_json::from_value(value).ok()),
+            permissions,
+            requested_network_domains,
+            asset: asset.into(),
+            repository: repository.into(),
+        });
+    }
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(entries)
+}
+
+fn fallback_marketplace(
+    assets: &[serde_json::Value],
+    release: &serde_json::Value,
+    repository: &str,
+) -> Result<Vec<MarketplacePlugin>, String> {
+    let version = release
+        .get("tag_name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let mut entries = Vec::new();
+    for asset in assets {
+        let Some(name) = asset.get("name").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        if !name.ends_with(".fiexplugin") {
+            continue;
+        }
+        let slug = name.split('-').next().unwrap_or("plugin");
+        entries.push(MarketplacePlugin {
+            id: format!("org.fiex.{slug}"),
+            name: slug.into(),
+            version: version.clone(),
+            description: String::new(),
+            author: None,
+            permissions: Vec::new(),
+            requested_network_domains: Vec::new(),
+            asset: name.into(),
+            repository: repository.into(),
+        });
+    }
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(entries)
+}
+
 pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, String> {
     if asset_name.len() > 160 || !asset_name.ends_with(".fiexplugin") {
         return Err("invalid package selection".into());
@@ -239,12 +445,10 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
         return Err("invalid plugin id".into());
     }
     let declared = plugin_permissions::declaration(&manifest.permissions)?;
-    let requested_network_domains = plugin_permissions::validate_network_domains(
-        &declared,
-        &manifest.network_domains,
-    )?
-    .into_iter()
-    .collect::<Vec<_>>();
+    let requested_network_domains =
+        plugin_permissions::validate_network_domains(&declared, &manifest.network_domains)?
+            .into_iter()
+            .collect::<Vec<_>>();
     let permissions = declared.into_iter().collect::<Vec<_>>();
     if install_root()?.join(&manifest.id).exists() {
         return Err("plugin already installed; uninstall before installing another version".into());

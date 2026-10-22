@@ -63,7 +63,7 @@ unsubscribe()
 5. **不可把 nonce 当作永久密钥**；随机值只绑定握手。UI 桥最终鉴权依赖宿主保存的 session、来源、iframe 实例、用户授权及 Core 对节点/命令的二次检查。
 6. 若不同平台的资源来源具有 opaque origin，设计需要专门的 origin/source 校验实现并通过安全测试；不可仅凭消息中的 token、`"*"` targetOrigin 或 `event.data.pluginId` 识别身份。
 
-提案中 UI Bridge 对外版本为 `"1.0"`；主/次版本遵循 [版本策略](08-SDK.md)，不等于 Native IPC `"1.0"` 的同一个约束。
+提案中 UI Bridge 对外版本为 `"1.0"`；主/次版本遵循 [版本策略](08-SDK.md)，不等于 Native IPC `"2.0"` 的同一个约束。
 
 ## 4. Wire envelope（内部线格式草案）
 

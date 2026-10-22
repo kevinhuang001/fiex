@@ -2,7 +2,7 @@
 
 [索引](README.md) · [上一篇：IPC](04-IPC-PROTOCOL.md) · [下一篇：任务](06-TASKS.md) · [UI SDK 与 Bridge](11-UI-SDK.md)
 
-> **v1 决策**：插件开发者**必须交付已编译的 HTML/CSS/JavaScript 静态资源**；Fiex 将其作为隔离的 iframe 加载。Fiex 不编译 UI 源码、不运行 npm、不在产品运行时提供 Node.js。**不设计第二套声明式业务面板协议**。简单连接表单仍可由宿主根据数据字段定义生成，但所有自定义交互面板使用 iframe。以下为拟议规范，尚未实现。
+> **v1 决策**：插件开发者**必须交付已编译的 HTML/CSS/JavaScript 静态资源**；Fiex 将其作为隔离的 iframe 加载。Fiex 不编译 UI 源码、不运行 npm、不在产品运行时提供 Node.js。**不设计第二套声明式业务面板协议**。简单连接表单仍可由宿主根据数据字段定义生成，但所有自定义交互面板使用 iframe。宿主侧 `PluginPanelHost`、MessageChannel 桥和 `@fiex/ui-sdk` 已实现；插件作者需自行构建 iframe 静态资源。
 
 ## 1. 扩展点
 
