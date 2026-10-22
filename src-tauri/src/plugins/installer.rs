@@ -115,48 +115,80 @@ fn unpack(package: &[u8], output: &Path) -> Result<(), String> {
     }
     Ok(())
 }
-fn compatible_assets<'a>(release:&'a serde_json::Value)->Vec<&'a serde_json::Value>{
-    let Some(all)=release.get("assets").and_then(serde_json::Value::as_array) else {
+fn compatible_assets<'a>(release: &'a serde_json::Value) -> Vec<&'a serde_json::Value> {
+    let Some(all) = release.get("assets").and_then(serde_json::Value::as_array) else {
         return Vec::new();
     };
-    let platform=format!("{}-{}",std::env::consts::OS,std::env::consts::ARCH);
-    let matches=all.iter().filter(|asset|asset.get("name")
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|name|name.ends_with(".fiexplugin") && name.contains(&platform)))
+    let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    let matches = all
+        .iter()
+        .filter(|asset| {
+            asset
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|name| name.ends_with(".fiexplugin") && name.contains(&platform))
+        })
         .collect::<Vec<_>>();
-    if !matches.is_empty(){return matches;}
-    let generic=all.iter().filter(|asset|asset.get("name")
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|name|name.ends_with(".fiexplugin"))).collect::<Vec<_>>();
-    if generic.len()==1 {generic} else {Vec::new()}
+    if !matches.is_empty() {
+        return matches;
+    }
+    let generic = all
+        .iter()
+        .filter(|asset| {
+            asset
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|name| name.ends_with(".fiexplugin"))
+        })
+        .collect::<Vec<_>>();
+    if generic.len() == 1 {
+        generic
+    } else {
+        Vec::new()
+    }
 }
-fn plugin_release(repository:&str,client:&reqwest::blocking::Client)->Result<serde_json::Value,String>{
-    let (owner,repo)=parse_repo(repository)?;
-    let response=client.get(format!("https://api.github.com/repos/{owner}/{repo}/releases?per_page=20"))
-        .send().and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|e|format!("cannot list GitHub releases: {e}"))?;
-    let releases:Vec<serde_json::Value>=response.json().map_err(|e|e.to_string())?;
-    releases.into_iter().find(|v|!compatible_assets(v).is_empty())
-        .ok_or_else(||"repository has no compatible .fiexplugin release assets".into())
+fn plugin_release(
+    repository: &str,
+    client: &reqwest::blocking::Client,
+) -> Result<serde_json::Value, String> {
+    let (owner, repo) = parse_repo(repository)?;
+    let response = client
+        .get(format!(
+            "https://api.github.com/repos/{owner}/{repo}/releases?per_page=20"
+        ))
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|e| format!("cannot list GitHub releases: {e}"))?;
+    let releases: Vec<serde_json::Value> = response.json().map_err(|e| e.to_string())?;
+    releases
+        .into_iter()
+        .find(|v| !compatible_assets(v).is_empty())
+        .ok_or_else(|| "repository has no compatible .fiexplugin release assets".into())
 }
-pub fn release_assets(repository:&str)->Result<Vec<String>,String>{
-    let client=request_client()?;
-    let release=plugin_release(repository,&client)?;
-    let mut names=compatible_assets(&release).into_iter()
-        .filter_map(|a|a.get("name").and_then(serde_json::Value::as_str).map(str::to_owned))
+pub fn release_assets(repository: &str) -> Result<Vec<String>, String> {
+    let client = request_client()?;
+    let release = plugin_release(repository, &client)?;
+    let mut names = compatible_assets(&release)
+        .into_iter()
+        .filter_map(|a| {
+            a.get("name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        })
         .collect::<Vec<_>>();
     names.sort();
     Ok(names)
 }
-pub fn prepare(repository:&str,asset_name:&str)->Result<InstallPreview,String>{
-    if asset_name.len()>160 || !asset_name.ends_with(".fiexplugin"){
+pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, String> {
+    if asset_name.len() > 160 || !asset_name.ends_with(".fiexplugin") {
         return Err("invalid package selection".into());
     }
-    let (owner,repo)=parse_repo(repository)?;
-    let client=request_client()?;
-    let release=plugin_release(repository,&client)?;
-    let asset=compatible_assets(&release).into_iter()
-        .find(|a|a.get("name").and_then(serde_json::Value::as_str)==Some(asset_name))
+    let (owner, repo) = parse_repo(repository)?;
+    let client = request_client()?;
+    let release = plugin_release(repository, &client)?;
+    let asset = compatible_assets(&release)
+        .into_iter()
+        .find(|a| a.get("name").and_then(serde_json::Value::as_str) == Some(asset_name))
         .ok_or("requested plugin asset is unavailable for this platform")?;
     let url = asset
         .get("browser_download_url")
@@ -320,13 +352,13 @@ mod tests {
     }
     #[test]
     fn release_listing_can_offer_multiple_plugins_per_platform() {
-        let platform=format!("{}-{}",std::env::consts::OS,std::env::consts::ARCH);
-        let release=serde_json::json!({"assets":[
+        let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+        let release = serde_json::json!({"assets":[
             {"name":format!("archive-{platform}.fiexplugin")},
             {"name":format!("git-{platform}.fiexplugin")},
             {"name":"other-platform-only.fiexplugin"}
         ]});
-        assert_eq!(compatible_assets(&release).len(),2);
+        assert_eq!(compatible_assets(&release).len(), 2);
     }
     #[test]
     fn zip_slip_is_not_accepted() {

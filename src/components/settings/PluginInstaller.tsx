@@ -125,8 +125,7 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
         {assets.length > 0 && (
           <div className="plugin-install-assets" aria-label="可安装插件">
             {assets.map((asset) => (
-              <button type="button" key={asset} disabled={busy}
-                onClick={() => void prepare(asset)}>
+              <button type="button" key={asset} disabled={busy} onClick={() => void prepare(asset)}>
                 <Download size={15} />
                 <span>{asset}</span>
                 <strong>查看权限并安装</strong>
