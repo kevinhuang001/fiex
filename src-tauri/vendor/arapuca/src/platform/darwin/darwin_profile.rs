@@ -14,6 +14,8 @@ use crate::Error;
 
 /// Data used to render a Seatbelt profile.
 pub struct ProfileData {
+    /// Whether child processes may execute anything beyond the plugin itself.
+    pub allow_exec: bool,
     /// Paths the subprocess can read.
     pub read_paths: Vec<String>,
     /// Paths the subprocess can read and write.
@@ -612,8 +614,7 @@ mod tests {
 
         let data = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/home/user/src".into()],
+            read_paths: vec!["/home/user/src".into()],
             write_paths: vec!["/tmp/work".into()],
             exec_paths: vec!["/usr/local/bin".into()],
             control_socket: Some("/tmp/sock/control.sock".into()),
@@ -714,8 +715,7 @@ mod tests {
 
         let data = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/home/user/src".into()],
+            read_paths: vec!["/home/user/src".into()],
             write_paths: vec![],
             exec_paths: vec![],
             control_socket: None,
@@ -743,8 +743,7 @@ mod tests {
 
         let base = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/home/user/src".into()],
+            read_paths: vec!["/home/user/src".into()],
             write_paths: vec![],
             exec_paths: vec![],
             control_socket: None,
@@ -803,8 +802,7 @@ mod tests {
 
         let data = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/Users/bob/project".into()],
+            read_paths: vec!["/Users/bob/project".into()],
             write_paths: vec!["/Users/bob/.c3/worktrees/run1".into()],
             exec_paths: vec![],
             control_socket: None,
@@ -840,8 +838,7 @@ mod tests {
         // Crafted path that tries to inject Seatbelt syntax.
         let data = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/tmp/evil\") (allow default) (deny nothing \"".into()],
+            read_paths: vec!["/tmp/evil\") (allow default) (deny nothing \"".into()],
             write_paths: vec![],
             exec_paths: vec![],
             control_socket: None,
@@ -866,8 +863,7 @@ mod tests {
 
         let data = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/home/user/src".into()],
+            read_paths: vec!["/home/user/src".into()],
             write_paths: vec!["/tmp/work".into()],
             exec_paths: vec![],
             control_socket: None,
@@ -943,8 +939,7 @@ mod tests {
         // Keychain disabled: no securityd Mach lookup, no keychain files.
         let off = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/home/user/src".into()],
+            read_paths: vec!["/home/user/src".into()],
             write_paths: vec![],
             exec_paths: vec![],
             control_socket: None,
@@ -983,8 +978,7 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir_both);
         let both = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/home/user/src".into()],
+            read_paths: vec!["/home/user/src".into()],
             write_paths: vec![],
             exec_paths: vec![],
             control_socket: None,
@@ -1018,8 +1012,7 @@ mod tests {
 
         let data = ProfileData {
             allow_exec: true,
-            allow_exec: true,
-        read_paths: vec!["/home/user/src".into()],
+            read_paths: vec!["/home/user/src".into()],
             write_paths: vec!["/tmp/work".into()],
             exec_paths: vec![],
             control_socket: None,
