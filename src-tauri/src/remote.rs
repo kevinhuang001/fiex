@@ -1,5 +1,4 @@
-use futures_util::{pin_mut, StreamExt};
-use quick_xml::events::Event;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use smb::ReadAt;
 use std::{
@@ -10,9 +9,6 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-
-const DAV_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
-<d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:resourcetype/><d:getcontentlength/><d:getlastmodified/><d:getcontenttype/></d:prop></d:propfind>"#;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -378,79 +374,6 @@ fn local_for(conn: &StoredConnection, rel: &str) -> PathBuf {
     path
 }
 
-fn placeholder(conn: &StoredConnection, rel: &str, file: &RemoteFile) -> Result<(), String> {
-    let local = local_for(conn, rel);
-    if file.is_dir {
-        fs::create_dir_all(&local).map_err(|e| e.to_string())?;
-    } else if !local.exists() {
-        if let Some(parent) = local.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        fs::File::create(&local).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-pub async fn sync_dir(path: &str) -> Result<(), String> {
-    let Some((conn, rel)) = connection_for_path(path) else {
-        return Ok(());
-    };
-    let rel = rel_string(&rel);
-    let files = list_remote(&conn, &rel).await?;
-    let mut meta = load_meta(&conn);
-    for file in files {
-        let Some(name) = safe_child_name(&file.name) else {
-            continue;
-        };
-        let child = if rel.is_empty() {
-            name.to_string()
-        } else {
-            format!("{rel}/{name}")
-        };
-        placeholder(&conn, &child, &file)?;
-        let old = meta.files.get(&child);
-        meta.files.insert(
-            child,
-            RemoteMetaFile {
-                size: file.size,
-                modified: file.modified,
-                is_dir: file.is_dir,
-                downloaded: old.is_some_and(|m| m.downloaded)
-                    && local_for(&conn, &rel).join(name).exists(),
-            },
-        );
-    }
-    save_meta(&conn, &meta)
-}
-
-pub fn apply_meta(entries: &mut [crate::files::Entry]) {
-    let Some((conn, _)) = entries
-        .first()
-        .and_then(|entry| connection_for_path(&entry.path))
-    else {
-        return;
-    };
-    let meta = load_meta(&conn);
-    let mount = mount_path(&conn);
-    for entry in entries {
-        let Ok(path) = dunce::canonicalize(&entry.path) else {
-            continue;
-        };
-        let Ok(rel) = path.strip_prefix(&mount) else {
-            continue;
-        };
-        if let Some(file) = meta.files.get(&rel_string(rel)) {
-            entry.size = file.size;
-            entry.modified = file.modified;
-            entry.readonly = true;
-            entry.sync = Some(if file.downloaded { "synced" } else { "cloud" }.into());
-        }
-    }
-}
-
-/// Use the approved provider plugin even for existing mirror-based views.
-/// A missing, disabled or unapproved provider cannot silently fall back to an
-/// embedded WebDAV/SMB client.
 async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
     let plugin_id = format!("org.fiex.{}", conn.kind);
     if !crate::plugin_host::permission_allowed(&plugin_id, "network")? {
@@ -716,7 +639,12 @@ pub async fn download_dir(path: &str) -> Result<(), String> {
             } else {
                 format!("{current}/{name}")
             };
-            placeholder(&conn, &child, &file)?;
+            let local = local_for(&conn, &child);
+            if file.is_dir {
+                fs::create_dir_all(&local).map_err(|e| e.to_string())?;
+            } else if let Some(parent) = local.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
             if file.is_dir {
                 dirs.push(child);
             } else {
@@ -783,132 +711,6 @@ fn auth(req: reqwest::RequestBuilder, conn: &StoredConnection) -> reqwest::Reque
     }
 }
 
-async fn webdav_list(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
-    let client = webdav_client(conn)?;
-    let url = format!("{}/", webdav_url(conn, rel).trim_end_matches('/'));
-    let request = client
-        .request(
-            reqwest::Method::from_bytes(b"PROPFIND").map_err(|e| e.to_string())?,
-            &url,
-        )
-        .header("Depth", "1")
-        .header("Content-Type", "application/xml; charset=utf-8")
-        .body(DAV_BODY);
-    let response = auth(request, conn)
-        .send()
-        .await
-        .map_err(|e| format!("WebDAV 连接失败：{e}"))?;
-    if !response.status().is_success() && response.status().as_u16() != 207 {
-        return Err(format!("WebDAV 返回 {}", response.status()));
-    }
-    let xml = response.text().await.map_err(|e| e.to_string())?;
-    parse_dav(&url, rel, &xml)
-}
-
-fn decode_href(href: &str) -> String {
-    urlencoding::decode(href)
-        .map(|value| value.into_owned())
-        .unwrap_or_else(|_| href.into())
-}
-
-fn parse_dav(url: &str, rel: &str, xml: &str) -> Result<Vec<RemoteFile>, String> {
-    let base = reqwest::Url::parse(url).map_err(|e| e.to_string())?;
-    let base_path = decode_href(base.path());
-    let mut reader = quick_xml::Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
-    let mut current: Option<RemoteFile> = None;
-    let mut field: Option<&str> = None;
-    let mut text = String::new();
-    let mut out = Vec::new();
-    loop {
-        match reader.read_event() {
-            Ok(Event::Start(event)) => {
-                let name = event.local_name();
-                match name.as_ref() {
-                    b"response" => {
-                        current = Some(RemoteFile {
-                            name: String::new(),
-                            path: String::new(),
-                            is_dir: false,
-                            size: 0,
-                            modified: 0,
-                        })
-                    }
-                    b"href" => field = Some("href"),
-                    b"displayname" => field = Some("displayname"),
-                    b"getcontentlength" => field = Some("size"),
-                    b"getlastmodified" => field = Some("modified"),
-                    _ => {}
-                }
-                text.clear();
-            }
-            Ok(Event::Empty(event)) => {
-                if event.local_name().as_ref() == b"collection" {
-                    if let Some(item) = current.as_mut() {
-                        item.is_dir = true;
-                    }
-                }
-            }
-            Ok(Event::Text(event)) => {
-                if field.is_some() {
-                    text.push_str(&event.unescape().unwrap_or_default());
-                }
-            }
-            Ok(Event::End(event)) => {
-                if let Some(item) = current.as_mut() {
-                    match field {
-                        Some("href") => {
-                            if let Ok(full) = base.join(text.trim()) {
-                                let path = decode_href(full.path());
-                                if let Some(relative) = path.strip_prefix(&base_path) {
-                                    let relative = relative.trim_matches('/');
-                                    if !relative.is_empty() {
-                                        item.path = relative.into();
-                                        item.name =
-                                            relative.rsplit('/').next().unwrap_or(relative).into();
-                                    }
-                                }
-                            }
-                        }
-                        Some("displayname") => {
-                            if !text.trim().is_empty() {
-                                item.name = text.trim().into();
-                            }
-                        }
-                        Some("size") => item.size = text.trim().parse().unwrap_or(0),
-                        Some("modified") => {
-                            if let Ok(time) = httpdate::parse_http_date(text.trim()) {
-                                item.modified = time
-                                    .duration_since(UNIX_EPOCH)
-                                    .map(|d| d.as_secs())
-                                    .unwrap_or_default();
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                field = None;
-                text.clear();
-                if event.local_name().as_ref() == b"response" {
-                    if let Some(mut item) = current.take() {
-                        let requested = rel.trim_matches('/');
-                        if !item.path.is_empty() && item.path.trim_matches('/') != requested {
-                            if item.is_dir {
-                                item.size = 0;
-                            }
-                            out.push(item);
-                        }
-                    }
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(e) => return Err(format!("WebDAV 响应解析失败：{e}")),
-            _ => {}
-        }
-    }
-    Ok(out)
-}
-
 async fn webdav_get(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
     let client = webdav_client(conn)?;
     let request = client.get(webdav_url(conn, rel));
@@ -946,52 +748,6 @@ async fn smb_client(conn: &StoredConnection) -> Result<(smb::Client, smb::UncPat
 fn smb_path(conn: &StoredConnection, rel: &str) -> String {
     let joined = remote_join(&conn.base, rel).replace('/', "\\");
     joined.trim_matches('\\').to_string()
-}
-
-async fn smb_list(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
-    let (client, unc) = smb_client(conn).await?;
-    let path = smb_path(conn, rel);
-    let target = if path.is_empty() {
-        unc.clone()
-    } else {
-        unc.with_path(&path)
-    };
-    let dir = client
-        .create_file(
-            &target,
-            &smb::FileCreateArgs::make_open_existing(
-                smb::DirAccessMask::new()
-                    .with_list_directory(true)
-                    .with_synchronize(true)
-                    .into(),
-            ),
-        )
-        .await
-        .map_err(|e| e.to_string())?
-        .unwrap_dir();
-    let dir = std::sync::Arc::new(dir);
-    let stream =
-        smb::Directory::query_with_options::<smb::FileFullDirectoryInformation>(&dir, "*", 65536)
-            .await
-            .map_err(|e| e.to_string())?;
-    pin_mut!(stream);
-    let mut out = Vec::new();
-    while let Some(item) = stream.next().await {
-        let item = item.map_err(|e| e.to_string())?;
-        let name = item.file_name.to_string();
-        if name == "." || name == ".." {
-            continue;
-        }
-        out.push(RemoteFile {
-            name,
-            path: String::new(),
-            is_dir: item.file_attributes.directory(),
-            size: item.end_of_file,
-            modified: 0,
-        });
-    }
-    let _ = dir.close().await;
-    Ok(out)
 }
 
 async fn smb_get(conn: &StoredConnection, rel: &str, dest: &Path) -> Result<u64, String> {
@@ -1118,11 +874,7 @@ pub fn unsync(paths: &[String]) -> Result<(), String> {
                 let child = local_for(&conn, &key);
                 if meta.files.get(&key).is_some_and(|file| !file.is_dir) {
                     let _ = fs::remove_file(&child);
-                    let _ = fs::OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .truncate(true)
-                        .open(&child);
+
                 }
                 if let Some(file) = meta.files.get_mut(&key) {
                     file.downloaded = false;
@@ -1130,7 +882,6 @@ pub fn unsync(paths: &[String]) -> Result<(), String> {
             }
         } else {
             let _ = fs::remove_file(&local);
-            fs::File::create(&local).map_err(|error| error.to_string())?;
             if let Some(file) = meta.files.get_mut(&rel) {
                 file.downloaded = false;
             }
