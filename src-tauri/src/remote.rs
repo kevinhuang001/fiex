@@ -124,18 +124,17 @@ fn load_stored() -> Vec<StoredConnection> {
         .unwrap_or_default();
     let mut migrated = false;
     for item in &mut items {
-        if !item.password.is_empty() {
-            if crate::plugin_storage::secret_set(
+        if !item.password.is_empty()
+            && crate::plugin_storage::secret_set(
                 &format!("org.fiex.{}", item.kind),
                 &format!("connection-{}", item.id),
                 "password",
                 &item.password,
             )
             .is_ok()
-            {
-                item.password.clear();
-                migrated = true;
-            }
+        {
+            item.password.clear();
+            migrated = true;
         }
     }
     // Commit sanitized legacy data before populating in-memory credentials.

@@ -60,10 +60,13 @@ struct IndexHandle {
     _watcher: Option<notify::RecommendedWatcher>,
 }
 
+type IndexSlot = Arc<Mutex<Option<IndexHandle>>>;
+type IndexSlots = Arc<Mutex<HashMap<String, IndexSlot>>>;
+
 #[derive(Clone, Default)]
 pub struct SearchState {
     generations: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
-    indexes: Arc<Mutex<HashMap<String, Arc<Mutex<Option<IndexHandle>>>>>>,
+    indexes: IndexSlots,
 }
 
 #[derive(Clone, Serialize)]

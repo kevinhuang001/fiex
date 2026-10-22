@@ -115,7 +115,7 @@ fn unpack(package: &[u8], output: &Path) -> Result<(), String> {
     }
     Ok(())
 }
-fn compatible_assets<'a>(release: &'a serde_json::Value) -> Vec<&'a serde_json::Value> {
+fn compatible_assets(release: &serde_json::Value) -> Vec<&serde_json::Value> {
     let Some(all) = release.get("assets").and_then(serde_json::Value::as_array) else {
         return Vec::new();
     };

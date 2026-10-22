@@ -135,13 +135,7 @@ fn discover() -> Vec<(PluginManifest, PathBuf)> {
     list
 }
 fn platform() -> String {
-    let os = match std::env::consts::OS {
-        "macos" => "macos",
-        "windows" => "windows",
-        "linux" => "linux",
-        s => s,
-    };
-    format!("{os}-{}", std::env::consts::ARCH)
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 pub fn valid_id(id: &str) -> bool {
     id.len() > 2
