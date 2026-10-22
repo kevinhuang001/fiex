@@ -242,6 +242,21 @@ jobs:
             tail -50 integration-test.log | sed 's/^/::error title=RUSTTEST::/'
           fi
           exit "$status"
+      - name: Core IPC integration with an external mock plugin
+        shell: bash
+        env:
+          FIEX_PLUGIN_DIR: ${{ runner.temp }}/fiex-plugin-host-test/plugins
+          XDG_DATA_HOME: ${{ runner.temp }}/fiex-plugin-host-test/user-data
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path sdk/rust/Cargo.toml --target "${{ matrix.target }}" --example mock_plugin
+          mkdir -p "$FIEX_PLUGIN_DIR/org.fiex.mock"
+          cp sdk/rust/fixtures/mock-manifest.json "$FIEX_PLUGIN_DIR/org.fiex.mock/manifest.json"
+          executable=mock_plugin
+          if [ "$RUNNER_OS" = Windows ]; then executable=mock_plugin.exe; fi
+          cp "sdk/rust/target/${{ matrix.target }}/debug/examples/$executable" "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"
+          if [ "$RUNNER_OS" != Windows ]; then chmod +x "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"; fi
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_smoke -- org.fiex.mock
       - name: Clippy
         shell: bash
         env:
