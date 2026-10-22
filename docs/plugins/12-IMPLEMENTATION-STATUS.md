@@ -6,8 +6,10 @@
 
 - `sdk/rust/`：独立可发布的 Rust Native SDK 初版，Content-Length JSON-RPC framing、错误和服务循环、单元测试。
 - `sdk/ui/`：浏览器端 `@fiex/ui-sdk` 原型及宿主 MessageChannel 桥接口，支持 iframe 握手、请求/响应、事件、取消和类型。
-- `src-tauri/src/plugin_host.rs`：长驻子进程客户端，按进程序列化请求、初始化身份校验、断开后清理。
-- 三个独立二进制入口 `fiex-plugin-webdav`、`fiex-plugin-smb`、`fiex-plugin-git`。**当前进程仍复用旧 `fiex` library 里的网络/Git 逻辑，是过渡适配，不属于最终插件解耦**。
+- `src-tauri/src/plugin_host.rs`：按 manifest 动态发现插件、独立子进程与握手验证，并支持插件→宿主的 `host.storage.*`、`host.secret.*` 反向请求。
+- 新增 `plugins/official/{webdav,smb,git}` 三个**不再链接 Fiex Core 的独立 crate**，Linux SDK/Git 测试及 WebDAV/SMB 编译已通过。旧 `src-tauri/src/bin/*` 过渡 sidecar 仍存在，主程序运行时和打包尚未完全切换到独立 crate，不能算最终解耦。
+- `src-tauri/src/plugin_storage.rs`：内核持有的普通 KV（作用域、配额、原子替换）与系统凭据库；旧连接密码尝试迁移并停止写入明文。
+- `src/components/ConnectionDialog.tsx`、`PreferencesDialog.tsx`、`ExplorerToolbar.tsx`：插件清单驱动连接选择、插件设置 Tab 和插件工具下拉，正式插件 iframe 加载仍待完成。
 - `remote::provider_list`：由远程 provider 直接列出资源元数据，不创建本地空占位文件；Core 可以据此接入 VFS。
 
 ## 规格审查发现的实际问题
@@ -21,7 +23,7 @@
 
 ## 发布阻断项
 
-- [ ] SDK、Native 宿主、三个二进制跨平台 `cargo fmt/clippy/test` 和完整构建通过。
+- [ ] SDK、Native 宿主、三个二进制跨平台 `cargo fmt/clippy/test` 和完整构建通过。**Linux 独立 crate CI 已通过，三平台待测。**
 - [ ] 旧 `remote.rs` / `git*.rs` 不再被 Core 链接，插件可独立构建和打包。
 - [ ] 官方插件不在 Host 实现中硬编码列表；第三方 manifest 动态安装/能力授权可用。
 - [ ] WebDAV/SMB 所有目录与文件访问都使用 Core VFS，无零字节占位，连接配置/凭据安全迁移完成。
@@ -29,6 +31,8 @@
 - [ ] 内核级缓存、选择性同步、冲突解决、任务进度、取消、恢复真正落地。
 - [ ] iframe UI 独立 origin、CSP/权限、构建产物加载及真实活动中心集成。
 - [ ] 原有文件浏览、Git、WebDAV、SMB 行为与三平台打包测试不回退。
+
+- [ ] OAuth Broker（PKCE/state/callback、Refresh Token 轮换）及安装授权 UI 完整落地；目前只实现 SecretStore 与账户级 KV 基础。
 
 ## 稳定性策略
 

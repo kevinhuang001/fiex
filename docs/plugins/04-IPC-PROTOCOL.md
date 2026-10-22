@@ -40,7 +40,8 @@ Content-Length: 96\r\n
 | Core→插件 | `plugin.task.cancel`                                        | 取消长任务               |
 | 插件→Core | `host.mount.create / remove`                                | 注册 VFS 挂载            |
 | 插件→Core | `host.task.create / progress / complete / fail / cancelled` | 统一任务中心             |
-| 插件→Core | `host.secret.request`                                       | 按授权获取凭据           |
+| 插件→Core | `host.storage.get/set/delete/keys`                         | 插件与账户隔离的普通 JSON KV |
+| 插件→Core | `host.secret.get/set/delete/available`                                       | 按授权获取凭据           |
 | 插件→Core | `host.context.get`                                          | 受限访问当前选择上下文   |
 
 **iframe ↔ UI Host 使用独立版本的 [UI Bridge](11-UI-SDK.md)**（MessageChannel），而不是本文件的 Native stdio JSON-RPC。UI Host 经过鉴权可将 `plugin.invoke` 路由为 `plugin.command.execute`。宿主可额外提供 `host.vfs.*` 以使功能插件通过授权访问别的挂载，但不能绕过本地路径/其他插件的数据授权。对于插件提供的缓存、同步诉求，不应出现 `plugin.cache.*` 或 `plugin.sync.*`：Core 通过通用 VFS 原语执行它们。
@@ -116,3 +117,9 @@ rate_limited, invalid_cursor, partial_commit, internal
 `protocolVersion` 的 major 不兼容；minor 只增加可忽略字段/可选方法。插件 manifest 声明支持范围，协商取共同版本。Core 不得把未知方法当成成功响应；SDK/CI 使用 golden fixtures 和模拟独立进程互测，覆盖超长帧、错误 JSON、乱序响应、超时、进程崩溃以及网络中断。
 
 下一篇 [UI 扩展](05-UI-EXTENSIONS.md) 规定插件预编译 iframe 资源；[11 UI SDK](11-UI-SDK.md) 独立定义 iframe ↔ Host Bridge 的版本与消息安全。
+
+## 9. 反向 IPC 与持久化（已实现实验原型）
+
+插件处理宿主请求期间，可以在同一 `stdin/stdout` 控制通道发出带字符串请求 ID 的 `host.*` JSON-RPC 请求。宿主在等待插件原请求响应时必须处理这一反向消息，再继续等待原响应；不能把反向调用错判为不匹配的响应 ID。每次宿主请求都以**实际已认证进程的插件 ID**作为权限主体，不信任 JSON 请求体中的插件 ID。
+
+`host.storage.*` 依据 `permissions.storage` 限制，`host.secret.*` 依据 `permissions.secrets` 限制，所有数据由内核持有。错误使用 JSON-RPC 结构化错误，不经 stdout 日志传送。反向调用暂为**同步嵌套单请求**，不表示已经支持任意双向并发推送或二进制数据流。详见 [13 插件持久化与 OAuth](13-PERSISTENCE-OAUTH.md)。
