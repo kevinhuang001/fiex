@@ -22,6 +22,8 @@ jobs:
         with:
           components: rustfmt
       - run: npx prettier --write plugins/official src-tauri/tauri.conf.json src e2e docs/plugins sdk/ui
+      - name: Synchronize core dependency lockfile
+        run: cargo update --manifest-path src-tauri/Cargo.toml --workspace
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml
       - run: cargo fmt --manifest-path sdk/rust/Cargo.toml
       - run: cargo fmt --manifest-path plugins/official/git/Cargo.toml
