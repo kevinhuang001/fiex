@@ -21,6 +21,7 @@ import { Columns2, Puzzle, RefreshCw, ScrollText, Trash2 } from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
 import { usePluginCatalog } from '@/lib/plugins'
 import { call } from '@/lib/api'
+import { OPEN_PLUGIN_PANEL } from '@/components/plugins/PluginPanelHost'
 import type { ReactNode } from 'react'
 const views: { id: View; name: string; icon: ReactNode }[] = [
   { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
@@ -210,7 +211,12 @@ export function ExplorerToolbar({
                 onClick={() => {
                   // Built-in Git panel is a compatibility adapter until its
                   // iframe is bundled as a plugin UI contribution.
-                  if (tool.id === 'git.main' && plugin.id === 'org.fiex.git') {
+                  if (tool.openPanel) {
+                    window.dispatchEvent(new CustomEvent(OPEN_PLUGIN_PANEL, {detail:{
+                      pluginId:plugin.id,panelId:tool.openPanel,title:tool.title,
+                      selection:x.selected,directory:x.path
+                    }}))
+                  } else if (tool.id === 'git.main' && plugin.id === 'org.fiex.git') {
                     setGitOpen(true)
                   } else if (tool.command && plugin.backendAvailable) {
                     void call('plugin_invoke', {

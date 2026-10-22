@@ -1,4 +1,5 @@
 import { ChecksumDialog } from '@/components/ChecksumDialog'
+import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
 import { FileInfoDialog } from '@/components/FileInfoDialog'
@@ -106,6 +107,7 @@ export function ExplorerDialogs({
 >) {
   return (
     <>
+      <PluginPanelHost />
       <ConflictDialog
         request={conflict}
         busy={Boolean(busy)}

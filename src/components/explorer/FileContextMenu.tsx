@@ -1,11 +1,7 @@
 import type { AppController } from '@/hooks/useAppController'
 import { progressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
-import { archiveFormats } from '@/lib/archives'
-import { isArchive } from '@/lib/files'
 import {
-  Archive,
-  Hash,
   RotateCcw,
   ChevronRight,
   CloudCheck,
@@ -21,6 +17,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { PluginContextActions } from '@/components/plugins/PluginContextActions'
 interface ContextAction {
   disabled?: boolean
   label: string
@@ -40,7 +37,6 @@ export function FileContextMenu({
   menu,
   hint,
   open,
-  checksum,
   previewEntry,
   setInfo,
   platform,
@@ -51,8 +47,6 @@ export function FileContextMenu({
   run,
   copy,
   duplicate,
-  compress,
-  extract,
   terminal,
   notify,
   recycle,
@@ -61,14 +55,12 @@ export function FileContextMenu({
   inTrash,
   setCompressOpen,
   compressOpen,
-  setCompressAdvanced,
   setMenu,
 }: Pick<
   AppController,
   | 'menu'
   | 'hint'
   | 'open'
-  | 'checksum'
   | 'previewEntry'
   | 'setInfo'
   | 'platform'
@@ -79,8 +71,6 @@ export function FileContextMenu({
   | 'run'
   | 'copy'
   | 'duplicate'
-  | 'compress'
-  | 'extract'
   | 'terminal'
   | 'notify'
   | 'recycle'
@@ -89,7 +79,6 @@ export function FileContextMenu({
   | 'inTrash'
   | 'setCompressOpen'
   | 'compressOpen'
-  | 'setCompressAdvanced'
   | 'setMenu'
 >) {
   return (
@@ -193,45 +182,11 @@ export function FileContextMenu({
                 action: duplicate,
               },
               {
-                label: '压缩为…',
-                icon: <Archive />,
-                hint: '',
-                disabled: gitSwitched || x.directoryReadOnly,
-                submenu: [
-                  ...archiveFormats.map((format) => ({
-                    label: format.name,
-                    action: () => compress(format),
-                  })),
-                  {
-                    label: '高级…',
-                    action: () => setCompressAdvanced(archiveFormats[0]),
-                  },
-                ],
-              },
-              ...(isArchive(menu.entry)
-                ? [
-                    {
-                      label: '解压缩到…',
-                      icon: <Archive />,
-                      hint: '',
-                      disabled: gitSwitched || x.directoryReadOnly,
-                      action: extract,
-                    },
-                  ]
-                : []),
-              {
                 label: 'Open in Terminal',
                 icon: <TerminalSquare />,
                 hint: '',
                 disabled: gitSwitched || x.directoryReadOnly,
                 action: () => terminal(),
-              },
-              {
-                label: '查看校验和',
-                icon: <Hash />,
-                hint: '',
-                disabled: menu.entry.isDir,
-                action: () => checksum(menu.entry.path),
               },
               {
                 label: '复制路径',
@@ -329,6 +284,12 @@ export function FileContextMenu({
               </button>
             ),
           )}
+          <PluginContextActions
+            paths={x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]}
+            path={x.path} isDirectory={menu.entry.isDir} readOnly={x.readOnly}
+            isRemote={isRemotePath(menu.entry.path)}
+            onClose={() => setMenu(null)} onError={x.setError}
+          />
         </div>
       )}
     </>

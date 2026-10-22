@@ -273,6 +273,10 @@ fn plugin_status() -> Vec<(String, bool)> {
         .collect()
 }
 #[tauri::command]
+fn plugin_panel_html(plugin_id:String,panel_id:String)->Result<String,String>{
+    crate::plugin_host::panel_html(&plugin_id,&panel_id)
+}
+#[tauri::command]
 fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
     crate::plugin_host::catalog()
 }
@@ -1375,6 +1379,7 @@ pub fn run() {
             plugin_invoke,
             plugin_status,
             plugins_list,
+            plugin_panel_html,
             plugin_prepare_install,
             plugin_confirm_install,
             plugin_cancel_install,

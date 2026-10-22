@@ -73,10 +73,12 @@ export function attachFiexPanel(session: HostSession): () => void {
     }
   }
   channel.port1.start()
-  // "targetOrigin" MUST be the installation-specific plugin origin, never "*".
+  // srcDoc sandboxed without allow-same-origin has an opaque origin; in that
+  // one case targetOrigin must be '*'. The transferred channel is bound to
+  // the specific frame contentWindow and a nonce, not globally broadcast.
   target.postMessage(
     { type: 'fiex.bridge.init', bridgeVersion: '1.0', sessionId: session.sessionId, nonce },
-    session.origin,
+    session.origin === 'null' ? '*' : session.origin,
     [channel.port2],
   )
   return dispose
