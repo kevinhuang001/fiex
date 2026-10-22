@@ -226,10 +226,16 @@ async fn plugin_invoke(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+async fn plugin_release_assets(repository:String)->Result<Vec<String>,String>{
+    tauri::async_runtime::spawn_blocking(move||crate::plugin_installer::release_assets(&repository))
+        .await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
 async fn plugin_prepare_install(
     repository: String,
+    asset_name: String,
 ) -> Result<crate::plugin_installer::InstallPreview, String> {
-    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::prepare(&repository))
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::prepare(&repository, &asset_name))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -1403,6 +1409,7 @@ pub fn run() {
             plugins_list,
             plugin_panel_html,
             plugin_permission_allowed,
+            plugin_release_assets,
             plugin_prepare_install,
             plugin_confirm_install,
             plugin_cancel_install,

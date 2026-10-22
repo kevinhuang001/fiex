@@ -6,10 +6,10 @@
 
 在「设置 → 插件 → 从 GitHub 安装」输入公开仓库的 `owner/repo`。
 
-1. Core 用带超时的 HTTPS 客户端读取 `GET /repos/{owner}/{repo}/releases/latest`。
-2. 找到最新 Release 的第一个 `.fiexplugin` 资产；若缺失则**报错**，不擅自执行任意 `.exe`/`.sh`。建议一个仓库的最新 Release 只包含一个插件包。
+1. Core 使用带超时的 HTTPS 客户端读取 `GET /repos/{owner}/{repo}/releases?per_page=20`，从新到旧选择最近一版带有当前平台插件包的 Release。
+2. 展示 Release 中全部匹配当前操作系统及 CPU 架构的 `.fiexplugin` 资产，**由用户选择具体插件**；不运行 `.exe`/`.sh`。一个 Release 可以包含 Git、WebDAV、SMB、压缩、校验和五种插件，各自独立安装。
 3. 限制下载大小（当前 60 MiB）、解压总字节数（256 MiB）和文件数量（2000），拒绝 ZIP Slip、软链接与特殊文件。
-4. 只在临时目录解压、验证 `manifest.json` 和受支持的声明权限，**这个阶段绝不启动二进制**。
+4. 只在插件安装根目录同一文件系统的 `.staging` 临时目录解压、验证 `manifest.json` 和受支持的声明权限，**这个阶段绝不启动二进制**。
 5. 前端展示 ID、名称、版本、作者、GitHub 来源和请求权限。用户点击“同意权限并安装”，才将临时目录移动到用户级插件目录并启用。
 6. 安装失败则不启动；卸载停止插件进程、撤销授权并删除插件程序文件，但**默认保留用户数据与同步目录**。更新时需使用更明确的升级与回滚流程；初版要求卸载后重装。
 
@@ -53,8 +53,19 @@
 ## 5. 后续发布阻断
 
 - [ ] 所有平台完整安装/卸载集成测试，含原生可执行位、平台架构、锁定的程序文件及回滚。
-- [ ] 对 GitHub Release 资产命名实现多个候选可选择，而不是只取第一个。
+- [x] Release 多插件包列表及选择；平台专用包选择；同分区 staging。
 - [ ] 真正的 OS 沙箱及权限撤销后现有 Native 句柄/任务的强制失效。
 - [ ] VFS 授权资源句柄及二进制流接口取代裸绝对路径传递。
 - [ ] 完整插件 iframe 资产策略、CSP 与事件总线跨平台压力测试。
 - [ ] 内核缓存/双向同步与 Git/WebDAV/SMB 的遗留路由彻底迁移。
+
+## 6. 可选插件的三平台构建与发布
+
+仓库增加 `scripts/package-fiex-plugin.py` 以及独立的 `.github/workflows/plugin-packages.yml`，构建和打包与 Fiex 主程序安装包分离：
+
+- Rust 构建 `plugins/official/{git,webdav,smb,archive,checksum}`；`cargo test` 先于 `cargo build --release`。
+- Windows、macOS、Linux 各自输出类似 `archive-macos-aarch64.fiexplugin`、`git-windows-x86_64.fiexplugin`，ZIP 顶层只包含 Manifest、本平台二进制和可选预编译 `ui/`。
+- `workflow_dispatch` 可以生成供 CI 检查的工件；仅在推送 `plugins-v*` 标签且三个系统包构建成功后才创建 GitHub Release。
+- 用户自己在 Fiex 设置页输入 `kevinhuang001/fiex`，从匹配当前平台的可安装资产中选具体插件并授权。**插件从未自动预装，也没有签名特权。**
+
+提醒：多平台完整插件打包与运行尚需实际 CI 验证。没有经过验证的包不应发布为可用 Release。

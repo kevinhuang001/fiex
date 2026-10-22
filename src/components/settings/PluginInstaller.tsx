@@ -31,17 +31,34 @@ interface InstallPreview {
 export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
   const [repository, setRepository] = useState('')
   const [busy, setBusy] = useState(false)
+  const [assets, setAssets] = useState<string[]>([])
   const [preview, setPreview] = useState<InstallPreview | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const prepare = async () => {
+  const loadAssets = async () => {
     if (busy || !repository.trim()) return
     setBusy(true)
     setError('')
     setMessage('')
     try {
+      const names = await call<string[]>('plugin_release_assets', {
+        repository: repository.trim(),
+      })
+      setAssets(names)
+    } catch (cause) {
+      setError(String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const prepare = async (assetName: string) => {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
       const data = await call<InstallPreview>('plugin_prepare_install', {
         repository: repository.trim(),
+        assetName,
       })
       setPreview(data)
     } catch (cause) {
@@ -63,6 +80,7 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
       await call('plugin_confirm_install', { ticket: preview.ticket })
       setPreview(null)
       setRepository('')
+      setAssets([])
       setMessage('插件已安装并授权。可在下方配置或撤销权限。')
       onChanged()
     } catch (cause) {
@@ -84,15 +102,18 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
             value={repository}
             aria-label="GitHub 插件仓库"
             placeholder="开发者/仓库名称，例如 owner/fiex-plugin"
-            onChange={(event) => setRepository(event.target.value)}
+            onChange={(event) => {
+              setRepository(event.target.value)
+              setAssets([])
+            }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') void prepare()
+              if (event.key === 'Enter') void loadAssets()
             }}
           />
           <Button
             disabled={busy || !repository.trim()}
             type="button"
-            onClick={() => void prepare()}
+            onClick={() => void loadAssets()}
           >
             {busy ? '获取中…' : '获取插件'}
           </Button>
@@ -101,6 +122,18 @@ export function PluginInstaller({ onChanged }: { onChanged: () => void }) {
           只支持 GitHub 最新 Release 中的 .fiexplugin
           文件。下载后先检查插件信息和权限，再由你确认安装。
         </p>
+        {assets.length > 0 && (
+          <div className="plugin-install-assets" aria-label="可安装插件">
+            {assets.map((asset) => (
+              <button type="button" key={asset} disabled={busy}
+                onClick={() => void prepare(asset)}>
+                <Download size={15} />
+                <span>{asset}</span>
+                <strong>查看权限并安装</strong>
+              </button>
+            ))}
+          </div>
+        )}
         {message && <p role="status">{message}</p>}
         {error && !preview && (
           <p role="alert" className="connection-error">

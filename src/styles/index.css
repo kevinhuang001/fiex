@@ -3914,3 +3914,17 @@ body.dragging-reorder * {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Opt-in GitHub plugin listing. Each entry previews permissions before install. */
+.plugin-install-assets {display:flex;flex-direction:column;gap:7px;margin:8px 0 2px;}
+.plugin-install-assets>button {
+  display:flex;align-items:center;gap:9px;width:100%;min-width:0;
+  padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface);text-align:left;color:var(--text);
+}
+.plugin-install-assets>button:hover:not(:disabled) {
+  border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface));
+}
+.plugin-install-assets>button span {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;}
+.plugin-install-assets>button strong {font-size:11px;white-space:nowrap;color:var(--accent);}
+.plugin-install-assets>button:disabled {opacity:.5;cursor:wait;}
