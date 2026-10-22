@@ -1,25 +1,25 @@
-# 15 · 外部仓库与子模块版本管理
+# 15 · 外部仓库与独立 CI
 
-代码来源：
+本插件系统的代码归属与仓库边界（Fiex 开发分支）：
 
-- [Fiex Core](https://github.com/kevinhuang001/fiex)：宿主、权限、安装器、Native IPC 管理、UI 以及业务内核。
-- [Fiex SDK](https://github.com/kevinhuang001/fiex-sdk)：Rust IPC 与 TypeScript UI Bridge 的独立实现、测试与 CI。
-- [Fiex Official Plugins](https://github.com/kevinhuang001/fiex-official-plugins)：Git、WebDAV、SMB、Archive、Checksum 的 Native 插件、三平台包和集成测试。
+- **[Fiex Core](https://github.com/kevinhuang001/fiex)**：本地资源管理、宿主进程生命周期与 IPC、安装/权限、VFS 与缓存/同步、React 设置与 UI 扩展。
+- **[Flex SDK](https://github.com/kevinhuang001/flex-sdk/tree/feat/fiex-repo-split)**：`rust/` 提供 Rust JSON-RPC 进程 SDK；根目录 `src/` 提供预编译 iframe 的 TypeScript Bridge SDK。维护协议、Mock 与 SDK 测试。
+- **[Flex Official Plugins](https://github.com/kevinhuang001/flex-official-plugins/tree/feat/fiex-repo-split)**：`plugins/official/{git,webdav,smb,archive,checksum}` 的真实插件实现、黑盒进程测试、Core-host 集成测试、三平台打包与发布。
 
-Core 中的 `sdk/`、`plugins/` 为 Git submodule 引用（GitHub 显示 `目录 @ SHA`），不是拷贝的代码、可写的源码所有权或应用资源。官方插件仓库中的 `sdk/` 同样指向明确的 SDK Commit。SDK 更新必须分别在两个使用方中显式更新 SHA，并经过各自的 CI。
-
-本地开发：
+Core 的 `sdk/` 是指向 **flex-sdk 特定 Git 提交**的 submodule（Gitlink），Core Git 对象中不存放 SDK 源码。Core **不再存在** `plugins/` Gitlink、插件实现源目录、插件编译或插件包 Release。插件独立仓库的 Rust Cargo.toml 使用 `git + rev` 固定 SDK 版本，而不是引用 Core 本地源码。
 
 ```sh
 git clone https://github.com/kevinhuang001/fiex.git
 cd fiex
-git submodule update --init sdk plugins
+git submodule update --init sdk
 ```
 
-Core CI 仅初始化 `sdk`：测试通用文件管理、权限/安装器、模拟插件进程的初始化、IPC 调用、停用和重启；不构建官方插件，不发布插件包。
+## 验证职责与触发
 
-SDK CI 独立运行 Rust 协议单元测试、静态检查与 TypeScript UI SDK 编译测试。
+1. **Core CI**：普通文件操作及索引、设置、权限、安装器测试；使用 SDK 提供的模拟原生进程验证首次拒绝、用户批准、握手、IPC、禁用和重启；独立构建 Windows/macOS/Linux 客户端。不启动 SMB/WebDAV 测试服务器，也不构建官方插件。
+2. **SDK CI**：Rust IPC 编解码/HostClient 单元测试、Rustfmt/Clippy，以及 TypeScript Bridge 类型和 Node 测试。SDK 的浏览器代码不要求最终用户安装 Node。
+3. **Plugin CI**：每个平台单独构建和执行五个 Native 进程（真实 stdio Content-Length/JSON-RPC 握手、ping、错误响应、关闭），执行对应 crate 测试并独立打出 `.fiexplugin`。Linux 另检出 Core 并由其真实 PluginHost 启动已构建的校验和进程，验证用户授权与进程通信。各平台插件更深层的网络读写、异常处理和缓存一致性仍需扩展集成用例。
 
-官方插件 CI 初始化其 SDK 子模块，在 Linux、macOS、Windows 上分别执行插件测试、构建、黑盒进程 IPC 测试、打包；再在 Linux 上通过真实的 Fiex Core PluginHost 运行所有产物做集成测试。通过后才允许从该仓库的 `plugins-v*` Tag 发布 .fiexplugin Release。Core Release 不负责这些插件包。
+生产发行使用固定 SDK 提交，升级必须通过三仓库各自 CI；不要把 SDK 或插件 CI 合并到 Core 里。插件仍由用户在设置中从 `kevinhuang001/flex-official-plugins` 的 GitHub Releases 自行选择、安装和授予权限。
 
-所有插件需要用户从 GitHub Release 显式下载和授权，GitHub 源码仓库、作者信息及官方身份没有默认信任或免审特权。目前 Native 子进程没有系统级强制沙箱，不应把宿主 API 的授权范围误称为进程级操作系统权限隔离。
+官方身份无特殊权限，不使用插件签名，也不预装任何官方插件。当前 Native 子进程**没有强制操作系统沙箱**，因此宿主授权只能约束经过宿主的 API，不能宣称它能完全限制不可信 Native 代码的系统调用。

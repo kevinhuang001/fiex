@@ -40,7 +40,7 @@
 
 ## 3. 官方功能插件
 
-`fiex-official-plugins/official/{git,webdav,smb,archive,checksum}` 是**外部仓库中的源码目录**，不属于 Fiex 应用的内置资源。客户端不读取它们或硬编码 ID。作者可以分别使用 CI 编译、测试，并将 `.fiexplugin` 发布为 GitHub Release 资产，用户手动选择安装。
+`flex-official-plugins/plugins/official/{git,webdav,smb,archive,checksum}` 是**外部仓库中的源码目录**，不属于 Fiex 应用的内置资源。客户端不读取它们或硬编码 ID。作者可以分别使用 CI 编译、测试，并将 `.fiexplugin` 发布为 GitHub Release 资产，用户手动选择安装。
 
 扩展开发者提供预编译平台 Native 二进制与 `manifest.json`。带交互 UI 的插件还可以提交自包含的 `ui/index.html`（单文件内联 CSS/JS），使用 `contributes.panels[].entry` 声明。Fiex 的宿主模态框把它加载到 `sandbox="allow-scripts"` 的 opaque-origin iframe 中。
 
@@ -61,9 +61,9 @@
 
 ## 6. 可选插件的三平台构建与发布
 
-`fiex-official-plugins` 仓库维护 `scripts/package-fiex-plugin.py` 和 `.github/workflows/ci.yml`，构建和打包与 Fiex 主程序安装包分离：
+`fiex-official-plugins` 仓库维护 `flex-official-plugins/scripts/package-fiex-plugin.py` 和 `.github/workflows/ci.yml`，构建和打包与 Fiex 主程序安装包分离：
 
-- Rust 构建 `fiex-official-plugins/official/{git,webdav,smb,archive,checksum}`；`cargo test` 先于 `cargo build --release`。
+- Rust 构建 `flex-official-plugins/plugins/official/{git,webdav,smb,archive,checksum}`；`cargo test` 先于 `cargo build --release`。
 - Windows、macOS、Linux 各自输出类似 `archive-macos-aarch64.fiexplugin`、`git-windows-x86_64.fiexplugin`，ZIP 顶层只包含 Manifest、本平台二进制和可选预编译 `ui/`。
 - `workflow_dispatch` 可以生成供 CI 检查的工件；仅在推送 `plugins-v*` 标签且三个系统包构建成功后才创建 GitHub Release。
 - 用户自己在 Fiex 设置页输入 `kevinhuang001/fiex-official-plugins`，从匹配当前平台的可安装资产中选具体插件并授权。**插件从未自动预装，也没有签名特权。**
