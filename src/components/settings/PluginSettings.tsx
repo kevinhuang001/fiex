@@ -110,6 +110,67 @@ function PermissionList({
   )
 }
 
+/** Settings stored before `list` existed may be a comma/newline separated
+ * string; accept both shapes and always hand the editor a string array. */
+function asList(value: unknown, field: PluginField): string[] {
+  const fallback = field.defaultValue
+  if (Array.isArray(value)) return value.map((item) => String(item))
+  if (typeof value === 'string' && value.trim())
+    return value
+      .split(/[\n,，]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  if (Array.isArray(fallback)) return fallback.map((item) => String(item))
+  if (typeof fallback === 'string' && fallback.trim())
+    return fallback
+      .split(/[\n,，]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  return []
+}
+
+function PluginListField({
+  field,
+  values,
+  onChange,
+}: {
+  field: PluginField
+  values: string[]
+  onChange: (values: string[]) => void
+}) {
+  const update = (index: number, value: string) =>
+    onChange(values.map((item, i) => (i === index ? value : item)))
+  return (
+    <div className="plugin-list-field">
+      <div className="plugin-list-rows">
+        {values.map((value, index) => (
+          <div className="plugin-list-row" key={index}>
+            <input
+              aria-label={`${field.label} 第 ${index + 1} 项`}
+              value={value}
+              placeholder={field.placeholder}
+              onChange={(event) => update(index, event.target.value)}
+            />
+            <button
+              type="button"
+              className="plugin-list-remove"
+              aria-label={`删除${field.label}第 ${index + 1} 项`}
+              title="删除"
+              onClick={() => onChange(values.filter((_, i) => i !== index))}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+        {!values.length && <p className="sidebar-hint">还没有条目。</p>}
+      </div>
+      <Button type="button" size="sm" variant="outline" onClick={() => onChange([...values, ''])}>
+        添加条目
+      </Button>
+    </div>
+  )
+}
+
 type PluginError = {
   at: number
   source: string
@@ -182,7 +243,7 @@ export function PluginSettings() {
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [draft, setDraft] = useState<Record<string, string | boolean>>({})
+  const [draft, setDraft] = useState<Record<string, string | boolean | string[]>>({})
   const [permissionToApprove, setPermissionToApprove] = useState<string | null>(null)
   useEffect(() => {
     setPermissionsFor((current) =>
@@ -244,14 +305,16 @@ export function PluginSettings() {
     void Promise.all(
       fields.map(async (field) => {
         if (field.type === 'secret') return [field.id, ''] as const
-        const value = await call<string | boolean | null>('plugin_storage_get', {
+        const value = await call<unknown>('plugin_storage_get', {
           pluginId: settingsFor.id,
           scope: 'global',
           key: field.id,
         })
+        if (field.type === 'list') return [field.id, asList(value, field)] as const
         return [
           field.id,
-          value ?? field.defaultValue ?? (field.type === 'checkbox' ? false : ''),
+          (value ?? field.defaultValue ?? (field.type === 'checkbox' ? false : '')) as
+            string | boolean,
         ] as const
       }),
     )
@@ -390,7 +453,12 @@ export function PluginSettings() {
             pluginId: settingsFor.id,
             scope: 'global',
             key: field.id,
-            value: field.type === 'number' ? Number(value) : value,
+            value:
+              field.type === 'number'
+                ? Number(value)
+                : field.type === 'list'
+                  ? (Array.isArray(value) ? value : []).map((item) => item.trim()).filter(Boolean)
+                  : value,
           })
         }
       }
@@ -844,7 +912,13 @@ export function PluginSettings() {
                 {field.type === 'secret' ? <KeyRound size={14} /> : <Database size={14} />}
                 {field.label}
               </span>
-              {field.type === 'checkbox' ? (
+              {field.type === 'list' ? (
+                <PluginListField
+                  field={field}
+                  values={asList(draft[field.id], field)}
+                  onChange={(values) => setDraft((old) => ({ ...old, [field.id]: values }))}
+                />
+              ) : field.type === 'checkbox' ? (
                 <input
                   type="checkbox"
                   checked={Boolean(draft[field.id])}

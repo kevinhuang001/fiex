@@ -4,9 +4,10 @@ import { call, demo, native } from '@/lib/api'
 export interface PluginField {
   id: string
   label: string
-  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret'
+  /** `list` renders a row editor and stores a JSON array of strings. */
+  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret' | 'list'
   placeholder?: string
-  defaultValue?: string
+  defaultValue?: string | boolean | string[]
   required?: boolean
 }
 export interface PluginPanel {

@@ -41,6 +41,19 @@ fn handle(host: &mut dyn fiex_plugin_sdk::HostServices) {
 
 `manifest.contributions.settings` 声明字段，Fiex 设置 → 插件中的宿主面板渲染与持久化。非敏感字段使用 `plugin_storage_*`，`secret` 字段使用 Host SecretStore，仅允许写入/清除或显示“已配置”，**不回显秘密**。
 
+### 设置字段类型
+
+| type       | 存储值           | 渲染                                                           |
+| ---------- | ---------------- | -------------------------------------------------------------- |
+| `text`     | string           | 单行输入                                                       |
+| `url`      | string           | 单行输入                                                       |
+| `number`   | number           | 数字输入                                                       |
+| `checkbox` | boolean          | 开关                                                           |
+| `secret`   | SecretStore      | 密码输入；留空表示不修改                                       |
+| `list`     | string[]（JSON） | 行编辑器：每行一个值，可添加/删除；`defaultValue` 为字符串数组 |
+
+`list` 用于忽略列表、镜像地址这类无序集合。读取时兼容旧的逗号/换行分隔字符串，保存后统一为数组。
+
 工具栏的插件菜单、侧栏连接创建入口与设置插件列表都必须读取同一份验证后的 manifest，不得硬编码官方插件名。
 
 ## 3. OAuth Authorization Code + PKCE
