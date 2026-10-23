@@ -17,6 +17,7 @@
 | `toolbar`      | 工具栏动作；`command` 执行命令，`panel` 打开 iframe。                                      |
 | `contextMenus` | 右键菜单动作；同样支持 `command` / `panel`。                                               |
 | `search`       | 搜索来源；Core 查询所有启用来源并合并结果。                                                |
+| `preview`      | 文件预览器；声明扩展名与优先级，可覆盖内置预览（设计见 [23](23-PREVIEW-EXTENSIONS.md)）。  |
 | `settings`     | 插件配置字段，由 Core 渲染。                                                               |
 
 不再有独立的 `panels` 或 `vfs` 注册：
@@ -44,6 +45,7 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 
 - [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md) —— iframe 面板、SDK、主题继承、本地 dev server
 - [22 主题包开发指南](22-THEME-AUTHORING.md) —— 主题包形态、token 参考、校验规则、验收
+- [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md) —— 预览器注册、优先级、office-preview
 
 **协议与设计**
 
@@ -70,3 +72,4 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 - [20 主题与面板生命周期](20-THEMES-AND-PERFORMANCE.md)
 - [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md)
 - [22 主题包开发指南](22-THEME-AUTHORING.md)
+- [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md)
