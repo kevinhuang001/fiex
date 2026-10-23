@@ -398,7 +398,7 @@ const officialPlugins: DemoPlugin[] = officialMode
                   panel: {
                     entry: 'ui/dist/index.html',
                     title: '高级压缩',
-                    defaultSize: { width: 520, height: 320 },
+                    defaultSize: { width: 520, height: 420 },
                   },
                 },
               ],
