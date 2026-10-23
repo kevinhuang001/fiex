@@ -240,7 +240,13 @@ function CachedPanel({
     if (!active) return
     const outside = (event: PointerEvent) => {
       if (fakePicker) return
-      if (!panel.current?.contains(event.target as Node)) close()
+      const target = event.target as Element | null
+      if (panel.current?.contains(target)) return
+      // A plugin tool button or the plugin menu opens the next panel on click.
+      // Closing here would hide this panel for one frame and then show it again
+      // for the exit animation, which reads as a double flash.
+      if (target?.closest('.plugin-tool-button, [aria-label="插件"]')) return
+      close()
     }
     const escape = (event: KeyboardEvent) => {
       if (fakePicker) return
@@ -275,6 +281,21 @@ function CachedPanel({
       reveal()
     }
   }, [error])
+  // A closed panel is laid out again from its previous size, and some panels
+  // resize right after becoming visible again. Hide it until the next settle so
+  // a reopen never jumps; the same arm/disarm keeps the exit animation intact.
+  const wasActive = useRef(active)
+  useEffect(() => {
+    if (!active && !leaving) setRevealed(false)
+    if (active && !wasActive.current) {
+      if (revealTimer.current !== null) window.clearTimeout(revealTimer.current)
+      revealTimer.current = window.setTimeout(() => {
+        revealTimer.current = null
+        setRevealed(true)
+      }, PANEL_REVEAL_FALLBACK_MS)
+    }
+    wasActive.current = active
+  }, [active, leaving])
   useEffect(
     () => () => {
       if (revealTimer.current !== null) window.clearTimeout(revealTimer.current)
