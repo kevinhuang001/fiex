@@ -31,7 +31,7 @@ export function ExplorerPathBar({
   | 'split'
   | 'closePane'
 >) {
-  // Virtual locations (recent://, history://) cannot receive a drop.
+  // Virtual locations cannot receive a drop.
   const dropFolder = /^[a-z][a-z0-9+.-]*:\/\//i.test(x.path) ? undefined : x.path
   return (
     <>

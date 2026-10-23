@@ -105,7 +105,6 @@ export interface Preferences {
   fontSize: number
   startPage: StartPage
   displayIgnore: string[]
-  compressIgnore: string[]
   sidebarOrder: SidebarSection[]
   placeOrder: string[]
   hiddenPlaces: string[]
@@ -130,12 +129,9 @@ export interface GitStatus {
 export interface RemoteConnection {
   id: string
   name: string
-  kind: 'webdav' | 'smb'
+  kind: string
+  pluginId: string
   mountPath: string
-  host: string
-  url: string
-  share: string
-  base: string
 }
 
 export interface GitRefs {

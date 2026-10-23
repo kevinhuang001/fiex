@@ -39,10 +39,6 @@ fn main() {
             .invoke(&id, "search.query", json!({"query":"mock"}))
             .expect("mock search failed");
         assert_eq!(search["entries"][0]["name"], "fiex-mock-search.txt");
-        let direct = plugin_host::global()
-            .invoke(&id, "mock.directExec", json!({}))
-            .expect("direct exec probe failed");
-        assert_eq!(direct["blocked"], true, "{direct}");
         let exec = plugin_host::global()
             .invoke(&id, "mock.exec", json!({}))
             .expect("host exec proxy failed");

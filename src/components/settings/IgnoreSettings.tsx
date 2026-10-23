@@ -1,4 +1,4 @@
-import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
+import { defaultDisplayIgnore } from '@/lib/ignores'
 import type { Preferences } from '@/lib/types'
 import { Plus, RotateCcw, X } from 'lucide-react'
 import { useState } from 'react'
@@ -81,11 +81,6 @@ export function IgnoreSettings({
             key: 'displayIgnore',
             title: '显示忽略',
             reset: defaultDisplayIgnore,
-          },
-          {
-            key: 'compressIgnore',
-            title: '压缩忽略',
-            reset: defaultOperationIgnore,
           },
         ] as const
       ).map(({ key, title, reset }) => (

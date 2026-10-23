@@ -1,14 +1,7 @@
 import { call } from '@/lib/api'
-import type { ArchiveFormat } from '@/lib/archives'
 import type { DialogState } from '@/lib/dialogs'
-import { basename, uniqueName } from '@/lib/files'
-import type {
-  Entry,
-  OperationResult,
-  Preferences,
-  TransferConflict,
-  ConflictResolution,
-} from '@/lib/types'
+import { uniqueName } from '@/lib/files'
+import type { OperationResult, TransferConflict, ConflictResolution } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 import { useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
@@ -16,21 +9,15 @@ import { beginActivity, finishActivity, progressChannel, type ActivityKind } fro
 
 export function useFileOperations({
   x,
-  prefs,
   writable,
   notify,
   setDialog,
-  chosen,
-  first,
   trashPath,
 }: {
   x: Explorer
-  prefs: Preferences
   writable: () => boolean
   notify: (message: string) => void
   setDialog: Dispatch<SetStateAction<DialogState | null>>
-  chosen: Entry[]
-  first: Entry | undefined
   trashPath: string | null
 }) {
   // Inside the Trash, "move to Trash" would be a no-op, so the delete action
@@ -291,73 +278,6 @@ export function useFileOperations({
       },
     )
   }
-  const compress = (
-    format: ArchiveFormat,
-    options: { level?: number; password?: string; full?: boolean } = {},
-  ) => {
-    if (!writable()) return
-    if (!first) return
-    const base = chosen.length === 1 ? first.name : 'Archive'
-    const name = uniqueName(
-      x.entries.map((entry) => entry.name),
-      base + format.ext,
-    )
-    void call<string | null>('plugin_file_dialog', {
-      mode: 'saveFile',
-      directory: x.path,
-      suggestedName: name,
-      extensions: [format.ext.split('.').filter(Boolean).pop() || 'zip'],
-    })
-      .then((destination) => {
-        if (!destination) return
-        void run(
-          '正在压缩…',
-          async () => {
-            await call('compress_archive', {
-              paths: x.selected,
-              destination,
-              format: format.id,
-              ignores: options.full ? [] : prefs.compressIgnore,
-              level: options.level ?? null,
-              password: options.password || null,
-            })
-            notify('已压缩为 ' + basename(destination))
-            x.reload()
-          },
-          base +
-            ' → ' +
-            basename(destination) +
-            ' · ' +
-            format.name +
-            (options.password ? ' · AES-256' : '') +
-            (options.full ? ' · 全量' : ''),
-          true,
-        )
-      })
-      .catch((error) => x.setError(String(error)))
-  }
-  const extract = () => {
-    if (!writable()) return
-    if (!first) return
-    void call<string | null>('pick_folder', { default: x.path })
-      .then((destination) => {
-        if (!destination) return
-        void run(
-          '正在解压…',
-          async () => {
-            const path = await call<string>('extract_archive', {
-              path: first.path,
-              destination,
-            })
-            notify(`已解压到 ${basename(path)}`)
-            x.reload()
-          },
-          `${basename(first.path)} → ${basename(destination)}`,
-          true,
-        )
-      })
-      .catch((error) => x.setError(String(error)))
-  }
   const undo = () => {
     if (!writable()) return
     void run('正在撤销…', async () => {
@@ -382,8 +302,6 @@ export function useFileOperations({
     transfer,
     copy,
     duplicate,
-    compress,
-    extract,
     undo,
   }
 }

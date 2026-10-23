@@ -1,18 +1,14 @@
 import type { AppController } from '@/hooks/useAppController'
 import { size } from '@/lib/files'
-import { ChevronDown, ChevronUp, GitBranch, ListChecks, LoaderCircle, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, ListChecks, LoaderCircle, X } from 'lucide-react'
 export function ExplorerStatusBar({
   busy,
   x,
   chosen,
-  gitSwitched,
   clipboard,
   setClipboard,
   workspace,
-}: Pick<
-  AppController,
-  'busy' | 'x' | 'chosen' | 'gitSwitched' | 'clipboard' | 'setClipboard' | 'workspace'
->) {
+}: Pick<AppController, 'busy' | 'x' | 'chosen' | 'clipboard' | 'setClipboard' | 'workspace'>) {
   return (
     <>
       <footer className="statusbar" data-workspace-drop="true">
@@ -38,15 +34,6 @@ export function ExplorerStatusBar({
               </>
             )}
           </span>
-          {x.git && (
-            <span className="git-status" title={x.git.root}>
-              <GitBranch size={12} />
-              {x.git.branch}
-              {!gitSwitched &&
-                Object.keys(x.git.entries).length > 0 &&
-                ` · ${Object.keys(x.git.entries).length} 更改`}
-            </span>
-          )}
           {x.tagFilter && <span>标签：{x.tagFilter}</span>}
           <span>{x.searchStats}</span>
           <div className="toolbar-spacer" />

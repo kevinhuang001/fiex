@@ -28,13 +28,6 @@ fn main() {
         settings: [("url".to_string(), json!("http://127.0.0.1:18081/"))]
             .into_iter()
             .collect(),
-        url: "http://127.0.0.1:18081/".into(),
-        host: String::new(),
-        port: None,
-        share: String::new(),
-        base: String::new(),
-        username: String::new(),
-        allow_invalid_certs: false,
     })
     .expect("save_connection failed");
 

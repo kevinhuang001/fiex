@@ -146,9 +146,6 @@ export function groups(entries: Entry[], by: Group): [string, Entry[]][] {
   }
   return [...map]
 }
-export function isArchive(e: Entry) {
-  return ['zip', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz', 'tbz2', 'txz'].includes(e.extension)
-}
 export function isImage(e: Entry) {
   return (
     e.mime.startsWith('image/') &&

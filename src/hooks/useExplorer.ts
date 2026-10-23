@@ -2,14 +2,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { parent } from '@/lib/files'
-import type {
-  Entry,
-  GitStatus,
-  Listing,
-  Location,
-  Preferences,
-  RemoteConnection,
-} from '@/lib/types'
+import type { Entry, Listing, Location, Preferences, RemoteConnection } from '@/lib/types'
 export function useExplorer(
   prefs: Preferences,
   startOverride?: string,
@@ -37,10 +30,6 @@ export function useExplorer(
   const [tab, setTab] = useState(0)
   const tabHistory = useRef<{ paths: string[]; cursor: number }[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
-  const [git, setGit] = useState<GitStatus | null>(null)
-  const [gitPath, setGitPath] = useState('')
-  const [gitLoading, setGitLoading] = useState(false)
-  const gitRequest = useRef(0)
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [renaming, setRenaming] = useState<string | null>(null)
   const [listedPath, setListedPath] = useState('')
@@ -172,15 +161,7 @@ export function useExplorer(
     }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (
-      !enabled ||
-      !path ||
-      !native ||
-      virtualVolume ||
-      path.startsWith('history://') ||
-      path.startsWith('recent://')
-    )
-      return
+    if (!enabled || !path || !native || virtualVolume || path.startsWith('recent://')) return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
@@ -201,44 +182,6 @@ export function useExplorer(
       void call('unwatch_directory', { path, pane }).catch(() => {})
     }
   }, [enabled, path, pane, reload, virtualVolume])
-  const refreshGit = useCallback(async () => {
-    const id = ++gitRequest.current
-    if (
-      !path ||
-      path.startsWith('remote://') ||
-      path.startsWith('usbfs://') ||
-      path.startsWith('recent://')
-    ) {
-      setGit(null)
-      setGitLoading(false)
-      setGitPath(path)
-      return
-    }
-    setGitLoading(true)
-    try {
-      const value = await call<GitStatus | null>('git_status', { path })
-      if (id === gitRequest.current) setGit(value)
-    } catch {
-      if (id === gitRequest.current) setGit(null)
-    } finally {
-      if (id === gitRequest.current) {
-        setGitPath(path)
-        setGitLoading(false)
-      }
-    }
-  }, [path])
-  useEffect(() => {
-    if (!enabled) return
-    // Navigation bursts (and refresh after a file operation) should not spawn
-    // a git subprocess each time; coalesce them.
-    const timer = window.setTimeout(() => {
-      void refreshGit()
-    }, 350)
-    return () => {
-      window.clearTimeout(timer)
-      ++gitRequest.current
-    }
-  }, [enabled, refresh, refreshGit])
   useEffect(() => {
     if (!enabled) return
     const generation = ++searchRequest.current
@@ -453,9 +396,6 @@ export function useExplorer(
     setReadOnly,
     locations,
     refreshLocations,
-    git: gitPath === path ? git : null,
-    gitLoading: gitLoading || (!!path && gitPath !== path),
-    refreshGit,
     selected,
     setSelected,
     loading: loading || (!query && listedPath !== path && !error),

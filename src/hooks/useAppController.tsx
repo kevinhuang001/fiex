@@ -3,8 +3,7 @@ import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import type { DialogState } from '@/lib/dialogs'
-import { basename, isArchive } from '@/lib/files'
-import type { ArchiveFormat } from '@/lib/archives'
+import { basename } from '@/lib/files'
 import { shortcutLabel } from '@/lib/shortcuts'
 import type { Entry, Location, Tag } from '@/lib/types'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -48,15 +47,11 @@ export function useAppController() {
   const [dialogBusy, setDialogBusy] = useState(false)
   const [toast, setToast] = useState('')
   const [trashIssue, setTrashIssue] = useState(false)
-  const [compressAdvanced, setCompressAdvanced] = useState<ArchiveFormat | null>(null)
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
-  const [gitOpen, setGitOpen] = useState(false)
-  const workspaces = useRef(new Map<string, string>())
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
-  const [compressOpen, setCompressOpen] = useState(false)
   const [dragging, setDragging] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
   const chosen = useMemo(() => {
@@ -65,28 +60,12 @@ export function useAppController() {
   }, [x.entries, x.selected])
   const first = chosen[0]
   const notify = useCallback((s: string) => setToast(s), [])
-  const gitSwitched = x.path.startsWith('history://')
   useEffect(() => {
-    x.setReadOnly(gitSwitched || x.directoryReadOnly)
-  }, [gitSwitched, x.directoryReadOnly])
-  const viewRevision = async (reference: string) => {
-    if (!x.git) return
-    const path = await call<string>('git_browse', { root: x.git.root, reference })
-    if (!gitSwitched) workspaces.current.set(x.git.root, x.path)
-    setPreview(null)
-    x.navigate(path)
-  }
-  const returnToWorktree = () => {
-    const path = x.git && (workspaces.current.get(x.git.root) || x.git.root)
-    if (path) x.navigate(path)
-  }
+    x.setReadOnly(x.directoryReadOnly)
+  }, [x.directoryReadOnly, x.setReadOnly])
   const writable = () => {
-    if (!gitSwitched && !x.directoryReadOnly) return true
-    if (x.directoryReadOnly && !gitSwitched) {
-      x.setError('此文件系统只读')
-      return false
-    }
-    x.setError('历史版本只读，请返回工作区后再修改')
+    if (!x.directoryReadOnly) return true
+    x.setError('此文件系统只读')
     return false
   }
   useEffect(() => {
@@ -118,35 +97,13 @@ export function useAppController() {
     transfer,
     copy,
     duplicate,
-    compress,
-    extract,
     undo,
-  } = useFileOperations({ x, prefs, writable, notify, setDialog, chosen, first, trashPath })
+  } = useFileOperations({ x, writable, notify, setDialog, trashPath })
 
   const open = (e: Entry, pane = x) => {
     if (e.isDir && e.extension !== 'app') {
       setPreview(null)
       pane.navigate(e.path)
-      return
-    }
-    if (pane.path.startsWith('history://')) {
-      previewEntry(e, pane)
-      return
-    }
-    if (isArchive(e)) {
-      // Archives open in place instead of being handed to the system archiver.
-      void run(
-        '正在解压…',
-        async () => {
-          const path = await call<string>('extract_archive', {
-            path: e.path,
-            destination: pane.path,
-          })
-          notify(`已解压到 ${basename(path)}`)
-        },
-        undefined,
-        true,
-      )
       return
     }
     void run('正在打开…', () => call('open_path', { path: e.path }))
@@ -161,8 +118,6 @@ export function useAppController() {
     )
     workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
   }
-  const [checksumPath, setChecksumPath] = useState<string | null>(null)
-  const checksum = (path: string) => setChecksumPath(path)
   const previewEntry = (entry: Entry, pane = x) => {
     if (!isRemotePath(entry.path)) {
       setPreview(entry)
@@ -507,10 +462,7 @@ export function useAppController() {
     }
   }, [x.path, conflict, x.directoryReadOnly])
   useEffect(() => {
-    if (!menu) {
-      setCompressOpen(false)
-      return
-    }
+    if (!menu) return
     const close = () => setMenu(null)
     document.addEventListener('click', close)
     document.addEventListener('keydown', close)
@@ -544,13 +496,8 @@ export function useAppController() {
     trashPath,
     setSidebar,
     displayName,
-    gitSwitched,
-    viewRevision,
-    returnToWorktree,
     hint,
     create,
-    gitOpen,
-    setGitOpen,
     ides,
     openIde,
     terminal,
@@ -569,9 +516,6 @@ export function useAppController() {
     open,
     openLeft: (entry: Entry) => open(entry, left),
     openRight: (entry: Entry) => open(entry, right),
-    checksum,
-    checksumPath,
-    setChecksumPath,
     previewEntry,
     setMenu,
     transfer,
@@ -591,18 +535,12 @@ export function useAppController() {
     run,
     copy,
     duplicate,
-    compress,
-    extract,
     notify,
     recycle,
     deletePermanently,
     restoreFromTrash,
     emptyTrash,
     inTrash,
-    setCompressOpen,
-    compressOpen,
-    compressAdvanced,
-    setCompressAdvanced,
     preview,
     setPreview,
     navigatePreview,

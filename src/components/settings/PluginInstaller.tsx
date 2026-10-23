@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   Archive,
   Check,
@@ -11,6 +12,7 @@ import {
   Puzzle,
   RefreshCw,
   Search,
+  Server,
   Shield,
   Store,
 } from 'lucide-react'
@@ -38,14 +40,18 @@ interface InstallPreview {
   repository: string
 }
 
-function pluginIcon(id: string) {
-  if (id.includes('git')) return <GitBranch size={21} />
-  if (id.includes('webdav')) return <Cloud size={21} />
-  if (id.includes('smb')) return <HardDrive size={21} />
-  if (id.includes('archive')) return <Archive size={21} />
-  if (id.includes('checksum')) return <Hash size={21} />
-  if (id.includes('everything')) return <Search size={21} />
-  return <Puzzle size={21} />
+function pluginIcon(icon?: string) {
+  const icons: Record<string, ReactNode> = {
+    'git-branch': <GitBranch size={21} />,
+    cloud: <Cloud size={21} />,
+    server: <Server size={21} />,
+    drive: <HardDrive size={21} />,
+    archive: <Archive size={21} />,
+    hash: <Hash size={21} />,
+    search: <Search size={21} />,
+    puzzle: <Puzzle size={21} />,
+  }
+  return icons[icon || 'puzzle'] || <Puzzle size={21} />
 }
 
 /**
@@ -189,7 +195,7 @@ export function PluginInstaller({
                 return (
                   <article className="plugin-store-card" key={entry.id}>
                     <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
-                      {pluginIcon(entry.id)}
+                      {pluginIcon(entry.icon)}
                     </div>
                     <div className="plugin-store-main">
                       <div className="plugin-store-title">

@@ -80,12 +80,15 @@ export function PluginPanelHost() {
           'dialog.openDirectory',
           'dialog.saveFile',
           'dialog.openFiles',
+          'navigation.open',
         ]),
         dispatch: async (method, params): Promise<JsonValue> => {
           if (method === 'context.get')
             return {
               directory: current.directory,
               selection: current.selection,
+              directoryPath: current.directory,
+              selectionPaths: current.selection,
             }
           if (method === 'panel.close') {
             close()
@@ -102,6 +105,15 @@ export function PluginPanelHost() {
             return null
           }
           if (method === 'theme.get') return document.documentElement.dataset.theme || 'system'
+          if (method === 'navigation.open') {
+            const p = params as { path?: unknown } | null
+            if (!p || typeof p.path !== 'string' || !p.path)
+              throw new Error('Invalid navigation path')
+            window.dispatchEvent(
+              new CustomEvent('fiex:navigate', { detail: { path: p.path, pane: 'left' } }),
+            )
+            return null
+          }
           if (method === 'plugin.invoke') {
             const p = params as { method?: unknown; params?: unknown } | null
             if (!p || typeof p.method !== 'string' || !p.method || p.method.startsWith('host.'))

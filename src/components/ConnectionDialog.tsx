@@ -78,13 +78,6 @@ export function ConnectionDialog({
           pluginId: current.plugin.id,
           kind: current.factory.id,
           settings,
-          url: String(values.url || ''),
-          host: String(values.host || ''),
-          port: values.port ? Number(values.port) : undefined,
-          share: String(values.share || ''),
-          base: String(values.base || ''),
-          username: String(values.username || ''),
-          allowInvalidCerts: Boolean(values.allowInvalidCerts),
         },
       })
       onSaved(connection)

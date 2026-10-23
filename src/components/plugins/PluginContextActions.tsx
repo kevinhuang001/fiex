@@ -10,7 +10,6 @@ interface Item {
   when?: string
   command?: string
   panel?: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
-  resultView?: 'checksum' | 'json'
   children?: Item[]
   args?: Record<string, unknown>
   picker?: {
@@ -121,11 +120,9 @@ export function PluginContextActions({
   isRemote,
   onClose,
   onError,
-  onChecksum,
 }: Context & {
   onClose: () => void
   onError: (error: string) => void
-  onChecksum?: (path: string) => void
 }) {
   const plugins = usePluginCatalog()
   const ctx: Context = { paths, path, isDirectory, readOnly, isRemote }
@@ -146,10 +143,6 @@ export function PluginContextActions({
       return
     }
     if (!item.command) return
-    if (item.resultView === 'checksum' && paths[0]) {
-      onChecksum?.(paths[0])
-      return
-    }
     try {
       const args: Record<string, unknown> = { ...item.args, paths, path: paths[0], root: path }
       if (item.picker) {

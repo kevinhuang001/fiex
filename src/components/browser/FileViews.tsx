@@ -19,7 +19,6 @@ import { startFileDrag } from '@/lib/drag'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type { Entry, Listing, Preferences } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
-import { gitState } from '@/lib/git'
 import type { CSSProperties } from 'react'
 
 // macOS stops reporting pointer events once the cursor leaves the window while a
@@ -92,19 +91,17 @@ function NameCell({
   entry: Entry
   className: string
 }) {
-  const state = gitState(explorer.git?.entries[entry.path])
-  const gitClass = state ? ` git-file git-file-${state.letter.toLowerCase()}` : ''
   if (explorer.renaming === entry.path)
     return (
       <InlineRename
         entry={entry}
-        className={`${className}${gitClass}`}
+        className={className}
         onCommit={(name) => explorer.renameTo(entry.path, name)}
         onCancel={explorer.cancelRename}
       />
     )
   return (
-    <span className={`${className}${gitClass}`} title={entry.name}>
+    <span className={className} title={entry.name}>
       {entry.name}
     </span>
   )

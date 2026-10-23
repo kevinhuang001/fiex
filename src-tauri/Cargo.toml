@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.3.0"
+version = "0.4.0"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -68,9 +68,9 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-arapuca = { path = "vendor/arapuca", default-features = false }
+arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e40035fb87ef766eedf23bd1c01fd91261c447", default-features = false }
 [target.'cfg(windows)'.dependencies]
-arapuca = { path = "vendor/arapuca", default-features = false }
+arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e40035fb87ef766eedf23bd1c01fd91261c447", default-features = false }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]

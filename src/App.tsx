@@ -8,17 +8,25 @@ import { WorkspaceBar } from '@/components/WorkspaceBar'
 import { ExplorerTabs } from '@/components/explorer/ExplorerTabs'
 import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
-import { GitPanel } from '@/components/GitPanel'
 import { Sidebar } from '@/components/Sidebar'
 import { useAppController } from '@/hooks/useAppController'
 import { call, native } from '@/lib/api'
-import { parent } from '@/lib/files'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
 import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
+
+  useEffect(() => {
+    const navigate = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string; pane?: string }>).detail
+      if (!detail?.path) return
+      app.left.navigate(detail.path)
+    }
+    window.addEventListener('fiex:navigate', navigate)
+    return () => window.removeEventListener('fiex:navigate', navigate)
+  }, [app.left])
 
   // The label size is the reference size: every window is zoomed by the same
   // ratio so the preference scales the sidebar, toolbar, dialogs and file list
@@ -60,14 +68,6 @@ export default function App() {
           onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
         />
         <ExplorerPathBar {...app} x={app.left} />
-        {app.gitSwitched && (
-          <div className="history-banner">
-            <span>
-              历史版本 · {app.x.git?.branch || app.x.path.split('/')[3]?.slice(0, 8)} · 只读
-            </span>
-            <button onClick={app.returnToWorktree}>返回工作区</button>
-          </div>
-        )}
         {app.x.error && (
           <div className="error-banner" role="alert">
             <Info size={16} />
@@ -107,7 +107,7 @@ export default function App() {
             }
           >
             <FileViews
-              readOnly={app.left.path.startsWith('history://') || app.left.directoryReadOnly}
+              readOnly={app.left.directoryReadOnly}
               trashPath={app.trashPath}
               explorer={app.left}
               prefs={app.prefs}
@@ -138,19 +138,6 @@ export default function App() {
             onWidthChange={app.setPaneWidth}
           />
         )}
-        <GitPanel
-          open={app.gitOpen}
-          git={app.x.git}
-          path={app.x.path}
-          loading={app.x.gitLoading}
-          allowInit={!app.isRemotePath(app.x.path) && !app.x.virtualVolume}
-          onClose={() => app.setGitOpen(false)}
-          onRefresh={app.x.refreshGit}
-          onViewRevision={app.viewRevision}
-          onReturnToWorktree={app.returnToWorktree}
-          readOnly={app.gitSwitched}
-          onOpen={(path) => app.x.navigate(parent(path))}
-        />
         <WorkspaceBar
           items={app.workspace.items}
           open={app.workspace.open}

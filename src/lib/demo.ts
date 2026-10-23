@@ -153,7 +153,12 @@ const fixturePlugin: DemoPlugin = {
   author: { name: 'Fiex Fixtures' },
   contributions: {
     toolbar: [
-      { id: 'fixture.tool', title: '测试工具', icon: 'puzzle-piece', command: 'fixture.inspect' },
+      {
+        id: 'fixture.tool',
+        title: '测试工具',
+        icon: 'puzzle-piece',
+        panel: { entry: 'ui/index.html', title: '测试工具' },
+      },
     ],
     search: [
       {
@@ -188,7 +193,7 @@ const fixturePlugin: DemoPlugin = {
 const fixturePlugins: DemoPlugin[] = [
   fixturePlugin,
   {
-    id: 'org.fiex.git',
+    id: 'org.example.git',
     name: 'Git',
     version: '0.1.0',
     description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
@@ -219,7 +224,7 @@ const fixturePlugins: DemoPlugin[] = [
     },
   },
   {
-    id: 'org.fiex.checksum',
+    id: 'org.example.checksum',
     name: '校验和',
     version: '0.1.0',
     description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
@@ -250,7 +255,7 @@ const demoPlugins: DemoPlugin[] = new URLSearchParams(location.search).has('plug
   : []
 const marketplace = [
   {
-    id: 'org.fiex.git',
+    id: 'org.example.git',
     name: 'Git',
     version: '0.1.0',
     description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
@@ -276,7 +281,7 @@ const marketplace = [
     capabilities: ['filesystem', 'toolbar', 'commands'],
   },
   {
-    id: 'org.fiex.webdav',
+    id: 'org.example.webdav',
     name: 'WebDAV',
     version: '0.1.0',
     description: '连接 WebDAV 服务器，目录按需读取，不落地零字节占位文件。',
@@ -302,7 +307,7 @@ const marketplace = [
     },
   },
   {
-    id: 'org.fiex.smb',
+    id: 'org.example.smb',
     name: 'SMB / NAS',
     version: '0.1.0',
     description: '通过独立进程连接 SMB / NAS 共享。',
@@ -329,7 +334,7 @@ const marketplace = [
     },
   },
   {
-    id: 'org.fiex.archive',
+    id: 'org.example.archive',
     name: '压缩与解压',
     version: '0.1.0',
     description: '压缩与解压 ZIP、7z、TAR 等格式。',
@@ -358,7 +363,7 @@ const marketplace = [
     },
   },
   {
-    id: 'org.fiex.checksum',
+    id: 'org.example.checksum',
     name: '校验和',
     version: '0.1.0',
     description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
@@ -693,11 +698,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           id: 'demo-webdav',
           name: '团队 WebDAV',
           kind: 'webdav',
+          pluginId: 'org.example.webdav',
           mountPath: root + '/.fiex/drives/demo-webdav',
-          host: '',
-          url: 'https://dav.example.com',
-          share: '',
-          base: '',
         },
       ]
     case 'git_refs':

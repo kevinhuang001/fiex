@@ -15,4 +15,3 @@ public/file-icons/
 # GitHub Apps cannot push modifications to workflow files without workflow permissions.
 .github/workflows/plugin-validation.yml
 
-src-tauri/vendor/

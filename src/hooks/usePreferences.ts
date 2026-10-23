@@ -1,5 +1,5 @@
 import { demo } from '@/lib/api'
-import { defaultDisplayIgnore, defaultOperationIgnore } from '@/lib/ignores'
+import { defaultDisplayIgnore } from '@/lib/ignores'
 import {
   SHORTCUT_ACTIONS,
   defaultShortcuts,
@@ -24,7 +24,6 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     fontSize: 11,
     startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
-    compressIgnore: defaultOperationIgnore(),
     sidebarOrder: ['places', 'favorites', 'tags', 'devices', 'connections'],
     placeOrder: [],
     hiddenPlaces: [],
@@ -90,9 +89,6 @@ function load(): Preferences {
       displayIgnore: Array.isArray(stored.displayIgnore)
         ? stored.displayIgnore
         : fallback.displayIgnore,
-      compressIgnore: Array.isArray(stored.compressIgnore)
-        ? stored.compressIgnore
-        : fallback.compressIgnore,
       sidebarOrder: Array.isArray(stored.sidebarOrder)
         ? (() => {
             const known: SidebarSection[] = [

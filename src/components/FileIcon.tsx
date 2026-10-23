@@ -54,7 +54,7 @@ function whenVisible(element: Element, callback: () => void) {
  * Fiex matches Finder where it matters.
  */
 export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number }) {
-  const isApplication = !e.path.startsWith('history://') && kind(e) === '应用程序'
+  const isApplication = kind(e) === '应用程序'
   const [native, setNative] = useState<string | null>(null)
   const ref = useRef<HTMLSpanElement>(null)
   const pixels = Math.min(

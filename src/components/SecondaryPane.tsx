@@ -194,7 +194,7 @@ export function SecondaryPane({
           onDrop={(paths, destination, moving) => onTransfer(paths, destination, moving)}
           onBookmark={() => {}}
           onWorkspace={() => {}}
-          readOnly={x.path.startsWith('history://') || x.directoryReadOnly}
+          readOnly={x.directoryReadOnly}
         />
       </aside>
     </>

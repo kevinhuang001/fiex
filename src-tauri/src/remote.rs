@@ -25,20 +25,6 @@ struct StoredConnection {
     /// Secret field identifiers whose values are persisted in the OS keyring.
     #[serde(default)]
     secret_keys: Vec<String>,
-    #[serde(default)]
-    url: String,
-    #[serde(default)]
-    host: String,
-    #[serde(default)]
-    share: String,
-    #[serde(default)]
-    base: String,
-    #[serde(default)]
-    username: String,
-    #[serde(default)]
-    allow_invalid_certs: bool,
-    #[serde(default)]
-    port: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -51,20 +37,6 @@ pub struct ConnectionInput {
     pub plugin_id: Option<String>,
     #[serde(default)]
     pub settings: serde_json::Map<String, serde_json::Value>,
-    #[serde(default)]
-    pub url: String,
-    #[serde(default)]
-    pub host: String,
-    #[serde(default)]
-    pub port: Option<u16>,
-    #[serde(default)]
-    pub share: String,
-    #[serde(default)]
-    pub base: String,
-    #[serde(default)]
-    pub username: String,
-    #[serde(default)]
-    pub allow_invalid_certs: bool,
 }
 
 #[derive(Serialize)]
@@ -75,10 +47,6 @@ pub struct ConnectionInfo {
     pub kind: String,
     pub plugin_id: String,
     pub mount_path: String,
-    pub host: String,
-    pub url: String,
-    pub share: String,
-    pub base: String,
 }
 
 #[derive(Clone)]
@@ -122,12 +90,7 @@ fn meta_dir() -> PathBuf {
 }
 
 fn connection_plugin_id(conn: &StoredConnection) -> String {
-    if conn.plugin_id.is_empty() {
-        // Migrate v0.2.7 connection records that predate provider IDs.
-        format!("org.fiex.{}", conn.kind)
-    } else {
-        conn.plugin_id.clone()
-    }
+    conn.plugin_id.clone()
 }
 
 /// Refuse requests when a provider has lost one of its declared permissions.
@@ -292,23 +255,23 @@ fn allowed_network_domains(plugin_id: &str) -> Vec<String> {
 }
 
 fn provider_config(conn: &StoredConnection) -> serde_json::Value {
-    let mut config = serde_json::json!({
-        "url": conn.url,
-        "host": conn.host,
-        "port": conn.port,
-        "share": conn.share,
-        "base": conn.base,
-        "username": conn.username,
-        "allowInvalidCerts": conn.allow_invalid_certs
-    });
-    if let Some(map) = config.as_object_mut() {
-        map.insert(
-            "networkDomains".into(),
-            serde_json::json!(allowed_network_domains(&connection_plugin_id(conn))),
-        );
-        map.extend(conn.settings.clone());
+    let mut config = serde_json::Map::new();
+    config.insert(
+        "networkDomains".into(),
+        serde_json::json!(allowed_network_domains(&connection_plugin_id(conn))),
+    );
+    config.extend(conn.settings.clone());
+    let scope = format!("connection-{}", conn.id);
+    for field in &conn.secret_keys {
+        if let Ok(value) =
+            crate::plugin_storage::secret_get(&connection_plugin_id(conn), &scope, field)
+        {
+            if !value.is_empty() {
+                config.insert(field.clone(), serde_json::Value::String(value));
+            }
+        }
     }
-    config
+    serde_json::Value::Object(config)
 }
 
 fn public(conn: &StoredConnection) -> ConnectionInfo {
@@ -320,10 +283,6 @@ fn public(conn: &StoredConnection) -> ConnectionInfo {
         kind: conn.kind.clone(),
         plugin_id: connection_plugin_id(conn),
         mount_path: mount.to_string_lossy().into_owned(),
-        host: conn.host.clone(),
-        url: conn.url.clone(),
-        share: conn.share.clone(),
-        base: conn.base.clone(),
     }
 }
 
@@ -331,15 +290,25 @@ pub fn list_connections() -> Vec<ConnectionInfo> {
     load_stored().iter().map(public).collect()
 }
 
-fn connection_domain(kind: &str, url: &str, host: &str) -> Option<String> {
-    let value = match kind {
-        "webdav" => reqwest::Url::parse(url)
+fn connection_domain(settings: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+    for key in ["url", "host", "server", "address"] {
+        let Some(value) = settings.get(key).and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+        let host = value
+            .parse::<reqwest::Url>()
             .ok()
-            .and_then(|url| url.host_str().map(str::to_owned))?,
-        "smb" => host.trim().to_owned(),
-        _ => return None,
-    };
-    crate::plugin_permissions::normalize_domain(&value).ok()
+            .and_then(|url| url.host_str().map(str::to_owned))
+            .unwrap_or_else(|| value.split('/').next().unwrap_or(value).to_owned());
+        if let Ok(domain) = crate::plugin_permissions::normalize_domain(&host) {
+            return Some(domain);
+        }
+    }
+    None
 }
 
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
@@ -354,7 +323,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     let plugin_id = input
         .plugin_id
         .clone()
-        .unwrap_or_else(|| format!("org.fiex.{kind}"));
+        .ok_or("connection plugin ID is required")?;
     if !crate::plugin_host::valid_id(&plugin_id) {
         return Err("连接插件 ID 无效".into());
     }
@@ -379,40 +348,6 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .filter(|(_, ty)| ty == "secret")
         .map(|(id, _)| id)
         .collect::<Vec<_>>();
-    let value_string = |field: &str| {
-        input
-            .settings
-            .get(field)
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .trim()
-            .to_string()
-    };
-    let url = if input.url.trim().is_empty() {
-        value_string("url")
-    } else {
-        input.url.trim().to_string()
-    };
-    let host = if input.host.trim().is_empty() {
-        value_string("host")
-    } else {
-        input.host.trim().to_string()
-    };
-    let share = if input.share.trim().is_empty() {
-        value_string("share")
-    } else {
-        input.share.trim().to_string()
-    };
-    if kind == "webdav" && !(url.starts_with("http://") || url.starts_with("https://")) {
-        return Err("WebDAV 地址必须以 http:// 或 https:// 开头".into());
-    }
-    if kind == "smb" && (host.is_empty() || share.is_empty()) {
-        return Err("请填写 SMB 主机和共享名".into());
-    }
-    if input.port == Some(0) {
-        return Err("请输入有效的端口".into());
-    }
-
     let mut items = load_stored();
     let existing = input
         .id
@@ -456,25 +391,18 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             }
         }
     }
-    let record = StoredConnection {
+    let mut record = StoredConnection {
         id: id.clone(),
         name: name.into(),
         kind: kind.into(),
         plugin_id: plugin_id.clone(),
         settings,
         secret_keys,
-        url,
-        host,
-        share,
-        base: input.base.trim().into(),
-        username: input.username.trim().into(),
-        allow_invalid_certs: input.allow_invalid_certs,
-        port: input.port,
     };
     ensure_provider_access(&record)?;
     // Saving a connection is explicit user intent to reach this host. The
     // exact hostname is added to the plugin's own allowlist before validation.
-    if let Some(domain) = connection_domain(&record.kind, &record.url, &record.host) {
+    if let Some(domain) = connection_domain(&record.settings) {
         if !crate::plugin_permissions::is_loopback_domain(&domain) {
             crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
         }
@@ -495,6 +423,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
                 crate::plugin_storage::secret_set(&plugin_id, &scope, field, value)?;
             }
         }
+    }
+    for field in &record.secret_keys {
+        record.settings.remove(field);
     }
     fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
     if let Some(index) = existing {

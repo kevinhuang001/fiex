@@ -1,7 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
-import { gitState } from '@/lib/git'
 import { FileIcon } from './FileIcon'
 import { date, parent, kind, size } from '@/lib/files'
 import { tagHex } from '@/lib/tags'
@@ -9,12 +8,10 @@ import { call } from '@/lib/api'
 import type { Entry } from '@/lib/types'
 export function FileInfoDialog({
   info,
-  gitStatus,
   onClose,
   onError,
 }: {
   info: Entry | null
-  gitStatus?: string
   onClose: () => void
   onError: (s: string) => void
 }) {
@@ -41,7 +38,6 @@ export function FileInfoDialog({
               ['权限', info.readonly ? '只读' : '可读写'],
               ['符号链接', info.isSymlink ? '是' : '否'],
               ...(info.linkTarget ? [['链接到', info.linkTarget]] : []),
-              ...(gitStatus ? [['Git', gitState(gitStatus)?.label || gitStatus]] : []),
             ].map(([k, v]) => (
               <div key={k}>
                 <dt>{k}</dt>
@@ -61,7 +57,6 @@ export function FileInfoDialog({
           )}
           <Button
             variant="secondary"
-            disabled={info.path.startsWith('history://')}
             onClick={() => void run('正在显示…', () => call('reveal_path', { path: info.path }))}
           >
             在系统文件管理器中显示

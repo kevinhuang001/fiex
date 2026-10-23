@@ -25,7 +25,7 @@ Fiex has one React frontend and one Rust library. Tauri commands form the bounda
 - `volumes.rs`: common locations, mounted/unmounted disks, device mounting and Trash discovery, with platform-specific implementations guarded by `cfg`.
 - `core/operations.rs`, `core/search.rs`, `remote.rs`, `usbfs.rs` and `core/terminals.rs` retain their focused domains.
 - `plugins/host.rs`, `plugins/installer.rs`, `plugins/permissions.rs`, `plugins/sandbox.rs` and `plugins/vfs.rs` own plugin lifecycle, installation, permissions, OS confinement and generic virtual paths.
-- Git, WebDAV, SMB, archive, checksum and Everything search implementations live in the separate `fiex-official-plugins` repository. Core keeps only thin Tauri command adapters that forward to the Git plugin.
+- Git, WebDAV, SMB, archive, checksum and Everything search implementations live in the separate `fiex-official-plugins` repository. Core contains no Git, archive, checksum or provider-specific commands; those features are delivered entirely by installed plugins.
 - `desktop.rs`: Tauri command adapters and application startup. Callers reference the owning native module directly; moved APIs have no compatibility re-exports.
 
 The obsolete icon-size preference migration has been removed. PDF.js's `legacy/build` import is the upstream distribution used for WebView compatibility, not an old Fiex implementation.
@@ -38,7 +38,7 @@ Native videos are recorded only by the independent `.github/workflows/recording.
 
 ## Git workflow and responsiveness
 
-`useGitRepository` owns source-control actions, author identity, progress/errors and the commit draft. Core Git commands are thin proxies to the installed `org.fiex.git` plugin and run on Tauri's blocking pool. Stage paths are literal, restricted to the repository, and support deleted files; unstaging also works before the first commit. Initialization reads symbolic HEAD correctly in an unborn repository. Commits include staged changes only, default to effective Git identity and save chosen author information in project config. Remote push sets upstream for the selected remote; pull is fast-forward only. Authentication uses installed Git credential helpers; errors preserve the working tree and commit draft.
+Git is an independent official plugin with a React panel built to static HTML. Core has no Git commands, repository discovery, status tinting or Git-specific paths. The plugin uses `git2`/libgit2 for status, staging, commits, refs, history, trees and remotes; it never spawns a local Git process. It declares only `filesystem.*` and `network` permissions. Remote pull is fast-forward only and refuses divergent histories; errors preserve the working tree. The plugin registers the `history` virtual scheme for read-only commit browsing through the generic VFS.
 
 The icon browser virtualizes rows above 200 files, including groups, keyboard navigation and inline rename. Large columns use virtual rows; list view remains virtualized. Selection membership uses sets. Native application-icon requests are limited to two concurrent requests and bounded caches evict one entry at a time. Refreshes retain the active directory contents; search result updates use React transitions. Settings load in a separate chunk, and theme listeners update only when the theme changes.
 

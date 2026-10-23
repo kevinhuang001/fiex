@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { AppController } from '@/hooks/useAppController'
 import { progressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
@@ -40,7 +41,6 @@ export function FileContextMenu({
   previewEntry,
   setInfo,
   platform,
-  gitSwitched,
   openTags,
   x,
   isRemotePath,
@@ -53,10 +53,7 @@ export function FileContextMenu({
   deletePermanently,
   restoreFromTrash,
   inTrash,
-  setCompressOpen,
-  compressOpen,
   setMenu,
-  checksum,
 }: Pick<
   AppController,
   | 'menu'
@@ -65,7 +62,6 @@ export function FileContextMenu({
   | 'previewEntry'
   | 'setInfo'
   | 'platform'
-  | 'gitSwitched'
   | 'openTags'
   | 'x'
   | 'isRemotePath'
@@ -78,11 +74,9 @@ export function FileContextMenu({
   | 'deletePermanently'
   | 'restoreFromTrash'
   | 'inTrash'
-  | 'setCompressOpen'
-  | 'compressOpen'
   | 'setMenu'
-  | 'checksum'
 >) {
+  const [submenuOpen, setSubmenuOpen] = useState(false)
   return (
     <>
       {menu && (
@@ -119,7 +113,7 @@ export function FileContextMenu({
                 ? [
                     {
                       label: '标签…',
-                      disabled: gitSwitched || x.directoryReadOnly,
+                      disabled: x.directoryReadOnly,
                       icon: <Tags />,
                       hint: '',
                       action: () =>
@@ -165,7 +159,7 @@ export function FileContextMenu({
                 label: '重新命名',
                 icon: <Pencil />,
                 hint: hint('rename'),
-                disabled: gitSwitched || x.directoryReadOnly,
+                disabled: x.directoryReadOnly,
                 action: () => x.beginRename(menu.entry.path),
               },
               { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
@@ -173,21 +167,21 @@ export function FileContextMenu({
                 label: '剪切',
                 icon: <Scissors />,
                 hint: hint('cut'),
-                disabled: gitSwitched || x.directoryReadOnly,
+                disabled: x.directoryReadOnly,
                 action: () => copy(true),
               },
               {
                 label: '创建副本',
                 icon: <Copy />,
                 hint: hint('duplicate'),
-                disabled: gitSwitched || x.directoryReadOnly,
+                disabled: x.directoryReadOnly,
                 action: duplicate,
               },
               {
                 label: 'Open in Terminal',
                 icon: <TerminalSquare />,
                 hint: '',
-                disabled: gitSwitched || x.directoryReadOnly,
+                disabled: x.directoryReadOnly,
                 action: () => terminal(),
               },
               {
@@ -214,7 +208,7 @@ export function FileContextMenu({
                     label: '移到废纸篓',
                     icon: <Trash2 />,
                     hint: hint('trash'),
-                    disabled: gitSwitched || x.directoryReadOnly,
+                    disabled: x.directoryReadOnly,
                     action: recycle,
                   },
               ...(inTrash
@@ -236,24 +230,24 @@ export function FileContextMenu({
               <div
                 className="context-submenu-wrap"
                 key={a.label}
-                onMouseEnter={() => setCompressOpen(true)}
-                onMouseLeave={() => setCompressOpen(false)}
+                onMouseEnter={() => setSubmenuOpen(true)}
+                onMouseLeave={() => setSubmenuOpen(false)}
               >
                 <button
                   role="menuitem"
                   disabled={a.disabled}
                   aria-haspopup="menu"
-                  aria-expanded={compressOpen}
+                  aria-expanded={submenuOpen}
                   onClick={(event) => {
                     event.stopPropagation()
-                    setCompressOpen((value) => !value)
+                    setSubmenuOpen((value) => !value)
                   }}
                 >
                   {a.icon}
                   {a.label}
                   <ChevronRight className="submenu-arrow" size={13} />
                 </button>
-                {compressOpen && !a.disabled && (
+                {submenuOpen && !a.disabled && (
                   <div className="context-submenu" role="menu">
                     {a.submenu.map((item) => (
                       <button
@@ -294,7 +288,6 @@ export function FileContextMenu({
             isRemote={isRemotePath(menu.entry.path)}
             onClose={() => setMenu(null)}
             onError={x.setError}
-            onChecksum={checksum}
           />
         </div>
       )}

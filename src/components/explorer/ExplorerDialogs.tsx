@@ -1,4 +1,3 @@
-import { ChecksumDialog } from '@/components/ChecksumDialog'
 import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
@@ -12,13 +11,10 @@ import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { AppController } from '@/hooks/useAppController'
-import { CompressDialog } from '../CompressDialog'
 import { call } from '@/lib/api'
 import { CheckCircle2, LoaderCircle, X } from 'lucide-react'
 export function ExplorerDialogs({
   left,
-  checksumPath,
-  setChecksumPath,
   preview,
   setPreview,
   navigatePreview,
@@ -37,9 +33,6 @@ export function ExplorerDialogs({
   setDialogValue,
   dialogError,
   trashIssue,
-  compressAdvanced,
-  setCompressAdvanced,
-  compress,
   setTrashIssue,
   openTrash,
   info,
@@ -62,8 +55,6 @@ export function ExplorerDialogs({
 }: Pick<
   AppController,
   | 'left'
-  | 'checksumPath'
-  | 'setChecksumPath'
   | 'preview'
   | 'setPreview'
   | 'navigatePreview'
@@ -82,9 +73,6 @@ export function ExplorerDialogs({
   | 'setDialogValue'
   | 'dialogError'
   | 'trashIssue'
-  | 'compressAdvanced'
-  | 'setCompressAdvanced'
-  | 'compress'
   | 'setTrashIssue'
   | 'openTrash'
   | 'info'
@@ -121,14 +109,6 @@ export function ExplorerDialogs({
         onOpen={open}
       />
 
-      <CompressDialog
-        format={compressAdvanced}
-        onClose={() => setCompressAdvanced(null)}
-        onSubmit={(format, options) => {
-          setCompressAdvanced(null)
-          compress(format, options)
-        }}
-      />
       <Modal
         open={!!dialog}
         onClose={() => {
@@ -225,14 +205,8 @@ export function ExplorerDialogs({
         </div>
       </Modal>
 
-      <FileInfoDialog
-        info={info}
-        gitStatus={info ? x.git?.entries[info.path] : undefined}
-        onClose={() => setInfo(null)}
-        onError={x.setError}
-      />
+      <FileInfoDialog info={info} onClose={() => setInfo(null)} onError={x.setError} />
 
-      <ChecksumDialog path={checksumPath} onClose={() => setChecksumPath(null)} />
       <TagDialog
         open={tagOpen}
         initial={tagInitial}

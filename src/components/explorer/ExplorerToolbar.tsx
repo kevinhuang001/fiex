@@ -88,11 +88,8 @@ export function ExplorerToolbar({
   displayName,
   prefs,
   update,
-  gitSwitched,
   hint,
   create,
-  gitOpen,
-  setGitOpen,
   ides,
   terminals,
   openIde,
@@ -111,11 +108,8 @@ export function ExplorerToolbar({
   | 'displayName'
   | 'prefs'
   | 'update'
-  | 'gitSwitched'
   | 'hint'
   | 'create'
-  | 'gitOpen'
-  | 'setGitOpen'
   | 'ides'
   | 'terminals'
   | 'openIde'
@@ -156,11 +150,6 @@ export function ExplorerToolbar({
           },
         }),
       )
-      return
-    }
-    if (tool.id === 'git.main' && plugin.id === 'org.fiex.git') {
-      if (!gitOpen) void x.refreshGit()
-      setGitOpen(true)
       return
     }
     if (tool.command && plugin.backendAvailable) {
@@ -392,9 +381,9 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={gitSwitched ? '历史版本只读' : `新建文件夹 ${hint('newFolder')}`}
+          title={`新建文件夹 ${hint('newFolder')}`}
           aria-label="新建文件夹"
-          disabled={gitSwitched || x.directoryReadOnly}
+          disabled={x.directoryReadOnly}
           onClick={() => create(true)}
         >
           <FolderPlus weight="duotone" size={20} />
@@ -402,13 +391,9 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={
-            gitSwitched
-              ? '历史版本只读'
-              : `在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`
-          }
+          title={`在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`}
           aria-label="在 IDE 中打开"
-          disabled={gitSwitched || x.directoryReadOnly}
+          disabled={x.directoryReadOnly}
           onClick={() => openIde()}
           onContextMenu={(event) => {
             event.preventDefault()
@@ -421,13 +406,9 @@ export function ExplorerToolbar({
           <Button
             variant="ghost"
             size="icon"
-            title={
-              gitSwitched
-                ? '历史版本只读'
-                : `在 ${terminals.find((t) => t.id === prefs.terminal)?.name || '终端'} 中打开`
-            }
+            title={`在 ${terminals.find((t) => t.id === prefs.terminal)?.name || '终端'} 中打开`}
             aria-label="Open in Terminal"
-            disabled={gitSwitched || x.directoryReadOnly}
+            disabled={x.directoryReadOnly}
             onClick={() => terminal()}
             onContextMenu={(event) => {
               event.preventDefault()
@@ -467,7 +448,6 @@ export function ExplorerToolbar({
                   )
                 })}
               </div>
-              {gitSwitched && <span className="git-branch-hint">{x.git?.branch}</span>}
               <Menu label="插件" icon={<Puzzle weight="duotone" size={20} />}>
                 <Label>插件工具</Label>
                 {availableTools.map(({ plugin, tool }) => {

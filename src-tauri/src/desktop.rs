@@ -367,215 +367,6 @@ fn plugin_secret_available() -> bool {
     crate::plugin_storage::secret_available()
 }
 
-const GIT_PLUGIN: &str = "org.fiex.git";
-
-fn git_network_domains() -> Vec<String> {
-    let Some(plugin) = crate::plugin_host::catalog()
-        .into_iter()
-        .find(|plugin| plugin.id == GIT_PLUGIN)
-    else {
-        return Vec::new();
-    };
-    let declared = plugin
-        .declared_permissions
-        .iter()
-        .cloned()
-        .collect::<std::collections::BTreeSet<_>>();
-    let mut domains = crate::plugin_permissions::status(GIT_PLUGIN, &declared)
-        .map(|state| state.network_domains.into_iter().collect::<Vec<_>>())
-        .unwrap_or_default();
-    for loopback in ["localhost", "127.0.0.1", "::1"] {
-        if !domains.iter().any(|domain| domain == loopback) {
-            domains.push(loopback.into());
-        }
-    }
-    domains
-}
-
-fn git_proxy(method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    if !crate::plugin_host::global().is_installed(GIT_PLUGIN) {
-        return Err("Git 插件未安装，请先在设置 → 插件中安装并授权".into());
-    }
-    crate::plugin_host::global().invoke(GIT_PLUGIN, method, params)
-}
-
-#[tauri::command]
-async fn git_remote_status(root: String) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy("git.remoteStatus", serde_json::json!({"root":root}))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_remote_remove(root: String, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy(
-            "git.remoteRemove",
-            serde_json::json!({"root":root,"name":name}),
-        )
-        .map(|_| ())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_remote_save(root: String, name: String, url: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy(
-            "git.remoteSave",
-            serde_json::json!({
-                "root":root,"name":name,"url":url,
-                "networkDomains": git_network_domains()
-            }),
-        )
-        .map(|_| ())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_sync(
-    root: String,
-    remote: String,
-    push: bool,
-    branch: Option<String>,
-) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let value = git_proxy(
-            "git.remoteSync",
-            serde_json::json!({
-                "root":root,"remote":remote,"push":push,"branch":branch,
-                "networkDomains": git_network_domains()
-            }),
-        )?;
-        serde_json::from_value(value).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn drag_files(
-    window: tauri::Window,
-    paths: Vec<String>,
-    on_event: Channel<String>,
-) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    {
-        crate::native_drag::start(window, paths, on_event).await
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (window, paths, on_event);
-        Err("此命令仅用于 GTK 文件拖动".into())
-    }
-}
-#[tauri::command]
-async fn git_init(path: String) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy("git.init", serde_json::json!({"root":path}))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_stage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy(
-            "git.stage",
-            serde_json::json!({"root":root,"paths":paths,"all":all}),
-        )
-        .map(|_| ())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_unstage(root: String, paths: Vec<String>, all: bool) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy(
-            "git.unstage",
-            serde_json::json!({"root":root,"paths":paths,"all":all}),
-        )
-        .map(|_| ())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_identity(root: String) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy("git.identity", serde_json::json!({"root":root}))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_commit(
-    root: String,
-    message: String,
-    name: String,
-    email: String,
-) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let value = git_proxy(
-            "git.commit",
-            serde_json::json!({"root":root,"message":message,"name":name,"email":email}),
-        )?;
-        serde_json::from_value(value).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_refs(root: String) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy("git.refs", serde_json::json!({"root":root}))
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-#[tauri::command]
-async fn git_history(root: String, skip: usize) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy("git.history", serde_json::json!({"root":root,"skip":skip}))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_browse(root: String, reference: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let value = git_proxy(
-            "git.browse",
-            serde_json::json!({"root":root,"reference":reference}),
-        )?;
-        serde_json::from_value(value).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_history_asset(path: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let value = git_proxy("git.historyAsset", serde_json::json!({"path":path}))?;
-        serde_json::from_value(value).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[tauri::command]
-async fn git_status(path: String) -> Option<serde_json::Value> {
-    if !crate::plugin_host::global().is_installed(GIT_PLUGIN) {
-        return None;
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        git_proxy("git.status", serde_json::json!({"root":path}))
-    })
-    .await
-    .ok()
-    .and_then(Result::ok)
-}
 #[tauri::command]
 fn platform() -> &'static str {
     std::env::consts::OS
@@ -1052,18 +843,6 @@ async fn plugin_search(
         .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-async fn file_checksums(path: String) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_host::global().invoke(
-            "org.fiex.checksum",
-            "checksum.calculate",
-            serde_json::json!({"path":path}),
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
 /// Host-owned native file chooser. Returns only a selected path; plugin
 /// code never gets a handle to the chooser UI or a directory browsing grant.
 #[tauri::command]
@@ -1147,52 +926,6 @@ fn pick_folder(default: Option<String>) -> Option<String> {
     dialog
         .pick_folder()
         .map(|path| path.to_string_lossy().into_owned())
-}
-#[tauri::command]
-async fn extract_archive(
-    app: tauri::AppHandle,
-    path: String,
-    destination: Option<String>,
-) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let result = crate::plugin_host::global().invoke(
-            "org.fiex.archive",
-            "archive.extract",
-            serde_json::json!({"path":path,"destination":destination}),
-        )?;
-        let extracted: String = serde_json::from_value(result).map_err(|e| e.to_string())?;
-        app.state::<Operations>()
-            .record_created(std::path::PathBuf::from(&extracted));
-        Ok(extracted)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-#[allow(clippy::too_many_arguments)]
-#[tauri::command]
-async fn compress_archive(
-    app: tauri::AppHandle,
-    paths: Vec<String>,
-    destination: String,
-    format: String,
-    level: Option<u32>,
-    password: Option<String>,
-    ignores: Vec<String>,
-) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let response = crate::plugin_host::global().invoke(
-            "org.fiex.archive",
-            "archive.compress",
-            serde_json::json!({"paths":paths,"destination":destination,"format":format,
-                "level":level,"password":password,"ignores":ignores}),
-        )?;
-        let created: String = serde_json::from_value(response).map_err(|e| e.to_string())?;
-        app.state::<Operations>()
-            .record_created(std::path::PathBuf::from(&created));
-        Ok(created)
-    })
-    .await
-    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 async fn detect_terminals() -> Result<Vec<terminals::Terminal>, String> {
@@ -1356,6 +1089,22 @@ fn unwatch_directory(
         watches.remove(&key);
     }
 }
+#[tauri::command]
+async fn drag_files(
+    window: tauri::Window,
+    paths: Vec<String>,
+    on_event: Channel<String>,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::native_drag::start(window, paths, on_event).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window, paths, on_event);
+        Err("此命令仅用于 GTK 文件拖动".into())
+    }
+}
 // Synchronous Tauri commands execute on the main thread, as required by GTK's icon provider.
 #[tauri::command]
 fn native_icon(path: String, size: Option<u16>) -> Result<String, String> {
@@ -1416,21 +1165,7 @@ pub fn run() {
             initial_path,
             launch_path,
             new_window,
-            git_remote_status,
-            git_remote_save,
-            git_remote_remove,
-            git_sync,
             drag_files,
-            git_init,
-            git_stage,
-            git_unstage,
-            git_commit,
-            git_identity,
-            git_status,
-            git_refs,
-            git_history,
-            git_browse,
-            git_history_asset,
             locations,
             list_directory,
             file_info,
@@ -1444,13 +1179,10 @@ pub fn run() {
             cancel_search,
             begin_operation,
             cancel_operation,
-            extract_archive,
             pick_folder,
             plugin_file_dialog,
             plugin_files_dialog,
             plugin_search,
-            file_checksums,
-            compress_archive,
             detect_terminals,
             detect_ides,
             open_in_ide,

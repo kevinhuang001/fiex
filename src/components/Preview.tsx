@@ -21,9 +21,9 @@ export function Preview({
 }) {
   const [text, setText] = useState('')
   const [error, setError] = useState('')
-  const [source, setSource] = useState('')
   const [loading, setLoading] = useState(false)
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
+  const source = entry ? asset(entry.path) : ''
   const highlighted = useMemo(
     () => (entry && isText(entry) ? highlightCode(text, entry.extension, entry.name) : null),
     [entry, text],
@@ -42,21 +42,6 @@ export function Preview({
   }, [media])
   useEffect(() => {
     setMedia(null)
-  }, [entry?.path])
-  useEffect(() => {
-    setSource(entry ? asset(entry.path) : '')
-    if (!entry || !entry.path.startsWith('history://') || entry.isDir || isText(entry)) return
-    let active = true
-    void call<string>('git_history_asset', { path: entry.path })
-      .then((path) => {
-        if (active) setSource(asset(path))
-      })
-      .catch((e) => {
-        if (active) setError(String(e))
-      })
-    return () => {
-      active = false
-    }
   }, [entry?.path])
   useEffect(() => {
     setText('')
@@ -131,8 +116,6 @@ export function Preview({
                 )}
                 {!loading && entry.size > 256 * 1024 && '\n\n…仅预览前 256 KiB'}
               </pre>
-            ) : entry.path.startsWith('history://') && !source ? (
-              <p>正在读取历史文件…</p>
             ) : isImage(entry) && native ? (
               <img
                 src={source}

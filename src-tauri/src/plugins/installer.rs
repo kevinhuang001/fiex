@@ -386,7 +386,7 @@ fn fallback_marketplace(
         }
         let slug = name.split('-').next().unwrap_or("plugin");
         entries.push(MarketplacePlugin {
-            id: format!("org.fiex.{slug}"),
+            id: format!("plugin.{slug}"),
             name: slug.into(),
             version: version.clone(),
             description: String::new(),
