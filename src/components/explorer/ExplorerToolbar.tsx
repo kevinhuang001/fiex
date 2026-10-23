@@ -165,6 +165,7 @@ export function ExplorerToolbar({
             selection: x.selected,
             directory: x.path,
             anchor,
+            source: 'toolbar',
           },
         }),
       )

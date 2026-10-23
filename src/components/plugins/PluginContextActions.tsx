@@ -191,6 +191,7 @@ export function PluginContextActions({
             selection: paths,
             directory: path,
             anchor,
+            source: 'contextMenu',
             size: item.panel.defaultSize,
           },
         }),

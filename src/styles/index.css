@@ -5937,3 +5937,7 @@ body.dragging-reorder * {
   font-size: 10.5px;
   align-self: center;
 }
+.plugin-panel-popover.toolbar-anchored {
+  left: auto;
+  transform: none;
+}

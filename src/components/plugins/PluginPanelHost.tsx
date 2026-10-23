@@ -23,6 +23,8 @@ export interface PluginPanelRequest {
   selection: string[]
   directory: string
   icon?: string
+  anchor?: { x: number; y: number }
+  source?: 'toolbar' | 'contextMenu'
   size?: { width: number; height: number }
 }
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
@@ -382,19 +384,37 @@ export function PluginPanelHost() {
       }
     }
   }, [plugins])
+  const panelWidth = Math.min(size.width, window.innerWidth - 40)
   return (
     <>
       {request && (
         <div
           ref={panel}
-          className={`plugin-panel-popover${ready ? ' ready' : ' opening'}`}
+          className={`plugin-panel-popover${ready ? ' ready' : ' opening'}${
+            request.source === 'toolbar' ? ' toolbar-anchored' : ''
+          }`}
           role="dialog"
           aria-label={request.title || '插件'}
           aria-busy={!ready}
-          style={{
-            width: Math.min(size.width, window.innerWidth - 40),
-            height: Math.min(size.height + 52, window.innerHeight - 40),
-          }}
+          style={
+            request.source === 'toolbar'
+              ? {
+                  width: panelWidth,
+                  height: Math.min(size.height + 52, window.innerHeight - 96 - 16),
+                  top: 96,
+                  right: Math.max(
+                    18,
+                    Math.min(
+                      window.innerWidth - (request.anchor?.x ?? window.innerWidth - 18),
+                      window.innerWidth - panelWidth - 18,
+                    ),
+                  ),
+                }
+              : {
+                  width: panelWidth,
+                  height: Math.min(size.height + 52, window.innerHeight - 40),
+                }
+          }
         >
           <header>
             <span className="plugin-panel-icon">
