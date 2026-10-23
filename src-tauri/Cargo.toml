@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.4.2"
+version = "0.4.3"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"

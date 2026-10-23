@@ -1,7 +1,8 @@
 use crate::{
     ignores::IgnoreSet,
     operations::{
-        check_cancelled, copy_stream, copy_tree, exists, unique, OperationResult, Undo, CANCELLED,
+        check_cancelled, copy_stream, copy_tree_with_progress, exists, unique, OperationResult,
+        Undo, CANCELLED,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -63,6 +64,29 @@ struct Task {
     src: PathBuf,
     dest: PathBuf,
     replace: bool,
+    files: u64,
+}
+
+fn count_files(path: &Path, ignore: &IgnoreSet, relative: &Path) -> Result<u64, String> {
+    if ignore.is_ignored(relative) {
+        return Ok(0);
+    }
+    let meta = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if meta.file_type().is_symlink() {
+        return Err("暂不支持复制或移动符号链接及特殊文件".into());
+    }
+    if meta.is_file() {
+        return Ok(1);
+    }
+    if !meta.is_dir() {
+        return Ok(0);
+    }
+    let mut total = 0;
+    for child in fs::read_dir(path).map_err(|e| e.to_string())? {
+        let child = child.map_err(|e| e.to_string())?;
+        total += count_files(&child.path(), ignore, &relative.join(child.file_name()))?;
+    }
+    Ok(total)
 }
 struct Plan<'a> {
     tasks: Vec<Task>,
@@ -147,10 +171,12 @@ impl Plan<'_> {
                         return Err("不能用文件替换其自身，请选择保留两者".into());
                     }
                     self.reserve(&dest)?;
+                    let files = count_files(&src, &self.ignore, &relative)?;
                     self.tasks.push(Task {
                         src,
                         dest,
                         replace: true,
+                        files,
                     });
                     return Ok(());
                 }
@@ -158,10 +184,12 @@ impl Plan<'_> {
         }
         // A duplicate name in one selection must never overwrite another task.
         self.reserve(&dest)?;
+        let files = count_files(&src, &self.ignore, &relative)?;
         self.tasks.push(Task {
             src,
             dest,
             replace: false,
+            files,
         });
         Ok(())
     }
@@ -186,6 +214,7 @@ fn install_copy(
     dest: &Path,
     ignore: &IgnoreSet,
     cancel: &AtomicBool,
+    progress: Option<&(dyn Fn(&Path) + Sync)>,
 ) -> Result<usize, String> {
     check_cancelled(cancel)?;
     let staging = tempfile::Builder::new()
@@ -193,12 +222,13 @@ fn install_copy(
         .tempdir_in(dest.parent().ok_or("目标路径无效")?)
         .map_err(|e| e.to_string())?;
     let staged = staging.path().join("incoming");
-    let skipped = copy_tree(
+    let skipped = copy_tree_with_progress(
         src,
         &staged,
         ignore,
         Path::new(src.file_name().unwrap_or_default()),
         cancel,
+        progress,
     )?;
     if staged.is_dir() {
         if exists(dest) {
@@ -258,7 +288,7 @@ pub(crate) fn move_tree(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<
             Err(_) => (),
         }
     }
-    install_copy(src, dest, &IgnoreSet::new(&[]), cancel)?;
+    install_copy(src, dest, &IgnoreSet::new(&[]), cancel, None)?;
     remove(src)?;
     Ok(0)
 }
@@ -311,7 +341,19 @@ pub(crate) fn execute(
         return Ok((result, vec![]));
     }
     let mut undo = vec![];
-    let total = plan.tasks.len() as u64;
+    let total = plan.tasks.iter().map(|task| task.files).sum::<u64>();
+    let done_files = std::sync::atomic::AtomicU64::new(0);
+    let report = |path: &Path| {
+        let current = done_files.fetch_add(1, Ordering::Relaxed) + 1;
+        progress(
+            current,
+            total,
+            path.file_name().and_then(|name| name.to_str()),
+        );
+    };
+    if total > 0 {
+        progress(0, total, None);
+    }
     if !moving && plan.tasks.iter().all(|task| !task.replace) {
         let ignore = &plan.ignore;
         let tasks = std::mem::take(&mut plan.tasks);
@@ -322,24 +364,17 @@ pub(crate) fn execute(
             .num_threads(workers)
             .build()
             .map_err(|e| e.to_string())?;
-        let done = std::sync::atomic::AtomicU64::new(0);
         let outcomes = pool.install(|| {
             use rayon::prelude::*;
             tasks
                 .into_par_iter()
                 .map(|task| {
-                    let current = done.fetch_add(1, Ordering::Relaxed) + 1;
-                    progress(
-                        current,
-                        total,
-                        task.dest.file_name().and_then(|name| name.to_str()),
-                    );
                     let result = if cancel.load(Ordering::Relaxed) {
                         Err(CANCELLED.into())
                     } else if exists(&task.dest) {
                         Err("目标已改变，请重试".into())
                     } else {
-                        install_copy(&task.src, &task.dest, ignore, cancel)
+                        install_copy(&task.src, &task.dest, ignore, cancel, Some(&report))
                     };
                     (task, result)
                 })
@@ -372,13 +407,15 @@ pub(crate) fn execute(
         }
         return Ok((result, undo));
     }
-    let mut done = 0u64;
     for task in plan.tasks {
         // Cancellation stops at a file boundary; moved files are not rolled back.
         check_cancelled(cancel)?;
-        let Task { src, dest, replace } = task;
-        done += 1;
-        progress(done, total, dest.file_name().and_then(|name| name.to_str()));
+        let Task {
+            src,
+            dest,
+            replace,
+            files,
+        } = task;
         // Re-check immediately before mutation: a new target must get a fresh dialog.
         if exists(&dest) && !replace {
             result
@@ -402,12 +439,17 @@ pub(crate) fn execute(
         let operation = if moving {
             move_tree(&src, &dest, cancel)
         } else {
-            install_copy(&src, &dest, &plan.ignore, cancel)
+            install_copy(&src, &dest, &plan.ignore, cancel, Some(&report))
         };
         match operation {
             Ok(skipped) => {
                 result.skipped += skipped;
                 result.paths.push(dest.to_string_lossy().into_owned());
+                if moving {
+                    for _ in 0..files {
+                        report(&dest);
+                    }
+                }
                 if let Some(backup) = backup {
                     undo.push(Undo::Replaced(dest.clone(), backup));
                 }
@@ -469,6 +511,32 @@ mod tests {
                 action,
             })
             .collect()
+    }
+    #[test]
+    fn folder_progress_counts_each_file() {
+        let t = tempfile::tempdir().unwrap();
+        let source = t.path().join("source");
+        let destination = t.path().join("destination");
+        fs::create_dir_all(source.join("nested")).unwrap();
+        fs::create_dir(&destination).unwrap();
+        for name in ["one.txt", "nested/two.txt", "nested/three.txt"] {
+            fs::write(source.join(name), name).unwrap();
+        }
+        let samples = std::sync::Mutex::new(Vec::new());
+        execute(
+            &[source.to_string_lossy().into_owned()],
+            destination.to_str().unwrap(),
+            false,
+            false,
+            &[],
+            &[],
+            &NEVER_CANCELLED,
+            &|done, total, _| samples.lock().unwrap().push((done, total)),
+        )
+        .unwrap();
+        let samples = samples.into_inner().unwrap();
+        assert!(samples.iter().all(|(_, total)| *total == 3), "{samples:?}");
+        assert_eq!(samples.last(), Some(&(3, 3)));
     }
     #[test]
     fn conflicts_are_preflighted_replace_is_undoable_and_stale_choices_are_rejected() {

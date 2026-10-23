@@ -189,12 +189,13 @@ fn fast_copy_file(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<(), St
     Ok(())
 }
 
-pub(crate) fn copy_tree(
+pub(crate) fn copy_tree_with_progress(
     src: &Path,
     dest: &Path,
     ignore: &IgnoreSet,
     relative: &Path,
     cancel: &AtomicBool,
+    progress: Option<&(dyn Fn(&Path) + Sync)>,
 ) -> Result<usize, String> {
     check_cancelled(cancel)?;
     let mut plan = CopyPlan::default();
@@ -202,10 +203,16 @@ pub(crate) fn copy_tree(
     for (_, dir) in &plan.dirs {
         fs::create_dir(dir).map_err(|e| e.to_string())?;
     }
+    let report = |file: &Path| {
+        if let Some(progress) = progress {
+            progress(file);
+        }
+    };
     if plan.files.len() <= 1 {
         for file in &plan.files {
             fast_copy_file(&file.src, &file.dest, cancel)?;
             fs::set_permissions(&file.dest, file.permissions.clone()).map_err(|e| e.to_string())?;
+            report(&file.dest);
         }
         return Ok(plan.skipped);
     }
@@ -213,7 +220,9 @@ pub(crate) fn copy_tree(
         use rayon::prelude::*;
         plan.files.par_iter().try_for_each(|file| {
             fast_copy_file(&file.src, &file.dest, cancel)?;
-            fs::set_permissions(&file.dest, file.permissions.clone()).map_err(|e| e.to_string())
+            fs::set_permissions(&file.dest, file.permissions.clone()).map_err(|e| e.to_string())?;
+            report(&file.dest);
+            Ok::<(), String>(())
         })
     };
     if rayon::current_thread_index().is_some() {
@@ -467,12 +476,13 @@ mod tests {
             };
             fs::write(path, vec![index as u8; 128 * 1024]).unwrap();
         }
-        copy_tree(
+        copy_tree_with_progress(
             &src,
             &dest,
             &IgnoreSet::new(&[]),
             Path::new("tree"),
             &AtomicBool::new(false),
+            None,
         )
         .unwrap();
         for index in 0..64 {

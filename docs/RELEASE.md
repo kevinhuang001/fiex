@@ -1,3 +1,8 @@
+# Fiex 0.4.3
+
+- Status Center progress counts every file, including files inside folders. A folder with 8 files contributes 8 to total/done, not 1.
+- Per-file progress is reported while copying directories, including parallel copies.
+
 # Fiex 0.4.2
 
 - Plugin manifests are signed with Ed25519 publisher keys. `manifest.files` covers every package file; Core verifies the signature and digests at install and again before spawning the plugin.

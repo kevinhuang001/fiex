@@ -38,7 +38,7 @@ function ActivityDetails({ item }: { item: ActivityItem }) {
           <div>
             <dt>进度</dt>
             <dd>
-              {percent}%{item.total ? ` · ${item.done ?? 0}/${item.total}` : ''}
+              {percent}%{item.total ? ` · ${item.done ?? 0}/${item.total} 文件` : ''}
             </dd>
           </div>
         )}
@@ -161,7 +161,7 @@ export function ActivityCenter() {
                         ` · ${Math.round(item.progress * 100)}%`}
                       {item.status === 'running' &&
                         item.total !== undefined &&
-                        ` · ${item.done ?? 0}/${item.total}`}
+                        ` · ${item.done ?? 0}/${item.total} 文件`}
                       {item.status === 'running' && eta(item) && ` · 预计 ${eta(item)}`}
                     </small>
                     {item.status === 'running' && (
