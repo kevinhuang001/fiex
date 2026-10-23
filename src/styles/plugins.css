@@ -1073,10 +1073,6 @@
 .plugin-panel-popover[hidden] {
   display: none;
 }
-.plugin-panel-popover.opening {
-  opacity: 1;
-  visibility: visible;
-}
 .plugin-panel-loading {
   position: absolute;
   inset: 0;

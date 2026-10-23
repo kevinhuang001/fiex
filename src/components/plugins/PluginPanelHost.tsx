@@ -538,7 +538,7 @@ function CachedPanel({
       {request && (
         <div
           ref={panel}
-          className={`plugin-panel-popover${ready ? ' ready' : ' opening'}${
+          className={`plugin-panel-popover${
             request.source === 'toolbar' ? ' toolbar-anchored' : ''
           }${revealed ? ' revealed' : ''}${leaving ? ' leaving' : ''}`}
           hidden={!active && !leaving}
