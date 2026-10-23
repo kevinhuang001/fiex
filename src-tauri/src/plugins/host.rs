@@ -577,6 +577,130 @@ fn host_exec(
     }))
 }
 
+fn host_process_run(
+    plugin_id: &str,
+    declared: &std::collections::BTreeSet<String>,
+    params: &Value,
+) -> Result<Value, String> {
+    let command = params
+        .get("command")
+        .and_then(Value::as_str)
+        .ok_or("missing command")?;
+    if !crate::plugin_permissions::valid_command(command)
+        || !crate::plugin_permissions::allowed_command(plugin_id, declared, command)?
+    {
+        return Err("command was not approved by the user".into());
+    }
+    let args = params
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .map(|value| {
+                    value
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| "command arguments must be strings".to_string())
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+    if args.len() > 128
+        || args
+            .iter()
+            .any(|arg| arg.len() > 8192 || arg.contains('\0'))
+    {
+        return Err("command arguments are too large".into());
+    }
+    let cwd = active_path().ok_or("no active directory")?;
+    if !cwd.is_dir() {
+        return Err("active directory is unavailable".into());
+    }
+    let executable =
+        which::which(command).map_err(|error| format!("command unavailable: {error}"))?;
+    let mut process = Command::new(executable);
+    process
+        .args(&args)
+        .current_dir(&cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env_clear()
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "Never")
+        .env("LC_ALL", "C");
+    for key in [
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "SystemRoot",
+        "PATHEXT",
+        "SSH_AUTH_SOCK",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            process.env(key, value);
+        }
+    }
+    let mut child = process
+        .spawn()
+        .map_err(|error| format!("command failed to start: {error}"))?;
+    if let Some(stdin) = params.get("stdin").and_then(Value::as_str) {
+        if let Some(mut pipe) = child.stdin.take() {
+            pipe.write_all(stdin.as_bytes())
+                .map_err(|error| error.to_string())?;
+        }
+    } else {
+        drop(child.stdin.take());
+    }
+    let out_thread = child
+        .stdout
+        .take()
+        .map(|stream| thread::spawn(move || read_capped(stream)));
+    let err_thread = child
+        .stderr
+        .take()
+        .map(|stream| thread::spawn(move || read_capped(stream)));
+    let deadline = Instant::now() + EXEC_TIMEOUT;
+    let status = loop {
+        match child.try_wait().map_err(|error| error.to_string())? {
+            Some(status) => break status,
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("command timed out".into());
+            }
+            None => thread::sleep(Duration::from_millis(20)),
+        }
+    };
+    let (stdout, out_truncated) = out_thread
+        .map(|handle| handle.join().unwrap_or_default())
+        .unwrap_or_default();
+    let (stderr, err_truncated) = err_thread
+        .map(|handle| handle.join().unwrap_or_default())
+        .unwrap_or_default();
+    let mut result = json!({
+        "code": status.code(),
+        "stdout": String::from_utf8_lossy(&stdout),
+        "stderr": String::from_utf8_lossy(&stderr),
+        "truncated": out_truncated || err_truncated
+    });
+    if stdout.len() > 512 * 1024 {
+        let descriptor = crate::plugin_ipc::create(plugin_id, stdout.len(), false)?;
+        crate::plugin_ipc::write(&descriptor.id, &stdout)?;
+        result["stdout"] = Value::String(String::new());
+        result["stdoutBuffer"] =
+            serde_json::to_value(descriptor).map_err(|error| error.to_string())?;
+    }
+    Ok(result)
+}
+
 struct Running {
     plugin_id: String,
     declared: std::collections::BTreeSet<String>,
@@ -614,6 +738,65 @@ impl Running {
                 let id = p.get("id").and_then(Value::as_str).ok_or("missing id")?;
                 serde_json::to_value(crate::plugin_ipc::map(&self.plugin_id, id)?)
                     .map_err(|error| error.to_string())
+            }
+            "host.fs.list" if permitted("filesystem.read") => {
+                let path = p.get("path").and_then(Value::as_str).unwrap_or(".");
+                crate::plugin_fs_access::list(path)
+            }
+            "host.fs.stat" if permitted("filesystem.read") => {
+                let path = p
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or("missing path")?;
+                crate::plugin_fs_access::stat(path)
+            }
+            "host.fs.read" if permitted("filesystem.read") => {
+                let path = p
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or("missing path")?;
+                let offset = p.get("offset").and_then(Value::as_u64).unwrap_or(0);
+                let length = p
+                    .get("length")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(1024 * 1024) as usize;
+                crate::plugin_fs_access::read(&self.plugin_id, path, offset, length)
+            }
+            "host.fs.create" if permitted("filesystem.write") => {
+                let path = p
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or("missing path")?;
+                crate::plugin_fs_access::create(path)
+            }
+            "host.fs.write" if permitted("filesystem.write") => {
+                let path = p
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or("missing path")?;
+                let buffer = p
+                    .get("buffer")
+                    .and_then(Value::as_str)
+                    .ok_or("missing buffer")?;
+                let mode = p.get("mode").and_then(Value::as_str).unwrap_or("truncate");
+                crate::plugin_fs_access::write(&self.plugin_id, path, buffer, mode)
+            }
+            "host.fs.remove" if permitted("filesystem.write") => {
+                let path = p
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .ok_or("missing path")?;
+                crate::plugin_fs_access::remove(path)?;
+                Ok(Value::Null)
+            }
+            "host.fs.rename" if permitted("filesystem.write") => {
+                let from = p
+                    .get("from")
+                    .and_then(Value::as_str)
+                    .ok_or("missing from")?;
+                let to = p.get("to").and_then(Value::as_str).ok_or("missing to")?;
+                crate::plugin_fs_access::rename(from, to)?;
+                Ok(Value::Null)
             }
             "host.buffer.release" => {
                 let id = p.get("id").and_then(Value::as_str).ok_or("missing id")?;
@@ -659,6 +842,9 @@ impl Running {
                 Ok(json!(crate::plugin_storage::secret_available()))
             }
             "host.exec" if permitted("commands") => host_exec(&self.plugin_id, &self.declared, p),
+            "host.process.run" if permitted("commands") => {
+                host_process_run(&self.plugin_id, &self.declared, p)
+            }
             _ => Err("host method not available or permission denied".into()),
         }
     }
@@ -709,6 +895,28 @@ impl Drop for Running {
         let _ = &self.child;
     }
 }
+static ACTIVE_DIRECTORY: OnceLock<Mutex<Option<std::path::PathBuf>>> = OnceLock::new();
+
+pub fn active_path() -> Option<std::path::PathBuf> {
+    ACTIVE_DIRECTORY
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .ok()
+        .and_then(|value| value.clone())
+}
+
+pub fn set_active_directory(path: &str) -> Result<(), String> {
+    let path = dunce::canonicalize(path).map_err(|error| error.to_string())?;
+    if !path.is_dir() {
+        return Err("active path is not a directory".into());
+    }
+    *ACTIVE_DIRECTORY
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .map_err(|_| "active directory lock poisoned")? = Some(path);
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct PluginHost {
     children: Mutex<HashMap<String, Arc<Mutex<Running>>>>,

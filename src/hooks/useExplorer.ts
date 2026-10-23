@@ -43,6 +43,10 @@ export function useExplorer(
   const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
   const decorationRequest = useRef(0)
+  useEffect(() => {
+    if (!enabled || !path) return
+    void call('plugin_set_active_directory', { path }).catch(() => {})
+  }, [enabled, path])
   const searchRequest = useRef(0)
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
   const navigate = useCallback(

@@ -16,6 +16,8 @@ mod native_drag;
 pub mod operations;
 #[path = "plugins/decorations.rs"]
 pub mod plugin_decorations;
+#[path = "plugins/fs_access.rs"]
+pub mod plugin_fs_access;
 #[path = "plugins/host.rs"]
 pub mod plugin_host;
 #[path = "plugins/installer.rs"]

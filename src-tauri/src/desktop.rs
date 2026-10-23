@@ -334,6 +334,11 @@ async fn plugin_decorations(
     .map_err(|error| error.to_string())
 }
 #[tauri::command]
+fn plugin_set_active_directory(path: String) -> Result<(), String> {
+    crate::plugin_host::set_active_directory(&path)
+}
+
+#[tauri::command]
 fn plugin_network_domains(plugin_id: String) -> Result<Vec<String>, String> {
     crate::plugin_host::network_domains(&plugin_id)
 }
@@ -1176,6 +1181,7 @@ pub fn run() {
             plugins_list,
             plugin_panel_html,
             plugin_permission_allowed,
+            plugin_set_active_directory,
             plugin_network_domains,
             plugin_decorations,
             plugin_marketplace,

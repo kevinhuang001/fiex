@@ -53,6 +53,30 @@ pub fn map(owner: &str, id: &str) -> Result<BufferDescriptor, String> {
     Ok(entry.buffer.descriptor().clone())
 }
 
+pub fn read(owner: &str, id: &str) -> Result<Vec<u8>, String> {
+    let buffers = registry()
+        .lock()
+        .map_err(|_| "buffer registry lock poisoned")?;
+    let entry = buffers.get(id).ok_or("shared buffer not found")?;
+    if entry.owner != owner {
+        return Err("shared buffer belongs to another plugin".into());
+    }
+    Ok(entry.buffer.as_slice().to_vec())
+}
+
+pub fn write(id: &str, bytes: &[u8]) -> Result<(), String> {
+    let mut buffers = registry()
+        .lock()
+        .map_err(|_| "buffer registry lock poisoned")?;
+    let entry = buffers.get_mut(id).ok_or("shared buffer not found")?;
+    let target = entry.buffer.as_mut_slice()?;
+    if target.len() < bytes.len() {
+        return Err("shared buffer is too small".into());
+    }
+    target[..bytes.len()].copy_from_slice(bytes);
+    Ok(())
+}
+
 pub fn release(owner: &str, id: &str) -> Result<(), String> {
     let mut buffers = registry()
         .lock()
