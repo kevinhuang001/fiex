@@ -142,11 +142,10 @@ function DecoratedValue({
   children: React.ReactNode
 }) {
   const field = fieldOf(decoration, target)
-  if (!field) return <>{children}</>
   return (
-    <span className="decorated-value" style={styleOf(field.style)}>
+    <span className="decorated-value" style={styleOf(field?.style)}>
       {children}
-      <Badges badges={field.badges} />
+      <Badges badges={field?.badges} />
     </span>
   )
 }

@@ -3,6 +3,7 @@ import { Link2 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { kind } from '@/lib/files'
 import { fileVisual } from '@/lib/fileIcons'
+import { pluginIconFor, usePluginIconVersion } from '@/lib/pluginIcons'
 import type { Entry } from '@/lib/types'
 
 const cache = new Map<string, Promise<string | null>>()
@@ -56,11 +57,23 @@ function whenVisible(element: Element, callback: () => void) {
 export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number }) {
   const isApplication = kind(e) === '应用程序'
   const [native, setNative] = useState<string | null>(null)
+  const [pluginIcon, setPluginIcon] = useState<string | null>(null)
+  const iconVersion = usePluginIconVersion()
   const ref = useRef<HTMLSpanElement>(null)
   const pixels = Math.min(
     512,
     Math.max(32, Math.ceil((size * (window.devicePixelRatio || 1)) / 32) * 32),
   )
+  useEffect(() => {
+    let active = true
+    setPluginIcon(null)
+    void pluginIconFor(e).then((url) => {
+      if (active) setPluginIcon(url)
+    })
+    return () => {
+      active = false
+    }
+  }, [e.path, e.name, e.extension, e.isDir, e.mime, iconVersion])
   useEffect(() => {
     setNative(null)
     if (!isApplication || !ref.current) return
@@ -85,7 +98,9 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
   const generic = visual.generic ? (visual.folder ? 'generic-folder' : 'generic-file') : ''
   return (
     <span ref={ref} className="file-icon" style={{ width: size, height: size }}>
-      {isApplication && native ? (
+      {pluginIcon ? (
+        <img src={pluginIcon} alt="" draggable={false} onError={() => setPluginIcon(null)} />
+      ) : isApplication && native ? (
         <img src={native} alt="" draggable={false} onError={() => setNative(null)} />
       ) : (
         <img className={generic} src={visual.url} alt="" draggable={false} />

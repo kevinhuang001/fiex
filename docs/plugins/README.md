@@ -49,5 +49,7 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 - [14 GitHub 安装](14-GITHUB-INSTALLATION.md)
 - [15 仓库边界](15-EXTERNAL-REPOSITORIES.md)
 - [16 搜索](16-SEARCH.md)
+- [17 文件装饰](17-DECORATIONS.md)
+- [19 插件文件图标](19-FILE-ICONS.md)
 
 See [activation and brokered resources](18-ACTIVATION-AND-BROKER.md) for the current authorization contract.
