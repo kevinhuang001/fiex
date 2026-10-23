@@ -122,6 +122,7 @@ export function ExplorerToolbar({
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
   const plugins = usePluginCatalog()
+  const lastPointer = useRef({ x: window.innerWidth - 18, y: 96 })
   const pinnedKeys = prefs.pinnedPluginTools || []
   const availableTools = plugins.flatMap((plugin) =>
     plugin.enabled ? (plugin.contributions?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
@@ -149,6 +150,17 @@ export function ExplorerToolbar({
     const missing = defaults.filter((key) => !pinnedKeys.includes(key))
     if (missing.length) update({ pinnedPluginTools: [...pinnedKeys, ...missing] })
   }, [availableTools, pinnedKeys, update])
+  useEffect(() => {
+    const track = (event: globalThis.PointerEvent) => {
+      lastPointer.current = { x: event.clientX, y: event.clientY }
+    }
+    window.addEventListener('pointermove', track, true)
+    window.addEventListener('pointerdown', track, true)
+    return () => {
+      window.removeEventListener('pointermove', track, true)
+      window.removeEventListener('pointerdown', track, true)
+    }
+  }, [])
   const runTool = (
     plugin: (typeof plugins)[number],
     tool: PluginContribution,
@@ -164,7 +176,7 @@ export function ExplorerToolbar({
             icon: tool.icon,
             selection: x.selected,
             directory: x.path,
-            anchor,
+            anchor: anchor ?? lastPointer.current,
             source: 'toolbar',
           },
         }),

@@ -30,6 +30,9 @@ export interface PluginPanelRequest {
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
 
+const MAX_PANEL_WIDTH = 720
+const MAX_PANEL_HEIGHT = 680
+
 const PANEL_CSP =
   "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'\">"
 
@@ -93,8 +96,8 @@ export function PluginPanelHost() {
       setError('')
       const nextSize = req.size || { width: 560, height: 560 }
       setSize({
-        width: Math.min(nextSize.width, window.innerWidth - 40),
-        height: Math.min(nextSize.height, window.innerHeight - 92),
+        width: Math.min(MAX_PANEL_WIDTH, nextSize.width, window.innerWidth - 40),
+        height: Math.min(MAX_PANEL_HEIGHT, nextSize.height, window.innerHeight - 92),
       })
       void loadPanel(req.pluginId, req.panelId)
         .then((source) => {
@@ -204,8 +207,16 @@ export function PluginPanelHost() {
               const p = (params || {}) as { width?: number; height?: number }
               if (Number.isFinite(p.width) && Number.isFinite(p.height)) {
                 setSize({
-                  width: Math.min(window.innerWidth - 40, Math.max(320, Number(p.width))),
-                  height: Math.min(window.innerHeight - 92, Math.max(220, Number(p.height))),
+                  width: Math.min(
+                    MAX_PANEL_WIDTH,
+                    window.innerWidth - 40,
+                    Math.max(320, Number(p.width)),
+                  ),
+                  height: Math.min(
+                    MAX_PANEL_HEIGHT,
+                    window.innerHeight - 92,
+                    Math.max(220, Number(p.height)),
+                  ),
                 })
               }
               return null
@@ -384,7 +395,7 @@ export function PluginPanelHost() {
       }
     }
   }, [plugins])
-  const panelWidth = Math.min(size.width, window.innerWidth - 40)
+  const panelWidth = Math.min(MAX_PANEL_WIDTH, size.width, window.innerWidth - 40)
   return (
     <>
       {request && (
@@ -400,19 +411,28 @@ export function PluginPanelHost() {
             request.source === 'toolbar'
               ? {
                   width: panelWidth,
-                  height: Math.min(size.height + 52, window.innerHeight - 96 - 16),
+                  height: Math.min(
+                    size.height + 52,
+                    MAX_PANEL_HEIGHT + 52,
+                    window.innerHeight - 96 - 16,
+                  ),
                   top: 96,
-                  right: Math.max(
-                    18,
+                  left: Math.max(
+                    12,
                     Math.min(
-                      window.innerWidth - (request.anchor?.x ?? window.innerWidth - 18),
-                      window.innerWidth - panelWidth - 18,
+                      (request.anchor?.x ?? window.innerWidth - 18) - panelWidth / 2,
+                      window.innerWidth - panelWidth - 12,
                     ),
                   ),
+                  right: 'auto',
                 }
               : {
                   width: panelWidth,
-                  height: Math.min(size.height + 52, window.innerHeight - 40),
+                  height: Math.min(
+                    size.height + 52,
+                    MAX_PANEL_HEIGHT + 52,
+                    window.innerHeight - 40,
+                  ),
                 }
           }
         >

@@ -80,10 +80,19 @@ ID 是 **pluginId 内部命名空间**：相同 ID 在不同插件中不得混�
 ## 4. 资源加载与 iframe 隔离
 
 - PluginHost 安装时校验所有资产的路径、长度和摘要。宿主使用Core 管理的独立 origin iframe 加载 `index.html`；具体 URL scheme/host 是平台实现细节，不作为 Plugin Protocol 持久标识。不同插件和 Fiex 主界面不得同源。
-- 默认禁止外网脚本/样式、任意表单跳转、弹窗、顶层导航与非授权媒体。采用严格 CSP（尤其 `script-src 'self'`、`connect-src 'none'` 或经审查的允许集）；不允许 `unsafe-eval`。资源仅加载已安装包中的静态文件；不要给插件页面 Tauri capability 或 `window.__TAURI__`。
+- 默认禁止外网脚本/样式、任意表单跳转、弹窗、顶层导航与非授权媒体。插件文档使用自己的严格 CSP：允许内联的已编译 bundle（`script-src 'unsafe-inline'`、`style-src 'unsafe-inline'`），但 `default-src 'none'`、`connect-src 'none'`、`form-action 'none'`，不允许 `unsafe-eval`，也不允许外部 CDN。资源仅加载已安装包中的静态文件；不要给插件页面 Tauri capability 或 `window.__TAURI__`。
 - iframe 的 `sandbox` 策略按平台实施，至少限制 top navigation、非授权 popups、自动下载和表单提交。如果使用 `allow-scripts` 与 `allow-same-origin`，**MUST** 保证插件 iframe 与主页面永不属于同一 origin，并经过跨平台测试，不能只依赖 sandbox 进行隔离。
 - 用户文件不可直接暴露为普通 iframe URL。预览、下载、外链和选取文件必须通过授权 Bridge 或 Core 控制的资源句柄。
+- 桌面端不要把插件 HTML 直接塞进 `srcDoc`：srcdoc 会继承主窗口 CSP，打包版里的 `script-src 'self'` 会挡掉插件的内联 bundle。Core 将校验后的 HTML 写入内容寻址缓存，通过资产协议加载，并由插件文档自己的 CSP 约束。
 - UI 资源版本随安装包固定，前端与 Native 可共用包版本，但 UI Bridge `major/minor` **独立于**插件 Native IPC 版本。
+
+### 4.1 面板尺寸与位置
+
+- 插件在 manifest 的 `panel.defaultSize` 中声明自己需要的尺寸；具体大小由插件决定，宿主只负责校验和夹取。
+- 宿主最大内容区为 **720 × 680**（高度不含 52px 宿主标题栏）；最小为 **320 × 220**，且不能超出当前窗口。插件不得通过 `panel.resize`、CSS 或 `window.open` 突破这个上限。
+- 内容较短时插件应调用 `panel.resize` 请求缩小，避免留出大块空白；内容较多时保持上限并在 iframe 内滚动。
+- 右键菜单打开的面板在窗口居中；工具栏打开的面板顶部与状态中心对齐（`top: 96px`），横向锚定到点击图标时的鼠标 x 坐标（从右侧向内展开）。从“插件”下拉菜单打开时默认贴右上角。
+- `panel.resize` 只改变容器尺寸，不改变宿主标题栏、关闭按钮、焦点和沙箱边界。
 
 具体安全握手、消息和运行时能力由 [11 UI SDK](11-UI-SDK.md) 定义。
 
