@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { parent } from '@/lib/files'
+import { syncDecorationIcons } from '@/lib/decorationIcons'
 import type {
   Entry,
   EntryDecoration,
@@ -29,6 +30,9 @@ export function useExplorer(
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [globalSearch, setGlobalSearch] = useState(false)
+  useEffect(() => {
+    syncDecorationIcons(decorations)
+  }, [decorations])
   const [searching, setSearching] = useState(false)
   const [searchStats, setSearchStats] = useState('')
   const [history, setHistory] = useState<string[]>([])

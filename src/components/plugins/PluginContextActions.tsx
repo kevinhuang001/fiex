@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 import { call } from '@/lib/api'
 import { usePluginCatalog } from '@/lib/plugins'
+import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/PluginPanelHost'
 
 interface Item {
@@ -185,11 +186,12 @@ export function PluginContextActions({
           detail: {
             pluginId,
             panelId: item.id,
-            title: item.title,
+            title: item.panel.title || item.title,
             icon: item.icon || plugins.find((plugin) => plugin.id === pluginId)?.icon,
             selection: paths,
             directory: path,
             anchor,
+            source: 'contextMenu',
             size: item.panel.defaultSize,
           },
         }),
@@ -197,6 +199,8 @@ export function PluginContextActions({
       return
     }
     if (!item.command) return
+    const plugin = plugins.find((entry) => entry.id === pluginId)
+    let activityId = ''
     try {
       const args: Record<string, unknown> = { ...item.args, paths, path: paths[0], root: path }
       if (item.picker) {
@@ -209,15 +213,31 @@ export function PluginContextActions({
         if (!selected) return
         args[item.picker.param] = selected
       }
+      activityId = beginActivity(
+        `${plugin?.name || '插件'} · ${item.title}`,
+        `${paths.length} 个项目`,
+        undefined,
+        'plugin',
+      )
+      updateActivity(activityId, { indeterminate: true })
       const response = await call<unknown>('plugin_invoke', {
         pluginId,
         method: item.command,
         params: args,
       })
-      window.dispatchEvent(
-        new CustomEvent(PLUGIN_RESULT_EVENT, { detail: { title: item.title, result: response } }),
+      finishActivity(
+        activityId,
+        undefined,
+        typeof response === 'string' && response ? response : '已完成',
       )
+      // A path or null result belongs in the activity detail, not a modal.
+      if (response !== null && typeof response === 'object') {
+        window.dispatchEvent(
+          new CustomEvent(PLUGIN_RESULT_EVENT, { detail: { title: item.title, result: response } }),
+        )
+      }
     } catch (error) {
+      if (activityId) finishActivity(activityId, String(error))
       onError(String(error))
     }
   }

@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
+import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
 import type { Preferences } from '@/lib/types'
-import { Eye, Home, SlidersHorizontal, Sun } from 'lucide-react'
+import { Eye, Home, Palette, SlidersHorizontal, Sun } from 'lucide-react'
 
 export function AppearanceSettings({
   prefs,
@@ -9,9 +11,45 @@ export function AppearanceSettings({
   prefs: Preferences
   update: (p: Partial<Preferences>) => void
 }) {
+  const [themes, setThemes] = useState<Theme[]>([])
+  useEffect(() => {
+    let alive = true
+    const refresh = () => {
+      void installedThemes()
+        .then((items) => {
+          if (alive) setThemes(items)
+        })
+        .catch(() => {})
+    }
+    refresh()
+    window.addEventListener('fiex:plugins-changed', refresh)
+    return () => {
+      alive = false
+      window.removeEventListener('fiex:plugins-changed', refresh)
+    }
+  }, [])
   return (
     <>
       <div className="settings-card">
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-icon" style={{ background: '#8b5cf6' }}>
+              <Palette size={15} />
+            </span>
+            主题
+          </div>
+          <div className="settings-row-control">
+            <SelectField
+              label="主题"
+              value={prefs.themeId || ''}
+              options={[
+                { value: '', label: 'Fiex 默认' },
+                ...themes.map((theme) => ({ value: theme.id, label: theme.name })),
+              ]}
+              onChange={(themeId) => update({ themeId })}
+            />
+          </div>
+        </div>
         <div className="settings-row">
           <div className="settings-row-label">
             <span className="settings-row-icon" style={{ background: '#3b82f6' }}>
@@ -40,14 +78,16 @@ export function AppearanceSettings({
             </span>
             显示隐藏文件
           </div>
-          <button
-            role="switch"
-            aria-checked={prefs.hidden}
-            className="switch"
-            onClick={() => update({ hidden: !prefs.hidden })}
-          >
-            <i />
-          </button>
+          <div className="settings-row-control">
+            <button
+              role="switch"
+              aria-checked={prefs.hidden}
+              className="switch"
+              onClick={() => update({ hidden: !prefs.hidden })}
+            >
+              <i />
+            </button>
+          </div>
         </div>
         <div className="settings-row">
           <div className="settings-row-label">

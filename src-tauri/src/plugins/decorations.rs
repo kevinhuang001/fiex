@@ -45,6 +45,15 @@ pub struct DecorationStyle {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DecorationField {
+    #[serde(default)]
+    pub badges: Vec<DecorationBadge>,
+    #[serde(default)]
+    pub style: DecorationStyle,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Decoration {
     pub path: String,
     #[serde(default)]
@@ -55,6 +64,16 @@ pub struct Decoration {
     pub description: Option<String>,
     #[serde(default)]
     pub style: DecorationStyle,
+    /// Per-column decorations keyed by `name`, `modified`, `size`, `kind`
+    /// or `row`. `row` only accepts `style`.
+    #[serde(default)]
+    pub fields: HashMap<String, DecorationField>,
+    /// Namespaced reference (`fiex-resource://<plugin-id>/<resource-id>`).
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// Resolved absolute path for the renderer's asset protocol.
+    #[serde(default)]
+    pub icon_path: Option<String>,
     #[serde(default)]
     pub providers: Vec<String>,
 }
@@ -94,6 +113,8 @@ struct DecorationRule {
     description: Option<String>,
     #[serde(default)]
     style: Option<DecorationStyle>,
+    #[serde(default)]
+    fields: HashMap<String, DecorationField>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -107,8 +128,11 @@ struct DecorationMatcher {
 
 fn config(manifest: &PluginManifest) -> DecorationConfig {
     manifest
-        .contributions
-        .get("decorations")
+        .permissions
+        .folders
+        .read
+        .decorations
+        .as_ref()
         .and_then(|value| serde_json::from_value(value.clone()).ok())
         .unwrap_or_default()
 }
@@ -162,6 +186,57 @@ fn safe_style(value: DecorationStyle) -> DecorationStyle {
     }
 }
 
+fn style_is_empty(style: &DecorationStyle) -> bool {
+    style.color.is_none()
+        && style.background.is_none()
+        && style.font_weight.is_none()
+        && style.font_style.is_none()
+}
+
+fn merge_style(target: &mut DecorationStyle, source: &DecorationStyle) {
+    if source.color.is_some() {
+        target.color.clone_from(&source.color);
+    }
+    if source.background.is_some() {
+        target.background.clone_from(&source.background);
+    }
+    if source.font_weight.is_some() {
+        target.font_weight.clone_from(&source.font_weight);
+    }
+    if source.font_style.is_some() {
+        target.font_style.clone_from(&source.font_style);
+    }
+}
+
+fn safe_field(value: DecorationField) -> Option<DecorationField> {
+    let badges = value
+        .badges
+        .into_iter()
+        .filter_map(safe_badge)
+        .take(3)
+        .collect::<Vec<_>>();
+    let style = safe_style(value.style);
+    if badges.is_empty() && style_is_empty(&style) {
+        None
+    } else {
+        Some(DecorationField { badges, style })
+    }
+}
+
+fn safe_fields(fields: HashMap<String, DecorationField>) -> HashMap<String, DecorationField> {
+    fields
+        .into_iter()
+        .filter(|(key, _)| matches!(key.as_str(), "name" | "modified" | "size" | "kind" | "row"))
+        .filter_map(|(key, mut field)| {
+            // A row is not a value cell; only its style is meaningful.
+            if key == "row" {
+                field.badges.clear();
+            }
+            safe_field(field).map(|field| (key, field))
+        })
+        .collect()
+}
+
 fn marker_matches(directory: &str, marker: &str) -> bool {
     if marker.is_empty() || marker.contains(['/', '\\']) {
         return false;
@@ -194,23 +269,18 @@ fn merge(
     if !entries.contains_key(path) {
         return;
     }
-    let badges = value
-        .badges
-        .into_iter()
-        .filter_map(safe_badge)
-        .take(3)
-        .collect::<Vec<_>>();
-    let style = safe_style(value.style);
+    let mut fields = value.fields;
+    // Legacy `badge` / `badges` / `style` keep their original meaning: the
+    // file-name cell.
+    if !value.badges.is_empty() || !style_is_empty(&value.style) {
+        let name = fields.entry("name".into()).or_default();
+        name.badges.extend(value.badges);
+        merge_style(&mut name.style, &value.style);
+    }
+    let fields = safe_fields(fields);
     let label = safe_text(value.label.as_deref(), 120);
     let description = safe_text(value.description.as_deref(), 200);
-    if badges.is_empty()
-        && label.is_none()
-        && description.is_none()
-        && style.color.is_none()
-        && style.background.is_none()
-        && style.font_weight.is_none()
-        && style.font_style.is_none()
-    {
+    if fields.is_empty() && label.is_none() && description.is_none() && value.icon.is_none() {
         return;
     }
     let pending = result.entry(path.to_owned()).or_insert_with(|| Pending {
@@ -223,15 +293,16 @@ fn merge(
     if !pending.value.providers.iter().any(|item| item == provider) {
         pending.value.providers.push(provider.to_owned());
     }
-    for badge in badges {
-        if pending.value.badges.len() < 3
-            && !pending
-                .value
-                .badges
-                .iter()
-                .any(|item| item.text == badge.text)
-        {
-            pending.value.badges.push(badge);
+    for (key, field) in fields {
+        let target = pending.value.fields.entry(key).or_default();
+        for badge in field.badges {
+            if target.badges.len() < 3 && !target.badges.iter().any(|item| item.text == badge.text)
+            {
+                target.badges.push(badge);
+            }
+        }
+        if priority >= pending.priority {
+            merge_style(&mut target.style, &field.style);
         }
     }
     if priority >= pending.priority {
@@ -241,17 +312,9 @@ fn merge(
         if let Some(description) = description {
             pending.value.description = Some(description);
         }
-        if style.color.is_some() {
-            pending.value.style.color = style.color;
-        }
-        if style.background.is_some() {
-            pending.value.style.background = style.background;
-        }
-        if style.font_weight.is_some() {
-            pending.value.style.font_weight = style.font_weight;
-        }
-        if style.font_style.is_some() {
-            pending.value.style.font_style = style.font_style;
+        if value.icon.is_some() {
+            pending.value.icon = value.icon;
+            pending.value.icon_path = value.icon_path;
         }
     }
     pending.priority = pending.priority.max(priority);
@@ -286,6 +349,9 @@ fn apply_rules(
                 label: rule.label.clone(),
                 description: rule.description.clone(),
                 style: rule.style.clone().unwrap_or_default(),
+                fields: rule.fields.clone(),
+                icon: None,
+                icon_path: None,
                 providers: vec![],
             };
             merge(result, entries, &entry.path, priority, provider, value);
@@ -297,6 +363,7 @@ fn dynamic(
     result: &mut HashMap<String, Pending>,
     entries: &HashMap<String, DecorationEntry>,
     manifest: &PluginManifest,
+    folder: &std::path::Path,
     directory: &str,
     config: &DecorationConfig,
 ) {
@@ -311,8 +378,7 @@ fn dynamic(
         }
     }
     let declared = plugin_host::declared_permissions(manifest).unwrap_or_default();
-    if !crate::plugin_permissions::allowed(&manifest.id, &declared, "filesystem.read")
-        .unwrap_or(false)
+    if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read").unwrap_or(false)
     {
         return;
     }
@@ -320,7 +386,8 @@ fn dynamic(
         "directory": directory,
         "entries": entries.values().collect::<Vec<_>>(),
     });
-    let Ok(response) = plugin_host::global().invoke(&manifest.id, method, payload) else {
+    let Ok(response) = plugin_host::global().invoke_at(&manifest.id, method, payload, directory)
+    else {
         return;
     };
     let Some(items) = response.get("decorations").and_then(Value::as_array) else {
@@ -349,6 +416,20 @@ fn dynamic(
             .cloned()
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default();
+        let mut fields = HashMap::new();
+        if let Some(values) = item.get("fields").and_then(Value::as_object) {
+            for (key, value) in values {
+                if let Ok(field) = serde_json::from_value::<DecorationField>(value.clone()) {
+                    fields.insert(key.clone(), field);
+                }
+            }
+        }
+        let (icon, icon_path) = item
+            .get("icon")
+            .and_then(Value::as_str)
+            .and_then(|reference| crate::plugin_resources::resolve(manifest, folder, reference))
+            .map(|(namespace, path)| (Some(namespace), Some(path)))
+            .unwrap_or((None, None));
         let value = Decoration {
             path: path.into(),
             badges,
@@ -358,6 +439,9 @@ fn dynamic(
                 .and_then(Value::as_str)
                 .map(str::to_owned),
             style,
+            fields,
+            icon,
+            icon_path,
             providers: vec![],
         };
         merge(
@@ -377,13 +461,13 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
         .map(|entry| (entry.path.clone(), entry))
         .collect::<HashMap<_, _>>();
     let mut result = HashMap::new();
-    for (manifest, _) in plugin_host::installed_manifests() {
+    for (manifest, folder) in plugin_host::installed_manifests() {
         let config = config(&manifest);
         if config.mode == "none" || config.mode.is_empty() {
             continue;
         }
         let declared = plugin_host::declared_permissions(&manifest).unwrap_or_default();
-        if !crate::plugin_permissions::allowed(&manifest.id, &declared, "filesystem.read")
+        if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read")
             .unwrap_or(false)
         {
             continue;
@@ -396,7 +480,14 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
                 config.priority,
                 &config.rules,
             ),
-            "dynamic" => dynamic(&mut result, &entries, &manifest, directory, &config),
+            "dynamic" => dynamic(
+                &mut result,
+                &entries,
+                &manifest,
+                &folder,
+                directory,
+                &config,
+            ),
             _ => {}
         }
     }
@@ -429,6 +520,55 @@ mod tests {
             tooltip: None
         })
         .is_none());
+    }
+
+    #[test]
+    fn fields_are_sanitized_per_target() {
+        let mut fields = HashMap::new();
+        fields.insert(
+            "modified".into(),
+            DecorationField {
+                badges: vec![DecorationBadge {
+                    text: "新".into(),
+                    color: "green".into(),
+                    tooltip: None,
+                }],
+                style: DecorationStyle {
+                    color: Some("#c2410c".into()),
+                    ..Default::default()
+                },
+            },
+        );
+        fields.insert(
+            "row".into(),
+            DecorationField {
+                badges: vec![DecorationBadge {
+                    text: "R".into(),
+                    color: "red".into(),
+                    tooltip: None,
+                }],
+                style: DecorationStyle {
+                    background: Some("#fff9f0".into()),
+                    ..Default::default()
+                },
+            },
+        );
+        fields.insert(
+            "bogus".into(),
+            DecorationField {
+                style: DecorationStyle {
+                    color: Some("#000".into()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let safe = safe_fields(fields);
+        assert!(safe.contains_key("modified"));
+        assert!(safe.contains_key("row"));
+        assert!(!safe.contains_key("bogus"));
+        assert!(safe["row"].badges.is_empty());
+        assert_eq!(safe["modified"].style.color.as_deref(), Some("#c2410c"));
     }
 
     #[test]

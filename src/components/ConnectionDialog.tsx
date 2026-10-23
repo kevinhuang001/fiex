@@ -54,7 +54,9 @@ export function ConnectionDialog({
       Object.fromEntries(
         fields.map((field) => [
           field.id,
-          field.defaultValue ?? (field.type === 'checkbox' ? false : ''),
+          typeof field.defaultValue === 'object'
+            ? ''
+            : (field.defaultValue ?? (field.type === 'checkbox' ? false : '')),
         ]),
       ),
     )

@@ -21,6 +21,7 @@ import type { ReactNode } from 'react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
 interface ContextAction {
   disabled?: boolean
+  danger?: boolean
   label: string
   icon: ReactNode
   hint: string
@@ -209,6 +210,7 @@ export function FileContextMenu({
                     icon: <Trash2 />,
                     hint: hint('trash'),
                     disabled: x.directoryReadOnly,
+                    danger: true,
                     action: recycle,
                   },
               ...(inTrash
@@ -217,6 +219,7 @@ export function FileContextMenu({
                       label: '彻底删除',
                       icon: <Trash2 />,
                       hint: '',
+                      danger: true,
                       action: () =>
                         deletePermanently(
                           x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path],
@@ -269,6 +272,7 @@ export function FileContextMenu({
                 role="menuitem"
                 key={a.label}
                 disabled={a.disabled}
+                className={a.danger ? 'context-danger' : undefined}
                 onClick={() => {
                   a.action()
                   setMenu(null)

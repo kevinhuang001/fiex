@@ -1,0 +1,72 @@
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+  --color-background: var(--surface);
+  --color-foreground: var(--text);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--surface);
+  --color-secondary: var(--hover);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--hover);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--hover);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--danger);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-panel);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: default;
+}
+button:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+button {
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+button svg {
+  flex-shrink: 0;
+}
+button[data-slot='button'] svg {
+  width: 16px;
+  height: 16px;
+}
+button[data-slot='button'] {
+  border-radius: var(--radius-control);
+}
+button[data-slot='button'][data-size='icon'] {
+  width: 32px;
+  height: 32px;
+}
+button[data-slot='button'][data-variant='default'] {
+  background: var(--accent);
+  color: var(--canvas);
+}

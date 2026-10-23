@@ -24,7 +24,8 @@ for (const name of assets) {
 // Remove icons from older releases without deleting the directory itself:
 // recreating it would break a running Vite dev server's public-file index.
 for (const name of readdirSync(output))
-  if (name !== 'LICENSE' && !assets.has(name)) rmSync(join(output, name))
+  if (name !== 'LICENSE' && !assets.has(name))
+    rmSync(join(output, name), { recursive: true, force: true })
 // Material Icon Theme exposes folder colours through its configuration; apply
 // the same blue to the generic folder so it reads like Finder instead of the
 // upstream grey-blue. This only replaces a fill value in the MIT asset.

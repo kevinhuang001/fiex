@@ -62,8 +62,8 @@
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  color: #32875e;
-  background: color-mix(in srgb, #32875e 11%, var(--canvas));
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 11%, var(--canvas));
 }
 .activity-item.running .activity-icon,
 .activity-detail-hero.running .activity-detail-icon {
@@ -72,8 +72,8 @@
 }
 .activity-item.error .activity-icon,
 .activity-detail-hero.error .activity-detail-icon {
-  color: #bc6155;
-  background: color-mix(in srgb, #bc6155 11%, var(--canvas));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 11%, var(--canvas));
 }
 .activity-main {
   display: flex;
@@ -204,8 +204,8 @@
   white-space: pre-wrap;
 }
 .activity-detail-message.error {
-  color: #b6574d;
-  background: color-mix(in srgb, #bc6155 8%, var(--canvas));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--canvas));
 }
 .activity-detail-cancel {
   margin-top: 16px;

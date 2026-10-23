@@ -18,7 +18,7 @@ export function SelectField({
         <span>{options.find((option) => option.value === value)?.label || value}</span>
         <ChevronDown size={14} />
       </D.DropdownMenuTrigger>
-      <D.DropdownMenuContent className="fiex-menu select-menu" align="end">
+      <D.DropdownMenuContent className="fiex-menu select-menu" align="center">
         <D.DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           {options.map((option) => (
             <D.DropdownMenuRadioItem key={option.value} value={option.value}>

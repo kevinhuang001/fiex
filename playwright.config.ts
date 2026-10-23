@@ -14,7 +14,9 @@ export default defineConfig({
       : {},
   },
   webServer: {
-    command: 'npm run dev',
+    command: process.env.FIEX_E2E_PREVIEW
+      ? 'npx vite preview --host 127.0.0.1 --port 1420'
+      : 'npm run dev',
     url: 'http://127.0.0.1:1420',
     reuseExistingServer: !process.env.CI,
   },

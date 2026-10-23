@@ -101,11 +101,7 @@ fn ensure_provider_access(conn: &StoredConnection) -> Result<String, String> {
         .into_iter()
         .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
         .ok_or("连接插件未安装、启用或已被撤销授权")?;
-    let mut required = vec!["filesystem.read"];
-    if plugin.declared_permissions.iter().any(|p| p == "network") {
-        required.push("network");
-    }
-    for permission in required {
+    for permission in &plugin.declared_permissions {
         if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
             return Err(format!("插件权限未授权：{permission}"));
         }
@@ -403,9 +399,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     // Saving a connection is explicit user intent to reach this host. The
     // exact hostname is added to the plugin's own allowlist before validation.
     if let Some(domain) = connection_domain(&record.settings) {
-        if !crate::plugin_permissions::is_loopback_domain(&domain) {
-            crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
-        }
+        crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
     }
     crate::plugin_host::global().invoke(
         &plugin_id,

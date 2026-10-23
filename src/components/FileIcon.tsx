@@ -3,6 +3,7 @@ import { Link2 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { kind } from '@/lib/files'
 import { fileVisual } from '@/lib/fileIcons'
+import { useDecorationIcon } from '@/lib/decorationIcons'
 import type { Entry } from '@/lib/types'
 
 const cache = new Map<string, Promise<string | null>>()
@@ -56,6 +57,7 @@ function whenVisible(element: Element, callback: () => void) {
 export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number }) {
   const isApplication = kind(e) === '应用程序'
   const [native, setNative] = useState<string | null>(null)
+  const decorationIcon = useDecorationIcon(e.path)
   const ref = useRef<HTMLSpanElement>(null)
   const pixels = Math.min(
     512,
@@ -85,7 +87,9 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
   const generic = visual.generic ? (visual.folder ? 'generic-folder' : 'generic-file') : ''
   return (
     <span ref={ref} className="file-icon" style={{ width: size, height: size }}>
-      {isApplication && native ? (
+      {decorationIcon ? (
+        <img src={decorationIcon} alt="" draggable={false} />
+      ) : isApplication && native ? (
         <img src={native} alt="" draggable={false} onError={() => setNative(null)} />
       ) : (
         <img className={generic} src={visual.url} alt="" draggable={false} />

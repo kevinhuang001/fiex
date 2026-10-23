@@ -4,9 +4,10 @@ import { call, demo, native } from '@/lib/api'
 export interface PluginField {
   id: string
   label: string
-  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret'
+  /** `list` renders a row editor and stores a JSON array of strings. */
+  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret' | 'list'
   placeholder?: string
-  defaultValue?: string
+  defaultValue?: string | boolean | string[]
   required?: boolean
 }
 export interface PluginPanel {
@@ -52,6 +53,8 @@ export interface PluginInfo {
   allowedNetworkDomains: string[]
   requestedCommands: string[]
   allowedCommands: string[]
+  /** Requested commands that Core cannot resolve on PATH right now. */
+  missingCommands: string[]
   backendAvailable: boolean
   contributions?: {
     connections?: Array<{ id: string; title: string; fields: PluginField[] }>
@@ -59,6 +62,14 @@ export interface PluginInfo {
     contextMenus?: PluginContribution[]
     search?: Array<{ id: string; title: string; icon?: string }>
     settings?: PluginField[]
+    preview?: Array<{
+      id: string
+      title?: string
+      extensions: string[]
+      priority?: number
+      maxBytes?: number
+      panel: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
+    }>
   }
 }
 export async function pluginCatalog(): Promise<PluginInfo[]> {

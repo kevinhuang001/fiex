@@ -47,7 +47,7 @@
 ## 2. 权限行为
 
 - 所有插件都必须安装授权，不预置任何同意状态；首次安装批准的是当前 Manifest **已声明的权限**。
-- 设置页可启用、停用和逐项撤销 `filesystem.read`、`filesystem.write`、`network` 及单个域名。撤销后插件进程会停止并在下次启用时重启。私有 KV 与凭据代理不依赖这些权限。
+- 设置页可启用、停用和逐项撤销 `files.read`、`files.write`、`network` 及单个域名。撤销后插件进程会停止并在下次启用时重启。私有 KV 与凭据代理不依赖这些权限。
 - 新版本声明新增权限不会自动加入历史授权。
 - Node/JS 插件 UI 不获得 Tauri 全局 invoke；通过隔离 iframe 的 MessageChannel 请求宿主。
 - Linux/macOS/Windows 统一使用 Arapuca 进程沙箱；Windows AppContainer 启动器已接入，等待 CI 真机验证。域名白名单由插件进程校验，不等同于 OS 级网络过滤。

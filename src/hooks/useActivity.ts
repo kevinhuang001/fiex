@@ -1,6 +1,6 @@
 import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
-import { native } from '@/lib/api'
+import { demo, native } from '@/lib/api'
 import type { OperationProgress } from '@/lib/types'
 
 export type ActivityStatus = 'running' | 'done' | 'error'
@@ -15,6 +15,7 @@ export interface ActivityItem {
   finishedAt?: number
   detail?: string
   progress?: number
+  indeterminate?: boolean
   done?: number
   total?: number
   step?: string
@@ -54,6 +55,7 @@ function load(): ActivityItem[] {
         startedAt: Number(item.startedAt) || Date.now(),
         finishedAt: item.finishedAt ? Number(item.finishedAt) : undefined,
         detail: item.status === 'running' ? '应用已关闭' : item.detail,
+        indeterminate: Boolean(item.indeterminate),
       }))
   } catch {
     return []
@@ -91,7 +93,9 @@ export function beginActivity(
   ].slice(0, LIMIT)
   // Transfers and syncs surface their progress; other operations stay in
   // history without covering the window.
-  if (kind === 'transfer' || kind === 'sync') open = true
+  // Transfers, syncs and plugin tasks surface their progress; other
+  // operations stay in history without covering the window.
+  if (kind === 'transfer' || kind === 'sync' || kind === 'plugin') open = true
   if (cancel) cancellers.set(id, cancel)
   persist()
   emit()
@@ -100,7 +104,12 @@ export function beginActivity(
 
 export function updateActivity(
   id: string,
-  patch: Partial<Pick<ActivityItem, 'label' | 'progress' | 'done' | 'total' | 'step' | 'detail'>>,
+  patch: Partial<
+    Pick<
+      ActivityItem,
+      'label' | 'progress' | 'indeterminate' | 'done' | 'total' | 'step' | 'detail'
+    >
+  >,
 ) {
   let changed = false
   items = items.map((item) => {
@@ -119,9 +128,22 @@ export function updateActivity(
 }
 
 export function progressChannel(id: string) {
-  // The browser fixture has no Tauri internals; channels only exist in the
-  // desktop webview.
-  if (!native) return undefined
+  // The browser fixture has no Tauri internals, so it receives a plain object
+  // whose `onmessage` the demo mock can call to simulate a progress channel.
+  if (!native) {
+    if (!demo) return undefined
+    const channel = {
+      onmessage: undefined as ((progress: OperationProgress) => void) | undefined,
+    }
+    channel.onmessage = ({ done, total, step }) =>
+      updateActivity(id, {
+        done,
+        total,
+        progress: total > 0 ? done / total : undefined,
+        step: step || undefined,
+      })
+    return channel as unknown as Channel<OperationProgress>
+  }
   const channel = new Channel<OperationProgress>()
   channel.onmessage = ({ done, total, step }) =>
     updateActivity(id, {

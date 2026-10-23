@@ -16,8 +16,18 @@ import { InlineRename } from './InlineRename'
 import { TagDots } from '../TagDots'
 import { asset, call, native } from '@/lib/api'
 import { startFileDrag } from '@/lib/drag'
+import { useDecorationIcon } from '@/lib/decorationIcons'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
-import type { Entry, Listing, Preferences } from '@/lib/types'
+import type {
+  DecorationBadge,
+  DecorationField,
+  DecorationStyle,
+  DecorationTarget,
+  Entry,
+  EntryDecoration,
+  Listing,
+  Preferences,
+} from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { CSSProperties } from 'react'
 
@@ -82,6 +92,83 @@ function SyncBadge({ sync }: { sync: Entry['sync'] }) {
   )
 }
 
+function fieldOf(
+  decoration: EntryDecoration | undefined,
+  target: DecorationTarget,
+): DecorationField | undefined {
+  const field = decoration?.fields?.[target]
+  if (field) return field
+  if (target === 'name' && decoration) return { badges: decoration.badges, style: decoration.style }
+  return undefined
+}
+
+function styleOf(style: DecorationStyle | undefined): CSSProperties | undefined {
+  if (!style) return undefined
+  return {
+    color: style.color,
+    fontWeight: style.fontWeight as CSSProperties['fontWeight'],
+    fontStyle: style.fontStyle as CSSProperties['fontStyle'],
+    background: style.background,
+  }
+}
+
+function Badges({ badges }: { badges?: DecorationBadge[] }) {
+  return (
+    <>
+      {badges?.map((badge) => (
+        <span
+          key={`${badge.text}-${badge.color}`}
+          className={`decoration-badge ${badge.color.startsWith('#') ? 'custom' : badge.color}`}
+          style={
+            badge.color.startsWith('#')
+              ? { color: badge.color, borderColor: badge.color }
+              : undefined
+          }
+          title={badge.tooltip}
+        >
+          {badge.text}
+        </span>
+      ))}
+    </>
+  )
+}
+
+function DecoratedValue({
+  decoration,
+  target,
+  children,
+}: {
+  decoration: EntryDecoration | undefined
+  target: Exclude<DecorationTarget, 'name' | 'row'>
+  children: React.ReactNode
+}) {
+  const field = fieldOf(decoration, target)
+  return (
+    <span className="decorated-value" style={styleOf(field?.style)}>
+      {children}
+      <Badges badges={field?.badges} />
+    </span>
+  )
+}
+
+function rowVars(decoration: EntryDecoration | undefined): {
+  className: string
+  style?: CSSProperties
+} {
+  const style = fieldOf(decoration, 'row')?.style
+  if (!style) return { className: '' }
+  const vars = {
+    '--decoration-color': style.color,
+    '--decoration-weight': style.fontWeight,
+    '--decoration-font-style': style.fontStyle,
+    '--decoration-bg': style.background,
+  } as CSSProperties
+  return {
+    className: ` decorated${style.background ? ' decorated-bg' : ''}`,
+    style: vars,
+  }
+}
+
 function NameCell({
   explorer,
   entry,
@@ -101,14 +188,8 @@ function NameCell({
       />
     )
   const decoration = explorer.decorations?.[entry.path]
-  const style = decoration?.style
-    ? {
-        color: decoration.style.color,
-        fontWeight: decoration.style.fontWeight,
-        fontStyle: decoration.style.fontStyle,
-        background: decoration.style.background,
-      }
-    : undefined
+  const field = fieldOf(decoration, 'name')
+  const style = styleOf(field?.style)
   const title = [entry.name, decoration?.description, decoration?.providers?.join(' · ')]
     .filter(Boolean)
     .join(' · ')
@@ -118,20 +199,7 @@ function NameCell({
       <span className={className} style={style} title={title}>
         {entry.name}
       </span>
-      {decoration?.badges.map((badge) => (
-        <span
-          key={`${badge.text}-${badge.color}`}
-          className={`decoration-badge ${badge.color.startsWith('#') ? 'custom' : badge.color}`}
-          style={
-            badge.color.startsWith('#')
-              ? { color: badge.color, borderColor: badge.color }
-              : undefined
-          }
-          title={badge.tooltip}
-        >
-          {badge.text}
-        </span>
-      ))}
+      <Badges badges={field?.badges} />
       {label !== entry.name && <small className="decoration-label">{label}</small>}
     </>
   )
@@ -471,6 +539,8 @@ export function FileViews(props: Props) {
           <div style={{ height: virtual.getTotalSize(), position: 'relative' }}>
             {virtual.getVirtualItems().map((row) => {
               const item = flat[row.index]
+              const decoration = item.entry ? x.decorations?.[item.entry.path] : undefined
+              const rowDecor = rowVars(decoration)
               return (
                 <div
                   key={item.entry?.path || item.heading}
@@ -486,7 +556,8 @@ export function FileViews(props: Props) {
                   {item.entry ? (
                     <div
                       role="row"
-                      className={`file-row ${selectedPaths.has(item.entry.path) ? 'selected' : ''}`}
+                      className={`file-row ${selectedPaths.has(item.entry.path) ? 'selected' : ''}${rowDecor.className}`}
+                      style={rowDecor.style}
                       {...shared(item.entry)}
                     >
                       <span className="file-name">
@@ -498,9 +569,15 @@ export function FileViews(props: Props) {
                           <small>只读</small>
                         )}
                       </span>
-                      <span>{date(item.entry.modified)}</span>
-                      <span>{item.entry.isDir ? '—' : size(item.entry.size)}</span>
-                      <span>{kind(item.entry)}</span>
+                      <DecoratedValue decoration={decoration} target="modified">
+                        {date(item.entry.modified)}
+                      </DecoratedValue>
+                      <DecoratedValue decoration={decoration} target="size">
+                        {item.entry.isDir ? '—' : size(item.entry.size)}
+                      </DecoratedValue>
+                      <DecoratedValue decoration={decoration} target="kind">
+                        {kind(item.entry)}
+                      </DecoratedValue>
                     </div>
                   ) : (
                     <div className="group-heading">{item.heading}</div>
@@ -540,21 +617,26 @@ export function FileViews(props: Props) {
               rowHeight={iconSize + 76}
               scrollRef={container}
               target={x.renaming || x.selected.at(-1) || null}
-              render={(e) => (
-                <div
-                  role="gridcell"
-                  className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}`}
-                  key={e.path}
-                  {...shared(e)}
-                >
-                  <span className="tile-icon">
-                    <Thumbnail entry={e} size={iconSize} />
-                  </span>
-                  <NameCell explorer={x} entry={e} className="tile-label" />
-                  <TagDots tags={e.tags} />
-                  <SyncBadge sync={e.sync} />
-                </div>
-              )}
+              render={(e) => {
+                const decoration = x.decorations?.[e.path]
+                const rowDecor = rowVars(decoration)
+                return (
+                  <div
+                    role="gridcell"
+                    className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}${rowDecor.className}`}
+                    key={e.path}
+                    style={rowDecor.style}
+                    {...shared(e)}
+                  >
+                    <span className="tile-icon">
+                      <Thumbnail entry={e} size={iconSize} />
+                    </span>
+                    <NameCell explorer={x} entry={e} className="tile-label" />
+                    <TagDots tags={e.tags} />
+                    <SyncBadge sync={e.sync} />
+                  </div>
+                )
+              }}
             />
           ) : (
             groups(entries, prefs.group).map(([heading, files]) => (
@@ -575,21 +657,26 @@ export function FileViews(props: Props) {
                     if (event.target === event.currentTarget) x.setSelected([])
                   }}
                 >
-                  {files.map((e) => (
-                    <div
-                      role="gridcell"
-                      className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}`}
-                      key={e.path}
-                      {...shared(e)}
-                    >
-                      <span className="tile-icon">
-                        <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
-                      </span>
-                      <NameCell explorer={x} entry={e} className="tile-label" />
-                      <TagDots tags={e.tags} />
-                      <SyncBadge sync={e.sync} />
-                    </div>
-                  ))}
+                  {files.map((e) => {
+                    const decoration = x.decorations?.[e.path]
+                    const rowDecor = rowVars(decoration)
+                    return (
+                      <div
+                        role="gridcell"
+                        className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}${rowDecor.className}`}
+                        key={e.path}
+                        style={rowDecor.style}
+                        {...shared(e)}
+                      >
+                        <span className="tile-icon">
+                          <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
+                        </span>
+                        <NameCell explorer={x} entry={e} className="tile-label" />
+                        <TagDots tags={e.tags} />
+                        <SyncBadge sync={e.sync} />
+                      </div>
+                    )
+                  })}
                 </div>
               </section>
             ))
@@ -608,7 +695,18 @@ export function FileViews(props: Props) {
 
 function Thumbnail({ entry: e, size: s }: { entry: Entry; size: number }) {
   const [failed, setFailed] = useState(false)
+  const decorationIcon = useDecorationIcon(e.path)
   useEffect(() => setFailed(false), [e.path])
+  if (decorationIcon)
+    return (
+      <img
+        className="thumbnail"
+        style={{ width: s, height: s }}
+        src={decorationIcon}
+        alt=""
+        draggable={false}
+      />
+    )
   if (isImage(e) && !failed && asset(e.path))
     return (
       <img
@@ -680,25 +778,30 @@ function Columns({
       entries={files}
       prefs={prefs}
       target={current ? x.selected.at(-1) : x.path}
-      render={(e) => (
-        <div
-          key={e.path}
-          className={`column-row ${selectedPaths.has(e.path) || e.path === x.path ? 'selected' : ''}`}
-          data-drop-folder={e.isDir ? e.path : undefined}
-          {...(current
-            ? shared(e)
-            : {
-                onClick: () => (e.isDir ? x.navigate(e.path) : onPreview(e)),
-                onDoubleClick: () => onOpen(e),
-              })}
-        >
-          <FileIcon entry={e} size={24} />
-          <NameCell explorer={x} entry={e} className="column-label" />
-          <TagDots tags={e.tags} size={6} />
-          <SyncBadge sync={e.sync} />
-          {e.isDir && <ChevronRight size={13} />}
-        </div>
-      )}
+      render={(e) => {
+        const decoration = x.decorations?.[e.path]
+        const rowDecor = rowVars(decoration)
+        return (
+          <div
+            key={e.path}
+            className={`column-row ${selectedPaths.has(e.path) || e.path === x.path ? 'selected' : ''}${rowDecor.className}`}
+            style={rowDecor.style}
+            data-drop-folder={e.isDir ? e.path : undefined}
+            {...(current
+              ? shared(e)
+              : {
+                  onClick: () => (e.isDir ? x.navigate(e.path) : onPreview(e)),
+                  onDoubleClick: () => onOpen(e),
+                })}
+          >
+            <FileIcon entry={e} size={24} />
+            <NameCell explorer={x} entry={e} className="column-label" />
+            <TagDots tags={e.tags} size={6} />
+            <SyncBadge sync={e.sync} />
+            {e.isDir && <ChevronRight size={13} />}
+          </div>
+        )
+      }}
     />
   )
   return (

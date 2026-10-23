@@ -20,7 +20,7 @@ Core 拥有搜索框、防抖、取消、结果合并和展示；搜索插件只
 }
 ```
 
-`scope`：`global` 或 `directory`。搜索注册本身不需要权限；索引本地内容通常需要 `filesystem.read`。
+`scope`：`global` 或 `directory`。搜索注册本身不需要权限；索引本地内容通常需要 `files.read`。
 
 ## 查询
 

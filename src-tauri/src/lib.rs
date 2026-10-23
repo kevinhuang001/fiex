@@ -16,12 +16,22 @@ mod native_drag;
 pub mod operations;
 #[path = "plugins/decorations.rs"]
 pub mod plugin_decorations;
+#[path = "plugins/errors.rs"]
+pub mod plugin_errors;
+#[path = "plugins/fs_access.rs"]
+pub mod plugin_fs_access;
 #[path = "plugins/host.rs"]
 pub mod plugin_host;
 #[path = "plugins/installer.rs"]
 pub mod plugin_installer;
+#[path = "plugins/ipc.rs"]
+pub mod plugin_ipc;
+#[path = "plugins/net.rs"]
+pub mod plugin_net;
 #[path = "plugins/permissions.rs"]
 pub mod plugin_permissions;
+#[path = "plugins/resources.rs"]
+pub mod plugin_resources;
 #[path = "plugins/signing.rs"]
 pub mod plugin_signing;
 pub use fiex_plugin_sdk as plugin_sdk;
@@ -31,6 +41,8 @@ pub mod plugin_sandbox;
 pub mod plugin_search;
 #[path = "plugins/storage.rs"]
 pub mod plugin_storage;
+#[path = "plugins/themes.rs"]
+pub mod plugin_themes;
 #[path = "plugins/vfs.rs"]
 pub mod plugin_vfs;
 #[path = "core/recent.rs"]

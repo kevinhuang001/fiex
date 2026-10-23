@@ -10,23 +10,16 @@ import {
   Hash,
   LoaderCircle,
   Puzzle,
-  RefreshCw,
   Search,
   Server,
   Shield,
-  Store,
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { pluginMarketplace, type MarketplacePlugin } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 
-export const permissionTitles: Record<string, string> = {
-  'filesystem.read': '读取文件',
-  'filesystem.write': '修改文件',
-  network: '网络访问',
-  commands: '执行命令',
-}
+import { permissionLabels as permissionTitles } from '@/lib/pluginPermissions'
 
 interface InstallPreview {
   ticket: string
@@ -47,7 +40,7 @@ interface InstallPreview {
   fingerprint?: string
 }
 
-function pluginIcon(icon?: string) {
+export function pluginIcon(icon?: string) {
   const icons: Record<string, ReactNode> = {
     'git-branch': <GitBranch size={21} />,
     cloud: <Cloud size={21} />,
@@ -101,8 +94,8 @@ export function PluginInstaller({
     if (!open) return
     setPreview(null)
     setMessage('')
-    if (!entries.length) load()
-    // The catalog is intentionally fetched once per settings session.
+    load()
+    // Refresh the catalog each time the store opens; there is no manual button.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -160,30 +153,19 @@ export function PluginInstaller({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title="获取插件" wide className="plugin-store-modal">
+      <Modal open={open} onClose={onClose} title="获取插件" className="plugin-store-modal">
         <div className="plugin-store">
-          <header className="plugin-store-hero">
-            <div className="plugin-store-hero-icon">
-              <Store size={24} />
-            </div>
-            <div>
-              <strong>Fiex 官方插件</strong>
-              <p>按需安装。所有插件都需要你审核权限后才会运行。</p>
-            </div>
-            <Button variant="outline" size="sm" disabled={loading} onClick={load}>
-              {loading ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}
-              刷新
-            </Button>
-          </header>
-          <label className="plugin-store-search">
-            <Search size={15} />
-            <input
-              aria-label="搜索插件"
-              placeholder="搜索插件"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
+          <div className="plugin-store-tools">
+            <label className="plugin-store-search">
+              <Search size={15} />
+              <input
+                aria-label="搜索插件"
+                placeholder="搜索插件"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          </div>
           {error && (
             <p role="alert" className="connection-error">
               {error}
@@ -204,24 +186,21 @@ export function PluginInstaller({
                 const installed = installedIds.includes(entry.id)
                 return (
                   <article className="plugin-store-card" key={entry.id}>
-                    <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
-                      {pluginIcon(entry.icon)}
-                    </div>
-                    <div className="plugin-store-main">
-                      <div className="plugin-store-title">
-                        <strong>{entry.name}</strong>
-                        <span className="plugin-pill">v{entry.version}</span>
-                        {installed && (
-                          <span className="plugin-pill success">
-                            <Check size={11} /> 已安装
-                          </span>
-                        )}
+                    <div className="plugin-store-card-head">
+                      <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
+                        {pluginIcon(entry.icon)}
                       </div>
-                      <p>{entry.description || '没有提供说明。'}</p>
-                      <div className="plugin-store-meta">
-                        <span>{entry.author?.name || 'Fiex Contributors'}</span>
-                        <span aria-hidden>·</span>
-                        <span>{entry.permissions.length} 项权限</span>
+                      <div className="plugin-store-main">
+                        <div className="plugin-store-title">
+                          <strong>{entry.name}</strong>
+                          <span className="plugin-pill">v{entry.version}</span>
+                          {installed && (
+                            <span className="plugin-pill success">
+                              <Check size={11} /> 已安装
+                            </span>
+                          )}
+                        </div>
+                        <p>{entry.description || '没有提供说明。'}</p>
                       </div>
                     </div>
                     <Button
@@ -248,9 +227,6 @@ export function PluginInstaller({
               )}
             </div>
           )}
-          <p className="plugin-store-footnote">
-            安装包来自 GitHub Release。插件以独立进程运行，权限由 Fiex 宿主校验。
-          </p>
         </div>
       </Modal>
       <Modal open={Boolean(preview)} title="确认插件安装及权限" onClose={discard}>
@@ -344,7 +320,7 @@ export function PluginInstaller({
               取消
             </Button>
             <Button type="button" disabled={installing} onClick={() => void confirm()}>
-              {installing ? '安装中…' : '同意权限并安装'}
+              {installing ? '安装中…' : '安装（权限默认关闭）'}
             </Button>
           </footer>
         </div>

@@ -201,8 +201,26 @@ const fixturePlugins: DemoPlugin[] = [
     approved: true,
     backendAvailable: true,
     capabilities: ['filesystem', 'toolbar', 'commands'],
-    declaredPermissions: ['filesystem.read', 'filesystem.write', 'network', 'commands'],
-    grantedPermissions: ['filesystem.read', 'filesystem.write', 'network', 'commands'],
+    declaredPermissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+      'network',
+      'commands',
+    ],
+    grantedPermissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+      'network',
+      'commands',
+    ],
     requestedNetworkDomains: ['github.com'],
     allowedNetworkDomains: ['github.com'],
     requestedCommands: ['git'],
@@ -232,8 +250,8 @@ const fixturePlugins: DemoPlugin[] = [
     approved: true,
     backendAvailable: true,
     capabilities: ['commands', 'contextMenu'],
-    declaredPermissions: ['filesystem.read'],
-    grantedPermissions: ['filesystem.read'],
+    declaredPermissions: ['folders.read', 'files.read'],
+    grantedPermissions: ['folders.read', 'files.read'],
     requestedNetworkDomains: [],
     allowedNetworkDomains: [],
     author: { name: 'Fiex Contributors' },
@@ -294,8 +312,28 @@ const officialPlugins: DemoPlugin[] = officialMode
         approved: true,
         backendAvailable: true,
         capabilities: ['filesystem', 'toolbar', 'panel'],
-        declaredPermissions: ['filesystem.read', 'filesystem.write', 'network'],
-        grantedPermissions: ['filesystem.read', 'filesystem.write', 'network'],
+        declaredPermissions: [
+          'folders.read',
+          'folders.create',
+          'folders.delete',
+          'folders.rename',
+          'files.read',
+          'files.write',
+          'network',
+          'commands',
+        ],
+        grantedPermissions: [
+          'folders.read',
+          'folders.create',
+          'folders.delete',
+          'folders.rename',
+          'files.read',
+          'files.write',
+          'network',
+          'commands',
+        ],
+        requestedCommands: ['git'],
+        allowedCommands: ['git'],
         requestedNetworkDomains: ['github.com'],
         allowedNetworkDomains: ['github.com'],
         author: { name: 'Fiex Contributors' },
@@ -309,7 +347,7 @@ const officialPlugins: DemoPlugin[] = officialMode
               panel: {
                 entry: 'ui/dist/index.html',
                 title: '源代码管理',
-                defaultSize: { width: 560, height: 620 },
+                defaultSize: { width: 480, height: 300 },
               },
             },
           ],
@@ -327,8 +365,22 @@ const officialPlugins: DemoPlugin[] = officialMode
         approved: true,
         backendAvailable: true,
         capabilities: ['contextMenu', 'panel'],
-        declaredPermissions: ['filesystem.read', 'filesystem.write'],
-        grantedPermissions: ['filesystem.read', 'filesystem.write'],
+        declaredPermissions: [
+          'folders.read',
+          'folders.create',
+          'folders.delete',
+          'folders.rename',
+          'files.read',
+          'files.write',
+        ],
+        grantedPermissions: [
+          'folders.read',
+          'folders.create',
+          'folders.delete',
+          'folders.rename',
+          'files.read',
+          'files.write',
+        ],
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
@@ -346,7 +398,7 @@ const officialPlugins: DemoPlugin[] = officialMode
                   panel: {
                     entry: 'ui/dist/index.html',
                     title: '高级压缩',
-                    defaultSize: { width: 520, height: 320 },
+                    defaultSize: { width: 400, height: 420 },
                   },
                 },
               ],
@@ -356,6 +408,97 @@ const officialPlugins: DemoPlugin[] = officialMode
               title: '解压缩',
               when: 'context.selection.isArchive',
               command: 'archive.extract',
+            },
+          ],
+          settings: [
+            {
+              id: 'compressIgnores',
+              label: '压缩时忽略的文件或目录',
+              type: 'list',
+              defaultValue: ['.git', 'node_modules'],
+            },
+            {
+              id: 'extractIgnores',
+              label: '解压时忽略的文件或目录',
+              type: 'list',
+              defaultValue: ['__MACOSX'],
+            },
+          ],
+        },
+      },
+      {
+        id: 'org.fiex.gpg',
+        name: 'GPG',
+        version: '0.1.0',
+        description: '使用本机 GnuPG 加密、解密、签名、验签及管理公钥。',
+        enabled: true,
+        approved: true,
+        backendAvailable: true,
+        capabilities: ['contextMenu', 'panel'],
+        declaredPermissions: ['commands'],
+        grantedPermissions: ['commands'],
+        requestedCommands: ['gpg'],
+        allowedCommands: ['gpg'],
+        requestedNetworkDomains: [],
+        allowedNetworkDomains: [],
+        author: { name: 'Fiex Contributors' },
+        contributions: {
+          toolbar: [
+            {
+              id: 'gpg.keys',
+              title: '公钥管理',
+              icon: 'key-round',
+              panel: {
+                entry: 'ui/dist/index.html',
+                title: 'GPG 公钥管理',
+                defaultSize: { width: 420, height: 460 },
+              },
+            },
+          ],
+          contextMenus: [
+            {
+              id: 'gpg.menu',
+              title: 'GPG',
+              when: 'context.selection.count > 0',
+              children: [
+                {
+                  id: 'gpg.encrypt',
+                  title: '加密…',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: 'GPG 加密',
+                    defaultSize: { width: 560, height: 520 },
+                  },
+                },
+                {
+                  id: 'gpg.decrypt',
+                  title: '解密…',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: 'GPG 解密',
+                    defaultSize: { width: 520, height: 400 },
+                  },
+                },
+                {
+                  id: 'gpg.sign',
+                  title: '签名…',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: 'GPG 签名',
+                    defaultSize: { width: 540, height: 470 },
+                  },
+                },
+                {
+                  id: 'gpg.verify',
+                  title: '验证签名…',
+                  when: 'context.selection.count == 1',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: '验证签名',
+                    defaultSize: { width: 520, height: 420 },
+                  },
+                },
+              ],
             },
           ],
         },
@@ -369,8 +512,8 @@ const officialPlugins: DemoPlugin[] = officialMode
         approved: true,
         backendAvailable: true,
         capabilities: ['contextMenu', 'panel'],
-        declaredPermissions: ['filesystem.read'],
-        grantedPermissions: ['filesystem.read'],
+        declaredPermissions: ['folders.read', 'files.read'],
+        grantedPermissions: ['folders.read', 'files.read'],
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
@@ -383,7 +526,7 @@ const officialPlugins: DemoPlugin[] = officialMode
               panel: {
                 entry: 'ui/dist/index.html',
                 title: '校验和',
-                defaultSize: { width: 540, height: 520 },
+                defaultSize: { width: 540, height: 300 },
               },
             },
           ],
@@ -391,6 +534,22 @@ const officialPlugins: DemoPlugin[] = officialMode
       },
     ]
   : []
+const demoGpgKeys = [
+  {
+    fingerprint: '0123456789ABCDEF0123456789ABCDEF01234567',
+    keyId: '01234567',
+    name: 'Ada Lovelace <ada@example.org>',
+    email: 'ada@example.org',
+    expires: '',
+  },
+  {
+    fingerprint: 'AAAABBBBCCCCDDDDEEEEFFFF00001111222233334444',
+    keyId: '22223333',
+    name: 'Fiex Release Signing <release@fiex.app>',
+    email: 'release@fiex.app',
+    expires: '',
+  },
+]
 const demoPlugins: DemoPlugin[] = officialMode
   ? structuredClone(officialPlugins)
   : query.has('pluginFixture')
@@ -403,7 +562,15 @@ const marketplace = [
     version: '0.1.0',
     description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
     author: { name: 'Fiex Contributors' },
-    permissions: ['filesystem.read', 'filesystem.write', 'network'],
+    permissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+      'network',
+    ],
     requestedNetworkDomains: ['github.com'],
     asset: 'git-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
@@ -429,7 +596,15 @@ const marketplace = [
     version: '0.1.0',
     description: '连接 WebDAV 服务器，目录按需读取，不落地零字节占位文件。',
     author: { name: 'Fiex Contributors' },
-    permissions: ['filesystem.read', 'network'],
+    permissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+      'network',
+    ],
     requestedNetworkDomains: [],
     commands: [],
     asset: 'webdav-linux-x86_64.fiexplugin',
@@ -455,7 +630,15 @@ const marketplace = [
     version: '0.1.0',
     description: '通过独立进程连接 SMB / NAS 共享。',
     author: { name: 'Fiex Contributors' },
-    permissions: ['filesystem.read', 'network'],
+    permissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+      'network',
+    ],
     requestedNetworkDomains: [],
     commands: [],
     asset: 'smb-linux-x86_64.fiexplugin',
@@ -482,7 +665,14 @@ const marketplace = [
     version: '0.1.0',
     description: '压缩与解压 ZIP、7z、TAR 等格式。',
     author: { name: 'Fiex Contributors' },
-    permissions: ['filesystem.read', 'filesystem.write'],
+    permissions: [
+      'folders.read',
+      'folders.create',
+      'folders.delete',
+      'folders.rename',
+      'files.read',
+      'files.write',
+    ],
     requestedNetworkDomains: [],
     asset: 'archive-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
@@ -511,7 +701,7 @@ const marketplace = [
     version: '0.1.0',
     description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
     author: { name: 'Fiex Contributors' },
-    permissions: ['filesystem.read'],
+    permissions: ['folders.read', 'files.read'],
     requestedNetworkDomains: [],
     asset: 'checksum-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
@@ -535,6 +725,12 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
   switch (command) {
     case 'plugins_list':
       return structuredClone(demoPlugins)
+    case 'plugin_errors':
+      return []
+    case 'plugin_error_report':
+      return null
+    case 'plugin_error_clear':
+      return null
     case 'plugin_panel_html': {
       if (officialMode) {
         const slug =
@@ -546,7 +742,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         return await response.text()
       }
       if (query.has('pluginFixture'))
-        return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selection||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
+        return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type==='fiex.bridge.probe'){window.parent.postMessage({type:'fiex.bridge.listening'},'*');return;}\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selectionPaths||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
       throw new Error('No installed fixture plugin')
     }
     case 'plugin_invoke': {
@@ -562,6 +758,16 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         if (method === 'git.refs')
           return { head: 'bbbbbbbb', current: 'main', branches: ['main'], tags: [] }
         if (method === 'git.history') return demoHistory
+        if (method === 'gpg.info') return { version: 'gpg (GnuPG) 2.4.5' }
+        if (method === 'gpg.keys') return demoGpgKeys
+        if (method === 'gpg.verify')
+          return {
+            valid: true,
+            signer: demoGpgKeys[0].name,
+            fingerprint: demoGpgKeys[0].fingerprint,
+          }
+        if (method === 'gpg.import') return { imported: 1, status: 'demo' }
+        if (method.startsWith('gpg.')) return { ok: true, status: 'demo' }
         if (method === 'git.identity') return { name: 'Kevin Huang', email: 'kevin@example.com' }
         if (method === 'git.remoteStatus')
           return {
@@ -605,8 +811,19 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           return [
             {
               path: entry.path,
-              badges: [{ text: 'M', color: 'orange', tooltip: 'Git：已修改' }],
-              style: { color: '#c2710c', fontWeight: '600' },
+              badges: [],
+              fields: {
+                name: {
+                  badges: [{ text: 'M', color: 'orange', tooltip: 'Git：已修改' }],
+                  style: { color: '#c2710c', fontWeight: '600' },
+                },
+                modified: { style: { color: '#c2710c' } },
+                size: { badges: [{ text: '新', color: 'green' }] },
+                kind: { style: { color: '#2f6f9f' } },
+                row: { style: { background: '#fff9f0' } },
+              },
+              icon: 'fiex-resource://org.example.icon-theme/markdown',
+              iconPath: '/plugin-icons/plugin-markdown.svg',
               providers: ['Git'],
             },
           ]
@@ -625,6 +842,23 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       if (a.mode === 'saveFile') return '/Users/kevin/Documents/Archive.zip'
       if (a.mode === 'openFile') return '/Users/kevin/Documents/Archive.zip'
       return '/Users/kevin/Documents'
+    case 'plugin_prepare_local_install':
+      return {
+        ticket: 'demo-local-install',
+        id: 'org.example.local',
+        name: '本地示例插件',
+        version: '1.2.3',
+        author: { name: 'Example Author' },
+        permissions: ['folders.read', 'files.read'],
+        requestedNetworkDomains: [],
+        commands: [],
+        signed: true,
+        trusted: false,
+        publisher: 'example',
+        publisherName: 'Example Publisher',
+        keyId: 'demo-key',
+        fingerprint: 'AB12 CD34 EF56 7890',
+      }
     case 'plugin_files_dialog':
       return ['/Users/kevin/Documents/Notes.md']
     case 'plugin_network_domains':
@@ -703,7 +937,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           name: entry.name,
           version: entry.version,
           description: entry.description,
-          enabled: true,
+          enabled: false,
           approved: true,
           backendAvailable: true,
           capabilities: entry.capabilities || [],
@@ -725,6 +959,22 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       if (index >= 0) demoPlugins.splice(index, 1)
       return null
     }
+    case 'plugin_activate': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const consent = a.consent as { permissions: string[]; domains: string[]; commands: string[] }
+      if (plugin) {
+        if (
+          !(plugin.declaredPermissions || []).every((value) => consent.permissions.includes(value))
+        )
+          throw new Error('请逐项同意全部权限')
+        plugin.approved = true
+        plugin.enabled = true
+        plugin.grantedPermissions = [...consent.permissions]
+        plugin.allowedNetworkDomains = [...consent.domains]
+        plugin.allowedCommands = [...consent.commands]
+      }
+      return null
+    }
     case 'plugin_set_enabled': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) plugin.enabled = Boolean(a.enabled)
@@ -737,11 +987,20 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         plugin.grantedPermissions = a.granted
           ? [...new Set([...plugin.grantedPermissions, permission])]
           : plugin.grantedPermissions.filter((value) => value !== permission)
+        if (!a.granted) plugin.enabled = false
       }
       return null
     }
-    case 'plugin_set_command':
+    case 'plugin_set_command': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      if (plugin) {
+        plugin.allowedCommands = a.granted
+          ? [...new Set([...(plugin.allowedCommands || []), String(a.command)])]
+          : (plugin.allowedCommands || []).filter((value) => value !== a.command)
+        if (!a.granted) plugin.enabled = false
+      }
       return null
+    }
     case 'plugin_set_network_domain': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
@@ -756,8 +1015,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         plugin.approved = true
-        plugin.enabled = true
-        plugin.grantedPermissions = [...plugin.declaredPermissions]
+        plugin.enabled = false
+        plugin.grantedPermissions = []
       }
       return null
     }
@@ -1062,6 +1321,20 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       entries = entries.filter((e) => !(a.paths as string[]).includes(e.path))
       return { paths: a.paths, errors: [], skipped: 0 }
     case 'transfer': {
+      const progress = a.onProgress as
+        { onmessage?: (value: { done: number; total: number; step?: string }) => void } | undefined
+      const files = a.paths as string[]
+      if (progress?.onmessage && files.length) {
+        const steps = 3
+        for (let index = 1; index <= steps; index += 1) {
+          progress.onmessage({
+            done: index,
+            total: steps,
+            step: basename(files[Math.min(index - 1, files.length - 1)]),
+          })
+          await new Promise((resolve) => setTimeout(resolve, 120))
+        }
+      }
       const planned: { source: string; destination: string; action: string }[] = []
       const conflicts = []
       for (const source of a.paths as string[]) {
@@ -1114,23 +1387,6 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       }
       return { paths, errors: [], skipped: 0, conflicts: [] }
     }
-
-    case 'file_checksums':
-      // Known abc vectors for the isolated UI fixture.
-      return [
-        {
-          algorithm: 'SHA-256',
-          value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
-        },
-        {
-          algorithm: 'SHA-512',
-          value:
-            'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
-        },
-        { algorithm: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d' },
-        { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
-        { algorithm: 'CRC32', value: '352441c2' },
-      ]
     default:
       return null
   }

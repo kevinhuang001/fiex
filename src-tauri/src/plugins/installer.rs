@@ -471,10 +471,18 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
     }
     let manifest: plugin_host::PluginManifest =
         serde_json::from_slice(&manifest_bytes).map_err(|e| format!("manifest invalid: {e}"))?;
+    if manifest.schema_version != 1
+        || (!crate::plugin_themes::is_theme(&manifest)
+            && manifest.runtime.protocol_version != crate::plugin_sdk::PROTOCOL_VERSION)
+    {
+        return Err("unsupported manifest or protocol version".into());
+    }
     if !plugin_host::valid_id(&manifest.id) {
         return Err("invalid plugin id".into());
     }
     let verification = crate::plugin_signing::verify(&manifest_bytes, &manifest, staging.path())?;
+    crate::plugin_resources::validate(&manifest, staging.path())?;
+    crate::plugin_themes::load(&manifest, staging.path())?;
     let declared = plugin_host::declared_permissions(&manifest)?;
     let requested_network_domains = plugin_permissions::validate_network_domains(
         &declared,
@@ -488,26 +496,28 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
     }
     // Make only the manifest-declared native executable runnable. No other
     // executable permission is accepted from the downloaded archive.
-    let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
-    let current = manifest
-        .runtime
-        .entrypoints
-        .get(&platform)
-        .ok_or("plugin has no executable for this operating system / architecture")?;
-    for relative in manifest.runtime.entrypoints.values() {
-        if !normal_relative(Path::new(relative)) {
-            return Err("unsafe executable path".into());
+    if !crate::plugin_themes::is_theme(&manifest) {
+        let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+        let current = manifest
+            .runtime
+            .entrypoints
+            .get(&platform)
+            .ok_or("plugin has no executable for this operating system / architecture")?;
+        for relative in manifest.runtime.entrypoints.values() {
+            if !normal_relative(Path::new(relative)) {
+                return Err("unsafe executable path".into());
+            }
         }
-    }
-    let executable = staging.path().join(current);
-    if !executable.is_file() {
-        return Err("missing native backend for current platform".into());
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700))
-            .map_err(|e| e.to_string())?;
+        let executable = staging.path().join(current);
+        if !executable.is_file() {
+            return Err("missing native backend for current platform".into());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&executable, fs::Permissions::from_mode(0o700))
+                .map_err(|e| e.to_string())?;
+        }
     }
     let ticket = staging
         .path()

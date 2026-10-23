@@ -1,13 +1,15 @@
 //! Host-authorized plugin capabilities.
 //!
 //! The user-facing permission model is deliberately small:
-//! - `filesystem.read`: read user files;
-//! - `filesystem.write`: create, modify and remove user files;
+//! - `folders.read`: list directories and read entry metadata (including decoration data);
+//! - `folders.create`, `folders.delete`, `folders.rename`: independent entry operations;
+//! - `files.read`: read file contents;
+//! - `files.write`: modify file contents;
 //! - `network`: open network connections to explicitly allowed domains.
 //!
-//! Private plugin storage, host-rendered file choosers and process execution
-//! are not permission items. Storage and choosers are brokered by the host;
-//! execution is constrained by the OS sandbox.
+//! - `commands`: explicitly approved executable names, run by Host.
+//!
+//! Private plugin storage and host-rendered choosers are brokered by the host.
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -17,7 +19,16 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-pub const PERMISSIONS: &[&str] = &["filesystem.read", "filesystem.write", "network", "commands"];
+pub const PERMISSIONS: &[&str] = &[
+    "folders.read",
+    "folders.create",
+    "folders.delete",
+    "folders.rename",
+    "files.read",
+    "files.write",
+    "network",
+    "commands",
+];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -197,7 +208,7 @@ pub fn normalize_domain(input: &str) -> Result<String, String> {
     Ok(domain)
 }
 
-/// `localhost` and loopback literals never need an explicit allowlist entry.
+/// Classify loopback destinations; this does not grant access to them.
 pub fn is_loopback_domain(input: &str) -> bool {
     let Ok(domain) = normalize_domain(input) else {
         return false;
@@ -240,6 +251,7 @@ pub fn set_command(
             current.commands.insert(command.to_ascii_lowercase());
         } else {
             current.commands.remove(&command.to_ascii_lowercase());
+            current.enabled = false;
         }
         Ok(())
     })
@@ -266,6 +278,7 @@ pub fn set_domain(
             current.network_domains.insert(domain);
         } else {
             current.network_domains.remove(&domain);
+            current.enabled = false;
         }
         Ok(())
     })
@@ -277,7 +290,7 @@ pub fn domain_allowed(id: &str, declared: &BTreeSet<String>, domain: &str) -> Re
     Ok(policy.approved
         && policy.enabled
         && policy.granted.contains("network")
-        && (is_loopback_domain(&domain) || policy.network_domains.contains(&domain)))
+        && policy.network_domains.contains(&domain))
 }
 
 pub fn revoke_install(id: &str) -> Result<(), String> {
@@ -306,10 +319,13 @@ pub fn approve_install_with_domains(
             return Err("plugin is already authorized".into());
         }
         current.approved = true;
-        current.enabled = true;
-        current.granted = declared.clone();
-        current.network_domains = domains.clone();
-        current.commands = commands.clone();
+        current.enabled = false;
+        // Installation only approves the package. Every capability starts
+        // denied and must be granted explicitly from plugin settings.
+        current.granted.clear();
+        current.network_domains.clear();
+        current.commands.clear();
+        let _ = (&domains, &commands);
         Ok(())
     })
 }
@@ -343,6 +359,7 @@ pub fn set_granted(
             current.granted.insert(permission.into());
         } else {
             current.granted.remove(permission);
+            current.enabled = false;
         }
         Ok(())
     })
@@ -362,21 +379,80 @@ fn mutate(
     save(&store)?;
     Ok(next)
 }
+
+/// A complete activation snapshot, reviewed item by item by the user.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivationConsent {
+    pub permissions: BTreeSet<String>,
+    pub domains: BTreeSet<String>,
+    pub commands: BTreeSet<String>,
+}
+
+pub fn activation_complete(grant: &PluginGrant, required: &ActivationConsent) -> bool {
+    grant.approved
+        && required.permissions.is_subset(&grant.granted)
+        && required.domains.is_subset(&grant.network_domains)
+        && required.commands.is_subset(&grant.commands)
+}
+
+pub fn activate(
+    id: &str,
+    required: &ActivationConsent,
+    consent: &ActivationConsent,
+) -> Result<(), String> {
+    if consent != required {
+        return Err(
+            "permission requirements changed or consent is incomplete; review every item again"
+                .into(),
+        );
+    }
+    mutate(id, &required.permissions, |current| {
+        current.approved = true;
+        current.granted = required.permissions.clone();
+        current.network_domains = required.domains.clone();
+        current.commands = required.commands.clone();
+        current.enabled = true;
+        Ok(())
+    })?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn activation_requires_every_capability_and_target() {
+        let required = ActivationConsent {
+            permissions: ["files.read".into(), "commands".into(), "network".into()].into(),
+            commands: ["tool".into()].into(),
+            domains: ["example.com".into()].into(),
+        };
+        let mut grant = PluginGrant {
+            approved: true,
+            granted: required.permissions.clone(),
+            ..Default::default()
+        };
+        assert!(!activation_complete(&grant, &required));
+        grant.commands = required.commands.clone();
+        grant.network_domains = required.domains.clone();
+        assert!(activation_complete(&grant, &required));
+        grant.granted.remove("files.read");
+        assert!(!activation_complete(&grant, &required));
+    }
+
     fn declared(values: &[&str]) -> BTreeSet<String> {
         values.iter().map(|value| (*value).to_string()).collect()
     }
     #[test]
     fn all_plugins_start_unapproved() {
-        let requested = declared(&["filesystem.read", "filesystem.write", "network"]);
+        let requested = declared(&["files.read", "files.write", "network"]);
         let state = effective(None, &requested);
         assert!(!state.approved && !state.enabled && state.granted.is_empty());
     }
     #[test]
     fn removed_grants_stay_removed_and_new_scopes_never_auto_grant() {
-        let old = declared(&["filesystem.read"]);
+        let old = declared(&["files.read"]);
         let current = PluginGrant {
             approved: true,
             enabled: true,
@@ -384,9 +460,9 @@ mod tests {
             network_domains: BTreeSet::new(),
             commands: BTreeSet::new(),
         };
-        let new = declared(&["filesystem.read", "filesystem.write"]);
+        let new = declared(&["files.read", "files.write"]);
         let s = effective(Some(&current), &new);
-        assert!(s.granted.contains("filesystem.read") && !s.granted.contains("filesystem.write"));
+        assert!(s.granted.contains("files.read") && !s.granted.contains("files.write"));
     }
     #[test]
     fn command_grants_are_exact_and_require_declaration() {
