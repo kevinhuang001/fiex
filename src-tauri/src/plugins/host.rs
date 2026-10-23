@@ -495,10 +495,9 @@ fn panel_document(html: &str) -> String {
         None => format!("{PANEL_CSP}{html}"),
     }
 }
-/// A panel may be declared directly on a toolbar/context-menu entry, on a
-/// nested context submenu entry, or in the optional top-level `panels` list.
-/// Search mirrors the frontend's depth limit so the two never disagree about
-/// which ids are openable.
+/// A panel is inlined on a toolbar or context-menu entry, possibly inside a
+/// context submenu. Search mirrors the frontend's depth limit so the two never
+/// disagree about which ids are openable.
 fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Value> {
     fn walk<'a>(items: &'a [Value], panel_id: &str, depth: usize) -> Option<&'a Value> {
         if depth > 4 {
@@ -517,7 +516,7 @@ fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Va
         }
         None
     }
-    ["panels", "toolbar", "contextMenus"]
+    ["toolbar", "contextMenus"]
         .iter()
         .filter_map(|key| manifest.contributions.get(key).and_then(Value::as_array))
         .find_map(|items| walk(items, panel_id, 1))
@@ -1474,15 +1473,10 @@ mod tests {
     }
 
     #[test]
-    fn resolves_top_level_panels_and_rejects_unknown_ids() {
+    fn resolves_toolbar_panels_and_rejects_unknown_ids() {
         let manifest = manifest(json!({
-            "panels": [{ "id": "gpg.keys", "title": "公钥", "panel": { "entry": "ui/index.html" } }],
             "toolbar": [{ "id": "git.main", "title": "Git", "panel": { "entry": "ui/git.html" } }]
         }));
-        assert_eq!(
-            find_panel(&manifest, "gpg.keys").unwrap()["entry"],
-            "ui/index.html"
-        );
         assert_eq!(
             find_panel(&manifest, "git.main").unwrap()["entry"],
             "ui/git.html"
