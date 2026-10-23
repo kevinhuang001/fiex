@@ -789,9 +789,6 @@ export function PluginSettings() {
             </label>
           ))}
           {!fields.length && <p className="sidebar-hint">此插件没有需要配置的设置。</p>}
-          <p className="sidebar-hint">
-            <KeyRound size={13} /> 敏感凭据由系统凭据库管理，不会回显。
-          </p>
           {message && <p role="status">{message}</p>}
           <footer className="plugin-consent-actions">
             <Button variant="outline" onClick={() => setSettingsFor(null)}>
