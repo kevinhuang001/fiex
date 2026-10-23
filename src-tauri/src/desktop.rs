@@ -218,9 +218,13 @@ async fn plugin_invoke(
     plugin_id: String,
     method: String,
     params: serde_json::Value,
+    directory: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_host::global().invoke(&plugin_id, &method, params)
+    tauri::async_runtime::spawn_blocking(move || match directory {
+        Some(directory) => {
+            crate::plugin_host::global().invoke_at(&plugin_id, &method, params, &directory)
+        }
+        None => crate::plugin_host::global().invoke(&plugin_id, &method, params),
     })
     .await
     .map_err(|e| e.to_string())?
@@ -283,6 +287,13 @@ async fn plugin_uninstall(plugin_id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::uninstall(&plugin_id))
         .await
         .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn plugin_activate(
+    plugin_id: String,
+    consent: crate::plugin_permissions::ActivationConsent,
+) -> Result<(), String> {
+    crate::plugin_host::activate(&plugin_id, &consent)
 }
 #[tauri::command]
 fn plugin_set_enabled(plugin_id: String, enabled: bool) -> Result<(), String> {
@@ -1193,6 +1204,7 @@ pub fn run() {
             plugin_cancel_install,
             plugin_uninstall,
             plugin_set_enabled,
+            plugin_activate,
             plugin_set_permission,
             plugin_set_command,
             plugin_set_network_domain,

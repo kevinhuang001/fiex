@@ -24,7 +24,12 @@ fn main() {
         "an unapproved plugin must never start"
     );
     // Simulates explicit user consent in an isolated test profile only.
-    plugin_host::approve_install(&id).expect("permission approval failed");
+    let (manifest, _) = plugin_host::installed_manifests()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
+        .unwrap();
+    let consent = plugin_host::activation_requirements(&manifest).unwrap();
+    plugin_host::activate(&id, &consent).expect("permission activation failed");
     let pong = plugin_host::global()
         .invoke(&id, "plugin.ping", json!({}))
         .expect("Core-to-plugin process IPC failed");
@@ -39,6 +44,31 @@ fn main() {
             .invoke(&id, "search.query", json!({"query":"mock"}))
             .expect("mock search failed");
         assert_eq!(search["entries"][0]["name"], "fiex-mock-search.txt");
+        let root = tempfile::tempdir().unwrap();
+        let secret = root.path().join("secret.txt");
+        std::fs::write(&secret, "host-only").unwrap();
+        plugin_host::set_active_directory(root.path().to_str().unwrap()).unwrap();
+        let read = plugin_host::global()
+            .invoke(&id, "mock.readFile", json!({"path":"secret.txt"}))
+            .expect("SDK file read failed");
+        assert_eq!(read, "host-only");
+        let blocked = plugin_host::global()
+            .invoke(&id, "mock.directFile", json!({"path":secret}))
+            .expect("direct filesystem access must be blocked");
+        assert_eq!(blocked["blocked"], true);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let blocked = plugin_host::global()
+            .invoke(
+                &id,
+                "mock.directNet",
+                json!({"address":listener.local_addr().unwrap().to_string()}),
+            )
+            .expect("direct sockets must be blocked");
+        assert_eq!(blocked["blocked"], true);
+        let blocked = plugin_host::global()
+            .invoke(&id, "mock.directExec", json!({}))
+            .expect("direct execution must be blocked");
+        assert_eq!(blocked["blocked"], true);
         let exec = plugin_host::global()
             .invoke(&id, "mock.exec", json!({}))
             .expect("host exec proxy failed");

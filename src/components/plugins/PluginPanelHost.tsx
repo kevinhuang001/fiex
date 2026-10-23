@@ -139,6 +139,7 @@ export function PluginPanelHost() {
           frame: target,
           allowedMethods: new Set([
             'context.get',
+            'clipboard.writeText',
             'plugin.invoke',
             'panel.close',
             'panel.resize',
@@ -279,6 +280,13 @@ export function PluginPanelHost() {
               return listActivity()
                 .filter((item) => item.kind === 'plugin')
                 .map((item) => ({ ...item }))
+            if (method === 'clipboard.writeText') {
+              const text = (params as { text?: unknown })?.text
+              if (typeof text !== 'string' || text.length > 1024 * 1024)
+                throw new Error('Invalid clipboard text')
+              await navigator.clipboard.writeText(text)
+              return null
+            }
             if (method === 'plugin.invoke') {
               const p = params as { method?: unknown; params?: unknown } | null
               if (!p || typeof p.method !== 'string' || !p.method || p.method.startsWith('host.'))
@@ -294,6 +302,7 @@ export function PluginPanelHost() {
                 pluginId: current.pluginId,
                 method: p.method,
                 params: { ...baseParams, networkDomains },
+                directory: current.directory,
               })
             }
             if (method.startsWith('dialog.')) {

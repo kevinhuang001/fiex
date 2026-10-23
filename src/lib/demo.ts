@@ -310,18 +310,26 @@ const officialPlugins: DemoPlugin[] = officialMode
         capabilities: ['filesystem', 'toolbar', 'panel'],
         declaredPermissions: [
           'folders.read',
-          'folders.write',
+          'folders.create',
+          'folders.delete',
+          'folders.rename',
           'files.read',
           'files.write',
           'network',
+          'commands',
         ],
         grantedPermissions: [
           'folders.read',
-          'folders.write',
+          'folders.create',
+          'folders.delete',
+          'folders.rename',
           'files.read',
           'files.write',
           'network',
+          'commands',
         ],
+        requestedCommands: ['git'],
+        allowedCommands: ['git'],
         requestedNetworkDomains: ['github.com'],
         allowedNetworkDomains: ['github.com'],
         author: { name: 'Fiex Contributors' },
@@ -729,7 +737,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           name: entry.name,
           version: entry.version,
           description: entry.description,
-          enabled: true,
+          enabled: false,
           approved: true,
           backendAvailable: true,
           capabilities: entry.capabilities || [],
@@ -751,6 +759,22 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       if (index >= 0) demoPlugins.splice(index, 1)
       return null
     }
+    case 'plugin_activate': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      const consent = a.consent as { permissions: string[]; domains: string[]; commands: string[] }
+      if (plugin) {
+        if (
+          !(plugin.declaredPermissions || []).every((value) => consent.permissions.includes(value))
+        )
+          throw new Error('请逐项同意全部权限')
+        plugin.approved = true
+        plugin.enabled = true
+        plugin.grantedPermissions = [...consent.permissions]
+        plugin.allowedNetworkDomains = [...consent.domains]
+        plugin.allowedCommands = [...consent.commands]
+      }
+      return null
+    }
     case 'plugin_set_enabled': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) plugin.enabled = Boolean(a.enabled)
@@ -763,11 +787,20 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         plugin.grantedPermissions = a.granted
           ? [...new Set([...plugin.grantedPermissions, permission])]
           : plugin.grantedPermissions.filter((value) => value !== permission)
+        if (!a.granted) plugin.enabled = false
       }
       return null
     }
-    case 'plugin_set_command':
+    case 'plugin_set_command': {
+      const plugin = demoPlugins.find((item) => item.id === a.pluginId)
+      if (plugin) {
+        plugin.allowedCommands = a.granted
+          ? [...new Set([...(plugin.allowedCommands || []), String(a.command)])]
+          : (plugin.allowedCommands || []).filter((value) => value !== a.command)
+        if (!a.granted) plugin.enabled = false
+      }
       return null
+    }
     case 'plugin_set_network_domain': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
@@ -782,8 +815,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         plugin.approved = true
-        plugin.enabled = true
-        plugin.grantedPermissions = [...plugin.declaredPermissions]
+        plugin.enabled = false
+        plugin.grantedPermissions = []
       }
       return null
     }

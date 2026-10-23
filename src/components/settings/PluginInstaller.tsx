@@ -21,14 +21,7 @@ import { pluginMarketplace, type MarketplacePlugin } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 
-export const permissionTitles: Record<string, string> = {
-  'folders.read': '读取文件夹',
-  'folders.write': '新增/删除文件夹内容',
-  'files.read': '读取文件',
-  'files.write': '修改文件',
-  network: '网络访问',
-  commands: '执行命令',
-}
+import { permissionLabels as permissionTitles } from '@/lib/pluginPermissions'
 
 interface InstallPreview {
   ticket: string
@@ -49,7 +42,7 @@ interface InstallPreview {
   fingerprint?: string
 }
 
-function pluginIcon(icon?: string) {
+export function pluginIcon(icon?: string) {
   const icons: Record<string, ReactNode> = {
     'git-branch': <GitBranch size={21} />,
     cloud: <Cloud size={21} />,

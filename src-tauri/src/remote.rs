@@ -403,9 +403,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     // Saving a connection is explicit user intent to reach this host. The
     // exact hostname is added to the plugin's own allowlist before validation.
     if let Some(domain) = connection_domain(&record.settings) {
-        if !crate::plugin_permissions::is_loopback_domain(&domain) {
-            crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
-        }
+        crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
     }
     crate::plugin_host::global().invoke(
         &plugin_id,

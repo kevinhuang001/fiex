@@ -39,6 +39,12 @@ pub struct FolderPermission {
     pub read: FolderReadPermission,
     #[serde(default)]
     pub write: bool,
+    #[serde(default)]
+    pub create: bool,
+    #[serde(default)]
+    pub delete: bool,
+    #[serde(default)]
+    pub rename: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -61,20 +67,11 @@ pub struct CommandsPermission {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TcpTarget {
-    pub host: String,
-    pub port: u16,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct NetworkPermission {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
     pub domains: Vec<String>,
-    #[serde(default)]
-    pub tcp: Vec<TcpTarget>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -160,8 +157,14 @@ pub fn declared_permissions(
     if folders.read.enabled {
         declared.insert("folders.read".to_string());
     }
-    if folders.write {
-        declared.insert("folders.write".to_string());
+    for (name, requested) in [
+        ("folders.create", folders.create),
+        ("folders.delete", folders.delete),
+        ("folders.rename", folders.rename),
+    ] {
+        if requested || folders.write {
+            declared.insert(name.into());
+        }
     }
     if files.read {
         declared.insert("files.read".to_string());
@@ -169,10 +172,7 @@ pub fn declared_permissions(
     if files.write {
         declared.insert("files.write".to_string());
     }
-    if manifest.permissions.network.enabled
-        || !manifest.permissions.network.domains.is_empty()
-        || !manifest.permissions.network.tcp.is_empty()
-    {
+    if manifest.permissions.network.enabled || !manifest.permissions.network.domains.is_empty() {
         declared.insert("network".to_string());
     }
     if manifest.permissions.commands.enabled {
@@ -241,10 +241,51 @@ pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
         .into_iter()
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
-    crate::plugin_permissions::set_enabled(id, &declared(&manifest)?, enabled)?;
+    let required = activation_requirements(&manifest)?;
+    if enabled
+        && !crate::plugin_permissions::activation_complete(
+            &crate::plugin_permissions::status(id, &required.permissions)?,
+            &required,
+        )
+    {
+        return Err("review and approve every requested permission before activation".into());
+    }
+    crate::plugin_permissions::set_enabled(id, &required.permissions, enabled)?;
     global().stop(id);
     Ok(())
 }
+pub fn activation_requirements(
+    manifest: &PluginManifest,
+) -> Result<crate::plugin_permissions::ActivationConsent, String> {
+    let permissions = declared(manifest)?;
+    let domains = crate::plugin_permissions::validate_network_domains(
+        &permissions,
+        &manifest.permissions.network.domains,
+    )?;
+    let commands = crate::plugin_permissions::validate_commands(
+        &permissions,
+        &manifest.permissions.commands.allow,
+    )?;
+    Ok(crate::plugin_permissions::ActivationConsent {
+        permissions,
+        domains,
+        commands,
+    })
+}
+
+pub fn activate(
+    id: &str,
+    consent: &crate::plugin_permissions::ActivationConsent,
+) -> Result<(), String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
+        .ok_or("plugin not installed")?;
+    crate::plugin_permissions::activate(id, &activation_requirements(&manifest)?, consent)?;
+    global().stop(id);
+    Ok(())
+}
+
 pub fn declared_permissions_for(id: &str) -> Result<std::collections::BTreeSet<String>, String> {
     let (manifest, _) = discover()
         .into_iter()
@@ -411,6 +452,9 @@ pub fn catalog() -> Vec<PluginInfo> {
             let declared = declared(&manifest).unwrap_or_default();
             let state =
                 crate::plugin_permissions::status(&manifest.id, &declared).unwrap_or_default(); // unreadable policy fails closed
+            let active = activation_requirements(&manifest).is_ok_and(|required| {
+                state.enabled && crate::plugin_permissions::activation_complete(&state, &required)
+            });
             let capabilities = capabilities(&manifest.contributions);
             PluginInfo {
                 schema_version: manifest.schema_version,
@@ -422,7 +466,7 @@ pub fn catalog() -> Vec<PluginInfo> {
                 capabilities,
                 contributions: manifest.contributions,
                 backend_available: backend,
-                enabled: state.enabled && state.approved,
+                enabled: active,
                 author: manifest.author,
                 approved: state.approved,
                 declared_permissions: declared.into_iter().collect(),
@@ -443,7 +487,12 @@ pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
         .find(|(m, _)| m.id == plugin_id)
         .ok_or("plugin is not installed")?;
     let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
-    if !rights.approved || !rights.enabled {
+    if !rights.enabled
+        || !crate::plugin_permissions::activation_complete(
+            &rights,
+            &activation_requirements(&manifest)?,
+        )
+    {
         return Err("plugin disabled or not approved".into());
     }
     let panel = ["toolbar", "contextMenus"]
@@ -474,7 +523,7 @@ pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
 pub fn exists(id: &str) -> bool {
     discover().iter().any(|(m, _)| m.id == id)
 }
-const EXEC_OUTPUT_LIMIT: usize = 2 * 1024 * 1024;
+const EXEC_OUTPUT_LIMIT: usize = 1024 * 1024;
 const EXEC_TIMEOUT: Duration = Duration::from_secs(120);
 
 fn read_capped(mut reader: impl Read) -> (Vec<u8>, bool) {
@@ -625,10 +674,11 @@ fn host_exec(
     }))
 }
 
-fn host_process_run(
+pub fn run_command(
     plugin_id: &str,
     declared: &std::collections::BTreeSet<String>,
     params: &Value,
+    task_root: Option<&Path>,
 ) -> Result<Value, String> {
     let command = params
         .get("command")
@@ -662,7 +712,9 @@ fn host_process_run(
     {
         return Err("command arguments are too large".into());
     }
-    let cwd = active_path().ok_or("no active directory")?;
+    let cwd = task_root
+        .map(Path::to_path_buf)
+        .unwrap_or(std::env::current_dir().map_err(|e| e.to_string())?);
     if !cwd.is_dir() {
         return Err("active directory is unavailable".into());
     }
@@ -733,30 +785,24 @@ fn host_process_run(
     let (stderr, err_truncated) = err_thread
         .map(|handle| handle.join().unwrap_or_default())
         .unwrap_or_default();
-    let mut result = json!({
+    use base64::Engine;
+    Ok(json!({
         "code": status.code(),
-        "stdout": String::from_utf8_lossy(&stdout),
-        "stderr": String::from_utf8_lossy(&stderr),
+        "stdoutBase64": base64::engine::general_purpose::STANDARD.encode(&stdout),
+        "stderrBase64": base64::engine::general_purpose::STANDARD.encode(&stderr),
         "truncated": out_truncated || err_truncated
-    });
-    if stdout.len() > 512 * 1024 {
-        let descriptor = crate::plugin_ipc::create(plugin_id, stdout.len(), false)?;
-        crate::plugin_ipc::write(&descriptor.id, &stdout)?;
-        result["stdout"] = Value::String(String::new());
-        result["stdoutBuffer"] =
-            serde_json::to_value(descriptor).map_err(|error| error.to_string())?;
-    }
-    Ok(result)
+    }))
 }
 
 struct Running {
     plugin_id: String,
+    resource_owner: String,
     declared: std::collections::BTreeSet<String>,
-    tcp_targets: Vec<TcpTarget>,
     child: crate::plugin_sandbox::SandboxChild,
     stdin: Box<dyn Write + Send>,
-    stdout: BufReader<Box<dyn Read + Send>>,
+    stdout: std::sync::mpsc::Receiver<Result<Option<Value>, String>>,
     next_id: u64,
+    task_root: Option<PathBuf>,
 }
 impl Running {
     /// All host.* requests are authenticated by the Running process identity,
@@ -771,24 +817,78 @@ impl Running {
                 .and_then(Value::as_str)
                 .ok_or_else(|| format!("missing {key}"))
         };
+        let root = || {
+            self.task_root
+                .as_deref()
+                .ok_or_else(|| "no task directory".to_string())
+        };
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
-            "host.net.http" if permitted("network") => {
-                crate::plugin_net::http(&self.plugin_id, &self.declared, p)
+            "host.net.http.open" if permitted("network") => crate::plugin_net::http_open(
+                &self.resource_owner,
+                &self.plugin_id,
+                &self.declared,
+                p,
+            ),
+            "host.net.http.read" if permitted("network") => {
+                crate::plugin_net::http_read(&self.resource_owner, p)
             }
-            "host.net.tcp.open" if permitted("network") => {
-                crate::plugin_net::tcp_open(&self.plugin_id, &self.tcp_targets, p)
+            "host.net.http.close" => {
+                crate::plugin_net::http_close(&self.resource_owner, p)?;
+                Ok(Value::Null)
+            }
+            "host.net.http" if permitted("network") => {
+                crate::plugin_net::http(&self.resource_owner, &self.plugin_id, &self.declared, p)
+            }
+            "host.net.tcp.open" if permitted("network") => crate::plugin_net::tcp_open(
+                &self.resource_owner,
+                &self.plugin_id,
+                &self.declared,
+                p,
+            ),
+            "host.net.tcp.readBytes" if permitted("network") => {
+                crate::plugin_net::tcp_read_bytes(&self.resource_owner, p)
+            }
+            "host.net.tcp.writeBytes" if permitted("network") => {
+                crate::plugin_net::tcp_write_bytes(&self.resource_owner, p)
             }
             "host.net.tcp.read" if permitted("network") => {
-                crate::plugin_net::tcp_read(&self.plugin_id, p)
+                crate::plugin_net::tcp_read(&self.resource_owner, p)
             }
             "host.net.tcp.write" if permitted("network") => {
-                crate::plugin_net::tcp_write(&self.plugin_id, p)
+                crate::plugin_net::tcp_write(&self.resource_owner, p)
             }
             "host.net.tcp.close" if permitted("network") => {
-                crate::plugin_net::tcp_close(&self.plugin_id, p)?;
+                crate::plugin_net::tcp_close(&self.resource_owner, p)?;
                 Ok(Value::Null)
+            }
+            "host.preview.create" => {
+                use base64::Engine;
+                let name = arg("name")?;
+                if name.is_empty()
+                    || !Path::new(name)
+                        .components()
+                        .all(|c| matches!(c, Component::Normal(_)))
+                    || Path::new(name).components().count() != 1
+                {
+                    return Err("invalid preview name".into());
+                }
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(arg("base64")?)
+                    .map_err(|e| e.to_string())?;
+                if bytes.len() > 1024 * 1024 {
+                    return Err("preview too large".into());
+                }
+                let directory = dirs::cache_dir()
+                    .ok_or("cache directory unavailable")?
+                    .join("fiex")
+                    .join("plugin-previews")
+                    .join(&self.plugin_id);
+                fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+                let path = directory.join(name);
+                fs::write(&path, bytes).map_err(|e| e.to_string())?;
+                Ok(json!(path.to_string_lossy()))
             }
             "host.buffer.create" => {
                 let size = p
@@ -796,24 +896,76 @@ impl Running {
                     .and_then(Value::as_u64)
                     .ok_or("missing size")? as usize;
                 let writable = p.get("writable").and_then(Value::as_bool).unwrap_or(false);
-                serde_json::to_value(crate::plugin_ipc::create(&self.plugin_id, size, writable)?)
-                    .map_err(|error| error.to_string())
+                serde_json::to_value(crate::plugin_ipc::create(
+                    &self.resource_owner,
+                    size,
+                    writable,
+                )?)
+                .map_err(|error| error.to_string())
             }
             "host.buffer.map" => {
                 let id = p.get("id").and_then(Value::as_str).ok_or("missing id")?;
-                serde_json::to_value(crate::plugin_ipc::map(&self.plugin_id, id)?)
+                serde_json::to_value(crate::plugin_ipc::map(&self.resource_owner, id)?)
                     .map_err(|error| error.to_string())
+            }
+            "host.fs.readChunk" if permitted("files.read") => crate::plugin_fs_access::read_chunk(
+                root()?,
+                arg("path")?,
+                p.get("offset").and_then(Value::as_u64).unwrap_or(0),
+                p.get("length").and_then(Value::as_u64).unwrap_or(262144) as usize,
+            ),
+            "host.fs.mkdir" if permitted("folders.create") => {
+                crate::plugin_fs_access::mkdir(root()?, arg("path")?)
+            }
+            "host.fs.beginWrite" if permitted("files.write") => {
+                let create = p.get("create").and_then(Value::as_bool).unwrap_or(false);
+                if create && !permitted("folders.create") {
+                    return Err(
+                        "creating a file requires directory entry creation permission".into(),
+                    );
+                }
+                Ok(json!(crate::plugin_fs_access::begin_write(
+                    &self.resource_owner,
+                    root()?,
+                    arg("path")?,
+                    create
+                )?))
+            }
+            "host.fs.seekWrite" if permitted("files.write") => {
+                Ok(json!(crate::plugin_fs_access::seek_write(
+                    &self.resource_owner,
+                    arg("handle")?,
+                    arg("kind")?,
+                    p.get("offset")
+                        .and_then(Value::as_i64)
+                        .ok_or("missing seek offset")?
+                )?))
+            }
+            "host.fs.writeChunk" if permitted("files.write") => {
+                crate::plugin_fs_access::write_chunk(
+                    &self.resource_owner,
+                    arg("handle")?,
+                    arg("base64")?,
+                )?;
+                Ok(Value::Null)
+            }
+            "host.fs.commit" if permitted("files.write") => {
+                crate::plugin_fs_access::commit(&self.resource_owner, arg("handle")?)
+            }
+            "host.fs.abort" => {
+                crate::plugin_fs_access::abort(&self.resource_owner, arg("handle")?)?;
+                Ok(Value::Null)
             }
             "host.fs.list" if permitted("folders.read") => {
                 let path = p.get("path").and_then(Value::as_str).unwrap_or(".");
-                crate::plugin_fs_access::list(path)
+                crate::plugin_fs_access::list(root()?, path)
             }
-            "host.fs.stat" if permitted("folders.read") => {
+            "host.fs.stat" if permitted("folders.read") || permitted("files.read") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
-                crate::plugin_fs_access::stat(path)
+                crate::plugin_fs_access::stat(root()?, path)
             }
             "host.fs.read" if permitted("files.read") => {
                 let path = p
@@ -825,14 +977,14 @@ impl Running {
                     .get("length")
                     .and_then(Value::as_u64)
                     .unwrap_or(1024 * 1024) as usize;
-                crate::plugin_fs_access::read(&self.plugin_id, path, offset, length)
+                crate::plugin_fs_access::read(&self.resource_owner, root()?, path, offset, length)
             }
-            "host.fs.create" if permitted("folders.write") => {
+            "host.fs.create" if permitted("folders.create") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
-                crate::plugin_fs_access::create(path)
+                crate::plugin_fs_access::create(root()?, path)
             }
             "host.fs.write" if permitted("files.write") => {
                 let path = p
@@ -844,31 +996,31 @@ impl Running {
                     .and_then(Value::as_str)
                     .ok_or("missing buffer")?;
                 let mode = p.get("mode").and_then(Value::as_str).unwrap_or("truncate");
-                if mode == "create" && !permitted("folders.write") {
+                if mode == "create" && !permitted("folders.create") {
                     return Err("folder write permission is required to create a file".into());
                 }
-                crate::plugin_fs_access::write(&self.plugin_id, path, buffer, mode)
+                crate::plugin_fs_access::write(&self.resource_owner, root()?, path, buffer, mode)
             }
-            "host.fs.remove" if permitted("folders.write") => {
+            "host.fs.remove" if permitted("folders.delete") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
-                crate::plugin_fs_access::remove(path)?;
+                crate::plugin_fs_access::remove(root()?, path)?;
                 Ok(Value::Null)
             }
-            "host.fs.rename" if permitted("folders.write") => {
+            "host.fs.rename" if permitted("folders.rename") => {
                 let from = p
                     .get("from")
                     .and_then(Value::as_str)
                     .ok_or("missing from")?;
                 let to = p.get("to").and_then(Value::as_str).ok_or("missing to")?;
-                crate::plugin_fs_access::rename(from, to)?;
+                crate::plugin_fs_access::rename(root()?, from, to)?;
                 Ok(Value::Null)
             }
             "host.buffer.release" => {
                 let id = p.get("id").and_then(Value::as_str).ok_or("missing id")?;
-                crate::plugin_ipc::release(&self.plugin_id, id)?;
+                crate::plugin_ipc::release(&self.resource_owner, id)?;
                 Ok(Value::Null)
             }
             "host.storage.get" => {
@@ -910,13 +1062,17 @@ impl Running {
                 Ok(json!(crate::plugin_storage::secret_available()))
             }
             "host.exec" if permitted("commands") => host_exec(&self.plugin_id, &self.declared, p),
-            "host.process.run" if permitted("commands") => {
-                host_process_run(&self.plugin_id, &self.declared, p)
-            }
+            "host.process.run" if permitted("commands") => run_command(
+                &self.plugin_id,
+                &self.declared,
+                p,
+                self.task_root.as_deref(),
+            ),
             _ => Err("host method not available or permission denied".into()),
         }
     }
-    fn rpc(&mut self, method: &str, params: Value) -> Result<Value, String> {
+    fn rpc(&mut self, method: &str, params: Value, root: Option<PathBuf>) -> Result<Value, String> {
+        self.task_root = root;
         self.next_id += 1;
         let id = self.next_id;
         plugin_sdk::write_frame(
@@ -927,8 +1083,10 @@ impl Running {
         )
         .map_err(|e| e.to_string())?;
         loop {
-            let response = plugin_sdk::read_frame(&mut self.stdout)
-                .map_err(|e| e.to_string())?
+            let response = self
+                .stdout
+                .recv_timeout(Duration::from_secs(120))
+                .map_err(|_| "plugin stopped responding or disconnected")??
                 .ok_or("plugin exited during request")?;
             // Re-entrant plugin→host request while host awaits a plugin response.
             if let Some(host_method) = response.get("method").and_then(Value::as_str) {
@@ -960,6 +1118,9 @@ impl Running {
 impl Drop for Running {
     fn drop(&mut self) {
         // Dropping SandboxChild terminates the plugin and its process tree.
+        crate::plugin_fs_access::cleanup(&self.resource_owner);
+        crate::plugin_net::cleanup(&self.resource_owner);
+        crate::plugin_ipc::cleanup(&self.resource_owner);
         let _ = &self.child;
     }
 }
@@ -985,17 +1146,21 @@ pub fn set_active_directory(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+struct Instance {
+    running: Mutex<Running>,
+    kill: crate::plugin_sandbox::KillHandle,
+}
+
 #[derive(Default)]
 pub struct PluginHost {
-    children: Mutex<HashMap<String, Arc<Mutex<Running>>>>,
+    children: Mutex<HashMap<String, Arc<Instance>>>,
 }
 impl PluginHost {
     pub fn stop(&self, id: &str) {
         if let Ok(mut processes) = self.children.lock() {
-            // Removes idle processes. A request currently holding an Arc
-            // is still subject to per-IPC checks; strong immediate termination
-            // requires the platform sandbox/kill-handle launcher.
-            processes.remove(id);
+            if let Some(instance) = processes.remove(id) {
+                instance.kill.terminate();
+            }
         }
     }
     pub fn is_installed(&self, id: &str) -> bool {
@@ -1005,6 +1170,38 @@ impl PluginHost {
             .is_some_and(|(m, d)| executable(&m, &d).is_ok())
     }
     pub fn invoke(&self, plugin_id: &str, method: &str, params: Value) -> Result<Value, String> {
+        self.invoke_scoped(plugin_id, method, params, active_path())
+    }
+    pub fn invoke_at(
+        &self,
+        plugin_id: &str,
+        method: &str,
+        params: Value,
+        directory: &str,
+    ) -> Result<Value, String> {
+        let root = if directory.contains("://") {
+            None
+        } else {
+            Some(dunce::canonicalize(directory).map_err(|e| e.to_string())?)
+        };
+        self.invoke_scoped(plugin_id, method, params, root)
+    }
+    fn invoke_scoped(
+        &self,
+        plugin_id: &str,
+        method: &str,
+        params: Value,
+        task_root: Option<PathBuf>,
+    ) -> Result<Value, String> {
+        let (manifest, _) = discover()
+            .into_iter()
+            .find(|(m, _)| m.id == plugin_id)
+            .ok_or("plugin not installed")?;
+        let required = activation_requirements(&manifest)?;
+        let state = crate::plugin_permissions::status(plugin_id, &required.permissions)?;
+        if !state.enabled || !crate::plugin_permissions::activation_complete(&state, &required) {
+            return Err("plugin activation requires complete permission consent".into());
+        }
         let mut guard = self
             .children
             .lock()
@@ -1019,7 +1216,12 @@ impl PluginHost {
             crate::plugin_signing::verify_installed(&manifest, &dir)?;
             let declared = declared(&manifest)?;
             let state = crate::plugin_permissions::status(plugin_id, &declared)?;
-            if !state.enabled || !state.approved {
+            if !state.enabled
+                || !crate::plugin_permissions::activation_complete(
+                    &state,
+                    &activation_requirements(&manifest)?,
+                )
+            {
                 return Err("plugin is disabled or installation consent is pending".into());
             }
             let path = executable(&manifest, &dir)?;
@@ -1033,34 +1235,65 @@ impl PluginHost {
                 &mut sandbox.stdout,
                 BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
             );
+            let kill = sandbox.kill_handle();
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            thread::spawn(move || {
+                let mut stdout = stdout;
+                loop {
+                    let frame = plugin_sdk::read_frame(&mut stdout).map_err(|e| e.to_string());
+                    let finished = !matches!(frame, Ok(Some(_)));
+                    if sender.send(frame).is_err() || finished {
+                        break;
+                    }
+                }
+            });
             let mut running = Running {
                 plugin_id: plugin_id.to_string(),
-                tcp_targets: manifest.permissions.network.tcp.clone(),
+                resource_owner: format!(
+                    "{plugin_id}:{}:{}",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_err(|e| e.to_string())?
+                        .as_nanos()
+                ),
                 declared,
                 child: sandbox,
                 stdin,
-                stdout,
+                stdout: receiver,
                 next_id: 0,
+                task_root: None,
             };
             let result = running.rpc(
                 "plugin.initialize",
                 json!({"protocolVersion":plugin_sdk::PROTOCOL_VERSION}),
+                task_root.clone(),
             )?;
             if result.get("pluginId").and_then(Value::as_str) != Some(plugin_id) {
                 return Err("plugin identity mismatch".into());
             }
-            let instance = Arc::new(Mutex::new(running));
+            let instance = Arc::new(Instance {
+                running: Mutex::new(running),
+                kill,
+            });
             guard.insert(plugin_id.to_string(), instance.clone());
             instance
         };
         drop(guard);
         let response = instance
+            .running
             .lock()
             .map_err(|_| "plugin instance lock poisoned")?
-            .rpc(method, params);
+            .rpc(method, params, task_root);
         if response.is_err() {
+            instance.kill.terminate();
             if let Ok(mut guard) = self.children.lock() {
-                guard.remove(plugin_id);
+                if guard
+                    .get(plugin_id)
+                    .is_some_and(|current| Arc::ptr_eq(current, &instance))
+                {
+                    guard.remove(plugin_id);
+                }
             }
         }
         response

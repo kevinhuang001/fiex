@@ -69,12 +69,7 @@ pub fn write(id: &str, bytes: &[u8]) -> Result<(), String> {
         .lock()
         .map_err(|_| "buffer registry lock poisoned")?;
     let entry = buffers.get_mut(id).ok_or("shared buffer not found")?;
-    let target = entry.buffer.as_mut_slice()?;
-    if target.len() < bytes.len() {
-        return Err("shared buffer is too small".into());
-    }
-    target[..bytes.len()].copy_from_slice(bytes);
-    Ok(())
+    entry.buffer.fill(bytes)
 }
 
 pub fn release(owner: &str, id: &str) -> Result<(), String> {
@@ -87,4 +82,10 @@ pub fn release(owner: &str, id: &str) -> Result<(), String> {
     }
     buffers.remove(id);
     Ok(())
+}
+
+pub fn cleanup(owner: &str) {
+    if let Ok(mut entries) = registry().lock() {
+        entries.retain(|_, entry| entry.owner != owner);
+    }
 }

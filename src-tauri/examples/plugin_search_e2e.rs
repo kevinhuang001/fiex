@@ -9,10 +9,15 @@ fn main() {
         .find(|plugin| plugin.id == id)
         .expect("mock plugin must be installed in FIEX_PLUGIN_DIR");
     assert!(entry.backend_available);
-    if !entry.approved {
-        plugin_host::approve_install(id).expect("approval failed");
-    }
-    plugin_host::set_enabled(id, true).expect("enable failed");
+    let (manifest, _) = plugin_host::installed_manifests()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
+        .unwrap();
+    plugin_host::activate(
+        id,
+        &plugin_host::activation_requirements(&manifest).unwrap(),
+    )
+    .unwrap();
     let entries = fiex_lib::plugin_search::query(&PluginSearchInput {
         query: "mock".into(),
         root: "everywhere://".into(),

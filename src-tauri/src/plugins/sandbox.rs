@@ -25,16 +25,15 @@ fn system_read_roots() -> Vec<std::path::PathBuf> {
     {
         let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
         [
-            "/usr",
+            "/usr/lib",
             "/lib",
             "/lib64",
-            "/bin",
-            "/sbin",
-            "/etc",
+            "/etc/ld.so.cache",
             "/dev/urandom",
             "/dev/null",
         ]
         .iter()
+        .filter(|path| Path::new(path).exists())
         .map(|path| canonical(Path::new(path)))
         .collect()
     }
@@ -44,22 +43,6 @@ fn system_read_roots() -> Vec<std::path::PathBuf> {
         // through the implicit ALL APPLICATION PACKAGES SID. Adding those
         // trees as explicit DACL roots both is unnecessary and can stall
         // CreateProcess while Windows propagates inheritance.
-        Vec::new()
-    }
-}
-
-fn media_roots() -> Vec<std::path::PathBuf> {
-    #[cfg(unix)]
-    {
-        let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
-        ["/media", "/mnt", "/run/media", "/Volumes"]
-            .iter()
-            .map(|path| canonical(Path::new(path)))
-            .filter(|path| path.exists())
-            .collect()
-    }
-    #[cfg(windows)]
-    {
         Vec::new()
     }
 }
@@ -74,23 +57,10 @@ impl Policy {
         let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
         let executable = canonical(executable);
         let install_dir = canonical(install_dir);
-        let readable = declared.contains("folders.read") || declared.contains("files.read");
-        let writable = declared.contains("folders.write") || declared.contains("files.write");
-        let mut read_roots = vec![executable.clone(), install_dir.clone()];
+        let mut read_roots = vec![executable.clone()];
         read_roots.extend(system_read_roots());
-        let mut write_roots = vec![canonical(&std::env::temp_dir()), canonical(&install_dir)];
-        if readable {
-            if let Some(home) = dirs::home_dir() {
-                read_roots.push(canonical(&home));
-            }
-            read_roots.extend(media_roots());
-        }
-        if writable {
-            if let Some(home) = dirs::home_dir() {
-                write_roots.push(canonical(&home));
-            }
-            write_roots.extend(media_roots());
-        }
+        let mut write_roots = Vec::new();
+        let _ = (grant, declared);
         read_roots.sort();
         read_roots.dedup();
         write_roots.sort();
@@ -100,7 +70,7 @@ impl Policy {
             install_dir,
             read_roots,
             write_roots,
-            network: grant.granted.contains("network"),
+            network: false,
         }
     }
 }
@@ -108,15 +78,15 @@ impl Policy {
 pub struct SandboxChild {
     pub stdin: Box<dyn Write + Send>,
     pub stdout: BufReader<Box<dyn Read + Send>>,
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     _process: arapuca::Process,
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     _socket_dir: tempfile::TempDir,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     process: std::process::Child,
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 impl Drop for SandboxChild {
     fn drop(&mut self) {
         let _ = self.process.kill();
@@ -149,7 +119,7 @@ pub fn run_wrapper_if_requested() {
 #[cfg(target_os = "macos")]
 pub fn run_wrapper_if_requested() {}
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     use arapuca::platform::{new, Sandbox};
     use arapuca::{CgroupPolicy, Config, Profile, SeccompProfile};
@@ -198,13 +168,10 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         read_paths: policy.read_roots.clone(),
         write_paths: policy.write_roots.clone(),
         allow_exec: false,
+        deny_unix_sockets: true,
         use_netns: false,
         use_pidns: false,
-        seccomp_profile: if policy.network {
-            SeccompProfile::Baseline
-        } else {
-            SeccompProfile::Strict
-        },
+        seccomp_profile: SeccompProfile::Strict,
         cgroup_policy: CgroupPolicy::BestEffort,
         max_open_files: 1024,
         ..Profile::default()
@@ -266,6 +233,46 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         stdout: BufReader::new(Box::new(parent_stdout) as Box<dyn Read + Send>),
         _process: process,
         _socket_dir: socket_dir,
+    })
+}
+
+#[cfg(target_os = "macos")]
+pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
+    use std::process::{Command, Stdio};
+    let quote = |path: &Path| {
+        format!(
+            "\"{}\"",
+            path.to_string_lossy()
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+        )
+    };
+    let mut profile = String::from("(version 1)(deny default)(allow process-info*)(allow sysctl-read)(allow signal (target self))(allow file-read-metadata)");
+    profile.push_str(&format!(
+        "(allow process-exec (literal {}))",
+        quote(&policy.executable)
+    ));
+    for path in &policy.read_roots {
+        profile.push_str(&format!("(allow file-read* (subpath {}))", quote(path)));
+    }
+    // Runtime system resources only; never permit sockets, forks or user paths.
+    profile.push_str("(allow file-read* (subpath \"/System/Library\") (subpath \"/Library/Apple/System/Library\") (literal \"/dev/null\") (literal \"/dev/urandom\"))");
+    let mut process = Command::new("/usr/bin/sandbox-exec")
+        .args(["-p", &profile])
+        .arg(&policy.executable)
+        .env_clear()
+        .env("LANG", "en_US.UTF-8")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("plugin sandbox launch failed: {e}"))?;
+    let stdin = process.stdin.take().ok_or("missing plugin stdin")?;
+    let stdout = process.stdout.take().ok_or("missing plugin stdout")?;
+    Ok(SandboxChild {
+        stdin: Box::new(stdin),
+        stdout: BufReader::new(Box::new(stdout)),
+        process,
     })
 }
 
@@ -427,5 +434,67 @@ mod windows_tests {
         for root in super::system_read_roots() {
             assert!(root.exists(), "missing sandbox root: {}", root.display());
         }
+    }
+}
+
+#[cfg(test)]
+mod policy_tests {
+    #[test]
+    fn user_grants_never_open_native_files_or_network() {
+        let grant = crate::plugin_permissions::PluginGrant {
+            granted: ["network".into(), "files.write".into()].into(),
+            ..Default::default()
+        };
+        let policy = super::Policy::new(
+            std::path::Path::new("/plugin/bin"),
+            std::path::Path::new("/plugin"),
+            &grant,
+            &grant.granted,
+        );
+        assert!(!policy.network);
+        assert!(policy.write_roots.is_empty());
+        if let Some(home) = dirs::home_dir() {
+            assert!(!policy.read_roots.contains(&home));
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct KillHandle(std::sync::Arc<(u32, std::sync::atomic::AtomicBool)>);
+impl KillHandle {
+    pub fn terminate(&self) {
+        if self.0 .1.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(self.0 .0 as i32, libc::SIGKILL);
+        }
+        #[cfg(windows)]
+        unsafe {
+            #[link(name = "kernel32")]
+            unsafe extern "system" {
+                fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
+                fn TerminateProcess(handle: *mut std::ffi::c_void, code: u32) -> i32;
+                fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+            }
+            let handle = OpenProcess(1, 0, self.0 .0);
+            if !handle.is_null() {
+                TerminateProcess(handle, 1);
+                CloseHandle(handle);
+            }
+        }
+    }
+}
+impl SandboxChild {
+    pub fn kill_handle(&self) -> KillHandle {
+        #[cfg(target_os = "linux")]
+        let pid = self._process.pid();
+        #[cfg(any(windows, target_os = "macos"))]
+        let pid = self.process.id();
+        KillHandle(std::sync::Arc::new((
+            pid,
+            std::sync::atomic::AtomicBool::new(false),
+        )))
     }
 }
