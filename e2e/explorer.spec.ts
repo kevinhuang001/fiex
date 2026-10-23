@@ -636,3 +636,22 @@ test('activation asks for one permission at a time and cancellation grants nothi
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
   await page.screenshot({ path: 'artifacts/plugin-settings.png' })
 })
+
+test('closing and reopening the same plugin context retains its iframe', async ({ page }) => {
+  const open = async () => {
+    await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+    await page.getByRole('menuitem', { name: '测试插件', exact: true }).hover()
+    await page.getByRole('menuitem', { name: '信息面板', exact: true }).click()
+  }
+  await open()
+  const frame = page.locator('iframe[title="信息面板"]')
+  await expect(page.frameLocator('iframe[title="信息面板"]').locator('#selected')).toContainText(
+    'Notes.md',
+  )
+  await frame.evaluate((element) => element.setAttribute('data-session-test', 'retained'))
+  await page.getByRole('button', { name: '关闭插件面板', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: '信息面板' })).toBeHidden()
+  await open()
+  await expect(frame).toHaveAttribute('data-session-test', 'retained')
+  await expect(frame).toHaveCount(1)
+})
