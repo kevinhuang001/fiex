@@ -5911,3 +5911,11 @@ body.dragging-reorder * {
   padding: 0 18px;
   font-size: 11px;
 }
+.plugin-store-tools .plugin-store-search {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+}
+.plugin-store-tools .plugin-store-search input {
+  font-size: 12px;
+}
