@@ -5919,3 +5919,9 @@ body.dragging-reorder * {
 .plugin-store-tools .plugin-store-search input {
   font-size: 12px;
 }
+.plugin-store-modal .plugin-store-card > button[data-slot='button'] {
+  width: 70%;
+  min-width: 120px;
+  max-width: 150px;
+  align-self: center;
+}
