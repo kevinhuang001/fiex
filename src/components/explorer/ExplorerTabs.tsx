@@ -97,19 +97,21 @@ export function ExplorerTabs({
       }
       next.preventDefault()
       const box = data.rects[from]
-      const left = next.clientX - data.grab
-      // Insert after every tab whose centre the dragged tab has passed. The
-      // source tab is excluded so the count is the final array index.
-      const center = left + box.width / 2
+      const pointer = next.clientX
+      // Insert after every tab whose centre the pointer has passed. The source
+      // tab is excluded so the count is the final array index.
       let nextTo = 0
       for (let index = 0; index < data.rects.length; index++) {
-        if (index !== from && center > data.rects[index].center) nextTo++
+        if (index !== from && pointer > data.rects[index].center) nextTo++
       }
       to = nextTo
+      // The lifted tab rides the pointer; the slot it will occupy is vacated by
+      // the tabs sliding over, so it overlaps a neighbour by at most half a tab
+      // before that neighbour moves aside.
       setDrag({
         from,
         to,
-        left,
+        left: next.clientX - data.grab,
         top: box.top,
         width: box.width,
         height: box.height,
