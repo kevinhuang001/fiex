@@ -5865,3 +5865,10 @@ body.dragging-reorder * {
   align-self: end;
   margin-top: 2px;
 }
+.plugin-store-modal {
+  width: min(540px, calc(100vw - 40px));
+  padding: 16px 20px 18px;
+}
+.plugin-store-modal .plugin-store {
+  max-width: 480px;
+}
