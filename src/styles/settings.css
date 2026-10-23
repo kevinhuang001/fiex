@@ -3621,6 +3621,8 @@ body.dragging-reorder * {
 }
 .plugin-tool-ghost {
   position: fixed;
+  left: 0;
+  top: 0;
   z-index: 60;
   display: grid;
   place-items: center;
@@ -3630,6 +3632,10 @@ body.dragging-reorder * {
   box-shadow: 0 10px 24px color-mix(in srgb, var(--text) 16%, transparent);
   pointer-events: none;
   color: var(--text);
+  /* Track the pointer exactly; only the drop animation eases. */
+  transition: none;
+}
+.plugin-tool-ghost.settling {
   transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 

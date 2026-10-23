@@ -241,17 +241,17 @@ export function ExplorerToolbar({
       }
       next.preventDefault()
       const box = data.rects[from]
-      const left = next.clientX - data.grab
-      const center = left + box.width / 2
+      // Same rule as the tab strip: the pointer decides the slot, so a tool is
+      // displaced once half of it is covered instead of a whole button later.
       let nextTo = 0
       for (let index = 0; index < data.rects.length; index++) {
-        if (index !== from && center > data.rects[index].center) nextTo++
+        if (index !== from && next.clientX > data.rects[index].center) nextTo++
       }
       to = nextTo
       setPinDrag({
         from,
         to,
-        left,
+        left: next.clientX - data.grab,
         top: box.top,
         width: box.width,
         height: box.height,
