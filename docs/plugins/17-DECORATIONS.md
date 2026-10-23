@@ -87,6 +87,7 @@ Plugins only participate when `contributions.decorations` is present.
   "decorations": [
     {
       "path": "/Users/kevin/Documents/a.txt",
+      "icon": "fiex-resource://org.example.icons/markdown",
       "providers": ["Git"],
       "fields": {
         "name": {
@@ -132,5 +133,7 @@ Plugins only participate when `contributions.decorations` is present.
 - Style: `color`, `background`, `fontWeight`, `fontStyle` only.
 - Unknown paths, targets and unsafe values are ignored.
 - `row` badges are ignored; only its style is applied.
+- `icon` 必须是 `fiex-resource://<plugin-id>/<resource-id>`，命名空间必须等于
+  当前插件 id；详见 [19 插件资源与文件图标](19-FILE-ICONS.md)。
 - Core renders files first and applies decorations asynchronously; empty
   results are not requested again for the same listing.

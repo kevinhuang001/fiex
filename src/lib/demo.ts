@@ -713,6 +713,8 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
                 kind: { style: { color: '#2f6f9f' } },
                 row: { style: { background: '#fff9f0' } },
               },
+              icon: 'fiex-resource://org.example.icon-theme/markdown',
+              iconPath: '/plugin-icons/plugin-markdown.svg',
               providers: ['Git'],
             },
           ]

@@ -68,6 +68,12 @@ pub struct Decoration {
     /// or `row`. `row` only accepts `style`.
     #[serde(default)]
     pub fields: HashMap<String, DecorationField>,
+    /// Namespaced reference (`fiex-resource://<plugin-id>/<resource-id>`).
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// Resolved absolute path for the renderer's asset protocol.
+    #[serde(default)]
+    pub icon_path: Option<String>,
     #[serde(default)]
     pub providers: Vec<String>,
 }
@@ -274,7 +280,7 @@ fn merge(
     let fields = safe_fields(fields);
     let label = safe_text(value.label.as_deref(), 120);
     let description = safe_text(value.description.as_deref(), 200);
-    if fields.is_empty() && label.is_none() && description.is_none() {
+    if fields.is_empty() && label.is_none() && description.is_none() && value.icon.is_none() {
         return;
     }
     let pending = result.entry(path.to_owned()).or_insert_with(|| Pending {
@@ -305,6 +311,10 @@ fn merge(
         }
         if let Some(description) = description {
             pending.value.description = Some(description);
+        }
+        if value.icon.is_some() {
+            pending.value.icon = value.icon;
+            pending.value.icon_path = value.icon_path;
         }
     }
     pending.priority = pending.priority.max(priority);
@@ -340,6 +350,8 @@ fn apply_rules(
                 description: rule.description.clone(),
                 style: rule.style.clone().unwrap_or_default(),
                 fields: rule.fields.clone(),
+                icon: None,
+                icon_path: None,
                 providers: vec![],
             };
             merge(result, entries, &entry.path, priority, provider, value);
@@ -351,6 +363,7 @@ fn dynamic(
     result: &mut HashMap<String, Pending>,
     entries: &HashMap<String, DecorationEntry>,
     manifest: &PluginManifest,
+    folder: &std::path::Path,
     directory: &str,
     config: &DecorationConfig,
 ) {
@@ -411,6 +424,12 @@ fn dynamic(
                 }
             }
         }
+        let (icon, icon_path) = item
+            .get("icon")
+            .and_then(Value::as_str)
+            .and_then(|reference| crate::plugin_resources::resolve(manifest, folder, reference))
+            .map(|(namespace, path)| (Some(namespace), Some(path)))
+            .unwrap_or((None, None));
         let value = Decoration {
             path: path.into(),
             badges,
@@ -421,6 +440,8 @@ fn dynamic(
                 .map(str::to_owned),
             style,
             fields,
+            icon,
+            icon_path,
             providers: vec![],
         };
         merge(
@@ -440,7 +461,7 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
         .map(|entry| (entry.path.clone(), entry))
         .collect::<HashMap<_, _>>();
     let mut result = HashMap::new();
-    for (manifest, _) in plugin_host::installed_manifests() {
+    for (manifest, folder) in plugin_host::installed_manifests() {
         let config = config(&manifest);
         if config.mode == "none" || config.mode.is_empty() {
             continue;
@@ -459,7 +480,14 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
                 config.priority,
                 &config.rules,
             ),
-            "dynamic" => dynamic(&mut result, &entries, &manifest, directory, &config),
+            "dynamic" => dynamic(
+                &mut result,
+                &entries,
+                &manifest,
+                &folder,
+                directory,
+                &config,
+            ),
             _ => {}
         }
     }

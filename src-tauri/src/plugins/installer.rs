@@ -475,7 +475,7 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
         return Err("invalid plugin id".into());
     }
     let verification = crate::plugin_signing::verify(&manifest_bytes, &manifest, staging.path())?;
-    crate::plugin_file_icons::validate(&manifest, staging.path())?;
+    crate::plugin_resources::validate(&manifest, staging.path())?;
     let declared = plugin_host::declared_permissions(&manifest)?;
     let requested_network_domains = plugin_permissions::validate_network_domains(
         &declared,

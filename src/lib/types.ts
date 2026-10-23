@@ -110,6 +110,8 @@ export interface EntryDecoration {
   description?: string
   style?: DecorationStyle
   fields?: Partial<Record<DecorationTarget, DecorationField>>
+  icon?: string
+  iconPath?: string
   providers?: string[]
 }
 export type View = 'list' | 'gallery' | 'columns' | 'icons'

@@ -1,39 +1,20 @@
-//! Plugin-provided file icons.
+//! Namespaced static resources declared by plugins.
 //!
-//! Icons are static assets declared in the manifest. Core validates them at
-//! install time and exposes the resolved absolute paths to the browser, which
-//! loads them through the Tauri asset protocol. There is deliberately no
-//! runtime registration API: a plugin cannot start serving arbitrary files
-//! after installation.
-use crate::plugin_host::{self, PluginManifest};
-use serde::Serialize;
+//! A plugin can ship icons/images in its package and reference them from
+//! dynamic decorations as `fiex-resource://<plugin-id>/<resource-id>`. Core
+//! validates the path, media type and SVG content at install time, and resolves
+//! the reference only when the namespace matches the decorating plugin.
+use crate::plugin_host::PluginManifest;
 use serde_json::Value;
 use std::path::{Component, Path, PathBuf};
 
 const MAX_RESOURCES: usize = 64;
-const MAX_RULES: usize = 128;
-const MAX_ICON_BYTES: u64 = 256 * 1024;
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileIconRule {
-    pub plugin_id: String,
-    pub plugin_name: String,
-    pub resource_id: String,
-    pub path: String,
-    pub media_type: String,
-    pub extensions: Vec<String>,
-    pub names: Vec<String>,
-    pub mime: Vec<String>,
-    pub is_dir: Option<bool>,
-    pub priority: i32,
-}
+const MAX_RESOURCE_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone, Debug)]
 struct Resource {
     id: String,
     path: PathBuf,
-    media_type: String,
 }
 
 fn valid_id(value: &str) -> bool {
@@ -100,7 +81,7 @@ fn svg_is_safe(bytes: &[u8]) -> bool {
     .any(|needle| text.contains(needle))
 }
 
-fn resolve_resource(folder: &Path, path: &str) -> Option<(PathBuf, String)> {
+fn resolve_file(folder: &Path, path: &str) -> Option<(PathBuf, String)> {
     let relative = Path::new(path);
     if relative.is_absolute() || !normal_relative(relative) {
         return None;
@@ -110,7 +91,7 @@ fn resolve_resource(folder: &Path, path: &str) -> Option<(PathBuf, String)> {
     if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
         return None;
     }
-    if metadata.len() > MAX_ICON_BYTES {
+    if metadata.len() > MAX_RESOURCE_BYTES {
         return None;
     }
     let canonical_folder = folder.canonicalize().ok()?;
@@ -151,7 +132,7 @@ fn resources(manifest: &PluginManifest, folder: &Path) -> Vec<Resource> {
                 ),
                 _ => return None,
             };
-            let (path, media) = resolve_resource(folder, path)?;
+            let (path, media) = resolve_file(folder, path)?;
             if let Some(declared) = declared {
                 if media_type(&path, Some(declared)) != Some(media.as_str()) {
                     return None;
@@ -160,77 +141,34 @@ fn resources(manifest: &PluginManifest, folder: &Path) -> Vec<Resource> {
             Some(Resource {
                 id: id.clone(),
                 path,
-                media_type: media,
             })
         })
         .collect()
 }
 
-pub fn rules(manifest: &PluginManifest, folder: &Path) -> Vec<FileIconRule> {
-    let resources = resources(manifest, folder);
-    if resources.is_empty() {
-        return Vec::new();
+/// Parse `fiex-resource://<plugin-id>/<resource-id>` and enforce that the
+/// namespace is exactly the plugin producing the decoration.
+pub fn resolve(
+    manifest: &PluginManifest,
+    folder: &Path,
+    reference: &str,
+) -> Option<(String, String)> {
+    let rest = reference.strip_prefix("fiex-resource://")?;
+    let (namespace, resource_id) = rest.split_once('/')?;
+    if namespace != manifest.id || !valid_id(resource_id) {
+        return None;
     }
-    let Some(items) = manifest
-        .contributions
-        .get("fileIcons")
-        .and_then(Value::as_array)
-    else {
-        return Vec::new();
-    };
-    let mut result = Vec::new();
-    for item in items.iter().take(MAX_RULES) {
-        let Some(resource_id) = item.get("icon").and_then(Value::as_str) else {
-            continue;
-        };
-        let Some(resource) = resources.iter().find(|entry| entry.id == resource_id) else {
-            continue;
-        };
-        let matcher = item.get("match").unwrap_or(&Value::Null);
-        let list = |key: &str| {
-            matcher
-                .get(key)
-                .and_then(Value::as_array)
-                .map(|values| {
-                    values
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(|value| value.trim().trim_start_matches('.').to_ascii_lowercase())
-                        .filter(|value| !value.is_empty())
-                        .take(64)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default()
-        };
-        let extensions = list("extensions");
-        let names = list("names");
-        let mime = list("mime");
-        let is_dir = matcher.get("isDir").and_then(Value::as_bool);
-        if extensions.is_empty() && names.is_empty() && mime.is_empty() && is_dir.is_none() {
-            continue;
-        }
-        result.push(FileIconRule {
-            plugin_id: manifest.id.clone(),
-            plugin_name: manifest.name.clone(),
-            resource_id: resource.id.clone(),
-            path: resource.path.to_string_lossy().to_string(),
-            media_type: resource.media_type.clone(),
-            extensions,
-            names,
-            mime,
-            is_dir,
-            priority: item
-                .get("priority")
-                .and_then(Value::as_i64)
-                .unwrap_or(0)
-                .clamp(-1000, 1000) as i32,
-        });
-    }
-    result
+    let resource = resources(manifest, folder)
+        .into_iter()
+        .find(|entry| entry.id == resource_id)?;
+    Some((
+        format!("fiex-resource://{namespace}/{resource_id}"),
+        resource.path.to_string_lossy().to_string(),
+    ))
 }
 
-/// Reject a package whose icon declarations point outside the package or at an
-/// unsupported asset. Called while the package is still staged.
+/// Reject a package whose resources point outside the package or use an
+/// unsupported type. Called while the package is still staged.
 pub fn validate(manifest: &PluginManifest, folder: &Path) -> Result<(), String> {
     let Some(object) = manifest
         .contributions
@@ -257,7 +195,7 @@ pub fn validate(manifest: &PluginManifest, folder: &Path) -> Result<(), String> 
             ),
             _ => return Err(format!("resource {id} must be a path or object")),
         };
-        let (resolved, media) = resolve_resource(folder, path)
+        let (resolved, media) = resolve_file(folder, path)
             .ok_or_else(|| format!("resource {id} is missing or unsafe"))?;
         if let Some(declared) = declared {
             if media_type(&resolved, Some(declared)) != Some(media.as_str()) {
@@ -265,47 +203,7 @@ pub fn validate(manifest: &PluginManifest, folder: &Path) -> Result<(), String> 
             }
         }
     }
-    let Some(items) = manifest
-        .contributions
-        .get("fileIcons")
-        .and_then(Value::as_array)
-    else {
-        return Ok(());
-    };
-    if items.len() > MAX_RULES {
-        return Err("plugin declares too many file icons".into());
-    }
-    for item in items {
-        let icon = item
-            .get("icon")
-            .and_then(Value::as_str)
-            .ok_or("file icon rule has no icon")?;
-        if !object.contains_key(icon) {
-            return Err(format!("file icon references unknown resource: {icon}"));
-        }
-    }
     Ok(())
-}
-
-pub fn all() -> Vec<FileIconRule> {
-    let mut result = Vec::new();
-    for (manifest, folder) in plugin_host::installed_manifests() {
-        let declared = plugin_host::declared_permissions(&manifest).unwrap_or_default();
-        let Ok(status) = crate::plugin_permissions::status(&manifest.id, &declared) else {
-            continue;
-        };
-        if !status.enabled {
-            continue;
-        }
-        result.extend(rules(&manifest, &folder));
-    }
-    result.sort_by(|a, b| {
-        b.priority
-            .cmp(&a.priority)
-            .then_with(|| a.plugin_id.cmp(&b.plugin_id))
-            .then_with(|| a.resource_id.cmp(&b.resource_id))
-    });
-    result
 }
 
 #[cfg(test)]
@@ -324,7 +222,14 @@ mod tests {
     }
 
     #[test]
-    fn resolves_declared_resources() {
+    fn media_types_are_limited() {
+        assert_eq!(media_type(Path::new("a.svg"), None), Some("image/svg+xml"));
+        assert_eq!(media_type(Path::new("a.png"), None), Some("image/png"));
+        assert_eq!(media_type(Path::new("a.html"), None), None);
+    }
+
+    #[test]
+    fn resolves_only_its_own_namespace() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("assets")).unwrap();
         std::fs::write(
@@ -340,24 +245,20 @@ mod tests {
             "contributions": {
                 "resources": {
                     "rust": { "path": "assets/rust.svg", "mediaType": "image/svg+xml" }
-                },
-                "fileIcons": [
-                    { "match": { "extensions": [".RS"] }, "icon": "rust", "priority": 10 }
-                ]
+                }
             }
         }))
         .unwrap();
         assert!(validate(&manifest, dir.path()).is_ok());
-        let rules = rules(&manifest, dir.path());
-        assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0].extensions, vec!["rs"]);
-        assert!(rules[0].path.ends_with("assets/rust.svg"));
-    }
-
-    #[test]
-    fn media_types_are_limited() {
-        assert_eq!(media_type(Path::new("a.svg"), None), Some("image/svg+xml"));
-        assert_eq!(media_type(Path::new("a.png"), None), Some("image/png"));
-        assert_eq!(media_type(Path::new("a.html"), None), None);
+        let (namespace, path) =
+            resolve(&manifest, dir.path(), "fiex-resource://org.test.icons/rust").unwrap();
+        assert_eq!(namespace, "fiex-resource://org.test.icons/rust");
+        assert!(path.ends_with("assets/rust.svg"));
+        assert!(resolve(
+            &manifest,
+            dir.path(),
+            "fiex-resource://org.other.icons/rust"
+        )
+        .is_none());
     }
 }

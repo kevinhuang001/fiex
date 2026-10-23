@@ -16,6 +16,7 @@ import { InlineRename } from './InlineRename'
 import { TagDots } from '../TagDots'
 import { asset, call, native } from '@/lib/api'
 import { startFileDrag } from '@/lib/drag'
+import { useDecorationIcon } from '@/lib/decorationIcons'
 import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
 import type {
   DecorationBadge,
@@ -694,7 +695,18 @@ export function FileViews(props: Props) {
 
 function Thumbnail({ entry: e, size: s }: { entry: Entry; size: number }) {
   const [failed, setFailed] = useState(false)
+  const decorationIcon = useDecorationIcon(e.path)
   useEffect(() => setFailed(false), [e.path])
+  if (decorationIcon)
+    return (
+      <img
+        className="thumbnail"
+        style={{ width: s, height: s }}
+        src={decorationIcon}
+        alt=""
+        draggable={false}
+      />
+    )
   if (isImage(e) && !failed && asset(e.path))
     return (
       <img

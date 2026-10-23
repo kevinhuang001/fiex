@@ -366,10 +366,6 @@ fn plugin_panel_asset(plugin_id: String, panel_id: String) -> Result<String, Str
     crate::plugin_host::panel_asset(&plugin_id, &panel_id)
 }
 #[tauri::command]
-fn plugin_file_icons() -> Vec<crate::plugin_file_icons::FileIconRule> {
-    crate::plugin_file_icons::all()
-}
-#[tauri::command]
 fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
     crate::plugin_host::catalog()
 }
@@ -1200,7 +1196,6 @@ pub fn run() {
             plugins_list,
             plugin_panel_html,
             plugin_panel_asset,
-            plugin_file_icons,
             plugin_permission_allowed,
             plugin_set_active_directory,
             plugin_network_domains,
