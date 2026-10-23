@@ -1467,14 +1467,11 @@ body.dragging-file * {
     border-color 140ms ease;
 }
 .tab:not(.active):hover {
-  background: color-mix(in srgb, var(--hover) 65%, transparent);
+  background: var(--tab-hover-background);
 }
 .tab > button:first-child {
   font-size: 12px;
   padding-inline: 11px;
-}
-.tab.active {
-  box-shadow: 0 -2px 0 var(--accent) inset;
 }
 .tabs-spacer {
   min-width: 24px;
@@ -1514,38 +1511,28 @@ body.dragging-file * {
 }
 
 /* Shared desktop chrome across browser, sidebar, and preferences. */
-.sidebar {
-  background:
-    linear-gradient(155deg, color-mix(in srgb, var(--canvas) 34%, transparent), transparent 72%),
-    var(--glass);
-  border-right-color: color-mix(in srgb, var(--line) 70%, transparent);
-}
 .sidebar-label {
   font-size: 10px;
   letter-spacing: 0.35px;
 }
 .nav-item.active {
-  background: color-mix(in srgb, var(--accent) 11%, var(--canvas));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+  background: var(--nav-active-background);
+  box-shadow: inset 0 0 0 1px var(--nav-active-line);
   color: var(--text);
-}
-.dark .nav-item.active {
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .file-row {
   height: 40px;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
 }
 .file-row:nth-child(even) {
-  background: transparent;
+  background: var(--row-alt-background);
 }
 .file-row:hover {
-  background: color-mix(in srgb, var(--hover) 72%, var(--canvas));
+  background: var(--row-hover-background);
 }
 .file-row.selected {
-  background: var(--selected);
-  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+  background: var(--row-selected-background);
+  border-color: var(--row-selected-line);
 }
 .file-label {
   font-size: max(var(--label-size, 11px), 12px);
@@ -1596,19 +1583,19 @@ body.dragging-file * {
   align-items: center;
   padding: 6px 12px;
   gap: 6px;
-  background: color-mix(in srgb, var(--text) 6%, var(--canvas));
+  background: var(--tabbar-background);
   border-bottom: 1px solid var(--line);
 }
 .tab {
   height: 34px;
   border: 1px solid transparent;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--canvas) 55%, transparent);
+  border-radius: var(--radius-tab);
+  background: var(--tab-background);
   flex-shrink: 0;
 }
 .tab.active {
-  background: var(--canvas);
-  border-color: var(--line);
+  background: var(--tab-active-background);
+  border-color: var(--tab-active-line);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 3.14%, transparent);
 }
 .tab.tab-drop {
@@ -1753,26 +1740,23 @@ body.dragging-file * {
   border-bottom: 0;
 }
 .tab {
-  --tab-bg: color-mix(in srgb, var(--canvas) 45%, transparent);
   position: relative;
   height: 34px;
   flex: 0 1 220px;
   min-width: 118px;
   border: 0;
-  border-radius: 10px 10px 0 0;
-  background: var(--tab-bg);
+  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+  background: var(--tab-background);
   box-shadow: none;
 }
 .tab:not(.active):hover {
-  --tab-bg: color-mix(in srgb, var(--canvas) 68%, transparent);
-  background: var(--tab-bg);
+  background: var(--tab-hover-background);
 }
 .tab.active {
-  --tab-bg: var(--canvas);
   top: auto;
   border: 0;
-  border-radius: 10px 10px 0 0;
-  background: var(--tab-bg);
+  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+  background: var(--tab-active-background);
   box-shadow: none;
 }
 .tab::before,
@@ -2065,17 +2049,9 @@ body.dragging-reorder * {
 
 /* The left rail is a frosted surface, not a window onto the desktop. */
 .sidebar {
-  background:
-    linear-gradient(155deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
-    color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  background: var(--sidebar-background);
   backdrop-filter: blur(30px) saturate(140%);
-  border-right-color: color-mix(in srgb, var(--line) 70%, transparent);
-}
-.dark .sidebar {
-  background:
-    linear-gradient(155deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
-    color-mix(in srgb, var(--surface) 96%, var(--canvas));
-  border-right-color: color-mix(in srgb, var(--line) 80%, transparent);
+  border-right-color: var(--sidebar-line);
 }
 
 /* Context menus sit above the workspace dock but below modal sheets. */

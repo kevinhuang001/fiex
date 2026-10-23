@@ -255,6 +255,9 @@ function CachedPanel({
               return {
                 directoryPath: current.directory,
                 selectionPaths: current.selection,
+                panelId: current.panelId,
+                panelTitle: current.title,
+                ...(current.source ? { source: current.source } : {}),
               }
             if (method === 'panel.close') {
               close()

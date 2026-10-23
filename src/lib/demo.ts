@@ -427,6 +427,83 @@ const officialPlugins: DemoPlugin[] = officialMode
         },
       },
       {
+        id: 'org.fiex.gpg',
+        name: 'GPG',
+        version: '0.1.0',
+        description: '使用本机 GnuPG 加密、解密、签名、验签及管理公钥。',
+        enabled: true,
+        approved: true,
+        backendAvailable: true,
+        capabilities: ['contextMenu', 'panel'],
+        declaredPermissions: ['commands'],
+        grantedPermissions: ['commands'],
+        requestedCommands: ['gpg'],
+        allowedCommands: ['gpg'],
+        requestedNetworkDomains: [],
+        allowedNetworkDomains: [],
+        author: { name: 'Fiex Contributors' },
+        contributions: {
+          toolbar: [
+            {
+              id: 'gpg.keys',
+              title: '公钥管理',
+              icon: 'key-round',
+              panel: {
+                entry: 'ui/dist/index.html',
+                title: 'GPG 公钥管理',
+                defaultSize: { width: 420, height: 460 },
+              },
+            },
+          ],
+          contextMenus: [
+            {
+              id: 'gpg.menu',
+              title: 'GPG',
+              when: 'context.selection.count > 0',
+              children: [
+                {
+                  id: 'gpg.encrypt',
+                  title: '加密…',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: 'GPG 加密',
+                    defaultSize: { width: 560, height: 520 },
+                  },
+                },
+                {
+                  id: 'gpg.decrypt',
+                  title: '解密…',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: 'GPG 解密',
+                    defaultSize: { width: 520, height: 400 },
+                  },
+                },
+                {
+                  id: 'gpg.sign',
+                  title: '签名…',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: 'GPG 签名',
+                    defaultSize: { width: 540, height: 470 },
+                  },
+                },
+                {
+                  id: 'gpg.verify',
+                  title: '验证签名…',
+                  when: 'context.selection.count == 1',
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: '验证签名',
+                    defaultSize: { width: 520, height: 420 },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
         id: 'org.fiex.checksum',
         name: '校验和',
         version: '0.2.7',
@@ -457,6 +534,22 @@ const officialPlugins: DemoPlugin[] = officialMode
       },
     ]
   : []
+const demoGpgKeys = [
+  {
+    fingerprint: '0123456789ABCDEF0123456789ABCDEF01234567',
+    keyId: '01234567',
+    name: 'Ada Lovelace <ada@example.org>',
+    email: 'ada@example.org',
+    expires: '',
+  },
+  {
+    fingerprint: 'AAAABBBBCCCCDDDDEEEEFFFF00001111222233334444',
+    keyId: '22223333',
+    name: 'Fiex Release Signing <release@fiex.app>',
+    email: 'release@fiex.app',
+    expires: '',
+  },
+]
 const demoPlugins: DemoPlugin[] = officialMode
   ? structuredClone(officialPlugins)
   : query.has('pluginFixture')
@@ -659,6 +752,16 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         if (method === 'git.refs')
           return { head: 'bbbbbbbb', current: 'main', branches: ['main'], tags: [] }
         if (method === 'git.history') return demoHistory
+        if (method === 'gpg.info') return { version: 'gpg (GnuPG) 2.4.5' }
+        if (method === 'gpg.keys') return demoGpgKeys
+        if (method === 'gpg.verify')
+          return {
+            valid: true,
+            signer: demoGpgKeys[0].name,
+            fingerprint: demoGpgKeys[0].fingerprint,
+          }
+        if (method === 'gpg.import') return { imported: 1, status: 'demo' }
+        if (method.startsWith('gpg.')) return { ok: true, status: 'demo' }
         if (method === 'git.identity') return { name: 'Kevin Huang', email: 'kevin@example.com' }
         if (method === 'git.remoteStatus')
           return {

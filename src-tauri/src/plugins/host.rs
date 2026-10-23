@@ -495,6 +495,33 @@ fn panel_document(html: &str) -> String {
         None => format!("{PANEL_CSP}{html}"),
     }
 }
+/// A panel may be declared directly on a toolbar/context-menu entry, on a
+/// nested context submenu entry, or in the optional top-level `panels` list.
+/// Search mirrors the frontend's depth limit so the two never disagree about
+/// which ids are openable.
+fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Value> {
+    fn walk<'a>(items: &'a [Value], panel_id: &str, depth: usize) -> Option<&'a Value> {
+        if depth > 4 {
+            return None;
+        }
+        for item in items {
+            if item.get("id").and_then(Value::as_str) == Some(panel_id) {
+                if let Some(panel) = item.get("panel") {
+                    return Some(panel);
+                }
+            }
+            let nested = item.get("children").and_then(Value::as_array);
+            if let Some(found) = nested.and_then(|children| walk(children, panel_id, depth + 1)) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    ["panels", "toolbar", "contextMenus"]
+        .iter()
+        .filter_map(|key| manifest.contributions.get(key).and_then(Value::as_array))
+        .find_map(|items| walk(items, panel_id, 1))
+}
 /// Host-approved precompiled, self-contained iframe HTML. Plugins cannot
 /// supply absolute paths or read unrelated files through this API.
 fn panel_source(plugin_id: &str, panel_id: &str) -> Result<String, String> {
@@ -511,13 +538,7 @@ fn panel_source(plugin_id: &str, panel_id: &str) -> Result<String, String> {
     {
         return Err("plugin disabled or not approved".into());
     }
-    let panel = ["toolbar", "contextMenus"]
-        .iter()
-        .filter_map(|key| manifest.contributions.get(key).and_then(Value::as_array))
-        .flatten()
-        .find(|item| item.get("id").and_then(Value::as_str) == Some(panel_id))
-        .and_then(|item| item.get("panel"))
-        .ok_or("plugin declares no such panel")?;
+    let panel = find_panel(&manifest, panel_id).ok_or("plugin declares no such panel")?;
     let asset = panel
         .get("entry")
         .and_then(Value::as_str)
@@ -1416,4 +1437,78 @@ pub fn themes() -> Vec<crate::plugin_themes::Theme> {
             crate::plugin_themes::load(&manifest, &folder).unwrap_or_default()
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn manifest(contributions: Value) -> PluginManifest {
+        serde_json::from_value(json!({
+            "schemaVersion": 1,
+            "id": "test.panels",
+            "name": "Panels",
+            "version": "1.0.0",
+            "contributions": contributions
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn resolves_panels_nested_in_context_submenus() {
+        let manifest = manifest(json!({
+            "contextMenus": [{
+                "id": "archive.compress",
+                "title": "压缩",
+                "when": "context.selection.count > 0",
+                "children": [{
+                    "id": "archive.advanced",
+                    "title": "高级压缩…",
+                    "panel": { "entry": "ui/dist/index.html", "title": "高级压缩" }
+                }]
+            }]
+        }));
+        let panel = find_panel(&manifest, "archive.advanced").unwrap();
+        assert_eq!(panel["title"], "高级压缩");
+    }
+
+    #[test]
+    fn resolves_top_level_panels_and_rejects_unknown_ids() {
+        let manifest = manifest(json!({
+            "panels": [{ "id": "gpg.keys", "title": "公钥", "panel": { "entry": "ui/index.html" } }],
+            "toolbar": [{ "id": "git.main", "title": "Git", "panel": { "entry": "ui/git.html" } }]
+        }));
+        assert_eq!(
+            find_panel(&manifest, "gpg.keys").unwrap()["entry"],
+            "ui/index.html"
+        );
+        assert_eq!(
+            find_panel(&manifest, "git.main").unwrap()["entry"],
+            "ui/git.html"
+        );
+        assert!(find_panel(&manifest, "missing").is_none());
+    }
+
+    #[test]
+    fn entry_ids_without_a_panel_do_not_resolve() {
+        let manifest = manifest(json!({
+            "contextMenus": [{ "id": "gpg.menu", "title": "GPG", "command": "gpg.run" }]
+        }));
+        assert!(find_panel(&manifest, "gpg.menu").is_none());
+    }
+
+    #[test]
+    fn panel_ids_deeper_than_the_frontend_limit_do_not_resolve() {
+        let mut item = json!({
+            "id": "deep.panel",
+            "title": "Deep",
+            "panel": { "entry": "ui/index.html" }
+        });
+        for _ in 0..5 {
+            item = json!({ "id": "level", "title": "Level", "children": [item] });
+        }
+        let manifest = manifest(json!({ "contextMenus": [item] }));
+        assert!(find_panel(&manifest, "deep.panel").is_none());
+    }
 }

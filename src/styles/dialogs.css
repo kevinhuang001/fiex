@@ -3,10 +3,10 @@
   z-index: 40;
   width: 210px;
   padding: 6px;
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-menu);
   box-shadow: var(--shadow);
-  border: 1px solid var(--line);
-  background: var(--surface);
+  border: 1px solid var(--menu-line);
+  background: var(--context-menu-background);
 }
 .context-menu button {
   display: flex;
@@ -23,7 +23,7 @@
   color: var(--muted);
 }
 .context-menu button:hover {
-  background: var(--hover);
+  background: var(--control-hover-background);
 }
 /* Only explicit destructive actions are red. Plugin entries are appended last
    and must keep the normal color and geometry. */
@@ -50,9 +50,9 @@
   overflow-y: auto;
   width: 124px;
   padding: 5px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  border: 1px solid var(--menu-line);
+  border-radius: var(--radius-submenu);
+  background: var(--context-menu-background);
   box-shadow: var(--shadow);
 }
 .context-submenu button {
@@ -63,7 +63,7 @@
   text-align: left;
 }
 .context-submenu button:hover {
-  background: var(--hover);
+  background: var(--control-hover-background);
 }
 .modal-overlay {
   position: fixed;
@@ -113,8 +113,8 @@
 }
 .text-field {
   display: block;
-  background: var(--canvas);
-  border: 1px solid var(--line);
+  background: var(--input-background);
+  border: 1px solid var(--input-line);
   border-radius: var(--radius-control);
   width: 100%;
   padding: 10px 12px;

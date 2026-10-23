@@ -37,6 +37,8 @@ Themes are installed and enabled through the same plugin flow. A pure theme has 
 
 The settings identifier is `<plugin-id>:<theme-id>`. `mode` is `light` or `dark`. Optional tokens inherit Fiex defaults for that mode. Tokens include `danger`, `success`, `warning`, `on-accent`, `glass`, `shadow`, `overlay`, `sidebar-background`, `toolbar-background`, and `font-family`. No raw stylesheet or executable theme code is accepted. Disabling/removing the selected theme restores the default palette.
 
+Surface tokens make the chrome restylable without new selectors: `tabbar-background`, `tab-background`, `tab-hover-background`, `tab-active-background`, `tab-active-line`, `row-alt-background`, `row-hover-background`, `row-selected-background`, `row-selected-line`, `row-selected-text`, `nav-active-background`, `nav-active-line`, `statusbar-background`, `menu-background`, `context-menu-background`, `menu-line`, `input-background`, `input-line`, `control-hover-background`, `segmented-background`, `segmented-active-background`, `sidebar-line`, plus `radius-row`, `radius-tab`, `radius-menu` and `radius-submenu`. Each defaults to the exact value the built-in palette used, so a theme only overrides what it needs and the default look is unchanged. Values may be gradients or shadows, not only colors.
+
 Core publishes the computed palette as `theme.changed` on each panel's private MessagePort, including at initial handshake. The SDK applies tokens as inline custom properties inside the opaque-origin iframe. Custom token names may be used by cooperating plugins; they do not create arbitrary CSS selectors or permissions.
 
 ## Panels

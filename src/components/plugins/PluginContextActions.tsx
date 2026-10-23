@@ -186,7 +186,7 @@ export function PluginContextActions({
           detail: {
             pluginId,
             panelId: item.id,
-            title: item.title,
+            title: item.panel.title || item.title,
             icon: item.icon || plugins.find((plugin) => plugin.id === pluginId)?.icon,
             selection: paths,
             directory: path,

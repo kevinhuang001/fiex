@@ -54,6 +54,8 @@ unsubscribe()
 
 `plugin.invoke` 只允许请求 **本插件**的 namespace 下、manifest 声明的命令；UI-only 插件无 Native 命令处理器时返回 `unsupported`，不能偷偷路由到其他插件。
 
+`context.get()` 返回 `directoryPath`、`selectionPaths`，以及打开该面板的贡献标识：`panelId`、`panelTitle` 与 `source`（`toolbar` 或 `contextMenu`）。同一个 HTML 入口可被多个工具栏按钮或右键菜单项复用，面板据此决定初始动作，不必为每个入口复制资源。`panelId` 来自 Host 已安装的 manifest，不是 iframe 可以自行声明的值。
+
 ## 3. UI Bridge 的会话握手
 
 1. Fiex 安装时确定不可被插件伪造的 `pluginId`、资源完整性与该 iframe 的**独立 origin**；打开面板时生成不复用的 `panelInstanceId` 与绑定窗口/挂载/选择范围的权限上下文。

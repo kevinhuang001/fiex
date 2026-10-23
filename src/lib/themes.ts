@@ -7,7 +7,13 @@ export interface Theme {
 }
 let applied: string[] = []
 export async function installedThemes(): Promise<Theme[]> {
-  return native ? call<Theme[]>('plugin_themes') : []
+  if (native) return call<Theme[]>('plugin_themes')
+  // The browser demo has no plugin host. In development the Vite server mirrors
+  // the sibling official theme packages so they stay previewable on the web;
+  // production browser builds have no plugins and no fallback.
+  if (!import.meta.env.DEV) return []
+  const response = await fetch('/__fiex_theme/index.json').catch(() => null)
+  return response?.ok ? ((await response.json()) as Theme[]) : []
 }
 export function applyTheme(theme: Theme | undefined, mode: 'light' | 'dark') {
   const root = document.documentElement
@@ -49,7 +55,31 @@ export const THEME_TOKENS = [
   'on-accent',
   'radius-control',
   'radius-panel',
+  'radius-row',
+  'radius-tab',
+  'radius-menu',
+  'radius-submenu',
   'sidebar-background',
+  'sidebar-line',
   'toolbar-background',
+  'toolbar-line',
+  'tabbar-background',
+  'tab-background',
+  'tab-active-background',
+  'tab-active-line',
+  'row-alt-background',
+  'row-hover-background',
+  'row-selected-background',
+  'row-selected-line',
+  'row-selected-text',
+  'statusbar-background',
+  'menu-background',
+  'context-menu-background',
+  'menu-line',
+  'input-background',
+  'input-line',
+  'control-hover-background',
+  'segmented-background',
+  'segmented-active-background',
   'font-family',
 ]

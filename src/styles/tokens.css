@@ -29,8 +29,40 @@
   --on-accent: #ffffff;
   --radius-control: 9px;
   --radius-panel: 12px;
-  --sidebar-background: var(--glass);
+  --radius-row: 7px;
+  --radius-tab: 10px;
+  --radius-menu: 12px;
+  --radius-submenu: 10px;
+  /* Surface tokens. Each defaults to the value the component already used, so
+     the built-in appearance is unchanged and a theme can restyle one surface
+     without repainting the whole palette. Values may be gradients or shadows. */
+  --sidebar-background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%),
+    color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  --sidebar-line: color-mix(in srgb, var(--line) 70%, transparent);
   --toolbar-background: linear-gradient(110deg, var(--surface), var(--canvas));
+  --toolbar-line: transparent;
+  --tabbar-background: color-mix(in srgb, var(--text) 6%, var(--canvas));
+  --tab-background: color-mix(in srgb, var(--canvas) 45%, transparent);
+  --tab-hover-background: color-mix(in srgb, var(--canvas) 68%, transparent);
+  --tab-active-background: var(--canvas);
+  --tab-active-line: var(--line);
+  --row-alt-background: transparent;
+  --row-hover-background: color-mix(in srgb, var(--hover) 72%, var(--canvas));
+  --row-selected-background: var(--selected);
+  --row-selected-line: color-mix(in srgb, var(--accent) 20%, transparent);
+  --row-selected-text: var(--text);
+  --nav-active-background: color-mix(in srgb, var(--accent) 11%, var(--canvas));
+  --nav-active-line: color-mix(in srgb, var(--accent) 14%, transparent);
+  --statusbar-background: var(--surface);
+  --menu-background: var(--canvas);
+  --context-menu-background: var(--surface);
+  --menu-line: var(--line);
+  --input-background: var(--canvas);
+  --input-line: color-mix(in srgb, var(--line) 80%, transparent);
+  --control-hover-background: var(--hover);
+  --segmented-background: color-mix(in srgb, var(--hover) 55%, transparent);
+  --segmented-active-background: var(--canvas);
   color-scheme: light;
 }
 :root.dark {
@@ -55,5 +87,11 @@
   --danger: #f08b8b;
   --success: #7ac7a1;
   --warning: #e2bd6c;
+  --sidebar-background:
+    linear-gradient(155deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
+    color-mix(in srgb, var(--surface) 96%, var(--canvas));
+  --sidebar-line: color-mix(in srgb, var(--line) 80%, transparent);
+  --nav-active-background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  --nav-active-line: color-mix(in srgb, var(--accent) 22%, transparent);
   color-scheme: dark;
 }

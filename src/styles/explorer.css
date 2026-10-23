@@ -12,7 +12,7 @@
   flex-direction: column;
   background: var(--sidebar-background);
   backdrop-filter: blur(30px) saturate(150%);
-  border-right: 1px solid color-mix(in srgb, var(--accent) 13.33%, transparent);
+  border-right: 1px solid var(--sidebar-line);
 }
 .sidebar-hidden .sidebar {
   display: none;
@@ -251,6 +251,7 @@
   height: 69px;
   min-height: 69px;
   background: var(--toolbar-background);
+  box-shadow: inset 0 -1px 0 var(--toolbar-line);
 }
 .toolbar h1 {
   font-size: 15px;
@@ -285,7 +286,7 @@
   display: flex;
   gap: 1px;
   padding: 3px;
-  background: color-mix(in srgb, var(--hover) 55%, transparent);
+  background: var(--segmented-background);
   border-radius: 10px;
 }
 .view-switch button[data-slot='button'] {
@@ -296,7 +297,7 @@
 }
 .view-switch button[aria-pressed='true'] {
   color: var(--accent);
-  background: var(--canvas);
+  background: var(--segmented-active-background);
   box-shadow: 0 1px 5px color-mix(in srgb, var(--accent) 7.84%, transparent);
 }
 .terminal-control {
@@ -315,21 +316,22 @@
   padding: 0 18px;
   border-bottom: 1px solid var(--line);
   gap: 4px;
-  background: var(--surface);
+  background: var(--tabbar-background);
 }
 .tab {
   display: flex;
   align-items: center;
   min-width: 110px;
   max-width: 210px;
-  border-radius: 7px 7px 0 0;
+  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
   align-self: stretch;
+  background: var(--tab-background);
   border: 1px solid transparent;
   border-bottom: 0;
 }
 .tab.active {
-  background: var(--canvas);
-  border-color: var(--line);
+  background: var(--tab-active-background);
+  border-color: var(--tab-active-line);
   position: relative;
   top: 1px;
 }
@@ -400,7 +402,7 @@
   white-space: nowrap;
 }
 .breadcrumbs button:hover {
-  background: var(--hover);
+  background: var(--control-hover-background);
   color: var(--text);
 }
 .breadcrumbs > span:last-child {
@@ -416,9 +418,9 @@
   width: 100%;
   height: 28px;
   padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border: 1px solid var(--input-line);
   border-radius: 6px;
-  background: var(--canvas);
+  background: var(--input-background);
   color: var(--text);
   font-size: 11px;
   outline: none;
@@ -496,7 +498,7 @@
   height: 36px;
 }
 .file-row {
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   border: 1px solid transparent;
 }
 .file-row > span:not(:first-child) {
@@ -507,17 +509,17 @@
   overflow: hidden;
 }
 .file-row:nth-child(even) {
-  background: color-mix(in srgb, var(--hover) 20%, transparent);
+  background: var(--row-alt-background);
 }
 .file-row:hover {
-  background: color-mix(in srgb, var(--hover) 65%, transparent);
+  background: var(--row-hover-background);
 }
 .file-row.selected {
-  background: var(--selected);
-  border-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--row-selected-background);
+  border-color: var(--row-selected-line);
 }
 .file-row.selected > span {
-  color: var(--text);
+  color: var(--row-selected-text);
 }
 .file-name {
   display: flex;
@@ -762,8 +764,8 @@
   background: color-mix(in srgb, var(--hover) 50%, transparent);
 }
 .file-tile.selected {
-  background: var(--selected);
-  border-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--row-selected-background);
+  border-color: var(--row-selected-line);
 }
 .gallery-preview {
   height: calc(100% - 170px);
@@ -848,7 +850,7 @@
   background: var(--hover);
 }
 .column-row.selected {
-  background: var(--selected);
+  background: var(--row-selected-background);
 }
 .column-detail {
   min-width: 220px;
@@ -894,7 +896,7 @@
   gap: 0;
   font-size: 10px;
   color: var(--muted);
-  background: var(--surface);
+  background: var(--statusbar-background);
 }
 .statusbar > span {
   display: flex;
@@ -964,7 +966,7 @@
   color: var(--muted);
 }
 .icon-button:hover {
-  background: var(--hover);
+  background: var(--control-hover-background);
   color: var(--text);
 }
 .error-banner {
@@ -1005,15 +1007,15 @@
 }
 .fiex-menu {
   font-size: 11px !important;
-  border-radius: 12px !important;
+  border-radius: var(--radius-menu) !important;
   min-width: 210px !important;
   padding: 6px !important;
   /* Portaled menus sit over the translucent window material; an opaque sheet
      keeps them from picking up the grey desktop tint. */
-  background: var(--canvas) !important;
+  background: var(--menu-background) !important;
   box-shadow: var(--shadow) !important;
   backdrop-filter: none;
-  border: 1px solid var(--line) !important;
+  border: 1px solid var(--menu-line) !important;
 }
 .fiex-menu [role='menuitem'] {
   font-size: 11px;

@@ -26,8 +26,50 @@ function officialPluginDevServer(): Plugin {
     },
   }
 }
+/** Read installed-shape theme packages from the sibling official plugins
+ * checkout. Only the development server uses this: the browser demo has no
+ * plugin host, so without it theme packages could not be previewed in the web
+ * build. Production always reads themes through Core. */
+function readOfficialThemes() {
+  const themes: Array<Record<string, unknown>> = []
+  if (!fs.existsSync(officialPluginRoot)) return themes
+  for (const entry of fs.readdirSync(officialPluginRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const folder = path.join(officialPluginRoot, entry.name)
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(folder, 'manifest.json'), 'utf8'))
+      for (const contribution of manifest.contributions?.themes || []) {
+        const file = path.resolve(folder, String(contribution.path || ''))
+        if (!file.startsWith(folder + path.sep) || !fs.existsSync(file)) continue
+        const theme = JSON.parse(fs.readFileSync(file, 'utf8'))
+        // Core namespaces theme ids by plugin id; mirror it so a previewed id
+        // always matches the installed one.
+        themes.push({
+          id: `${manifest.id}:${theme.id}`,
+          name: theme.name,
+          mode: theme.mode,
+          tokens: theme.tokens || {},
+        })
+      }
+    } catch {
+      // A malformed sibling package must not break the dev server.
+    }
+  }
+  return themes
+}
+function officialThemeDevServer(): Plugin {
+  return {
+    name: 'fiex-official-theme-dev-server',
+    configureServer(server) {
+      server.middlewares.use('/__fiex_theme/index.json', (_req, res) => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify(readOfficialThemes()))
+      })
+    },
+  }
+}
 export default defineConfig({
-  plugins: [react(), tailwindcss(), officialPluginDevServer()],
+  plugins: [react(), tailwindcss(), officialPluginDevServer(), officialThemeDevServer()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: { strictPort: true },
   optimizeDeps: { include: ['pdfjs-dist/legacy/build/pdf.mjs'] },
