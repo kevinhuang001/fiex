@@ -91,10 +91,11 @@ export function PluginPanelHost() {
   const place = (_point: { x: number; y: number } | null, box = size) => {
     const width = Math.min(box.width, window.innerWidth - 24)
     const height = Math.min(window.innerHeight * 0.66, 600, window.innerHeight - 24)
-    // Plugin panels are global floating windows like the Activity Center:
-    // top-right, with the same vertical position and height.
+    const left = _point
+      ? Math.max(12, Math.min(_point.x + 10, window.innerWidth - width - 12))
+      : Math.max(12, window.innerWidth - width - 18)
     return {
-      left: Math.max(12, window.innerWidth - width - 18),
+      left,
       top: Math.max(12, Math.min(96, window.innerHeight - height - 12)),
     }
   }

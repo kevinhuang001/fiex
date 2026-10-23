@@ -1,3 +1,9 @@
+# Fiex 0.4.6
+
+- Decoration badges render after the real filename so text selectors and accessibility keep the exact name.
+- Git status decorations also color the filename; modified files are orange, additions green, deletions red, renames blue, untracked gray.
+- Toolbar plugin panels anchor to the toolbar button; context-menu panels anchor to the menu item position.
+
 # Fiex 0.4.5
 
 - Nested context submenus automatically flip upward when they would cross the window bottom, so long Archive format lists stay visible.

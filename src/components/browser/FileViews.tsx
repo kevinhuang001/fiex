@@ -112,8 +112,12 @@ function NameCell({
   const title = [entry.name, decoration?.description, decoration?.providers?.join(' · ')]
     .filter(Boolean)
     .join(' · ')
+  const label = decoration?.label || entry.name
   return (
-    <span className={className} style={style} title={title}>
+    <>
+      <span className={className} style={style} title={title}>
+        {entry.name}
+      </span>
       {decoration?.badges.map((badge) => (
         <span
           key={`${badge.text}-${badge.color}`}
@@ -128,8 +132,8 @@ function NameCell({
           {badge.text}
         </span>
       ))}
-      {decoration?.label || entry.name}
-    </span>
+      {label !== entry.name && <small className="decoration-label">{label}</small>}
+    </>
   )
 }
 

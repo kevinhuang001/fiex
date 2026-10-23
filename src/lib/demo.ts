@@ -594,6 +594,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
             {
               path: entry.path,
               badges: [{ text: 'M', color: 'orange', tooltip: 'Git：已修改' }],
+              style: { color: '#c2710c', fontWeight: '600' },
               providers: ['Git'],
             },
           ]

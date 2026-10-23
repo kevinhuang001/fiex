@@ -5157,7 +5157,7 @@ body.dragging-reorder * {
   justify-content: center;
   min-width: 15px;
   height: 15px;
-  margin-right: 5px;
+  margin-left: 5px;
   padding: 0 3px;
   border: 1px solid currentColor;
   border-radius: 4px;
@@ -5217,4 +5217,9 @@ body.dragging-reorder * {
     color: #9db0c1;
     background: #30404f;
   }
+}
+.decoration-label {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 10px;
 }
