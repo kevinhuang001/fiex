@@ -1,5 +1,7 @@
 # Themes and panel lifecycle
 
+> 主题包怎么写、有哪些 token、怎么本地预览：见 [22 主题包开发指南](22-THEME-AUTHORING.md)。
+
 ## Theme packages
 
 Themes are installed and enabled through the same plugin flow. A pure theme has no `runtime`, executable, iframe, or special publisher privilege. Its `contributions.themes` is a list of `{ "path": "theme.json" }` entries. Paths must remain inside the package. Core rejects oversized files, duplicate IDs, invalid metadata, and token values containing CSS declarations or URLs.

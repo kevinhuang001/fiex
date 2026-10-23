@@ -41,16 +41,18 @@ await fiex.ready()
 
 const context = await fiex.context.get()
 const result = await fiex.plugin.invoke<{ branch: string }>('git.status', {
-  directory: context.directory,
+  directory: context.directoryPath,
 })
 const unsubscribe = fiex.events.on('git.statusChanged', (event) => {
   console.log(event)
 })
 
-await fiex.panel.resize({ width: 420, height: 560 })
+await fiex.panel.resize(420, 560)
 // iframe 关闭前解除订阅
 unsubscribe()
 ```
+
+可运行的完整示例、构建配置、主题继承和 dev server 调试见 [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md)。
 
 `plugin.invoke` 只允许请求 **本插件**的 namespace 下、manifest 声明的命令；UI-only 插件无 Native 命令处理器时返回 `unsupported`，不能偷偷路由到其他插件。
 

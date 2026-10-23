@@ -40,16 +40,33 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 
 ## 文档
 
-- [01 架构](01-ARCHITECTURE.md)
-- [02 VFS 与连接](02-VFS.md)
-- [04 IPC](04-IPC-PROTOCOL.md)
-- [05 UI 扩展](05-UI-EXTENSIONS.md)
-- [07 安全](07-SECURITY-PACKAGING.md)
-- [12 状态](12-IMPLEMENTATION-STATUS.md)
-- [14 GitHub 安装](14-GITHUB-INSTALLATION.md)
-- [15 仓库边界](15-EXTERNAL-REPOSITORIES.md)
-- [16 搜索](16-SEARCH.md)
-- [17 文件装饰](17-DECORATIONS.md)
-- [19 插件资源与文件图标](19-FILE-ICONS.md)
+**动手做插件，先看这两篇：**
 
-See [activation and brokered resources](18-ACTIVATION-AND-BROKER.md) for the current authorization contract.
+- [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md) —— iframe 面板、SDK、主题继承、本地 dev server
+- [22 主题包开发指南](22-THEME-AUTHORING.md) —— 主题包形态、token 参考、校验规则、验收
+
+**协议与设计**
+
+- [01 架构](01-ARCHITECTURE.md)
+- [02 VFS 与目录树](02-VFS.md)
+- [03 缓存与选择性同步](03-CACHE-SYNC.md)
+- [04 Native IPC 协议](04-IPC-PROTOCOL.md)
+- [05 iframe UI 扩展点](05-UI-EXTENSIONS.md)
+- [06 任务与活动中心](06-TASKS.md)
+- [07 安全、权限与打包](07-SECURITY-PACKAGING.md)
+- [08 SDK 与第三方开发](08-SDK.md)
+- [09 迁移与 CI 验收](09-MIGRATION-TESTING.md)
+- [10 完整能力场景](10-EXAMPLES.md)
+- [11 UI SDK 与 Host Bridge](11-UI-SDK.md)
+- [12 实现状态](12-IMPLEMENTATION-STATUS.md)
+- [13 Storage / Secrets / OAuth](13-PERSISTENCE-OAUTH.md)
+- [14 GitHub 安装流程](14-GITHUB-INSTALLATION.md)
+- [15 外部仓库与 Release 契约](15-EXTERNAL-REPOSITORIES.md)
+- [16 搜索来源插件](16-SEARCH.md)
+- [16 插件签名](16-SIGNING.md)（历史编号与搜索重复）
+- [17 文件装饰](17-DECORATIONS.md)
+- [18 激活与代理资源](18-ACTIVATION-AND-BROKER.md)
+- [19 插件静态资源与文件图标](19-FILE-ICONS.md)
+- [20 主题与面板生命周期](20-THEMES-AND-PERFORMANCE.md)
+- [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md)
+- [22 主题包开发指南](22-THEME-AUTHORING.md)
