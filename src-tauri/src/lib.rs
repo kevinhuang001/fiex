@@ -24,6 +24,8 @@ pub mod plugin_host;
 pub mod plugin_installer;
 #[path = "plugins/ipc.rs"]
 pub mod plugin_ipc;
+#[path = "plugins/net.rs"]
+pub mod plugin_net;
 #[path = "plugins/permissions.rs"]
 pub mod plugin_permissions;
 #[path = "plugins/signing.rs"]

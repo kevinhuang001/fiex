@@ -440,7 +440,7 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
     .click()
   const review = page.getByRole('dialog', { name: '确认插件安装及权限' })
   await expect(review).toContainText('读取文件')
-  await review.getByRole('button', { name: '同意权限并安装' }).click()
+  await review.getByRole('button', { name: '安装（权限默认关闭）' }).click()
   await expect(page.locator('.plugin-row').filter({ hasText: '校验和' })).toBeVisible()
 })
 test('installed plugin rows expose permissions and settings', async ({ page }) => {

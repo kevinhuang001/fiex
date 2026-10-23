@@ -61,11 +61,20 @@ pub struct CommandsPermission {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TcpTarget {
+    pub host: String,
+    pub port: u16,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NetworkPermission {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
     pub domains: Vec<String>,
+    #[serde(default)]
+    pub tcp: Vec<TcpTarget>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -160,7 +169,10 @@ pub fn declared_permissions(
     if files.write {
         declared.insert("files.write".to_string());
     }
-    if manifest.permissions.network.enabled {
+    if manifest.permissions.network.enabled
+        || !manifest.permissions.network.domains.is_empty()
+        || !manifest.permissions.network.tcp.is_empty()
+    {
         declared.insert("network".to_string());
     }
     if manifest.permissions.commands.enabled {
@@ -740,6 +752,7 @@ fn host_process_run(
 struct Running {
     plugin_id: String,
     declared: std::collections::BTreeSet<String>,
+    tcp_targets: Vec<TcpTarget>,
     child: crate::plugin_sandbox::SandboxChild,
     stdin: Box<dyn Write + Send>,
     stdout: BufReader<Box<dyn Read + Send>>,
@@ -761,6 +774,22 @@ impl Running {
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
+            "host.net.http" if permitted("network") => {
+                crate::plugin_net::http(&self.plugin_id, &self.declared, p)
+            }
+            "host.net.tcp.open" if permitted("network") => {
+                crate::plugin_net::tcp_open(&self.plugin_id, &self.tcp_targets, p)
+            }
+            "host.net.tcp.read" if permitted("network") => {
+                crate::plugin_net::tcp_read(&self.plugin_id, p)
+            }
+            "host.net.tcp.write" if permitted("network") => {
+                crate::plugin_net::tcp_write(&self.plugin_id, p)
+            }
+            "host.net.tcp.close" if permitted("network") => {
+                crate::plugin_net::tcp_close(&self.plugin_id, p)?;
+                Ok(Value::Null)
+            }
             "host.buffer.create" => {
                 let size = p
                     .get("size")
@@ -1006,6 +1035,7 @@ impl PluginHost {
             );
             let mut running = Running {
                 plugin_id: plugin_id.to_string(),
+                tcp_targets: manifest.permissions.network.tcp.clone(),
                 declared,
                 child: sandbox,
                 stdin,

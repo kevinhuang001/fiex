@@ -346,7 +346,7 @@ export function PluginInstaller({
               取消
             </Button>
             <Button type="button" disabled={installing} onClick={() => void confirm()}>
-              {installing ? '安装中…' : '同意权限并安装'}
+              {installing ? '安装中…' : '安装（权限默认关闭）'}
             </Button>
           </footer>
         </div>

@@ -316,9 +316,12 @@ pub fn approve_install_with_domains(
         }
         current.approved = true;
         current.enabled = true;
-        current.granted = declared.clone();
-        current.network_domains = domains.clone();
-        current.commands = commands.clone();
+        // Installation only approves the package. Every capability starts
+        // denied and must be granted explicitly from plugin settings.
+        current.granted.clear();
+        current.network_domains.clear();
+        current.commands.clear();
+        let _ = (&domains, &commands);
         Ok(())
     })
 }
