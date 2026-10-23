@@ -120,6 +120,9 @@ jobs:
           if [ "$RUNNER_OS" != Windows ]; then chmod +x "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"; fi
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_smoke -- org.fiex.mock
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_search_e2e
+      - name: macOS sandbox startup diagnostics
+        if: failure() && runner.os == 'macOS'
+        run: sudo log show --last 5m --style compact --predicate 'process == "sandboxd" OR eventMessage CONTAINS "mock_plugin"' | tail -200
       - name: Clippy
         shell: bash
         env:

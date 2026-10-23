@@ -8,6 +8,7 @@
 //! - `network`: open network connections to explicitly allowed domains.
 //!
 //! - `commands`: explicitly approved executable names, run by Host.
+//!
 //! Private plugin storage and host-rendered choosers are brokered by the host.
 use serde::{Deserialize, Serialize};
 use std::{

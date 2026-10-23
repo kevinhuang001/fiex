@@ -1110,7 +1110,12 @@ impl Running {
                 .stdout
                 .recv_timeout(Duration::from_secs(120))
                 .map_err(|_| "plugin stopped responding or disconnected")??
-                .ok_or("plugin exited during request")?;
+                .ok_or_else(|| {
+                    format!(
+                        "plugin exited during request: {}",
+                        self.child.exit_diagnostic()
+                    )
+                })?;
             // Re-entrant plugin→host request while host awaits a plugin response.
             if let Some(host_method) = response.get("method").and_then(Value::as_str) {
                 let Some(reverse_id) = response.get("id").cloned() else {

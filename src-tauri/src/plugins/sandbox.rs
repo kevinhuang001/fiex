@@ -290,9 +290,10 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     })
 }
 
-#[cfg(target_os = "macos")]
-pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
-    use std::process::{Command, Stdio};
+// dyld requires reading the root directory itself during bootstrap. This is a
+// literal grant, not recursive access to user files or arbitrary Mach services.
+#[cfg(any(test, target_os = "macos"))]
+fn macos_profile(policy: &Policy) -> String {
     let quote = |path: &Path| {
         format!(
             "\"{}\"",
@@ -301,7 +302,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
                 .replace('"', "\\\"")
         )
     };
-    let mut profile = String::from("(version 1)(deny default)(allow process-info*)(allow sysctl-read)(allow signal (target self))(allow file-read-metadata)");
+    let mut profile = String::from("(version 1)(deny default)(allow process-info* (target self))(allow sysctl-read)(allow signal (target self))(allow file-read* (literal \"/\"))");
     profile.push_str(&format!(
         "(allow process-exec (literal {}))",
         quote(&policy.executable)
@@ -309,8 +310,35 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     for path in &policy.read_roots {
         profile.push_str(&format!("(allow file-read* (subpath {}))", quote(path)));
     }
+    // Resolve only the allowed paths' ancestors; never grant blanket metadata.
+    for path in &policy.read_roots {
+        for ancestor in path.ancestors().skip(1) {
+            profile.push_str(&format!(
+                "(allow file-read-metadata (literal {}))",
+                quote(ancestor)
+            ));
+        }
+    }
+    for ancestor in [
+        "/System",
+        "/Library",
+        "/Library/Apple",
+        "/Library/Apple/System",
+    ] {
+        profile.push_str(&format!(
+            "(allow file-read-metadata (literal {}))",
+            quote(Path::new(ancestor))
+        ));
+    }
     // Runtime system resources only; never permit sockets, forks or user paths.
-    profile.push_str("(allow file-read* (subpath \"/System/Library\") (subpath \"/Library/Apple/System/Library\") (literal \"/dev/null\") (literal \"/dev/urandom\"))");
+    profile.push_str("(allow file-read* (subpath \"/System/Library\") (subpath \"/System/Cryptexes\") (subpath \"/Library/Apple/System/Library\") (literal \"/dev/null\") (literal \"/dev/urandom\"))");
+    profile
+}
+
+#[cfg(target_os = "macos")]
+pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
+    use std::process::{Command, Stdio};
+    let profile = macos_profile(policy);
     let mut process = Command::new("/usr/bin/sandbox-exec")
         .args(["-p", &profile])
         .arg(&policy.executable)
@@ -481,38 +509,6 @@ pub fn run_wrapper_if_requested() {
     }
 }
 
-#[cfg(all(test, windows))]
-mod windows_tests {
-    #[test]
-    fn sandbox_system_roots_exist() {
-        for root in super::system_read_roots() {
-            assert!(root.exists(), "missing sandbox root: {}", root.display());
-        }
-    }
-}
-
-#[cfg(test)]
-mod policy_tests {
-    #[test]
-    fn user_grants_never_open_native_files_or_network() {
-        let grant = crate::plugin_permissions::PluginGrant {
-            granted: ["network".into(), "files.write".into()].into(),
-            ..Default::default()
-        };
-        let policy = super::Policy::new(
-            std::path::Path::new("/plugin/bin"),
-            std::path::Path::new("/plugin"),
-            &grant,
-            &grant.granted,
-        );
-        assert!(!policy.network);
-        assert!(policy.write_roots.is_empty());
-        if let Some(home) = dirs::home_dir() {
-            assert!(!policy.read_roots.contains(&home));
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct KillHandle(std::sync::Arc<(u32, std::sync::atomic::AtomicBool)>);
 impl KillHandle {
@@ -541,6 +537,20 @@ impl KillHandle {
     }
 }
 impl SandboxChild {
+    pub fn exit_diagnostic(&mut self) -> String {
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            match self.process.try_wait() {
+                Ok(Some(status)) => status.to_string(),
+                Ok(None) => "control pipe closed before process exit".into(),
+                Err(error) => error.to_string(),
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            "control pipe closed".into()
+        }
+    }
     pub fn kill_handle(&self) -> KillHandle {
         #[cfg(target_os = "linux")]
         let pid = self._process.pid();
@@ -550,5 +560,54 @@ impl SandboxChild {
             pid,
             std::sync::atomic::AtomicBool::new(false),
         )))
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    #[test]
+    fn sandbox_system_roots_exist() {
+        for root in super::system_read_roots() {
+            assert!(root.exists(), "missing sandbox root: {}", root.display());
+        }
+    }
+}
+
+#[cfg(test)]
+mod policy_tests {
+    #[test]
+    fn macos_profile_only_grants_runtime_paths_and_initial_executable() {
+        let grant = crate::plugin_permissions::PluginGrant::default();
+        let policy = super::Policy::new(
+            std::path::Path::new("/plugin/bin"),
+            std::path::Path::new("/plugin"),
+            &grant,
+            &Default::default(),
+        );
+        let profile = super::macos_profile(&policy);
+        assert!(profile.contains("(allow file-read* (literal \"/\"))"));
+        assert!(!profile.contains("(allow file-read-metadata)"));
+        assert!(!profile.contains("(allow process-fork"));
+        assert!(!profile.contains("(allow network"));
+        assert!(!profile.contains("(allow mach-lookup"));
+        assert!(!profile.contains("(allow process-exec (subpath"));
+    }
+    #[test]
+    fn user_grants_never_open_native_files_or_network() {
+        let grant = crate::plugin_permissions::PluginGrant {
+            granted: ["network".into(), "files.write".into()].into(),
+            ..Default::default()
+        };
+        let policy = super::Policy::new(
+            std::path::Path::new("/plugin/bin"),
+            std::path::Path::new("/plugin"),
+            &grant,
+            &grant.granted,
+        );
+        assert!(!policy.network);
+        assert!(policy.write_roots.is_empty());
+        if let Some(home) = dirs::home_dir() {
+            assert!(!policy.read_roots.contains(&home));
+        }
     }
 }
