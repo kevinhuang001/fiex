@@ -410,6 +410,20 @@ const officialPlugins: DemoPlugin[] = officialMode
               command: 'archive.extract',
             },
           ],
+          settings: [
+            {
+              id: 'compressIgnores',
+              label: '压缩时忽略的文件或目录',
+              type: 'text',
+              defaultValue: '.git, node_modules',
+            },
+            {
+              id: 'extractIgnores',
+              label: '解压时忽略的文件或目录',
+              type: 'text',
+              defaultValue: '__MACOSX',
+            },
+          ],
         },
       },
       {
