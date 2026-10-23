@@ -31,6 +31,7 @@ export interface PluginPanelRequest {
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
 
+const PANEL_EXIT_MS = 90
 const MAX_PANEL_WIDTH = 720
 const MAX_PANEL_HEIGHT = 680
 
@@ -42,17 +43,57 @@ const PANEL_CSP =
 export function PluginPanelHost() {
   const [panels, setPanels] = useState<PluginPanelRequest[]>([])
   const [active, setActive] = useState('')
+  // The outgoing panel animates out before the next one mounts, so switching
+  // between toolbar tools never shows two panels at once. At most one swap is
+  // in flight; a newer click replaces the queued request.
+  const [leaving, setLeaving] = useState('')
+  const leaveTimer = useRef<number | null>(null)
+  const activeKey = useRef('')
+  const pending = useRef<{ request: PluginPanelRequest; key: string } | null>(null)
+  // A toolbar click outside the panel closes it on pointerdown, one event
+  // before the new panel opens; remember it briefly so the swap still animates.
+  const closedKey = useRef('')
+  const closedAt = useRef(0)
+  activeKey.current = active
   const keyOf = (req: PluginPanelRequest) =>
     JSON.stringify([req.pluginId, req.panelId, req.directory, req.selection])
+  const cancelExit = () => {
+    if (leaveTimer.current !== null) {
+      window.clearTimeout(leaveTimer.current)
+      leaveTimer.current = null
+    }
+    pending.current = null
+    setLeaving('')
+  }
   useEffect(() => {
+    const show = (request: PluginPanelRequest, key: string) => {
+      setPanels((items) => [...items.filter((item) => keyOf(item) !== key), request].slice(-3))
+      setActive(key)
+    }
     const open = (event: Event) => {
       const req = (event as CustomEvent<PluginPanelRequest>).detail
       if (!req?.pluginId || !req.panelId) return
       const key = keyOf(req)
-      setPanels((items) => [...items.filter((item) => keyOf(item) !== key), req].slice(-3))
-      setActive(key)
+      const previous =
+        activeKey.current || (performance.now() - closedAt.current < 150 ? closedKey.current : '')
+      if (!previous || previous === key) {
+        cancelExit()
+        show(req, key)
+        return
+      }
+      pending.current = { request: req, key }
+      setLeaving(previous)
+      if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current)
+      leaveTimer.current = window.setTimeout(() => {
+        leaveTimer.current = null
+        const next = pending.current
+        pending.current = null
+        setLeaving('')
+        if (next) show(next.request, next.key)
+      }, PANEL_EXIT_MS)
     }
     const invalidate = () => {
+      cancelExit()
       setPanels([])
       setActive('')
     }
@@ -61,18 +102,29 @@ export function PluginPanelHost() {
     return () => {
       window.removeEventListener(OPEN_PLUGIN_PANEL, open)
       window.removeEventListener('fiex:plugins-changed', invalidate)
+      if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current)
     }
   }, [])
   return (
     <>
-      {panels.map((request) => (
-        <CachedPanel
-          key={keyOf(request)}
-          initialRequest={request}
-          active={active === keyOf(request)}
-          onClose={() => setActive('')}
-        />
-      ))}
+      {panels.map((request) => {
+        const key = keyOf(request)
+        const exiting = leaving === key
+        return (
+          <CachedPanel
+            key={key}
+            initialRequest={request}
+            active={active === key && !exiting}
+            leaving={exiting}
+            onClose={() => {
+              closedKey.current = key
+              closedAt.current = performance.now()
+              cancelExit()
+              setActive('')
+            }}
+          />
+        )
+      })}
       <PluginResult />
     </>
   )
@@ -104,10 +156,12 @@ function PluginResult() {
 function CachedPanel({
   initialRequest,
   active,
+  leaving,
   onClose,
 }: {
   initialRequest: PluginPanelRequest
   active: boolean
+  leaving: boolean
   onClose: () => void
 }) {
   const request = initialRequest
@@ -448,8 +502,8 @@ function CachedPanel({
           ref={panel}
           className={`plugin-panel-popover${ready ? ' ready' : ' opening'}${
             request.source === 'toolbar' ? ' toolbar-anchored' : ''
-          }`}
-          hidden={!active}
+          }${leaving ? ' leaving' : ''}`}
+          hidden={!active && !leaving}
           role="dialog"
           aria-label={request.title || '插件'}
           aria-busy={!ready}
