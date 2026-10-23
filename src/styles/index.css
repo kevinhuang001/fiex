@@ -5872,3 +5872,20 @@ body.dragging-reorder * {
 .plugin-store-modal .plugin-store {
   max-width: 480px;
 }
+.plugin-store-modal .plugin-store-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.plugin-store-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.plugin-store-modal .plugin-store-card > button[data-slot='button'] {
+  display: inline-flex;
+  width: 100%;
+  height: 30px;
+  justify-content: center;
+}

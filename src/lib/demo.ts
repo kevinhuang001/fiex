@@ -435,7 +435,7 @@ const officialPlugins: DemoPlugin[] = officialMode
               panel: {
                 entry: 'ui/dist/index.html',
                 title: '校验和',
-                defaultSize: { width: 540, height: 520 },
+                defaultSize: { width: 540, height: 260 },
               },
             },
           ],

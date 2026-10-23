@@ -191,24 +191,21 @@ export function PluginInstaller({
                 const installed = installedIds.includes(entry.id)
                 return (
                   <article className="plugin-store-card" key={entry.id}>
-                    <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
-                      {pluginIcon(entry.icon)}
-                    </div>
-                    <div className="plugin-store-main">
-                      <div className="plugin-store-title">
-                        <strong>{entry.name}</strong>
-                        <span className="plugin-pill">v{entry.version}</span>
-                        {installed && (
-                          <span className="plugin-pill success">
-                            <Check size={11} /> 已安装
-                          </span>
-                        )}
+                    <div className="plugin-store-card-head">
+                      <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
+                        {pluginIcon(entry.icon)}
                       </div>
-                      <p>{entry.description || '没有提供说明。'}</p>
-                      <div className="plugin-store-meta">
-                        <span>{entry.author?.name || 'Fiex Contributors'}</span>
-                        <span aria-hidden>·</span>
-                        <span>{entry.permissions.length} 项权限</span>
+                      <div className="plugin-store-main">
+                        <div className="plugin-store-title">
+                          <strong>{entry.name}</strong>
+                          <span className="plugin-pill">v{entry.version}</span>
+                          {installed && (
+                            <span className="plugin-pill success">
+                              <Check size={11} /> 已安装
+                            </span>
+                          )}
+                        </div>
+                        <p>{entry.description || '没有提供说明。'}</p>
                       </div>
                     </div>
                     <Button
