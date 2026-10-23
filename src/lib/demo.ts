@@ -1201,6 +1201,20 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       entries = entries.filter((e) => !(a.paths as string[]).includes(e.path))
       return { paths: a.paths, errors: [], skipped: 0 }
     case 'transfer': {
+      const progress = a.onProgress as
+        { onmessage?: (value: { done: number; total: number; step?: string }) => void } | undefined
+      const files = a.paths as string[]
+      if (progress?.onmessage && files.length) {
+        const steps = 3
+        for (let index = 1; index <= steps; index += 1) {
+          progress.onmessage({
+            done: index,
+            total: steps,
+            step: basename(files[Math.min(index - 1, files.length - 1)]),
+          })
+          await new Promise((resolve) => setTimeout(resolve, 120))
+        }
+      }
       const planned: { source: string; destination: string; action: string }[] = []
       const conflicts = []
       for (const source of a.paths as string[]) {
