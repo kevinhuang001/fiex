@@ -27,8 +27,10 @@ import { Modal } from '@/components/ui/Modal'
 import { PluginInstaller } from './PluginInstaller'
 
 const permissionLabels: Record<string, string> = {
-  'filesystem.read': '读取文件',
-  'filesystem.write': '修改文件',
+  'folders.read': '读取文件夹',
+  'folders.write': '新增/删除文件夹内容',
+  'files.read': '读取文件',
+  'files.write': '修改文件',
   network: '网络访问',
   commands: '执行命令',
 }
@@ -54,8 +56,10 @@ interface LocalPreview {
   fingerprint?: string
 }
 const permissionHints: Record<string, string> = {
-  'filesystem.read': '读取你选择的目录和文件内容。',
-  'filesystem.write': '创建、修改和删除用户文件。',
+  'folders.read': '列出当前目录并读取文件名、大小和扩展名；装饰也属于此权限。',
+  'folders.write': '在当前目录新建、删除或重命名文件/文件夹。',
+  'files.read': '读取文件内容。',
+  'files.write': '修改、覆盖或截断文件内容。',
   network: '只允许连接下方白名单中的精确域名。',
   commands: '只能通过宿主代理执行下方允许的命令；插件进程本身不能执行命令。',
 }

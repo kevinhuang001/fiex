@@ -107,8 +107,11 @@ struct DecorationMatcher {
 
 fn config(manifest: &PluginManifest) -> DecorationConfig {
     manifest
-        .contributions
-        .get("decorations")
+        .permissions
+        .folders
+        .read
+        .decorations
+        .as_ref()
         .and_then(|value| serde_json::from_value(value.clone()).ok())
         .unwrap_or_default()
 }

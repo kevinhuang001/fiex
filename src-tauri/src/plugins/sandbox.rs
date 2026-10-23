@@ -74,8 +74,8 @@ impl Policy {
         let canonical = |path: &Path| dunce::canonicalize(path).unwrap_or_else(|_| path.into());
         let executable = canonical(executable);
         let install_dir = canonical(install_dir);
-        let readable = declared.contains("filesystem.read");
-        let writable = declared.contains("filesystem.write");
+        let readable = declared.contains("folders.read") || declared.contains("files.read");
+        let writable = declared.contains("folders.write") || declared.contains("files.write");
         let mut read_roots = vec![executable.clone(), install_dir.clone()];
         read_roots.extend(system_read_roots());
         let mut write_roots = vec![canonical(&std::env::temp_dir()), canonical(&install_dir)];

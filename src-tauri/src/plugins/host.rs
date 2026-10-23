@@ -25,7 +25,25 @@ pub struct PluginRuntime {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FilesystemPermission {
+pub struct FolderReadPermission {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub decorations: Option<Value>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderPermission {
+    #[serde(default)]
+    pub read: FolderReadPermission,
+    #[serde(default)]
+    pub write: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilePermission {
     #[serde(default)]
     pub read: bool,
     #[serde(default)]
@@ -54,7 +72,9 @@ pub struct NetworkPermission {
 #[serde(rename_all = "camelCase")]
 pub struct PluginPermissions {
     #[serde(default)]
-    pub filesystem: FilesystemPermission,
+    pub folders: FolderPermission,
+    #[serde(default)]
+    pub files: FilePermission,
     #[serde(default)]
     pub network: NetworkPermission,
     #[serde(default)]
@@ -126,11 +146,19 @@ pub fn declared_permissions(
     manifest: &PluginManifest,
 ) -> Result<std::collections::BTreeSet<String>, String> {
     let mut declared = std::collections::BTreeSet::new();
-    if manifest.permissions.filesystem.read {
-        declared.insert("filesystem.read".to_string());
+    let folders = &manifest.permissions.folders;
+    let files = &manifest.permissions.files;
+    if folders.read.enabled {
+        declared.insert("folders.read".to_string());
     }
-    if manifest.permissions.filesystem.write {
-        declared.insert("filesystem.write".to_string());
+    if folders.write {
+        declared.insert("folders.write".to_string());
+    }
+    if files.read {
+        declared.insert("files.read".to_string());
+    }
+    if files.write {
+        declared.insert("files.write".to_string());
     }
     if manifest.permissions.network.enabled {
         declared.insert("network".to_string());
@@ -739,18 +767,18 @@ impl Running {
                 serde_json::to_value(crate::plugin_ipc::map(&self.plugin_id, id)?)
                     .map_err(|error| error.to_string())
             }
-            "host.fs.list" if permitted("filesystem.read") => {
+            "host.fs.list" if permitted("folders.read") => {
                 let path = p.get("path").and_then(Value::as_str).unwrap_or(".");
                 crate::plugin_fs_access::list(path)
             }
-            "host.fs.stat" if permitted("filesystem.read") => {
+            "host.fs.stat" if permitted("folders.read") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
                 crate::plugin_fs_access::stat(path)
             }
-            "host.fs.read" if permitted("filesystem.read") => {
+            "host.fs.read" if permitted("files.read") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
@@ -762,14 +790,14 @@ impl Running {
                     .unwrap_or(1024 * 1024) as usize;
                 crate::plugin_fs_access::read(&self.plugin_id, path, offset, length)
             }
-            "host.fs.create" if permitted("filesystem.write") => {
+            "host.fs.create" if permitted("folders.write") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
                 crate::plugin_fs_access::create(path)
             }
-            "host.fs.write" if permitted("filesystem.write") => {
+            "host.fs.write" if permitted("files.write") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
@@ -779,9 +807,12 @@ impl Running {
                     .and_then(Value::as_str)
                     .ok_or("missing buffer")?;
                 let mode = p.get("mode").and_then(Value::as_str).unwrap_or("truncate");
+                if mode == "create" && !permitted("folders.write") {
+                    return Err("folder write permission is required to create a file".into());
+                }
                 crate::plugin_fs_access::write(&self.plugin_id, path, buffer, mode)
             }
-            "host.fs.remove" if permitted("filesystem.write") => {
+            "host.fs.remove" if permitted("folders.write") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
@@ -789,7 +820,7 @@ impl Running {
                 crate::plugin_fs_access::remove(path)?;
                 Ok(Value::Null)
             }
-            "host.fs.rename" if permitted("filesystem.write") => {
+            "host.fs.rename" if permitted("folders.write") => {
                 let from = p
                     .get("from")
                     .and_then(Value::as_str)

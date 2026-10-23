@@ -1,8 +1,10 @@
 //! Host-authorized plugin capabilities.
 //!
 //! The user-facing permission model is deliberately small:
-//! - `filesystem.read`: read user files;
-//! - `filesystem.write`: create, modify and remove user files;
+//! - `folders.read`: list directories and read entry metadata (including decoration data);
+//! - `folders.write`: create, remove and rename directory entries;
+//! - `files.read`: read file contents;
+//! - `files.write`: modify file contents;
 //! - `network`: open network connections to explicitly allowed domains.
 //!
 //! Private plugin storage, host-rendered file choosers and process execution
@@ -17,7 +19,14 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-pub const PERMISSIONS: &[&str] = &["filesystem.read", "filesystem.write", "network", "commands"];
+pub const PERMISSIONS: &[&str] = &[
+    "folders.read",
+    "folders.write",
+    "files.read",
+    "files.write",
+    "network",
+    "commands",
+];
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

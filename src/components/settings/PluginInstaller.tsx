@@ -22,8 +22,10 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 
 export const permissionTitles: Record<string, string> = {
-  'filesystem.read': '读取文件',
-  'filesystem.write': '修改文件',
+  'folders.read': '读取文件夹',
+  'folders.write': '新增/删除文件夹内容',
+  'files.read': '读取文件',
+  'files.write': '修改文件',
   network: '网络访问',
   commands: '执行命令',
 }
