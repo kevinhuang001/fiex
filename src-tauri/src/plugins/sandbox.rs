@@ -77,6 +77,9 @@ impl Policy {
 pub struct SandboxChild {
     pub stdin: Box<dyn Write + Send>,
     pub stdout: BufReader<Box<dyn Read + Send>>,
+    /// Private scratch space. Some codecs (RAR) need temporary spool files;
+    /// they still cannot write to the user's directory or install package.
+    _scratch: tempfile::TempDir,
     #[cfg(target_os = "linux")]
     _process: arapuca::Process,
     #[cfg(target_os = "linux")]
@@ -218,6 +221,16 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         .available()
         .map_err(|e| format!("plugin sandbox is unavailable: {e}"))?;
 
+    // A private, empty scratch directory is the only writable path a plugin
+    // receives. Several codecs spool to a temp file even when the final output
+    // goes through the host file API.
+    let scratch = tempfile::Builder::new()
+        .prefix("fiex-plugin-scratch-")
+        .tempdir()
+        .map_err(|e| format!("plugin scratch directory unavailable: {e}"))?;
+    let mut policy = policy.clone();
+    policy.write_roots.push(scratch.path().to_path_buf());
+
     let profile = Profile {
         read_paths: policy.read_roots.clone(),
         write_paths: policy.write_roots.clone(),
@@ -253,6 +266,18 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
             std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".into()),
         ),
         ("GIT_TERMINAL_PROMPT".to_string(), "0".to_string()),
+        (
+            "TMPDIR".to_string(),
+            scratch.path().to_string_lossy().into_owned(),
+        ),
+        (
+            "TMP".to_string(),
+            scratch.path().to_string_lossy().into_owned(),
+        ),
+        (
+            "TEMP".to_string(),
+            scratch.path().to_string_lossy().into_owned(),
+        ),
     ];
     if let Some(home) = dirs::home_dir() {
         env.push(("HOME".to_string(), home.to_string_lossy().into_owned()));
@@ -262,7 +287,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         socket_dir: socket_dir.path().to_path_buf(),
         task_id,
         phase: "plugin".into(),
-        work_dir: None,
+        work_dir: Some(scratch.path().to_path_buf()),
         stdin: Some(child_stdin.as_raw_fd()),
         stdout: Some(child_stdout.as_raw_fd()),
         stderr: None,
@@ -285,6 +310,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     Ok(SandboxChild {
         stdin: Box::new(parent_stdin),
         stdout: BufReader::new(Box::new(parent_stdout) as Box<dyn Read + Send>),
+        _scratch: scratch,
         _process: process,
         _socket_dir: socket_dir,
     })
@@ -309,6 +335,20 @@ fn macos_profile(policy: &Policy) -> String {
     ));
     for path in &policy.read_roots {
         profile.push_str(&format!("(allow file-read* (subpath {}))", quote(path)));
+    }
+    // The only writable path is the private scratch directory created by
+    // `spawn`; user directories and the install package remain read-only.
+    for path in &policy.write_roots {
+        profile.push_str(&format!(
+            "(allow file-read* file-write* (subpath {}))",
+            quote(path)
+        ));
+        for ancestor in path.ancestors().skip(1) {
+            profile.push_str(&format!(
+                "(allow file-read-metadata (literal {}))",
+                quote(ancestor)
+            ));
+        }
     }
     // Resolve only the allowed paths' ancestors; never grant blanket metadata.
     for path in &policy.read_roots {
@@ -338,12 +378,22 @@ fn macos_profile(policy: &Policy) -> String {
 #[cfg(target_os = "macos")]
 pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     use std::process::{Command, Stdio};
-    let profile = macos_profile(policy);
+    let scratch = tempfile::Builder::new()
+        .prefix("fiex-plugin-scratch-")
+        .tempdir()
+        .map_err(|e| format!("plugin scratch directory unavailable: {e}"))?;
+    let mut policy = policy.clone();
+    policy.write_roots.push(scratch.path().to_path_buf());
+    let profile = macos_profile(&policy);
     let mut process = Command::new("/usr/bin/sandbox-exec")
         .args(["-p", &profile])
         .arg(&policy.executable)
+        .current_dir(scratch.path())
         .env_clear()
         .env("LANG", "en_US.UTF-8")
+        .env("TMPDIR", scratch.path())
+        .env("TMP", scratch.path())
+        .env("TEMP", scratch.path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -354,6 +404,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     Ok(SandboxChild {
         stdin: Box::new(stdin),
         stdout: BufReader::new(Box::new(stdout)),
+        _scratch: scratch,
         process,
     })
 }
@@ -361,8 +412,16 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
 #[cfg(windows)]
 pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     use std::process::{Command, Stdio};
+    let scratch = tempfile::Builder::new()
+        .prefix("fiex-plugin-scratch-")
+        .tempdir()
+        .map_err(|e| format!("plugin scratch directory unavailable: {e}"))?;
+    let mut policy = policy.clone();
+    policy.write_roots.push(scratch.path().to_path_buf());
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-    let payload = serde_json::to_string(&LaunchPolicy::from(policy)).map_err(|e| e.to_string())?;
+    let mut launch = LaunchPolicy::from(&policy);
+    launch.scratch = scratch.path().to_string_lossy().into_owned();
+    let payload = serde_json::to_string(&launch).map_err(|e| e.to_string())?;
     let mut child = Command::new(executable)
         .arg("--fiex-plugin-sandbox")
         .arg(payload)
@@ -376,6 +435,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     Ok(SandboxChild {
         stdin: Box::new(stdin),
         stdout: BufReader::new(Box::new(stdout) as Box<dyn Read + Send>),
+        _scratch: scratch,
         process: child,
     })
 }
@@ -392,6 +452,7 @@ struct LaunchPolicy {
     read_paths: Vec<String>,
     write_paths: Vec<String>,
     network: bool,
+    scratch: String,
 }
 
 #[cfg(windows)]
@@ -410,6 +471,7 @@ impl From<&Policy> for LaunchPolicy {
                 .map(|path| path.to_string_lossy().into_owned())
                 .collect(),
             network: policy.network,
+            scratch: String::new(),
         }
     }
 }
@@ -474,6 +536,11 @@ pub fn run_wrapper_if_requested() {
         ),
         ("GIT_TERMINAL_PROMPT".to_string(), "0".to_string()),
     ];
+    if !policy.scratch.is_empty() {
+        for key in ["TMPDIR", "TMP", "TEMP"] {
+            env.push((key.to_string(), policy.scratch.clone()));
+        }
+    }
     if let Some(home) = dirs::home_dir() {
         env.push(("HOME".to_string(), home.to_string_lossy().into_owned()));
     }
@@ -482,7 +549,7 @@ pub fn run_wrapper_if_requested() {
         socket_dir: socket_dir.path().to_path_buf(),
         task_id: format!("plugin-{}", std::process::id()),
         phase: "plugin".into(),
-        work_dir: None,
+        work_dir: (!policy.scratch.is_empty()).then(|| policy.scratch.clone().into()),
         network_proxy_socket: None,
         env,
         audit_sink: None,

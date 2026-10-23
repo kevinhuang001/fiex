@@ -1195,14 +1195,13 @@ button[data-slot='button'][data-variant='default'] {
 .context-menu button:hover {
   background: var(--hover);
 }
-/* Only a top-level destructive action is red; submenu entries and the
-   "compress to…" wrapper must keep the normal color and geometry. */
-.context-menu > button:last-child:not(:first-child) {
+/* Only explicit destructive actions are red. Plugin entries are appended last
+   and must keep the normal color and geometry. */
+.context-menu > button.context-danger {
   color: #c66c60;
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 6px 6px;
-  margin-top: 4px;
-  padding-top: 9px;
+}
+.context-menu > button.context-danger:hover {
+  background: color-mix(in srgb, #c66c60 10%, transparent);
 }
 .context-submenu-wrap {
   position: relative;
@@ -5414,4 +5413,399 @@ body.dragging-reorder * {
   .plugin-row-actions {
     width: 100%;
   }
+}
+
+/* Plugin settings toolbar: actions only, no descriptive copy. */
+.plugin-toolbar-actions-only {
+  justify-content: flex-end;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.plugin-permission-card .plugin-switch,
+.plugin-domain-row .plugin-switch {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* Mobile-style permission request: one decision at a time. */
+.plugin-permission-prompt-modal {
+  width: min(356px, calc(100vw - 32px));
+  padding: 26px 22px 18px;
+  border-radius: 22px;
+}
+.plugin-permission-prompt-modal .modal-close {
+  display: none;
+}
+.plugin-permission-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.plugin-permission-prompt-app {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+.plugin-permission-prompt-app-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plugin-permission-prompt-step {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.plugin-permission-prompt h3 {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+.plugin-permission-prompt p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.plugin-permission-prompt-error {
+  color: #b56457 !important;
+  white-space: pre-wrap;
+}
+.plugin-permission-prompt-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+}
+.plugin-permission-prompt-actions .button {
+  width: 100%;
+  min-height: 36px;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+/* Store: independent, centered sheet; cards keep a comfortable width. */
+.plugin-store-modal {
+  width: min(980px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  padding: 26px 30px;
+}
+.plugin-store-modal .plugin-store {
+  width: 100%;
+  max-width: 850px;
+  margin: 0 auto;
+  gap: 14px;
+}
+.plugin-store-modal .plugin-store-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.plugin-store-modal .plugin-store-card {
+  padding: 13px;
+  gap: 10px;
+}
+.plugin-store-modal .plugin-store-card > .button {
+  align-self: flex-start;
+}
+.plugin-store-modal .plugin-store-card > .button[data-variant='outline'] {
+  align-self: center;
+}
+@media (max-width: 900px) {
+  .plugin-store-modal .plugin-store-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .plugin-store-modal .plugin-store-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.plugin-toolbar-actions-only > div.plugin-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Compact store sheet: narrower dialog, same centered column. */
+.plugin-store-modal {
+  width: min(780px, calc(100vw - 48px));
+  padding: 22px 24px;
+}
+.plugin-store-modal .plugin-store {
+  max-width: 680px;
+}
+/* Compact store: two wider cards per row and a slim toolbar. */
+.plugin-store-modal {
+  width: min(740px, calc(100vw - 48px));
+  padding: 20px 24px 22px;
+}
+.plugin-store-modal > header {
+  margin-bottom: 14px;
+}
+.plugin-store-modal .plugin-store {
+  max-width: 660px;
+  gap: 12px;
+}
+.plugin-store-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plugin-store-tools .plugin-store-search {
+  flex: 1;
+  min-width: 0;
+}
+.plugin-store-modal .plugin-store-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.plugin-store-modal .plugin-store-card {
+  padding: 13px 14px;
+}
+.plugin-store-meta {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.plugin-store-meta > span {
+  white-space: nowrap;
+}
+.plugin-store-modal {
+  padding: 16px 24px 18px;
+}
+.plugin-store-modal > header {
+  margin-bottom: 8px;
+}
+.plugin-store-modal > header h2 {
+  font-size: 15px;
+}
+/* Permission manager: grouped sections, one profile header, compact switch rows. */
+.plugin-permissions-modal {
+  width: min(620px, calc(100vw - 32px));
+}
+.plugin-permissions-modal > header {
+  margin-bottom: 16px;
+}
+.plugin-permissions-page {
+  gap: 12px;
+}
+.plugin-permission-profile {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 2px 2px 4px;
+}
+.plugin-permission-profile-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--muted);
+}
+.plugin-permission-profile-icon.enabled {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.plugin-permission-profile-copy {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.plugin-permission-profile-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugin-permission-profile-title strong {
+  font-size: 16px;
+  letter-spacing: -0.2px;
+}
+.plugin-permission-profile-copy small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.plugin-permission-profile-copy p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.plugin-permission-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.plugin-permission-section .plugin-section-title {
+  padding: 0 1px;
+}
+.plugin-permission-section .plugin-permission-list {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.plugin-permission-section .plugin-permission-card {
+  padding: 9px 1px;
+}
+.plugin-permission-section .plugin-permission-card + .plugin-permission-card {
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+.plugin-permission-section .plugin-permission-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+.plugin-permission-section .plugin-permission-copy small {
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+.plugin-permission-section.plugin-domain-section {
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+}
+.plugin-permission-actions {
+  padding-top: 12px;
+}
+.plugin-permission-actions p {
+  font-size: 10px;
+}
+.plugin-uninstall-action {
+  color: #b56457;
+  border-color: color-mix(in srgb, #b56457 28%, var(--line));
+}
+.plugin-uninstall-action:hover:not(:disabled) {
+  background: color-mix(in srgb, #b56457 8%, var(--surface));
+}
+.plugin-row-remove:hover:not(:disabled) {
+  color: #b56457;
+  background: color-mix(in srgb, #b56457 10%, transparent);
+}
+.plugin-permissions-modal {
+  padding: 24px 30px;
+}
+.plugin-permissions-page {
+  padding: 0 2px;
+}
+.plugin-inline-config {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  color: var(--muted);
+}
+.plugin-inline-config:hover:not(:disabled) {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.plugin-inline-config:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.plugin-domain-modal {
+  width: min(460px, calc(100vw - 32px));
+}
+.plugin-domain-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugin-domain-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+/* Local import: identity and signature only. */
+.plugin-import-modal {
+  width: min(420px, calc(100vw - 32px));
+}
+.plugin-import-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.plugin-import-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 2px;
+}
+.plugin-import-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.plugin-import-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.plugin-import-copy strong {
+  font-size: 16px;
+  letter-spacing: -0.2px;
+}
+.plugin-import-copy small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.plugin-import-signature {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border-radius: 11px;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+.plugin-import-signature > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.plugin-import-signature strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+}
+.plugin-import-signature.verified {
+  color: #2f7d42;
+  border: 1px solid color-mix(in srgb, #34c759 32%, var(--line));
+  background: color-mix(in srgb, #34c759 8%, var(--surface));
+}
+.plugin-import-signature.warning {
+  color: #72520b;
+  border: 1px solid color-mix(in srgb, #e3b341 38%, var(--line));
+  background: color-mix(in srgb, #e3b341 9%, var(--surface));
+}
+.plugin-permissions-modal {
+  width: min(560px, calc(100vw - 32px));
 }

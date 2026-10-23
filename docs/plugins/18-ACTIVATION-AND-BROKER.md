@@ -1,15 +1,18 @@
 # Activation and brokered resources
 
 Installing a package does not activate it or grant its requested capabilities.
-Selecting Activate opens a review of every declared capability, network host and
-external command. Each item must be checked individually. The host compares the
-submitted snapshot with the currently installed manifest and atomically grants
-and activates it. Partial or stale consent is rejected. Removing any grant
-disables the plugin; reactivation requires another complete review.
+Selecting Activate requests every declared capability, network host and external
+command one at a time, in a mobile-style prompt. Core is called only after the
+last request is allowed; closing or denying any request grants nothing. The host
+compares the submitted snapshot with the currently installed manifest and
+atomically grants and activates it. Partial or stale consent is rejected.
+Removing any grant disables the plugin; reactivation requires another complete
+review.
 
 Native plugin processes never receive access to the user's directory, package
 writes, direct sockets (including localhost) or subprocess execution. They retain
-only runtime system reads and inherited control pipes. SDK calls are requests to
+only runtime system reads, inherited control pipes and a private empty scratch
+directory for codecs that need temporary spool files. SDK calls are requests to
 Core, not OS permissions; a network grant never weakens the sandbox.
 
 ## Manifest capabilities
@@ -49,6 +52,14 @@ read or modify files outside the file SDK scope, connect to a network or start
 other programs. The generic consent screen explains this for every command.
 Command approval is not a promise that the executable obeys file/network grants.
 There are no privileged official plugin IDs and no Git-specific host operations.
+
+## Plugin panels
+
+Panel HTML is validated against the installed manifest and served from the asset
+protocol on desktop with the plugin document's own strict CSP. A `srcDoc` panel
+inherits the app shell policy, whose `script-src 'self'` blocks the inline
+plugin bundle in packaged builds. The iframe stays sandboxed to an opaque origin
+and reaches Core only through its per-panel MessageChannel.
 
 ## High-level SDK
 

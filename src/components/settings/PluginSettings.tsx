@@ -6,14 +6,13 @@ import {
   Globe2,
   KeyRound,
   LoaderCircle,
-  Plus,
   Puzzle,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   Terminal,
   Trash2,
   Upload,
-  X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import {
@@ -26,13 +25,9 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import { PluginInstaller, pluginIcon } from './PluginInstaller'
 import { PluginActivationDialog } from './PluginActivationDialog'
-import { commandRisk, permissionHints, permissionLabels } from '@/lib/pluginPermissions'
+import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
+import { permissionHints, permissionLabels } from '@/lib/pluginPermissions'
 
-interface ProxyInfo {
-  enabled: boolean
-  source: string
-  proxy?: string
-}
 interface LocalPreview {
   ticket: string
   id: string
@@ -58,17 +53,20 @@ function PermissionList({
   plugin,
   busy,
   onToggle,
+  onConfigure,
 }: {
   plugin: PluginInfo
   busy: boolean
   onToggle: (permission: string, granted: boolean) => void
+  onConfigure: (permission: string) => void
 }) {
   const declared = plugin.declaredPermissions || []
   const granted = plugin.grantedPermissions || []
+  const configurable = (permission: string) => permission === 'network' || permission === 'commands'
   return (
     <>
       {declared.map((permission) => (
-        <label className="plugin-permission-card" key={permission}>
+        <div className="plugin-permission-card" key={permission}>
           <span className="plugin-permission-icon">
             <ShieldCheck size={15} />
           </span>
@@ -76,14 +74,30 @@ function PermissionList({
             <strong>{permissionLabels[permission] || permission}</strong>
             <small>{permissionHints[permission] || permission}</small>
           </span>
-          <input
-            type="checkbox"
+          {configurable(permission) && (
+            <button
+              type="button"
+              className="plugin-inline-config"
+              aria-label={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
+              title={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
+              disabled={busy || !plugin.approved || !granted.includes(permission)}
+              onClick={() => onConfigure(permission)}
+            >
+              {permission === 'network' ? <Globe2 size={13} /> : <Terminal size={13} />}
+            </button>
+          )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={granted.includes(permission)}
             aria-label={`授权 ${permissionLabels[permission] || permission}`}
-            checked={granted.includes(permission)}
+            className={`plugin-switch ${granted.includes(permission) ? 'on' : ''}`}
             disabled={busy || !plugin.approved}
-            onChange={(event) => onToggle(permission, event.target.checked)}
-          />
-        </label>
+            onClick={() => onToggle(permission, !granted.includes(permission))}
+          >
+            <span />
+          </button>
+        </div>
       ))}
       {!declared.length && <p className="sidebar-hint">此插件未声明受控宿主权限。</p>}
     </>
@@ -94,7 +108,6 @@ export function PluginSettings() {
   const plugins = usePluginCatalog()
   const [storeOpen, setStoreOpen] = useState(false)
   const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
-  const [proxy, setProxy] = useState<ProxyInfo | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
   const [busy, setBusy] = useState(false)
@@ -110,8 +123,10 @@ export function PluginSettings() {
     )
   }, [plugins])
   const [domainDraft, setDomainDraft] = useState('')
+  const [domainSettingsOpen, setDomainSettingsOpen] = useState(false)
   const [domainToApprove, setDomainToApprove] = useState<string | null>(null)
   const [commandDraft, setCommandDraft] = useState('')
+  const [commandSettingsOpen, setCommandSettingsOpen] = useState(false)
   const [activationFor, setActivationFor] = useState<PluginInfo | null>(null)
   const [commandToApprove, setCommandToApprove] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<PluginInfo | null>(null)
@@ -152,12 +167,6 @@ export function PluginSettings() {
   }
 
   const fields = settingsFor?.contributions?.settings || []
-
-  useEffect(() => {
-    void call<ProxyInfo>('system_proxy_info')
-      .then(setProxy)
-      .catch(() => setProxy(null))
-  }, [])
   useEffect(() => {
     if (!settingsFor) return
     let alive = true
@@ -333,25 +342,7 @@ export function PluginSettings() {
   return (
     <>
       <div className="plugin-page">
-        <header className="settings-section-heading">
-          <Puzzle size={19} />
-          <div>
-            <h3>插件</h3>
-            <p>可选功能以独立进程运行，安装和权限都由你决定。</p>
-          </div>
-        </header>
-
-        <div className="plugin-toolbar">
-          <div>
-            <strong>{plugins.length ? `${plugins.length} 个已安装插件` : '还没有安装插件'}</strong>
-            <span>官方与第三方插件使用同一套权限和进程隔离。</span>
-            <span className="plugin-proxy-status">
-              <Globe2 size={12} />
-              {proxy?.enabled
-                ? `网络：${proxy.source === 'environment' ? '环境代理' : '系统代理'} ${proxy.proxy}`
-                : '网络：直连（未检测到代理）'}
-            </span>
-          </div>
+        <div className="plugin-toolbar plugin-toolbar-actions-only">
           <div className="plugin-toolbar-actions">
             <Button
               type="button"
@@ -430,10 +421,27 @@ export function PluginSettings() {
                         title="权限管理"
                         onClick={() => {
                           setMessage('')
+                          setDomainSettingsOpen(false)
+                          setCommandSettingsOpen(false)
                           setPermissionsFor(plugin)
                         }}
                       >
                         <ShieldCheck size={14} />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        className="plugin-row-remove"
+                        aria-label={`卸载 ${plugin.name}`}
+                        title="卸载插件"
+                        disabled={busy}
+                        onClick={() => {
+                          setMessage('')
+                          setConfirmRemove(plugin)
+                        }}
+                      >
+                        <Trash2 size={14} />
                       </Button>
                     </div>
                     <button
@@ -487,18 +495,30 @@ export function PluginSettings() {
         open={Boolean(permissionsFor)}
         onClose={() => {
           setPermissionsFor(null)
+          setDomainSettingsOpen(false)
+          setCommandSettingsOpen(false)
           setMessage('')
         }}
-        title={permissionsFor ? `${permissionsFor.name} · 权限` : '插件权限'}
-        wide
+        title="权限管理"
         className="plugin-permissions-modal"
       >
         {permissionsFor && (
           <div className="plugin-permissions-page">
-            <div className="plugin-detail-heading">
-              <div className="plugin-row-icon enabled">{iconFor(permissionsFor.icon)}</div>
-              <div>
-                <strong>{permissionsFor.name}</strong>
+            <div className="plugin-permission-profile">
+              <div
+                className={`plugin-permission-profile-icon ${permissionsFor.enabled ? 'enabled' : ''}`}
+              >
+                {iconFor(permissionsFor.icon)}
+              </div>
+              <div className="plugin-permission-profile-copy">
+                <div className="plugin-permission-profile-title">
+                  <strong>{permissionsFor.name}</strong>
+                  <span className={`plugin-state ${permissionsFor.enabled ? 'active' : ''}`}>
+                    <span />
+                    {permissionsFor.enabled ? '运行中' : '未激活'}
+                  </span>
+                  {!permissionsFor.approved && <span className="plugin-pill warn">待授权</span>}
+                </div>
                 <small>
                   {permissionsFor.id} · v{permissionsFor.version}
                 </small>
@@ -510,30 +530,76 @@ export function PluginSettings() {
                 <ShieldCheck size={18} />
                 <div>
                   <strong>此插件尚未授权</strong>
-                  <p>安装不会自动授权。激活前需要逐项审核全部申请。</p>
+                  <p>激活时会逐项请求权限，允许后才会运行。</p>
                 </div>
                 <Button type="button" size="sm" onClick={() => setActivationFor(permissionsFor)}>
                   审核并激活
                 </Button>
               </div>
             )}
-            <div className="plugin-permission-list">
-              <PermissionList
-                plugin={permissionsFor}
-                busy={busy}
-                onToggle={(permission, granted) =>
-                  void updatePermission(permissionsFor, permission, granted)
-                }
-              />
+            <section className="plugin-permission-section">
+              <div className="plugin-section-title">
+                <strong>
+                  <ShieldCheck size={15} /> 权限
+                </strong>
+                <small>
+                  {(permissionsFor.grantedPermissions || []).length} /{' '}
+                  {(permissionsFor.declaredPermissions || []).length} 已授权
+                </small>
+              </div>
+              <div className="plugin-permission-list">
+                <PermissionList
+                  plugin={permissionsFor}
+                  busy={busy}
+                  onToggle={(permission, granted) =>
+                    void updatePermission(permissionsFor, permission, granted)
+                  }
+                  onConfigure={(permission) => {
+                    setMessage('')
+                    if (permission === 'network') setDomainSettingsOpen(true)
+                    else setCommandSettingsOpen(true)
+                  }}
+                />
+              </div>
+            </section>
+            <div className="plugin-permission-actions">
+              <p>
+                {permissionsFor.enabled ? '运行中' : '已停用'} ·{' '}
+                {permissionsFor.approved ? '已授权' : '待授权'}
+              </p>
+              <div>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void updateActivation(permissionsFor, !permissionsFor.enabled)}
+                >
+                  {permissionsFor.enabled ? '停用插件' : '激活插件'}
+                </Button>
+              </div>
             </div>
-            {permissionsFor.declaredPermissions.includes('network') && (
-              <section className="plugin-domain-section">
-                <div className="plugin-section-title">
-                  <strong>
-                    <Globe2 size={15} /> 允许的域名
-                  </strong>
-                  <small>支持精确域名与 IP；本机和局域网地址也需要授权。</small>
-                </div>
+            {message && (
+              <p role="status" className="plugin-page-message">
+                {message}
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {permissionsFor &&
+        domainSettingsOpen &&
+        permissionsFor.declaredPermissions.includes('network') && (
+          <Modal
+            open
+            onClose={() => setDomainSettingsOpen(false)}
+            title="网络域名"
+            className="plugin-domain-modal"
+          >
+            <div className="plugin-domain-page">
+              <p className="plugin-domain-hint">
+                允许「{permissionsFor.name}」访问的精确主机；本机和局域网地址也需要授权。
+              </p>
+              <section className="plugin-permission-section plugin-domain-section">
                 <div className="plugin-domain-list">
                   {[
                     ...new Set([
@@ -554,19 +620,20 @@ export function PluginSettings() {
                             {requested && <small>插件申请</small>}
                             {!allowed && <small className="muted">未授权</small>}
                           </span>
-                          <Button
+                          <button
                             type="button"
-                            size="icon-xs"
-                            variant="ghost"
+                            role="switch"
+                            aria-checked={allowed}
                             aria-label={allowed ? `移除域名 ${domain}` : `授权域名 ${domain}`}
                             title={allowed ? '移除域名' : '授权域名'}
+                            className={`plugin-switch ${allowed ? 'on' : ''}`}
                             disabled={
                               busy || !permissionsFor.grantedPermissions.includes('network')
                             }
                             onClick={() => void updateDomain(permissionsFor, domain, !allowed)}
                           >
-                            {allowed ? <X size={13} /> : <Plus size={13} />}
-                          </Button>
+                            <span />
+                          </button>
                         </div>
                       )
                     })}
@@ -607,15 +674,23 @@ export function PluginSettings() {
                   </Button>
                 </div>
               </section>
-            )}
-            {permissionsFor.declaredPermissions.includes('commands') && (
-              <section className="plugin-domain-section">
-                <div className="plugin-section-title">
-                  <strong>
-                    <Terminal size={15} /> 允许的命令
-                  </strong>
-                  <small>执行外部命令可能访问文件、网络或启动其他程序。</small>
-                </div>
+            </div>
+          </Modal>
+        )}
+      {permissionsFor &&
+        commandSettingsOpen &&
+        permissionsFor.declaredPermissions.includes('commands') && (
+          <Modal
+            open
+            onClose={() => setCommandSettingsOpen(false)}
+            title="外部命令"
+            className="plugin-domain-modal"
+          >
+            <div className="plugin-domain-page">
+              <p className="plugin-domain-hint">
+                外部命令由宿主从 PATH 解析执行，可能访问授权目录以外的资源。
+              </p>
+              <section className="plugin-permission-section plugin-domain-section">
                 <div className="plugin-domain-list">
                   {[
                     ...new Set([
@@ -634,19 +709,20 @@ export function PluginSettings() {
                             {requested && <small>插件申请</small>}
                             {!allowed && <small className="muted">未授权</small>}
                           </span>
-                          <Button
+                          <button
                             type="button"
-                            size="icon-xs"
-                            variant="ghost"
+                            role="switch"
+                            aria-checked={allowed}
                             aria-label={allowed ? `移除命令 ${command}` : `授权命令 ${command}`}
                             title={allowed ? '移除命令' : '授权命令'}
+                            className={`plugin-switch ${allowed ? 'on' : ''}`}
                             disabled={
                               busy || !permissionsFor.grantedPermissions.includes('commands')
                             }
                             onClick={() => void updateCommand(permissionsFor, command, !allowed)}
                           >
-                            {allowed ? <X size={13} /> : <Plus size={13} />}
-                          </Button>
+                            <span />
+                          </button>
                         </div>
                       )
                     })}
@@ -687,42 +763,9 @@ export function PluginSettings() {
                   </Button>
                 </div>
               </section>
-            )}
-            <div className="plugin-permission-actions">
-              <p>
-                撤销任一权限会停用插件，重新激活时需要再次审核。插件数据和同步目录不会被删除。
-                <br />
-                当前状态：{permissionsFor.enabled ? '已启用' : '已停用'} ·{' '}
-                {permissionsFor.approved ? '已授权' : '待授权'}
-              </p>
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => setConfirmRemove(permissionsFor)}
-                >
-                  <Trash2 size={14} />
-                  卸载插件
-                </Button>
-                <Button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void updateActivation(permissionsFor, !permissionsFor.enabled)}
-                >
-                  {permissionsFor.enabled ? '停用插件' : '激活插件'}
-                </Button>
-              </div>
             </div>
-            {message && (
-              <p role="status" className="plugin-page-message">
-                {message}
-              </p>
-            )}
-          </div>
+          </Modal>
         )}
-      </Modal>
-
       <Modal
         open={Boolean(settingsFor)}
         onClose={() => {
@@ -777,52 +820,37 @@ export function PluginSettings() {
         </div>
       </Modal>
 
-      <Modal
-        open={Boolean(domainToApprove)}
-        title="允许插件访问网络域名"
-        onClose={() => setDomainToApprove(null)}
-      >
-        <p>
-          确认允许「{permissionsFor?.name}」访问 <strong>{domainToApprove}</strong>{' '}
-          吗？仅授权此精确域名，不包括子域名。
-        </p>
-        <footer className="plugin-consent-actions">
-          <Button variant="outline" onClick={() => setDomainToApprove(null)}>
-            取消
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              permissionsFor &&
-              domainToApprove &&
-              void updateDomain(permissionsFor, domainToApprove, true)
-            }
-          >
-            允许此域名
-          </Button>
-        </footer>
-      </Modal>
-      <Modal
-        open={Boolean(permissionToApprove)}
-        title="重新授予插件权限"
-        onClose={() => setPermissionToApprove(null)}
-      >
-        <p>
-          允许「{permissionsFor?.name}」重新获得
-          {permissionLabels[permissionToApprove || ''] || permissionToApprove}权限吗？
-        </p>
-        <footer className="plugin-consent-actions">
-          <Button variant="outline" onClick={() => setPermissionToApprove(null)}>
-            取消
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() => permissionsFor && void grantPermission(permissionsFor)}
-          >
-            允许
-          </Button>
-        </footer>
-      </Modal>
+      {permissionsFor && domainToApprove && (
+        <PluginPermissionPrompt
+          open
+          pluginName={permissionsFor.name}
+          icon={permissionsFor.icon}
+          item={{
+            id: `domain:${domainToApprove}`,
+            kind: 'network',
+            title: '网络域名',
+            value: domainToApprove,
+          }}
+          step={1}
+          total={1}
+          busy={busy}
+          onAllow={() => void updateDomain(permissionsFor, domainToApprove, true)}
+          onDeny={() => setDomainToApprove(null)}
+        />
+      )}
+      {permissionsFor && permissionToApprove && (
+        <PluginPermissionPrompt
+          open
+          pluginName={permissionsFor.name}
+          icon={permissionsFor.icon}
+          item={promptForPermission(permissionToApprove)}
+          step={1}
+          total={1}
+          busy={busy}
+          onAllow={() => void grantPermission(permissionsFor)}
+          onDeny={() => setPermissionToApprove(null)}
+        />
+      )}
       <Modal open={Boolean(confirmRemove)} title="卸载插件" onClose={() => setConfirmRemove(null)}>
         <p>
           确定卸载「{confirmRemove?.name}
@@ -837,56 +865,66 @@ export function PluginSettings() {
           </Button>
         </footer>
       </Modal>
-      <Modal open={Boolean(localPreview)} title="导入插件" onClose={() => setLocalPreview(null)}>
-        <p>
-          {localPreview?.name} {localPreview?.version}
-          {localPreview?.author?.name ? ` · ${localPreview.author.name}` : ''}
-        </p>
-        {localPreview && !localPreview.trusted && (
-          <div className="plugin-signature-warning">
-            {localPreview.signed ? (
-              <>
-                <strong>未信任的发布者</strong>
-                <span>
-                  {localPreview.publisherName || localPreview.publisher || '未知发布者'} · 密钥指纹{' '}
-                  <code>{localPreview.fingerprint || localPreview.keyId}</code>
-                </span>
-              </>
-            ) : (
-              <>
-                <strong>此插件未签名</strong>
-                <span>只在你确认来源可信时继续安装。</span>
-              </>
-            )}
+      <Modal
+        open={Boolean(localPreview)}
+        title="导入插件"
+        onClose={() => setLocalPreview(null)}
+        className="plugin-import-modal"
+      >
+        {localPreview && (
+          <div className="plugin-import-page">
+            <div className="plugin-import-profile">
+              <span className="plugin-import-icon">
+                <Puzzle size={24} />
+              </span>
+              <span className="plugin-import-copy">
+                <strong>{localPreview.name}</strong>
+                <small>{localPreview.author?.name || '未知开发者'}</small>
+              </span>
+            </div>
+            <div
+              className={`plugin-import-signature ${
+                localPreview.signed && localPreview.trusted ? 'verified' : 'warning'
+              }`}
+            >
+              {localPreview.signed && localPreview.trusted ? (
+                <>
+                  <ShieldCheck size={16} />
+                  <span>
+                    <strong>签名已验证</strong>
+                    {localPreview.publisherName || localPreview.publisher || '已验证发布者'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <ShieldAlert size={16} />
+                  <span>
+                    <strong>{localPreview.signed ? '未信任的发布者' : '此插件未签名'}</strong>
+                    {localPreview.signed
+                      ? `${localPreview.publisherName || localPreview.publisher || '未知发布者'} · 密钥指纹 ${localPreview.fingerprint || localPreview.keyId || '未知'}`
+                      : '只在你确认来源可信时继续导入。'}
+                  </span>
+                </>
+              )}
+            </div>
+            <footer className="plugin-consent-actions">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  if (localPreview)
+                    void call('plugin_cancel_install', { ticket: localPreview.ticket })
+                  setLocalPreview(null)
+                }}
+              >
+                取消
+              </Button>
+              <Button disabled={busy} onClick={() => void installLocal()}>
+                导入插件
+              </Button>
+            </footer>
           </div>
         )}
-        {localPreview?.signed && localPreview.trusted && (
-          <div className="plugin-signature-ok">
-            签名已验证 · {localPreview.publisherName || localPreview.publisher}
-          </div>
-        )}
-        <p>安装后保持未激活，以下权限需要在激活时逐项同意：</p>
-        <ul>
-          {(localPreview?.permissions || []).map((permission) => (
-            <li key={permission}>{permissionLabels[permission] || permission}</li>
-          ))}
-          {!localPreview?.permissions.length && <li>无需宿主权限</li>}
-        </ul>
-        <footer className="plugin-consent-actions">
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => {
-              if (localPreview) void call('plugin_cancel_install', { ticket: localPreview.ticket })
-              setLocalPreview(null)
-            }}
-          >
-            取消
-          </Button>
-          <Button disabled={busy} onClick={() => void installLocal()}>
-            导入插件
-          </Button>
-        </footer>
       </Modal>
       {activationFor && (
         <PluginActivationDialog
@@ -900,31 +938,24 @@ export function PluginSettings() {
           }}
         />
       )}
-      <Modal
-        open={Boolean(commandToApprove)}
-        title="授权执行外部命令"
-        onClose={() => setCommandToApprove(null)}
-      >
-        <p>{commandRisk}</p>
-        <p>
-          申请的命令：<code>{commandToApprove}</code>
-        </p>
-        <footer className="plugin-consent-actions">
-          <Button variant="outline" onClick={() => setCommandToApprove(null)}>
-            取消
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() =>
-              permissionsFor &&
-              commandToApprove &&
-              void updateCommand(permissionsFor, commandToApprove, true)
-            }
-          >
-            允许此命令
-          </Button>
-        </footer>
-      </Modal>
+      {permissionsFor && commandToApprove && (
+        <PluginPermissionPrompt
+          open
+          pluginName={permissionsFor.name}
+          icon={permissionsFor.icon}
+          item={{
+            id: `command:${commandToApprove}`,
+            kind: 'command',
+            title: '外部命令',
+            value: commandToApprove,
+          }}
+          step={1}
+          total={1}
+          busy={busy}
+          onAllow={() => void updateCommand(permissionsFor, commandToApprove, true)}
+          onDeny={() => setCommandToApprove(null)}
+        />
+      )}
     </>
   )
 }

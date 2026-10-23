@@ -480,9 +480,23 @@ pub fn catalog() -> Vec<PluginInfo> {
         })
         .collect()
 }
+/// The plugin document must define its own policy. It is served from the
+/// asset origin rather than injected into the app shell, so the app's stricter
+/// `script-src 'self'` does not block the plugin's inline bundle.
+const PANEL_CSP: &str = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'\">";
+fn panel_document(html: &str) -> String {
+    let lower = html.to_ascii_lowercase();
+    let insert = lower
+        .find("<head")
+        .and_then(|start| lower[start..].find('>').map(|offset| start + offset + 1));
+    match insert {
+        Some(index) => format!("{}{PANEL_CSP}{}", &html[..index], &html[index..]),
+        None => format!("{PANEL_CSP}{html}"),
+    }
+}
 /// Host-approved precompiled, self-contained iframe HTML. Plugins cannot
 /// supply absolute paths or read unrelated files through this API.
-pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
+fn panel_source(plugin_id: &str, panel_id: &str) -> Result<String, String> {
     let (manifest, folder) = discover()
         .into_iter()
         .find(|(m, _)| m.id == plugin_id)
@@ -520,6 +534,36 @@ pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
         return Err("panel HTML exceeds size limit".into());
     }
     fs::read_to_string(file).map_err(|e| e.to_string())
+}
+pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
+    panel_source(plugin_id, panel_id)
+}
+/// Desktop panels are served from the asset protocol with their own CSP. A
+/// `srcDoc` document inherits the app shell's CSP, which blocks inline plugin
+/// bundles in packaged builds. The cache copy is content-addressed.
+pub fn panel_asset(plugin_id: &str, panel_id: &str) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let html = panel_document(&panel_source(plugin_id, panel_id)?);
+    let digest = format!("{:x}", Sha256::digest(html.as_bytes()));
+    let directory = dirs::cache_dir()
+        .ok_or("cache directory unavailable")?
+        .join("fiex")
+        .join("plugin-panels")
+        .join(plugin_id);
+    fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let safe_panel = panel_id
+        .chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() || value == '-' || value == '_' {
+                value
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let path = directory.join(format!("{safe_panel}-{}.html", &digest[..16]));
+    fs::write(&path, html).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
 }
 pub fn exists(id: &str) -> bool {
     discover().iter().any(|(m, _)| m.id == id)

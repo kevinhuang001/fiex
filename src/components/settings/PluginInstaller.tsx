@@ -14,7 +14,6 @@ import {
   Search,
   Server,
   Shield,
-  Store,
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { pluginMarketplace, type MarketplacePlugin } from '@/lib/plugins'
@@ -155,30 +154,23 @@ export function PluginInstaller({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title="获取插件" wide className="plugin-store-modal">
+      <Modal open={open} onClose={onClose} title="获取插件" className="plugin-store-modal">
         <div className="plugin-store">
-          <header className="plugin-store-hero">
-            <div className="plugin-store-hero-icon">
-              <Store size={24} />
-            </div>
-            <div>
-              <strong>Fiex 官方插件</strong>
-              <p>按需安装。所有插件都需要你审核权限后才会运行。</p>
-            </div>
+          <div className="plugin-store-tools">
+            <label className="plugin-store-search">
+              <Search size={15} />
+              <input
+                aria-label="搜索插件"
+                placeholder="搜索插件"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
             <Button variant="outline" size="sm" disabled={loading} onClick={load}>
               {loading ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}
               刷新
             </Button>
-          </header>
-          <label className="plugin-store-search">
-            <Search size={15} />
-            <input
-              aria-label="搜索插件"
-              placeholder="搜索插件"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
+          </div>
           {error && (
             <p role="alert" className="connection-error">
               {error}
@@ -243,9 +235,6 @@ export function PluginInstaller({
               )}
             </div>
           )}
-          <p className="plugin-store-footnote">
-            安装包来自 GitHub Release。插件以独立进程运行，权限由 Fiex 宿主校验。
-          </p>
         </div>
       </Modal>
       <Modal open={Boolean(preview)} title="确认插件安装及权限" onClose={discard}>

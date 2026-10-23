@@ -708,6 +708,23 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       if (a.mode === 'saveFile') return '/Users/kevin/Documents/Archive.zip'
       if (a.mode === 'openFile') return '/Users/kevin/Documents/Archive.zip'
       return '/Users/kevin/Documents'
+    case 'plugin_prepare_local_install':
+      return {
+        ticket: 'demo-local-install',
+        id: 'org.example.local',
+        name: '本地示例插件',
+        version: '1.2.3',
+        author: { name: 'Example Author' },
+        permissions: ['folders.read', 'files.read'],
+        requestedNetworkDomains: [],
+        commands: [],
+        signed: true,
+        trusted: false,
+        publisher: 'example',
+        publisherName: 'Example Publisher',
+        keyId: 'demo-key',
+        fingerprint: 'AB12 CD34 EF56 7890',
+      }
     case 'plugin_files_dialog':
       return ['/Users/kevin/Documents/Notes.md']
     case 'plugin_network_domains':

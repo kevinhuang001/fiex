@@ -362,6 +362,10 @@ fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<String, Stri
     crate::plugin_host::panel_html(&plugin_id, &panel_id)
 }
 #[tauri::command]
+fn plugin_panel_asset(plugin_id: String, panel_id: String) -> Result<String, String> {
+    crate::plugin_host::panel_asset(&plugin_id, &panel_id)
+}
+#[tauri::command]
 fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
     crate::plugin_host::catalog()
 }
@@ -1191,6 +1195,7 @@ pub fn run() {
             plugin_status,
             plugins_list,
             plugin_panel_html,
+            plugin_panel_asset,
             plugin_permission_allowed,
             plugin_set_active_directory,
             plugin_network_domains,

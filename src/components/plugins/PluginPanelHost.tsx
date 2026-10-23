@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { PluginGlyph } from './PluginGlyph'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
-import { call } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import { usePluginCatalog } from '@/lib/plugins'
 import {
   beginActivity,
@@ -35,6 +36,7 @@ const PANEL_CSP =
 export function PluginPanelHost() {
   const [request, setRequest] = useState<PluginPanelRequest | null>(null)
   const [html, setHtml] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
@@ -46,15 +48,31 @@ export function PluginPanelHost() {
   const readyTimer = useRef<number | null>(null)
   const taskIds = useRef(new Set<string>())
   const htmlCache = useRef(new Map<string, string>())
+  const urlCache = useRef(new Map<string, string>())
   const plugins = usePluginCatalog()
   const dispose = useRef<null | (() => void)>(null)
-  const loadPanel = (pluginId: string, panelId: string) => {
+  const loadPanel = (
+    pluginId: string,
+    panelId: string,
+  ): Promise<{ url?: string; html?: string }> => {
     const key = `${pluginId}:${panelId}`
+    // A srcDoc document inherits the app shell CSP, which blocks inline plugin
+    // bundles in packaged builds. Desktop loads the same HTML from the asset
+    // protocol with the plugin document's own policy.
+    if (native) {
+      const cachedUrl = urlCache.current.get(key)
+      if (cachedUrl) return Promise.resolve({ url: cachedUrl })
+      return call<string>('plugin_panel_asset', { pluginId, panelId }).then((path) => {
+        const url = convertFileSrc(path)
+        urlCache.current.set(key, url)
+        return { url }
+      })
+    }
     const cached = htmlCache.current.get(key)
-    if (cached) return Promise.resolve(cached)
+    if (cached) return Promise.resolve({ html: cached })
     return call<string>('plugin_panel_html', { pluginId, panelId }).then((value) => {
       htmlCache.current.set(key, value)
-      return value
+      return { html: value }
     })
   }
   useEffect(() => {
@@ -69,6 +87,7 @@ export function PluginPanelHost() {
       setRequest(req)
       setReady(false)
       setHtml(htmlCache.current.get(`${req.pluginId}:${req.panelId}`) || '')
+      setSourceUrl(urlCache.current.get(`${req.pluginId}:${req.panelId}`) || '')
       setError('')
       const nextSize = req.size || { width: 560, height: 560 }
       setSize({
@@ -76,7 +95,10 @@ export function PluginPanelHost() {
         height: Math.min(nextSize.height, window.innerHeight - 92),
       })
       void loadPanel(req.pluginId, req.panelId)
-        .then(setHtml)
+        .then((source) => {
+          if (source.url) setSourceUrl(source.url)
+          if (source.html) setHtml(source.html)
+        })
         .catch((cause) => setError(String(cause)))
     }
     const onResult = (event: Event) => {
@@ -121,6 +143,7 @@ export function PluginPanelHost() {
     setRequest(null)
     setReady(false)
     setHtml('')
+    setSourceUrl('')
   }
   const attach = () => {
     if (!frame.current || !request) return
@@ -391,8 +414,24 @@ export function PluginPanelHost() {
               <p role="alert" className="connection-error">
                 {error}
               </p>
+            ) : sourceUrl ? (
+              <iframe
+                key="asset"
+                ref={frame}
+                title={request.title || '插件界面'}
+                sandbox="allow-scripts"
+                referrerPolicy="no-referrer"
+                style={{ height: '100%', width: '100%', border: 0 }}
+                src={sourceUrl}
+                onLoad={() => {
+                  attach()
+                  if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
+                  readyTimer.current = window.setTimeout(() => setReady(true), 700)
+                }}
+              />
             ) : html ? (
               <iframe
+                key="srcdoc"
                 ref={frame}
                 title={request.title || '插件界面'}
                 sandbox="allow-scripts"
