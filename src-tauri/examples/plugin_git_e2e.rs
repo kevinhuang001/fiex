@@ -12,7 +12,14 @@ fn main() {
         .expect("Git plugin must be installed in FIEX_PLUGIN_DIR");
     assert!(entry.backend_available);
     if !entry.approved {
-        plugin_host::approve_install(id).expect("approval failed");
+        let declared = plugin_host::declared_permissions_for(id).expect("declared permissions");
+        fiex_lib::plugin_permissions::approve_install_with_domains(
+            id,
+            &declared,
+            &[],
+            &["git".to_string()],
+        )
+        .expect("approval failed");
     }
     plugin_host::set_enabled(id, true).expect("enable failed");
 
@@ -26,6 +33,7 @@ fn main() {
         .unwrap();
     std::fs::write(repo.join("a.txt"), "hello\n").unwrap();
     let root = repo.to_string_lossy().into_owned();
+    plugin_host::set_active_directory(&root).expect("active directory");
 
     let init = plugin_host::global()
         .invoke(id, "git.init", json!({"root": root}))
