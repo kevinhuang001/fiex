@@ -7,6 +7,10 @@
 - Tab and pinned-tool reordering follows the pointer, and neighbouring items move aside at half overlap.
 - Appearance settings right-align their controls and centre the theme picker menu.
 - File decorations and plugin-provided file icons.
+- Plugins can declare file previewers (`contributions.preview`) with extensions and a priority, overriding built-in previewers such as PDF.
+- Plugin diagnostics: requested commands missing from PATH are marked in red, and recent plugin, panel, bridge and activation failures are listed in the plugin's details.
+- Plugin settings support list fields, shown as add/remove rows.
+- The toolbar plugin switcher no longer flashes the outgoing panel twice, and a reopened cached panel settles before it becomes visible.
 
 # Fiex 0.4.8
 
