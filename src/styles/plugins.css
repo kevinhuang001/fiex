@@ -19,53 +19,30 @@
 }
 /* Switching toolbar tools swaps one panel for another; the outgoing panel
    animates out instead of disappearing between frames. */
+/* Fade only: scaling a panel re-rasterises its iframe every frame, which the
+   user sees as the previous panel shaking while it animates out. */
 @keyframes plugin-panel-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
   }
 }
 @keyframes plugin-panel-out {
   to {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.985);
-  }
-}
-@keyframes plugin-panel-in-top {
-  from {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-@keyframes plugin-panel-out-top {
-  to {
-    opacity: 0;
-    transform: scale(0.985);
   }
 }
 .plugin-panel-popover.revealed {
   visibility: visible;
   opacity: 1;
-  animation: plugin-panel-in 150ms cubic-bezier(0.2, 0, 0, 1) both;
-}
-.plugin-panel-popover.toolbar-anchored.revealed {
-  animation-name: plugin-panel-in-top;
+  animation: plugin-panel-in 150ms ease-out both;
 }
 .plugin-panel-popover.leaving {
   visibility: visible;
   animation: plugin-panel-out 90ms ease-in both;
   pointer-events: none;
-}
-.plugin-panel-popover.toolbar-anchored.leaving {
-  animation-name: plugin-panel-out-top;
 }
 @media (prefers-reduced-motion: reduce) {
   .plugin-panel-popover.revealed,
