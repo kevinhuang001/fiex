@@ -347,7 +347,7 @@ const officialPlugins: DemoPlugin[] = officialMode
               panel: {
                 entry: 'ui/dist/index.html',
                 title: '源代码管理',
-                defaultSize: { width: 560, height: 300 },
+                defaultSize: { width: 480, height: 300 },
               },
             },
           ],
