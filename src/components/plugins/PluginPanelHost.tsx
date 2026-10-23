@@ -63,6 +63,9 @@ export function PluginPanelHost() {
       if (!req?.pluginId || !req.panelId) return
       dispose.current?.()
       dispose.current = null
+      if (req.directory) {
+        void call('plugin_set_active_directory', { path: req.directory }).catch(() => {})
+      }
       setRequest(req)
       setReady(false)
       setHtml(htmlCache.current.get(`${req.pluginId}:${req.panelId}`) || '')
