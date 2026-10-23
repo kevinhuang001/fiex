@@ -1,3 +1,13 @@
+# Fiex 0.4.9
+
+- Plugins run behind scoped Host services and require explicit activation consent: folder, file, network and external-command grants are requested one at a time and can be revoked.
+- Panels can be declared on toolbar tools and inside context submenus; “高级压缩” opens again instead of failing with “plugin declares no such panel”.
+- Plugin panels keep a cached session per window, use the size the plugin declares, anchor to the toolbar button or menu item, and only appear once their iframe has settled.
+- Theme packages are declarative: no executable, no iframe, no permissions. Tokens now cover tabs, rows, menus, bars, inputs and controls, so a theme restyles the chrome without CSS while the built-in palette stays unchanged.
+- Tab and pinned-tool reordering follows the pointer, and neighbouring items move aside at half overlap.
+- Appearance settings right-align their controls and centre the theme picker menu.
+- File decorations and plugin-provided file icons.
+
 # Fiex 0.4.8
 
 - Plugin iframes stay invisible until their HTML and bridge are ready, eliminating the pop-then-load flash.
