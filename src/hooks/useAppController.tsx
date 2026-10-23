@@ -34,6 +34,11 @@ export function useAppController() {
     openPane,
     closePane,
   } = usePaneLayout(prefs, left)
+  useEffect(() => {
+    const path = active === 'left' ? left.path : right.path
+    if (!path) return
+    void call('plugin_set_active_directory', { path }).catch(() => {})
+  }, [active, left.path, right.path])
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
 
