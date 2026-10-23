@@ -20,6 +20,8 @@ pub mod plugin_decorations;
 pub mod plugin_host;
 #[path = "plugins/installer.rs"]
 pub mod plugin_installer;
+#[path = "plugins/ipc.rs"]
+pub mod plugin_ipc;
 #[path = "plugins/permissions.rs"]
 pub mod plugin_permissions;
 #[path = "plugins/signing.rs"]

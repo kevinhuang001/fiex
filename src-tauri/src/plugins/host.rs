@@ -601,6 +601,25 @@ impl Running {
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
+            "host.buffer.create" => {
+                let size = p
+                    .get("size")
+                    .and_then(Value::as_u64)
+                    .ok_or("missing size")? as usize;
+                let writable = p.get("writable").and_then(Value::as_bool).unwrap_or(false);
+                serde_json::to_value(crate::plugin_ipc::create(&self.plugin_id, size, writable)?)
+                    .map_err(|error| error.to_string())
+            }
+            "host.buffer.map" => {
+                let id = p.get("id").and_then(Value::as_str).ok_or("missing id")?;
+                serde_json::to_value(crate::plugin_ipc::map(&self.plugin_id, id)?)
+                    .map_err(|error| error.to_string())
+            }
+            "host.buffer.release" => {
+                let id = p.get("id").and_then(Value::as_str).ok_or("missing id")?;
+                crate::plugin_ipc::release(&self.plugin_id, id)?;
+                Ok(Value::Null)
+            }
             "host.storage.get" => {
                 Ok(
                     crate::plugin_storage::get(&self.plugin_id, scope()?, key()?)?
