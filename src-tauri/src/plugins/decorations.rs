@@ -314,8 +314,7 @@ fn dynamic(
         }
     }
     let declared = plugin_host::declared_permissions(manifest).unwrap_or_default();
-    if !crate::plugin_permissions::allowed(&manifest.id, &declared, "filesystem.read")
-        .unwrap_or(false)
+    if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read").unwrap_or(false)
     {
         return;
     }
@@ -323,7 +322,8 @@ fn dynamic(
         "directory": directory,
         "entries": entries.values().collect::<Vec<_>>(),
     });
-    let Ok(response) = plugin_host::global().invoke(&manifest.id, method, payload) else {
+    let Ok(response) = plugin_host::global().invoke_at(&manifest.id, method, payload, directory)
+    else {
         return;
     };
     let Some(items) = response.get("decorations").and_then(Value::as_array) else {
@@ -386,7 +386,7 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
             continue;
         }
         let declared = plugin_host::declared_permissions(&manifest).unwrap_or_default();
-        if !crate::plugin_permissions::allowed(&manifest.id, &declared, "filesystem.read")
+        if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read")
             .unwrap_or(false)
         {
             continue;

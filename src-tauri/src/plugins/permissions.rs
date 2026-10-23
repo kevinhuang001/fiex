@@ -446,13 +446,13 @@ mod tests {
     }
     #[test]
     fn all_plugins_start_unapproved() {
-        let requested = declared(&["filesystem.read", "filesystem.write", "network"]);
+        let requested = declared(&["files.read", "files.write", "network"]);
         let state = effective(None, &requested);
         assert!(!state.approved && !state.enabled && state.granted.is_empty());
     }
     #[test]
     fn removed_grants_stay_removed_and_new_scopes_never_auto_grant() {
-        let old = declared(&["filesystem.read"]);
+        let old = declared(&["files.read"]);
         let current = PluginGrant {
             approved: true,
             enabled: true,
@@ -460,9 +460,9 @@ mod tests {
             network_domains: BTreeSet::new(),
             commands: BTreeSet::new(),
         };
-        let new = declared(&["filesystem.read", "filesystem.write"]);
+        let new = declared(&["files.read", "files.write"]);
         let s = effective(Some(&current), &new);
-        assert!(s.granted.contains("filesystem.read") && !s.granted.contains("filesystem.write"));
+        assert!(s.granted.contains("files.read") && !s.granted.contains("files.write"));
     }
     #[test]
     fn command_grants_are_exact_and_require_declaration() {
