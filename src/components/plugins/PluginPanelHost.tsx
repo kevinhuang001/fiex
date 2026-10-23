@@ -250,14 +250,14 @@ export function PluginPanelHost() {
             const networkDomains = await call<string[]>('plugin_network_domains', {
               pluginId: current.pluginId,
             }).catch(() => [])
-            const params =
+            const baseParams =
               p.params && typeof p.params === 'object' && !Array.isArray(p.params)
                 ? { ...(p.params as Record<string, unknown>) }
                 : {}
             return await call<JsonValue>('plugin_invoke', {
               pluginId: current.pluginId,
               method: p.method,
-              params: { ...params, networkDomains },
+              params: { ...baseParams, networkDomains },
             })
           }
           if (method.startsWith('dialog.')) {
