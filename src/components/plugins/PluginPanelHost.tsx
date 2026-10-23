@@ -32,6 +32,7 @@ export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
 
 const PANEL_EXIT_MS = 90
+const PANEL_REVEAL_FALLBACK_MS = 260
 const MAX_PANEL_WIDTH = 720
 const MAX_PANEL_HEIGHT = 680
 
@@ -171,6 +172,11 @@ function CachedPanel({
   const [html, setHtml] = useState('')
   const [sourceUrl, setSourceUrl] = useState('')
   const [ready, setReady] = useState(false)
+  // The sheet stays invisible until the iframe has finished its own layout and
+  // stopped asking for new sizes, so it never appears at a size it is about to
+  // leave (that read as a jump the moment the panel opened).
+  const [revealed, setRevealed] = useState(false)
+  const revealTimer = useRef<number | null>(null)
   const [error, setError] = useState('')
   const [fakePicker, setFakePicker] = useState<FakePicker | null>(null)
   const [size, setSize] = useState({ width: 560, height: 560 })
@@ -247,9 +253,34 @@ function CachedPanel({
       document.removeEventListener('keydown', escape)
     }
   })
+  const reveal = () => {
+    if (revealTimer.current !== null) {
+      window.clearTimeout(revealTimer.current)
+      revealTimer.current = null
+    }
+    setRevealed(true)
+  }
+  // Panels measure themselves and call panel.resize; a quiet stretch after the
+  // last request is the signal that the layout has settled.
+  const settleReveal = () => {
+    if (revealTimer.current !== null) window.clearTimeout(revealTimer.current)
+    revealTimer.current = window.setTimeout(() => {
+      revealTimer.current = null
+      setRevealed(true)
+    }, 120)
+  }
   useEffect(() => {
-    if (error) setReady(true)
+    if (error) {
+      setReady(true)
+      reveal()
+    }
   }, [error])
+  useEffect(
+    () => () => {
+      if (revealTimer.current !== null) window.clearTimeout(revealTimer.current)
+    },
+    [],
+  )
   const close = () => {
     onClose()
   }
@@ -288,6 +319,12 @@ function CachedPanel({
             setReady(true)
             emit.current?.('theme.changed', themeSnapshot())
             emit.current?.('panel.visibility', activeRef.current)
+            // Fallback for panels that never resize themselves; resize-driven
+            // panels reveal sooner, as soon as their layout goes quiet.
+            revealTimer.current = window.setTimeout(() => {
+              revealTimer.current = null
+              setRevealed(true)
+            }, PANEL_REVEAL_FALLBACK_MS)
           },
           onError: setError,
           subscribe: (send) => {
@@ -332,6 +369,7 @@ function CachedPanel({
                     Math.max(220, Number(p.height)),
                   ),
                 })
+                settleReveal()
               }
               return null
             }
@@ -502,7 +540,7 @@ function CachedPanel({
           ref={panel}
           className={`plugin-panel-popover${ready ? ' ready' : ' opening'}${
             request.source === 'toolbar' ? ' toolbar-anchored' : ''
-          }${leaving ? ' leaving' : ''}`}
+          }${revealed ? ' revealed' : ''}${leaving ? ' leaving' : ''}`}
           hidden={!active && !leaving}
           role="dialog"
           aria-label={request.title || '插件'}
