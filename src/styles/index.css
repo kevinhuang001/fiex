@@ -5143,3 +5143,6 @@ body.dragging-reorder * {
   gap: 5px;
   color: var(--muted);
 }
+.context-submenu:has(> .context-submenu-wrap) {
+  overflow: visible;
+}

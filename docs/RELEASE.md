@@ -1,3 +1,11 @@
+# Fiex 0.4.4
+
+- Official plugin React panels can be tested in the dev web environment at `http://127.0.0.1:1421/`; the Git and Archive tools are pinned automatically in development.
+- Archive actions are context-menu only; the Archive toolbar entry was removed.
+- The plugin iframe bridge retries the MessageChannel handshake when a module script starts after the iframe load event, fixing blank official panels.
+- The Core iframe header owns the plugin icon, title and close button; official panels no longer render their own duplicate header.
+- Demo mode is enabled automatically in development, so opening the dev URL no longer raises "请在 Fiex 桌面应用中浏览本地文件".
+
 # Fiex 0.4.3
 
 - Status Center progress counts every file, including files inside folders. A folder with 8 files contributes 8 to total/done, not 1.

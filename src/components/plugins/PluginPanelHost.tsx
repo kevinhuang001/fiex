@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
+import { PluginGlyph } from './PluginGlyph'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import { call } from '@/lib/api'
@@ -19,6 +20,7 @@ export interface PluginPanelRequest {
   title: string
   selection: string[]
   directory: string
+  icon?: string
   anchor?: { x: number; y: number }
 }
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
@@ -40,6 +42,8 @@ export function PluginPanelHost() {
   const pointer = useRef<{ x: number; y: number } | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
+  const bridgeReady = useRef(false)
+  const retryTimers = useRef<number[]>([])
   const taskIds = useRef(new Set<string>())
   const dispose = useRef<null | (() => void)>(null)
   useEffect(() => {
@@ -113,6 +117,8 @@ export function PluginPanelHost() {
     return () => window.removeEventListener('resize', reposition)
   }, [request, anchor, size])
   const close = () => {
+    retryTimers.current.forEach((timer) => window.clearTimeout(timer))
+    retryTimers.current = []
     for (const id of taskIds.current) finishActivity(id, '插件面板已关闭')
     taskIds.current.clear()
     dispose.current?.()
@@ -122,170 +128,193 @@ export function PluginPanelHost() {
   }
   const attach = () => {
     if (!frame.current || !request) return
+    const target = frame.current
     dispose.current?.()
+    retryTimers.current.forEach((timer) => window.clearTimeout(timer))
+    retryTimers.current = []
+    bridgeReady.current = false
     const current = request
-    try {
-      dispose.current = attachFiexPanel({
-        pluginId: current.pluginId,
-        sessionId: crypto.randomUUID(),
-        origin: 'null',
-        frame: frame.current,
-        allowedMethods: new Set([
-          'context.get',
-          'plugin.invoke',
-          'panel.close',
-          'panel.resize',
-          'theme.get',
-          'dialog.openFile',
-          'dialog.openDirectory',
-          'dialog.saveFile',
-          'dialog.openFiles',
-          'navigation.open',
-          'tasks.create',
-          'tasks.update',
-          'tasks.finish',
-          'tasks.cancel',
-          'tasks.list',
-        ]),
-        dispatch: async (method, params): Promise<JsonValue> => {
-          if (method === 'context.get')
-            return {
-              directory: current.directory,
-              selection: current.selection,
-              directoryPath: current.directory,
-              selectionPaths: current.selection,
+    const connect = () => {
+      try {
+        dispose.current = attachFiexPanel({
+          pluginId: current.pluginId,
+          sessionId: crypto.randomUUID(),
+          origin: 'null',
+          frame: target,
+          allowedMethods: new Set([
+            'context.get',
+            'plugin.invoke',
+            'panel.close',
+            'panel.resize',
+            'theme.get',
+            'dialog.openFile',
+            'dialog.openDirectory',
+            'dialog.saveFile',
+            'dialog.openFiles',
+            'navigation.open',
+            'tasks.create',
+            'tasks.update',
+            'tasks.finish',
+            'tasks.cancel',
+            'tasks.list',
+          ]),
+          onReady: () => {
+            bridgeReady.current = true
+            retryTimers.current.forEach((timer) => window.clearTimeout(timer))
+            retryTimers.current = []
+          },
+          dispatch: async (method, params): Promise<JsonValue> => {
+            if (method === 'context.get')
+              return {
+                directory: current.directory,
+                selection: current.selection,
+                directoryPath: current.directory,
+                selectionPaths: current.selection,
+              }
+            if (method === 'panel.close') {
+              close()
+              return null
             }
-          if (method === 'panel.close') {
-            close()
-            return null
-          }
-          if (method === 'panel.resize') {
-            const p = (params || {}) as { width?: number; height?: number }
-            if (Number.isFinite(p.width) && Number.isFinite(p.height)) {
-              setSize((old) => ({
-                ...old,
-                width: Math.min(1000, Math.max(360, Number(p.width))),
-              }))
+            if (method === 'panel.resize') {
+              const p = (params || {}) as { width?: number; height?: number }
+              if (Number.isFinite(p.width) && Number.isFinite(p.height)) {
+                setSize((old) => ({
+                  ...old,
+                  width: Math.min(1000, Math.max(360, Number(p.width))),
+                }))
+              }
+              return null
             }
-            return null
-          }
-          if (method === 'theme.get') return document.documentElement.dataset.theme || 'system'
-          if (method === 'navigation.open') {
-            const p = params as { path?: unknown } | null
-            if (!p || typeof p.path !== 'string' || !p.path)
-              throw new Error('Invalid navigation path')
-            window.dispatchEvent(
-              new CustomEvent('fiex:navigate', { detail: { path: p.path, pane: 'left' } }),
-            )
-            return null
-          }
-          if (method === 'tasks.create') {
-            const p = (params || {}) as {
-              title?: unknown
-              detail?: unknown
-              progress?: unknown
+            if (method === 'theme.get') return document.documentElement.dataset.theme || 'system'
+            if (method === 'navigation.open') {
+              const p = params as { path?: unknown } | null
+              if (!p || typeof p.path !== 'string' || !p.path)
+                throw new Error('Invalid navigation path')
+              window.dispatchEvent(
+                new CustomEvent('fiex:navigate', { detail: { path: p.path, pane: 'left' } }),
+              )
+              return null
             }
-            if (typeof p.title !== 'string' || !p.title.trim())
-              throw new Error('Invalid task title')
-            const id = beginActivity(
-              p.title.trim(),
-              typeof p.detail === 'string' ? p.detail : undefined,
-              undefined,
-              'plugin',
-            )
-            taskIds.current.add(id)
-            if (typeof p.progress === 'number') updateActivity(id, { progress: p.progress })
-            return { taskId: id }
-          }
-          if (method === 'tasks.update') {
-            const p = (params || {}) as {
-              taskId?: unknown
-              label?: unknown
-              detail?: unknown
-              progress?: unknown
-              done?: unknown
-              total?: unknown
-              step?: unknown
+            if (method === 'tasks.create') {
+              const p = (params || {}) as {
+                title?: unknown
+                detail?: unknown
+                progress?: unknown
+              }
+              if (typeof p.title !== 'string' || !p.title.trim())
+                throw new Error('Invalid task title')
+              const id = beginActivity(
+                p.title.trim(),
+                typeof p.detail === 'string' ? p.detail : undefined,
+                undefined,
+                'plugin',
+              )
+              taskIds.current.add(id)
+              if (typeof p.progress === 'number') updateActivity(id, { progress: p.progress })
+              return { taskId: id }
             }
-            if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
-              throw new Error('Unknown task')
-            updateActivity(p.taskId, {
-              ...(typeof p.label === 'string' ? { label: p.label } : {}),
-              ...(typeof p.detail === 'string' ? { detail: p.detail } : {}),
-              ...(typeof p.progress === 'number' ? { progress: p.progress } : {}),
-              ...(typeof p.done === 'number' ? { done: p.done } : {}),
-              ...(typeof p.total === 'number' ? { total: p.total } : {}),
-              ...(typeof p.step === 'string' ? { step: p.step } : {}),
-            })
-            return null
-          }
-          if (method === 'tasks.finish') {
-            const p = (params || {}) as { taskId?: unknown; error?: unknown; detail?: unknown }
-            if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
-              throw new Error('Unknown task')
-            finishActivity(
-              p.taskId,
-              typeof p.error === 'string' ? p.error : undefined,
-              typeof p.detail === 'string' ? p.detail : undefined,
-            )
-            taskIds.current.delete(p.taskId)
-            return null
-          }
-          if (method === 'tasks.cancel') {
-            const p = (params || {}) as { taskId?: unknown }
-            if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
-              throw new Error('Unknown task')
-            cancelActivity(p.taskId)
-            taskIds.current.delete(p.taskId)
-            return null
-          }
-          if (method === 'tasks.list')
-            return listActivity()
-              .filter((item) => item.kind === 'plugin')
-              .map((item) => ({ ...item }))
-          if (method === 'plugin.invoke') {
-            const p = params as { method?: unknown; params?: unknown } | null
-            if (!p || typeof p.method !== 'string' || !p.method || p.method.startsWith('host.'))
-              throw new Error('Invalid plugin method')
-            const networkDomains = await call<string[]>('plugin_network_domains', {
-              pluginId: current.pluginId,
-            }).catch(() => [])
-            const baseParams =
-              p.params && typeof p.params === 'object' && !Array.isArray(p.params)
-                ? { ...(p.params as Record<string, unknown>) }
-                : {}
-            return await call<JsonValue>('plugin_invoke', {
-              pluginId: current.pluginId,
-              method: p.method,
-              params: { ...baseParams, networkDomains },
-            })
-          }
-          if (method.startsWith('dialog.')) {
-            // The chooser is rendered by the host and only returns the path the
-            // user explicitly picks; it never grants directory browsing.
-            const p = (params || {}) as {
-              directory?: string
-              suggestedName?: string
-              extensions?: string[]
+            if (method === 'tasks.update') {
+              const p = (params || {}) as {
+                taskId?: unknown
+                label?: unknown
+                detail?: unknown
+                progress?: unknown
+                done?: unknown
+                total?: unknown
+                step?: unknown
+              }
+              if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
+                throw new Error('Unknown task')
+              updateActivity(p.taskId, {
+                ...(typeof p.label === 'string' ? { label: p.label } : {}),
+                ...(typeof p.detail === 'string' ? { detail: p.detail } : {}),
+                ...(typeof p.progress === 'number' ? { progress: p.progress } : {}),
+                ...(typeof p.done === 'number' ? { done: p.done } : {}),
+                ...(typeof p.total === 'number' ? { total: p.total } : {}),
+                ...(typeof p.step === 'string' ? { step: p.step } : {}),
+              })
+              return null
             }
-            if (method === 'dialog.openFiles')
-              return await call<string[] | null>('plugin_files_dialog', {
+            if (method === 'tasks.finish') {
+              const p = (params || {}) as { taskId?: unknown; error?: unknown; detail?: unknown }
+              if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
+                throw new Error('Unknown task')
+              finishActivity(
+                p.taskId,
+                typeof p.error === 'string' ? p.error : undefined,
+                typeof p.detail === 'string' ? p.detail : undefined,
+              )
+              taskIds.current.delete(p.taskId)
+              return null
+            }
+            if (method === 'tasks.cancel') {
+              const p = (params || {}) as { taskId?: unknown }
+              if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
+                throw new Error('Unknown task')
+              cancelActivity(p.taskId)
+              taskIds.current.delete(p.taskId)
+              return null
+            }
+            if (method === 'tasks.list')
+              return listActivity()
+                .filter((item) => item.kind === 'plugin')
+                .map((item) => ({ ...item }))
+            if (method === 'plugin.invoke') {
+              const p = params as { method?: unknown; params?: unknown } | null
+              if (!p || typeof p.method !== 'string' || !p.method || p.method.startsWith('host.'))
+                throw new Error('Invalid plugin method')
+              const networkDomains = await call<string[]>('plugin_network_domains', {
+                pluginId: current.pluginId,
+              }).catch(() => [])
+              const baseParams =
+                p.params && typeof p.params === 'object' && !Array.isArray(p.params)
+                  ? { ...(p.params as Record<string, unknown>) }
+                  : {}
+              return await call<JsonValue>('plugin_invoke', {
+                pluginId: current.pluginId,
+                method: p.method,
+                params: { ...baseParams, networkDomains },
+              })
+            }
+            if (method.startsWith('dialog.')) {
+              // The chooser is rendered by the host and only returns the path the
+              // user explicitly picks; it never grants directory browsing.
+              const p = (params || {}) as {
+                directory?: string
+                suggestedName?: string
+                extensions?: string[]
+              }
+              if (method === 'dialog.openFiles')
+                return await call<string[] | null>('plugin_files_dialog', {
+                  directory: p.directory,
+                  extensions: p.extensions,
+                })
+              return await call<string | null>('plugin_file_dialog', {
+                mode: method.slice('dialog.'.length),
                 directory: p.directory,
+                suggestedName: p.suggestedName,
                 extensions: p.extensions,
               })
-            return await call<string | null>('plugin_file_dialog', {
-              mode: method.slice('dialog.'.length),
-              directory: p.directory,
-              suggestedName: p.suggestedName,
-              extensions: p.extensions,
-            })
-          }
-          throw new Error('Unsupported panel operation')
-        },
-      })
-    } catch (cause) {
-      setError(String(cause))
+            }
+            throw new Error('Unsupported panel operation')
+          },
+        })
+      } catch (cause) {
+        setError(String(cause))
+      }
     }
+    connect()
+    // Module scripts may execute after iframe `load`; the initial port can be
+    // posted before the client is listening. Retry with a fresh channel until
+    // the ready handshake arrives.
+    retryTimers.current = [80, 300, 1000].map((delay) =>
+      window.setTimeout(() => {
+        if (!bridgeReady.current) {
+          dispose.current?.()
+          connect()
+        }
+      }, delay),
+    )
   }
   return (
     <>
@@ -308,6 +337,9 @@ export function PluginPanelHost() {
           }}
         >
           <header>
+            <span className="plugin-panel-icon">
+              <PluginGlyph icon={request.icon} />
+            </span>
             <strong>{request.title || '插件'}</strong>
             <button
               className="icon-button plugin-panel-close"

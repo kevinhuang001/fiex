@@ -7,6 +7,7 @@ import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/Plu
 interface Item {
   id: string
   title: string
+  icon?: string
   when?: string
   command?: string
   panel?: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
@@ -135,6 +136,7 @@ export function PluginContextActions({
             pluginId,
             panelId: item.id,
             title: item.title,
+            icon: item.icon || plugins.find((plugin) => plugin.id === pluginId)?.icon,
             selection: paths,
             directory: path,
           },

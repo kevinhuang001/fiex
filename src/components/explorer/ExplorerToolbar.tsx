@@ -137,6 +137,18 @@ export function ExplorerToolbar({
   const unpinTool = (key: string) => {
     update({ pinnedPluginTools: pinnedKeys.filter((item) => item !== key) })
   }
+  const autoPinned = useRef(false)
+  useEffect(() => {
+    if (!import.meta.env.DEV || autoPinned.current) return
+    if (new URLSearchParams(location.search).has('pluginFixture')) return
+    const defaults = availableTools
+      .filter(({ plugin, tool }) => plugin.id.startsWith('org.fiex.') && tool.panel)
+      .map(({ plugin, tool }) => pluginKey(plugin.id, tool.id))
+    if (!defaults.length) return
+    autoPinned.current = true
+    const missing = defaults.filter((key) => !pinnedKeys.includes(key))
+    if (missing.length) update({ pinnedPluginTools: [...pinnedKeys, ...missing] })
+  }, [availableTools, pinnedKeys, update])
   const runTool = (plugin: (typeof plugins)[number], tool: PluginContribution) => {
     if (tool.panel) {
       window.dispatchEvent(
@@ -145,6 +157,7 @@ export function ExplorerToolbar({
             pluginId: plugin.id,
             panelId: tool.id,
             title: tool.title,
+            icon: tool.icon,
             selection: x.selected,
             directory: x.path,
           },
