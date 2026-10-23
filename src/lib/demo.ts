@@ -534,7 +534,7 @@ const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
 export async function mock(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
     case 'plugins_list':
-      return demoPlugins
+      return structuredClone(demoPlugins)
     case 'plugin_panel_html': {
       if (officialMode) {
         const slug =

@@ -111,6 +111,14 @@ export function PluginSettings() {
   const [message, setMessage] = useState('')
   const [draft, setDraft] = useState<Record<string, string | boolean>>({})
   const [permissionToApprove, setPermissionToApprove] = useState<string | null>(null)
+  useEffect(() => {
+    setPermissionsFor((current) =>
+      current ? plugins.find((plugin) => plugin.id === current.id) || null : null,
+    )
+    setSettingsFor((current) =>
+      current ? plugins.find((plugin) => plugin.id === current.id) || null : null,
+    )
+  }, [plugins])
   const [domainDraft, setDomainDraft] = useState('')
   const [domainToApprove, setDomainToApprove] = useState<string | null>(null)
   const [commandDraft, setCommandDraft] = useState('')

@@ -1,3 +1,9 @@
+# Fiex 0.4.8
+
+- Plugin iframes stay invisible until their HTML and bridge are ready, eliminating the pop-then-load flash.
+- Plugin empty-selection hints wait for bridge context.
+- The dev plugin catalog now returns a fresh list after installation, so WebDAV appears immediately in “添加连接”.
+
 # Fiex 0.4.7
 
 - Plugin panels are centered on screen, use the panel size declared by the plugin, and only clamp to the viewport maximum.

@@ -18,14 +18,18 @@ export function ConnectionDialog({
   const plugins = usePluginCatalog()
   const choices = useMemo(
     () =>
-      plugins.flatMap((plugin) =>
-        plugin.enabled && plugin.capabilities.includes('connection')
+      plugins.flatMap((plugin) => {
+        const ok =
+          plugin.enabled &&
+          (plugin.capabilities.includes('connection') ||
+            Boolean(plugin.contributions?.connections?.length))
+        return ok
           ? (plugin.contributions?.connections || []).map((factory) => ({
               plugin,
               factory,
             }))
-          : [],
-      ),
+          : []
+      }),
     [plugins],
   )
   const [selected, setSelected] = useState<string | null>(null)

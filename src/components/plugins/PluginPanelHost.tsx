@@ -35,6 +35,7 @@ const PANEL_CSP =
 export function PluginPanelHost() {
   const [request, setRequest] = useState<PluginPanelRequest | null>(null)
   const [html, setHtml] = useState('')
+  const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
   const [size, setSize] = useState({ width: 560, height: 560 })
@@ -42,6 +43,7 @@ export function PluginPanelHost() {
   const frame = useRef<HTMLIFrameElement>(null)
   const bridgeReady = useRef(false)
   const retryTimers = useRef<number[]>([])
+  const readyTimer = useRef<number | null>(null)
   const taskIds = useRef(new Set<string>())
   const htmlCache = useRef(new Map<string, string>())
   const plugins = usePluginCatalog()
@@ -62,6 +64,7 @@ export function PluginPanelHost() {
       dispose.current?.()
       dispose.current = null
       setRequest(req)
+      setReady(false)
       setHtml(htmlCache.current.get(`${req.pluginId}:${req.panelId}`) || '')
       setError('')
       const nextSize = req.size || { width: 560, height: 560 }
@@ -100,7 +103,12 @@ export function PluginPanelHost() {
       document.removeEventListener('keydown', escape)
     }
   })
+  useEffect(() => {
+    if (error) setReady(true)
+  }, [error])
   const close = () => {
+    if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
+    readyTimer.current = null
     retryTimers.current.forEach((timer) => window.clearTimeout(timer))
     retryTimers.current = []
     for (const id of taskIds.current) finishActivity(id, '插件面板已关闭')
@@ -108,6 +116,7 @@ export function PluginPanelHost() {
     dispose.current?.()
     dispose.current = null
     setRequest(null)
+    setReady(false)
     setHtml('')
   }
   const attach = () => {
@@ -146,6 +155,8 @@ export function PluginPanelHost() {
             bridgeReady.current = true
             retryTimers.current.forEach((timer) => window.clearTimeout(timer))
             retryTimers.current = []
+            if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
+            readyTimer.current = window.setTimeout(() => setReady(true), 40)
           },
           dispatch: async (method, params): Promise<JsonValue> => {
             if (method === 'context.get')
@@ -319,9 +330,10 @@ export function PluginPanelHost() {
       {request && (
         <div
           ref={panel}
-          className="plugin-panel-popover"
+          className={`plugin-panel-popover${ready ? ' ready' : ' opening'}`}
           role="dialog"
           aria-label={request.title || '插件'}
+          aria-busy={!ready}
           style={{
             width: Math.min(size.width, window.innerWidth - 40),
             height: Math.min(size.height + 52, window.innerHeight - 40),
@@ -353,7 +365,11 @@ export function PluginPanelHost() {
                 referrerPolicy="no-referrer"
                 style={{ height: '100%', width: '100%', border: 0 }}
                 srcDoc={PANEL_CSP + html}
-                onLoad={attach}
+                onLoad={() => {
+                  attach()
+                  if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
+                  readyTimer.current = window.setTimeout(() => setReady(true), 700)
+                }}
               />
             ) : null}
           </div>

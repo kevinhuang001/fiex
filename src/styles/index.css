@@ -5108,6 +5108,11 @@ body.dragging-reorder * {
   max-height: min(86vh, 820px);
   transform: translate(-50%, -50%);
   box-shadow: 0 20px 60px color-mix(in srgb, var(--text) 18%, transparent);
+  transition: opacity 120ms ease;
+}
+.plugin-panel-popover.opening {
+  opacity: 0;
+  pointer-events: none;
 }
 .plugin-panel-popover > header {
   display: flex;
