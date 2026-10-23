@@ -16,6 +16,8 @@ export interface PluginPermissionItem {
   title: string
   hint?: string
   value?: string
+  /** Shown in red, e.g. a command that is not installed on this machine. */
+  warning?: string
 }
 
 const permissionOrder = [
@@ -57,6 +59,9 @@ export function activationPromptItems(plugin: PluginInfo): PluginPermissionItem[
       kind: 'command' as const,
       title: '外部命令',
       value,
+      warning: plugin.missingCommands?.includes(value)
+        ? '本地未找到该命令，允许后插件也可能无法工作。'
+        : undefined,
     })),
   ]
   return items.length
@@ -147,6 +152,11 @@ export function PluginPermissionPrompt({
         )}
         <h3>{question}</h3>
         {hint && <p>{hint}</p>}
+        {item.warning && (
+          <p role="alert" className="plugin-permission-prompt-warning">
+            {item.warning}
+          </p>
+        )}
         {error && (
           <p role="alert" className="plugin-permission-prompt-error">
             {error}

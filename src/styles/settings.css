@@ -3745,3 +3745,79 @@ body.dragging-reorder * {
   color: var(--success);
   font-size: 11px;
 }
+
+/* Plugin diagnostics: missing commands and recent errors. */
+.plugin-command-missing {
+  color: var(--danger);
+}
+
+.plugin-command-row-missing {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--line));
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+
+.plugin-permission-prompt-warning {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.plugin-error-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.plugin-error-list li {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.plugin-error-list p {
+  margin: 0;
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.plugin-error-list pre {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 90px;
+  overflow: auto;
+}
+
+.plugin-error-list time {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plugin-error-source {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.plugin-error-source.panel,
+.plugin-error-source.bridge,
+.plugin-error-source.process {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}

@@ -725,6 +725,12 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
   switch (command) {
     case 'plugins_list':
       return structuredClone(demoPlugins)
+    case 'plugin_errors':
+      return []
+    case 'plugin_error_report':
+      return null
+    case 'plugin_error_clear':
+      return null
     case 'plugin_panel_html': {
       if (officialMode) {
         const slug =

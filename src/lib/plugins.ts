@@ -52,6 +52,8 @@ export interface PluginInfo {
   allowedNetworkDomains: string[]
   requestedCommands: string[]
   allowedCommands: string[]
+  /** Requested commands that Core cannot resolve on PATH right now. */
+  missingCommands: string[]
   backendAvailable: boolean
   contributions?: {
     connections?: Array<{ id: string; title: string; fields: PluginField[] }>

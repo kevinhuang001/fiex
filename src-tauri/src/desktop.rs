@@ -213,6 +213,24 @@ async fn new_window(app: tauri::AppHandle, path: String) -> Result<(), String> {
 }
 /// Generic plugin process bridge. Deliberately runs on the blocking pool:
 /// stdout/IPC must never block the WebView or Tauri's async scheduler.
+/// Errors that are normal before activation must not flood the diagnostic log.
+fn expected_plugin_error(message: &str) -> bool {
+    [
+        "plugin is not installed",
+        "plugin disabled or not approved",
+        "plugin is not enabled",
+        "permission not granted",
+        "not authorized",
+    ]
+    .iter()
+    .any(|prefix| message.to_ascii_lowercase().contains(prefix))
+}
+fn record_plugin_error(plugin_id: &str, source: &str, message: &str) {
+    if expected_plugin_error(message) {
+        return;
+    }
+    let _ = crate::plugin_errors::report(plugin_id, source, message, None);
+}
 #[tauri::command]
 async fn plugin_invoke(
     plugin_id: String,
@@ -220,6 +238,8 @@ async fn plugin_invoke(
     params: serde_json::Value,
     directory: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let id = plugin_id.clone();
+    let call = method.clone();
     tauri::async_runtime::spawn_blocking(move || match directory {
         Some(directory) => {
             crate::plugin_host::global().invoke_at(&plugin_id, &method, params, &directory)
@@ -228,6 +248,7 @@ async fn plugin_invoke(
     })
     .await
     .map_err(|e| e.to_string())?
+    .inspect_err(|error| record_plugin_error(&id, "plugin", &format!("{call}: {error}")))
 }
 #[tauri::command]
 async fn plugin_marketplace(
@@ -294,6 +315,7 @@ fn plugin_activate(
     consent: crate::plugin_permissions::ActivationConsent,
 ) -> Result<(), String> {
     crate::plugin_host::activate(&plugin_id, &consent)
+        .inspect_err(|error| record_plugin_error(&plugin_id, "permission", error))
 }
 #[tauri::command]
 fn plugin_set_enabled(plugin_id: String, enabled: bool) -> Result<(), String> {
@@ -363,15 +385,36 @@ fn plugin_permission_allowed(plugin_id: String, permission: String) -> Result<bo
 }
 #[tauri::command]
 fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<String, String> {
-    crate::plugin_host::panel_html(&plugin_id, &panel_id)
+    crate::plugin_host::panel_html(&plugin_id, &panel_id).inspect_err(|error| {
+        record_plugin_error(&plugin_id, "panel", &format!("{panel_id}: {error}"))
+    })
 }
 #[tauri::command]
 fn plugin_panel_asset(plugin_id: String, panel_id: String) -> Result<String, String> {
-    crate::plugin_host::panel_asset(&plugin_id, &panel_id)
+    crate::plugin_host::panel_asset(&plugin_id, &panel_id).inspect_err(|error| {
+        record_plugin_error(&plugin_id, "panel", &format!("{panel_id}: {error}"))
+    })
 }
 #[tauri::command]
 fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
     crate::plugin_host::catalog()
+}
+#[tauri::command]
+fn plugin_errors(plugin_id: String) -> Vec<crate::plugin_errors::PluginError> {
+    crate::plugin_errors::list(&plugin_id)
+}
+#[tauri::command]
+fn plugin_error_report(
+    plugin_id: String,
+    source: String,
+    message: String,
+    detail: Option<String>,
+) -> Result<(), String> {
+    crate::plugin_errors::report(&plugin_id, &source, &message, detail.as_deref())
+}
+#[tauri::command]
+fn plugin_error_clear(plugin_id: String) {
+    crate::plugin_errors::clear(&plugin_id);
 }
 #[tauri::command]
 fn plugin_storage_get(
@@ -1198,6 +1241,9 @@ pub fn run() {
             plugin_invoke,
             plugin_status,
             plugins_list,
+            plugin_errors,
+            plugin_error_report,
+            plugin_error_clear,
             plugin_panel_html,
             plugin_panel_asset,
             plugin_permission_allowed,

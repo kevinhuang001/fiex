@@ -145,6 +145,10 @@ pub struct PluginInfo {
     pub allowed_network_domains: Vec<String>,
     pub requested_commands: Vec<String>,
     pub allowed_commands: Vec<String>,
+    /// Requested commands that cannot be resolved on PATH right now. The
+    /// settings UI marks these red: the plugin is approved to run them but the
+    /// machine cannot.
+    pub missing_commands: Vec<String>,
 }
 pub fn declared_permissions(
     manifest: &PluginManifest,
@@ -420,6 +424,14 @@ pub fn valid_id(id: &str) -> bool {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
+/// Commands Core would fail to spawn because they are not on PATH today.
+fn missing_commands(commands: &std::collections::BTreeSet<String>) -> Vec<String> {
+    commands
+        .iter()
+        .filter(|command| which::which(command).is_err())
+        .cloned()
+        .collect()
+}
 fn canonical_under(candidate: &Path, root: &Path) -> bool {
     match (fs::canonicalize(candidate), fs::canonicalize(root)) {
         (Ok(candidate), Ok(root)) => candidate.starts_with(&root) && candidate != root,
@@ -457,6 +469,7 @@ pub fn catalog() -> Vec<PluginInfo> {
                 state.enabled && crate::plugin_permissions::activation_complete(&state, &required)
             });
             let requested = activation_requirements(&manifest).unwrap_or_default();
+            let missing_commands = missing_commands(&requested.commands);
             let capabilities = capabilities(&manifest.contributions);
             PluginInfo {
                 schema_version: manifest.schema_version,
@@ -477,6 +490,7 @@ pub fn catalog() -> Vec<PluginInfo> {
                 allowed_network_domains: state.network_domains.into_iter().collect(),
                 requested_commands: requested.commands.into_iter().collect(),
                 allowed_commands: state.commands.into_iter().collect(),
+                missing_commands,
             }
         })
         .collect()
@@ -1154,6 +1168,17 @@ impl Running {
                 Ok(Value::Null)
             }
             "host.secret.available" => Ok(json!(crate::plugin_storage::secret_available())),
+            // Diagnostics only: no permission gate, capped and best effort.
+            "host.error.report" => {
+                let code = p.get("code").and_then(Value::as_str).unwrap_or("");
+                let message = p
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .ok_or("missing message")?;
+                let detail = p.get("detail").and_then(Value::as_str);
+                crate::plugin_errors::report_limited(&self.plugin_id, code, message, detail);
+                Ok(Value::Null)
+            }
             "host.exec" if permitted("commands") => host_exec(&self.plugin_id, &self.declared, p),
             "host.process.run" if permitted("commands") => run_command(
                 &self.plugin_id,
@@ -1536,6 +1561,20 @@ mod tests {
         }));
         assert!(find_panel(&manifest, "gpg.menu").is_none());
         assert!(find_panel(&manifest, "gpg.encrypt").is_some());
+    }
+
+    #[test]
+    fn missing_commands_only_reports_unresolvable_names() {
+        let commands = std::collections::BTreeSet::from([
+            "fiex-definitely-not-a-real-command".to_string(),
+            "git".to_string(),
+        ]);
+        let missing = missing_commands(&commands);
+        assert_eq!(
+            missing,
+            vec!["fiex-definitely-not-a-real-command".to_string()]
+        );
+        assert!(missing_commands(&std::collections::BTreeSet::new()).is_empty());
     }
 
     #[test]

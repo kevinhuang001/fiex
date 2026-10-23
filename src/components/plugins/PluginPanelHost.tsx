@@ -130,6 +130,12 @@ export function PluginPanelHost() {
     </>
   )
 }
+function reportPluginError(pluginId: string, source: string, message: string) {
+  if (!message) return
+  void call('plugin_error_report', { pluginId, source, message: message.slice(0, 500) }).catch(
+    () => {},
+  )
+}
 function PluginResult() {
   const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
   useEffect(() => {
@@ -225,7 +231,10 @@ function CachedPanel({
         if (source.html) setHtml(source.html)
       })
       .catch((cause) => {
-        if (live) setError(String(cause))
+        if (live) {
+          setError(String(cause))
+          reportPluginError(req.pluginId, 'panel', String(cause))
+        }
       })
     return () => {
       live = false
@@ -323,6 +332,7 @@ function CachedPanel({
             'plugin.invoke',
             'panel.close',
             'panel.resize',
+            'plugin.error',
             'theme.get',
             'dialog.openFile',
             'dialog.openDirectory',
@@ -347,7 +357,10 @@ function CachedPanel({
               setRevealed(true)
             }, PANEL_REVEAL_FALLBACK_MS)
           },
-          onError: setError,
+          onError: (message) => {
+            setError(message)
+            reportPluginError(current.pluginId, 'bridge', message)
+          },
           subscribe: (send) => {
             emit.current = send
             const changed = () => send('theme.changed', themeSnapshot())
@@ -392,6 +405,18 @@ function CachedPanel({
                 })
                 settleReveal()
               }
+              return null
+            }
+            if (method === 'plugin.error') {
+              const p = (params || {}) as { message?: unknown; detail?: unknown }
+              if (typeof p.message !== 'string' || !p.message.trim())
+                throw new Error('Invalid error message')
+              await call('plugin_error_report', {
+                pluginId: current.pluginId,
+                source: 'ui',
+                message: p.message.slice(0, 500),
+                detail: typeof p.detail === 'string' ? p.detail.slice(0, 4000) : undefined,
+              })
               return null
             }
             if (method === 'theme.get') return themeSnapshot()

@@ -46,6 +46,7 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 - [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md) —— iframe 面板、SDK、主题继承、本地 dev server
 - [22 主题包开发指南](22-THEME-AUTHORING.md) —— 主题包形态、token 参考、校验规则、验收
 - [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md) —— 预览器注册、优先级、office-preview
+- [24 插件诊断](24-PLUGIN-DIAGNOSTICS.md) —— 命令可用性、错误来源与设置页
 
 **协议与设计**
 
@@ -73,3 +74,4 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 - [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md)
 - [22 主题包开发指南](22-THEME-AUTHORING.md)
 - [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md)
+- [24 插件诊断](24-PLUGIN-DIAGNOSTICS.md)
