@@ -1,3 +1,9 @@
+# Fiex 0.4.10
+
+- Plugin previewers render inside the Quick Look sheet itself, with the same sandbox and bridge as panels; the built-in text, image, media and PDF previewers are unchanged.
+- The dev server serves a plugin's unbuilt `ui/index.html` when there is no `ui/dist`, so self-contained plugin panels can be developed without a bundler.
+- New official plugins (published separately): SQLite viewer and Office preview.
+
 # Fiex 0.4.9
 
 - Plugins run behind scoped Host services and require explicit activation consent: folder, file, network and external-command grants are requested one at a time and can be revoked.

@@ -8,14 +8,9 @@ import { date, isImage, isText, kind, size } from '@/lib/files'
 import { highlightCode } from '@/lib/highlight'
 import { usePluginCatalog } from '@/lib/plugins'
 import { resolvePreviewer } from '@/lib/preview'
-import { OPEN_PLUGIN_PANEL } from '@/components/plugins/PluginPanelHost'
+import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { Entry } from '@/lib/types'
 const PdfPreview = lazy(() => import('./PdfPreview'))
-const dirname = (path: string) => {
-  const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return index > 0 ? path.slice(0, index) : path
-}
-
 export function Preview({
   entry,
   onClose,
@@ -40,23 +35,6 @@ export function Preview({
   // file through the preview context instead of reading it in the webview.
   const pluginPreview = previewer?.pluginId ? previewer : null
   const source = entry && !pluginPreview ? asset(entry.path) : ''
-  useEffect(() => {
-    if (!entry || !pluginPreview) return
-    window.dispatchEvent(
-      new CustomEvent(OPEN_PLUGIN_PANEL, {
-        detail: {
-          pluginId: pluginPreview.pluginId,
-          panelId: pluginPreview.panelId,
-          title: entry.name,
-          directory: dirname(entry.path),
-          selection: [entry.path],
-          source: 'preview',
-          preview: { path: entry.path, name: entry.name, extension: entry.extension },
-        },
-      }),
-    )
-    onClose()
-  }, [entry?.path, pluginPreview?.id])
   const highlighted = useMemo(
     () => (entry && isText(entry) ? highlightCode(text, entry.extension, entry.name) : null),
     [entry, text],
@@ -116,13 +94,22 @@ export function Preview({
       onClose={onClose}
       title={entry?.name || '快速查看'}
       wide
-      className={`preview-modal ${entry && isText(entry) ? 'preview-text' : entry?.extension === 'pdf' ? 'preview-pdf' : fit ? 'preview-media' : 'preview-compact'}`}
-      contentStyle={fit ? { width: fit.width } : undefined}
+      className={`preview-modal ${pluginPreview ? 'preview-plugin' : entry && isText(entry) ? 'preview-text' : entry?.extension === 'pdf' ? 'preview-pdf' : fit ? 'preview-media' : 'preview-compact'}`}
+      contentStyle={
+        pluginPreview ? { width: 'min(92vw, 980px)' } : fit ? { width: fit.width } : undefined
+      }
     >
       {entry && (
         <>
           <div className="preview-body" style={fit ? { height: fit.height } : undefined}>
-            {error ? (
+            {pluginPreview && entry ? (
+              <PluginPreviewFrame
+                key={entry.path}
+                pluginId={pluginPreview.pluginId || ''}
+                panelId={pluginPreview.panelId || ''}
+                preview={{ path: entry.path, name: entry.name, extension: entry.extension }}
+              />
+            ) : error ? (
               <div className="preview-fallback">
                 <AlertCircle />
                 <p>{error}</p>

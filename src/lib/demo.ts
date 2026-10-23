@@ -80,6 +80,25 @@ let entries = [
     42771,
   ),
   item(root + '/Documents/Research/InSb.pdf', false, 'application/pdf', 2000000),
+  item(
+    root + '/Documents/季度报告.docx',
+    false,
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    18432,
+  ),
+  item(
+    root + '/Documents/预算表.xlsx',
+    false,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    9216,
+  ),
+  item(
+    root + '/Documents/产品介绍.pptx',
+    false,
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    15360,
+  ),
+  item(root + '/Documents/示例数据库.db', false, 'application/vnd.sqlite3', 147456),
   item(root + '/Documents/Projects/fiex', true),
   item(root + '/Documents/Projects/App.tsx', false, 'text/plain', 18342),
   item(root + '/Documents/Projects/main.rs', false, 'text/plain', 4210),
@@ -427,6 +446,70 @@ const officialPlugins: DemoPlugin[] = officialMode
         },
       },
       {
+        id: 'org.fiex.office-preview',
+        name: 'Office 预览',
+        version: '0.2.8',
+        description: 'Word、Excel、PowerPoint 的只读预览（文本级）。',
+        enabled: true,
+        approved: true,
+        backendAvailable: true,
+        capabilities: ['preview'],
+        declaredPermissions: ['files.read'],
+        grantedPermissions: ['files.read'],
+        requestedCommands: [],
+        allowedCommands: [],
+        requestedNetworkDomains: [],
+        allowedNetworkDomains: [],
+        author: { name: 'Fiex Contributors' },
+        contributions: {
+          preview: [
+            {
+              id: 'office',
+              title: 'Office 预览',
+              extensions: ['docx', 'xlsx', 'pptx'],
+              priority: 100,
+              panel: {
+                entry: 'ui/index.html',
+                title: 'Office 预览',
+                defaultSize: { width: 720, height: 600 },
+              },
+            },
+          ],
+        },
+      },
+      {
+        id: 'org.fiex.sqlite-preview',
+        name: 'SQLite 查看器',
+        version: '0.2.9',
+        description: '只读浏览 SQLite 数据库：表、字段、索引、外键与表数据。',
+        enabled: true,
+        approved: true,
+        backendAvailable: true,
+        capabilities: ['preview'],
+        declaredPermissions: ['files.read'],
+        grantedPermissions: ['files.read'],
+        requestedCommands: [],
+        allowedCommands: [],
+        requestedNetworkDomains: [],
+        allowedNetworkDomains: [],
+        author: { name: 'Fiex Contributors' },
+        contributions: {
+          preview: [
+            {
+              id: 'sqlite',
+              title: 'SQLite 查看器',
+              extensions: ['db', 'sqlite', 'sqlite3'],
+              priority: 100,
+              panel: {
+                entry: 'ui/index.html',
+                title: 'SQLite 查看器',
+                defaultSize: { width: 720, height: 640 },
+              },
+            },
+          ],
+        },
+      },
+      {
         id: 'org.fiex.gpg',
         name: 'GPG',
         version: '0.1.0',
@@ -749,6 +832,205 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       const method = String(a.method || '')
       const params = (a.params || {}) as Record<string, unknown>
       if (officialMode) {
+        if (method === 'sqlite.open')
+          return {
+            tables: [
+              { name: 'users', type: 'table', sql: 'CREATE TABLE users (...)' },
+              { name: 'orders', type: 'table', sql: 'CREATE TABLE orders (...)' },
+              { name: 'active_users', type: 'view', sql: 'CREATE VIEW active_users AS ...' },
+            ],
+          }
+        if (method === 'sqlite.table') {
+          const name = String(params.table || '')
+          const schema = {
+            users: {
+              columns: [
+                {
+                  cid: 0,
+                  name: 'id',
+                  type: 'INTEGER',
+                  notNull: false,
+                  default: null,
+                  primaryKey: true,
+                },
+                {
+                  cid: 1,
+                  name: 'name',
+                  type: 'TEXT',
+                  notNull: true,
+                  default: null,
+                  primaryKey: false,
+                },
+                {
+                  cid: 2,
+                  name: 'email',
+                  type: 'TEXT',
+                  notNull: false,
+                  default: null,
+                  primaryKey: false,
+                },
+                {
+                  cid: 3,
+                  name: 'created_at',
+                  type: 'TEXT',
+                  notNull: false,
+                  default: 'CURRENT_TIMESTAMP',
+                  primaryKey: false,
+                },
+              ],
+              rows: [
+                [1, 'Ada Lovelace', 'ada@example.com', '2026-01-04 09:12:00'],
+                [2, 'Grace Hopper', 'grace@example.com', '2026-02-11 14:05:00'],
+                [3, 'Alan Turing', null, '2026-03-02 08:30:00'],
+                [4, 'Katherine Johnson', 'katherine@example.com', null],
+              ],
+              indexes: [
+                { name: 'sqlite_autoindex_users_1', unique: true, origin: 'u', columns: ['id'] },
+                { name: 'users_email', unique: true, origin: 'c', columns: ['email'] },
+              ],
+              foreignKeys: [],
+            },
+            orders: {
+              columns: [
+                {
+                  cid: 0,
+                  name: 'id',
+                  type: 'INTEGER',
+                  notNull: false,
+                  default: null,
+                  primaryKey: true,
+                },
+                {
+                  cid: 1,
+                  name: 'user_id',
+                  type: 'INTEGER',
+                  notNull: true,
+                  default: null,
+                  primaryKey: false,
+                },
+                {
+                  cid: 2,
+                  name: 'total',
+                  type: 'REAL',
+                  notNull: true,
+                  default: '0',
+                  primaryKey: false,
+                },
+                {
+                  cid: 3,
+                  name: 'status',
+                  type: 'TEXT',
+                  notNull: false,
+                  default: "'paid'",
+                  primaryKey: false,
+                },
+              ],
+              rows: [
+                [1, 1, 128.5, 'paid'],
+                [2, 1, 42, 'paid'],
+                [3, 2, 999.99, 'refunded'],
+                [4, 3, 7.5, 'pending'],
+                [5, 3, 64, 'paid'],
+              ],
+              indexes: [{ name: 'orders_user', unique: false, origin: 'c', columns: ['user_id'] }],
+              foreignKeys: [{ id: 0, table: 'users', from: 'user_id', to: 'id' }],
+            },
+            active_users: {
+              columns: [
+                {
+                  cid: 0,
+                  name: 'id',
+                  type: 'INTEGER',
+                  notNull: false,
+                  default: null,
+                  primaryKey: false,
+                },
+                {
+                  cid: 1,
+                  name: 'name',
+                  type: 'TEXT',
+                  notNull: true,
+                  default: null,
+                  primaryKey: false,
+                },
+              ],
+              rows: [
+                [1, 'Ada Lovelace'],
+                [2, 'Grace Hopper'],
+              ],
+              indexes: [],
+              foreignKeys: [],
+            },
+          } as Record<
+            string,
+            { columns: unknown[]; rows: unknown[][]; indexes: unknown[]; foreignKeys: unknown[] }
+          >
+          const entry = schema[name] || schema.users
+          return {
+            columns: entry.columns,
+            rows: entry.rows,
+            total: entry.rows.length,
+            limit: Number(params.limit) || 100,
+            offset: Number(params.offset) || 0,
+            order: params.order ?? null,
+            descending: Boolean(params.descending),
+            indexes: entry.indexes,
+            foreignKeys: entry.foreignKeys,
+          }
+        }
+        if (method === 'office.render') {
+          const path = String(params.path || '')
+          const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+          if (extension === 'docx')
+            return {
+              kind: 'docx',
+              lines: [
+                '2026 年第三季度产品报告',
+                '本季度活跃用户增长 24%，其中团队版转化率提升 6 个百分点。',
+                '一、核心进展',
+                '插件市场完成签名校验与增量更新，平均安装时间缩短到 3 秒。',
+                '二、下一步计划',
+                '完善 Office 预览、远程连接与搜索体验。',
+              ],
+            }
+          if (extension === 'xlsx')
+            return {
+              kind: 'xlsx',
+              sheets: [
+                {
+                  name: 'Sheet1',
+                  rows: [
+                    ['项目', '预算', '实际', '差异'],
+                    ['研发', '1,200,000', '1,180,000', '-20,000'],
+                    ['市场', '450,000', '470,000', '20,000'],
+                    ['运营', '300,000', '290,000', '-10,000'],
+                  ],
+                },
+                {
+                  name: 'Sheet2',
+                  rows: [
+                    ['季度', '收入'],
+                    ['Q1', '820,000'],
+                    ['Q2', '960,000'],
+                    ['Q3', '1,120,000'],
+                  ],
+                },
+              ],
+            }
+          if (extension === 'pptx')
+            return {
+              kind: 'pptx',
+              slides: [
+                { index: 1, lines: ['Fiex 产品介绍', '一个更快的文件管理器'] },
+                {
+                  index: 2,
+                  lines: ['插件化', 'Office 预览、远程连接、压缩工具都以插件形式安装。'],
+                },
+                { index: 3, lines: ['下一步', '完善预览与搜索，保持核心轻量。'] },
+              ],
+            }
+          return { kind: 'docx', lines: [] }
+        }
         if (method === 'git.status')
           return {
             root: '/Users/kevin/Documents',
