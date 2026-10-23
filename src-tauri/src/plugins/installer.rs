@@ -22,6 +22,7 @@ const MAX_FILES: usize = 2_000;
 struct Staged {
     dir: TempDir,
     manifest: plugin_host::PluginManifest,
+    verification: crate::plugin_signing::Verification,
 }
 fn pending() -> &'static Mutex<HashMap<String, Staged>> {
     static PENDING: OnceLock<Mutex<HashMap<String, Staged>>> = OnceLock::new();
@@ -44,6 +45,13 @@ pub struct InstallPreview {
     pub requested_network_domains: Vec<String>,
     pub commands: Vec<String>,
     pub repository: String,
+    pub signed: bool,
+    pub trusted: bool,
+    pub publisher: Option<String>,
+    pub publisher_name: Option<String>,
+    pub key_id: Option<String>,
+    pub publisher_key: Option<String>,
+    pub fingerprint: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -83,11 +91,13 @@ fn normal_relative(path: &Path) -> bool {
     path.components().all(|c| matches!(c, Component::Normal(_)))
 }
 fn request_client() -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
+    let mut builder = reqwest::blocking::Client::builder()
         .user_agent("Fiex-Plugin-Installer/0.1")
-        .timeout(Duration::from_secs(65))
-        .build()
-        .map_err(|e| e.to_string())
+        .timeout(Duration::from_secs(65));
+    if let Some(proxy) = crate::system_proxy::proxy_url() {
+        builder = builder.proxy(reqwest::Proxy::all(proxy).map_err(|e| e.to_string())?);
+    }
+    builder.build().map_err(|e| e.to_string())
 }
 fn unpack(package: &[u8], output: &Path) -> Result<(), String> {
     let reader = Cursor::new(package);
@@ -464,6 +474,7 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
     if !plugin_host::valid_id(&manifest.id) {
         return Err("invalid plugin id".into());
     }
+    let verification = crate::plugin_signing::verify(&manifest_bytes, &manifest, staging.path())?;
     let declared = plugin_host::declared_permissions(&manifest)?;
     let requested_network_domains = plugin_permissions::validate_network_domains(
         &declared,
@@ -514,6 +525,19 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
         requested_network_domains,
         commands: manifest.permissions.commands.allow.clone(),
         repository: repository.into(),
+        signed: verification.signed,
+        trusted: verification.trusted,
+        publisher: verification.publisher.clone(),
+        publisher_name: manifest.publisher.as_ref().map(|value| value.name.clone()),
+        key_id: verification.key_id.clone(),
+        publisher_key: verification.publisher_key.clone(),
+        fingerprint: verification
+            .publisher_key
+            .as_deref()
+            .and_then(|key| {
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, key).ok()
+            })
+            .map(|key| crate::plugin_signing::fingerprint(&key)),
     };
     let mut map = pending().lock().map_err(|_| "installer locked")?;
     if map.len() >= 8 {
@@ -524,6 +548,7 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
         Staged {
             dir: staging,
             manifest,
+            verification,
         },
     );
     Ok(info)
@@ -542,9 +567,20 @@ pub fn prepare_local(path: &str) -> Result<InstallPreview, String> {
     stage_package(package, "local import")
 }
 
-pub fn install(ticket: &str) -> Result<String, String> {
+pub fn install(ticket: &str, allow_untrusted: bool) -> Result<String, String> {
     let mut pending = pending().lock().map_err(|_| "installer locked")?;
     let staged = pending.remove(ticket).ok_or("install preview expired")?;
+    if !staged.verification.trusted && !allow_untrusted {
+        return Err("plugin publisher is not trusted; review the fingerprint and confirm".into());
+    }
+    if staged.verification.signed && !staged.verification.trusted {
+        let publisher = staged
+            .manifest
+            .publisher
+            .as_ref()
+            .ok_or("signed plugin has no publisher")?;
+        crate::plugin_signing::trust_publisher(publisher)?;
+    }
     let id = staged.manifest.id.clone();
     let destination = install_root()?.join(&id);
     if destination.exists() {

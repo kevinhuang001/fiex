@@ -28,18 +28,11 @@ Core 在启动插件后发送：
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "result": {
-    "pluginId": "org.fiex.git",
-    "protocolVersion": "2.0",
-    "ready": true,
-    "manifest": { "schemaVersion": 1, "id": "org.fiex.git", "...": "..." }
-  }
+  "result": { "pluginId": "org.fiex.git", "protocolVersion": "2.0", "ready": true }
 }
 ```
 
-`manifest` 是编译进二进制的同一份 manifest（Rust SDK 使用 `include_str!("../manifest.json")`）。Core 在登记进程前把它与已审核的安装包 manifest 规范化比较；不一致即终止启动。旧协议 2.0 插件可以省略该字段以保持兼容，但新插件必须提供。
-
-版本不匹配、身份不匹配、manifest 不一致或握手失败时 Core 终止进程。
+版本不匹配、身份不匹配或握手失败时 Core 终止进程。
 
 ## 3. 方法与命名空间
 

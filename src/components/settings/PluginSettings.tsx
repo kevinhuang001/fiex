@@ -32,6 +32,11 @@ const permissionLabels: Record<string, string> = {
   network: '网络访问',
   commands: '执行命令',
 }
+interface ProxyInfo {
+  enabled: boolean
+  source: string
+  proxy?: string
+}
 interface LocalPreview {
   ticket: string
   id: string
@@ -41,6 +46,12 @@ interface LocalPreview {
   permissions: string[]
   requestedNetworkDomains: string[]
   commands: string[]
+  signed: boolean
+  trusted: boolean
+  publisher?: string
+  publisherName?: string
+  keyId?: string
+  fingerprint?: string
 }
 const permissionHints: Record<string, string> = {
   'filesystem.read': '读取你选择的目录和文件内容。',
@@ -93,6 +104,7 @@ export function PluginSettings() {
   const plugins = usePluginCatalog()
   const [storeOpen, setStoreOpen] = useState(false)
   const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
+  const [proxy, setProxy] = useState<ProxyInfo | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
   const [busy, setBusy] = useState(false)
@@ -126,7 +138,10 @@ export function PluginSettings() {
     if (!localPreview) return
     setBusy(true)
     try {
-      await call('plugin_confirm_install', { ticket: localPreview.ticket })
+      await call('plugin_confirm_install', {
+        ticket: localPreview.ticket,
+        allowUntrusted: !localPreview.trusted,
+      })
       setLocalPreview(null)
       refreshPluginCatalog()
       setMessage(`已导入 ${localPreview.name} ${localPreview.version}`)
@@ -139,6 +154,11 @@ export function PluginSettings() {
 
   const fields = settingsFor?.contributions?.settings || []
 
+  useEffect(() => {
+    void call<ProxyInfo>('system_proxy_info')
+      .then(setProxy)
+      .catch(() => setProxy(null))
+  }, [])
   useEffect(() => {
     if (!settingsFor) return
     let alive = true
@@ -329,6 +349,12 @@ export function PluginSettings() {
           <div>
             <strong>{plugins.length ? `${plugins.length} 个已安装插件` : '还没有安装插件'}</strong>
             <span>官方与第三方插件使用同一套权限和进程隔离。</span>
+            <span className="plugin-proxy-status">
+              <Globe2 size={12} />
+              {proxy?.enabled
+                ? `网络：${proxy.source === 'environment' ? '环境代理' : '系统代理'} ${proxy.proxy}`
+                : '网络：直连（未检测到代理）'}
+            </span>
           </div>
           <div className="plugin-toolbar-actions">
             <Button
@@ -817,6 +843,29 @@ export function PluginSettings() {
           {localPreview?.name} {localPreview?.version}
           {localPreview?.author?.name ? ` · ${localPreview.author.name}` : ''}
         </p>
+        {localPreview && !localPreview.trusted && (
+          <div className="plugin-signature-warning">
+            {localPreview.signed ? (
+              <>
+                <strong>未信任的发布者</strong>
+                <span>
+                  {localPreview.publisherName || localPreview.publisher || '未知发布者'} · 密钥指纹{' '}
+                  <code>{localPreview.fingerprint || localPreview.keyId}</code>
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>此插件未签名</strong>
+                <span>只在你确认来源可信时继续安装。</span>
+              </>
+            )}
+          </div>
+        )}
+        {localPreview?.signed && localPreview.trusted && (
+          <div className="plugin-signature-ok">
+            签名已验证 · {localPreview.publisherName || localPreview.publisher}
+          </div>
+        )}
         <p>此插件申请以下权限，确认后安装并一次性授权：</p>
         <ul>
           {(localPreview?.permissions || []).map((permission) => (

@@ -139,8 +139,23 @@ interface FiexUiSdk {
   }
   tasks: {
     list(): Promise<TaskSummary[]>
-    cancel(taskId: string): Promise<void> // 仅可取消授权范围内任务
-    create(options: { title: string; cancellable?: boolean }): Promise<TaskSummary>
+    create(
+      title: string,
+      options?: { detail?: string; progress?: number },
+    ): Promise<{ taskId: string }>
+    update(
+      taskId: string,
+      patch: {
+        label?: string
+        detail?: string
+        progress?: number
+        done?: number
+        total?: number
+        step?: string
+      },
+    ): Promise<void>
+    finish(taskId: string, options?: { error?: string; detail?: string }): Promise<void>
+    cancel(taskId: string): Promise<void>
   }
   panel: {
     resize(size: { width?: number; height?: number }): Promise<void>
@@ -155,7 +170,7 @@ interface FiexUiSdk {
 
 `ExplorerContext` 只包含当前已授权 selection、directory、window/pane ID 和最小能力信息，不提供全局可遍历系统路径。事件与上下文权限可变；所有操作必须重新校验。
 
-`tasks.create` **只创建当前 UI 会话作用域的可见短任务**，关闭 iframe 时由 Host 终止或置为中断；不能伪造后台完成。持续运行的 Git Push/同步/大文件传输等任务必须由 **Native 插件或 Core** 创建和拥有，iframe 只能列举/观察/申请取消有权访问的任务。
+`tasks.*` 把插件操作写入 Core 的**状态中心**，不再显示在底部栏。任务归当前 panel 会话所有；关闭面板时未完成的任务会标记为中断。任务名称在 `create` 时提供，`update` 可更新名称、步骤、进度或完成数。读取类操作不应创建任务，Git init/commit/push/pull、压缩等会修改状态或耗时较长的操作才应上报。
 
 `panel.resize` 是请求，实际大小始终受宿主布局和用户选择限制。`panel.close` 只能关闭自己的实例。未来增加新宿主 API 时必须是可选/按能力协商，不能默默扩大旧插件的访问范围。
 

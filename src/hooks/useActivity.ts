@@ -4,7 +4,7 @@ import { native } from '@/lib/api'
 import type { OperationProgress } from '@/lib/types'
 
 export type ActivityStatus = 'running' | 'done' | 'error'
-export type ActivityKind = 'transfer' | 'git' | 'delete' | 'sync'
+export type ActivityKind = 'transfer' | 'git' | 'delete' | 'sync' | 'plugin'
 
 export interface ActivityItem {
   id: string
@@ -42,7 +42,8 @@ function load(): ActivityItem[] {
           (item.kind === 'transfer' ||
             item.kind === 'git' ||
             item.kind === 'delete' ||
-            item.kind === 'sync'),
+            item.kind === 'sync' ||
+            item.kind === 'plugin'),
       )
       .slice(0, LIMIT)
       .map((item): ActivityItem => ({
@@ -99,7 +100,7 @@ export function beginActivity(
 
 export function updateActivity(
   id: string,
-  patch: Partial<Pick<ActivityItem, 'progress' | 'done' | 'total' | 'step' | 'detail'>>,
+  patch: Partial<Pick<ActivityItem, 'label' | 'progress' | 'done' | 'total' | 'step' | 'detail'>>,
 ) {
   let changed = false
   items = items.map((item) => {
@@ -162,6 +163,10 @@ export function finishActivity(id: string, error?: string, detail?: string) {
   )
   persist()
   emit()
+}
+
+export function listActivity(): ActivityItem[] {
+  return items
 }
 
 export function clearActivity() {

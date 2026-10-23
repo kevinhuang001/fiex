@@ -63,6 +63,14 @@ pub struct PluginPermissions {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PluginPublisher {
+    pub id: String,
+    pub name: String,
+    pub key_id: String,
+    pub public_key: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginManifest {
     pub schema_version: u32,
     pub id: String,
@@ -80,6 +88,10 @@ pub struct PluginManifest {
     pub contributions: Value,
     #[serde(default)]
     pub author: Option<PluginAuthor>,
+    #[serde(default)]
+    pub publisher: Option<PluginPublisher>,
+    #[serde(default)]
+    pub files: std::collections::BTreeMap<String, String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -192,6 +204,17 @@ pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
     crate::plugin_permissions::set_enabled(id, &declared(&manifest)?, enabled)?;
     global().stop(id);
     Ok(())
+}
+pub fn network_domains(id: &str) -> Result<Vec<String>, String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
+        .ok_or("plugin not installed")?;
+    let declared = declared(&manifest)?;
+    Ok(crate::plugin_permissions::status(id, &declared)?
+        .network_domains
+        .into_iter()
+        .collect())
 }
 pub fn permission_allowed(id: &str, permission: &str) -> Result<bool, String> {
     let (manifest, _) = discover()
@@ -694,6 +717,7 @@ impl PluginHost {
                 .into_iter()
                 .find(|(m, _)| m.id == plugin_id)
                 .ok_or("plugin is not installed")?;
+            crate::plugin_signing::verify_installed(&manifest, &dir)?;
             let declared = declared(&manifest)?;
             let state = crate::plugin_permissions::status(plugin_id, &declared)?;
             if !state.enabled || !state.approved {
@@ -724,23 +748,6 @@ impl PluginHost {
             )?;
             if result.get("pluginId").and_then(Value::as_str) != Some(plugin_id) {
                 return Err("plugin identity mismatch".into());
-            }
-            // New plugins embed their manifest and return it here. Verify it
-            // against the installed package; old 2.0 plugins that predate the
-            // handshake continue to load from the reviewed manifest on disk.
-            if let Some(returned) = result.get("manifest").cloned() {
-                let returned: PluginManifest = serde_json::from_value(returned)
-                    .map_err(|error| format!("plugin manifest is invalid: {error}"))?;
-                let expected = serde_json::to_value(&manifest)
-                    .map_err(|error| format!("installed manifest is invalid: {error}"))?;
-                let actual = serde_json::to_value(&returned)
-                    .map_err(|error| format!("plugin manifest is invalid: {error}"))?;
-                if actual != expected {
-                    return Err(
-                        "plugin embedded manifest does not match the installed package; reinstall the plugin"
-                            .into(),
-                    );
-                }
             }
             let instance = Arc::new(Mutex::new(running));
             guard.insert(plugin_id.to_string(), instance.clone());

@@ -38,6 +38,13 @@ interface InstallPreview {
   requestedNetworkDomains: string[]
   commands: string[]
   repository: string
+  signed: boolean
+  trusted: boolean
+  publisher?: string
+  publisherName?: string
+  keyId?: string
+  publisherKey?: string
+  fingerprint?: string
 }
 
 function pluginIcon(icon?: string) {
@@ -126,7 +133,10 @@ export function PluginInstaller({
     setInstalling(true)
     setError('')
     try {
-      await call('plugin_confirm_install', { ticket: preview.ticket })
+      await call('plugin_confirm_install', {
+        ticket: preview.ticket,
+        allowUntrusted: !preview.trusted,
+      })
       const installed = preview
       setPreview(null)
       setMessage(`${installed.name} 已安装`)
@@ -258,6 +268,29 @@ export function PluginInstaller({
             <span>作者：{preview?.author?.name || '未知开发者'}</span>
             <span>来源：GitHub / {preview?.repository}</span>
           </div>
+          {preview && !preview.trusted && (
+            <div className="plugin-signature-warning">
+              {preview.signed ? (
+                <>
+                  <strong>未信任的发布者</strong>
+                  <span>
+                    {preview.publisherName || preview.publisher || '未知发布者'} · 密钥指纹{' '}
+                    <code>{preview.fingerprint || preview.keyId}</code>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>此插件未签名</strong>
+                  <span>只在你确认来源可信时继续安装。</span>
+                </>
+              )}
+            </div>
+          )}
+          {preview?.signed && preview.trusted && (
+            <div className="plugin-signature-ok">
+              签名已验证 · {preview.publisherName || preview.publisher}
+            </div>
+          )}
           <strong>请求的权限</strong>
           <div className="plugin-install-permissions">
             {preview?.permissions.length ? (

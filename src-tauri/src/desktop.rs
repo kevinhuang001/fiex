@@ -264,10 +264,15 @@ async fn plugin_prepare_local_install(
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn plugin_confirm_install(ticket: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::install(&ticket))
-        .await
-        .map_err(|e| e.to_string())?
+async fn plugin_confirm_install(
+    ticket: String,
+    allow_untrusted: Option<bool>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_installer::install(&ticket, allow_untrusted.unwrap_or(false))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn plugin_cancel_install(ticket: String) -> Result<(), String> {
@@ -313,6 +318,10 @@ fn plugin_status() -> Vec<(String, bool)> {
         .into_iter()
         .map(|item| (item.id, item.backend_available))
         .collect()
+}
+#[tauri::command]
+fn plugin_network_domains(plugin_id: String) -> Result<Vec<String>, String> {
+    crate::plugin_host::network_domains(&plugin_id)
 }
 #[tauri::command]
 fn plugin_permission_allowed(plugin_id: String, permission: String) -> Result<bool, String> {
@@ -375,6 +384,10 @@ fn plugin_secret_available() -> bool {
     crate::plugin_storage::secret_available()
 }
 
+#[tauri::command]
+fn system_proxy_info() -> crate::system_proxy::ProxyInfo {
+    crate::system_proxy::info()
+}
 #[tauri::command]
 fn platform() -> &'static str {
     std::env::consts::OS
@@ -1149,7 +1162,9 @@ pub fn run() {
             plugins_list,
             plugin_panel_html,
             plugin_permission_allowed,
+            plugin_network_domains,
             plugin_marketplace,
+            system_proxy_info,
             plugin_release_assets,
             plugin_prepare_install,
             plugin_prepare_local_install,

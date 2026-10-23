@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.4.1"
+version = "0.4.2"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -59,6 +59,9 @@ trash = "5"
 open = "5"
 which = "8"
 base64 = "0.22"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+sha2 = "0.10"
+hex = "0.4"
 mime_guess = "2"
 zip = { version = "4", default-features = false, features = ["deflate", "bzip2", "zstd", "aes-crypto"] }
 tempfile = "3"
@@ -70,6 +73,7 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 libc = "0.2"
 arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e40035fb87ef766eedf23bd1c01fd91261c447", default-features = false }
 [target.'cfg(windows)'.dependencies]
+winreg = "0.55"
 arapuca = { git = "https://github.com/sergio-correia/arapuca.git", rev = "55e40035fb87ef766eedf23bd1c01fd91261c447", default-features = false }
 
 

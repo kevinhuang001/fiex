@@ -467,7 +467,14 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         author: entry.author,
         permissions: entry.permissions,
         requestedNetworkDomains: entry.requestedNetworkDomains,
+        commands: [],
         repository: entry.repository,
+        signed: true,
+        trusted: true,
+        publisher: 'org.fiex',
+        publisherName: 'Fiex Contributors',
+        keyId: 'demo',
+        fingerprint: 'DEMO OFFICIAL KEY',
       }
     }
     case 'plugin_confirm_install': {

@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import { call } from '@/lib/api'
+import {
+  beginActivity,
+  cancelActivity,
+  finishActivity,
+  listActivity,
+  updateActivity,
+} from '@/hooks/useActivity'
 import { attachFiexPanel } from '../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../sdk/ui/src/index'
 
@@ -11,6 +19,7 @@ export interface PluginPanelRequest {
   title: string
   selection: string[]
   directory: string
+  anchor?: { x: number; y: number }
 }
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
@@ -25,8 +34,13 @@ export function PluginPanelHost() {
   const [html, setHtml] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
-  const [size, setSize] = useState({ width: 620, height: 560 })
+  const [size, setSize] = useState({ width: 440, height: 520 })
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
+  const [position, setPosition] = useState({ left: 12, top: 96 })
+  const pointer = useRef<{ x: number; y: number } | null>(null)
+  const panel = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
+  const taskIds = useRef(new Set<string>())
   const dispose = useRef<null | (() => void)>(null)
   useEffect(() => {
     const onOpen = (event: Event) => {
@@ -37,7 +51,11 @@ export function PluginPanelHost() {
       setRequest(req)
       setHtml('')
       setError('')
-      setSize({ width: 620, height: 560 })
+      const point = req.anchor || pointer.current
+      setAnchor(point)
+      const nextSize = { width: 440, height: Math.min(520, window.innerHeight - 120) }
+      setSize(nextSize)
+      setPosition(place(point, nextSize))
       void call<string>('plugin_panel_html', { pluginId: req.pluginId, panelId: req.panelId })
         .then(setHtml)
         .catch((cause) => setError(String(cause)))
@@ -54,7 +72,49 @@ export function PluginPanelHost() {
       dispose.current?.()
     }
   }, [])
+  const place = (point: { x: number; y: number } | null, box = size) => {
+    const width = Math.min(box.width, window.innerWidth - 24)
+    const height = Math.min(window.innerHeight * 0.66, 600, window.innerHeight - 24)
+    const x = point?.x ?? window.innerWidth - 18
+    // Horizontal placement follows the pointer; vertical placement/height
+    // matches the Activity Center instead of following the pointer.
+    return {
+      left: Math.max(12, Math.min(x + 10, window.innerWidth - width - 12)),
+      top: Math.max(12, Math.min(96, window.innerHeight - height - 12)),
+    }
+  }
+  useEffect(() => {
+    const track = (event: PointerEvent) => {
+      pointer.current = { x: event.clientX, y: event.clientY }
+    }
+    document.addEventListener('pointerdown', track, true)
+    return () => document.removeEventListener('pointerdown', track, true)
+  }, [])
+  useEffect(() => {
+    if (!request) return
+    const outside = (event: PointerEvent) => {
+      if (!panel.current?.contains(event.target as Node)) close()
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', escape)
+    }
+  })
+  useEffect(() => {
+    if (!request) return
+    const reposition = () => setPosition(place(anchor, size))
+    reposition()
+    window.addEventListener('resize', reposition)
+    return () => window.removeEventListener('resize', reposition)
+  }, [request, anchor, size])
   const close = () => {
+    for (const id of taskIds.current) finishActivity(id, '插件面板已关闭')
+    taskIds.current.clear()
     dispose.current?.()
     dispose.current = null
     setRequest(null)
@@ -81,6 +141,11 @@ export function PluginPanelHost() {
           'dialog.saveFile',
           'dialog.openFiles',
           'navigation.open',
+          'tasks.create',
+          'tasks.update',
+          'tasks.finish',
+          'tasks.cancel',
+          'tasks.list',
         ]),
         dispatch: async (method, params): Promise<JsonValue> => {
           if (method === 'context.get')
@@ -97,10 +162,10 @@ export function PluginPanelHost() {
           if (method === 'panel.resize') {
             const p = (params || {}) as { width?: number; height?: number }
             if (Number.isFinite(p.width) && Number.isFinite(p.height)) {
-              setSize({
+              setSize((old) => ({
+                ...old,
                 width: Math.min(1000, Math.max(360, Number(p.width))),
-                height: Math.min(850, Math.max(240, Number(p.height))),
-              })
+              }))
             }
             return null
           }
@@ -114,14 +179,85 @@ export function PluginPanelHost() {
             )
             return null
           }
+          if (method === 'tasks.create') {
+            const p = (params || {}) as {
+              title?: unknown
+              detail?: unknown
+              progress?: unknown
+            }
+            if (typeof p.title !== 'string' || !p.title.trim())
+              throw new Error('Invalid task title')
+            const id = beginActivity(
+              p.title.trim(),
+              typeof p.detail === 'string' ? p.detail : undefined,
+              undefined,
+              'plugin',
+            )
+            taskIds.current.add(id)
+            if (typeof p.progress === 'number') updateActivity(id, { progress: p.progress })
+            return { taskId: id }
+          }
+          if (method === 'tasks.update') {
+            const p = (params || {}) as {
+              taskId?: unknown
+              label?: unknown
+              detail?: unknown
+              progress?: unknown
+              done?: unknown
+              total?: unknown
+              step?: unknown
+            }
+            if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
+              throw new Error('Unknown task')
+            updateActivity(p.taskId, {
+              ...(typeof p.label === 'string' ? { label: p.label } : {}),
+              ...(typeof p.detail === 'string' ? { detail: p.detail } : {}),
+              ...(typeof p.progress === 'number' ? { progress: p.progress } : {}),
+              ...(typeof p.done === 'number' ? { done: p.done } : {}),
+              ...(typeof p.total === 'number' ? { total: p.total } : {}),
+              ...(typeof p.step === 'string' ? { step: p.step } : {}),
+            })
+            return null
+          }
+          if (method === 'tasks.finish') {
+            const p = (params || {}) as { taskId?: unknown; error?: unknown; detail?: unknown }
+            if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
+              throw new Error('Unknown task')
+            finishActivity(
+              p.taskId,
+              typeof p.error === 'string' ? p.error : undefined,
+              typeof p.detail === 'string' ? p.detail : undefined,
+            )
+            taskIds.current.delete(p.taskId)
+            return null
+          }
+          if (method === 'tasks.cancel') {
+            const p = (params || {}) as { taskId?: unknown }
+            if (typeof p.taskId !== 'string' || !taskIds.current.has(p.taskId))
+              throw new Error('Unknown task')
+            cancelActivity(p.taskId)
+            taskIds.current.delete(p.taskId)
+            return null
+          }
+          if (method === 'tasks.list')
+            return listActivity()
+              .filter((item) => item.kind === 'plugin')
+              .map((item) => ({ ...item }))
           if (method === 'plugin.invoke') {
             const p = params as { method?: unknown; params?: unknown } | null
             if (!p || typeof p.method !== 'string' || !p.method || p.method.startsWith('host.'))
               throw new Error('Invalid plugin method')
+            const networkDomains = await call<string[]>('plugin_network_domains', {
+              pluginId: current.pluginId,
+            }).catch(() => [])
+            const params =
+              p.params && typeof p.params === 'object' && !Array.isArray(p.params)
+                ? { ...(p.params as Record<string, unknown>) }
+                : {}
             return await call<JsonValue>('plugin_invoke', {
               pluginId: current.pluginId,
               method: p.method,
-              params: p.params || {},
+              params: { ...params, networkDomains },
             })
           }
           if (method.startsWith('dialog.')) {
@@ -153,32 +289,55 @@ export function PluginPanelHost() {
   }
   return (
     <>
-      <Modal
-        open={Boolean(request)}
-        onClose={close}
-        title={request?.title || '插件'}
-        wide
-        className="plugin-iframe-modal"
-        contentStyle={{ width: size.width, maxWidth: '95vw' }}
-      >
-        {error ? (
-          <p role="alert" className="connection-error">
-            {error}
-          </p>
-        ) : !html ? (
-          <p className="sidebar-hint">正在打开插件界面…</p>
-        ) : (
-          <iframe
-            ref={frame}
-            title={request?.title || '插件界面'}
-            sandbox="allow-scripts"
-            referrerPolicy="no-referrer"
-            style={{ height: size.height, width: '100%', border: 0, borderRadius: 8 }}
-            srcDoc={PANEL_CSP + html}
-            onLoad={attach}
-          />
-        )}
-      </Modal>
+      {request && (
+        <div
+          ref={panel}
+          className="plugin-panel-popover"
+          role="dialog"
+          aria-label={request.title || '插件'}
+          style={{
+            width: Math.min(size.width, window.innerWidth - 24),
+            height: Math.min(
+              size.height + 54,
+              window.innerHeight * 0.66,
+              600,
+              window.innerHeight - 24,
+            ),
+            left: position.left,
+            top: position.top,
+          }}
+        >
+          <header>
+            <strong>{request.title || '插件'}</strong>
+            <button
+              className="icon-button plugin-panel-close"
+              aria-label="关闭插件面板"
+              onClick={close}
+            >
+              <X size={17} />
+            </button>
+          </header>
+          <div className="plugin-panel-content">
+            {error ? (
+              <p role="alert" className="connection-error">
+                {error}
+              </p>
+            ) : !html ? (
+              <p className="sidebar-hint">正在打开插件界面…</p>
+            ) : (
+              <iframe
+                ref={frame}
+                title={request.title || '插件界面'}
+                sandbox="allow-scripts"
+                referrerPolicy="no-referrer"
+                style={{ height: '100%', width: '100%', border: 0 }}
+                srcDoc={PANEL_CSP + html}
+                onLoad={attach}
+              />
+            )}
+          </div>
+        </div>
+      )}
       <Modal
         open={Boolean(result)}
         title={result?.title || '插件结果'}

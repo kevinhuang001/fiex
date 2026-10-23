@@ -51,3 +51,11 @@ Linux 规则：
 ## 官方插件
 
 官方插件与第三方使用相同包格式、权限、安装和沙箱。官方身份不提供签名或预装特权。发布源为 `kevinhuang001/fiex-official-plugins`。
+
+## Package signatures
+
+Every signed `.fiexplugin` carries an Ed25519 publisher signature over its
+manifest, and the manifest carries SHA-256 digests for every executable and UI
+file. Core verifies both at install time and again before spawning an installed
+plugin. Official plugins are not special: they use the same trust-on-first-use
+publisher fingerprint as third-party plugins. See [16 SIGNING](16-SIGNING.md).

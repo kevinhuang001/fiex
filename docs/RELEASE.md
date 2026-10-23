@@ -1,3 +1,13 @@
+# Fiex 0.4.2
+
+- Plugin manifests are signed with Ed25519 publisher keys. `manifest.files` covers every package file; Core verifies the signature and digests at install and again before spawning the plugin.
+- There is no special official trust. Official and third-party packages use the same first-use publisher fingerprint confirmation and key pinning.
+- `Settings → Plugins` supports importing a local `.fiexplugin` package with signature/fingerprint review.
+- Detects Windows/macOS system proxies and Linux proxy environment variables, shows the detected endpoint in plugin settings, and uses it for marketplace requests.
+- Bottom bar no longer shows current-operation text. Important operations are recorded in Status Center.
+- The plugin UI SDK now supports `tasks.create/update/finish/cancel`; Git init/commit/push/pull and Archive compression report name, detail, step and progress to Status Center.
+- Removed the binary-embedded manifest handshake; the package manifest is the single source of truth.
+
 # Fiex 0.4.1
 
 - Fix GitHub release listing on Windows/macOS by enabling reqwest's system-proxy support. The marketplace now follows the OS proxy instead of failing with "error sending request".

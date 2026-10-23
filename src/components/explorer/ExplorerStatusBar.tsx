@@ -1,38 +1,23 @@
 import type { AppController } from '@/hooks/useAppController'
 import { size } from '@/lib/files'
-import { ChevronDown, ChevronUp, ListChecks, LoaderCircle, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, ListChecks, X } from 'lucide-react'
 export function ExplorerStatusBar({
-  busy,
   x,
   chosen,
   clipboard,
   setClipboard,
   workspace,
-}: Pick<AppController, 'busy' | 'x' | 'chosen' | 'clipboard' | 'setClipboard' | 'workspace'>) {
+}: Pick<AppController, 'x' | 'chosen' | 'clipboard' | 'setClipboard' | 'workspace'>) {
   return (
     <>
       <footer className="statusbar" data-workspace-drop="true">
         <div className="statusbar-row">
           <span>
-            {busy ? (
-              <>
-                <LoaderCircle className="spin" size={13} />
-                {busy}
-              </>
-            ) : x.searching ? (
-              <>
-                <LoaderCircle className="spin" size={13} />
-                正在搜索…
-              </>
-            ) : (
-              <>
-                {x.entries.length.toLocaleString()} 个项目
-                {x.selected.length > 0 && ` · 已选择 ${x.selected.length} 项`}
-                {chosen.length > 0 &&
-                  !chosen.some((e) => e.isDir) &&
-                  ` · ${size(chosen.reduce((a, e) => a + e.size, 0))}`}
-              </>
-            )}
+            {x.entries.length.toLocaleString()} 个项目
+            {x.selected.length > 0 && ` · 已选择 ${x.selected.length} 项`}
+            {chosen.length > 0 &&
+              !chosen.some((e) => e.isDir) &&
+              ` · ${size(chosen.reduce((a, e) => a + e.size, 0))}`}
           </span>
           {x.tagFilter && <span>标签：{x.tagFilter}</span>}
           <span>{x.searchStats}</span>

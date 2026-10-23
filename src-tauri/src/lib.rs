@@ -20,6 +20,8 @@ pub mod plugin_host;
 pub mod plugin_installer;
 #[path = "plugins/permissions.rs"]
 pub mod plugin_permissions;
+#[path = "plugins/signing.rs"]
+pub mod plugin_signing;
 pub use fiex_plugin_sdk as plugin_sdk;
 #[path = "plugins/sandbox.rs"]
 pub mod plugin_sandbox;
@@ -34,6 +36,7 @@ pub mod recent;
 pub mod remote;
 #[path = "core/search.rs"]
 pub mod search;
+pub mod system_proxy;
 #[path = "core/tags.rs"]
 pub mod tags;
 #[path = "core/terminals.rs"]
