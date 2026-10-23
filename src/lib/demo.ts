@@ -288,7 +288,7 @@ const officialPlugins: DemoPlugin[] = officialMode
       {
         id: 'org.fiex.git',
         name: 'Git',
-        version: '0.2.4',
+        version: '0.2.7',
         description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
         enabled: true,
         approved: true,
@@ -321,7 +321,7 @@ const officialPlugins: DemoPlugin[] = officialMode
       {
         id: 'org.fiex.archive',
         name: '压缩与解压',
-        version: '0.2.4',
+        version: '0.2.7',
         description: '压缩与解压 ZIP、RAR、7z、TAR 等格式。',
         enabled: true,
         approved: true,
@@ -363,7 +363,7 @@ const officialPlugins: DemoPlugin[] = officialMode
       {
         id: 'org.fiex.checksum',
         name: '校验和',
-        version: '0.2.4',
+        version: '0.2.7',
         description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
         enabled: true,
         approved: true,
