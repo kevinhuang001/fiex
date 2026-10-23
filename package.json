@@ -1,6 +1,6 @@
 {
   "name": "fiex",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "private": true,
   "type": "module",
   "description": "A calm, fast file explorer for macOS, Windows and Linux.",

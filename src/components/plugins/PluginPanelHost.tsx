@@ -22,7 +22,7 @@ export interface PluginPanelRequest {
   selection: string[]
   directory: string
   icon?: string
-  anchor?: { x: number; y: number }
+  size?: { width: number; height: number }
 }
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
@@ -37,10 +37,7 @@ export function PluginPanelHost() {
   const [html, setHtml] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
-  const [size, setSize] = useState({ width: 440, height: 520 })
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null)
-  const [position, setPosition] = useState({ left: 12, top: 96 })
-  const pointer = useRef<{ x: number; y: number } | null>(null)
+  const [size, setSize] = useState({ width: 560, height: 560 })
   const panel = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
   const bridgeReady = useRef(false)
@@ -65,13 +62,13 @@ export function PluginPanelHost() {
       dispose.current?.()
       dispose.current = null
       setRequest(req)
-      setHtml('')
+      setHtml(htmlCache.current.get(`${req.pluginId}:${req.panelId}`) || '')
       setError('')
-      const point = req.anchor || pointer.current
-      setAnchor(point)
-      const nextSize = { width: 440, height: Math.min(520, window.innerHeight - 120) }
-      setSize(nextSize)
-      setPosition(place(point, nextSize))
+      const nextSize = req.size || { width: 560, height: 560 }
+      setSize({
+        width: Math.min(nextSize.width, window.innerWidth - 40),
+        height: Math.min(nextSize.height, window.innerHeight - 92),
+      })
       void loadPanel(req.pluginId, req.panelId)
         .then(setHtml)
         .catch((cause) => setError(String(cause)))
@@ -88,24 +85,6 @@ export function PluginPanelHost() {
       dispose.current?.()
     }
   }, [])
-  const place = (_point: { x: number; y: number } | null, box = size) => {
-    const width = Math.min(box.width, window.innerWidth - 24)
-    const height = Math.min(window.innerHeight * 0.66, 600, window.innerHeight - 24)
-    const left = _point
-      ? Math.max(12, Math.min(_point.x + 10, window.innerWidth - width - 12))
-      : Math.max(12, window.innerWidth - width - 18)
-    return {
-      left,
-      top: Math.max(12, Math.min(96, window.innerHeight - height - 12)),
-    }
-  }
-  useEffect(() => {
-    const track = (event: PointerEvent) => {
-      pointer.current = { x: event.clientX, y: event.clientY }
-    }
-    document.addEventListener('pointerdown', track, true)
-    return () => document.removeEventListener('pointerdown', track, true)
-  }, [])
   useEffect(() => {
     if (!request) return
     const outside = (event: PointerEvent) => {
@@ -121,13 +100,6 @@ export function PluginPanelHost() {
       document.removeEventListener('keydown', escape)
     }
   })
-  useEffect(() => {
-    if (!request) return
-    const reposition = () => setPosition(place(anchor, size))
-    reposition()
-    window.addEventListener('resize', reposition)
-    return () => window.removeEventListener('resize', reposition)
-  }, [request, anchor, size])
   const close = () => {
     retryTimers.current.forEach((timer) => window.clearTimeout(timer))
     retryTimers.current = []
@@ -190,10 +162,10 @@ export function PluginPanelHost() {
             if (method === 'panel.resize') {
               const p = (params || {}) as { width?: number; height?: number }
               if (Number.isFinite(p.width) && Number.isFinite(p.height)) {
-                setSize((old) => ({
-                  ...old,
-                  width: Math.min(1000, Math.max(360, Number(p.width))),
-                }))
+                setSize({
+                  width: Math.min(window.innerWidth - 40, Math.max(320, Number(p.width))),
+                  height: Math.min(window.innerHeight - 92, Math.max(220, Number(p.height))),
+                })
               }
               return null
             }
@@ -351,15 +323,8 @@ export function PluginPanelHost() {
           role="dialog"
           aria-label={request.title || '插件'}
           style={{
-            width: Math.min(size.width, window.innerWidth - 24),
-            height: Math.min(
-              size.height + 54,
-              window.innerHeight * 0.66,
-              600,
-              window.innerHeight - 24,
-            ),
-            left: position.left,
-            top: position.top,
+            width: Math.min(size.width, window.innerWidth - 40),
+            height: Math.min(size.height + 52, window.innerHeight - 40),
           }}
         >
           <header>
@@ -380,9 +345,7 @@ export function PluginPanelHost() {
               <p role="alert" className="connection-error">
                 {error}
               </p>
-            ) : !html ? (
-              <p className="sidebar-hint">正在打开插件界面…</p>
-            ) : (
+            ) : html ? (
               <iframe
                 ref={frame}
                 title={request.title || '插件界面'}
@@ -392,7 +355,7 @@ export function PluginPanelHost() {
                 srcDoc={PANEL_CSP + html}
                 onLoad={attach}
               />
-            )}
+            ) : null}
           </div>
         </div>
       )}

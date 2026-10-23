@@ -5095,6 +5095,8 @@ body.dragging-reorder * {
 }
 .plugin-panel-popover {
   position: fixed;
+  left: 50%;
+  top: 50%;
   z-index: 80;
   display: flex;
   flex-direction: column;
@@ -5102,7 +5104,9 @@ body.dragging-reorder * {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--canvas);
-  max-height: min(66vh, 600px);
+  max-width: min(960px, calc(100vw - 24px));
+  max-height: min(86vh, 820px);
+  transform: translate(-50%, -50%);
   box-shadow: 0 20px 60px color-mix(in srgb, var(--text) 18%, transparent);
 }
 .plugin-panel-popover > header {

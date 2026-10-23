@@ -1,3 +1,9 @@
+# Fiex 0.4.7
+
+- Plugin panels are centered on screen, use the panel size declared by the plugin, and only clamp to the viewport maximum.
+- Large plugin panels no longer force a fixed Core width or height; plugins can also resize through `panel.resize`.
+- Archive’s advanced-compression panel uses a compact plugin-declared size.
+
 # Fiex 0.4.6
 
 - Decoration badges render after the real filename so text selectors and accessibility keep the exact name.

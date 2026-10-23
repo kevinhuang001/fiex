@@ -306,7 +306,11 @@ const officialPlugins: DemoPlugin[] = officialMode
               title: '源代码管理',
               icon: 'git-branch',
               schemes: ['history'],
-              panel: { entry: 'ui/dist/index.html', title: '源代码管理' },
+              panel: {
+                entry: 'ui/dist/index.html',
+                title: '源代码管理',
+                defaultSize: { width: 560, height: 620 },
+              },
             },
           ],
           settings: [
@@ -339,7 +343,11 @@ const officialPlugins: DemoPlugin[] = officialMode
                 {
                   id: 'archive.advanced',
                   title: '高级压缩…',
-                  panel: { entry: 'ui/dist/index.html', title: '高级压缩' },
+                  panel: {
+                    entry: 'ui/dist/index.html',
+                    title: '高级压缩',
+                    defaultSize: { width: 520, height: 320 },
+                  },
                 },
               ],
             },
@@ -372,7 +380,11 @@ const officialPlugins: DemoPlugin[] = officialMode
               id: 'checksum.calculate',
               title: '查看校验和',
               when: 'context.selection.isFile',
-              panel: { entry: 'ui/dist/index.html', title: '校验和' },
+              panel: {
+                entry: 'ui/dist/index.html',
+                title: '校验和',
+                defaultSize: { width: 540, height: 520 },
+              },
             },
           ],
         },

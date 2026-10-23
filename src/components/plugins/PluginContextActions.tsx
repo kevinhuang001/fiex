@@ -190,6 +190,7 @@ export function PluginContextActions({
             selection: paths,
             directory: path,
             anchor,
+            size: item.panel.defaultSize,
           },
         }),
       )
