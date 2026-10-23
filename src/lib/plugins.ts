@@ -20,6 +20,7 @@ export interface PluginContribution {
   icon?: string
   command?: string
   panel?: PluginPanel
+  children?: PluginContribution[]
 }
 export interface MarketplacePlugin {
   id: string

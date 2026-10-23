@@ -4,6 +4,7 @@ import { PluginGlyph } from './PluginGlyph'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import { call } from '@/lib/api'
+import { usePluginCatalog } from '@/lib/plugins'
 import {
   beginActivity,
   cancelActivity,
@@ -45,7 +46,18 @@ export function PluginPanelHost() {
   const bridgeReady = useRef(false)
   const retryTimers = useRef<number[]>([])
   const taskIds = useRef(new Set<string>())
+  const htmlCache = useRef(new Map<string, string>())
+  const plugins = usePluginCatalog()
   const dispose = useRef<null | (() => void)>(null)
+  const loadPanel = (pluginId: string, panelId: string) => {
+    const key = `${pluginId}:${panelId}`
+    const cached = htmlCache.current.get(key)
+    if (cached) return Promise.resolve(cached)
+    return call<string>('plugin_panel_html', { pluginId, panelId }).then((value) => {
+      htmlCache.current.set(key, value)
+      return value
+    })
+  }
   useEffect(() => {
     const onOpen = (event: Event) => {
       const req = (event as CustomEvent<PluginPanelRequest>).detail
@@ -60,7 +72,7 @@ export function PluginPanelHost() {
       const nextSize = { width: 440, height: Math.min(520, window.innerHeight - 120) }
       setSize(nextSize)
       setPosition(place(point, nextSize))
-      void call<string>('plugin_panel_html', { pluginId: req.pluginId, panelId: req.panelId })
+      void loadPanel(req.pluginId, req.panelId)
         .then(setHtml)
         .catch((cause) => setError(String(cause)))
     }
@@ -316,6 +328,20 @@ export function PluginPanelHost() {
       }, delay),
     )
   }
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    for (const plugin of plugins) {
+      for (const tool of plugin.contributions?.toolbar || []) {
+        if (tool.panel) void loadPanel(plugin.id, tool.id).catch(() => {})
+      }
+      for (const item of plugin.contributions?.contextMenus || []) {
+        if (item.panel) void loadPanel(plugin.id, item.id).catch(() => {})
+        for (const child of item.children || []) {
+          if (child.panel) void loadPanel(plugin.id, child.id).catch(() => {})
+        }
+      }
+    }
+  }, [plugins])
   return (
     <>
       {request && (

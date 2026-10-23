@@ -312,6 +312,7 @@ const officialPlugins: DemoPlugin[] = officialMode
                 {
                   id: 'archive.compress',
                   title: '压缩为…',
+                  when: 'context.selection.isNotArchive',
                   children: [
                     ['zip', 'ZIP'],
                     ['rar', 'RAR'],
@@ -336,13 +337,14 @@ const officialPlugins: DemoPlugin[] = officialMode
                 {
                   id: 'archive.extract',
                   title: '解压缩到…',
-                  when: 'context.selection.isFile',
+                  when: 'context.selection.isArchive',
                   command: 'archive.extract',
                   picker: { mode: 'openDirectory', param: 'destination' },
                 },
                 {
                   id: 'archive.advanced',
                   title: '高级压缩…',
+                  when: 'context.selection.isNotArchive',
                   panel: { entry: 'ui/dist/index.html', title: '高级压缩' },
                 },
               ],

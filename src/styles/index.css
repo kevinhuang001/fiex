@@ -3728,6 +3728,7 @@ body.dragging-reorder * {
 .context-menu .context-submenu-wrap > .context-submenu .context-submenu {
   left: 100%;
   top: 0;
+  bottom: auto;
   z-index: 100;
 }
 .plugin-install-box {
@@ -5145,4 +5146,8 @@ body.dragging-reorder * {
 }
 .context-submenu:has(> .context-submenu-wrap) {
   overflow: visible;
+}
+.context-submenu.open-up {
+  top: auto !important;
+  bottom: 0 !important;
 }

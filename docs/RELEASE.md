@@ -1,3 +1,9 @@
+# Fiex 0.4.5
+
+- Nested context submenus automatically flip upward when they would cross the window bottom, so long Archive format lists stay visible.
+- Core owns the plugin panel icon, title and close button. Archive/Checksum/Git panels no longer render duplicate headers.
+- Archive is one context-menu entry with all compression formats nested, extraction only for archive files, and compression only for non-archive selections.
+
 # Fiex 0.4.4
 
 - Official plugin React panels can be tested in the dev web environment at `http://127.0.0.1:1421/`; the Git and Archive tools are pinned automatically in development.

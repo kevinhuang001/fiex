@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 import { call } from '@/lib/api'
 import { usePluginCatalog } from '@/lib/plugins'
@@ -27,6 +27,20 @@ interface Context {
   readOnly: boolean
   isRemote: boolean
 }
+const archiveExtensions = new Set([
+  'zip',
+  'rar',
+  '7z',
+  'tar',
+  'gz',
+  'tgz',
+  'bz2',
+  'tbz2',
+  'xz',
+  'txz',
+])
+const isArchivePath = (path: string) =>
+  archiveExtensions.has(path.split('.').pop()?.toLowerCase() || '')
 function matches(when: string | undefined, c: Context): boolean {
   if (!when) return true
   switch (when.trim()) {
@@ -38,6 +52,10 @@ function matches(when: string | undefined, c: Context): boolean {
       return c.paths.length === 1 && !c.isDirectory
     case 'context.selection.isDirectory':
       return c.paths.length === 1 && c.isDirectory
+    case 'context.selection.isArchive':
+      return c.paths.length === 1 && !c.isDirectory && isArchivePath(c.paths[0])
+    case 'context.selection.isNotArchive':
+      return c.paths.length > 0 && c.paths.every((path) => !isArchivePath(path))
     case 'context.directory.canWrite':
       return !c.readOnly
     case 'context.directory.isLocal':
@@ -78,6 +96,13 @@ function MenuNode({
   ctx: Context
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [openUp, setOpenUp] = useState(false)
+  const submenu = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (!expanded || !submenu.current) return
+    const rect = submenu.current.getBoundingClientRect()
+    setOpenUp(rect.bottom > window.innerHeight - 8)
+  }, [expanded, item.children])
   if (!matches(item.when, ctx)) return null
   return item.children ? (
     <div
@@ -99,7 +124,7 @@ function MenuNode({
         <ChevronRight size={13} className="submenu-arrow" />
       </button>
       {expanded && (
-        <div className="context-submenu" role="menu">
+        <div ref={submenu} className={`context-submenu${openUp ? ' open-up' : ''}`} role="menu">
           {item.children.map((child) => (
             <MenuNode key={child.id} item={child} onAction={onAction} ctx={ctx} />
           ))}
