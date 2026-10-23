@@ -256,6 +256,14 @@ async fn plugin_prepare_install(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+async fn plugin_prepare_local_install(
+    path: String,
+) -> Result<crate::plugin_installer::InstallPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::prepare_local(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
 async fn plugin_confirm_install(ticket: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::install(&ticket))
         .await
@@ -521,7 +529,7 @@ fn relaunch_elevated(app: tauri::AppHandle) -> Result<(), String> {
         );
         std::process::Command::new("powershell")
             .args(["-NoProfile", "-Command", &script])
-            .creation_flags(0x00000010)
+            .creation_flags(0x08000000)
             .spawn()
             .map_err(|error| error.to_string())?;
         app.exit(0);
@@ -1144,6 +1152,7 @@ pub fn run() {
             plugin_marketplace,
             plugin_release_assets,
             plugin_prepare_install,
+            plugin_prepare_local_install,
             plugin_confirm_install,
             plugin_cancel_install,
             plugin_uninstall,

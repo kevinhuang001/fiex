@@ -725,6 +725,23 @@ impl PluginHost {
             if result.get("pluginId").and_then(Value::as_str) != Some(plugin_id) {
                 return Err("plugin identity mismatch".into());
             }
+            // New plugins embed their manifest and return it here. Verify it
+            // against the installed package; old 2.0 plugins that predate the
+            // handshake continue to load from the reviewed manifest on disk.
+            if let Some(returned) = result.get("manifest").cloned() {
+                let returned: PluginManifest = serde_json::from_value(returned)
+                    .map_err(|error| format!("plugin manifest is invalid: {error}"))?;
+                let expected = serde_json::to_value(&manifest)
+                    .map_err(|error| format!("installed manifest is invalid: {error}"))?;
+                let actual = serde_json::to_value(&returned)
+                    .map_err(|error| format!("plugin manifest is invalid: {error}"))?;
+                if actual != expected {
+                    return Err(
+                        "plugin embedded manifest does not match the installed package; reinstall the plugin"
+                            .into(),
+                    );
+                }
+            }
             let instance = Arc::new(Mutex::new(running));
             guard.insert(plugin_id.to_string(), instance.clone());
             instance

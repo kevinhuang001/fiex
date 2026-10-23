@@ -443,13 +443,17 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
     if download.len() as u64 > MAX_DOWNLOAD {
         return Err("plugin package exceeds size limit".into());
     }
+    stage_package(download, repository)
+}
+
+fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, String> {
     let staging_parent = install_root()?.join(".staging");
     fs::create_dir_all(&staging_parent).map_err(|e| e.to_string())?;
     let staging = tempfile::Builder::new()
         .prefix("fiex-plugin-")
         .tempdir_in(&staging_parent)
         .map_err(|e| e.to_string())?;
-    unpack(&download, staging.path())?;
+    unpack(&package, staging.path())?;
     let manifest_bytes = fs::read(staging.path().join("manifest.json"))
         .map_err(|_| "manifest.json must be at the ZIP root")?;
     if manifest_bytes.len() > 1024 * 1024 {
@@ -524,6 +528,20 @@ pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, Str
     );
     Ok(info)
 }
+
+pub fn prepare_local(path: &str) -> Result<InstallPreview, String> {
+    let path = Path::new(path);
+    if path.extension().and_then(|value| value.to_str()) != Some("fiexplugin") {
+        return Err("select a .fiexplugin package".into());
+    }
+    let metadata = fs::metadata(path).map_err(|e| e.to_string())?;
+    if !metadata.is_file() || metadata.len() > MAX_DOWNLOAD {
+        return Err("plugin package is too large".into());
+    }
+    let package = fs::read(path).map_err(|e| e.to_string())?;
+    stage_package(package, "local import")
+}
+
 pub fn install(ticket: &str) -> Result<String, String> {
     let mut pending = pending().lock().map_err(|_| "installer locked")?;
     let staged = pending.remove(ticket).ok_or("install preview expired")?;

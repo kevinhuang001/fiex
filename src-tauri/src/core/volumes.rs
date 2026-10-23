@@ -375,10 +375,14 @@ Get-Partition | Where-Object { $usb -contains $_.DiskNumber -and -not $_.DriveLe
   }
 } | ConvertTo-Json -Compress
 "#;
-    let Ok(output) = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", script])
-        .output()
-    else {
+    let mut command = std::process::Command::new("powershell");
+    command.args(["-NoProfile", "-Command", script]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let Ok(output) = command.output() else {
         return Vec::new();
     };
     if !output.status.success() {
@@ -807,15 +811,16 @@ pub fn empty_trash(cancel: &AtomicBool) -> Result<usize, String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let status = std::process::Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "Clear-RecycleBin -Force -ErrorAction SilentlyContinue",
-            ])
-            .status()
-            .map_err(|e| e.to_string())?;
+        let mut command = std::process::Command::new("powershell.exe");
+        command.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Clear-RecycleBin -Force -ErrorAction SilentlyContinue",
+        ]);
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+        let status = command.status().map_err(|e| e.to_string())?;
         if status.success() {
             Ok(0)
         } else {

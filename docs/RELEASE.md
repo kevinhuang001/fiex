@@ -1,3 +1,11 @@
+# Fiex 0.4.1
+
+- Fix GitHub release listing on Windows/macOS by enabling reqwest's system-proxy support. The marketplace now follows the OS proxy instead of failing with "error sending request".
+- Hide every PowerShell helper window used for removable-volume polling, Recycle Bin clearing, device ejection and elevation.
+- Add **Settings → Plugins → Import plugin** for a local `.fiexplugin` package, with the same manifest validation and permission preview as the store.
+- Plugins now embed their manifest at build time and return it during `plugin.initialize`; Core verifies it matches the installed package before serving requests. Old protocol-2.0 plugins without the handshake remain loadable.
+- Keep the 0.4.0 decoupling changes and plugin versions.
+
 # Fiex 0.4.0
 
 ## Decoupled plugins

@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Terminal,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react'
 import { call } from '@/lib/api'
@@ -30,6 +31,16 @@ const permissionLabels: Record<string, string> = {
   'filesystem.write': '修改文件',
   network: '网络访问',
   commands: '执行命令',
+}
+interface LocalPreview {
+  ticket: string
+  id: string
+  name: string
+  version: string
+  author?: { name: string }
+  permissions: string[]
+  requestedNetworkDomains: string[]
+  commands: string[]
 }
 const permissionHints: Record<string, string> = {
   'filesystem.read': '读取你选择的目录和文件内容。',
@@ -81,6 +92,7 @@ function PermissionList({
 export function PluginSettings() {
   const plugins = usePluginCatalog()
   const [storeOpen, setStoreOpen] = useState(false)
+  const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
   const [busy, setBusy] = useState(false)
@@ -92,6 +104,38 @@ export function PluginSettings() {
   const [commandDraft, setCommandDraft] = useState('')
   const [confirmInstall, setConfirmInstall] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState<PluginInfo | null>(null)
+
+  const chooseLocalPlugin = async () => {
+    setBusy(true)
+    setMessage('')
+    try {
+      const path = await call<string | null>('plugin_file_dialog', {
+        mode: 'openFile',
+        extensions: ['fiexplugin'],
+      })
+      if (!path) return
+      const preview = await call<LocalPreview>('plugin_prepare_local_install', { path })
+      setLocalPreview(preview)
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const installLocal = async () => {
+    if (!localPreview) return
+    setBusy(true)
+    try {
+      await call('plugin_confirm_install', { ticket: localPreview.ticket })
+      setLocalPreview(null)
+      refreshPluginCatalog()
+      setMessage(`已导入 ${localPreview.name} ${localPreview.version}`)
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const fields = settingsFor?.contributions?.settings || []
 
@@ -286,10 +330,21 @@ export function PluginSettings() {
             <strong>{plugins.length ? `${plugins.length} 个已安装插件` : '还没有安装插件'}</strong>
             <span>官方与第三方插件使用同一套权限和进程隔离。</span>
           </div>
-          <Button type="button" size="sm" onClick={() => setStoreOpen(true)}>
-            <Download size={15} />
-            获取插件
-          </Button>
+          <div className="plugin-toolbar-actions">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void chooseLocalPlugin()}
+            >
+              <Upload size={15} />
+              导入插件
+            </Button>
+            <Button type="button" size="sm" onClick={() => setStoreOpen(true)}>
+              <Download size={15} />
+              获取插件
+            </Button>
+          </div>
         </div>
 
         {plugins.length ? (
@@ -754,6 +809,34 @@ export function PluginSettings() {
           </Button>
           <Button variant="destructive" disabled={busy} onClick={() => void uninstall()}>
             卸载
+          </Button>
+        </footer>
+      </Modal>
+      <Modal open={Boolean(localPreview)} title="导入插件" onClose={() => setLocalPreview(null)}>
+        <p>
+          {localPreview?.name} {localPreview?.version}
+          {localPreview?.author?.name ? ` · ${localPreview.author.name}` : ''}
+        </p>
+        <p>此插件申请以下权限，确认后安装并一次性授权：</p>
+        <ul>
+          {(localPreview?.permissions || []).map((permission) => (
+            <li key={permission}>{permissionLabels[permission] || permission}</li>
+          ))}
+          {!localPreview?.permissions.length && <li>无需宿主权限</li>}
+        </ul>
+        <footer className="plugin-consent-actions">
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              if (localPreview) void call('plugin_cancel_install', { ticket: localPreview.ticket })
+              setLocalPreview(null)
+            }}
+          >
+            取消
+          </Button>
+          <Button disabled={busy} onClick={() => void installLocal()}>
+            导入并授权
           </Button>
         </footer>
       </Modal>

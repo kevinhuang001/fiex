@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.4.0"
+version = "0.4.1"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -52,7 +52,7 @@ ignore = "0.4"
 reflink-copy = "0.1"
 rayon = "1"
 globset = "0.4"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "blocking", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "blocking", "json", "system-proxy"] }
 urlencoding = "2"
 notify = "8"
 trash = "5"

@@ -964,10 +964,11 @@ pub fn eject(path: &str) -> Result<(), String> {
         let script = format!(
             "$d=(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{drive}:');$d.InvokeVerb('Eject')"
         );
-        let status = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &script])
-            .status()
-            .map_err(|e| e.to_string())?;
+        let mut command = std::process::Command::new("powershell");
+        command.args(["-NoProfile", "-Command", &script]);
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+        let status = command.status().map_err(|e| e.to_string())?;
         if status.success() {
             return Ok(());
         }
