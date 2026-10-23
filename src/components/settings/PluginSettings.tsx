@@ -293,7 +293,7 @@ export function PluginSettings() {
       setConfirmRemove(null)
       setPermissionsFor(null)
       refreshPluginCatalog()
-      setMessage(`已卸载 ${confirmRemove.name}，插件配置与同步目录已保留。`)
+      setMessage('')
     } catch (error) {
       setMessage(String(error))
     } finally {
