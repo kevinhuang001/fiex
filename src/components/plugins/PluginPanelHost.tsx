@@ -146,6 +146,7 @@ export function PluginPanelHost() {
             'dialog.openFiles',
             'navigation.open',
             'tasks.create',
+            'tasks.spinner',
             'tasks.update',
             'tasks.finish',
             'tasks.cancel',
@@ -190,11 +191,29 @@ export function PluginPanelHost() {
               )
               return null
             }
+            if (method === 'tasks.spinner') {
+              const p = (params || {}) as {
+                title?: unknown
+                detail?: unknown
+              }
+              if (typeof p.title !== 'string' || !p.title.trim())
+                throw new Error('Invalid task title')
+              const id = beginActivity(
+                p.title.trim(),
+                typeof p.detail === 'string' ? p.detail : undefined,
+                undefined,
+                'plugin',
+              )
+              taskIds.current.add(id)
+              updateActivity(id, { indeterminate: true })
+              return { taskId: id }
+            }
             if (method === 'tasks.create') {
               const p = (params || {}) as {
                 title?: unknown
                 detail?: unknown
                 progress?: unknown
+                indeterminate?: unknown
               }
               if (typeof p.title !== 'string' || !p.title.trim())
                 throw new Error('Invalid task title')
@@ -206,6 +225,7 @@ export function PluginPanelHost() {
               )
               taskIds.current.add(id)
               if (typeof p.progress === 'number') updateActivity(id, { progress: p.progress })
+              if (p.indeterminate === true) updateActivity(id, { indeterminate: true })
               return { taskId: id }
             }
             if (method === 'tasks.update') {
@@ -214,6 +234,7 @@ export function PluginPanelHost() {
                 label?: unknown
                 detail?: unknown
                 progress?: unknown
+                indeterminate?: unknown
                 done?: unknown
                 total?: unknown
                 step?: unknown
@@ -224,6 +245,7 @@ export function PluginPanelHost() {
                 ...(typeof p.label === 'string' ? { label: p.label } : {}),
                 ...(typeof p.detail === 'string' ? { detail: p.detail } : {}),
                 ...(typeof p.progress === 'number' ? { progress: p.progress } : {}),
+                ...(typeof p.indeterminate === 'boolean' ? { indeterminate: p.indeterminate } : {}),
                 ...(typeof p.done === 'number' ? { done: p.done } : {}),
                 ...(typeof p.total === 'number' ? { total: p.total } : {}),
                 ...(typeof p.step === 'string' ? { step: p.step } : {}),

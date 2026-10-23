@@ -18,7 +18,8 @@ function StatusIcon({ item }: { item: ActivityItem }) {
 
 function ActivityDetails({ item }: { item: ActivityItem }) {
   const state = item.status === 'running' ? '进行中' : item.status === 'error' ? '失败' : '已完成'
-  const percent = item.progress === undefined ? null : Math.round(item.progress * 100)
+  const percent =
+    item.indeterminate || item.progress === undefined ? null : Math.round(item.progress * 100)
   const etaText = eta(item)
   return (
     <div className="activity-details">
@@ -69,10 +70,15 @@ function ActivityDetails({ item }: { item: ActivityItem }) {
       </dl>
       {item.status === 'running' && (
         <div className="activity-detail-progress">
-          <div className={`activity-progress ${percent !== null ? 'determinate' : ''}`}>
-            <i style={percent !== null ? { width: `${percent}%` } : undefined} />
+          <div
+            className={`activity-progress ${percent !== null && !item.indeterminate ? 'determinate' : ''}`}
+            aria-label={item.indeterminate ? '处理中' : undefined}
+          >
+            <i
+              style={percent !== null && !item.indeterminate ? { width: `${percent}%` } : undefined}
+            />
           </div>
-          <span>{percent !== null ? `${percent}%` : '处理中'}</span>
+          <span>{percent !== null && !item.indeterminate ? `${percent}%` : '处理中'}</span>
         </div>
       )}
       {item.detail && <div className={`activity-detail-message ${item.status}`}>{item.detail}</div>}
@@ -156,8 +162,10 @@ export function ActivityCenter() {
                           : '已完成'}
                       {item.status !== 'running' &&
                         ` · 结束 ${time(item.finishedAt || item.startedAt)}`}
+                      {item.status === 'running' && item.indeterminate && ' · 处理中'}
                       {item.status === 'running' &&
                         item.progress !== undefined &&
+                        !item.indeterminate &&
                         ` · ${Math.round(item.progress * 100)}%`}
                       {item.status === 'running' &&
                         item.total !== undefined &&
