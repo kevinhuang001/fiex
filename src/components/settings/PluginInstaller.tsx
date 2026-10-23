@@ -10,7 +10,6 @@ import {
   Hash,
   LoaderCircle,
   Puzzle,
-  RefreshCw,
   Search,
   Server,
   Shield,
@@ -95,8 +94,8 @@ export function PluginInstaller({
     if (!open) return
     setPreview(null)
     setMessage('')
-    if (!entries.length) load()
-    // The catalog is intentionally fetched once per settings session.
+    load()
+    // Refresh the catalog each time the store opens; there is no manual button.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -166,10 +165,6 @@ export function PluginInstaller({
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <Button variant="outline" size="sm" disabled={loading} onClick={load}>
-              {loading ? <LoaderCircle className="spin" size={14} /> : <RefreshCw size={14} />}
-              刷新
-            </Button>
           </div>
           {error && (
             <p role="alert" className="connection-error">

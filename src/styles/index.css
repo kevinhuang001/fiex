@@ -5902,3 +5902,12 @@ body.dragging-reorder * {
   justify-content: center;
   padding: 0 14px;
 }
+.plugin-store-tools {
+  margin-top: 12px;
+}
+.plugin-store-modal .plugin-store-card > button[data-slot='button'] {
+  min-width: 100px;
+  height: 34px;
+  padding: 0 18px;
+  font-size: 11px;
+}
