@@ -5815,3 +5815,53 @@ body.dragging-reorder * {
 .plugin-domain-modal {
   width: min(400px, calc(100vw - 32px));
 }
+/* Store cards: compact two-column grid with the action at the bottom. */
+.plugin-store-modal {
+  width: min(600px, calc(100vw - 48px));
+  padding: 18px 22px 20px;
+}
+.plugin-store-modal .plugin-store {
+  max-width: 540px;
+}
+.plugin-store-modal .plugin-store-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.plugin-store-modal .plugin-store-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon main'
+    'button button';
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+}
+.plugin-store-modal .plugin-store-icon {
+  grid-area: icon;
+}
+.plugin-store-modal .plugin-store-main {
+  grid-area: main;
+}
+.plugin-store-modal .plugin-store-card > .button {
+  grid-area: button;
+  width: 100%;
+  height: 30px;
+  justify-content: center;
+  align-self: end;
+  margin-top: 2px;
+}
+.plugin-store-modal .plugin-store-main p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.plugin-store-modal .plugin-store-card > button[data-slot='button'] {
+  grid-area: button;
+  width: 100%;
+  height: 30px;
+  justify-content: center;
+  align-self: end;
+  margin-top: 2px;
+}
