@@ -753,6 +753,10 @@ impl Running {
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
+            "host.process.cwd" => {
+                let path = active_path().ok_or("no active directory")?;
+                Ok(json!({"path": path.to_string_lossy()}))
+            }
             "host.buffer.create" => {
                 let size = p
                     .get("size")
