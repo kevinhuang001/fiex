@@ -5925,3 +5925,15 @@ body.dragging-reorder * {
   max-width: 150px;
   align-self: center;
 }
+.plugin-store-tools {
+  margin: 16px 4px 10px;
+}
+.plugin-store-modal .plugin-store-card > button[data-slot='button'] {
+  width: auto;
+  min-width: 104px;
+  max-width: none;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 10.5px;
+  align-self: center;
+}
