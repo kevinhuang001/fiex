@@ -92,17 +92,24 @@ export interface DecorationBadge {
   color: string
   tooltip?: string
 }
+export interface DecorationStyle {
+  color?: string
+  fontWeight?: string
+  fontStyle?: string
+  background?: string
+}
+export interface DecorationField {
+  badges?: DecorationBadge[]
+  style?: DecorationStyle
+}
+export type DecorationTarget = 'name' | 'modified' | 'size' | 'kind' | 'row'
 export interface EntryDecoration {
   path: string
   badges: DecorationBadge[]
   label?: string
   description?: string
-  style?: {
-    color?: string
-    fontWeight?: string
-    fontStyle?: string
-    background?: string
-  }
+  style?: DecorationStyle
+  fields?: Partial<Record<DecorationTarget, DecorationField>>
   providers?: string[]
 }
 export type View = 'list' | 'gallery' | 'columns' | 'icons'

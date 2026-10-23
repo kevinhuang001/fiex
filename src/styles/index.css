@@ -6080,3 +6080,35 @@ body.dragging-reorder * {
   color: #fff;
   font-weight: 600;
 }
+/* Per-column decorations: `fields` targets name/modified/size/kind, while
+   `row` paints the container. Selection stays above a row decoration. */
+.decorated-value {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+.decorated-value .decoration-badge {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+.file-row.decorated,
+.file-tile.decorated,
+.column-row.decorated {
+  color: var(--decoration-color, inherit);
+  font-weight: var(--decoration-weight, inherit);
+  font-style: var(--decoration-font-style, inherit);
+}
+.file-row.decorated-bg:not(.selected),
+.file-tile.decorated-bg:not(.selected),
+.column-row.decorated-bg:not(.selected) {
+  background: var(--decoration-bg);
+}
+/* Badges in the columns view are inline chips, not flexible columns. */
+.column-row > span.decoration-badge {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+.column-row > span.decoration-label {
+  flex: 0 0 auto;
+}
