@@ -39,6 +39,8 @@ pub mod plugin_sandbox;
 pub mod plugin_search;
 #[path = "plugins/storage.rs"]
 pub mod plugin_storage;
+#[path = "plugins/themes.rs"]
+pub mod plugin_themes;
 #[path = "plugins/vfs.rs"]
 pub mod plugin_vfs;
 #[path = "core/recent.rs"]

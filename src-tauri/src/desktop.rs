@@ -350,6 +350,10 @@ fn plugin_set_active_directory(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn plugin_themes() -> Vec<crate::plugin_themes::Theme> {
+    crate::plugin_host::themes()
+}
+#[tauri::command]
 fn plugin_network_domains(plugin_id: String) -> Result<Vec<String>, String> {
     crate::plugin_host::network_domains(&plugin_id)
 }
@@ -1199,6 +1203,7 @@ pub fn run() {
             plugin_permission_allowed,
             plugin_set_active_directory,
             plugin_network_domains,
+            plugin_themes,
             plugin_decorations,
             plugin_marketplace,
             system_proxy_info,

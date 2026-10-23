@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
 import type { Preferences } from '@/lib/types'
 import { Eye, Home, SlidersHorizontal, Sun } from 'lucide-react'
@@ -9,9 +11,38 @@ export function AppearanceSettings({
   prefs: Preferences
   update: (p: Partial<Preferences>) => void
 }) {
+  const [themes, setThemes] = useState<Theme[]>([])
+  useEffect(() => {
+    let alive = true
+    const refresh = () => {
+      void installedThemes()
+        .then((items) => {
+          if (alive) setThemes(items)
+        })
+        .catch(() => {})
+    }
+    refresh()
+    window.addEventListener('fiex:plugins-changed', refresh)
+    return () => {
+      alive = false
+      window.removeEventListener('fiex:plugins-changed', refresh)
+    }
+  }, [])
   return (
     <>
       <div className="settings-card">
+        <div className="settings-row">
+          <div className="settings-row-label">主题</div>
+          <SelectField
+            label="主题"
+            value={prefs.themeId || ''}
+            options={[
+              { value: '', label: 'Fiex 默认' },
+              ...themes.map((theme) => ({ value: theme.id, label: theme.name })),
+            ]}
+            onChange={(themeId) => update({ themeId })}
+          />
+        </div>
         <div className="settings-row">
           <div className="settings-row-label">
             <span className="settings-row-icon" style={{ background: '#3b82f6' }}>

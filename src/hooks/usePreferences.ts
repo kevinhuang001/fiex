@@ -1,3 +1,4 @@
+import { applyTheme, installedThemes } from '@/lib/themes'
 import { demo } from '@/lib/api'
 import { defaultDisplayIgnore } from '@/lib/ignores'
 import {
@@ -21,6 +22,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     terminal: 'default',
     ide: 'vscode',
     theme: 'system',
+    themeId: '',
     fontSize: 11,
     startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
@@ -45,7 +47,7 @@ function load(): Preferences {
   try {
     const stored = JSON.parse(
       localStorage.getItem('fiex:preferences') || '{}',
-    ) as Partial<Preferences> & { customTags?: unknown }
+    ) as Partial<Preferences>
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
@@ -68,21 +70,10 @@ function load(): Preferences {
           stored.startPage === 'last'
         ? stored.startPage
         : 'recent'
-    // Profiles saved before the tag catalogue moved into Settings only have
-    // `customTags`; fold them into the new single list, in front of the
-    // built-in tags.
-    const legacyTags = normalizeTags(stored.customTags) ?? []
-    const tags = normalizeTags(stored.tags) ?? [
-      ...TAG_PRESETS.map((tag) => ({ ...tag })),
-      ...legacyTags,
-    ]
+    const tags = normalizeTags(stored.tags) ?? fallback.tags
     return {
       ...fallback,
-      ...Object.fromEntries(
-        Object.entries(stored).filter(
-          ([key]) => key !== 'copyIgnore' && key !== 'customTags' && key !== 'tags',
-        ),
-      ),
+      ...Object.fromEntries(Object.entries(stored).filter(([key]) => key in fallback)),
       tags,
       startPage,
       fontSize,
@@ -123,16 +114,31 @@ export function usePreferences() {
     localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
   }, [prefs])
   useEffect(() => {
-    const apply = () =>
-      document.documentElement.classList.toggle(
-        'dark',
-        prefs.theme === 'dark' ||
-          (prefs.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches),
-      )
-    apply()
+    let alive = true
     const media = matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => {
+      const mode =
+        prefs.theme === 'dark' || (prefs.theme === 'system' && media.matches) ? 'dark' : 'light'
+      void installedThemes()
+        .then((themes) => {
+          if (alive)
+            applyTheme(
+              themes.find((theme) => theme.id === prefs.themeId),
+              mode,
+            )
+        })
+        .catch(() => {
+          if (alive) applyTheme(undefined, mode)
+        })
+    }
+    apply()
     media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [prefs.theme])
+    window.addEventListener('fiex:plugins-changed', apply)
+    return () => {
+      alive = false
+      media.removeEventListener('change', apply)
+      window.removeEventListener('fiex:plugins-changed', apply)
+    }
+  }, [prefs.theme, prefs.themeId])
   return [prefs, (p: Partial<Preferences>) => setPrefs((v) => ({ ...v, ...p }))] as const
 }

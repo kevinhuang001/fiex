@@ -129,6 +129,7 @@ export interface Preferences {
   terminal: string
   ide: string
   theme: 'system' | 'light' | 'dark'
+  themeId?: string
   fontSize: number
   startPage: StartPage
   displayIgnore: string[]

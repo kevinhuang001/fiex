@@ -1,11 +1,12 @@
+import { DemoFilePicker, type FakePicker } from './DemoFilePicker'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronUp, FileText, Folder, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { PluginGlyph } from './PluginGlyph'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
+import { themeSnapshot } from '@/lib/themes'
 import { call, native } from '@/lib/api'
-import { usePluginCatalog } from '@/lib/plugins'
 import {
   beginActivity,
   cancelActivity,
@@ -30,36 +31,6 @@ export interface PluginPanelRequest {
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
 
-interface FakePicker {
-  mode: string
-  suggestedName?: string
-  directory: string
-  resolve: (value: string | string[] | null) => void
-}
-
-const FAKE_TREE: Record<string, { folders: string[]; files: string[] }> = {
-  '/Users/kevin/Documents': {
-    folders: ['Projects', 'Research', 'Archive'],
-    files: ['Notes.md', 'Palette.json', 'Budget.xlsx', 'Archive.zip'],
-  },
-  '/Users/kevin/Documents/Projects': {
-    folders: ['Design'],
-    files: ['Fiex — 产品设计.pdf'],
-  },
-  '/Users/kevin/Documents/Projects/Design': {
-    folders: [],
-    files: ['Palette.json'],
-  },
-  '/Users/kevin/Documents/Research': {
-    folders: [],
-    files: ['Meeting.txt'],
-  },
-  '/Users/kevin/Documents/Archive': {
-    folders: [],
-    files: ['Archive.zip'],
-  },
-}
-
 const MAX_PANEL_WIDTH = 720
 const MAX_PANEL_HEIGHT = 680
 
@@ -69,25 +40,91 @@ const PANEL_CSP =
 /** Plugin iframe is sandboxed to an opaque origin. Its only way to reach Core
  * is the per-panel MessageChannel, never Tauri's global invoke. */
 export function PluginPanelHost() {
-  const [request, setRequest] = useState<PluginPanelRequest | null>(null)
+  const [panels, setPanels] = useState<PluginPanelRequest[]>([])
+  const [active, setActive] = useState('')
+  const keyOf = (req: PluginPanelRequest) =>
+    JSON.stringify([req.pluginId, req.panelId, req.directory, req.selection])
+  useEffect(() => {
+    const open = (event: Event) => {
+      const req = (event as CustomEvent<PluginPanelRequest>).detail
+      if (!req?.pluginId || !req.panelId) return
+      const key = keyOf(req)
+      setPanels((items) => [...items.filter((item) => keyOf(item) !== key), req].slice(-3))
+      setActive(key)
+    }
+    const invalidate = () => {
+      setPanels([])
+      setActive('')
+    }
+    window.addEventListener(OPEN_PLUGIN_PANEL, open)
+    window.addEventListener('fiex:plugins-changed', invalidate)
+    return () => {
+      window.removeEventListener(OPEN_PLUGIN_PANEL, open)
+      window.removeEventListener('fiex:plugins-changed', invalidate)
+    }
+  }, [])
+  return (
+    <>
+      {panels.map((request) => (
+        <CachedPanel
+          key={keyOf(request)}
+          initialRequest={request}
+          active={active === keyOf(request)}
+          onClose={() => setActive('')}
+        />
+      ))}
+      <PluginResult />
+    </>
+  )
+}
+function PluginResult() {
+  const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
+  useEffect(() => {
+    const show = (event: Event) => {
+      const detail = (event as CustomEvent<{ title: string; result: unknown }>).detail
+      setResult({ title: detail.title, value: detail.result })
+    }
+    window.addEventListener(PLUGIN_RESULT_EVENT, show)
+    return () => window.removeEventListener(PLUGIN_RESULT_EVENT, show)
+  }, [])
+  return (
+    <Modal
+      open={Boolean(result)}
+      title={result?.title || '插件结果'}
+      onClose={() => setResult(null)}
+      wide
+    >
+      <pre className="plugin-command-result">{result && JSON.stringify(result.value, null, 2)}</pre>
+      <footer className="plugin-consent-actions">
+        <Button onClick={() => setResult(null)}>关闭</Button>
+      </footer>
+    </Modal>
+  )
+}
+function CachedPanel({
+  initialRequest,
+  active,
+  onClose,
+}: {
+  initialRequest: PluginPanelRequest
+  active: boolean
+  onClose: () => void
+}) {
+  const request = initialRequest
+  const activeRef = useRef(active)
+  activeRef.current = active
+  const emit = useRef<((name: string, payload: JsonValue) => void) | null>(null)
   const [html, setHtml] = useState('')
   const [sourceUrl, setSourceUrl] = useState('')
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
-  const [result, setResult] = useState<{ title: string; value: unknown } | null>(null)
   const [fakePicker, setFakePicker] = useState<FakePicker | null>(null)
-  const [fakeDirectory, setFakeDirectory] = useState('/Users/kevin/Documents')
-  const [fakeName, setFakeName] = useState('')
   const [size, setSize] = useState({ width: 560, height: 560 })
   const panel = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
-  const bridgeReady = useRef(false)
-  const retryTimers = useRef<number[]>([])
-  const readyTimer = useRef<number | null>(null)
   const taskIds = useRef(new Set<string>())
   const htmlCache = useRef(new Map<string, string>())
   const urlCache = useRef(new Map<string, string>())
-  const plugins = usePluginCatalog()
   const dispose = useRef<null | (() => void)>(null)
   const loadPanel = (
     pluginId: string,
@@ -114,45 +151,33 @@ export function PluginPanelHost() {
     })
   }
   useEffect(() => {
-    const onOpen = (event: Event) => {
-      const req = (event as CustomEvent<PluginPanelRequest>).detail
-      if (!req?.pluginId || !req.panelId) return
-      dispose.current?.()
-      dispose.current = null
-      if (req.directory) {
-        void call('plugin_set_active_directory', { path: req.directory }).catch(() => {})
-      }
-      setRequest(req)
-      setReady(false)
-      setHtml(htmlCache.current.get(`${req.pluginId}:${req.panelId}`) || '')
-      setSourceUrl(urlCache.current.get(`${req.pluginId}:${req.panelId}`) || '')
-      setError('')
-      const nextSize = req.size || { width: 560, height: 560 }
-      setSize({
-        width: Math.min(MAX_PANEL_WIDTH, nextSize.width, window.innerWidth - 40),
-        height: Math.min(MAX_PANEL_HEIGHT, nextSize.height, window.innerHeight - 92),
+    let live = true
+    const req = initialRequest
+    const nextSize = req.size || { width: 560, height: 560 }
+    setSize({
+      width: Math.min(MAX_PANEL_WIDTH, nextSize.width, window.innerWidth - 40),
+      height: Math.min(MAX_PANEL_HEIGHT, nextSize.height, window.innerHeight - 92),
+    })
+    void loadPanel(req.pluginId, req.panelId)
+      .then((source) => {
+        if (!live) return
+        if (source.url) setSourceUrl(source.url)
+        if (source.html) setHtml(source.html)
       })
-      void loadPanel(req.pluginId, req.panelId)
-        .then((source) => {
-          if (source.url) setSourceUrl(source.url)
-          if (source.html) setHtml(source.html)
-        })
-        .catch((cause) => setError(String(cause)))
-    }
-    const onResult = (event: Event) => {
-      const detail = (event as CustomEvent<{ title: string; result: unknown }>).detail
-      setResult({ title: detail.title, value: detail.result })
-    }
-    window.addEventListener(PLUGIN_RESULT_EVENT, onResult)
-    window.addEventListener(OPEN_PLUGIN_PANEL, onOpen)
+      .catch((cause) => {
+        if (live) setError(String(cause))
+      })
     return () => {
-      window.removeEventListener(OPEN_PLUGIN_PANEL, onOpen)
-      window.removeEventListener(PLUGIN_RESULT_EVENT, onResult)
+      live = false
       dispose.current?.()
+      for (const id of taskIds.current) finishActivity(id, '插件面板已释放')
     }
   }, [])
   useEffect(() => {
-    if (!request) return
+    emit.current?.('panel.visibility', active)
+  }, [active])
+  useEffect(() => {
+    if (!active) return
     const outside = (event: PointerEvent) => {
       if (fakePicker) return
       if (!panel.current?.contains(event.target as Node)) close()
@@ -172,26 +197,12 @@ export function PluginPanelHost() {
     if (error) setReady(true)
   }, [error])
   const close = () => {
-    if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
-    readyTimer.current = null
-    retryTimers.current.forEach((timer) => window.clearTimeout(timer))
-    retryTimers.current = []
-    for (const id of taskIds.current) finishActivity(id, '插件面板已关闭')
-    taskIds.current.clear()
-    dispose.current?.()
-    dispose.current = null
-    setRequest(null)
-    setReady(false)
-    setHtml('')
-    setSourceUrl('')
+    onClose()
   }
   const attach = () => {
-    if (!frame.current || !request) return
+    if (!frame.current) return
     const target = frame.current
     dispose.current?.()
-    retryTimers.current.forEach((timer) => window.clearTimeout(timer))
-    retryTimers.current = []
-    bridgeReady.current = false
     const current = request
     const connect = () => {
       try {
@@ -220,17 +231,28 @@ export function PluginPanelHost() {
             'tasks.list',
           ]),
           onReady: () => {
-            bridgeReady.current = true
-            retryTimers.current.forEach((timer) => window.clearTimeout(timer))
-            retryTimers.current = []
-            if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
-            readyTimer.current = window.setTimeout(() => setReady(true), 40)
+            setReady(true)
+            emit.current?.('theme.changed', themeSnapshot())
+            emit.current?.('panel.visibility', activeRef.current)
+          },
+          onError: setError,
+          subscribe: (send) => {
+            emit.current = send
+            const changed = () => send('theme.changed', themeSnapshot())
+            window.addEventListener('fiex:theme-changed', changed)
+            return () => {
+              emit.current = null
+              window.removeEventListener('fiex:theme-changed', changed)
+            }
           },
           dispatch: async (method, params): Promise<JsonValue> => {
+            if (
+              !activeRef.current &&
+              !['theme.get', 'context.get', 'tasks.update', 'tasks.finish'].includes(method)
+            )
+              throw new Error('Panel is hidden')
             if (method === 'context.get')
               return {
-                directory: current.directory,
-                selection: current.selection,
                 directoryPath: current.directory,
                 selectionPaths: current.selection,
               }
@@ -256,7 +278,7 @@ export function PluginPanelHost() {
               }
               return null
             }
-            if (method === 'theme.get') return document.documentElement.dataset.theme || 'system'
+            if (method === 'theme.get') return themeSnapshot()
             if (method === 'navigation.open') {
               const p = params as { path?: unknown } | null
               if (!p || typeof p.path !== 'string' || !p.path)
@@ -362,9 +384,6 @@ export function PluginPanelHost() {
               const p = params as { method?: unknown; params?: unknown } | null
               if (!p || typeof p.method !== 'string' || !p.method || p.method.startsWith('host.'))
                 throw new Error('Invalid plugin method')
-              const networkDomains = await call<string[]>('plugin_network_domains', {
-                pluginId: current.pluginId,
-              }).catch(() => [])
               const baseParams =
                 p.params && typeof p.params === 'object' && !Array.isArray(p.params)
                   ? { ...(p.params as Record<string, unknown>) }
@@ -372,7 +391,7 @@ export function PluginPanelHost() {
               return await call<JsonValue>('plugin_invoke', {
                 pluginId: current.pluginId,
                 method: p.method,
-                params: { ...baseParams, networkDomains },
+                params: baseParams,
                 directory: current.directory,
               })
             }
@@ -385,8 +404,6 @@ export function PluginPanelHost() {
                 extensions?: string[]
               }
               if (!native) {
-                setFakeDirectory(p.directory || current.directory || '/Users/kevin/Documents')
-                setFakeName(p.suggestedName || '')
                 const picked = await new Promise<string | string[] | null>((resolve) => {
                   setFakePicker({
                     mode: method,
@@ -419,34 +436,8 @@ export function PluginPanelHost() {
       }
     }
     connect()
-    // Module scripts may execute after iframe `load`; the initial port can be
-    // posted before the client is listening. Retry with a fresh channel until
-    // the ready handshake arrives.
-    retryTimers.current = [80, 300, 1000].map((delay) =>
-      window.setTimeout(() => {
-        if (!bridgeReady.current) {
-          dispose.current?.()
-          connect()
-        }
-      }, delay),
-    )
   }
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    for (const plugin of plugins) {
-      for (const tool of plugin.contributions?.toolbar || []) {
-        if (tool.panel) void loadPanel(plugin.id, tool.id).catch(() => {})
-      }
-      for (const item of plugin.contributions?.contextMenus || []) {
-        if (item.panel) void loadPanel(plugin.id, item.id).catch(() => {})
-        for (const child of item.children || []) {
-          if (child.panel) void loadPanel(plugin.id, child.id).catch(() => {})
-        }
-      }
-    }
-  }, [plugins])
   const panelWidth = Math.min(MAX_PANEL_WIDTH, size.width, window.innerWidth - 40)
-  const fakeEntries = FAKE_TREE[fakeDirectory] || { folders: [], files: [] }
   return (
     <>
       {request && (
@@ -455,6 +446,7 @@ export function PluginPanelHost() {
           className={`plugin-panel-popover${ready ? ' ready' : ' opening'}${
             request.source === 'toolbar' ? ' toolbar-anchored' : ''
           }`}
+          hidden={!active}
           role="dialog"
           aria-label={request.title || '插件'}
           aria-busy={!ready}
@@ -501,6 +493,11 @@ export function PluginPanelHost() {
             </button>
           </header>
           <div className="plugin-panel-content">
+            {!ready && !error && (
+              <div role="status" className="plugin-panel-loading">
+                正在加载插件…
+              </div>
+            )}
             {error ? (
               <p role="alert" className="connection-error">
                 {error}
@@ -516,8 +513,6 @@ export function PluginPanelHost() {
                 src={sourceUrl}
                 onLoad={() => {
                   attach()
-                  if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
-                  readyTimer.current = window.setTimeout(() => setReady(true), 700)
                 }}
               />
             ) : html ? (
@@ -531,134 +526,13 @@ export function PluginPanelHost() {
                 srcDoc={PANEL_CSP + html}
                 onLoad={() => {
                   attach()
-                  if (readyTimer.current !== null) window.clearTimeout(readyTimer.current)
-                  readyTimer.current = window.setTimeout(() => setReady(true), 700)
                 }}
               />
             ) : null}
           </div>
         </div>
       )}
-      <Modal
-        open={Boolean(result)}
-        title={result?.title || '插件结果'}
-        onClose={() => setResult(null)}
-        wide
-      >
-        <pre className="plugin-command-result">
-          {result && JSON.stringify(result.value, null, 2)}
-        </pre>
-        <footer className="plugin-consent-actions">
-          <Button onClick={() => setResult(null)}>关闭</Button>
-        </footer>
-      </Modal>
-      {fakePicker && (
-        <div className="fake-picker-overlay" role="presentation">
-          <div
-            className="fake-picker"
-            role="dialog"
-            aria-label={fakePicker.mode === 'dialog.saveFile' ? '保存文件' : '选择文件'}
-          >
-            <header>
-              <strong>{fakePicker.mode === 'dialog.saveFile' ? '保存文件' : '选择文件'}</strong>
-              <button
-                type="button"
-                aria-label="关闭"
-                onClick={() => {
-                  fakePicker.resolve(null)
-                  setFakePicker(null)
-                }}
-              >
-                <X size={16} />
-              </button>
-            </header>
-            <div className="fake-picker-path">
-              <button
-                type="button"
-                aria-label="上一级"
-                onClick={() =>
-                  setFakeDirectory((current) => {
-                    const parts = current.split('/').filter(Boolean)
-                    parts.pop()
-                    return `/${parts.join('/')}` || '/'
-                  })
-                }
-              >
-                <ChevronUp size={14} />
-              </button>
-              <span title={fakeDirectory}>{fakeDirectory}</span>
-            </div>
-            <div className="fake-picker-list">
-              {fakeEntries.folders.map((folder) => (
-                <button
-                  type="button"
-                  className="fake-picker-item"
-                  key={folder}
-                  onClick={() => {
-                    setFakeDirectory((current) => `${current.replace(/\/$/, '')}/${folder}`)
-                    if (fakePicker.mode !== 'dialog.saveFile') setFakeName('')
-                  }}
-                >
-                  <Folder size={15} />
-                  {folder}
-                </button>
-              ))}
-              {fakeEntries.files.map((file) => (
-                <button
-                  type="button"
-                  className={`fake-picker-item ${fakeName === file ? 'selected' : ''}`}
-                  key={file}
-                  onClick={() => setFakeName(file)}
-                  onDoubleClick={() => {
-                    const value = `${fakeDirectory.replace(/\/$/, '')}/${file}`
-                    fakePicker.resolve(fakePicker.mode === 'dialog.openFiles' ? [value] : value)
-                    setFakePicker(null)
-                  }}
-                >
-                  <FileText size={15} />
-                  {file}
-                </button>
-              ))}
-            </div>
-            {fakePicker.mode === 'dialog.saveFile' && (
-              <label className="fake-picker-name">
-                文件名
-                <input
-                  aria-label="文件名"
-                  value={fakeName}
-                  onChange={(event) => setFakeName(event.target.value)}
-                />
-              </label>
-            )}
-            <footer>
-              <button
-                type="button"
-                onClick={() => {
-                  fakePicker.resolve(null)
-                  setFakePicker(null)
-                }}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="primary"
-                disabled={fakePicker.mode !== 'dialog.openDirectory' && !fakeName.trim()}
-                onClick={() => {
-                  const value =
-                    fakePicker.mode === 'dialog.openDirectory'
-                      ? fakeDirectory
-                      : `${fakeDirectory.replace(/\/$/, '')}/${fakeName}`
-                  fakePicker.resolve(fakePicker.mode === 'dialog.openFiles' ? [value] : value)
-                  setFakePicker(null)
-                }}
-              >
-                {fakePicker.mode === 'dialog.saveFile' ? '保存' : '选择'}
-              </button>
-            </footer>
-          </div>
-        </div>
-      )}
+      {fakePicker && <DemoFilePicker fakePicker={fakePicker} onClose={() => setFakePicker(null)} />}
     </>
   )
 }

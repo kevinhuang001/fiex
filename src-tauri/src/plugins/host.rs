@@ -38,8 +38,6 @@ pub struct FolderPermission {
     #[serde(default)]
     pub read: FolderReadPermission,
     #[serde(default)]
-    pub write: bool,
-    #[serde(default)]
     pub create: bool,
     #[serde(default)]
     pub delete: bool,
@@ -162,7 +160,7 @@ pub fn declared_permissions(
         ("folders.delete", folders.delete),
         ("folders.rename", folders.rename),
     ] {
-        if requested || folders.write {
+        if requested {
             declared.insert(name.into());
         }
     }
@@ -198,6 +196,7 @@ fn capabilities(contributions: &Value) -> Vec<String> {
         ("contextMenus", "contextMenu"),
         ("search", "search"),
         ("settings", "settings"),
+        ("themes", "theme"),
     ] {
         let present = contributions
             .get(key)
@@ -391,7 +390,8 @@ fn discover() -> Vec<(PluginManifest, PathBuf)> {
                 continue;
             };
             if manifest.schema_version != 1
-                || manifest.runtime.protocol_version != plugin_sdk::PROTOCOL_VERSION
+                || (!crate::plugin_themes::is_theme(&manifest)
+                    && manifest.runtime.protocol_version != plugin_sdk::PROTOCOL_VERSION)
                 || !valid_id(&manifest.id)
                 || manifest.name.len() > 128
                 || declared(&manifest).is_err()
@@ -448,7 +448,8 @@ pub fn catalog() -> Vec<PluginInfo> {
     discover()
         .into_iter()
         .map(|(manifest, folder)| {
-            let backend = executable(&manifest, &folder).is_ok();
+            let backend =
+                crate::plugin_themes::is_theme(&manifest) || executable(&manifest, &folder).is_ok();
             let declared = declared(&manifest).unwrap_or_default();
             let state =
                 crate::plugin_permissions::status(&manifest.id, &declared).unwrap_or_default(); // unreadable policy fails closed
@@ -662,6 +663,11 @@ fn host_exec(
         "SystemRoot",
         "PATHEXT",
         "SSH_AUTH_SOCK",
+        "GNUPGHOME",
+        "GPG_TTY",
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "DBUS_SESSION_BUS_ADDRESS",
     ] {
         if let Some(value) = std::env::var_os(key) {
             process.env(key, value);
@@ -788,6 +794,11 @@ pub fn run_command(
         "SystemRoot",
         "PATHEXT",
         "SSH_AUTH_SOCK",
+        "GNUPGHOME",
+        "GPG_TTY",
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "DBUS_SESSION_BUS_ADDRESS",
     ] {
         if let Some(value) = std::env::var_os(key) {
             process.env(key, value);
@@ -1149,10 +1160,14 @@ impl Running {
             }),
         )
         .map_err(|e| e.to_string())?;
+        let deadline = Instant::now() + Duration::from_secs(120);
         loop {
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .ok_or("plugin request deadline exceeded")?;
             let response = self
                 .stdout
-                .recv_timeout(Duration::from_secs(120))
+                .recv_timeout(remaining)
                 .map_err(|_| "plugin stopped responding or disconnected")??
                 .ok_or_else(|| {
                     format!(
@@ -1269,7 +1284,7 @@ impl PluginHost {
             .as_deref()
             .map(crate::plugin_fs_access::Scope::new)
             .transpose()?;
-        let (manifest, _) = discover()
+        let (manifest, dir) = discover()
             .into_iter()
             .find(|(m, _)| m.id == plugin_id)
             .ok_or("plugin not installed")?;
@@ -1278,6 +1293,10 @@ impl PluginHost {
         if !state.enabled || !crate::plugin_permissions::activation_complete(&state, &required) {
             return Err("plugin activation requires complete permission consent".into());
         }
+        let mut params = params;
+        if let Some(object) = params.as_object_mut() {
+            object.insert("networkDomains".into(), json!(state.network_domains));
+        }
         let mut guard = self
             .children
             .lock()
@@ -1285,10 +1304,6 @@ impl PluginHost {
         let instance = if let Some(instance) = guard.get(plugin_id) {
             instance.clone()
         } else {
-            let (manifest, dir) = discover()
-                .into_iter()
-                .find(|(m, _)| m.id == plugin_id)
-                .ok_or("plugin is not installed")?;
             crate::plugin_signing::verify_installed(&manifest, &dir)?;
             let declared = declared(&manifest)?;
             let state = crate::plugin_permissions::status(plugin_id, &declared)?;
@@ -1382,4 +1397,23 @@ impl PluginHost {
 pub fn global() -> &'static PluginHost {
     static HOST: OnceLock<PluginHost> = OnceLock::new();
     HOST.get_or_init(PluginHost::default)
+}
+
+pub fn themes() -> Vec<crate::plugin_themes::Theme> {
+    discover()
+        .into_iter()
+        .filter(|(manifest, _)| {
+            activation_requirements(manifest).is_ok_and(|required| {
+                crate::plugin_permissions::status(&manifest.id, &required.permissions).is_ok_and(
+                    |state| {
+                        state.enabled
+                            && crate::plugin_permissions::activation_complete(&state, &required)
+                    },
+                )
+            })
+        })
+        .flat_map(|(manifest, folder)| {
+            crate::plugin_themes::load(&manifest, &folder).unwrap_or_default()
+        })
+        .collect()
 }

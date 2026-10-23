@@ -8,7 +8,6 @@ export const permissionLabels: Record<string, string> = {
   'folders.create': '创建目录项',
   'folders.delete': '删除目录项',
   'folders.rename': '重命名目录项',
-  'folders.write': '管理目录项（旧版声明）',
   'files.read': '读取文件',
   'files.write': '修改文件',
   network: '网络访问',
