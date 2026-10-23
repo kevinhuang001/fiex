@@ -1,6 +1,6 @@
 //! Cross-repository smoke test: real Git plugin through Core's process host
 //! and generic plugin VFS router. Not shipped in release bundles.
-use fiex_lib::{plugin_host, plugin_vfs};
+use fiex_lib::{plugin_decorations, plugin_host, plugin_vfs};
 use serde_json::json;
 
 fn main() {
@@ -70,6 +70,20 @@ fn main() {
     let (found, _) =
         plugin_vfs::search(&history_path, "a.txt", true, &[], 50).expect("vfs.search failed");
     assert!(!found.is_empty(), "search returned no entries");
+
+    std::fs::write(repo.join("a.txt"), "changed\n").unwrap();
+    let decorated = plugin_decorations::query(
+        &root,
+        vec![plugin_decorations::DecorationEntry {
+            path: repo.join("a.txt").to_string_lossy().into_owned(),
+            name: "a.txt".into(),
+            is_dir: false,
+            extension: "txt".into(),
+            mime: "text/plain".into(),
+        }],
+    );
+    assert_eq!(decorated.len(), 1, "{decorated:?}");
+    assert_eq!(decorated[0].badges[0].text, "M", "{decorated:?}");
 
     plugin_host::global().stop(id);
     std::fs::remove_dir_all(&repo).ok();

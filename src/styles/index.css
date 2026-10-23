@@ -5151,3 +5151,70 @@ body.dragging-reorder * {
   top: auto !important;
   bottom: 0 !important;
 }
+.decoration-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  margin-right: 5px;
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 1px;
+}
+.decoration-badge.orange {
+  color: #c2710c;
+  background: #fff6e8;
+}
+.decoration-badge.green {
+  color: #2f7d42;
+  background: #eaf6ec;
+}
+.decoration-badge.red {
+  color: #b4443d;
+  background: #fbeceb;
+}
+.decoration-badge.blue {
+  color: #2f6f9f;
+  background: #eaf3fa;
+}
+.decoration-badge.purple {
+  color: #7d4fa8;
+  background: #f3ecfa;
+}
+.decoration-badge.gray,
+.decoration-badge.neutral {
+  color: #6f7c88;
+  background: #eef2f6;
+}
+@media (prefers-color-scheme: dark) {
+  .decoration-badge.orange {
+    color: #f0b35d;
+    background: #3b2d1c;
+  }
+  .decoration-badge.green {
+    color: #83cf96;
+    background: #1e3525;
+  }
+  .decoration-badge.red {
+    color: #f09a94;
+    background: #3b2222;
+  }
+  .decoration-badge.blue {
+    color: #8ec8ee;
+    background: #1d3141;
+  }
+  .decoration-badge.purple {
+    color: #c6a5e8;
+    background: #31243d;
+  }
+  .decoration-badge.gray,
+  .decoration-badge.neutral {
+    color: #9db0c1;
+    background: #30404f;
+  }
+}

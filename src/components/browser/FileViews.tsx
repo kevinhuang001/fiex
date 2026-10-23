@@ -100,9 +100,35 @@ function NameCell({
         onCancel={explorer.cancelRename}
       />
     )
+  const decoration = explorer.decorations?.[entry.path]
+  const style = decoration?.style
+    ? {
+        color: decoration.style.color,
+        fontWeight: decoration.style.fontWeight,
+        fontStyle: decoration.style.fontStyle,
+        background: decoration.style.background,
+      }
+    : undefined
+  const title = [entry.name, decoration?.description, decoration?.providers?.join(' · ')]
+    .filter(Boolean)
+    .join(' · ')
   return (
-    <span className={className} title={entry.name}>
-      {entry.name}
+    <span className={className} style={style} title={title}>
+      {decoration?.badges.map((badge) => (
+        <span
+          key={`${badge.text}-${badge.color}`}
+          className={`decoration-badge ${badge.color.startsWith('#') ? 'custom' : badge.color}`}
+          style={
+            badge.color.startsWith('#')
+              ? { color: badge.color, borderColor: badge.color }
+              : undefined
+          }
+          title={badge.tooltip}
+        >
+          {badge.text}
+        </span>
+      ))}
+      {decoration?.label || entry.name}
     </span>
   )
 }
@@ -492,7 +518,7 @@ export function FileViews(props: Props) {
                 return e ? (
                   <>
                     <Thumbnail entry={e} size={140} />
-                    <strong>{e.name}</strong>
+                    <NameCell explorer={x} entry={e} className="gallery-name" />
                     <span>
                       {kind(e)} · {e.isDir ? '文件夹' : size(e.size)}
                     </span>

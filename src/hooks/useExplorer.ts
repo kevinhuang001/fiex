@@ -2,7 +2,14 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { parent } from '@/lib/files'
-import type { Entry, Listing, Location, Preferences, RemoteConnection } from '@/lib/types'
+import type {
+  Entry,
+  EntryDecoration,
+  Listing,
+  Location,
+  Preferences,
+  RemoteConnection,
+} from '@/lib/types'
 export function useExplorer(
   prefs: Preferences,
   startOverride?: string,
@@ -12,6 +19,7 @@ export function useExplorer(
   const [locations, setLocations] = useState<Location[]>([])
   const [path, setPath] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
+  const [decorations, setDecorations] = useState<Record<string, EntryDecoration>>({})
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
   const [directoryReadOnly, setDirectoryReadOnly] = useState(false)
   const [virtualVolume, setVirtualVolume] = useState(false)
@@ -34,6 +42,7 @@ export function useExplorer(
   const [renaming, setRenaming] = useState<string | null>(null)
   const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
+  const decorationRequest = useRef(0)
   const searchRequest = useRef(0)
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
   const navigate = useCallback(
@@ -383,9 +392,40 @@ export function useExplorer(
     if (!enabled) return
     void refreshConnections()
   }, [enabled, refreshConnections])
+  useEffect(() => {
+    if (!enabled || query || !path || entries.length === 0) {
+      setDecorations({})
+      return
+    }
+    const generation = ++decorationRequest.current
+    const timer = window.setTimeout(() => {
+      void call<EntryDecoration[]>('plugin_decorations', {
+        directory: path,
+        entries: entries.map((entry) => ({
+          path: entry.path,
+          name: entry.name,
+          isDir: entry.isDir,
+          extension: entry.extension,
+          mime: entry.mime,
+        })),
+      })
+        .then((values) => {
+          if (generation !== decorationRequest.current) return
+          setDecorations(Object.fromEntries(values.map((value) => [value.path, value])))
+        })
+        .catch(() => {
+          if (generation === decorationRequest.current) setDecorations({})
+        })
+    }, 120)
+    return () => {
+      window.clearTimeout(timer)
+      ++decorationRequest.current
+    }
+  }, [enabled, path, entries, query, refresh])
   return {
     path,
     entries: visibleEntries,
+    decorations,
     connections,
     refreshConnections,
     tagFilter,

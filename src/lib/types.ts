@@ -87,6 +87,24 @@ export interface GitRemoteStatus {
   ahead: number
   behind: number
 }
+export interface DecorationBadge {
+  text: string
+  color: string
+  tooltip?: string
+}
+export interface EntryDecoration {
+  path: string
+  badges: DecorationBadge[]
+  label?: string
+  description?: string
+  style?: {
+    color?: string
+    fontWeight?: string
+    fontStyle?: string
+    background?: string
+  }
+  providers?: string[]
+}
 export type View = 'list' | 'gallery' | 'columns' | 'icons'
 export type Group = 'none' | 'kind' | 'modified' | 'extension' | 'size'
 export type Sort = 'name' | 'modified' | 'size' | 'kind'

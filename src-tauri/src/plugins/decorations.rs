@@ -1,0 +1,468 @@
+//! Read-only presentation decorations from plugins.
+//!
+//! A plugin must explicitly declare `contributions.decorations`; plugins that
+//! do not are never called. Declarative rules are applied by Core locally.
+use crate::plugin_host::{self, PluginManifest};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+use std::collections::HashMap;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecorationEntry {
+    pub path: String,
+    pub name: String,
+    pub is_dir: bool,
+    #[serde(default)]
+    pub extension: String,
+    #[serde(default)]
+    pub mime: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecorationBadge {
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub color: String,
+    #[serde(default)]
+    pub tooltip: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecorationStyle {
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub font_weight: Option<String>,
+    #[serde(default)]
+    pub font_style: Option<String>,
+    #[serde(default)]
+    pub background: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Decoration {
+    pub path: String,
+    #[serde(default)]
+    pub badges: Vec<DecorationBadge>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub style: DecorationStyle,
+    #[serde(default)]
+    pub providers: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DecorationConfig {
+    #[serde(default)]
+    mode: String,
+    #[serde(default)]
+    method: Option<String>,
+    #[serde(default)]
+    priority: i32,
+    #[serde(default)]
+    scope: Option<DecorationScope>,
+    #[serde(default)]
+    rules: Vec<DecorationRule>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DecorationScope {
+    #[serde(default)]
+    marker: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DecorationRule {
+    #[serde(default, rename = "match")]
+    matcher: DecorationMatcher,
+    #[serde(default)]
+    badge: Option<DecorationBadge>,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    style: Option<DecorationStyle>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DecorationMatcher {
+    #[serde(default)]
+    extensions: Vec<String>,
+    #[serde(default)]
+    is_dir: Option<bool>,
+}
+
+fn config(manifest: &PluginManifest) -> DecorationConfig {
+    manifest
+        .contributions
+        .get("decorations")
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default()
+}
+
+fn allowed_color(value: &str) -> bool {
+    let value = value.trim().to_ascii_lowercase();
+    matches!(
+        value.as_str(),
+        "orange" | "green" | "red" | "blue" | "gray" | "neutral" | "purple"
+    ) || (value.starts_with('#')
+        && matches!(value.len(), 4 | 7)
+        && value[1..]
+            .chars()
+            .all(|character| character.is_ascii_hexdigit()))
+}
+
+fn safe_text(value: Option<&str>, limit: usize) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.chars().count() <= limit)
+        .map(str::to_owned)
+}
+
+fn safe_badge(value: DecorationBadge) -> Option<DecorationBadge> {
+    let text = value.text.trim().to_owned();
+    if text.is_empty() || text.chars().count() > 4 {
+        return None;
+    }
+    let color = if allowed_color(&value.color) {
+        value.color.trim().to_ascii_lowercase()
+    } else {
+        "neutral".into()
+    };
+    Some(DecorationBadge {
+        text,
+        color,
+        tooltip: safe_text(value.tooltip.as_deref(), 200),
+    })
+}
+
+fn safe_style(value: DecorationStyle) -> DecorationStyle {
+    DecorationStyle {
+        color: value.color.filter(|value| allowed_color(value)),
+        background: value.background.filter(|value| allowed_color(value)),
+        font_weight: value
+            .font_weight
+            .filter(|value| matches!(value.as_str(), "normal" | "500" | "600" | "bold")),
+        font_style: value
+            .font_style
+            .filter(|value| matches!(value.as_str(), "normal" | "italic")),
+    }
+}
+
+fn marker_matches(directory: &str, marker: &str) -> bool {
+    if marker.is_empty() || marker.contains(['/', '\\']) {
+        return false;
+    }
+    let mut current = std::path::Path::new(directory);
+    loop {
+        if current.join(marker).exists() {
+            return true;
+        }
+        let Some(parent) = current.parent() else {
+            return false;
+        };
+        current = parent;
+    }
+}
+
+struct Pending {
+    priority: i32,
+    value: Decoration,
+}
+
+fn merge(
+    result: &mut HashMap<String, Pending>,
+    entries: &HashMap<String, DecorationEntry>,
+    path: &str,
+    priority: i32,
+    provider: &str,
+    value: Decoration,
+) {
+    if !entries.contains_key(path) {
+        return;
+    }
+    let badges = value
+        .badges
+        .into_iter()
+        .filter_map(safe_badge)
+        .take(3)
+        .collect::<Vec<_>>();
+    let style = safe_style(value.style);
+    let label = safe_text(value.label.as_deref(), 120);
+    let description = safe_text(value.description.as_deref(), 200);
+    if badges.is_empty()
+        && label.is_none()
+        && description.is_none()
+        && style.color.is_none()
+        && style.background.is_none()
+        && style.font_weight.is_none()
+        && style.font_style.is_none()
+    {
+        return;
+    }
+    let pending = result.entry(path.to_owned()).or_insert_with(|| Pending {
+        priority,
+        value: Decoration {
+            path: path.to_owned(),
+            ..Default::default()
+        },
+    });
+    if !pending.value.providers.iter().any(|item| item == provider) {
+        pending.value.providers.push(provider.to_owned());
+    }
+    for badge in badges {
+        if pending.value.badges.len() < 3
+            && !pending
+                .value
+                .badges
+                .iter()
+                .any(|item| item.text == badge.text)
+        {
+            pending.value.badges.push(badge);
+        }
+    }
+    if priority >= pending.priority {
+        if let Some(label) = label {
+            pending.value.label = Some(label);
+        }
+        if let Some(description) = description {
+            pending.value.description = Some(description);
+        }
+        if style.color.is_some() {
+            pending.value.style.color = style.color;
+        }
+        if style.background.is_some() {
+            pending.value.style.background = style.background;
+        }
+        if style.font_weight.is_some() {
+            pending.value.style.font_weight = style.font_weight;
+        }
+        if style.font_style.is_some() {
+            pending.value.style.font_style = style.font_style;
+        }
+    }
+    pending.priority = pending.priority.max(priority);
+}
+
+fn apply_rules(
+    result: &mut HashMap<String, Pending>,
+    entries: &HashMap<String, DecorationEntry>,
+    provider: &str,
+    priority: i32,
+    rules: &[DecorationRule],
+) {
+    for entry in entries.values() {
+        for rule in rules {
+            if let Some(is_dir) = rule.matcher.is_dir {
+                if entry.is_dir != is_dir {
+                    continue;
+                }
+            }
+            if !rule.matcher.extensions.is_empty()
+                && !rule
+                    .matcher
+                    .extensions
+                    .iter()
+                    .any(|extension| extension.eq_ignore_ascii_case(&entry.extension))
+            {
+                continue;
+            }
+            let value = Decoration {
+                path: entry.path.clone(),
+                badges: rule.badge.clone().into_iter().collect(),
+                label: rule.label.clone(),
+                description: rule.description.clone(),
+                style: rule.style.clone().unwrap_or_default(),
+                providers: vec![],
+            };
+            merge(result, entries, &entry.path, priority, provider, value);
+        }
+    }
+}
+
+fn dynamic(
+    result: &mut HashMap<String, Pending>,
+    entries: &HashMap<String, DecorationEntry>,
+    manifest: &PluginManifest,
+    directory: &str,
+    config: &DecorationConfig,
+) {
+    let Some(method) = config.method.as_deref().filter(|value| !value.is_empty()) else {
+        return;
+    };
+    if let Some(scope) = &config.scope {
+        if let Some(marker) = &scope.marker {
+            if !marker_matches(directory, marker) {
+                return;
+            }
+        }
+    }
+    let declared = plugin_host::declared_permissions(manifest).unwrap_or_default();
+    if !crate::plugin_permissions::allowed(&manifest.id, &declared, "filesystem.read")
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let payload = json!({
+        "directory": directory,
+        "entries": entries.values().collect::<Vec<_>>(),
+    });
+    let Ok(response) = plugin_host::global().invoke(&manifest.id, method, payload) else {
+        return;
+    };
+    let Some(items) = response.get("decorations").and_then(Value::as_array) else {
+        return;
+    };
+    for item in items.iter().take(entries.len().max(1)) {
+        let Ok(path) = item.get("path").and_then(Value::as_str).ok_or(()) else {
+            continue;
+        };
+        let mut badges = Vec::new();
+        if let Some(badge) = item.get("badge").cloned() {
+            if let Ok(badge) = serde_json::from_value::<DecorationBadge>(badge) {
+                badges.push(badge);
+            }
+        }
+        if let Some(values) = item.get("badges").and_then(Value::as_array) {
+            badges.extend(
+                values
+                    .iter()
+                    .cloned()
+                    .filter_map(|value| serde_json::from_value(value).ok()),
+            );
+        }
+        let style = item
+            .get("style")
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default();
+        let value = Decoration {
+            path: path.into(),
+            badges,
+            label: item.get("label").and_then(Value::as_str).map(str::to_owned),
+            description: item
+                .get("description")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            style,
+            providers: vec![],
+        };
+        merge(
+            result,
+            entries,
+            path,
+            config.priority,
+            &manifest.name,
+            value,
+        );
+    }
+}
+
+pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> {
+    let entries = entries
+        .into_iter()
+        .map(|entry| (entry.path.clone(), entry))
+        .collect::<HashMap<_, _>>();
+    let mut result = HashMap::new();
+    for (manifest, _) in plugin_host::installed_manifests() {
+        let config = config(&manifest);
+        if config.mode == "none" || config.mode.is_empty() {
+            continue;
+        }
+        let declared = plugin_host::declared_permissions(&manifest).unwrap_or_default();
+        if !crate::plugin_permissions::allowed(&manifest.id, &declared, "filesystem.read")
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        match config.mode.as_str() {
+            "declarative" => apply_rules(
+                &mut result,
+                &entries,
+                &manifest.name,
+                config.priority,
+                &config.rules,
+            ),
+            "dynamic" => dynamic(&mut result, &entries, &manifest, directory, &config),
+            _ => {}
+        }
+    }
+    let mut values = result
+        .into_values()
+        .map(|pending| pending.value)
+        .collect::<Vec<_>>();
+    values.sort_by(|a, b| a.path.cmp(&b.path));
+    values
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_unsafe_values() {
+        assert!(allowed_color("#fff"));
+        assert!(allowed_color("orange"));
+        assert!(!allowed_color("red; background:url(x)"));
+        assert!(safe_badge(DecorationBadge {
+            text: "M".into(),
+            color: "orange".into(),
+            tooltip: None
+        })
+        .is_some());
+        assert!(safe_badge(DecorationBadge {
+            text: "TOOLONG".into(),
+            color: "orange".into(),
+            tooltip: None
+        })
+        .is_none());
+    }
+
+    #[test]
+    fn declarative_rules_apply_without_a_plugin_process() {
+        let entries = vec![DecorationEntry {
+            path: "/tmp/a.zip".into(),
+            name: "a.zip".into(),
+            is_dir: false,
+            extension: "zip".into(),
+            mime: String::new(),
+        }];
+        let map = entries
+            .into_iter()
+            .map(|entry| (entry.path.clone(), entry))
+            .collect::<HashMap<_, _>>();
+        let mut result = HashMap::new();
+        apply_rules(
+            &mut result,
+            &map,
+            "Archive",
+            0,
+            &[DecorationRule {
+                matcher: DecorationMatcher {
+                    extensions: vec!["zip".into()],
+                    is_dir: Some(false),
+                },
+                badge: Some(DecorationBadge {
+                    text: "ZIP".into(),
+                    color: "neutral".into(),
+                    tooltip: None,
+                }),
+                ..Default::default()
+            }],
+        );
+        assert_eq!(result.len(), 1);
+    }
+}

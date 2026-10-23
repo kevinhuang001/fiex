@@ -205,6 +205,10 @@ pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
     global().stop(id);
     Ok(())
 }
+pub fn installed_manifests() -> Vec<(PluginManifest, PathBuf)> {
+    discover()
+}
+
 pub fn network_domains(id: &str) -> Result<Vec<String>, String> {
     let (manifest, _) = discover()
         .into_iter()

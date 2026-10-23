@@ -320,6 +320,20 @@ fn plugin_status() -> Vec<(String, bool)> {
         .collect()
 }
 #[tauri::command]
+async fn plugin_decorations(
+    directory: String,
+    entries: Vec<crate::plugin_decorations::DecorationEntry>,
+) -> Result<Vec<crate::plugin_decorations::Decoration>, String> {
+    if !directory.starts_with('/') && !directory.contains(":\\") && !directory.contains("://") {
+        return Err("invalid decoration directory".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_decorations::query(&directory, entries)
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+#[tauri::command]
 fn plugin_network_domains(plugin_id: String) -> Result<Vec<String>, String> {
     crate::plugin_host::network_domains(&plugin_id)
 }
@@ -1163,6 +1177,7 @@ pub fn run() {
             plugin_panel_html,
             plugin_permission_allowed,
             plugin_network_domains,
+            plugin_decorations,
             plugin_marketplace,
             system_proxy_info,
             plugin_release_assets,

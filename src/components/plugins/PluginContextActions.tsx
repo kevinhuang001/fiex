@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 import { call } from '@/lib/api'
 import { usePluginCatalog } from '@/lib/plugins'
@@ -92,12 +92,31 @@ function MenuNode({
   ctx,
 }: {
   item: Item
-  onAction: (item: Item) => void
+  onAction: (item: Item, anchor?: { x: number; y: number }) => void
   ctx: Context
 }) {
   const [expanded, setExpanded] = useState(false)
   const [openUp, setOpenUp] = useState(false)
   const submenu = useRef<HTMLDivElement>(null)
+  const closeTimer = useRef<number | null>(null)
+  const cancelClose = () => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+  const openSubmenu = () => {
+    cancelClose()
+    setExpanded(true)
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = null
+      setExpanded(false)
+    }, 180)
+  }
+  useEffect(() => cancelClose, [])
   useLayoutEffect(() => {
     if (!expanded || !submenu.current) return
     const rect = submenu.current.getBoundingClientRect()
@@ -105,17 +124,14 @@ function MenuNode({
   }, [expanded, item.children])
   if (!matches(item.when, ctx)) return null
   return item.children ? (
-    <div
-      className="context-submenu-wrap"
-      onMouseEnter={() => setExpanded(true)}
-      onMouseLeave={() => setExpanded(false)}
-    >
+    <div className="context-submenu-wrap" onMouseEnter={openSubmenu} onMouseLeave={scheduleClose}>
       <button
         role="menuitem"
         aria-haspopup="menu"
         aria-expanded={expanded}
         onClick={(event) => {
           event.stopPropagation()
+          cancelClose()
           setExpanded(!expanded)
         }}
       >
@@ -124,7 +140,13 @@ function MenuNode({
         <ChevronRight size={13} className="submenu-arrow" />
       </button>
       {expanded && (
-        <div ref={submenu} className={`context-submenu${openUp ? ' open-up' : ''}`} role="menu">
+        <div
+          ref={submenu}
+          className={`context-submenu${openUp ? ' open-up' : ''}`}
+          role="menu"
+          onMouseEnter={openSubmenu}
+          onMouseLeave={scheduleClose}
+        >
           {item.children.map((child) => (
             <MenuNode key={child.id} item={child} onAction={onAction} ctx={ctx} />
           ))}
@@ -132,7 +154,10 @@ function MenuNode({
       )}
     </div>
   ) : (
-    <button role="menuitem" onClick={() => onAction(item)}>
+    <button
+      role="menuitem"
+      onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
+    >
       <Puzzle size={15} />
       {item.title}
     </button>
@@ -152,7 +177,7 @@ export function PluginContextActions({
 }) {
   const plugins = usePluginCatalog()
   const ctx: Context = { paths, path, isDirectory, readOnly, isRemote }
-  const invoke = async (pluginId: string, item: Item) => {
+  const invoke = async (pluginId: string, item: Item, anchor?: { x: number; y: number }) => {
     onClose()
     if (item.panel) {
       window.dispatchEvent(
@@ -164,6 +189,7 @@ export function PluginContextActions({
             icon: item.icon || plugins.find((plugin) => plugin.id === pluginId)?.icon,
             selection: paths,
             directory: path,
+            anchor,
           },
         }),
       )
@@ -207,7 +233,7 @@ export function PluginContextActions({
               key={plugin.id + ':' + item.id}
               item={item}
               ctx={ctx}
-              onAction={(action) => void invoke(plugin.id, action)}
+              onAction={(action, at) => void invoke(plugin.id, action, at)}
             />
           ))
         })}

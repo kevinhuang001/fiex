@@ -149,7 +149,11 @@ export function ExplorerToolbar({
     const missing = defaults.filter((key) => !pinnedKeys.includes(key))
     if (missing.length) update({ pinnedPluginTools: [...pinnedKeys, ...missing] })
   }, [availableTools, pinnedKeys, update])
-  const runTool = (plugin: (typeof plugins)[number], tool: PluginContribution) => {
+  const runTool = (
+    plugin: (typeof plugins)[number],
+    tool: PluginContribution,
+    anchor?: { x: number; y: number },
+  ) => {
     if (tool.panel) {
       window.dispatchEvent(
         new CustomEvent(OPEN_PLUGIN_PANEL, {
@@ -160,6 +164,7 @@ export function ExplorerToolbar({
             icon: tool.icon,
             selection: x.selected,
             directory: x.path,
+            anchor,
           },
         }),
       )
@@ -452,8 +457,9 @@ export function ExplorerToolbar({
                         event.preventDefault()
                         unpinTool(key)
                       }}
-                      onClick={() => {
-                        if (!pinDragged.current) runTool(plugin, tool)
+                      onClick={(event) => {
+                        if (!pinDragged.current)
+                          runTool(plugin, tool, { x: event.clientX, y: event.clientY })
                       }}
                     >
                       {pluginIcon(tool.icon)}

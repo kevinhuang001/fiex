@@ -2,7 +2,7 @@
 
 - Nested context submenus automatically flip upward when they would cross the window bottom, so long Archive format lists stay visible.
 - Core owns the plugin panel icon, title and close button. Archive/Checksum/Git panels no longer render duplicate headers.
-- Archive is one context-menu entry with all compression formats nested, extraction only for archive files, and compression only for non-archive selections.
+- Archive uses separate first-level context entries: “压缩” for non-archive selections, “解压缩” for archive files, and “高级” containing “压缩到…” and advanced compression. Compression defaults to a unique name in the current folder; extraction defaults to the archive folder. Long nested menus flip upward near the viewport bottom.
 
 # Fiex 0.4.4
 

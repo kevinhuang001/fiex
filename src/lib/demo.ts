@@ -257,12 +257,38 @@ let demoGitEntries: Record<string, string> = {
 const officialMode =
   query.has('officialPlugins') ||
   (import.meta.env.DEV && !query.has('demo') && !query.has('pluginFixture'))
+const archiveFormats = [
+  ['zip', 'ZIP'],
+  ['rar', 'RAR'],
+  ['7z', '7z'],
+  ['tar', 'TAR'],
+  ['tar.gz', 'TAR.GZ'],
+  ['tar.bz2', 'TAR.BZ2'],
+  ['tar.xz', 'TAR.XZ'],
+] as const
+const archiveItems = (picker: boolean) =>
+  archiveFormats.map(([format, title]) => ({
+    id: `archive.${picker ? 'to.' : ''}${format}`,
+    title,
+    command: 'archive.compress',
+    args: { format },
+    ...(picker
+      ? {
+          picker: {
+            mode: 'saveFile',
+            suggestedName: `Archive.${format}`,
+            extensions: [format.split('.').pop()],
+            param: 'destination',
+          },
+        }
+      : {}),
+  }))
 const officialPlugins: DemoPlugin[] = officialMode
   ? [
       {
         id: 'org.fiex.git',
         name: 'Git',
-        version: '0.2.3',
+        version: '0.2.4',
         description: '源代码管理、提交历史、远程仓库与只读历史浏览。',
         enabled: true,
         approved: true,
@@ -291,7 +317,7 @@ const officialPlugins: DemoPlugin[] = officialMode
       {
         id: 'org.fiex.archive',
         name: '压缩与解压',
-        version: '0.2.3',
+        version: '0.2.4',
         description: '压缩与解压 ZIP、RAR、7z、TAR 等格式。',
         enabled: true,
         approved: true,
@@ -305,49 +331,23 @@ const officialPlugins: DemoPlugin[] = officialMode
         contributions: {
           contextMenus: [
             {
-              id: 'archive',
-              title: '压缩与解压',
-              when: 'context.selection.count > 0',
+              id: 'archive.compress',
+              title: '压缩',
+              when: 'context.selection.isNotArchive',
               children: [
-                {
-                  id: 'archive.compress',
-                  title: '压缩为…',
-                  when: 'context.selection.isNotArchive',
-                  children: [
-                    ['zip', 'ZIP'],
-                    ['rar', 'RAR'],
-                    ['7z', '7z'],
-                    ['tar', 'TAR'],
-                    ['tar.gz', 'TAR.GZ'],
-                    ['tar.bz2', 'TAR.BZ2'],
-                    ['tar.xz', 'TAR.XZ'],
-                  ].map(([format, title]) => ({
-                    id: `archive.${format}`,
-                    title,
-                    command: 'archive.compress',
-                    args: { format },
-                    picker: {
-                      mode: 'saveFile',
-                      suggestedName: `Archive.${format}`,
-                      extensions: [String(format).split('.').pop()],
-                      param: 'destination',
-                    },
-                  })),
-                },
-                {
-                  id: 'archive.extract',
-                  title: '解压缩到…',
-                  when: 'context.selection.isArchive',
-                  command: 'archive.extract',
-                  picker: { mode: 'openDirectory', param: 'destination' },
-                },
+                ...archiveItems(false),
                 {
                   id: 'archive.advanced',
                   title: '高级压缩…',
-                  when: 'context.selection.isNotArchive',
                   panel: { entry: 'ui/dist/index.html', title: '高级压缩' },
                 },
               ],
+            },
+            {
+              id: 'archive.extract',
+              title: '解压缩',
+              when: 'context.selection.isArchive',
+              command: 'archive.extract',
             },
           ],
         },
@@ -355,7 +355,7 @@ const officialPlugins: DemoPlugin[] = officialMode
       {
         id: 'org.fiex.checksum',
         name: '校验和',
-        version: '0.2.3',
+        version: '0.2.4',
         description: '计算 SHA-256、SHA-512、SHA-1、MD5 与 CRC32。',
         enabled: true,
         approved: true,
@@ -583,6 +583,30 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
           },
         ]
       return { ok: true, method, params }
+    }
+    case 'plugin_decorations': {
+      if (!officialMode) return []
+      const entries = (a.entries || []) as Array<{ path: string; extension?: string }>
+      return entries.flatMap((entry) => {
+        const extension = (entry.extension || '').toLowerCase()
+        if (entry.path.endsWith('/Notes.md'))
+          return [
+            {
+              path: entry.path,
+              badges: [{ text: 'M', color: 'orange', tooltip: 'Git：已修改' }],
+              providers: ['Git'],
+            },
+          ]
+        if (['zip', 'rar', '7z', 'gz', 'bz2', 'xz', 'tar'].includes(extension))
+          return [
+            {
+              path: entry.path,
+              badges: [{ text: extension.toUpperCase().slice(0, 3), color: 'neutral' }],
+              providers: ['Archive'],
+            },
+          ]
+        return []
+      })
     }
     case 'plugin_file_dialog':
       if (a.mode === 'saveFile') return '/Users/kevin/Documents/Archive.zip'
