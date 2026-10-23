@@ -119,6 +119,50 @@ jobs:
           if [ "$RUNNER_OS" != Windows ]; then chmod +x "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"; fi
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_smoke -- org.fiex.mock
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_search_e2e
+      - name: Panel resolution, including context submenus
+        shell: bash
+        env:
+          FIEX_PLUGIN_DIR: ${{ runner.temp }}/fiex-plugin-host-test/plugins
+          XDG_DATA_HOME: ${{ runner.temp }}/fiex-plugin-host-test/user-data
+        run: |
+          set -euo pipefail
+          fixture="$FIEX_PLUGIN_DIR/org.fiex.panels"
+          mkdir -p "$fixture/ui/dist"
+          cat > "$fixture/manifest.json" <<'JSON'
+          {
+            "schemaVersion": 1,
+            "id": "org.fiex.panels",
+            "name": "Panel fixture",
+            "version": "1.0.0",
+            "runtime": { "protocolVersion": "2.0" },
+            "contributions": {
+              "toolbar": [
+                {
+                  "id": "fixture.toolbar",
+                  "title": "Toolbar panel",
+                  "panel": { "entry": "ui/dist/index.html", "title": "Toolbar" }
+                }
+              ],
+              "contextMenus": [
+                {
+                  "id": "fixture.menu",
+                  "title": "Menu",
+                  "children": [
+                    {
+                      "id": "fixture.nested",
+                      "title": "Nested panel",
+                      "panel": { "entry": "ui/dist/index.html", "title": "Nested" }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+          JSON
+          cat > "$fixture/ui/dist/index.html" <<'HTML'
+          <!doctype html><html><head><title>fixture</title></head><body>panel</body></html>
+          HTML
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_panels -- org.fiex.panels
       - name: macOS sandbox startup diagnostics
         if: failure() && runner.os == 'macOS'
         run: sudo log show --last 5m --style compact --predicate 'process == "sandboxd" OR eventMessage CONTAINS "mock_plugin"' | tail -200

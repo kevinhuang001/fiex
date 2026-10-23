@@ -1505,4 +1505,59 @@ mod tests {
         let manifest = manifest(json!({ "contextMenus": [item] }));
         assert!(find_panel(&manifest, "deep.panel").is_none());
     }
+
+    #[test]
+    fn panel_ids_at_the_frontend_depth_limit_still_resolve() {
+        let mut item = json!({
+            "id": "fourth.level",
+            "title": "Fourth",
+            "panel": { "entry": "ui/fourth.html" }
+        });
+        // Three wrappers put the panel on the fourth level, the deepest the
+        // frontend accepts.
+        for _ in 0..3 {
+            item = json!({ "id": "level", "title": "Level", "children": [item] });
+        }
+        let manifest = manifest(json!({ "contextMenus": [item] }));
+        assert_eq!(
+            find_panel(&manifest, "fourth.level").unwrap()["entry"],
+            "ui/fourth.html"
+        );
+    }
+
+    #[test]
+    fn submenu_parents_without_panels_do_not_resolve_as_panels() {
+        let manifest = manifest(json!({
+            "contextMenus": [{
+                "id": "gpg.menu",
+                "title": "GPG",
+                "children": [{ "id": "gpg.encrypt", "title": "加密…", "panel": { "entry": "ui/index.html" } }]
+            }]
+        }));
+        assert!(find_panel(&manifest, "gpg.menu").is_none());
+        assert!(find_panel(&manifest, "gpg.encrypt").is_some());
+    }
+
+    #[test]
+    fn panel_document_injects_the_plugin_csp_into_head() {
+        let html = panel_document(
+            "<!doctype html><html><head><title>Panel</title></head><body></body></html>",
+        );
+        assert!(html.contains(PANEL_CSP));
+        let head = html.find("<head>").unwrap();
+        let policy = html.find(PANEL_CSP).unwrap();
+        let title = html.find("<title>").unwrap();
+        assert!(
+            head < policy && policy < title,
+            "CSP must precede the bundle"
+        );
+        assert_eq!(html.matches(PANEL_CSP).count(), 1);
+    }
+
+    #[test]
+    fn panel_document_prepends_the_csp_when_there_is_no_head() {
+        let html = panel_document("<body>fragment</body>");
+        assert!(html.starts_with(PANEL_CSP));
+        assert!(html.ends_with("<body>fragment</body>"));
+    }
 }
