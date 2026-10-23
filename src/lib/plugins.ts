@@ -62,6 +62,14 @@ export interface PluginInfo {
     contextMenus?: PluginContribution[]
     search?: Array<{ id: string; title: string; icon?: string }>
     settings?: PluginField[]
+    preview?: Array<{
+      id: string
+      title?: string
+      extensions: string[]
+      priority?: number
+      maxBytes?: number
+      panel: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
+    }>
   }
 }
 export async function pluginCatalog(): Promise<PluginInfo[]> {

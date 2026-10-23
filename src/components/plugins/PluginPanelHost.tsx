@@ -25,8 +25,10 @@ export interface PluginPanelRequest {
   directory: string
   icon?: string
   anchor?: { x: number; y: number }
-  source?: 'toolbar' | 'contextMenu'
+  source?: 'toolbar' | 'contextMenu' | 'preview'
   size?: { width: number; height: number }
+  /** Set when this panel renders a file preview for a plugin previewer. */
+  preview?: { path: string; name: string; extension: string }
 }
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
@@ -383,6 +385,7 @@ function CachedPanel({
                 panelId: current.panelId,
                 panelTitle: current.title,
                 ...(current.source ? { source: current.source } : {}),
+                ...(current.preview ? { preview: current.preview } : {}),
               }
             if (method === 'panel.close') {
               close()

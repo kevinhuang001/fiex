@@ -201,6 +201,7 @@ fn capabilities(contributions: &Value) -> Vec<String> {
         ("search", "search"),
         ("settings", "settings"),
         ("themes", "theme"),
+        ("preview", "preview"),
     ] {
         let present = contributions
             .get(key)
@@ -530,7 +531,7 @@ fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Va
         }
         None
     }
-    ["toolbar", "contextMenus"]
+    ["toolbar", "contextMenus", "preview"]
         .iter()
         .filter_map(|key| manifest.contributions.get(key).and_then(Value::as_array))
         .find_map(|items| walk(items, panel_id, 1))
@@ -1561,6 +1562,35 @@ mod tests {
         }));
         assert!(find_panel(&manifest, "gpg.menu").is_none());
         assert!(find_panel(&manifest, "gpg.encrypt").is_some());
+    }
+
+    #[test]
+    fn preview_panels_resolve_like_toolbar_panels() {
+        let manifest: PluginManifest = serde_json::from_value(json!({
+            "schemaVersion": 1,
+            "id": "org.test.preview",
+            "name": "Preview",
+            "version": "0.1.0",
+            "description": "fixture",
+            "runtime": { "protocolVersion": "2.0", "entrypoints": {} },
+            "permissions": {},
+            "contributions": {
+                "preview": [{
+                    "id": "docx",
+                    "title": "Word",
+                    "extensions": ["docx"],
+                    "priority": 100,
+                    "panel": { "entry": "ui/index.html" }
+                }]
+            }
+        }))
+        .unwrap();
+        let panel = find_panel(&manifest, "docx").expect("preview panel");
+        assert_eq!(
+            panel.get("entry").and_then(Value::as_str),
+            Some("ui/index.html")
+        );
+        assert!(capabilities(&manifest.contributions).contains(&"preview".to_string()));
     }
 
     #[test]

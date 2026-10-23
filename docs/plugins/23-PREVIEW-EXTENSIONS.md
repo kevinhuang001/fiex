@@ -2,7 +2,9 @@
 
 [索引](README.md) · 相关：[05 UI 扩展点](05-UI-EXTENSIONS.md) · [11 UI SDK](11-UI-SDK.md) · [21 面板开发](21-PANEL-UI-GUIDE.md)
 
-> **状态：设计稿，未实现。** 目标：让插件可以注册文件预览器，覆盖 Core 内置预览，并允许用户调整优先级；首个使用者是官方插件 `office-preview`（Word / Excel / PPT）。
+> **状态：v1 已实现。** 插件声明 `contributions.preview`，按扩展名与 `priority` 参与解析；office-preview 是首个使用者。
+>
+> v1 的行为：命中插件预览器时，用该插件的预览面板展示文件（与其他插件面板同一套沙箱、Bridge 和错误记录），内置文本/图片/媒体/PDF 不变。用户侧的拖动排序与禁用开关尚未接入设置页；当前由 manifest 的 `priority` 决定，并在 `src/lib/preview.ts` 预留了 `previewOrder` / `previewDisabled` 的存储与解析。
 
 ## 1. 目标与非目标
 
