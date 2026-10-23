@@ -5809,3 +5809,9 @@ body.dragging-reorder * {
 .plugin-permissions-modal {
   width: min(560px, calc(100vw - 32px));
 }
+.plugin-toolbar-actions-only {
+  padding-top: 12px;
+}
+.plugin-domain-modal {
+  width: min(400px, calc(100vw - 32px));
+}

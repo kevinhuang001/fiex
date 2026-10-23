@@ -417,8 +417,8 @@ export function PluginSettings() {
                         type="button"
                         size="icon-sm"
                         variant="ghost"
-                        aria-label="权限管理"
-                        title="权限管理"
+                        aria-label="插件详情"
+                        title="插件详情"
                         onClick={() => {
                           setMessage('')
                           setDomainSettingsOpen(false)
@@ -499,7 +499,7 @@ export function PluginSettings() {
           setCommandSettingsOpen(false)
           setMessage('')
         }}
-        title="权限管理"
+        title="插件详情"
         className="plugin-permissions-modal"
       >
         {permissionsFor && (
@@ -562,21 +562,6 @@ export function PluginSettings() {
                 />
               </div>
             </section>
-            <div className="plugin-permission-actions">
-              <p>
-                {permissionsFor.enabled ? '运行中' : '已停用'} ·{' '}
-                {permissionsFor.approved ? '已授权' : '待授权'}
-              </p>
-              <div>
-                <Button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void updateActivation(permissionsFor, !permissionsFor.enabled)}
-                >
-                  {permissionsFor.enabled ? '停用插件' : '激活插件'}
-                </Button>
-              </div>
-            </div>
             {message && (
               <p role="status" className="plugin-page-message">
                 {message}
@@ -934,7 +919,7 @@ export function PluginSettings() {
           onActivated={() => {
             setActivationFor(null)
             refreshPluginCatalog()
-            setMessage('插件已激活，可随时在权限管理中撤销授权。')
+            setMessage('插件已激活，可随时在插件详情中撤销授权。')
           }}
         />
       )}
