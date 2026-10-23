@@ -81,9 +81,14 @@ pub fn http(
     {
         return Err("request body too large".into());
     }
+    let allow_invalid_certs = params
+        .get("allowInvalidCerts")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(120))
         .redirect(reqwest::redirect::Policy::none())
+        .danger_accept_invalid_certs(allow_invalid_certs)
         .build()
         .map_err(|error| error.to_string())?;
     let mut request = client
