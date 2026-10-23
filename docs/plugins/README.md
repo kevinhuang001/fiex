@@ -4,7 +4,7 @@
 
 ## 权限与注册分离
 
-- **权限**回答“插件能碰什么数据”，安装时由用户授权：`filesystem.read`、`filesystem.write`、`network`。
+- **权限**回答“插件能碰什么数据”，激活时逐项授权目录操作、文件读写、网络及外部命令。
 - **注册**回答“插件向 Fiex 提供什么”，只影响 UI 和路由，不授予任何数据权限。
 
 `manifest.json` 只有三块：身份、`permissions`、`contributions`。

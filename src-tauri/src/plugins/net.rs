@@ -1,8 +1,7 @@
 //! Host-mediated HTTP and TCP access for plugins.
 //!
 //! Plugins never open sockets. HTTP is a structured request/response API;
-//! TCP is a controlled byte stream limited to manifest-declared host/port
-//! targets.
+//! TCP is a controlled byte stream sharing HTTP's approved hostname/IP list.
 use crate::{plugin_ipc, plugin_permissions};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};

@@ -1,8 +1,7 @@
 //! OS-level plugin confinement.
 //!
-//! All desktop builds delegate to [`arapuca`]: Landlock + seccomp on Linux,
-//! a deny-default Seatbelt profile on macOS, and AppContainer + a Job Object on
-//! Windows. Fiex refuses to launch a plugin if the sandbox cannot be applied.
+//! Desktop builds use Landlock + seccomp on Linux, a deny-default Seatbelt
+//! profile on macOS, and AppContainer + a Job Object on Windows. Fiex refuses to launch a plugin if the sandbox cannot be applied.
 //!
 //! A failed sandbox setup is fatal: a plugin is never launched unsandboxed
 //! when the host believes a policy is active.
@@ -94,6 +93,57 @@ impl Drop for SandboxChild {
     }
 }
 
+/// Arapuca permits ordinary fork/clone and System V IPC for general workloads.
+/// Plugins only need threads and inherited pipes, so tighten those before exec.
+#[cfg(target_os = "linux")]
+fn restrict_plugin_process_creation() -> Result<(), String> {
+    let instruction = |code, jt, jf, k| libc::sock_filter { code, jt, jf, k };
+    let mut code = vec![instruction(0x20, 0, 0, 0)]; // seccomp_data.nr
+    let denied = [
+        libc::SYS_shmget,
+        libc::SYS_shmat,
+        libc::SYS_shmctl,
+        libc::SYS_semget,
+        libc::SYS_semop,
+        libc::SYS_semctl,
+        libc::SYS_msgget,
+        libc::SYS_msgsnd,
+        libc::SYS_msgrcv,
+        libc::SYS_msgctl,
+        libc::SYS_kill,
+    ];
+    for number in denied {
+        code.push(instruction(0x15, 0, 1, number as u32));
+        code.push(instruction(0x06, 0, 0, 0x00050000 | libc::EPERM as u32));
+    }
+    #[cfg(target_arch = "x86_64")]
+    for number in [libc::SYS_fork, libc::SYS_vfork] {
+        code.push(instruction(0x15, 0, 1, number as u32));
+        code.push(instruction(0x06, 0, 0, 0x00050000 | libc::EPERM as u32));
+    }
+    code.extend([
+        instruction(0x15, 0, 3, libc::SYS_clone as u32),
+        instruction(0x20, 0, 0, 16), // low word of clone flags
+        instruction(0x45, 1, 0, libc::CLONE_THREAD as u32),
+        instruction(0x06, 0, 0, 0x00050000 | libc::EPERM as u32),
+        instruction(0x06, 0, 0, 0x7fff0000),
+    ]);
+    let program = libc::sock_fprog {
+        len: code.len() as u16,
+        filter: code.as_mut_ptr(),
+    };
+    // SAFETY: the kernel copies a live BPF instruction array synchronously.
+    if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0
+        || unsafe { libc::prctl(libc::PR_SET_SECCOMP, 2, &program) } != 0
+    {
+        return Err(format!(
+            "plugin process restrictions unavailable: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+
 /// When Fiex itself is re-executed as Arapuca's wrapper, apply the sandbox
 /// and `execve` the real plugin. Called before any runtime/thread starts.
 #[cfg(target_os = "linux")]
@@ -104,6 +154,10 @@ pub fn run_wrapper_if_requested() {
     };
     if std::env::var_os("ARAPUCA_WRAPPER").as_deref() != Some(OsStr::new("1")) {
         return;
+    }
+    if let Err(error) = restrict_plugin_process_creation() {
+        eprintln!("{error}");
+        std::process::exit(1);
     }
     let args = std::env::args_os()
         .map(|arg| CString::new(arg.as_bytes()).unwrap_or_default())

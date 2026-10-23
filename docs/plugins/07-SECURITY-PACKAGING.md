@@ -1,44 +1,37 @@
 # 07 · 安全、权限与打包
 
-## 权限
+## 授权和资源代理
 
-插件 manifest 用布尔值声明三项权限：
+安装只保存插件，默认不激活。点击激活时展示当前 manifest 的全部能力、主机和外部命令，逐项同意后由 Core 原子提交授权；部分同意或过期声明不能激活。撤销任一项会停用并终止插件进程。
 
 ```json
 {
   "permissions": {
-    "filesystem": { "read": true, "write": true },
-    "network": { "enabled": true, "domains": ["github.com"] },
-    "commands": { "enabled": true, "allow": ["git"] }
+    "folders": { "read": { "enabled": true }, "create": true, "delete": false, "rename": false },
+    "files": { "read": true, "write": true },
+    "network": { "enabled": true, "domains": ["example.com", "127.0.0.1"] },
+    "commands": { "enabled": true, "allow": ["example-command"] }
   }
 }
 ```
 
-- `filesystem.read` / `filesystem.write`：用户文件读取/修改。
-- `network`：只允许连接 manifest 申请的域名与用户后来添加的域名。
-- `localhost`、`127.0.0.1`、`::1` 等回环地址始终允许，不要求加入白名单。
-- 需要运行命令时，manifest 用 `permissions.commands` 申请可执行文件名，协议要求所有调用都经宿主 `host.exec` 代理。Linux/Windows 的沙箱禁止插件进程执行；macOS 上游 Arapuca 的已知行为仍允许 `/usr`、`/bin`、`/opt/homebrew` 执行，这是被接受的例外。
+文件目录读取、创建目录项、删除、重命名、文件读取和写入分别授权。访问范围是任务启动时的当前目录及其子目录；符号链接不能越界。后台任务固定此范围。内容写入由 Core 暂存，提交前检查原文件变化，失败或取消时由 SDK 清理暂存。
 
-安装时必须展示全部声明权限；安装成功后才写入授权状态。撤销权限会停止插件进程。域名可以在设置中逐个删除或添加。
+HTTP(S) 和 TCP 共用 `network` 能力与精确域名/IP 白名单，不分协议授权。回环和局域网地址同样需要明确授权。重定向逐跳检查目标，跨源移除凭据，拒绝 HTTPS 降级。
+
+外部命令由 Host 从环境变量 PATH 查找，以当前用户身份执行插件提供的参数，不施加文件 SDK 的目录范围限制。授权命令存在访问其他文件、联网和启动程序的风险；界面用统一的外部命令风险提示说明。
 
 ## OS 沙箱
 
-| 平台    | 机制                                  | 状态                                              |
-| ------- | ------------------------------------- | ------------------------------------------------- |
-| Linux   | Arapuca：Landlock + seccomp           | 已实现并通过 Git/WebDAV/Archive/Checksum 集成测试 |
-| macOS   | Arapuca：`sandbox-exec` Seatbelt 配置 | 已实现，需真机 CI 验证                            |
-| Windows | Arapuca：AppContainer + Job Object    | 已接入启动器，需 Windows CI 真机验证              |
+插件原生进程不获得用户目录权限、可写安装目录、直接网络、其他 IPC 或子进程执行权限；只保留运行时系统读取和继承的控制管道。批准网络或文件能力不会放宽原生沙箱。
 
-Linux 规则：
+| 平台    | 实现                                                 | 验证      |
+| ------- | ---------------------------------------------------- | --------- |
+| Linux   | Landlock + seccomp，拒绝 Unix socket                 | GitHub CI |
+| macOS   | 自定义 deny-default Seatbelt，仅允许指定插件入口执行 | GitHub CI |
+| Windows | AppContainer + Job Object，关闭网络能力和子进程创建  | GitHub CI |
 
-- 无 `filesystem.read`：不授予用户目录读取。
-- 无 `filesystem.write`：不授予用户目录写入。
-- 无 `network`：seccomp 拒绝 `socket/connect/socketpair`。
-- 有 `network`：允许网络；域名白名单由插件在连接前校验，因为 Landlock 不能按域名过滤。
-- 插件通过宿主 `host.exec` 代理执行命令；宿主校验用户授权的命令名，拒绝 shell、路径和未授权程序。Linux/Windows 禁止插件直接执行；macOS 仅保留上述三个系统目录的已知例外。
-- 沙箱初始化失败时拒绝启动插件。
-
-**限制**：域名白名单是插件进程内的策略，不是 OS 级网络过滤；`host.exec` 代理执行宿主权限下的程序，因此用户授权命令等同于授予该命令的能力。macOS 上插件进程仍可直接执行 `/usr`、`/bin`、`/opt/homebrew` 下的程序；这是上游 Arapuca 的已知例外，协议层仍要求走宿主代理。Windows 的 AppContainer 启动器尚未在 CI 真机验证前视为完成。文档不得把这些描述成完全隔离。
+沙箱初始化失败时拒绝启动，禁止降级到无沙箱运行。三平台行为以当前 CI 结果为准。资源代理与原生命令授权边界详见 [激活和资源代理](18-ACTIVATION-AND-BROKER.md)。
 
 ## 安装包
 

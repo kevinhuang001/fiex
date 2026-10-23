@@ -455,6 +455,7 @@ pub fn catalog() -> Vec<PluginInfo> {
             let active = activation_requirements(&manifest).is_ok_and(|required| {
                 state.enabled && crate::plugin_permissions::activation_complete(&state, &required)
             });
+            let requested = activation_requirements(&manifest).unwrap_or_default();
             let capabilities = capabilities(&manifest.contributions);
             PluginInfo {
                 schema_version: manifest.schema_version,
@@ -471,9 +472,9 @@ pub fn catalog() -> Vec<PluginInfo> {
                 approved: state.approved,
                 declared_permissions: declared.into_iter().collect(),
                 granted_permissions: state.granted.into_iter().collect(),
-                requested_network_domains: manifest.permissions.network.domains,
+                requested_network_domains: requested.domains.into_iter().collect(),
                 allowed_network_domains: state.network_domains.into_iter().collect(),
-                requested_commands: manifest.permissions.commands.allow,
+                requested_commands: requested.commands.into_iter().collect(),
                 allowed_commands: state.commands.into_iter().collect(),
             }
         })
@@ -751,22 +752,34 @@ pub fn run_command(
     let mut child = process
         .spawn()
         .map_err(|error| format!("command failed to start: {error}"))?;
-    if let Some(stdin) = params.get("stdin").and_then(Value::as_str) {
-        if let Some(mut pipe) = child.stdin.take() {
-            pipe.write_all(stdin.as_bytes())
-                .map_err(|error| error.to_string())?;
-        }
-    } else {
-        drop(child.stdin.take());
+    let input = params.get("stdin").and_then(Value::as_str).unwrap_or("");
+    if input.len() > 1024 * 1024 {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("command input is too large".into());
     }
-    let out_thread = child
-        .stdout
-        .take()
-        .map(|stream| thread::spawn(move || read_capped(stream)));
-    let err_thread = child
-        .stderr
-        .take()
-        .map(|stream| thread::spawn(move || read_capped(stream)));
+    let (input_sender, input_receiver) = std::sync::mpsc::sync_channel(1);
+    let input = input.to_owned();
+    let input_pipe = child.stdin.take();
+    thread::spawn(move || {
+        let result = input_pipe.map_or(Ok(()), |mut pipe| pipe.write_all(input.as_bytes()));
+        let _ = input_sender.send(result);
+    });
+    let capture = |stream: Option<std::process::ChildStdout>| {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        thread::spawn(move || {
+            let value = stream.map(read_capped).unwrap_or_default();
+            let _ = sender.send(value);
+        });
+        receiver
+    };
+    let out_receiver = capture(child.stdout.take());
+    let (err_sender, err_receiver) = std::sync::mpsc::sync_channel(1);
+    let err_stream = child.stderr.take();
+    thread::spawn(move || {
+        let value = err_stream.map(read_capped).unwrap_or_default();
+        let _ = err_sender.send(value);
+    });
     let deadline = Instant::now() + EXEC_TIMEOUT;
     let status = loop {
         match child.try_wait().map_err(|error| error.to_string())? {
@@ -779,12 +792,17 @@ pub fn run_command(
             None => thread::sleep(Duration::from_millis(20)),
         }
     };
-    let (stdout, out_truncated) = out_thread
-        .map(|handle| handle.join().unwrap_or_default())
-        .unwrap_or_default();
-    let (stderr, err_truncated) = err_thread
-        .map(|handle| handle.join().unwrap_or_default())
-        .unwrap_or_default();
+    let remaining = || deadline.saturating_duration_since(Instant::now());
+    input_receiver
+        .recv_timeout(remaining())
+        .map_err(|_| "command input timed out")?
+        .map_err(|error| error.to_string())?;
+    let (stdout, out_truncated) = out_receiver
+        .recv_timeout(remaining())
+        .map_err(|_| "command output timed out")?;
+    let (stderr, err_truncated) = err_receiver
+        .recv_timeout(remaining())
+        .map_err(|_| "command error output timed out")?;
     use base64::Engine;
     Ok(json!({
         "code": status.code(),
@@ -802,7 +820,7 @@ struct Running {
     stdin: Box<dyn Write + Send>,
     stdout: std::sync::mpsc::Receiver<Result<Option<Value>, String>>,
     next_id: u64,
-    task_root: Option<PathBuf>,
+    task_root: Option<crate::plugin_fs_access::Scope>,
 }
 impl Running {
     /// All host.* requests are authenticated by the Running process identity,
@@ -819,7 +837,7 @@ impl Running {
         };
         let root = || {
             self.task_root
-                .as_deref()
+                .as_ref()
                 .ok_or_else(|| "no task directory".to_string())
         };
         let scope = || arg("scope");
@@ -1042,10 +1060,12 @@ impl Running {
                 &self.plugin_id,
                 scope()?
             )?)),
-            "host.secret.get" if permitted("secrets") => Ok(json!(
-                crate::plugin_storage::secret_get(&self.plugin_id, scope()?, key()?)?
-            )),
-            "host.secret.set" if permitted("secrets") => {
+            "host.secret.get" => Ok(json!(crate::plugin_storage::secret_get(
+                &self.plugin_id,
+                scope()?,
+                key()?
+            )?)),
+            "host.secret.set" => {
                 crate::plugin_storage::secret_set(
                     &self.plugin_id,
                     scope()?,
@@ -1054,24 +1074,27 @@ impl Running {
                 )?;
                 Ok(Value::Null)
             }
-            "host.secret.delete" if permitted("secrets") => {
+            "host.secret.delete" => {
                 crate::plugin_storage::secret_delete(&self.plugin_id, scope()?, key()?)?;
                 Ok(Value::Null)
             }
-            "host.secret.available" if permitted("secrets") => {
-                Ok(json!(crate::plugin_storage::secret_available()))
-            }
+            "host.secret.available" => Ok(json!(crate::plugin_storage::secret_available())),
             "host.exec" if permitted("commands") => host_exec(&self.plugin_id, &self.declared, p),
             "host.process.run" if permitted("commands") => run_command(
                 &self.plugin_id,
                 &self.declared,
                 p,
-                self.task_root.as_deref(),
+                self.task_root.as_ref().map(|scope| scope.path()),
             ),
             _ => Err("host method not available or permission denied".into()),
         }
     }
-    fn rpc(&mut self, method: &str, params: Value, root: Option<PathBuf>) -> Result<Value, String> {
+    fn rpc(
+        &mut self,
+        method: &str,
+        params: Value,
+        root: Option<crate::plugin_fs_access::Scope>,
+    ) -> Result<Value, String> {
         self.task_root = root;
         self.next_id += 1;
         let id = self.next_id;
@@ -1193,6 +1216,10 @@ impl PluginHost {
         params: Value,
         task_root: Option<PathBuf>,
     ) -> Result<Value, String> {
+        let task_root = task_root
+            .as_deref()
+            .map(crate::plugin_fs_access::Scope::new)
+            .transpose()?;
         let (manifest, _) = discover()
             .into_iter()
             .find(|(m, _)| m.id == plugin_id)
@@ -1247,7 +1274,7 @@ impl PluginHost {
                     }
                 }
             });
-            let mut running = Running {
+            let running = Running {
                 plugin_id: plugin_id.to_string(),
                 resource_owner: format!(
                     "{plugin_id}:{}:{}",
@@ -1264,14 +1291,6 @@ impl PluginHost {
                 next_id: 0,
                 task_root: None,
             };
-            let result = running.rpc(
-                "plugin.initialize",
-                json!({"protocolVersion":plugin_sdk::PROTOCOL_VERSION}),
-                task_root.clone(),
-            )?;
-            if result.get("pluginId").and_then(Value::as_str) != Some(plugin_id) {
-                return Err("plugin identity mismatch".into());
-            }
             let instance = Arc::new(Instance {
                 running: Mutex::new(running),
                 kill,
@@ -1280,11 +1299,23 @@ impl PluginHost {
             instance
         };
         drop(guard);
-        let response = instance
-            .running
-            .lock()
-            .map_err(|_| "plugin instance lock poisoned")?
-            .rpc(method, params, task_root);
+        let response = (|| {
+            let mut running = instance
+                .running
+                .lock()
+                .map_err(|_| "plugin instance lock poisoned")?;
+            if running.next_id == 0 {
+                let result = running.rpc(
+                    "plugin.initialize",
+                    json!({"protocolVersion":plugin_sdk::PROTOCOL_VERSION}),
+                    task_root.clone(),
+                )?;
+                if result.get("pluginId").and_then(Value::as_str) != Some(plugin_id) {
+                    return Err("plugin identity mismatch".into());
+                }
+            }
+            running.rpc(method, params, task_root)
+        })();
         if response.is_err() {
             instance.kill.terminate();
             if let Ok(mut guard) = self.children.lock() {

@@ -2,14 +2,13 @@
 //!
 //! The user-facing permission model is deliberately small:
 //! - `folders.read`: list directories and read entry metadata (including decoration data);
-//! - `folders.write`: create, remove and rename directory entries;
+//! - `folders.create`, `folders.delete`, `folders.rename`: independent entry operations;
 //! - `files.read`: read file contents;
 //! - `files.write`: modify file contents;
 //! - `network`: open network connections to explicitly allowed domains.
 //!
-//! Private plugin storage, host-rendered file choosers and process execution
-//! are not permission items. Storage and choosers are brokered by the host;
-//! execution is constrained by the OS sandbox.
+//! - `commands`: explicitly approved executable names, run by Host.
+//! Private plugin storage and host-rendered choosers are brokered by the host.
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -208,7 +207,7 @@ pub fn normalize_domain(input: &str) -> Result<String, String> {
     Ok(domain)
 }
 
-/// `localhost` and loopback literals never need an explicit allowlist entry.
+/// Classify loopback destinations; this does not grant access to them.
 pub fn is_loopback_domain(input: &str) -> bool {
     let Ok(domain) = normalize_domain(input) else {
         return false;

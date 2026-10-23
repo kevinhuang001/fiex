@@ -40,7 +40,7 @@ Plugins only participate when `contributions.decorations` is present.
 - `none` or absent: Core never calls the plugin.
 - `declarative`: Core applies the rules locally; no IPC.
 - `dynamic`: Core calls `method` once per directory/listing when the scope
-  matches and the plugin has `filesystem.read`.
+  matches and the plugin has `files.read`.
 
 ## Dynamic input
 

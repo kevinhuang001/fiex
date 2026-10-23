@@ -16,10 +16,30 @@ use std::{
 const MAX_CHUNK: usize = 256 * 1024;
 const MAX_HANDLES: usize = 32;
 
-fn relative(root: &Path, input: &str) -> Result<PathBuf, String> {
+/// Captured once at invocation start, including an open directory capability.
+#[derive(Clone)]
+pub struct Scope {
+    path: PathBuf,
+    dir: std::sync::Arc<Dir>,
+}
+impl Scope {
+    pub fn new(path: &Path) -> Result<Self, String> {
+        let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
+        let dir = Dir::open_ambient_dir(&path, ambient_authority()).map_err(|e| e.to_string())?;
+        Ok(Self {
+            path,
+            dir: std::sync::Arc::new(dir),
+        })
+    }
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+fn relative(root: &Scope, input: &str) -> Result<PathBuf, String> {
     let path = Path::new(input);
     let path = if path.is_absolute() {
-        path.strip_prefix(root)
+        path.strip_prefix(&root.path)
             .map_err(|_| "path outside task directory")?
     } else {
         path
@@ -36,8 +56,8 @@ fn relative(root: &Path, input: &str) -> Result<PathBuf, String> {
         path.into()
     })
 }
-fn directory(root: &Path) -> Result<Dir, String> {
-    Dir::open_ambient_dir(root, ambient_authority()).map_err(|e| e.to_string())
+fn directory(root: &Scope) -> Result<Dir, String> {
+    root.dir.try_clone().map_err(|e| e.to_string())
 }
 fn entry(dir: &Dir, path: &Path) -> Result<Value, String> {
     let metadata = dir.metadata(path).map_err(|e| e.to_string())?;
@@ -45,7 +65,7 @@ fn entry(dir: &Dir, path: &Path) -> Result<Value, String> {
         json!({"path": path.to_string_lossy(), "name": path.file_name().unwrap_or_default().to_string_lossy(), "isDir": metadata.is_dir(), "size": metadata.len(), "modified": metadata.modified().ok().and_then(|t| t.into_std().duration_since(std::time::UNIX_EPOCH).ok()).map(|t| t.as_secs()).unwrap_or(0), "extension": path.extension().unwrap_or_default().to_string_lossy(), "mime": if metadata.is_dir() { "inode/directory".into() } else { mime_guess::from_path(path).first_or_octet_stream().to_string() }, "readonly": metadata.permissions().readonly(), "symlink": dir.symlink_metadata(path).map(|m| m.is_symlink()).unwrap_or(false)}),
     )
 }
-pub fn list(root: &Path, input: &str) -> Result<Value, String> {
+pub fn list(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
     let mut values = Vec::new();
@@ -54,7 +74,7 @@ pub fn list(root: &Path, input: &str) -> Result<Value, String> {
             return Err("directory exceeds listing limit".into());
         }
         let item = item.map_err(|e| e.to_string())?;
-        // Out-of-scope symlinks are visible as metadata only, never followed.
+        // Omit symlinks whose targets cannot be resolved inside the capability.
         let child = path.join(item.file_name());
         if let Ok(value) = entry(&dir, &child) {
             values.push(value);
@@ -63,23 +83,23 @@ pub fn list(root: &Path, input: &str) -> Result<Value, String> {
     values.sort_by_key(|v| v["name"].as_str().unwrap_or("").to_lowercase());
     Ok(json!(values))
 }
-pub fn stat(root: &Path, input: &str) -> Result<Value, String> {
+pub fn stat(root: &Scope, input: &str) -> Result<Value, String> {
     entry(&directory(root)?, &relative(root, input)?)
 }
-pub fn create(root: &Path, input: &str) -> Result<Value, String> {
+pub fn create(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
     dir.open_with(&path, OpenOptions::new().write(true).create_new(true))
         .map_err(|e| e.to_string())?;
     entry(&dir, &path)
 }
-pub fn mkdir(root: &Path, input: &str) -> Result<Value, String> {
+pub fn mkdir(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
     dir.create_dir_all(&path).map_err(|e| e.to_string())?;
     entry(&dir, &path)
 }
-pub fn read_chunk(root: &Path, input: &str, offset: u64, length: usize) -> Result<Value, String> {
+pub fn read_chunk(root: &Scope, input: &str, offset: u64, length: usize) -> Result<Value, String> {
     let mut file = directory(root)?
         .open(relative(root, input)?)
         .map_err(|e| e.to_string())?;
@@ -95,7 +115,7 @@ pub fn read_chunk(root: &Path, input: &str, offset: u64, length: usize) -> Resul
 }
 pub fn read(
     owner: &str,
-    root: &Path,
+    root: &Scope,
     input: &str,
     offset: u64,
     length: usize,
@@ -108,7 +128,7 @@ pub fn read(
     crate::plugin_ipc::write(&buffer.id, &data)?;
     Ok(json!({"buffer": buffer, "size": data.len(), "eof": value["eof"]}))
 }
-pub fn remove(root: &Path, input: &str) -> Result<(), String> {
+pub fn remove(root: &Scope, input: &str) -> Result<(), String> {
     let path = relative(root, input)?;
     if !path.components().any(|c| matches!(c, Component::Normal(_))) {
         return Err("cannot remove task root".into());
@@ -121,7 +141,7 @@ pub fn remove(root: &Path, input: &str) -> Result<(), String> {
         dir.remove_file(path).map_err(|e| e.to_string())
     }
 }
-pub fn rename(root: &Path, from: &str, to: &str) -> Result<(), String> {
+pub fn rename(root: &Scope, from: &str, to: &str) -> Result<(), String> {
     let dir = directory(root)?;
     let from = relative(root, from)?;
     let to = relative(root, to)?;
@@ -138,7 +158,7 @@ pub fn rename(root: &Path, from: &str, to: &str) -> Result<(), String> {
 
 struct PendingWrite {
     owner: String,
-    root: PathBuf,
+    root: Dir,
     path: PathBuf,
     original: Option<Vec<u8>>,
     staging: tempfile::NamedTempFile,
@@ -164,7 +184,7 @@ fn fingerprint(dir: &Dir, path: &Path) -> Result<Option<Vec<u8>>, String> {
     }
     Ok(Some(hash.finalize().to_vec()))
 }
-pub fn begin_write(owner: &str, root: &Path, input: &str, create: bool) -> Result<String, String> {
+pub fn begin_write(owner: &str, root: &Scope, input: &str, create: bool) -> Result<String, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
     let original = fingerprint(&dir, &path)?;
@@ -193,7 +213,7 @@ pub fn begin_write(owner: &str, root: &Path, input: &str, create: bool) -> Resul
         handle.clone(),
         PendingWrite {
             owner: owner.into(),
-            root: root.into(),
+            root: dir,
             path,
             original,
             staging,
@@ -227,8 +247,8 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
         .get_mut(handle)
         .filter(|v| v.owner == owner)
         .ok_or("write handle unavailable")?;
-    let dir = directory(&write.root)?;
-    if fingerprint(&dir, &write.path)? != write.original {
+    let dir = &write.root;
+    if fingerprint(dir, &write.path)? != write.original {
         return Err("file changed since write began; commit aborted".into());
     }
     let parent = write
@@ -267,7 +287,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
         }
         output.sync_all().map_err(|e| e.to_string())?;
         drop(output);
-        if fingerprint(&dir, &write.path)? != write.original {
+        if fingerprint(dir, &write.path)? != write.original {
             return Err("file changed during commit".into());
         }
         if write.original.is_none() {
@@ -283,7 +303,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
                 .rename(&temp_name, &target_dir, name)
                 .map_err(|e| e.to_string())?;
         }
-        entry(&dir, &write.path)
+        entry(dir, &write.path)
     })();
     if result.is_err() {
         let _ = target_dir.remove_file(&temp_name);
@@ -295,7 +315,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
 }
 pub fn write(
     owner: &str,
-    root: &Path,
+    root: &Scope,
     path: &str,
     buffer: &str,
     mode: &str,
@@ -340,8 +360,9 @@ mod tests {
     #[test]
     fn staged_writes_preserve_conflicts_and_abort() {
         let root = tempfile::tempdir().unwrap();
+        let scope = Scope::new(root.path()).unwrap();
         std::fs::write(root.path().join("file"), b"old").unwrap();
-        let handle = begin_write("p", root.path(), "file", false).unwrap();
+        let handle = begin_write("p", &scope, "file", false).unwrap();
         write_chunk("p", &handle, &STANDARD.encode(b"new")).unwrap();
         assert_eq!(std::fs::read(root.path().join("file")).unwrap(), b"old");
         assert!(write_chunk("other", &handle, "").is_err());
@@ -352,23 +373,46 @@ mod tests {
             std::fs::read(root.path().join("file")).unwrap(),
             b"external"
         );
-        let handle = begin_write("p", root.path(), "created", true).unwrap();
+        let handle = begin_write("p", &scope, "created", true).unwrap();
         write_chunk("p", &handle, &STANDARD.encode([0, 255, 128])).unwrap();
         commit("p", &handle).unwrap();
         assert_eq!(
             std::fs::read(root.path().join("created")).unwrap(),
             [0, 255, 128]
         );
-        assert!(remove(root.path(), ".").is_err());
+        assert!(remove(&scope, ".").is_err());
     }
     #[cfg(unix)]
     #[test]
     fn symlinks_cannot_escape_task_root() {
         let root = tempfile::tempdir().unwrap();
+        let scope = Scope::new(root.path()).unwrap();
         let outside = tempfile::tempdir().unwrap();
         std::fs::write(outside.path().join("secret"), "secret").unwrap();
         std::os::unix::fs::symlink(outside.path(), root.path().join("link")).unwrap();
-        assert!(read_chunk(root.path(), "link/secret", 0, 100).is_err());
-        assert!(begin_write("p", root.path(), "link/secret", false).is_err());
+        assert!(read_chunk(&scope, "link/secret", 0, 100).is_err());
+        assert!(begin_write("p", &scope, "link/secret", false).is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn captured_directory_survives_root_path_replacement() {
+        let parent = tempfile::tempdir().unwrap();
+        let original = parent.path().join("original");
+        let moved = parent.path().join("moved");
+        let outside = parent.path().join("outside");
+        std::fs::create_dir(&original).unwrap();
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(original.join("file"), b"bound").unwrap();
+        std::fs::write(outside.join("file"), b"outside").unwrap();
+        let scope = Scope::new(&original).unwrap();
+        let handle = begin_write("captured", &scope, "file", false).unwrap();
+        write_chunk("captured", &handle, &STANDARD.encode(b"updated")).unwrap();
+        std::fs::rename(&original, &moved).unwrap();
+        std::os::unix::fs::symlink(&outside, &original).unwrap();
+        let read = read_chunk(&scope, "file", 0, 100).unwrap();
+        assert_eq!(read["base64"], STANDARD.encode(b"bound"));
+        commit("captured", &handle).unwrap();
+        assert_eq!(std::fs::read(moved.join("file")).unwrap(), b"updated");
+        assert_eq!(std::fs::read(outside.join("file")).unwrap(), b"outside");
     }
 }

@@ -42,7 +42,7 @@ Release 必须包含：
       "version": "0.1.0",
       "description": "源代码管理与历史浏览",
       "author": { "name": "Fiex Contributors" },
-      "permissions": ["filesystem.read", "filesystem.write", "network"],
+      "permissions": ["folders.read", "files.read", "files.write", "network"],
       "networkDomains": ["github.com"],
       "assets": {
         "linux-x86_64": "git-linux-x86_64.fiexplugin",
@@ -60,6 +60,6 @@ Core 的插件商店读取该文件，只展示当前平台存在 asset 的条�
 
 - **Core CI**：前端格式/单测/构建/e2e；Rust fmt/clippy/单测；SDK mock 进程 IPC；三平台安装包。
 - **SDK CI**：Rust 帧解析、HostClient、TypeScript Bridge 类型与 Node 测试。
-- **Plugin CI**：五个 crate 的 fmt/test/clippy/build、真实进程握手、三平台打包、WebDAV/SMB 真实服务器测试、Core 宿主集成。
+- **Plugin CI**：六个 crate 的 fmt/test/clippy/build、真实进程握手、三平台打包、WebDAV/SMB 真实服务器测试、Core 宿主集成。
 
 任何仓库升级 SDK 都必须固定 commit 并各自跑 CI；不把插件 CI 合并进 Core。
