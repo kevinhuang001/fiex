@@ -63,6 +63,9 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
   const panePaths = left.tabs.map((_, index) =>
     index === left.tab ? (split ? right.path : null) : (tabs.current[index]?.right?.path ?? null),
   )
+  const paneActives = left.tabs.map((_, index) =>
+    index === left.tab ? active : (tabs.current[index]?.active ?? 'left'),
+  )
   return {
     right,
     x,
@@ -72,6 +75,7 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
     setActive,
     paneWidth,
     panePaths,
+    paneActives,
     setPaneWidth,
     switchWorkspaceTab,
     newWorkspaceTab,
