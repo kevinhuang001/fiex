@@ -19,7 +19,7 @@ const plugin = (id: string, priority: number, hooks = true): PluginInfo => ({
   enabled: true,
   approved: true,
   backendAvailable: true,
-  capabilities: [],
+
   declaredPermissions: hooks ? ['hooks'] : [],
   grantedPermissions: hooks ? ['hooks'] : [],
   requestedCommands: [],

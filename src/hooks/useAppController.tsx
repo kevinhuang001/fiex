@@ -38,6 +38,7 @@ export function useAppController() {
     setPaneWidth,
     panePaths,
     paneActives,
+    viewReferences,
     switchWorkspaceTab,
     newWorkspaceTab,
     closeWorkspaceTab,
@@ -48,8 +49,29 @@ export function useAppController() {
   useEffect(() => {
     if (left.tabs.length) saveTabs(left.tabs, left.tab)
   }, [left.tabs, left.tab])
+  useEffect(() => {
+    if (left.path && left.path !== 'recent://') localStorage.setItem('fiex:lastPath', left.path)
+  }, [left.path])
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
+  const retainedViews = JSON.stringify({
+    paths: viewReferences,
+    durable: [
+      ...(prefs.restoreTabs ? left.tabs : []),
+      ...prefs.favorites.map((f) => f.path),
+      ...workspace.items.map((e) => e.path),
+      ...(prefs.startPage === 'last' ? [left.path] : []),
+    ],
+  })
+  useEffect(() => {
+    if (!native) return
+    const timer = window.setTimeout(() => {
+      void call('vfs_retain_views', JSON.parse(retainedViews)).catch((error) =>
+        left.setError(String(error)),
+      )
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [retainedViews])
   const selectedAll = split ? [...new Set([...left.selected, ...right.selected])] : left.selected
   const focusSearch = () => {
     const selector =

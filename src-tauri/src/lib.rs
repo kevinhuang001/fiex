@@ -37,6 +37,8 @@ pub mod plugin_resources;
 #[path = "plugins/signing.rs"]
 pub mod plugin_signing;
 pub use fiex_plugin_sdk as plugin_sdk;
+#[path = "plugins/mounts.rs"]
+pub mod mounts;
 #[path = "plugins/sandbox/mod.rs"]
 pub mod plugin_sandbox;
 #[path = "plugins/search.rs"]

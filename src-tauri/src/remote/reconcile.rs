@@ -1,8 +1,8 @@
 //! Durable, restart-safe reconciliation. Provider revisions are opaque and
-//! writes require a server-enforced precondition. Failed uploads retain bytes.
+//! providers enforce their protocol-specific revision checks. Failed uploads retain bytes.
 use super::{config::*, files::*, store::*, sync::*};
 use serde_json::{json, Value};
-use std::{fs, io::Read};
+use std::fs;
 
 fn invoke(conn: &StoredConnection, method: &str, mut params: Value) -> Result<Value, String> {
     let plugin = ensure_provider_access(conn)?;
@@ -19,7 +19,6 @@ fn stat(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<Val
 }
 
 fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<String, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
     let local = local_for(conn, rel);
     check_cache_path(conn, &local)?;
     // A stable disk snapshot prevents mixing two saves during a long upload.
@@ -41,78 +40,30 @@ fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<S
         .metadata()
         .map_err(|e| e.to_string())?
         .len();
-    if super::config::write_mode(conn) == "file" {
-        let plugin = ensure_provider_access(conn)?;
-        let source = snapshot
-            .path()
-            .file_name()
-            .ok_or("invalid upload source")?
-            .to_string_lossy()
-            .into_owned();
-        let result = crate::plugin_host::global().invoke_selected(&plugin, "fs.writeFile",
-            json!({"connection":provider_config(conn), "nodeId":file.node_id, "source":source, "size":size, "ifRevision":file.revision}),
-            snapshot.path().parent().ok_or("invalid upload source")?.to_str().ok_or("invalid upload path")?,
-            &[snapshot.path().to_path_buf()])?;
-        let revision = result["revision"]
-            .as_str()
-            .filter(|r| !r.is_empty())
-            .ok_or("missing committed revision")?;
-        let mut meta = load_meta(conn);
-        let entry = meta.files.get_mut(rel).ok_or("cache entry disappeared")?;
-        entry.revision = revision.into();
-        entry.baseline = before;
-        entry.local_stamp = if fingerprint(&local)? == entry.baseline {
-            stamp(&local)?
-        } else {
-            String::new()
-        };
-        entry.size = size;
-        entry.conflict = false;
-        save_meta(conn, &meta)?;
-        return Ok(revision.into());
-    }
-    let opened = invoke(
-        conn,
-        "fs.beginWrite",
-        json!({"nodeId":file.node_id,"size":size,"ifRevision":file.revision}),
-    )?;
-    let id = opened["streamId"].as_str().ok_or("missing write stream")?;
-    let result: Result<(String, String), String> = (|| {
-        use std::io::{Seek, SeekFrom};
-        snapshot
-            .as_file_mut()
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| e.to_string())?;
-        let mut buffer = vec![0; 256 * 1024];
-        let mut offset = 0u64;
-        loop {
-            let count = snapshot.read(&mut buffer).map_err(|e| e.to_string())?;
-            if count == 0 {
-                break;
-            }
-            invoke(
-                conn,
-                "fs.writeStream",
-                json!({"streamId":id,"offset":offset,"base64":STANDARD.encode(&buffer[..count])}),
-            )?;
-            offset += count as u64;
-        }
-        let committed = invoke(conn, "fs.commitWrite", json!({"streamId":id}))?;
-        let revision = committed["revision"]
-            .as_str()
-            .filter(|r| !r.is_empty())
-            .ok_or("missing committed revision")?;
-        Ok((revision.to_owned(), before))
-    })();
-    if result.is_err() {
-        let _ = invoke(conn, "fs.abortWrite", json!({"streamId":id}));
-    }
-    let (revision, baseline) = result?;
+    let plugin = ensure_provider_access(conn)?;
+    let source = snapshot
+        .path()
+        .file_name()
+        .ok_or("invalid upload source")?
+        .to_string_lossy()
+        .into_owned();
+    let node = if file.node_id.is_empty() {
+        rel
+    } else {
+        &file.node_id
+    };
+    let result = crate::plugin_host::global().invoke_selected(&plugin, "fs.writeFile",
+        json!({"connection":provider_config(conn), "nodeId":node, "source":source, "size":size, "ifRevision":file.revision}),
+        snapshot.path().parent().ok_or("invalid upload source")?.to_str().ok_or("invalid upload path")?,
+        &[snapshot.path().to_path_buf()])?;
+    let revision = result["revision"]
+        .as_str()
+        .filter(|r| !r.is_empty())
+        .ok_or("missing committed revision")?;
     let mut meta = load_meta(conn);
     let entry = meta.files.get_mut(rel).ok_or("cache entry disappeared")?;
-    entry.revision = revision.clone();
-    entry.baseline = baseline;
-    // Only stamp the current file if it still matches the uploaded snapshot.
+    entry.revision = revision.into();
+    entry.baseline = before;
     entry.local_stamp = if fingerprint(&local)? == entry.baseline {
         stamp(&local)?
     } else {
@@ -121,7 +72,7 @@ fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<S
     entry.size = size;
     entry.conflict = false;
     save_meta(conn, &meta)?;
-    Ok(revision)
+    Ok(revision.into())
 }
 
 fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
@@ -184,7 +135,7 @@ pub async fn reconcile() {
 
 pub async fn reconcile_connection(id: &str) {
     for conn in load_stored().into_iter().filter(|conn| conn.id == id) {
-        if !supports_sync(&conn) {
+        if ensure_provider_access(&conn).is_err() {
             continue;
         }
         // The desktop scheduler runs separate connections independently.

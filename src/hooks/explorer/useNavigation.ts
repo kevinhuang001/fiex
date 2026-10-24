@@ -121,9 +121,16 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
             : tab,
     )
   }
+  const referencedPaths = [
+    ...history,
+    ...tabs,
+    ...tabHistory.current.flatMap((item, index) => (index === tab ? [] : item.paths)),
+  ]
   const snapshotNavigation = () => ({ path, history, cursor })
   const restoreNavigation = (state: { path: string; history: string[]; cursor: number }) => {
     setPath(state.path)
+    setTabs((paths) => paths.map((path, index) => (index === tab ? state.path : path)))
+    tabHistory.current[tab] = { paths: state.history, cursor: state.cursor }
     setHistory(state.history)
     setCursor(state.cursor)
     setQuery('')
@@ -132,6 +139,7 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   }
   return {
     path,
+    referencedPaths,
     selected,
     setSelected,
     renaming,

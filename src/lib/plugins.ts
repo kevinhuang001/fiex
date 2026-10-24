@@ -51,7 +51,7 @@ export interface PluginInfo {
   version: string
   description?: string
   icon?: string
-  capabilities: string[]
+
   enabled: boolean
   author?: { name: string; url?: string }
   approved: boolean

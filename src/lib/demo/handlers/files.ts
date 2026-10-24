@@ -1,7 +1,7 @@
 import type { Listing } from '../../types'
 import { basename, join, parent } from '../../files'
 import { demoChanges, ignored, item, repoFor, root, snapshotEntries } from '../data'
-import { notHandled, state } from './shared'
+import { demoViews, notHandled, state } from './shared'
 
 export async function handleFiles(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
@@ -21,28 +21,38 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         { algorithm: 'CRC32', value: '352441c2' },
       ]
     case 'list_directory': {
-      if (String(a.path).startsWith('history://')) {
-        const base = String(a.path).match(/^history:\/\/[^/]+\/[^/]+/)![0]
-        const original = atob(base.split('/')[2]) + String(a.path).slice(base.length)
+      const view = [...demoViews].find(([uri]) => String(a.path).startsWith(uri))
+      if (view) {
+        const [base, descriptor] = view
+        const original =
+          descriptor.root +
+          '/' +
+          String(a.path).slice(base.length).split('/').map(decodeURIComponent).join('/')
         return {
           path: a.path,
           entries: snapshotEntries
             .filter(
               (e) =>
-                parent(e.path) === original &&
+                parent(e.path) === original.replace(/\/$/, '') &&
                 (a.hidden || !e.name.startsWith('.')) &&
                 !ignored(e.name, a.ignores),
             )
             .map((e) => ({
               ...e,
-              path: base + e.path.slice(atob(base.split('/')[2]).length),
+              path:
+                base +
+                e.path
+                  .slice(view[1].root.length + 1)
+                  .split('/')
+                  .map(encodeURIComponent)
+                  .join('/'),
               readonly: true,
             })),
           warnings: [],
         }
       }
 
-      const remoteRoot = root + '/.fiex/drives/demo-webdav'
+      const remoteRoot = 'fiex://mount/demo-webdav'
       if ((a.path as string).startsWith(remoteRoot)) {
         return {
           path: a.path,
@@ -155,7 +165,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     case 'read_preview':
       if (String(a.path).endsWith('/Palette.json'))
         return '{\n  "accent": "#387ca8",\n  "surface": "#f8fafc",\n  "radius": 12\n}'
-      if (String(a.path).startsWith('history://'))
+      if ([...demoViews.keys()].some((uri) => String(a.path).startsWith(uri)))
         return '# Fiex · 历史版本\n\n这是提交时保存的内容，当前工作区没有改变。'
       return '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
     case 'set_tags': {

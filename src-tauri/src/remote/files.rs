@@ -60,6 +60,9 @@ pub(crate) fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<Remo
             .get("entries")
             .and_then(serde_json::Value::as_array)
             .ok_or("provider response missing entries")?;
+        if entries.len() > 500 || files.len() + entries.len() > 100_000 {
+            return Err("provider exceeded listing limit".into());
+        }
         for entry in entries {
             let name = entry
                 .get("name")
@@ -124,6 +127,7 @@ pub async fn list_listing(
     let Some((conn, relative)) = connection_for_path(path) else {
         return Ok(None);
     };
+    ensure_provider_access(&conn)?;
     let _guard = super::sync::lock(&conn).await;
     let rel = rel_string(&relative);
     let mut metadata = load_meta(&conn);
@@ -167,7 +171,7 @@ pub async fn list_listing(
             .is_some_and(|meta| meta.downloaded)
             && local.is_file();
         entries.push(crate::files::Entry {
-            path: local.to_string_lossy().into_owned(),
+            path: super::config::navigation_path(&conn, &child)?,
             name: file.name,
             is_dir: file.is_dir,
             is_symlink: false,
@@ -211,7 +215,7 @@ pub async fn list_listing(
     Ok(Some(crate::files::Listing {
         read_only: true,
         virtual_volume: true,
-        path: path.into(),
+        path: super::config::navigation_path(&conn, &rel)?,
         entries,
         warnings,
     }))
@@ -385,6 +389,7 @@ pub async fn provider_list(
 
 pub async fn download(path: &str, options: &TransferOptions) -> Result<String, String> {
     let Some((conn, _)) = connection_for_path(path) else {
+        crate::mounts::reject_local(path)?;
         return Ok(path.into());
     };
     let _guard = super::sync::lock(&conn).await;
@@ -393,8 +398,10 @@ pub async fn download(path: &str, options: &TransferOptions) -> Result<String, S
 
 pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<String, String> {
     let Some((conn, rel)) = connection_for_path(path) else {
+        crate::mounts::reject_local(path)?;
         return Ok(path.into());
     };
+    ensure_provider_access(&conn)?;
     let rel = rel_string(&rel);
     let mut meta = load_meta(&conn);
     let local = local_for(&conn, &rel);
@@ -409,9 +416,7 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
         let listing = list_remote(&conn, parent)?;
         remember_listing(parent, &listing, &mut meta);
     }
-    if meta.files.get(&rel).is_some_and(|f| f.revision.is_empty())
-        && super::config::supports_sync(&conn)
-    {
+    if meta.files.get(&rel).is_some_and(|f| f.revision.is_empty()) {
         let file = &meta.files[&rel];
         if let Ok(info) = crate::plugin_host::global().invoke(
             &ensure_provider_access(&conn)?, "fs.stat",
@@ -532,11 +537,13 @@ pub async fn ensure_downloaded(path: &str, options: &TransferOptions) -> Result<
     if connection_for_path(path).is_some() {
         download(path, options).await
     } else {
+        crate::mounts::reject_local(path)?;
         Ok(path.into())
     }
 }
 
 pub fn eject(path: &str) -> Result<(), String> {
+    crate::mounts::reject_local(path)?;
     #[cfg(target_os = "macos")]
     {
         let status = std::process::Command::new("diskutil")
@@ -584,6 +591,56 @@ pub fn eject(path: &str) -> Result<(), String> {
     }
     #[allow(unreachable_code)]
     Err("当前平台不支持弹出设备".into())
+}
+
+/// Metadata remains usable before a file has ever been downloaded.
+pub fn stat(path: &str) -> Result<crate::files::Entry, String> {
+    let (conn, relative) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
+    ensure_provider_access(&conn)?;
+    let rel = rel_string(&relative);
+    let mut meta = load_meta(&conn);
+    if !rel.is_empty() && !meta.files.contains_key(&rel) {
+        let parent = rel.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+        remember_listing(parent, &list_remote(&conn, parent)?, &mut meta);
+        save_meta(&conn, &meta)?;
+    }
+    let file = meta.files.get(&rel);
+    if !rel.is_empty() && file.is_none() {
+        return Err("remote node not found".into());
+    }
+    let name = relative
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| conn.name.clone());
+    Ok(crate::files::Entry {
+        path: super::config::navigation_path(&conn, &rel)?,
+        name,
+        is_dir: file.is_none_or(|m| m.is_dir),
+        is_symlink: false,
+        size: file.map(|m| m.size).unwrap_or(0),
+        modified: file.map(|m| m.modified).unwrap_or(0),
+        created: 0,
+        extension: relative
+            .extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
+        mime: mime_guess::from_path(&relative)
+            .first_or_octet_stream()
+            .to_string(),
+        readonly: true,
+        link_target: None,
+        tags: vec![],
+        sync: Some("cloud".into()),
+    })
+}
+/// OS operations receive only a checked materialized cache path.
+pub fn cached_path(path: &str) -> Result<String, String> {
+    let (conn, rel) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
+    ensure_provider_access(&conn)?;
+    let local = local_for(&conn, &rel_string(&rel));
+    super::config::check_cache_path(&conn, &local)?;
+    Ok(local.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

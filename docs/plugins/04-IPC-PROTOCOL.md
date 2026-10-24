@@ -55,7 +55,7 @@ Core 在启动插件后发送：
 | `fs.closeRead`                       | 关闭读取流                                        |
 | `git.*` / `archive.*` / `checksum.*` | 插件自定义命令                                    |
 
-`vfs.*` 用于插件在 `connections` / `toolbar` 条目里通过 `schemes` 声明的虚拟路径（例如 Git 的 `history://`）。Core 按 scheme 找到已安装、已授权的插件，不硬编码插件 ID。
+`vfs.*` 用于显式 `contributions.vfs` 的 Core View；`connections` 通过现有远端适配器隐式具备内部 VFS。Core 用 `fiex://mount/<id>/` 查找已绑定 owner。`host.vfs.openView` 校验当前 IPC 身份、contribution 和选中目录，返回 Core URI；插件不得声明 scheme。详情见 [VFS](02-VFS.md)。
 
 `fs.*` 只用于远程只读连接。Core 负责暂存、目标文件和缓存；插件不接收宿主绝对路径。
 
@@ -71,7 +71,7 @@ Core 在启动插件后发送：
 ## 4. 分页与流
 
 - `vfs.list` / `fs.list` 返回 `{entries,nextCursor,snapshotToken?,warnings?}`。
-- 条目字段：`nodeId,name,kind,size,modified,capabilities?`。
+- 条目字段：`nodeId,name,kind,size,modified`。
 - Core 每次请求最多 500 条，拒绝游标不前进或条目过多。
 - `fs.openRead` 返回 `{streamId,size?}`。`fs.readStream` 每次最多 256 KiB，必须返回 `eof`。
 - 传输上限 16 GiB；Core 在取消或失败时删除暂存文件。

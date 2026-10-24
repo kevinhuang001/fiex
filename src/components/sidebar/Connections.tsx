@@ -27,7 +27,7 @@ export function Connections({
         x.connections.map((connection) => (
           <div className="device-row" key={connection.id}>
             <button
-              className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath + '/') ? 'active' : ''}`}
+              className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
               onClick={() => x.navigate(connection.mountPath)}
             >
               <Server />

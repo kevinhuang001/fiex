@@ -40,6 +40,7 @@ fn shortcut_target(path: &Path) -> Option<String> {
 }
 
 pub fn entry(path: &Path) -> Result<Entry, String> {
+    crate::mounts::reject_local(&path.to_string_lossy())?;
     let link = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     // Most entries are not links. Reuse lstat instead of issuing a second
     // metadata syscall for every item in a large directory.
@@ -111,6 +112,7 @@ pub struct Listing {
     pub warnings: Vec<String>,
 }
 pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, String> {
+    crate::mounts::reject_local(path)?;
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
     let ignore = crate::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
@@ -163,6 +165,7 @@ pub fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 pub fn text_preview(path: &str) -> Result<String, String> {
+    crate::mounts::reject_local(path)?;
     use std::io::Read;
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut bytes = Vec::new();

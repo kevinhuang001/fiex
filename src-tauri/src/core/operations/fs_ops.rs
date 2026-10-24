@@ -11,6 +11,7 @@ use std::{
 };
 
 pub(super) fn create_entry(dir: &str, name: &str, folder: bool) -> Result<PathBuf, String> {
+    crate::mounts::reject_local(dir)?;
     validate_name(name)?;
     let path = Path::new(dir).join(name);
     if folder {
@@ -28,6 +29,7 @@ pub(super) fn create_entry(dir: &str, name: &str, folder: bool) -> Result<PathBu
 /// Rename in place. `None` means the name did not change, so there is nothing
 /// to undo.
 pub(super) fn rename_entry(source: &str, name: &str) -> Result<Option<PathBuf>, String> {
+    crate::mounts::reject_local(source)?;
     validate_name(name)?;
     let src = Path::new(source);
     let dest = src.with_file_name(name);
@@ -196,6 +198,9 @@ pub(crate) fn copy_tree_with_progress(
 }
 
 pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
+    for path in paths {
+        crate::mounts::reject_local(path)?;
+    }
     let mut result = OperationResult::default();
     for path in paths {
         let before = crate::volumes::trash_names();

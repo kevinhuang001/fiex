@@ -514,6 +514,7 @@ impl Running {
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
+            "host.vfs.openView" => crate::mounts::open_view(&self.plugin_id, p, root()?),
             "host.net.http.open" if permitted("network") => {
                 crate::plugin_net::http_open(owner, &self.plugin_id, &self.declared, p)
             }

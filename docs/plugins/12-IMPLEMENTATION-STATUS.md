@@ -6,7 +6,7 @@
 
 - **进程宿主**：manifest 发现、用户授权、独立进程、握手、身份校验、启用/停用、卸载。
 - **权限**：六项目录/文件能力、`network`、外部命令；HTTP/TCP 共用精确主机白名单，回环地址也需授权。
-- **通用虚拟 VFS**：插件通过 `connections` / `toolbar` 的 `schemes` 注册虚拟路径；Core 用 `vfs.list/stat/readSmall/search` 路由，不再硬编码 `history://`。
+- **通用虚拟 VFS**：独立 `vfs` Contribution、Connection 隐式 VFS、Core 统一 URI/Owner 路由、按需 Git View 和有界引用回收已经接入；无系统级挂载。详见 [VFS](02-VFS.md)。
 - **Git 插件化**：Core 删除 `git.rs`/`git_history.rs`/`git_remote.rs` 业务实现；专用命令只做插件代理。
 - **远程流**：WebDAV/SMB 使用 `fs.openRead/readStream/closeRead`，Core 负责暂存文件、块大小、EOF 和取消清理；不再交接绝对路径。
 - **官方插件**：Git、WebDAV、SMB、Archive、Checksum、Everything 搜索独立 crate，独立构建与打包。

@@ -31,6 +31,64 @@ pub(crate) async fn plugin_invoke(
     directory: Option<String>,
     selected_paths: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
+    if method.starts_with("vfs.")
+        || method.starts_with("fs.")
+        || method.starts_with("connection.")
+        || method.starts_with("host.")
+        || method.starts_with("core.")
+    {
+        return Err("PermissionDenied: provider and host methods are Core-only".into());
+    }
+    let mut directory = directory;
+    let mut selected_paths = selected_paths;
+    let mut params = params;
+    // Selected virtual resources become exact Core-owned materializations.
+    // This never grants a feature plugin access to the owner's repository.
+    if let Some(paths) = selected_paths.as_mut() {
+        let mut replacements = std::collections::HashMap::new();
+        for path in paths.iter_mut() {
+            if crate::mounts::handles(path) {
+                let local = materialize_file(path.clone()).await?;
+                replacements.insert(path.clone(), local.clone());
+                *path = local;
+            }
+        }
+        if !replacements.is_empty() {
+            if let Some(original) = directory.as_ref().filter(|p| crate::mounts::handles(p)) {
+                let local = std::path::Path::new(&paths[0])
+                    .parent()
+                    .ok_or("invalid materialization path")?
+                    .to_string_lossy()
+                    .into_owned();
+                replacements.insert(original.clone(), local.clone());
+                directory = Some(local);
+            }
+            fn replace(
+                value: &mut serde_json::Value,
+                mappings: &std::collections::HashMap<String, String>,
+            ) {
+                match value {
+                    serde_json::Value::String(text) => {
+                        if let Some(local) = mappings.get(text) {
+                            *text = local.clone();
+                        }
+                    }
+                    serde_json::Value::Array(items) => {
+                        for item in items {
+                            replace(item, mappings);
+                        }
+                    }
+                    serde_json::Value::Object(fields) => {
+                        for item in fields.values_mut() {
+                            replace(item, mappings);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            replace(&mut params, &replacements);
+        }
+    }
     let id = plugin_id.clone();
     let call = method.clone();
     tauri::async_runtime::spawn_blocking(move || match (directory, selected_paths) {
@@ -159,6 +217,19 @@ pub(crate) fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
 }
 #[tauri::command]
 pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::InfoSection> {
+    let path = if crate::mounts::handles(&path) {
+        if crate::remote::is_remote(&path)
+            && crate::remote::stat(&path).is_ok_and(|entry| entry.is_dir)
+        {
+            return Vec::new();
+        }
+        match materialize_file(path).await {
+            Ok(path) => path,
+            Err(_) => return Vec::new(),
+        }
+    } else {
+        path
+    };
     tauri::async_runtime::spawn_blocking(move || crate::plugin_info::file_info(&path))
         .await
         .unwrap_or_default()
@@ -383,4 +454,48 @@ pub(crate) fn plugin_files_dialog(
             .map(|p| p.to_string_lossy().into_owned())
             .collect()
     }))
+}
+
+/// One window reports all live history references and explicitly saved paths.
+#[tauri::command]
+pub(crate) fn vfs_retain_views(
+    window: tauri::Window,
+    paths: Vec<String>,
+    durable: Vec<String>,
+) -> Result<(), String> {
+    crate::mounts::retain(window.label(), &paths, &durable)
+}
+#[tauri::command]
+pub(crate) async fn materialize_file(path: String) -> Result<String, String> {
+    if crate::remote::is_remote(&path) {
+        if crate::remote::stat(&path)?.is_dir {
+            crate::remote::download_dir(&path, &crate::remote::TransferOptions::default()).await?;
+            return crate::remote::cached_path(&path);
+        }
+        return crate::remote::ensure_downloaded(&path, &crate::remote::TransferOptions::default())
+            .await;
+    }
+    if crate::plugin_vfs::handles(&path) {
+        return tauri::async_runtime::spawn_blocking(move || crate::plugin_vfs::materialize(&path))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    crate::mounts::reject_local(&path)?;
+    Ok(path)
+}
+
+/// Only the owner of an existing view may recover its already authorized
+/// resource context. Other plugins see the URI, never the backing local root.
+#[tauri::command]
+pub(crate) fn plugin_context_directory(plugin_id: String, path: String) -> Result<String, String> {
+    if !crate::mounts::handles(&path) {
+        return Ok(path);
+    }
+    let (_, source) = crate::mounts::resolve(&path)?;
+    match source {
+        crate::mounts::Source::View(view) if view.descriptor.plugin_id == plugin_id => {
+            Ok(view.descriptor.resource_root)
+        }
+        _ => Ok(path),
+    }
 }

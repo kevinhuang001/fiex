@@ -1,6 +1,30 @@
 import type { Entry, Group, Sort } from './types'
+export type CorePath = { root: string; parts: string[] }
+export function corePath(path: string): CorePath | null {
+  if (!/^fiex:/i.test(path)) return null
+  const match = path.match(/^fiex:\/\/mount\/([A-Za-z0-9-]{1,128})\/(.*)$/)
+  if (!match || path.length > 32768 || match[2].split('/').length > 256)
+    throw new Error('InvalidVfsUri')
+  const parts = match[2]
+    ? match[2].split('/').map((part) => {
+        if (/[?#\\]/.test(part)) throw new Error('InvalidVfsUri')
+        const decoded = decodeURIComponent(part)
+        if (
+          !decoded ||
+          decoded.length > 1024 ||
+          ['.', '..'].includes(decoded) ||
+          /[/\\\0:\x00-\x1f\x7f]/.test(decoded) ||
+          /%(?:2e|2f|5c|00|25)/i.test(decoded)
+        )
+          throw new Error('InvalidVfsUri')
+        return decoded
+      })
+    : []
+  return { root: `fiex://mount/${match[1]}/`, parts }
+}
 export function parent(path: string): string {
-  if (/^history:\/\/[^/]+\/[^/]+\/?$/.test(path)) return path.replace(/\/$/, '')
+  const core = corePath(path)
+  if (core) return core.root + core.parts.slice(0, -1).map(encodeURIComponent).join('/')
   const p = path.replace(/[\\/]+$/, '')
   const sep = p.includes('\\') ? '\\' : '/'
   const i = p.lastIndexOf(sep)
@@ -10,31 +34,56 @@ export function parent(path: string): string {
   return /^[A-Za-z]:$/.test(root) ? root + '\\' : root
 }
 export function join(path: string, name: string): string {
+  const core = corePath(path)
+  if (core) {
+    const result = core.root + [...core.parts, name].map(encodeURIComponent).join('/')
+    corePath(result)
+    return result
+  }
   return path.replace(/[\\/]+$/, '') + (path.includes('\\') ? '\\' : '/') + name
 }
 export type Crumb = { name: string; path: string }
-
 export function pathCrumbs(
   path: string,
   displayName: (path: string) => string = (value) =>
     value === 'recent://' ? value : basename(value),
 ): Crumb[] {
-  const historyRoot = path.match(/^history:\/\/[^/]+\/[^/]+/)?.[0]
-  const parts = (historyRoot ? path.slice(historyRoot.length) : path).split(/[\\/]/).filter(Boolean)
-  let accumulated = historyRoot || (path.startsWith('/') ? '' : path.startsWith('\\') ? '\\\\' : '')
-  const crumbs = parts.map((name) => {
-    accumulated = accumulated
-      ? join(accumulated, name)
-      : path.startsWith('/')
-        ? '/' + name
-        : name + '\\'
-    return { name: displayName(accumulated) || name, path: accumulated }
-  })
-  if (path === 'recent://') return [{ name: displayName('recent://'), path }]
-  return historyRoot ? [{ name: '历史版本', path: historyRoot }, ...crumbs] : crumbs
+  const core = corePath(path)
+  if (core)
+    return [
+      { name: displayName(core.root) || '虚拟文件系统', path: core.root },
+      ...core.parts.map((name, index) => ({
+        name,
+        path:
+          core.root +
+          core.parts
+            .slice(0, index + 1)
+            .map(encodeURIComponent)
+            .join('/'),
+      })),
+    ]
+  if (path === 'recent://') return [{ name: displayName(path), path }]
+  let accumulated = path.startsWith('/') ? '' : path.startsWith('\\') ? '\\\\' : ''
+  return path
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .map((name) => {
+      accumulated = accumulated
+        ? join(accumulated, name)
+        : path.startsWith('/')
+          ? '/' + name
+          : name + '\\'
+      return { name: displayName(accumulated) || name, path: accumulated }
+    })
 }
-
 export function basename(path: string): string {
+  let core: CorePath | null = null
+  try {
+    core = corePath(path)
+  } catch {
+    return path
+  }
+  if (core) return core.parts.at(-1) || '虚拟文件系统'
   return (
     path
       .replace(/[\\/]+$/, '')

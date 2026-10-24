@@ -50,7 +50,9 @@ export function useListing(
     const stop = listen('remote-sync', () => {
       if (
         !document.hidden &&
-        connections.some((c) => path.startsWith(c.mountPath + '/') || path === c.mountPath)
+        connections.some(
+          (c) => path.startsWith(c.mountPath.replace(/\/$/, '') + '/') || path === c.mountPath,
+        )
       )
         reload()
     })
@@ -139,6 +141,10 @@ export function useListing(
     })
       .then((l) => {
         if (active && id === request.current) {
+          if (l.path !== path) {
+            navigate(l.path)
+            return
+          }
           setDirectoryReadOnly(Boolean(l.readOnly))
           setVirtualVolume(Boolean(l.virtualVolume))
           setListedPath(path)

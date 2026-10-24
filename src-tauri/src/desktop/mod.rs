@@ -84,6 +84,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             plugin_invoke,
+            vfs_retain_views,
+            materialize_file,
+            plugin_context_directory,
             plugin_task,
             plugin_cancel_task,
             plugin_status,
@@ -183,6 +186,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {
+                crate::mounts::forget_window(window.label());
                 window
                     .state::<Watch>()
                     .lock()
@@ -258,6 +262,11 @@ pub fn run() {
             let _ = app;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Cannot start Fiex");
+        .build(tauri::generate_context!())
+        .expect("Cannot start Fiex")
+        .run(|_, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                crate::plugin_vfs::cleanup_exports();
+            }
+        });
 }

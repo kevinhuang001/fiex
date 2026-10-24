@@ -111,7 +111,7 @@ pub fn read_open(
 }
 pub fn close_read(owner: &str, handle: &str) -> Result<(), String> {
     let mut reads = reads().lock().map_err(|_| "read registry unavailable")?;
-    if !reads.get(handle).is_some_and(|v| v.owner == owner) {
+    if reads.get(handle).is_none_or(|v| v.owner != owner) {
         return Err("read handle unavailable".into());
     }
     reads.remove(handle);
@@ -172,6 +172,9 @@ impl Scope {
         }
         scope.allowed = Some(allowed);
         Ok(scope)
+    }
+    pub fn authorize(&self, path: &str) -> Result<(), String> {
+        relative(self, path).map(|_| ())
     }
     pub fn path(&self) -> &Path {
         &self.path
@@ -508,10 +511,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
     // commits never wait for a large copy or fsync.
     let mut write = {
         let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
-        if !pending
-            .get(handle)
-            .is_some_and(|value| value.owner == owner)
-        {
+        if pending.get(handle).is_none_or(|value| value.owner != owner) {
             return Err("write handle unavailable".into());
         }
         pending.remove(handle).ok_or("write handle unavailable")?

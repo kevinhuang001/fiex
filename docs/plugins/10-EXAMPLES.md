@@ -10,7 +10,7 @@
 用户“新建连接”
 → Fiex 从插件 manifest 获取 URL/用户名/secret 字段
 → plugin.connection.validate/open
-→ host.mount.create(pluginId, rootId, capabilities)
+→ ctx.open_vfs_view(contributionId, selectedRoot, immutableContext)
 → 侧边栏出现挂载
 → 访问目录：Core → plugin.fs.list
 → 用户“离线可用”：Core CacheManager → plugin.fs.openRead
@@ -22,7 +22,7 @@
 
 ## 2. SMB（官方连接插件）
 
-SMB 插件负责主机发现（如选择提供）、共享、认证、列目录、文件属性、版本条件（若后端可用）、读写/移动/删除。仅作为普通独立进程运行；Core 同样按 `mountId/nodeId` 路由。与 WebDAV 不同的只是插件的远程协议和具体 capabilities，不应在 `transfer` 或 `Sidebar` 保留任何“这是 SMB”业务分支。
+SMB 插件负责主机发现（如选择提供）、共享、认证、列目录、文件属性、版本条件（若后端可用）、读写/移动/删除。仅作为普通独立进程运行；Core 同样按 `mountId/nodeId` 路由。与 WebDAV 不同的只是插件的远程协议和实际操作语义，不应在 `transfer` 或 `Sidebar` 保留任何“这是 SMB”业务分支。
 
 NAS 上数十万文件时列表分页，避免连接即全盘递归。同步引擎遇到无可靠变化游标时使用目录扫描；遇到弱版本时禁用无人值守的危险覆盖，要求用户处理冲突。
 
@@ -101,3 +101,11 @@ Google Calendar
 **此流程作为最终验收“官方与第三方无特殊差别”的基准**，在至少两个不同操作系统上进行端到端自动化，并搭配单独编写的非 Rust 协议客户端验证语言独立性。
 
 更多线消息参见 [IPC](04-IPC-PROTOCOL.md)，实施与数据迁移参见 [09](09-MIGRATION-TESTING.md)。
+
+## Core VFS 视图与 Connection 边界
+
+工具栏和菜单只声明 UI，不允许 `scheme` / `schemes`。独立虚拟树使用 `contributions.vfs`，Connection Factory 使用 `contributions.connections`（隐式 VFS）。
+插件通过请求上下文的 `open_vfs_view(contribution_id, selected_resource_root, small_immutable_context)` 获取 Core 生成的 `fiex://mount/<id>/`。
+Core 检查 owner、Contribution 和选中资源；Provider 的 `nodeId` 不直接变成本地路径或权限。
+Connection 缓存/同步仍属 Core；Git View 按需读取对象，不扫描全部仓库、不缓存完整历史、不参与同步。
+实际协议、生命周期与导出限制见 [02-VFS.md](02-VFS.md)。

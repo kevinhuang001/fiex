@@ -7,7 +7,7 @@ import {
   repoFor,
   secondCommit,
 } from '../data'
-import { notHandled, state } from './shared'
+import { demoView, demoViews, notHandled, state } from './shared'
 
 const remoteConfigs = new Map<string, { name: string; url: string }[]>()
 
@@ -81,23 +81,17 @@ export function handleGit(command: string, a: Record<string, unknown>): unknown 
     case 'git_history':
       return demoHistory.slice(Number(a.skip) || 0, (Number(a.skip) || 0) + 50)
     case 'git_browse':
-      return (
-        'history://' +
-        btoa(String(a.root)) +
-        '/' +
-        (String(a.reference) === 'dev'
+      return demoView(
+        String(a.root),
+        String(a.reference) === 'dev'
           ? secondCommit
           : String(a.reference).length === 40
             ? String(a.reference)
-            : firstCommit)
+            : firstCommit,
       )
     case 'git_status': {
-      if (String(a.path).startsWith('history://'))
-        return {
-          root: atob(String(a.path).split('/')[2]),
-          branch: String(a.path).split('/')[3].slice(0, 8),
-          entries: {},
-        }
+      const view = [...demoViews].find(([uri]) => String(a.path).startsWith(uri))?.[1]
+      if (view) return { root: view.root, branch: view.commit.slice(0, 8), entries: {} }
       const repo = repoFor(String(a.path))
       return repo
         ? {

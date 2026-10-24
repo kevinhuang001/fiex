@@ -7,7 +7,7 @@
 ## 1. 设计原则
 
 - Fiex Core **MUST** 不依赖任何官方插件 crate/实现模块，也不能包含按官方插件名称、ID、URL scheme 判断的业务分支；`localfs` 是内核自带基础适配器而不是享有特殊权限的官方插件。
-- 插件类型在底层不是 `connection` 或 `feature` 枚举。`capabilities` 是组合集合：`filesystem`、`connectionFactory`、`contextMenu`、`toolbar`、`panel`、`commands`、`changeFeed` 等；“连接插件”“功能插件”只用在产品分类。
+- 插件扩展点直接由 `contributions` 表达，不再维护冗余 `capabilities` 分类或同步开关；“连接插件”“功能插件”只用在产品分类。
 - **功能插件 MUST 能贡献挂载及虚拟目录**，包括 Git 历史版本、搜索结果、GitHub 仓库树、日历日程视图等。插件的只读目录不必有真实的物理目录。
 - 内核独占通用 VFS、缓存、同步、传输、冲突、任务、设置与 iframe UI 宿主。插件前端交付**预编译 HTML/CSS/JS**，通过 UI Bridge 调用宿主；后端经独立进程 IPC 接入，不绑定主 React/Tauri API。
 - **Native 后端**必须在独立进程运行，官方与第三方使用相同的安装、握手和监管机制。UI-only 插件可仅包含预编译 iframe 静态资源，不必打包无意义的 Native 二进制。
@@ -107,3 +107,11 @@ docs/plugins/                   # 当前规格
 有关文件操作，见 [VFS](02-VFS.md)；缓存和同步的严格所有权见 [03](03-CACHE-SYNC.md)；插件的进程与 IPC 见 [04](04-IPC-PROTOCOL.md)。
 
 UI Bridge 详见 [11](11-UI-SDK.md)。
+
+## Core VFS 视图与 Connection 边界
+
+工具栏和菜单只声明 UI，不允许 `scheme` / `schemes`。独立虚拟树使用 `contributions.vfs`，Connection Factory 使用 `contributions.connections`（隐式 VFS）。
+插件通过请求上下文的 `open_vfs_view(contribution_id, selected_resource_root, small_immutable_context)` 获取 Core 生成的 `fiex://mount/<id>/`。
+Core 检查 owner、Contribution 和选中资源；Provider 的 `nodeId` 不直接变成本地路径或权限。
+Connection 缓存/同步仍属 Core；Git View 按需读取对象，不扫描全部仓库、不缓存完整历史、不参与同步。
+实际协议、生命周期与导出限制见 [02-VFS.md](02-VFS.md)。

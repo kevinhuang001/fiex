@@ -18,8 +18,11 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
     let plugin_id = connection_plugin_id(conn);
     let plugin = crate::plugin_host::catalog()
         .into_iter()
-        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
+        .find(|plugin| {
+            plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
+        })
         .ok_or("连接插件未安装、启用或已被撤销授权")?;
+    declared_connection_fields(&plugin_id, &conn.kind)?;
     for permission in &plugin.declared_permissions {
         if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
             return Err(format!("插件权限未授权：{permission}"));
@@ -36,7 +39,9 @@ pub(crate) fn declared_connection_fields(
 ) -> Result<Vec<(String, String)>, String> {
     let plugin = crate::plugin_host::catalog()
         .into_iter()
-        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
+        .find(|plugin| {
+            plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
+        })
         .ok_or("连接插件尚未安装、启用或授权")?;
     let factory = plugin
         .contributions
@@ -171,7 +176,18 @@ fn virtual_target(path: &str) -> Option<PathBuf> {
     Some(target)
 }
 
+pub fn navigation_path(conn: &StoredConnection, relative: &str) -> Result<String, String> {
+    crate::mounts::uri(&conn.mount_id, relative)
+}
+
 pub fn connection_for_path(path: &str) -> Option<(StoredConnection, PathBuf)> {
+    if crate::mounts::handles(path) {
+        let (uri, source) = crate::mounts::resolve(path).ok()?;
+        return match source {
+            crate::mounts::Source::Connection(conn) => Some((conn, PathBuf::from(uri.relative))),
+            _ => None,
+        };
+    }
     let target = virtual_target(path)?;
     for conn in load_stored() {
         let Ok(root) = dunce::canonicalize(mount_path(&conn)) else {
@@ -233,38 +249,6 @@ pub(crate) fn check_cache_path(conn: &StoredConnection, path: &Path) -> Result<(
     Ok(())
 }
 
-pub(crate) fn supports_sync(conn: &StoredConnection) -> bool {
-    crate::plugin_host::catalog()
-        .into_iter()
-        .find(|p| p.id == conn.plugin_id)
-        .and_then(|p| {
-            p.contributions
-                .get("connections")
-                .and_then(serde_json::Value::as_array)
-                .cloned()
-        })
-        .is_some_and(|factories| {
-            factories
-                .iter()
-                .any(|f| f["id"].as_str() == Some(&conn.kind) && f["capabilities"]["sync"] == true)
-        })
-}
-
-pub(crate) fn write_mode(conn: &StoredConnection) -> String {
-    crate::plugin_host::catalog()
-        .into_iter()
-        .find(|p| p.id == conn.plugin_id)
-        .and_then(|p| {
-            p.contributions
-                .get("connections")
-                .and_then(serde_json::Value::as_array)
-                .cloned()
-        })
-        .and_then(|factories| {
-            factories
-                .into_iter()
-                .find(|f| f["id"].as_str() == Some(&conn.kind))
-        })
-        .and_then(|f| f["capabilities"]["writeMode"].as_str().map(str::to_owned))
-        .unwrap_or_else(|| "stream".into())
+pub(crate) fn connection_by_mount(id: &str) -> Option<StoredConnection> {
+    load_stored().into_iter().find(|c| c.mount_id == id)
 }

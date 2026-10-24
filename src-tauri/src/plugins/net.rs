@@ -386,8 +386,8 @@ pub fn http_open(
         // Google resumable uploads use 308 without Location to acknowledge
         // an incomplete upload. It is a response, not a redirect.
         if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308)
-            && !(response.status().as_u16() == 308
-                && !response.headers().contains_key(reqwest::header::LOCATION))
+            && (response.status().as_u16() != 308
+                || response.headers().contains_key(reqwest::header::LOCATION))
         {
             if redirect == 10 {
                 return Err("too many HTTP redirects".into());
@@ -487,7 +487,7 @@ pub fn http_close(owner: &str, params: &Value) -> Result<(), String> {
     let mut entries = http_streams()
         .lock()
         .map_err(|_| "HTTP registry unavailable")?;
-    if !entries.get(id).is_some_and(|entry| entry.owner == owner) {
+    if entries.get(id).is_none_or(|entry| entry.owner != owner) {
         return Err("HTTP response unavailable".into());
     }
     entries.remove(id);

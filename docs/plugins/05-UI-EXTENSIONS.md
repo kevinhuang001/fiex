@@ -126,3 +126,11 @@ UI 可以在**宿主给定的边界内**请求 resize/close/focus，但不能改
 - 禁用/卸载插件时工具栏按钮、菜单、iframe、事件订阅全部释放；刷新/重启后无孤儿面板。
 - 三平台（Windows/macOS/Linux）验证 ES module、CSS、字体/图片静态资源及 CSP 能正确加载；不能默认所有自定义 URL scheme 表现一致。
 - **不将“以后再支持另一套 panel schema”作为兼容承诺**；未来可以增加可选 UI 辅助组件库，但 iframe + Bridge 是 v1 唯一可执行业务面板契约。
+
+## Core VFS 视图与 Connection 边界
+
+工具栏和菜单只声明 UI，不允许 `scheme` / `schemes`。独立虚拟树使用 `contributions.vfs`，Connection Factory 使用 `contributions.connections`（隐式 VFS）。
+插件通过请求上下文的 `open_vfs_view(contribution_id, selected_resource_root, small_immutable_context)` 获取 Core 生成的 `fiex://mount/<id>/`。
+Core 检查 owner、Contribution 和选中资源；Provider 的 `nodeId` 不直接变成本地路径或权限。
+Connection 缓存/同步仍属 Core；Git View 按需读取对象，不扫描全部仓库、不缓存完整历史、不参与同步。
+实际协议、生命周期与导出限制见 [02-VFS.md](02-VFS.md)。
