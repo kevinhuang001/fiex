@@ -39,6 +39,13 @@ export function useAppController() {
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
   const selectedAll = split ? [...new Set([...left.selected, ...right.selected])] : left.selected
+  const focusSearch = () => {
+    const selector =
+      split && active === 'right'
+        ? '.secondary-pane .search-box input'
+        : '.main > .path-toolbar .search-box input'
+    document.querySelector<HTMLInputElement>(selector)?.focus()
+  }
 
   const {
     sidebar,
@@ -182,7 +189,7 @@ export function useAppController() {
     tagOpen,
     connectionOpen,
     trashIssue,
-    searchInput,
+    focusSearch,
     startPathEdit,
     copy,
     clipboard,
