@@ -42,7 +42,7 @@ sequenceDiagram
 | `plugin.ping` | 空 | `pong/ok` | 存活检测 |
 | `plugin.shutdown` | 空 | `null` | 优雅退出、在最后期限强杀 |
 | `plugin.cancel` | `taskId` | notification | 协作取消任务 |
-| `contextMenu.resolve` | `menuSessionId,target,selection,directory` | `{items:[...]}` | 每次右键并行向已注册 Provider 发送一次，只读本次文件元数据；不授予文件内容读权限 |
+| `contextMenu.resolve` | `menuSessionId,target,selection,directory` | `{items:[...]}` | Core 每次右键主动推送资源 ref；仅获批 `files.metadata/folders.metadata` 时追加 `metadata`；不提供主动查询权限 |
 | `contextMenu.execute` | `menuSessionId,itemId,selection` | `JSON/null` | 仅允许点击了本次 resolve 中有效 `type:action` 项后调用，建立独立 OperationScope |
 | `connection.validate` | `connection` | `{valid:true,...}` | 验证连接配置；不得泄露 Secret |
 | `fs.list` | `connection,directoryId?,cursor?,limit?` | `entries,nextCursor,snapshotToken?,identityStability?` | Connection 远端目录分页 |
@@ -63,17 +63,18 @@ Provider 清单中的 `nodeId` 与 `revision` 均不应当被 Core 当作磁盘�
 
 ## 2.1 完全动态右键菜单的强制 RPC 合同
 
-Manifest 只需 `"contextMenus": true`，不会出现 `when`、`children`、静态 `command` 或 `panel`。目标流程每次右键向每个已启用、已获授权的插件发送一次 `contextMenu.resolve`；它返回本次菜单，而不是菜单谓词。请求包含本次右键产生的资源元数据，不包含文件字节或宿主任意可访问目录。
+Manifest 只需 `"contextMenus": true`，不会出现 `when`、`children`、静态 `command` 或 `panel`。目标流程每次右键向每个已启用、已获授权的插件发送一次 `contextMenu.resolve`；它返回本次菜单，而不是菜单谓词。请求总是包含本次右键选中对象的不透明 ref；只有插件声明并获批其类型对应的 `files.metadata.enabled` 或 `folders.metadata.enabled`，Core 才主动附带 `metadata` 对象。这是由事件触发的 **Core→Plugin Push**，不是插件在 IPC 里主动查询数据。未批准时必须省略 `metadata`；无论怎样都不包含文件字节或宿主任意可访问目录。
 
 ```json
 {
   "jsonrpc":"2.0","id":301,"method":"contextMenu.resolve",
   "params":{
     "menuSessionId":"sess-opaque",
-    "target":{"ref":{"mountId":"m1","nodeId":"n7"},"name":"report.zip",
-              "kind":"file","extension":"zip","size":4200,"readOnly":false},
-    "selection":[{"ref":{"mountId":"m1","nodeId":"n7"},"name":"report.zip","kind":"file"}],
-    "directory":{"readOnly":false,"source":"local"}
+    "target":{"ref":{"mountId":"m1","nodeId":"n7"},
+              "metadata":{"name":"report.zip","kind":"file","extension":"zip","size":4200,"readOnly":false}},
+    "selection":[{"ref":{"mountId":"m1","nodeId":"n7"},
+                  "metadata":{"name":"report.zip","kind":"file","extension":"zip"}}],
+    "directory":{"ref":{"mountId":"m1","nodeId":"parent"}}
   }
 }
 ```
@@ -101,7 +102,7 @@ Manifest 只需 `"contextMenus": true`，不会出现 `when`、`children`、静�
            "selection":[{"ref":{"mountId":"m1","nodeId":"n7"},"name":"report.zip"}]}}
 ```
 
-`execute` 从已经用户实际点击的菜单项派生 **OperationScope**；必须经过该方法需要的 Manifest permission 与当前选择的精确对象校验。查询 `resolve` 阶段没有 `files.read/folders.read/files.write` 资源作用域，任何 `host.fs.*` 试图读取实际文件数据或遍历本地路径均返回 `PermissionDenied`。元数据仅来自这一次用户右键对象。Core 不允许前端或其他插件直接调用这两个保留的 Provider RPC。
+`execute` 从已经用户实际点击的菜单项派生 **OperationScope**；必须经过该方法需要的 Manifest permission 与当前选择的精确对象校验。查询 `resolve` 阶段没有任何主动文件 I/O 资源 Scope，**包括主动 `host.fs.stat` 查询**；所有 `host.fs.*` 对查询阶段额外路径的访问均应返回 `PermissionDenied`。在此阶段 `metadata` 只能作为 Core 主动推送的 IPC 参数出现，且只包含这次用户右键实际选择并有 metadata 权限的对象。Core 不允许前端或其他插件直接调用这两个保留的 Provider RPC。
 
 `type:panel` 在宿主打开预安装、已签名的 `contributions.panels[]` 所引用页面，不执行 `contextMenu.execute`；子菜单展开由 Core 负责，无需额外 IPC。弱网或崩溃应在界限内失败并忽略该插件，不能阻塞宿主原生菜单。菜单 Session 关闭、插件重启或新一次右键后失效，迟到响应不得污染新的菜单。
 
@@ -142,26 +143,42 @@ sequenceDiagram
 
 | IPC method | Params | Result | 必要权限 |
 |---|---|---|---|
-| `host.fs.list` | `path` | `Entry[]` | `folders.read` + scope |
-| `host.fs.stat` | `path` | `Entry` | `folders.read` 或 `files.read` + scope |
-| `host.fs.readChunk` | `path,offset,length` | `base64,size,eof` | `files.read` + scope |
-| `host.fs.read` | `path,offset,length` | `buffer,size,eof` | `files.read` + scope；内部低层 |
-| `host.fs.openRead` | `path` | `handle,size` | `files.read` + scope |
+| `host.fs.list` | `path` | `Entry[]` | `folders.read.enabled` + scope；返回目录成员，其他属性须按 metadata 权限裁剪 |
+| `host.fs.stat` | `path` | `Entry` | 对文件要求 `files.metadata.enabled`；对目录要求 `folders.metadata.enabled`，**另需明确的 OperationScope/TaskScope**；菜单查询时禁止调用 |
+| `host.fs.readChunk` | `path,offset,length` | `base64,size,eof` | `files.read.enabled` + scope |
+| `host.fs.read` | `path,offset,length` | `buffer,size,eof` | `files.read.enabled` + scope；内部低层 |
+| `host.fs.openRead` | `path` | `handle,size` | `files.read.enabled` + scope |
 | `host.fs.readOpen` | `handle,offset,length,buffer?` | `size,eof,base64?` | 属主 Handle + 文件权限 |
 | `host.fs.closeRead` | `handle` | `null` | Handle 所属 operation/task |
-| `host.fs.create` | `path` | `Entry` | `folders.create` + scope |
-| `host.fs.mkdir` | `path` | `Entry` | `folders.create` + scope |
-| `host.fs.beginWrite` | `path,create` | `handle` | `files.write`，create 时还需 `folders.create` |
-| `host.fs.writeChunk` | `handle,base64` | `null` | `files.write` + Handle owner |
-| `host.fs.writeBuffer` | `handle,buffer,size` | `null` | `files.write` + Handle owner |
-| `host.fs.seekWrite` | `handle,kind,offset` | `u64 offset` | `files.write` + Handle owner |
-| `host.fs.commit` | `handle` | `Entry/confirmation` | `files.write` + 冲突复检 |
+| `host.fs.create` | `path` | `Entry` | 创建**新文件**时使用 `files.create.enabled` + scope；不得覆盖已有文件 |
+| `host.fs.mkdir` | `path` | `Entry` | `folders.create.enabled` + scope |
+| `host.fs.beginWrite` | `path,create` | `handle` | `create:false` 需要 `files.write.enabled`；`create:true` 仅允许对不存在的目标以 `files.create.enabled` 写入初始内容；两者均需 scope |
+| `host.fs.writeChunk` | `handle,base64` | `null` | 原事务授权 `files.write.enabled` 或 `files.create.enabled` + Handle owner |
+| `host.fs.writeBuffer` | `handle,buffer,size` | `null` | 原事务授权 `files.write.enabled` 或 `files.create.enabled` + Handle owner |
+| `host.fs.seekWrite` | `handle,kind,offset` | `u64 offset` | 原事务授权 `files.write.enabled` 或 `files.create.enabled` + Handle owner |
+| `host.fs.commit` | `handle` | `Entry/confirmation` | 原事务授权 `files.write.enabled` 或 `files.create.enabled` + 冲突复检 |
 | `host.fs.abort` | `handle` | `null` | Handle owner |
-| `host.fs.write` | `path,buffer,mode` | 状态 | `files.write`；低层旧风格接口计划内收敛 |
-| `host.fs.remove` | `path` | `null` | `folders.delete` + scope |
-| `host.fs.rename` | `from,to` | `null` | `folders.rename` + 双路径 scope |
+| `host.fs.write` | `path,buffer,mode` | 状态 | 按目标是否存在、是否创建检查 `files.write.enabled` 或 `files.create.enabled`；旧式方法最终收敛 |
+| `host.fs.remove` | `path` | `null` | 根据目标类型要求 `files.delete.enabled` **或** `folders.delete.enabled` + scope；目录默认仅删除空目录 |
+| `host.fs.rename` | `from,to` | `null` | 根据源目标类型要求 `files.rename.enabled` **或** `folders.rename.enabled` + 双路径 scope |
 
-统一处理文件目录对象的 race/symlink、原子提交、临时权限与文件大小。`create` 权限判定不能通过 `files.write` 单独绕过，`rename` 要分别授权两个操作数。
+统一处理文件目录对象的 race/symlink、原子提交、临时权限与文件大小。文件与目录的 `create/delete/rename` **按对象种类分别检查**，创建现有文件与新文件的操作权限不互相隐含；`rename` 要分别校验源和目标所选 Scope。Core 内部为了构建 Explorer UI 而获取元数据不属于插件调用 `host.fs.stat`，只有实际推送给插件时才按 `metadata.enabled` 校验。
+
+
+### 元数据：推送与主动查询严格分离
+
+| 数据流 | 方法 | 必要权限 | 是否需要文件操作 Scope |
+|---|---|---|---|
+| Core 因用户操作主动提供所选文件属性 | `contextMenu.resolve` / 预览、信息、工具栏等事件的 `params.target.metadata` | `permissions.files.metadata.enabled`（文件）或 `permissions.folders.metadata.enabled`（目录），并且**用户已批准** | 不需要额外点击动作；只绑定当前已触发的事件与当前选择 |
+| Plugin 在执行操作中主动查询任意文件自身属性 | `host.fs.stat` → `Files::metadata(path)` | 对应 `metadata.enabled` 已批准 | **必须**有本次操作/任务对该精确文件或目录的授权 |
+| Plugin 主动列举目录成员 | `host.fs.list` → `Files::list(path)` | `permissions.folders.read.enabled` 已批准 | 必须包含该目录的操作授权；列举的附加字段按 metadata 权限裁剪 |
+| Plugin 主动读取文件字节 | `host.fs.openRead/readOpen` | `permissions.files.read.enabled` 已批准 | 必须包含该文件的操作授权 |
+
+元数据回包规范目标统一使用可选的 `metadata` 对象：`{name,kind,extension,mime?,size?,modified?,readOnly?,source?}`。没有本类型的 metadata 用户批准就**不发送** `metadata`，只给当前事件所需的不透明 `ref`。特别注意：`contextMenu.resolve` 是 Core **主动向插件提供已经持有的元数据**，不能通过菜单的特殊身份暗中开放 `host.fs.stat` 或 `ctx.files().metadata`；插件一旦主动查询，就必须满足更严格的操作/任务授权。Connection Provider 的内部 `fs.stat` 是另一类由 Core 发起的协议适配，不与 `host.fs.stat` 混淆。
+
+### Search 的局部路径约束
+
+`contributions.search[]` 只声明 `id/title/command?`，彻底移除 `scope`。宿主始终将用户当前指定的目录作为 `root`，不得提供全局搜索入口。Everything 允许继续依托其**全局构建的搜索索引**，但必须向 ES 查询施加对应 `root` 路径限制；Core 再对返回的每项路径执行规范化、目录边界检查与去重，不允许将全局范围的命中直接渲染到局部搜索结果。注意 Core 的结果过滤不等于禁止已授权的 `es` 外部命令本身查询全局索引：这属于独立的外部命令风险模型。
 
 ## 4. Plugin → Core：网络、共享缓冲、进程
 
@@ -214,7 +231,7 @@ sequenceDiagram
 | Toolbar | `<plugin>.<action>` | `{selection,directory,args}` → JSON |
 | ContextMenu 查询 | `contextMenu.resolve` | `{menuSessionId,target,selection,directory}` → `{items}` |
 | ContextMenu 执行 | `contextMenu.execute` | `{menuSessionId,itemId,selection}` → JSON/null |
-| Search | 声明 `command`，默认 `search.query` | `{query,root,hidden,ignores,limit}` → `{entries}` |
+| Search（仅目录内搜索） | 声明 `command`，默认 `search.query`；Manifest 无 `scope` | `{query,root,hidden,ignores,limit}` → `{entries}`；Provider 限定 root，Core 校验返回路径 |
 | Info | 声明 `command` | `{path}` → `{rows:[{label,value}]}` |
 | Hooks | 声明 `command` | `{event,path}` → `{action:"pass"|"consume"}` |
 | Dynamic Decorations | 声明 `method` | `{directory,entries}` → 仅装饰，无文件写权限 |

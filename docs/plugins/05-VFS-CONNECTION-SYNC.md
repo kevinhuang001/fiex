@@ -46,6 +46,11 @@ sequenceDiagram
 
 配置 `connection` 仅发给所属 Provider 的特定授权进程。重启连接只恢复 provider 配置，不重建 mountId；删除连接需让用户决定缓存和离线副本如何保留，不能隐式抹掉本地未同步文件。
 
+### Connection 的 `fs.stat` 与普通插件的 `host.fs.stat` 不同
+
+Connection Provider 接收的 `fs.stat({connection,nodeId})` 是 Core 为用户已经建立、已获批准的连接发起的内部 Provider 请求，主要用于版本和同步基线。它不赋予 Provider 访问任意宿主本地文件的权限；也不受普通插件查询 `host.fs.stat` 的操作作用域控制。相反，普通插件主动调用 `ctx.files().metadata(path)` / `host.fs.stat` 必须同时具有 `files.metadata.enabled` 或 `folders.metadata.enabled` 和已确认的 OperationScope。Core 在 Explorer 事件中把已经持有的元数据推送给插件（Push）也只有获批后才允许，且不生成普通文件的读内容授权。
+
+
 ## 3. Node/目录分页/身份策略
 
 Provider 每页返回 `{entries,nextCursor,snapshotToken?,identityStability?}`，`entries[].name` 是单个可打印安全路径段，`nodeId` 不透明，`revision` 版本不透明；Core 校验列表长度、重复 nodeId、重复路径、非法字符、循环 cursor、最大扫描页数。只有完整、无错误的枚举能提交新目录快照；遇到分页途中网络断开保留上次已确认目录快照。

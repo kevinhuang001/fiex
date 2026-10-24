@@ -88,6 +88,30 @@ flowchart LR
 
 设计必须限定 IPC 查询时间、列表大小、层级与并发；慢插件不能延迟 Fiex 原生菜单。**查询菜单不允许文件内容读取**，也不是用户对后续执行的永久授权。详细字段见 [02](02-MANIFEST-EXTENSIONS.md) 与 [03](03-IPC-CATALOG.md)。
 
+## 2.2 事件元数据 Push 与主动资源访问 Pull
+
+Core 持有 Explorer / 连接树展示所需的资源元数据。插件注册贡献点并不因此拥有全局查询文件系统的能力。元数据是单独用户授权：文件 `files.metadata.enabled`、目录 `folders.metadata.enabled`。用户触发实际事件（如右键、预览）时，Core **直接在事件 params 中附带已获批类型的当前选中对象 metadata**；如未批准则仅发送不透明 ref。插件无需也不得因这次事件主动调用 `host.fs.stat` 探测其他资源。
+
+后续用户执行动作后，插件才在 OperationScope/TaskScope 中使用 `ctx.files().metadata(path)` → `host.fs.stat` 主动查询，仍需同类 metadata 权限；`files.read` 与 `folders.read` 分别控制文件字节与目录枚举，不能替代 metadata 授权。File/Folder 所有子权限统一 `{enabled}`，文件创建、删除、改名与文件夹的同名操作分离。
+
+```mermaid
+flowchart TD
+  Explorer["用户触发扩展点"] --> Core["Core 持有所选资源 Entry"]
+  Core --> Check{"对应 metadata.enabled 获批?"}
+  Check -->|yes| Push["Core 推送本次选择的 metadata"]
+  Check -->|no| Minimal["仅 opaque ref"]
+  Push --> Plugin["Plugin 处理事件"]
+  Minimal --> Plugin
+  Plugin --> Click{"用户点击执行?"}
+  Click -->|yes| Grant["创建选中范围 OperationScope"]
+  Grant --> Stat["插件主动 host.fs.stat: 再检查 metadata 权限和 Scope"]
+  Click -->|no| End["事件结束"]
+```
+
+## 2.3 目录限定的 Search
+
+`contributions.search[]` 不提供 `scope`；所有搜索由 Core 绑定已验证的当前 root。Everything 可以在后台依托全局索引，但必须使用 root 作为路径过滤条件，Core 还要逐项校验结果路径确实属于该目录树；不支持展示跨 root 的全局搜索结果。
+
 ## 3. 所有权矩阵
 
 | 事项 | Core | 插件 |

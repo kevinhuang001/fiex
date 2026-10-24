@@ -40,6 +40,14 @@ flowchart LR
   F --> G["M6 跨平台安全、性能与发布验收"]
 ```
 
+## 权限与搜索的目标约定
+
+所有 `permissions.files.*` 与 `permissions.folders.*` 均为 `{enabled: boolean, ...}` 结构。文件独立声明 `metadata/read/write/create/delete/rename`；文件夹独立声明 `metadata/read/create/delete/rename`。元数据权限与文件内容读取/目录遍历相互独立。
+
+当用户触发右键、预览、信息等扩展点，Core 在 **metadata 权限已批准** 时直接随 IPC 发出本次选择对象的 `metadata`，不要求插件另行调用 `stat`；插件主动 `host.fs.stat` 仍须经过 metadata permission 和具体的 OperationScope/TaskScope。未获批准则事件只包含不透明 ref，不提供详细元数据。
+
+`contributions.search[]` 只含 `id/title/command?` 等基本注册项，**没有 `scope`**。Fiex 搜索始终限定用户当前指定的 root 目录；Everything 使用其全局索引，但查询及 Core 结果过滤都必须遵守该路径范围。
+
 ## 动态右键菜单约定
 
 右键菜单不再有静态 `when`、`children` 或每项 `command`：`"contributions":{"contextMenus":true}` 仅声明参与菜单，用户每次右键时 Core 将本次文件元数据发给每个已启用 Provider 的 `contextMenu.resolve`，由插件返回扁平菜单 `items`（使用 `parentId` 表示多级菜单）；用户点击后才经过独立授权调用 `contextMenu.execute`。具体约定见 [02 Manifest](02-MANIFEST-EXTENSIONS.md)、[03 IPC](03-IPC-CATALOG.md)。

@@ -51,7 +51,7 @@ fn main() {
 
 | 方法 | 目标 SDK 类型 | IPC 输入 → 输出 | 权限 |
 |---|---|---|---|
-| `ctx.method()=="contextMenu.resolve"` | `sdk::context_menu::ResolveRequest` → `MenuResponse` | `target + selection + directory + menuSessionId` → `{items}` | 只读当次用户右键的文件元数据；不可发起文件内容/目录遍历请求 |
+| `ctx.method()=="contextMenu.resolve"` | `sdk::context_menu::ResolveRequest` → `MenuResponse` | `target + selection + directory + menuSessionId` → `{items}` | Core 主动附带本次选择的 `metadata?`（仅 files/folders.metadata 已获批时）；不可主动 stat/读内容/遍历 |
 | `ctx.method()=="contextMenu.execute"` | `sdk::context_menu::ExecuteRequest` → JSON | `menuSessionId + itemId + selection` → JSON | 用户实际点击之后的精确 OperationScope |
 | `sdk::context_menu::MenuItem` | `{id,type,title?,icon?,parentId?,enabled?,panelId?,group?,order?}` | 由 `resolve` 序列化至 Core | 只用于显示，不意味着可执行系统调用 |
 
@@ -65,7 +65,7 @@ fn handle(ctx: sdk::RequestContext) -> Result<Value, RpcError> {
     match ctx.method() {
         "contextMenu.resolve" => {
             let target = &ctx.params()["target"];
-            let is_zip = target["extension"] == "zip";
+            let is_zip = target["metadata"]["extension"] == "zip";
             if is_zip {
                 Ok(json!({"items":[
                     {"id":"archive.extract","type":"action","title":"解压到当前目录"},
@@ -91,7 +91,7 @@ fn handle(ctx: sdk::RequestContext) -> Result<Value, RpcError> {
 }
 ```
 
-注意：`contextMenu.resolve` 的 `ctx.files()` 方法即使存在，也**不会拥有文件内容读取/目录遍历授权**，Core 按本次请求的 metadata-only Scope 执行拒绝。SDK `ExecuteRequest` 的 `menuSessionId` 是宿主 Session 关联值，不能直接当作文件授权令牌；实际权限与资源版本均由 Core 再验证。
+注意：`contextMenu.resolve` 的 `ctx.files()` 方法即使存在，也**不会拥有主动查询 metadata、读取文件内容或目录遍历的授权**。Core 仅在用户批准 `permissions.files.metadata.enabled` / `permissions.folders.metadata.enabled` 时，随请求的 `target.metadata` / `selection[].metadata` 主动推送对应对象的元数据；未批准则字段不存在。SDK `ExecuteRequest` 的 `menuSessionId` 是宿主 Session 关联值，不能直接当作文件授权令牌；实际权限与资源版本均由 Core 再验证。
 
 ```mermaid
 flowchart TD
@@ -124,13 +124,13 @@ flowchart TD
 | `FileWriter::seek(position)` | `host.fs.seekWrite` | `Seek` |
 | `FileWriter::commit(self)` | `host.fs.commit` | 检查冲突/原子替换 |
 | `drop(FileWriter)` 未提交 | `host.fs.abort` + buffer.release | 自动回滚 |
-| `Files::write(path,bytes)` | beginWrite/write/commit | 更新已有文件 |
-| `Files::create(path,bytes)` | beginWrite(create:true)/commit | 创建新文件 |
+| `Files::write(path,bytes)` | beginWrite/write/commit | `files.write.enabled`：只修改已存在文件，不隐含新建 |
+| `Files::create(path,bytes)` | beginWrite(create:true)/commit | `files.create.enabled`：只创建不存在的文件并写入初始内容；不需要 `folders.create`，不隐含 `files.write` |
 | `Files::list(path)` | `host.fs.list` | 仅许可目录内 |
-| `Files::metadata(path)` | `host.fs.stat` | 文件元信息 |
-| `Files::create_dir_all(path)` | `host.fs.mkdir` | 创建目录 |
-| `Files::remove(path)` | `host.fs.remove` | 删除所选文件/目录 |
-| `Files::rename(from,to)` | `host.fs.rename` | 需要源/目标 scope |
+| `Files::metadata(path)` | `host.fs.stat` | **插件主动查询**：按目标类型要求 `files.metadata.enabled` 或 `folders.metadata.enabled` + 本次 OperationScope/TaskScope；与 Core 主动推送不同 |
+| `Files::create_dir_all(path)` | `host.fs.mkdir` | `folders.create.enabled`：创建目录，不等于创建新文件 |
+| `Files::remove(path)` | `host.fs.remove` | 按目标类型要求 `files.delete.enabled` 或 `folders.delete.enabled`，检查本次所选范围 |
+| `Files::rename(from,to)` | `host.fs.rename` | 按目标类型要求 `files.rename.enabled` 或 `folders.rename.enabled`，检查双路径 Scope |
 
 `FileReader` 和 `FileWriter` 实现标准 `Read/Seek/Write` 与 `Send + 'static`，可以脱离临时 `Files` 变量；不能脱离 Core 注册的 operation/task 授权。目标由 SDK 自动选择：小块 IPC 缓冲、读共享窗口最多 4 MiB、写共享窗口最多 256 KiB；共享内存不可用时降级有界 IPC。任何全文件分配都必须显式受 64 MiB 限制。
 
@@ -265,6 +265,16 @@ sequenceDiagram
 ```
 
 UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两个 RPC 仅由 Core 在真实用户右键/点击事件上向对应 Native Provider 调用。MenuResponse 引用的 `panelId` 必须存在于 Manifest 的 `contributions.panels[]`，因此插件无法动态加载未验证的 HTML。
+
+### 主动元数据查询不等同于事件中自动收到的元数据
+
+| 触发方式 | Rust SDK / RPC | 授权条件 |
+|---|---|---|
+| 当前文件被右键、预览或显示简介 | `ctx.params()["target"]["metadata"]`（或 selection[].metadata） | 对应的 `files.metadata.enabled` / `folders.metadata.enabled` 已批准；由 Core 主动提供，不需要调用 stat |
+| 插件需要在执行阶段查询其他已选文件的 stat | `ctx.files().metadata(path)` → `host.fs.stat` | 对应 metadata 权限已批准，且该路径在明确授权的 OperationScope/TaskScope 内 |
+| 插件主动读取文件内容 | `ctx.files().open_read(path)` → `host.fs.openRead` | `files.read.enabled` + 精确文件 Scope；metadata 权限不能代替 |
+
+查询 `contextMenu.resolve` 时不得调用 `ctx.files().metadata(path)` 探测更多文件；只能读取 Core 提供的 `params.target.metadata?`。无批准则 `metadata` 字段不存在，不能默认包含完整绝对路径。
 
 不同 UI/Native 会话绝不共享隐式“当前目录”权限。面板关闭不会自动取消已经显式启动、仍被 Core 持有的后台任务，但必须解除 UI panel-local 任务；用户能从活动中心取消后台任务。
 

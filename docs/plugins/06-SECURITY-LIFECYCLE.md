@@ -46,9 +46,9 @@ sequenceDiagram
 
 ## 2.1 动态右键菜单的 metadata-only 作用域
 
-右键菜单已改为 **每个注册 Provider 每次右键一次 `contextMenu.resolve`，返回 `items[]`**。查询阶段只向插件暴露本次用户明确右键的目标、当前有效选中项的最小显示元数据（类型、名称、扩展名、大小、修改时间、只读状态、不透明资源引用）；不暴露文件内容、秘密、宿主全路径树和未选资源。
+右键菜单已改为 **每个注册 Provider 每次右键一次 `contextMenu.resolve`，返回 `items[]`**。查询阶段只向插件暴露本次右键及有效选择对象的不透明资源引用。**仅当分别获批 `files.metadata.enabled` / `folders.metadata.enabled` 时**，Core 才在 `target.metadata` / `selection[].metadata` 主动附带名称、类型、扩展名、大小、时间、只读状态等信息。不暴露文件内容、秘密、宿主全路径树和未选资源。
 
-这种 metadata-only Session **不能**提升为 `files.read`、`folders.read` 或 `files.write`，即便 Manifest 已声明并获批这些权限也不允许在 `resolve` 阶段触碰真实文件字节；Core 的 Host Broker 必须根据请求阶段拒绝 `host.fs.*` 实际内容与目录遍历。用户点击 `type:action` 才从可验证的 `menuSessionId + itemId + selection` 派生真正的 OperationScope，并重新检查当前 manifest 权限、文件身份与版本。
+这种事件 Scope **只能承载 Core 主动推送、且 metadata 权限已获批的所选对象属性**；不能提升为 `files.read`、`folders.read`、`files.write`，更不允许插件在 `resolve` 中调用 `host.fs.stat` 主动探测路径。即便 Manifest 已声明并获批内容权限，Core 也应根据阶段拒绝 `host.fs.*` 的主动资源请求。用户点击 `type:action` 才从可验证的 `menuSessionId + itemId + selection` 派生真正的 OperationScope，并重新检查当前 manifest 权限、文件身份与版本。
 
 ```mermaid
 sequenceDiagram
@@ -56,18 +56,28 @@ sequenceDiagram
   participant H as Core Menu Host
   participant P as Menu Provider
   U->>H: Right click file A
-  H->>P: contextMenu.resolve(metadata(A), menuSession S)
+  H->>P: contextMenu.resolve(ref(A), optional approved metadata(A), S)
+  P->>H: host.fs.stat(A) (attempted active query)
+  H-->>P: PermissionDenied in resolve
   P->>H: host.fs.openRead(A) (attempt)
-  H-->>P: PermissionDenied metadataOnly
+  H-->>P: PermissionDenied in resolve
   P-->>H: items [extract]
   U->>H: Click extract
   H->>H: Verify S + itemId + A's identity + consent
   H->>P: contextMenu.execute(extract) with scope(A)
-  P->>H: host.fs.openRead(A)
+  P->>H: host.fs.stat(A) (if metadata permission approved)
+  H-->>P: Scoped metadata result
+  P->>H: host.fs.openRead(A) (if files.read approved)
   H-->>P: Scoped FileReader handle
 ```
 
 安全要求：Core 只信任当前已启用插件的真实进程身份，丢弃过期 Session，绑定响应与原请求 `pluginId/menuSessionId`；动态菜单项不能包含任意 `host.*` 方法或未签名的 HTML/JS。一个文件被重命名、替换或选择变化时，必须重新校验或使旧 Session 失效。查询超时/崩溃时丢弃该插件的菜单，不阻塞 Fiex 的原生菜单。禁止用缓存的菜单 Session 直接执行其他资源上的动作。
+
+## 2.2 文件、文件夹与元数据权限的类型隔离
+
+Manifest 中全部 `permissions.files.*` 和 `permissions.folders.*` 均为含 `enabled` 的对象。分别定义 `metadata/read/create/delete/rename` 和文件特有的 `write`；目录内容的列表访问由 folders.read 处理，目录本身创建、删除、改名由对应操作权限独立控制。文件的 `create` 只创建不存在的文件，`write` 只覆盖现有文件；新建文件不再需要 `folders.create`。删除/改名依据对象实际类型匹配 file 或 folder 权限。
+
+元数据 Push 属于**被动接收本次所选资源的已获批信息**；只有用户触发扩展点且元数据审批通过才发送。插件主动 `host.fs.stat` 则必须具有相同资源类型的 metadata permission 和明确的 OperationScope/TaskScope。Core 的 Connection Provider 内部 `fs.stat` 用于已授权连接的版本协调，是完全不同的协议方向。用户授予 Scope 后还要重新检查真实对象类型、源/目标路径、路径安全边界和资源是否被替换；不能由插件提交 `type:"file"` 就使用更宽松的权限。
 
 ## 3. Scope 与句柄生命周期
 
