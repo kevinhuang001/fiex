@@ -44,6 +44,7 @@ sequenceDiagram
 | `plugin.cancel` | `taskId` | notification | 协作取消任务 |
 | `contextMenu.resolve` | `menuSessionId,target,selection,directory` | `{items:[...]}` | Core 每次右键主动推送资源 ref；仅获批 `files.metadata/folders.metadata` 时追加 `metadata`；不提供主动查询权限 |
 | `contextMenu.execute` | `menuSessionId,itemId,selection` | `JSON/null` | 仅允许点击了本次 resolve 中有效 `type:action` 项后调用，建立独立 OperationScope |
+| `info.resolve` / `<registered info command>` | `sessionId,resource{ref,metadata?}` | `{sections:[{id,title,rows:[{label,value}]}]}` | 外部 Info Provider 固定响应 Schema；内置 Info Adapter 同合同进程内调用，不必走物理 IPC |
 | `connection.validate` | `connection` | `{valid:true,...}` | 验证连接配置；不得泄露 Secret |
 | `fs.list` | `connection,directoryId?,cursor?,limit?` | `entries,nextCursor,snapshotToken?,identityStability?` | Connection 远端目录分页 |
 | `fs.stat` | `connection,nodeId` | `revision,size,kind?,modified?` | 获取一致性基线 |
@@ -232,12 +233,35 @@ sequenceDiagram
 | ContextMenu 查询 | `contextMenu.resolve` | `{menuSessionId,target,selection,directory}` → `{items}` |
 | ContextMenu 执行 | `contextMenu.execute` | `{menuSessionId,itemId,selection}` → JSON/null |
 | Search（仅目录内搜索） | 声明 `command`，默认 `search.query`；Manifest 无 `scope` | `{query,root,hidden,ignores,limit}` → `{entries}`；Provider 限定 root，Core 校验返回路径 |
-| Info | 声明 `command` | `{path}` → `{rows:[{label,value}]}` |
+| Info | 默认 `info.resolve` 或贡献项声明的 `command` | `{sessionId,resource:{ref,metadata?}}` → `{sections:[{id,title,rows:[{label,value}]}]}`；内置与插件同形，禁止裸路径/旧 rows 回包 |
 | Hooks | 声明 `command` | `{event,path}` → `{action:"pass"|"consume"}` |
 | Dynamic Decorations | 声明 `method` | `{directory,entries}` → 仅装饰，无文件写权限 |
-| Preview | UI `plugin.invoke` | SDK 方法名与参数自定义；遵循 UI Bridge 限额 |
+| Preview | Host 逻辑入口 `preview.open` → 已登记 `panelId` / Core renderer；可选 UI `plugin.invoke` | `{sessionId,resource:{ref,metadata?},intent:"preview"}` → `PreviewView`；内置无需强制额外 Native RPC，插件必须经沙箱 UI Bridge |
 
 动态命令不属于 `host.*` 白名单，仅能在其贡献点明确注册的触发流程下执行；Core 对所有动态参数进行数据 schema 验证，并绑定最小资源授权。右键菜单不接受通过返回值指定任意命令字符串：只有 Core 控制的 `contextMenu.execute` 执行入口；其中 `itemId` 必须出自当前 Session 的 `resolve` 结果。
+
+## 6.1 Preview 与 Info 的统一 Provider 生命周期
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant C as Core Host
+  participant R as Preview/Info Registry
+  participant P as Builtin or Plugin Adapter
+  participant B as Resource Broker
+  U->>C: Preview / Info(selected)
+  C->>R: select scoped ResourceRef
+  R-->>C: same ProviderDescriptor contract
+  C->>P: preview.open or info.resolve
+  P->>B: bounded read if needed / permitted
+  B-->>P: readonly resource handle
+  P-->>C: PreviewView or InfoResponse.sections
+  C-->>U: one common host renderer
+```
+
+**`preview.open` 是统一的 Host→Provider 逻辑入口**：Core 内置渲染器直接通过进程内 Adapter 实现，外部预览通过 Manifest 已验证的 `panelId` + UI Bridge 加载；不强制产生额外的 Native RPC。**`info.resolve` 是 Info Provider 的目标固定 IPC 方法**（自定义命令亦必须遵守同一参数/回包）；Core 内置基础文件/音频/视频解析也调用同形的内部实现。所有 Info 结果按 `InfoResponse.sections[]` 聚合，一个失败不能让其他区块消失。
+
+查询插件可见 `metadata?` 时须先通过 `files.metadata.enabled` 或 `folders.metadata.enabled`；额外解析媒体内容需独立 `files.read.enabled` 与查看操作 Scope。两类 Provider 的大数据访问仅通过 Core ResourceBroker 安全流，不允许经 IPC JSON 传整文件或将任意宿主路径泄露给 iframe。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
 
 ## 7. 目标规范落地清单
 

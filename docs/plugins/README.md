@@ -14,7 +14,7 @@
 7. **协议目录单一事实来源**：通过 schema + 生成器产出 IPC 方法表、Rust SDK 类型、TypeScript UI 类型、Manifest JSON Schema 与契约测试；禁止“文档和代码各自手写一套语义”。
 8. **面向实现，而非阶段报告**：每章定义目标接口、必须满足的不变量、模块位置、测试要求；实施顺序见第 07 篇。
 
-## 文档目录（最终仅保留此八篇）
+## 文档目录（九篇规范 + 仓库根目录 Roadmap）
 
 | 文件 | 用途 |
 |---|---|
@@ -25,6 +25,8 @@
 | [05-VFS-CONNECTION-SYNC.md](05-VFS-CONNECTION-SYNC.md) | VFS、Connection、缓存、同步、冲突、数据一致性 |
 | [06-SECURITY-LIFECYCLE.md](06-SECURITY-LIFECYCLE.md) | 操作授权、沙箱、界面边界、升级安装与任务生命周期 |
 | [07-IMPLEMENTATION-PLAN.md](07-IMPLEMENTATION-PLAN.md) | 按依赖拆解的重构任务、验收矩阵、风险、完成定义 |
+| [08-UNIFIED-PREVIEW-INFO.md](08-UNIFIED-PREVIEW-INFO.md) | 内置/第三方 Preview 与 Info 共用接口、Registry、Session、流式读取及同形结果 |
+| [../../ROADMAP.md](../../ROADMAP.md) | 整个 Fiex 插件平台按优先级、依赖和验收条件整理的待办事项 |
 
 ## 总体实施依赖
 
@@ -39,6 +41,10 @@ flowchart LR
   E --> F
   F --> G["M6 跨平台安全、性能与发布验收"]
 ```
+
+## 统一 Preview / Info 目标
+
+内置代码高亮文本、图片、音频、视频、PDF、默认文件预览和插件预览统一注册为 `PreviewProvider`；普通文件属性、音频元数据、视频元数据及第三方 Info 插件统一注册为 `InfoProvider`。两者均由同一宿主流程按照 Provider Descriptor 匹配、排序、授权、调用、聚合/回退和渲染，不在 `Preview.tsx` 或 `FileInfoDialog.tsx` 里对内置类型与特定插件 ID 写特殊分支。内置进程内 Adapter 与第三方 IPC/沙箱 Adapter **共享接口、不共享信任等级**。具体见 [08 统一预览与属性](08-UNIFIED-PREVIEW-INFO.md)、[根目录 Roadmap](../../ROADMAP.md)。
 
 ## 权限与搜索的目标约定
 

@@ -112,6 +112,22 @@ flowchart TD
 
 `contributions.search[]` 不提供 `scope`；所有搜索由 Core 绑定已验证的当前 root。Everything 可以在后台依托全局索引，但必须使用 root 作为路径过滤条件，Core 还要逐项校验结果路径确实属于该目录树；不支持展示跨 root 的全局搜索结果。
 
+## 2.4 统一 Preview / Info 扩展 Provider，而不是硬编码功能分支
+
+内置代码高亮、图片、音频、视频、PDF 和 fallback 也是 `PreviewProvider`；普通文件属性、音频 lofty 解析、MP4/Matroska 视频解析也是 `InfoProvider`。第三方 Provider 与内置使用同形 Descriptor、匹配/排序、Session Context、响应类型、错误降级；`Preview.tsx` 只渲染通用 PreviewHost，`FileInfoDialog.tsx` 只渲染统一 `InfoResponse.sections[]`，绝不按固定 pluginId 为特定官方插件开特例。
+
+```mermaid
+flowchart LR
+  C["Core scoped ResourceContext"] --> R["PreviewRegistry / InfoRegistry"]
+  R --> B["Built-in adapter (in-process)"]
+  R --> P["Plugin adapter (IPC / sandboxed UI)"]
+  B --> H["Same PreviewHost / InfoHost"]
+  P --> H
+  H --> U["One UI rendering contract"]
+```
+
+**接口相同不等于传输路径相同**：内置组件在宿主进程内部高效运行，第三方必须经过 Broker + iframe 隔离。媒体属性探测涉及文件字节读取，不能把它视为只需 metadata permission 的被动 Core Push。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md) 和 [Roadmap](../../ROADMAP.md)。
+
 ## 3. 所有权矩阵
 
 | 事项 | Core | 插件 |

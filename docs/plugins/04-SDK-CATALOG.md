@@ -278,6 +278,25 @@ UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两
 
 不同 UI/Native 会话绝不共享隐式“当前目录”权限。面板关闭不会自动取消已经显式启动、仍被 Core 持有的后台任务，但必须解除 UI panel-local 任务；用户能从活动中心取消后台任务。
 
+## 7.1 PreviewProvider 与 InfoProvider 统一 SDK 类型（目标新增）
+
+内置文本高亮/图片/音视频/PDF 与第三方 Preview 注册**同一个** `PreviewDescriptor`，内置基础/音频/视频与第三方 Info 注册**同一个** `InfoDescriptor`。Core Adapter 和 Native Plugin Adapter 必须接受相同逻辑上下文、返回相同结果；传输层实现不同，但不能在 FileInfoDialog/Preview 里写出两套契约。
+
+| SDK 导出/逻辑合同 | Core ↔ Provider 入口 | 目标语义 |
+|---|---|---|
+| `preview::PreviewDescriptor` | Host `PreviewRegistry.register` | `id,title,extensions?,mimeTypes?,priority?,panelId?`；内置与外部同形 |
+| `preview::PreviewContext` | `preview.open` | `{sessionId,intent:"preview",resource:{ref,metadata?}}`，以 Ref 代替 host 路径 |
+| `preview::PreviewView` | Host `PreviewHost` | 宿主可识别的渲染目标；第三方只能引用本插件已验证 Panel |
+| `info::InfoDescriptor` | Host `InfoRegistry.register` | `id,title,extensions?,mimeTypes?,priority?,command?` |
+| `info::InfoContext` | `info.resolve` | `{sessionId,intent:"info",resource:{ref,metadata?}}` |
+| `info::InfoRow` / `InfoSection` / `InfoResponse` | `info.resolve` | `{sections:[{id,title,rows:[{label,value}]}]}`，聚合原生与第三方来源 |
+| `resources::PreviewResourceRef` | Core Scoped Resource Broker | 只读、限量、可取消、支持视频/PDF Range/Seek；插件无法拿到裸本地文件路径 |
+| `preview::PreviewSession` / `info::InfoSession` | Core session owner | 文件切换、对话框关闭/插件禁用、取消时释放资源，后到结果丢弃 |
+
+`preview.open` 对 Core 内置 Provider 是进程内 Adapter 调用，对插件是 Host 统一管理的 Panel/UI Bridge 加载过程，**不是要求插件每次额外跑一遍 Native IPC**。插件注册 `preview[]` 及 `panels[]` 后，由 Core 选择其签名资源。Info Native handler 可以使用 `info.resolve` 或声明的 `command`，但必须返回同形 `InfoResponse`；SDK 应生成可直接实现的 `InfoHandler` 类型。
+
+**权限**：Core 只主动 Push 已获批的本次所选资源 `metadata?`；媒体探测/图片/视频/PDF 内容解析需要相应文件的 `files.read.enabled` + 精确 Scope。内置 Provider 的内部读取不向外部插件暴露特权；所有第三方流由 Broker 代理。完整规范见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
+
 ## 8. Fiex 内部 Tauri command 边界（非插件公开接口）
 
 Core 的 UI Host 对内部命令进行代理、校验与路由，包含：

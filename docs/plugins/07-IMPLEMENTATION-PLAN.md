@@ -45,7 +45,7 @@ flowchart LR
 |---|---|---|---|
 | M2.1 | Core | JSON Schema 验证全部 Manifest；file/folder 子权限统一 `{enabled}`，拒绝旧布尔形态 | 拒绝 scheme/capabilities/sync/writeMode/conflictControl 和旧布尔权限 |
 | M2.2 | Core | 删除 `when/children` 与 Manifest 中的静态 context menu item；`contributions.contextMenus:true` 注册 Provider，新增 `panels[]` 静态资源目录；实现一次右键每插件一次并发 `contextMenu.resolve` | 每次只传本次选中元数据；空结果/超时不阻塞 UI；最大 80 项/4 层/无环 |
-| M2.3 | Core | 完成 search/preview/info/hooks/decorations/themes/settings 生命周期；删除 `search.scope`，只允许指定目录 `root` 搜索，复核每条结果 | Everything 用全局索引但结果限定 root；无全局搜索入口；非官方 fixture 验收 |
+| M2.3 | Core | 完成 search/preview/info/hooks/decorations/themes/settings 生命周期；Preview/Info 内置与外部共用 ProviderRegistry / 请求响应，删除 `search.scope`，只允许指定目录 `root` 搜索 | 统一 Preview/Info fixtures；Everything 查询和结果限定 root；无全局搜索入口 |
 | M2.4 | Core | 签名校验覆盖 manifest 与 assets，升级触发权限变更检查 | 篡改文件安装失败；新权限重新同意 |
 | M2.5 | SDK | 生成 Manifest Type/Schema/示例包校验工具 | 本地一条命令能 lint 所有官方 manifest |
 
@@ -74,6 +74,21 @@ flowchart LR
 | M3.3 | SDK | UI Bridge 按 04 全量目标实现，`vfs.*`、plugin.task、clipboard、navigation 等无悬空 public 调用 | 逐 method 运行 contract test |
 | M3.4 | Core | UI Bridge host dispatcher 与 UI SDK 声明完全吻合，支持真实协作 cancel | 客户端每项调用得到成功或结构化拒绝 |
 | M3.5 | SDK | `RpcError` 标准分类、超时一致、取消/任务进度与自动资源清理 | 取消后无句柄/TaskScope 泄漏 |
+
+## 5.1 M3-P · Preview 与 Info Provider 解耦里程碑（P0）
+
+| 编号 | 仓库 | 待实施任务 | 完成条件 |
+|---|---|---|---|
+| M3.P1 | Core | PreviewRegistry 统一内置高亮文本、图片、音频、视频、PDF、fallback 与外部 Plugin Preview 的描述符、过滤/排序、优先级、失败回退 | 内置/第三方预览可在同一选择器排序；fallback 稳定 |
+| M3.P2 | Core | 将 `Preview.tsx` 的内容类型判断迁移到内置 Preview Provider；PreviewHost 只管理 Modal、导航、焦点、关闭、会话 | 宿主组件没有按 MIME/扩展名硬编码 renderer 分支 |
+| M3.P3 | Core | InfoRegistry 统一基本文件、lofty 音频、MP4/Matroska 视频与第三方 Info；统一 `InfoResponse.sections[]` | 多个 Provider 并发聚合；一个失败不影响其他 |
+| M3.P4 | Core | 将 `FileInfoDialog.tsx` 的 `basicRows` 与特定插件 ID 判断移除；基础属性作为 `core.info.file` | Dialog 只根据 sections 渲染；同样布局无特例 |
+| M3.P5 | Core | 将 `src-tauri/src/plugins/info.rs` 内置解析器拆成可注册 Adapter，消除 `media_sections + plugin_sections` 双路径 | Core/Plugin Info 共享执行时序、异常隔离、序列化 Schema |
+| M3.P6 | Core/SDK | 新增 `PreviewContext/View`、`InfoContext/Response`、`ResourceRef` SDK 类型；补齐 `info.resolve` 和 `preview.open` Host 逻辑合同 | Core/Plugin Adapter 通过同一 contract fixture；无旧 `{path,rows}` 回包 |
+| M3.P7 | Core | Preview/Info 统一限额只读流、资源 URL、范围读取、取消/关闭句柄回收，覆盖本地/Connection/VFS | 无全文件 JSON/base64；跨资源访问拒绝；5 GiB+ 文件稳定 |
+| M3.P8 | Core/Official Plugins | 重写 Office/Data Preview 和 Info 等官方贡献，以新 Panel/Descriptor 与 `InfoResponse` 合同接入 | UI/原生插件不能绕过权限；回归文本/图片/音视频/PDF 与媒体元数据 |
+
+这里所有能力都属于**Provider 合同一致**，不要求内置 Component 运行插件进程或不必要地经过 IPC。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md) 与 [根目录 Roadmap](../../ROADMAP.md)。
 
 ## 6. M4 — VFS + Connection 全部统一
 
@@ -152,6 +167,7 @@ gantt
 
 - [ ] **所有 API 已列出**：03 的每个 method 有 Schema、Core 实现或显式拒绝逻辑、SDK 对应或标记内部低层、成功/失败测试；04 的 UI API 每个 getter 均有 Host Bridge 实际分发。
 - [ ] **所有贡献点有效**：02 的每类均有 Manifest fixture、渲染入口、错误降级与撤权测试；右键全部使用动态 `contextMenu.resolve/execute`，不再接受 `when/children`。
+- [ ] **统一 Preview/Info**：内置文本高亮、图片、音频、视频、PDF 与第三方共用 PreviewRegistry；基本文件/音频/视频元数据与第三方共用 InfoRegistry 和 InfoResponse；无格式硬编码、多条宿主渲染路径。
 - [ ] **Core 纯通用**：无官方 Provider ID 特判，无重复 VFS scheme，无旧 capabilities/sync/writeMode/conflictControl。
 - [ ] **同步不丢文件**：本地同大小同 mtime 改动、远端传输中改动、CAS 失败均保留双方完整副本并提示。
 - [ ] **跨平台隔离**：非授权元数据 Push、主动 stat、文件读写、目录遍历、网络、命令、任务和 UI Tauri 越权均有自动负面测试。

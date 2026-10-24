@@ -106,8 +106,8 @@ Core 发送元数据遵循最小披露：`{name,kind,extension,mime?,size?,modif
 | `contextMenus` | `true` | 注册一次右键菜单 Provider；每次右键动态查询 | `contextMenu.resolve` / `contextMenu.execute` |
 | `search[]` | `id,title,command?` | 仅搜索当前指定目录范围；Core 聚合、校验并去重 | 默认 `search.query` 或显式命令 |
 | `panels[]` | `id,title,entry,defaultSize?` | 注册本包内已编译 iframe 页面；由工具栏/右键菜单引用 | UI Bridge / 可选 Native 处理器 |
-| `preview[]` | `id,title,extensions,priority,panelId` | 在预览优先级选择器中匹配 | 已注册的 iframe + 可选 Native 命令 |
-| `info[]` | `id,title,extensions?,command,priority?` | 文件信息抽屉扩展卡片 | 返回标题/rows 的插件方法 |
+| `preview[]` | `id,title,extensions?,mimeTypes?,priority?,panelId` | 与内置 Text/Code/Image/Audio/Video/PDF Provider 同一 PreviewRegistry 匹配和排序 | 外部指向已验证 iframe；内置用 Core Adapter |
+| `info[]` | `id,title,extensions?,mimeTypes?,command?,priority?` | 与内置文件/音频/视频 Provider 同一 InfoRegistry 聚合 | 返回统一 `InfoResponse.sections[]` |
 | `hooks[]` | `id,event,command,priority?` | 在批准的文件操作前调用，必须限时 | `hook.beforeOpen` 等自定义命令 |
 | `settings[]` | `id,label,type,defaultValue?` | Core 根据字段生成设置界面、私有存储/Secret | Core 表单，无自动 Native 请求 |
 | `themes[]` | `path` | 加载包内 JSON 主题 token，不执行脚本 | 无 Native 要求 |
@@ -118,11 +118,27 @@ Core 发送元数据遵循最小披露：`{name,kind,extension,mime?,size?,modif
 - `connections.fields[]`：`id,label,type,required?,placeholder?,defaultValue?`；`type` 为 `text|url|number|checkbox|secret`。Secret 始终由 Keyring 代理，日志及普通 JSON 存储禁止泄露。
 - `vfs`：为临时只读视图，创建时必须绑定选中 resourceRoot 与小型不可变 viewContext。
 - `search[]` **不允许 `scope` 字段**。Fiex 只提供指定目录的搜索：每次 IPC 传入 Core 已校验的 `root`；Provider 必须将结果限制到该根目录及其子目录。Everything 虽然使用全局索引实现检索，但必须在查询时限制路径，且 Core 要对每条返回结果再次验证是否位于 `root` 下；不实现独立“全局搜索”入口。
-- `preview.extensions`：小写不带点，`maxBytes` 可限制可预览对象；扩展选择失败回退内置预览。
-- `info`：统一返回 `{title?, rows:[{label,value}]}`；不可由插件提交 HTML 直接插入宿主 DOM。
+- `preview.extensions` 小写不带点；`preview.mimeTypes` 支持明确的 MIME 匹配；外部插件必须引用其已登记且验证的 `panelId`，Core 内置 Provider 使用同形 descriptor + 内部渲染 Adapter。所有 Preview（高亮文本、图片、音频、视频、PDF、外部插件）在同一个 Registry 中排序，失败依次回退，始终保留基础 fallback。内容读取必须有资源流限额，不允许因文件小就静默读取未授权内容。
+- `info`：Core 内置基础文件元数据、lofty 音频、MP4/Matroska 视频与外部插件使用**同形** `InfoDescriptor`、相同调度与响应协议：`{sections:[{id,title,rows:[{label,value}]}]}`，不再使用旧式 `{title?,rows}`；不接受 HTML/JS。每个第三方 Info 需要一个已注册 handler（默认 `info.resolve` 或可配置的 `command`），并遵守资源 Scope。媒体解析可能读文件字节，不能只靠 metadata 权限。
 - `hooks`：动作回复应固定为 `{action:"pass"|"consume", reason?}`；Core 最终裁决。
 - `themes[]` 对应 JSON `{id,name,mode,tokens,darkTokens?}`，`mode` 只能 light/dark；限制 token 字符与值，不接受 CSS 任意选择器或远程资源。
 - `folders.read.decorations`：`mode:"declarative"` 时 `rules[]` 含 `match` 与 `badge`；`mode:"dynamic"` 时需 `method,priority,scope?`，由 Core 有界批量请求。
+
+### 3.1 Preview / Info 注册接口同形：内置也是 Provider
+
+**统一接口，不统一信任等级。** Core 在 PreviewRegistry 注册 `core.preview.text/image/audio/video/pdf/fallback`，在 InfoRegistry 注册 `core.info.file/audio/video`；它们和第三方 Manifest `preview[]/info[]` 均转换成同形 `PreviewDescriptor/InfoDescriptor`、相同匹配/优先级/生命周期。第三方预览通过已验证的 `panels[]` iframe，内置通过 Core in-process renderer Adapter；都由一个 Host 渲染调度器管理，不允许任何插件指定 builtin renderer。
+
+```json
+{
+  "contributions": {
+    "panels": [{"id":"xyz.viewer","title":"XYZ 预览","entry":"ui/preview.html"}],
+    "preview": [{"id":"xyz.preview","title":"XYZ 文件预览","extensions":["xyz"],"mimeTypes":["application/x-xyz"],"priority":60,"panelId":"xyz.viewer"}],
+    "info": [{"id":"xyz.info","title":"XYZ 属性","extensions":["xyz"],"priority":60,"command":"xyz.info"}]
+  }
+}
+```
+
+`InfoProvider` 只返回 `{sections:[{id,title,rows:[{label,value}]}]}`，由唯一 `InfoHost` 与内置的普通文件、音频、视频信息一起渲染；`PreviewProvider` 则统一返回受控 `PreviewView`，由 `PreviewHost` 管理宿主外框和错误回退。Core 事件向第三方 Push 的 `metadata?` 仍要求批准 `files.metadata.enabled/folders.metadata.enabled`，内容解析要求 `files.read.enabled` + 该次查看的精确 Scope。目标合同与具体任务见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md) 和根目录 [ROADMAP](../../ROADMAP.md)。
 
 ## 4. 完整示范：一个同时提供云连接、面板和信息扩展的插件
 
