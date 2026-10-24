@@ -484,15 +484,28 @@ function Picker({ request }: { request: FilePickerRequest }) {
               <ChevronUp size={15} />
             </button>
             <nav className="file-picker-crumbs" aria-label="路径">
-              {segments.map((segment, position) => (
+              {segments.length > 3 && (
                 <button
-                  key={position}
                   type="button"
-                  onClick={() => navigate('/' + segments.slice(0, position + 1).join('/'))}
+                  aria-label="更上层"
+                  title="更上层"
+                  onClick={() => navigate('/' + segments.slice(0, segments.length - 3).join('/'))}
                 >
-                  {segment}
+                  …
                 </button>
-              ))}
+              )}
+              {segments.slice(Math.max(0, segments.length - 3)).map((segment, position) => {
+                const index = segments.length - Math.min(3, segments.length) + position
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => navigate('/' + segments.slice(0, index + 1).join('/'))}
+                  >
+                    {segment}
+                  </button>
+                )
+              })}
             </nav>
             <button
               type="button"

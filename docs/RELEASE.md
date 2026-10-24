@@ -4,6 +4,7 @@
 - The archive plugin uses it: opening an archive extracts it next to the archive (conflict-safe names) instead of launching the system app; password-protected archives open the preview for the password.
 - Plugin file dialogs now use the app's own compact file browser (sidebar places, favorites, connections, devices, breadcrumbs, back/forward/up, search, list/grid, sorting, grouping, new folder, context menu, centered save name, replace dialog) instead of the system picker.
 - Context menus (picker and main window) measure themselves and stay inside the viewport, flipping near the edges.
+- Breadcrumbs show at most the last three levels, with an ellipsis to climb one level, in both the main window and the picker.
 
 # Fiex 0.4.11
 

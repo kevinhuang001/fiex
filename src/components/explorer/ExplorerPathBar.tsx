@@ -71,11 +71,25 @@ export function ExplorerPathBar({
             </form>
           ) : (
             <>
-              {crumbs.map((p, i) => (
+              {crumbs.length > 3 && (
+                <span>
+                  <ChevronRight size={11} />
+                  <button
+                    title="更上层"
+                    aria-label="更上层"
+                    onClick={() => x.navigate(crumbs[crumbs.length - 4].path)}
+                  >
+                    …
+                  </button>
+                </span>
+              )}
+              {crumbs.slice(Math.max(0, crumbs.length - 3)).map((p, i) => (
                 <span key={i}>
                   <ChevronRight size={11} />
                   <button
-                    onClick={() => (i === crumbs.length - 1 ? startPathEdit() : x.navigate(p.path))}
+                    onClick={() =>
+                      i === Math.min(3, crumbs.length) - 1 ? startPathEdit() : x.navigate(p.path)
+                    }
                   >
                     {p.name}
                   </button>
