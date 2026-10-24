@@ -381,6 +381,16 @@
 .preview-modal {
   max-width: 94vw;
 }
+
+/* Quick Look chrome stays compact; the content is the focus. */
+.preview-modal.modal-wide header {
+  height: 44px;
+  padding: 0 18px;
+}
+
+.preview-modal h2 {
+  font-size: 12px;
+}
 .modal-wide header {
   height: 62px;
   margin: 0;
