@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
-import { ArrowUp, ChevronRight, HardDrive, LoaderCircle, Search, X } from 'lucide-react'
+import { ArrowUp, ChevronRight, LoaderCircle, Search, X } from 'lucide-react'
 export function ExplorerPathBar({
   x,
   startPathEdit,
@@ -46,9 +46,6 @@ export function ExplorerPathBar({
             if (event.target === event.currentTarget) startPathEdit()
           }}
         >
-          <button onClick={startPathEdit} title="编辑或复制路径" aria-label="编辑路径">
-            <HardDrive size={13} />
-          </button>
           {editingPath ? (
             <form className="path-editor" onSubmit={submitPath}>
               <input

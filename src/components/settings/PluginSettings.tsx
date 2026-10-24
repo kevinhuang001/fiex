@@ -162,7 +162,7 @@ function PluginListField({
             </button>
           </div>
         ))}
-        {!values.length && <p className="sidebar-hint">还没有条目。</p>}
+        {!values.length && <p className="plugin-list-empty">还没有条目。</p>}
       </div>
       <Button type="button" size="sm" variant="outline" onClick={() => onChange([...values, ''])}>
         添加条目
@@ -906,40 +906,50 @@ export function PluginSettings() {
         title={settingsFor ? `${settingsFor.name} · 设置` : '插件设置'}
       >
         <div className="plugin-settings-fields">
-          {fields.map((field: PluginField) => (
-            <label key={field.id} className="plugin-settings-field">
-              <span>
+          {fields.map((field: PluginField) => {
+            const label = (
+              <span className="plugin-settings-label">
                 {field.type === 'secret' ? <KeyRound size={14} /> : <Database size={14} />}
                 {field.label}
               </span>
-              {field.type === 'list' ? (
-                <PluginListField
-                  field={field}
-                  values={asList(draft[field.id], field)}
-                  onChange={(values) => setDraft((old) => ({ ...old, [field.id]: values }))}
-                />
-              ) : field.type === 'checkbox' ? (
-                <input
-                  type="checkbox"
-                  checked={Boolean(draft[field.id])}
-                  onChange={(event) =>
-                    setDraft((old) => ({ ...old, [field.id]: event.target.checked }))
-                  }
-                />
-              ) : (
-                <input
-                  type={field.type === 'secret' ? 'password' : field.type}
-                  value={String(draft[field.id] ?? '')}
-                  placeholder={
-                    field.type === 'secret' ? '保留原有凭据（留空不修改）' : field.placeholder
-                  }
-                  onChange={(event) =>
-                    setDraft((old) => ({ ...old, [field.id]: event.target.value }))
-                  }
-                />
-              )}
-            </label>
-          ))}
+            )
+            if (field.type === 'list')
+              return (
+                <div key={field.id} className="plugin-settings-field">
+                  {label}
+                  <PluginListField
+                    field={field}
+                    values={asList(draft[field.id], field)}
+                    onChange={(values) => setDraft((old) => ({ ...old, [field.id]: values }))}
+                  />
+                </div>
+              )
+            return (
+              <label key={field.id} className="plugin-settings-field">
+                {label}
+                {field.type === 'checkbox' ? (
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft[field.id])}
+                    onChange={(event) =>
+                      setDraft((old) => ({ ...old, [field.id]: event.target.checked }))
+                    }
+                  />
+                ) : (
+                  <input
+                    type={field.type === 'secret' ? 'password' : field.type}
+                    value={String(draft[field.id] ?? '')}
+                    placeholder={
+                      field.type === 'secret' ? '保留原有凭据（留空不修改）' : field.placeholder
+                    }
+                    onChange={(event) =>
+                      setDraft((old) => ({ ...old, [field.id]: event.target.value }))
+                    }
+                  />
+                )}
+              </label>
+            )
+          })}
           {!fields.length && <p className="sidebar-hint">此插件没有需要配置的设置。</p>}
           {message && <p role="status">{message}</p>}
           <footer className="plugin-consent-actions">

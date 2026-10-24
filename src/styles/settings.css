@@ -3859,3 +3859,97 @@ body.dragging-reorder * {
   text-align: center;
   white-space: pre-wrap;
 }
+
+/* Plugin settings form: consistent labels and a bordered list editor. */
+.plugin-settings-fields {
+  padding: 2px 2px 0;
+}
+
+.plugin-settings-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.plugin-settings-field > input:not([type='checkbox']) {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.plugin-settings-field > input:not([type='checkbox']):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.plugin-list-field {
+  display: grid;
+  gap: 8px;
+}
+
+.plugin-list-rows {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.plugin-list-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+
+.plugin-list-row:last-child {
+  border-bottom: 0;
+}
+
+.plugin-list-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.plugin-list-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.plugin-list-remove:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.plugin-list-field > .button,
+.plugin-list-field > button {
+  justify-self: start;
+}
+
+.plugin-list-empty {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
