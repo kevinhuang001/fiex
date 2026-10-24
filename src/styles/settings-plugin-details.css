@@ -977,20 +977,26 @@
 }
 
 .plugin-list-modal {
-  max-width: 560px;
-  width: 560px;
+  width: 440px;
+  max-width: calc(100vw - 40px);
+  padding: 20px;
+}
+.plugin-list-modal > header,
+.plugin-list-confirm > header {
+  margin-bottom: 12px;
 }
 
 .plugin-list-editor {
   display: flex;
   gap: 10px;
-  padding: 4px 14px 10px;
+  padding: 0;
 }
 
 .plugin-list-editor-rows {
   flex: 1;
   min-width: 0;
-  height: 320px;
+  min-height: 96px;
+  max-height: 240px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -1025,7 +1031,7 @@
   flex-direction: column;
   gap: 6px;
   flex: 0 0 auto;
-  width: 70px;
+  width: 64px;
 }
 
 .plugin-list-editor-actions .button {
@@ -1039,13 +1045,15 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 0 14px 14px;
+  padding: 4px 0 0;
 }
 
 .plugin-list-confirm-field {
-  padding: 4px 14px 14px;
+  padding: 0;
 }
 
 .plugin-list-confirm {
-  max-width: 420px;
+  width: 380px;
+  max-width: calc(100vw - 40px);
+  padding: 20px;
 }
