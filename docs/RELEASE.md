@@ -1,3 +1,8 @@
+# Fiex 0.4.11
+
+- The preview sheet header is compact (44 px), leaving more room for the content.
+- Office preview now parses DOCX/XLSX/PPTX with a real Office library and renders headings, lists and tables (plugin 0.2.10).
+
 # Fiex 0.4.10
 
 - Plugin previewers render inside the Quick Look sheet itself, with the same sandbox and bridge as panels; the built-in text, image, media and PDF previewers are unchanged.

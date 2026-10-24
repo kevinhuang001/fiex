@@ -981,55 +981,13 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
         if (method === 'office.render') {
           const path = String(params.path || '')
           const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-          if (extension === 'docx')
-            return {
-              kind: 'docx',
-              lines: [
-                '2026 年第三季度产品报告',
-                '本季度活跃用户增长 24%，其中团队版转化率提升 6 个百分点。',
-                '一、核心进展',
-                '插件市场完成签名校验与增量更新，平均安装时间缩短到 3 秒。',
-                '二、下一步计划',
-                '完善 Office 预览、远程连接与搜索体验。',
-              ],
-            }
-          if (extension === 'xlsx')
-            return {
-              kind: 'xlsx',
-              sheets: [
-                {
-                  name: 'Sheet1',
-                  rows: [
-                    ['项目', '预算', '实际', '差异'],
-                    ['研发', '1,200,000', '1,180,000', '-20,000'],
-                    ['市场', '450,000', '470,000', '20,000'],
-                    ['运营', '300,000', '290,000', '-10,000'],
-                  ],
-                },
-                {
-                  name: 'Sheet2',
-                  rows: [
-                    ['季度', '收入'],
-                    ['Q1', '820,000'],
-                    ['Q2', '960,000'],
-                    ['Q3', '1,120,000'],
-                  ],
-                },
-              ],
-            }
-          if (extension === 'pptx')
-            return {
-              kind: 'pptx',
-              slides: [
-                { index: 1, lines: ['Fiex 产品介绍', '一个更快的文件管理器'] },
-                {
-                  index: 2,
-                  lines: ['插件化', 'Office 预览、远程连接、压缩工具都以插件形式安装。'],
-                },
-                { index: 3, lines: ['下一步', '完善预览与搜索，保持核心轻量。'] },
-              ],
-            }
-          return { kind: 'docx', lines: [] }
+          // Real office_oxide output for the bundled demo fixtures.
+          const rendered: Record<string, string> = {
+            docx: '<h1><span style="font-family:\'Cambria\';font-size:11pt">2026 \u5e74\u7b2c\u4e09\u5b63\u5ea6\u4ea7\u54c1\u62a5\u544a</span></h1>\n<p><span style="font-family:\'Cambria\';font-size:11pt">\u672c\u5b63\u5ea6 </span><span style="font-family:\'Cambria\';font-size:11pt"><strong>\u6d3b\u8dc3\u7528\u6237\u589e\u957f 24%</strong></span><span style="font-family:\'Cambria\';font-size:11pt">\uff0c\u56e2\u961f\u7248\u8f6c\u5316\u7387\u63d0\u5347 6 \u4e2a\u767e\u5206\u70b9\u3002</span></p>\n<h2><span style="font-family:\'Cambria\';font-size:11pt">\u6838\u5fc3\u8fdb\u5c55</span></h2>\n<ul>\n<li><p><span style="font-family:\'Cambria\';font-size:11pt">\u63d2\u4ef6\u5e02\u573a\u5b8c\u6210\u7b7e\u540d\u6821\u9a8c\u4e0e\u589e\u91cf\u66f4\u65b0\uff0c\u5e73\u5747\u5b89\u88c5\u65f6\u95f4\u7f29\u77ed\u5230 3 \u79d2\u3002</span></p></li>\n<li><p><span style="font-family:\'Cambria\';font-size:11pt">Office \u9884\u89c8\u3001SQLite \u67e5\u770b\u5668\u8fdb\u5165\u5b98\u65b9\u63d2\u4ef6\u5217\u8868\u3002</span></p></li>\n</ul>\n<table>\n<tr><td><p><span style="font-family:\'Cambria\';font-size:11pt">\u9879\u76ee</span></p></td><td><p><span style="font-family:\'Cambria\';font-size:11pt">\u9884\u7b97</span></p></td><td><p><span style="font-family:\'Cambria\';font-size:11pt">\u5b9e\u9645</span></p></td></tr>\n<tr><td><p><span style="font-family:\'Cambria\';font-size:11pt">\u7814\u53d1</span></p></td><td><p><span style="font-family:\'Cambria\';font-size:11pt">1,200,000</span></p></td><td><p><span style="font-family:\'Cambria\';font-size:11pt">1,180,000</span></p></td></tr>\n<tr><td><p><span style="font-family:\'Cambria\';font-size:11pt">\u5e02\u573a</span></p></td><td><p><span style="font-family:\'Cambria\';font-size:11pt">450,000</span></p></td><td><p><span style="font-family:\'Cambria\';font-size:11pt">470,000</span></p></td></tr>\n</table>\n<h2><span style="font-family:\'Cambria\';font-size:11pt">\u4e0b\u4e00\u6b65</span></h2>\n<p><span style="font-family:\'Cambria\';font-size:11pt">\u5b8c\u5584\u9884\u89c8\u4e0e\u641c\u7d22\uff0c\u4fdd\u6301\u6838\u5fc3\u8f7b\u91cf\u3002</span></p>',
+            xlsx: '<h2>\u9884\u7b97</h2>\n<table>\n<tr><th><p>\u9879\u76ee</p></th><th><p>Q1</p></th><th><p>Q2</p></th><th><p>Q3</p></th></tr>\n<tr><td><p>\u7814\u53d1</p></td><td><p>400000</p></td><td><p>400000</p></td><td><p>400000</p></td></tr>\n<tr><td><p>\u5e02\u573a</p></td><td><p>150000</p></td><td><p>150000</p></td><td><p>150000</p></td></tr>\n<tr><td><p>\u5408\u8ba1</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr>\n</table>\n<hr />\n<h2>\u6536\u5165</h2>\n<table>\n<tr><th><p>\u5b63\u5ea6</p></th><th><p>\u6536\u5165</p></th></tr>\n<tr><td><p>Q1</p></td><td><p>820000</p></td></tr>\n<tr><td><p>Q2</p></td><td><p>960000</p></td></tr>\n<tr><td><p>Q3</p></td><td><p>1120000</p></td></tr>\n</table>',
+            pptx: '<h2>Fiex \u4ea7\u54c1\u4ecb\u7ecd</h2>\n<p><span style="font-size:32pt">\u4e00\u4e2a\u66f4\u5feb\u7684\u6587\u4ef6\u7ba1\u7406\u5668</span></p>\n<hr />\n<h2>\u63d2\u4ef6\u5316</h2>\n<ul>\n<li><p><span style="font-size:32pt">Office \u9884\u89c8\u3001SQLite \u67e5\u770b\u5668\u3001\u8fdc\u7a0b\u8fde\u63a5\u90fd\u4ee5\u63d2\u4ef6\u5f62\u5f0f\u5b89\u88c5\u3002</span></p></li>\n</ul>\n<hr />\n<h2>\u4e0b\u4e00\u6b65</h2>\n<ul>\n<li><p><span style="font-size:32pt">\u5b8c\u5584\u9884\u89c8\u4e0e\u641c\u7d22\uff0c\u4fdd\u6301\u6838\u5fc3\u8f7b\u91cf\u3002</span></p></li>\n</ul>',
+          }
+          return { kind: extension, html: rendered[extension] || '' }
         }
         if (method === 'git.status')
           return {
