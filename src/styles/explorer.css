@@ -1042,3 +1042,17 @@
   color: var(--muted);
   font-size: 9px;
 }
+
+.toolbar-order {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.toolbar-order-item {
+  display: flex;
+  flex: 0 0 auto;
+}
+body.dragging-toolbar {
+  cursor: grabbing;
+  user-select: none;
+}

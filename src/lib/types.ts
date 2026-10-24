@@ -138,6 +138,8 @@ export interface Preferences {
   placeOrder: string[]
   hiddenPlaces: string[]
   hiddenSections: SidebarSection[]
+  toolbarLeftOrder: string[]
+  toolbarRightOrder: string[]
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap

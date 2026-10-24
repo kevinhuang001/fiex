@@ -30,6 +30,8 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     placeOrder: [],
     hiddenPlaces: [],
     hiddenSections: [],
+    toolbarLeftOrder: ['views', 'newFolder', 'ide', 'terminal'],
+    toolbarRightOrder: ['refresh', 'split', 'activity'],
     favorites: [],
     tags: TAG_PRESETS.map((tag) => ({ ...tag })),
     shortcutStyle: style,
@@ -106,6 +108,16 @@ function load(): Preferences {
             ['places', 'favorites', 'tags', 'devices', 'connections'].includes(section),
           )
         : fallback.hiddenSections,
+      toolbarLeftOrder: Array.isArray(stored.toolbarLeftOrder)
+        ? stored.toolbarLeftOrder.filter((item): item is string =>
+            ['views', 'newFolder', 'ide', 'terminal'].includes(item),
+          )
+        : fallback.toolbarLeftOrder,
+      toolbarRightOrder: Array.isArray(stored.toolbarRightOrder)
+        ? stored.toolbarRightOrder.filter((item): item is string =>
+            ['refresh', 'split', 'activity'].includes(item),
+          )
+        : fallback.toolbarRightOrder,
       shortcutStyle: style,
       shortcuts,
     }
