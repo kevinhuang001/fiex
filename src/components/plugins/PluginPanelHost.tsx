@@ -1,4 +1,4 @@
-import { DemoFilePicker, type FakePicker } from './DemoFilePicker'
+import { openFilePicker } from '@/lib/filePicker'
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { convertFileSrc } from '@tauri-apps/api/core'
@@ -186,7 +186,6 @@ function CachedPanel({
   const [revealed, setRevealed] = useState(false)
   const revealTimer = useRef<number | null>(null)
   const [error, setError] = useState('')
-  const [fakePicker, setFakePicker] = useState<FakePicker | null>(null)
   const [size, setSize] = useState({ width: 560, height: 560 })
   const panel = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
@@ -250,7 +249,6 @@ function CachedPanel({
   useEffect(() => {
     if (!active) return
     const outside = (event: PointerEvent) => {
-      if (fakePicker) return
       const target = event.target as Element | null
       if (panel.current?.contains(target)) return
       // A plugin tool button or the plugin menu opens the next panel on click.
@@ -260,7 +258,6 @@ function CachedPanel({
       close()
     }
     const escape = (event: KeyboardEvent) => {
-      if (fakePicker) return
       if (event.key === 'Escape') close()
     }
     document.addEventListener('pointerdown', outside)
@@ -547,30 +544,18 @@ function CachedPanel({
                 suggestedName?: string
                 extensions?: string[]
               }
-              if (!native) {
-                const picked = await new Promise<string | string[] | null>((resolve) => {
-                  setFakePicker({
-                    mode: method,
-                    suggestedName: p.suggestedName,
-                    directory: p.directory || current.directory,
-                    resolve,
-                  })
-                })
-                if (method === 'dialog.openFiles')
-                  return Array.isArray(picked) ? picked : picked ? [picked] : null
-                return typeof picked === 'string' ? picked : null
-              }
-              if (method === 'dialog.openFiles')
-                return await call<string[] | null>('plugin_files_dialog', {
-                  directory: p.directory,
-                  extensions: p.extensions,
-                })
-              return await call<string | null>('plugin_file_dialog', {
-                mode: method.slice('dialog.'.length),
-                directory: p.directory,
+              // The chooser is the app's own file browser: the plugin only
+              // receives the path the user explicitly picks.
+              const picked = await openFilePicker({
+                mode: method.slice('dialog.'.length) as
+                  'openFile' | 'openFiles' | 'openDirectory' | 'saveFile',
                 suggestedName: p.suggestedName,
+                directory: p.directory || current.directory,
                 extensions: p.extensions,
               })
+              if (method === 'dialog.openFiles')
+                return Array.isArray(picked) ? picked : picked ? [picked] : null
+              return typeof picked === 'string' ? picked : null
             }
             throw new Error('Unsupported panel operation')
           },
@@ -676,7 +661,6 @@ function CachedPanel({
           </div>
         </div>
       )}
-      {fakePicker && <DemoFilePicker fakePicker={fakePicker} onClose={() => setFakePicker(null)} />}
     </>
   )
 }
