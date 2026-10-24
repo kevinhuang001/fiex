@@ -265,11 +265,24 @@ impl Running {
             entry.info.clone()
         };
         self.emit_task(&info);
-        self.send_frame(&json!({
+        if let Err(error) = self.send_frame(&json!({
             "jsonrpc": "2.0",
             "method": "plugin.cancel",
             "params": { "taskId": info.task_id },
-        }))
+        })) {
+            if let Ok(mut tasks) = self.tasks.lock() {
+                if let Some(entry) = tasks.get_mut(id) {
+                    entry.info.status = "failed".into();
+                    entry.info.error = Some("插件进程已断开".into());
+                    entry.finished_at = Some(now_millis());
+                    let info = entry.info.clone();
+                    drop(tasks);
+                    self.emit_task(&info);
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     fn prune_tasks(tasks: &mut HashMap<String, TaskEntry>) {
@@ -773,11 +786,13 @@ impl Running {
         if self.initialized.load(Ordering::Acquire) {
             return Ok(());
         }
-        let result = self.rpc(
-            "plugin.initialize",
-            json!({"protocolVersion": plugin_sdk::PROTOCOL_VERSION}),
-            None,
-        )?;
+        let result = self
+            .rpc(
+                "plugin.initialize",
+                json!({"protocolVersion": plugin_sdk::PROTOCOL_VERSION}),
+                None,
+            )
+            .map_err(|failure| RpcFailure::fatal(failure.message))?;
         if result.get("pluginId").and_then(Value::as_str) != Some(self.plugin_id.as_str()) {
             return Err(RpcFailure::fatal("plugin identity mismatch"));
         }

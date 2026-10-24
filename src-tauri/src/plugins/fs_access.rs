@@ -475,7 +475,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
         let mut moved = false;
         if let Ok(canonical_parent) = dir.canonicalize(parent) {
             let absolute_parent = write.root_path.join(&canonical_parent);
-            let root_is_intact = std::fs::canonicalize(&write.root_path)
+            let root_is_intact = dunce::canonicalize(&write.root_path)
                 .map(|path| path == write.root_path)
                 .unwrap_or(false);
             if root_is_intact
