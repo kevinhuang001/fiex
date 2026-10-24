@@ -544,13 +544,14 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
         } else {
             let mut output = target_dir
                 .open_with(&temp_name, OpenOptions::new().write(true).create_new(true))
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("create commit temp: {e}"))?;
             temp_exists = true;
             write
                 .staging
                 .seek(SeekFrom::Start(0))
                 .map_err(|e| e.to_string())?;
-            std::io::copy(&mut write.staging, &mut output).map_err(|e| e.to_string())?;
+            std::io::copy(&mut write.staging, &mut output)
+                .map_err(|e| format!("copy commit temp: {e}"))?;
             output.sync_all().map_err(|e| e.to_string())?;
             // Windows refuses to replace a file while this handle is open.
             drop(output);
@@ -560,9 +561,11 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
                 .metadata(&write.path)
                 .map_err(|e| e.to_string())?
                 .permissions();
-            let temp = target_dir.open(&temp_name).map_err(|e| e.to_string())?;
+            let temp = target_dir
+                .open(&temp_name)
+                .map_err(|e| format!("open commit temp: {e}"))?;
             temp.set_permissions(permissions)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("set commit permissions: {e}"))?;
             temp.sync_all().map_err(|e| e.to_string())?;
         }
         if fingerprint(dir, &write.path)? != write.original {
@@ -578,7 +581,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
                 .map_err(|e| e.to_string())?;
         } else {
             replace_file(&target_dir, &temp_name, &name.to_string_lossy())
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("replace commit target: {e}"))?;
         }
         entry(dir, &write.path)
     })();
