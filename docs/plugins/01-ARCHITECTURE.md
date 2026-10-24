@@ -1,117 +1,120 @@
-> **实现状态**：进程宿主、通用插件 VFS、Git/WebDAV/SMB/Archive/Checksum 插件、Linux 沙箱已落地；Windows 沙箱与任务进度未完成。
+# 01 · 目标架构和职责边界
 
-# 01 · 总体架构与职责边界
+## 1. 总体分层
 
-[索引](README.md) · [下一篇：VFS](02-VFS.md)
-
-## 1. 设计原则
-
-- Fiex Core **MUST** 不依赖任何官方插件 crate/实现模块，也不能包含按官方插件名称、ID、URL scheme 判断的业务分支；`localfs` 是内核自带基础适配器而不是享有特殊权限的官方插件。
-- 插件扩展点直接由 `contributions` 表达，不再维护冗余 `capabilities` 分类或同步开关；“连接插件”“功能插件”只用在产品分类。
-- **功能插件 MUST 能贡献挂载及虚拟目录**，包括 Git 历史版本、搜索结果、GitHub 仓库树、日历日程视图等。插件的只读目录不必有真实的物理目录。
-- 内核独占通用 VFS、缓存、同步、传输、冲突、任务、设置与 iframe UI 宿主。插件前端交付**预编译 HTML/CSS/JS**，通过 UI Bridge 调用宿主；后端经独立进程 IPC 接入，不绑定主 React/Tauri API。
-- **Native 后端**必须在独立进程运行，官方与第三方使用相同的安装、握手和监管机制。UI-only 插件可仅包含预编译 iframe 静态资源，不必打包无意义的 Native 二进制。
-
-## 2. 分层与数据流
-
-```text
-┌────────────────────────────────────────────────────────────┐
-│ React UI: Explorer / Tabs / Sidebar / Context Menu /       │
-│ Toolbar / iframe Panel Host / Sync Rules / Activity Center  │
-└─────────────────── Tauri command/events ──────────────────┘
-┌────────────────────────────────────────────────────────────┐
-│ Fiex Core (Rust)                                           │
-│  PluginRegistry  PluginHost  PermissionBroker SecretStore │
-│  VfsRouter + NodeIndex + LocalFsAdapter                    │
-│  CacheManager  SyncEngine  TransferEngine  TaskManager     │
-│  UiContributionRegistry / UiBridge / Settings / Notices     │
-└───────────────── versioned IPC + stream ───────────────────┘
-      ↕                    ↕                    ↕
-  WebDAV process       SMB process         Git process
-  VFS + connections    VFS + connections   UI + read-only VFS
-      ↕                    ↕                    ↕
-   HTTP/WebDAV             SMB                  git CLI
+```mermaid
+flowchart TB
+  subgraph UI["Fiex 桌面端（React / Tauri）"]
+    Explorer["Explorer · Tabs · Sidebar"]
+    PanelHost["面板/菜单/预览/主题宿主"]
+    EventCenter["任务与冲突活动中心"]
+  end
+  subgraph Core["Fiex Core（唯一可信资源 Broker）"]
+    Registry["Manifest Registry / Installer / Signer"]
+    Permission["Consent + OperationScope + TaskScope"]
+    Router["VFS Router / MountRegistry / NodeIndex"]
+    Engine["Cache / Transfer / Sync / Conflict"]
+    FS["OS File Broker / Clipboard / Preview"]
+    Net["HTTP / TCP Broker / Process Broker"]
+    Storage["Settings / Secrets / Logs"]
+    Runtime["Native IPC Runtime"]
+  end
+  subgraph Plugins["受沙箱约束的独立进程"]
+    Providers["Connection Providers"]
+    VFS["Read-only VFS Providers"]
+    Features["Feature / Search / Hook / Info Providers"]
+  end
+  Explorer --> Router
+  PanelHost --> Permission
+  EventCenter --> Engine
+  Registry --> Runtime
+  Permission --> Runtime
+  Router --> Runtime
+  Engine --> Runtime
+  Runtime <-->|"versioned JSON-RPC"| Plugins
+  Runtime --> FS
+  Runtime --> Net
+  Runtime --> Storage
 ```
 
-`VfsRouter` 根据挂载 ID 查找适配器。插件跨进程返回树节点、元数据与流票据，核心统一生成 Explorer `Entry`；插件 UI 从隔离 origin 的 iframe 通过 `@fiex/ui-sdk` → UI Bridge → Core → 可选 Native 进程调用后端，无法直接调用 Tauri invoke。
+关键原则：Core 不编译、链接或动态加载插件业务 crate。一个 Native 插件进程可服务多个并发请求与多个 Connection；每次请求有独立鉴权上下文，不能从“同一个常驻进程”推导全局文件访问权限。
 
-## 3. 职责矩阵
+## 2. 四种通道
 
-| 事情                                     | Core             | Plugin                            |
-| ---------------------------------------- | ---------------- | --------------------------------- |
-| 安装/授权/卸载、启动/监督                | 唯一负责人       | 提供清单与程序                    |
-| 挂载管理、节点路由、选择与导航           | 唯一负责人       | 提供不透明节点 ID、列表           |
-| 远程网络、外部数据模型                   | 提供受控凭据服务 | 实现                              |
-| 元数据缓存、内容缓存、离线钉选           | 唯一负责人       | 提供版本、读取流                  |
-| 同步规则、调度、基线与冲突               | 唯一负责人       | 读写/变更提示/条件提交            |
-| 跨挂载传输和拖拽导出                     | 唯一负责人       | 可选同源优化操作                  |
-| 任务 ID、进度、取消状态                  | 唯一负责人       | 报告进度并响应取消                |
-| UI 配置、右键/工具栏/iframe 容器与消息桥 | 唯一负责人       | 提交预编译 UI、注册贡献及响应命令 |
-| 低层系统沙箱                             | 平台专门实现     | 不得声称自动受限                  |
-
-插件可以在内存中暂存协议会话数据；不得建立独立于 Core 的“Fiex 离线内容缓存/同步数据库”。协议栈自己管理瞬时网络缓冲不算独立缓存系统。
-
-## 4. 关键实体与所有权
-
-- `pluginId`：逆域名格式（如 `org.example.git`），包和权限主体；跨升级稳定。
-- `processInstanceId`：一次启动实例，重启变化；不得用于持久引用。
-- `mountId`：Core 生成并持久化的挂载实例（一个插件可能创建多个）；插件卸载时保留或清理需明确确认。
-- `nodeId`：在一个挂载内由插件负责的**不透明、尽可能稳定的**资源标识；重命名时最好不变，若后端无法保证应声明 `identityStability=path`。
-- `taskId`：Core 创建并拥有，贯穿 RPC、流通道、活动中心和取消。
-- `contributionId`：`pluginId` 命名空间内的菜单、按钮或面板 ID，不可与其他插件共享执行权限。
-
-## 5. 进程生命周期
-
-```text
-discovered → verified → installed → disabled
-                                  ↓ enable
-             stopped → starting → negotiating → ready
-                          ↓              ↓        ↓
-                        failed         rejected   idle / busy
-                                                   ↓ stop/crash
-                                         stopping → stopped
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant FE as Explorer
+    participant UI as iframe / UI SDK
+    participant C as Core
+    participant P as Plugin / Rust SDK
+    participant O as OS 或远端
+    U->>FE: 点击已安装扩展点
+    FE->>UI: 加载预编译 HTML / 创建 MessagePort
+    UI->>C: UI Bridge 请求 + 选中资源
+    C->>C: 验证 contribution / consent / operation scope
+    C->>P: Native JSON-RPC（必要时）
+    P->>C: host.fs / host.net 请求 + operation 授权
+    C->>O: Core 控制的系统 I/O
+    O-->>C: 字节/句柄/状态
+    C-->>P: RPC 响应
+    P-->>C: Provider 或命令结果
+    C-->>UI: UI Bridge 结果
+    UI-->>U: 展示/反馈
 ```
 
-1. 扫描包、校验结构/下载完整性和版本，读取 manifest，验证 API 范围和权限请求；首次启用需授权。
-2. Core 按系统架构选取二进制，以当前用户的权限启动进程；`stdin/stdout` 用于控制协议，`stderr` 只记日志。
-3. Core 发 `plugin.initialize`，插件回复版本和实际能力。Core 验证声明与实报一致，再登记挂载工厂/贡献。
-4. 超时/崩溃标记挂载不可用、使进行中任务进入明确中断状态；按有界退避重启。挂载 ID 与已持久的缓存/同步规则**不会**因为进程重启而更换。
-5. 禁用/卸载时停止新请求、取消或等待已有任务、关闭流、撤销贡献、卸载 VFS；保留的用户数据和本地同步目录不直接删除。
+四类通道不得混淆：
+- **Tauri Command**：Fiex 自己的前端与 Core 的内部 API，不开放给插件 iframe。
+- **UI Bridge**：iframe ↔ Host 的版本化 MessagePort API，只有有限宿主操作。
+- **Native Plugin IPC**：Core ↔ 插件标准输入输出上的 Length-framed JSON-RPC。
+- **数据通道**：小量 Base64、重复使用的共享内存窗口、Core 持有的文件/HTTP/TCP 句柄；不是独立身份通道。
 
-避免每个目录或标签启动单独 Native 进程。对于含 Native 后端的插件，建议每个插件 ID 一个常驻或按需启动的进程，进程内服务多个挂载实例；UI-only 无需后端进程。iframe 的渲染进程模型由 WebView 决定，不保证每个 iframe 一定独立 OS 进程。
+## 3. 所有权矩阵
 
-## 6. 推荐源码模块
+| 事项 | Core | 插件 |
+|---|---|---|
+| 插件 ID 绑定、签名验证、授权、停启 | MUST | 不得冒用 |
+| URI、mountId、路由、节点安全投影 | MUST | 提供 NodeId/Entry |
+| Connection 表单、实例和凭据持久化 | MUST | 提供协议验证及协议转换 |
+| 远程协议会话与瞬时缓存 | 管理隔离边界 | MAY 维护连接池/Token，必须按连接隔离 |
+| 缓存文件、Pin、恢复、版本基线、冲突 | MUST | 不得私建 Fiex 同步数据库 |
+| 精确文件句柄、HTTP/TCP 代理 | MUST | 仅用 SDK 访问 |
+| 可执行命令实际启动 | 在安全提示后由 Core | 不得绕开命令 allowlist |
+| 菜单、面板、搜索、预览、信息、主题显示 | 宿主渲染、上下文授权 | 贡献定义与结果 |
+| Task ID、取消、进度、清理 | 统一协调 | 上报与协作取消 |
+| 日志、密钥、存储 | 隔离与加密 | 只能访问自己命名空间 |
 
-```text
-src-tauri/
-  src/                 # Tauri 入口，只保留通用应用命令
-  crates/
-    fiex-core/          # 启动与应用服务
-    fiex-vfs/           # 统一节点/挂载/本地适配器
-    fiex-plugin-host/   # 发现、启动、IPC、权限检查
-    fiex-protocol/      # 与语言无关的线协议模型
-    fiex-cache/         # 节点缓存、内容 CAS
-    fiex-sync/          # 双向状态机及差异对比
-    fiex-transfer/      # 跨源读写、冲突、系统拖拽
-    fiex-tasks/         # 持久任务和取消
-plugins/official/{webdav,smb,git}/  # 单独二进制、公共 SDK
-sdk/rust/                       # Native SDK
-sdk/ui/                         # @fiex/ui-sdk 浏览器 SDK
-docs/plugins/                   # 当前规格
+## 4. 模块边界与计划拆分
+
+```mermaid
+flowchart LR
+  Manifest --> Catalog --> Permission --> IPC
+  IPC --> FS
+  IPC --> NET
+  IPC --> VFSRouter
+  VFSRouter --> RemoteAdapter
+  RemoteAdapter --> Cache --> Sync --> Conflict
+  IPC --> Task
+  IPC --> Storage
+  UiBridge --> Permission
+  UiBridge --> IPC
+  UiBridge --> VFSRouter
 ```
 
-## 7. 非目标和版本化
+建议独立出（至少文件/目录模块，不强求立即拆 crate）：`plugin_host/{manifest,catalog,installer,process,rpc,scope}`、`plugin_broker/{fs,net,process,storage,buffer}`、`vfs/{uri,mounts,views,index}`、`remote/{connection,listing,materialize,cache,reconcile,conflict}`、`desktop/{commands,ui_bridge,theme}`。SDK 的 `rust/src/{context,files,http,tcp,tasks,protocol}` 与 `ui/src/{bridge,client,types}` 独立。任何分层拆包不得导致 Core 对特定 Provider 增加业务 match。
 
-第一版不是 FUSE/WinFsp/Dokan OS 级全局挂载系统。VFS 先存在于 Fiex 应用内，向外部应用拖拽时由 Core 按需生成可访问的临时内容。插件平台协议版本与 Fiex 应用版本独立：小版本只能兼容增量扩展；破坏性更改必须提高主版本并提供迁移窗口。
+## 5. 线协议与安全不变量
 
-有关文件操作，见 [VFS](02-VFS.md)；缓存和同步的严格所有权见 [03](03-CACHE-SYNC.md)；插件的进程与 IPC 见 [04](04-IPC-PROTOCOL.md)。
+- 每帧 `Content-Length: N\r\n\r\n<UTF8-JSON>`；JSON-RPC 2.0 request/response + notifications。单帧上限 4 MiB、Header 8 KiB；不允许 stdout 日志。
+- 每个 RPC 携带受 SDK runtime 维护的 operation/task 会话标识；Core 从运行实例和调用链关联身份，忽略任意用户可控 pluginId。
+- 文件路径访问必须同时满足声明权限、实际批准权限和当前操作资源范围。Job/Task 清理包括 File handles、Shared windows、TCP/HTTP streams。
+- 最大持续时间、请求并发、缓存数量、read/write chunk 尺寸、日志条数、列表/游标迭代次数均须有明确上限。
+- URI 是定位符而非 bearer token。任何持久 View 的恢复都必须重新验证 owner、磁盘作用域和原始 Provider 版本上下文。
+- 坚决不允许“沙箱内禁止执行文件”被解释为 Core `host.process.run` 的操作亦受同一目录沙箱限制；后者是显式高风险授权。
 
-UI Bridge 详见 [11](11-UI-SDK.md)。
+## 6. 职责切分验收
 
-## Core VFS 视图与 Connection 边界
-
-工具栏和菜单只声明 UI，不允许 `scheme` / `schemes`。独立虚拟树使用 `contributions.vfs`，Connection Factory 使用 `contributions.connections`（隐式 VFS）。
-插件通过请求上下文的 `open_vfs_view(contribution_id, selected_resource_root, small_immutable_context)` 获取 Core 生成的 `fiex://mount/<id>/`。
-Core 检查 owner、Contribution 和选中资源；Provider 的 `nodeId` 不直接变成本地路径或权限。
-Connection 缓存/同步仍属 Core；Git View 按需读取对象，不扫描全部仓库、不缓存完整历史、不参与同步。
-实际协议、生命周期与导出限制见 [02-VFS.md](02-VFS.md)。
+1. 代码扫描禁止 `org.fiex.gdrive`、`org.fiex.git`、`webdav`、`smb` 出现在 Core 的 Provider 决策分支（示例/测试数据除外）。
+2. 禁止从虚拟 `fiex:` URI 隐式映射 OS 根目录；所有操作经 `mounts.resolve`。
+3. 使用模拟 Provider 验证相同 Core 缓存/同步流水线，不依赖任何官方插件。
+4. 跨平台进程一插件一进程池，并发请求正确匹配 ID；关闭时拒绝迟到响应。

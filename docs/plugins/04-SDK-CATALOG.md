@@ -1,0 +1,213 @@
+# 04 · Rust SDK / UI SDK API 全量清单与底层 IPC 对照
+
+> 此页枚举插件作者和 SDK 内部可见的全部接口簇。目标是**面向开发者的高层 SDK、对 Core 的稳定 Wire Contract、对 UI 的隔离 Bridge 三个层次严格一致**。公开 SDK 类型保留常规 Rust/TypeScript 使用习惯；新引入的 API 要在 M0 冻结 schema 后实现。
+
+## 1. Rust SDK 模块与顶层导出
+
+Rust crate `fiex-plugin-sdk` 导出：`serve`, `PROTOCOL_VERSION`, `MAX_FRAME`, `read_frame`, `write_frame`, `RpcError`; 类型 `RequestContext`, `TaskContext`, `Files`, `FileReader`, `FileWriter`, `HttpClient`, `Request`, `Response`, `TcpClient`, `TcpStream`, `TaskHandle`, `TaskStatus`, `Entry`, `ProcessResult`。底层辅助模块 `ipc` 导出 `SharedBuffer`、`BufferDescriptor`，提供 `create/open/descriptor/size/fill/fill_from/as_slice/as_mut_slice`。底层 IPC 仅作为 SDK 实现能力，不要求普通插件直接使用。
+
+```rust
+use fiex_plugin_sdk::{self as sdk, RpcError};
+use serde_json::{json, Value};
+fn main() {
+    sdk::serve("org.example.demo", |ctx| match ctx.method() {
+        "demo.echo" => Ok(json!({"received": ctx.params()})),
+        "connection.validate" => Ok(json!({"valid": true})),
+        other => Err(RpcError::method_not_found(other)),
+    }).expect("plugin terminated");
+}
+```
+
+`serve` 启动常驻 Native 进程，负责握手、多个 in-flight request 的 ID 配对、授权上下文与工作线程；SDK 的 public API 不暴露 `HostProxy`、裸写 stdout、手动协商 Request ID 等行为。所有未识别方法返回 `method_not_found`。
+
+## 2. RequestContext 与 TaskContext
+
+| Rust API | Native IPC / 行为 | 说明 |
+|---|---|---|
+| `ctx.method()` | 当前入站 RPC | 返回方法名 |
+| `ctx.params()` | 当前入站 params | 返回 JSON |
+| `ctx.files()` | `host.fs.*` | 返回可独立持有的 `Files` |
+| `ctx.http()` | `host.net.http.*` | 返回 `HttpClient` |
+| `ctx.tcp()` | `host.net.tcp.*` | 返回 `TcpClient` |
+| `ctx.invoke(method,params)` | 指定 `host.*` | 高级能力未封装时的受限低层入口 |
+| `ctx.open_vfs_view(id,root,context)` | `host.vfs.openView` | 请求 Core 创建只读 VFS View |
+| `ctx.report_error(code,message,detail)` | `host.error.report` | 限流、非敏感诊断 |
+| `ctx.process_run(command,args,stdin)` | `host.process.run` | 启动批准的外部命令（危险） |
+| `ctx.storage_get(scope,key)` | `host.storage.get` | 返回 JSON/Null |
+| `ctx.storage_set(scope,key,value)` | `host.storage.set` | 更新自己 KV |
+| `ctx.secret_get(scope,key)` | `host.secret.get` | Keyring 读取 |
+| `ctx.secret_set(scope,key,value)` | `host.secret.set` | Keyring 写入 |
+| `ctx.spawn_task(work)` | `host.task.start` | 独立继承 operation scope |
+| `ctx.spawn_task_with_label(label,work)` | `host.task.start` | 带友好名称 |
+| `ctx.spawn_internal_task(label,work)` | `host.task.start(internal:true)` | 不展示给用户的内部任务 |
+| `ctx.is_cancelled()` | 取消通知状态 | 响应取消 |
+
+`TaskContext` 应完整拥有 `id/files/http/tcp/invoke/report_error/process_run/storage_get/storage_set/secret_get/secret_set/cancel/is_cancelled/progress`。其中 `progress(done,total)` 对应 `host.task.progress`，取消后 SDK 和 Core 都要拒绝再使用旧 TaskScope。`TaskHandle` 的方法为 `id/cancel/is_cancelled/is_finished/status/progress/wait`；`TaskStatus = Running|Completed|Failed|Cancelled`，Rust `RpcError` 有 `method_not_found/invalid_params/internal/cancelled` 构造器，目标补全 `permission_denied/conflict/unavailable/deadline_exceeded` 并保留错误数据。
+
+## 3. Files、Reader、Writer：完整映射
+
+| 公共 Rust API | 具体 IPC | 说明 |
+|---|---|---|
+| `Files::read(path)` | `openRead/readOpen/closeRead` | 一次性读取最多 64 MiB |
+| `Files::read_to_string(path)` | `openRead/readOpen/closeRead` | UTF-8 |
+| `Files::open_read(path)` | `host.fs.openRead` | 返回 `FileReader` |
+| `FileReader::read(&mut buf)` | `host.fs.readOpen`，必要时 buffer | `Read`，自动短 IPC 或共享窗 |
+| `FileReader::seek(position)` | 改变客户端偏移 | `Seek`，下次 read 发目标 offset |
+| `FileReader::len()` / `is_empty()` | openRead 元信息 | 无追加 RPC |
+| `drop(FileReader)` | `host.fs.closeRead` + buffer.release | 自动资源清理 |
+| `Files::begin_write(path,create)` | `host.fs.beginWrite` | 开始 Core 暂存事务 |
+| `FileWriter::write(&buf)` / `flush()` | `host.fs.writeChunk` 或 `writeBuffer` | `Write`，自动缓存 |
+| `FileWriter::seek(position)` | `host.fs.seekWrite` | `Seek` |
+| `FileWriter::commit(self)` | `host.fs.commit` | 检查冲突/原子替换 |
+| `drop(FileWriter)` 未提交 | `host.fs.abort` + buffer.release | 自动回滚 |
+| `Files::write(path,bytes)` | beginWrite/write/commit | 更新已有文件 |
+| `Files::create(path,bytes)` | beginWrite(create:true)/commit | 创建新文件 |
+| `Files::list(path)` | `host.fs.list` | 仅许可目录内 |
+| `Files::metadata(path)` | `host.fs.stat` | 文件元信息 |
+| `Files::create_dir_all(path)` | `host.fs.mkdir` | 创建目录 |
+| `Files::remove(path)` | `host.fs.remove` | 删除所选文件/目录 |
+| `Files::rename(from,to)` | `host.fs.rename` | 需要源/目标 scope |
+
+`FileReader` 和 `FileWriter` 实现标准 `Read/Seek/Write` 与 `Send + 'static`，可以脱离临时 `Files` 变量；不能脱离 Core 注册的 operation/task 授权。目标由 SDK 自动选择：小块 IPC 缓冲、读共享窗口最多 4 MiB、写共享窗口最多 256 KiB；共享内存不可用时降级有界 IPC。任何全文件分配都必须显式受 64 MiB 限制。
+
+```mermaid
+flowchart TD
+  Read["std::io::Read/Write"] --> Size{"小块还是大块?"}
+  Size -->|小块| Ipc["Bounded framed JSON + Base64"]
+  Size -->|大块| Shared["Reusable Shared Window"]
+  Shared -->|映射失败| Ipc
+  Shared --> Broker["Core-owned file handle"]
+  Ipc --> Broker
+  Broker --> Scoped["授权范围检查 / ownership"]
+```
+
+## 4. HTTP/TCP：全量映射
+
+| Rust API | IPC | 用法 |
+|---|---|---|
+| `ctx.http().request(method,url)` | 请求构造 | 自定义 PUT/PATCH/PROPFIND |
+| `ctx.http().get/post/put/delete(url)` | 构造快捷方式 | 无立即网络 |
+| `Request::header(name,value)` | header 序列化 | 类型校验 |
+| `Request::body(bytes)` | `bodyBase64` | 小型内存请求体 |
+| `Request::body_reader(FileReader)` | `bodyReadHandle` | Core 直接从精确授权文件流上传 |
+| `Request::json(value)` | JSON body + content-type | JSON 序列化 |
+| `Request::basic_auth(u,p)` | Authorization | 每跳隔离 |
+| `Request::bearer_auth(token)` | Authorization | 禁止跨 origin 泄露 |
+| `Request::timeout(duration)` | `timeoutMs` | 上限由 Core 裁决 |
+| `Request::allow_invalid_certs(bool)` | TLS 字段 | 目标额外要求用户确认证书例外 |
+| `Request::send()` | `host.net.http.open` | `Response` 包含 `status/headers` |
+| `Response::read(buf)` | `host.net.http.read` | `Read` trait |
+| `Response::bytes/text/json()` | 多次 `http.read` | 每次聚合最大 64 MiB |
+| `Response::error_for_status()` | 本地状态判断 | 4xx/5xx 返回错误 |
+| `drop(Response)` | `host.net.http.close` | 回收连接 |
+| `ctx.tcp().connect(host,port)` | `host.net.tcp.open` | Core 网络授权 |
+| `TcpStream::read/write/flush` | `host.net.tcp.readBytes/writeBytes` | Rust `Read+Write` |
+| `TcpStream::peer_addr()` | open 结果 | peerAddr |
+| `drop(TcpStream)` | `host.net.tcp.close` | 最后引用释放 |
+
+文件 HTTP 上传例：
+
+```rust
+let reader = ctx.files().open_read("upload.iso")?;
+let result = ctx.http()
+    .put("https://cloud.example.com/files/opaque-node")
+    .body_reader(reader)
+    .send()?
+    .error_for_status()?;
+```
+
+不把宿主绝对路径传给网络插件。HTTP 和 TCP 共用审批的 `permissions.network.domains`；TCP 不提供任意 UDP/本机进程互联的自动授权。
+
+## 5. 低层 IPC 类型目录
+
+| 暴露类型/函数 | 用途 | 对应低层 |
+|---|---|---|
+| `ipc::BufferDescriptor {id,name,size,writable}` | SharedMemory 描述符 | `host.buffer.*` |
+| `ipc::SharedBuffer::create/open` | 操作系统共享窗口 | 受 Core owner 限制 |
+| `SharedBuffer::descriptor/size/fill/fill_from/as_slice/as_mut_slice` | 受界内存访问 | SDK 内部加速 |
+| `ipc::Entry` | host 文件/目录元数据 | `host.fs.list/stat` |
+| `ipc::ProcessResult` | 退出码、输出及截断标记 | `host.process.run` |
+| `ProcessResult::stdout_bytes()` | 读取可能在 Buffer 的输出 | `ProcessResult` 本地处理 |
+| `read_frame/write_frame` | 原始长度帧测试/自定义工具 | 正常插件不直接使用 |
+
+## 6. UI SDK 的全部公共方法与 Bridge method
+
+目标 `@fiex/ui-sdk` 统一出口 `fiex`，支持 `new FiexUiClient({timeoutMs,reportUnhandledErrors})`、`FiexBridgeError`、`ResourceRef`、`ExplorerContext`、`ThemeSnapshot`、`JsonValue`、`applyTheme`。UI 与 Native 的版本/鉴权独立。
+
+| UI SDK API | MessagePort method/event | 权限/预期 |
+|---|---|---|
+| `fiex.ready()` | handshake probe/init/ready | 建立一次性 session |
+| `fiex.invoke(method,params,options)` | 通用请求包装 | 仅下表允许的 method |
+| `fiex.on(name,handler)` | event subscription | 事件回调 |
+| `fiex.dispose()` | 关闭 port | 清理挂起操作 |
+| `fiex.context.get()` | `context.get` | 当前最小上下文 |
+| `fiex.context.subscribe(handler)` | `context.changed` 事件 | 随面板作用域改变 |
+| `fiex.plugin.invoke(command,args,options)` | `plugin.invoke` | 本插件已注册命令，所选资源 |
+| `fiex.plugin.task(taskId)` **目标新增** | `plugin.task` | 只读自己的任务 |
+| `fiex.vfs.stat(ref)` | `vfs.stat` | 目标必须新增宿主分发实现 |
+| `fiex.vfs.list(ref,cursor?)` | `vfs.list` | 目标必须新增宿主分发实现 |
+| `fiex.vfs.open(ref)` | `vfs.open` | 由 Core 导航/打开，不返回路径 |
+| `fiex.tasks.list()` | `tasks.list` | 仅面板拥有的任务，非全局泄漏 |
+| `fiex.tasks.create(title,opts)` | `tasks.create` | 注册 UI 任务 |
+| `fiex.tasks.spinner(title,opts)` | `tasks.spinner` | Indeterminate |
+| `fiex.tasks.update(taskId,patch)` | `tasks.update` | owner check |
+| `fiex.tasks.finish(taskId,opts)` | `tasks.finish` | 结束 |
+| `fiex.tasks.cancel(taskId)` | `tasks.cancel` | 取消 |
+| `fiex.dialog.openFile(opts)` | `dialog.openFile` | Native picker，不等于立刻赋权 |
+| `fiex.dialog.openFiles(opts)` | `dialog.openFiles` | 多选 |
+| `fiex.dialog.openDirectory(opts)` | `dialog.openDirectory` | 目录选择 |
+| `fiex.dialog.saveFile(opts)` | `dialog.saveFile` | 保存路径 |
+| `fiex.panel.resize(w,h)` | `panel.resize` | 宿主约束最小/最大尺寸 |
+| `fiex.panel.close()` | `panel.close` | 只关闭自身 |
+| `fiex.errors.report(message,detail?)` | `plugin.error` | 限流日志 |
+| `fiex.theme.get()` | `theme.get` | token Snapshot |
+| `fiex.theme.subscribe(handler)` | `theme.changed` 事件 | 实时主题 |
+| `fiex.events.on(name,handler)` | 所有允许的 Host 事件 | 解除订阅函数 |
+| `fiex.clipboard.writeText(text)` **目标新增** | `clipboard.writeText` | 宿主验证长度和用户操作 |
+| `fiex.navigation.open(path)` **目标新增** | `navigation.open` | 路径校验、由宿主执行 |
+
+UI Bridge 目标允许的请求全集（排除握手控制帧）：
+
+```text
+context.get  plugin.invoke  plugin.task  plugin.error
+vfs.stat  vfs.list  vfs.open
+tasks.list  tasks.create  tasks.spinner  tasks.update  tasks.finish  tasks.cancel
+dialog.openFile  dialog.openFiles  dialog.openDirectory  dialog.saveFile
+panel.resize  panel.close
+theme.get  clipboard.writeText  navigation.open
+```
+
+事件至少包括 `context.changed`、`theme.changed`、`panel.visibility` 和受限制的本插件事件。UI 侧 `type:cancel` 必须可取消宿主尚未执行的请求或协作取消进行中的任务；不要只在 UI 本地丢弃 Promise。
+
+## 7. UI → Native → Core 的作用域
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant UI as UI SDK
+  participant Host as UI Host
+  participant Core as Core
+  participant Plugin as Rust SDK
+  User->>UI: 选择文件并在面板点击确认
+  UI->>Host: plugin.invoke(command,{path})
+  Host->>Core: {pluginId,selectedPaths,operation,args}
+  Core->>Core: 从候选选中资源取实际使用的交集
+  Core->>Plugin: command + 短期 operation scope
+  Plugin->>Core: host.fs.openRead(path, authorization)
+  Core-->>Plugin: 仅授权文件的句柄
+  Plugin-->>Core: result
+  Core-->>Host: result
+  Host-->>UI: result
+```
+
+不同 UI/Native 会话绝不共享隐式“当前目录”权限。面板关闭不会自动取消已经显式启动、仍被 Core 持有的后台任务，但必须解除 UI panel-local 任务；用户能从活动中心取消后台任务。
+
+## 8. Fiex 内部 Tauri command 边界（非插件公开接口）
+
+Core 的 UI Host 对内部命令进行代理、校验与路由，包含：
+- 插件调用/安装：`plugin_invoke`, `plugins_list`, `plugin_status`, `plugin_marketplace`, `plugin_release_assets`, `plugin_prepare_install`, `plugin_prepare_local_install`, `plugin_confirm_install`, `plugin_cancel_install`, `plugin_uninstall`;
+- 授权与设置：`plugin_activate`, `plugin_set_enabled`, `plugin_set_permission`, `plugin_set_command`, `plugin_set_network_domain`, `plugin_approve_install`, `plugin_network_domains`, `plugin_permission_allowed`, `plugin_storage_get`, `plugin_storage_set`, `plugin_storage_delete`, `plugin_secret_set`, `plugin_secret_available`;
+- UI/诊断：`plugin_panel_html`, `plugin_panel_asset`, `plugin_decorations`, `plugin_themes`, `plugin_errors`, `plugin_error_report`, `plugin_error_clear`, `plugin_search`, `plugin_task`, `plugin_cancel_task`, `file_info_details`;
+- 文件选择/物化/视图：`plugin_file_dialog`, `plugin_files_dialog`, `materialize_file`, `plugin_context_directory`, `vfs_retain_views`。
+
+这些是宿主自己的实现 API，不能以“iframe 可以执行任意 Tauri Command”的方式暴露。增删内部 command 时需同步更新宿主注册、测试与本文附录，但不影响公开 UI Bridge 协议。
