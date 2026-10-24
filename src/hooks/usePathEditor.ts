@@ -1,5 +1,5 @@
 import { call } from '@/lib/api'
-import { join } from '@/lib/files'
+import { pathCrumbs } from '@/lib/files'
 import type { Preferences } from '@/lib/types'
 import { useEffect, useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
@@ -42,20 +42,7 @@ export function usePathEditor({
       x.setError(String(error))
     }
   }
-  const historyRoot = x.path.match(/^history:\/\/[^/]+\/[^/]+/)?.[0]
-  const pathParts = (historyRoot ? x.path.slice(historyRoot.length) : x.path)
-    .split(/[\\/]/)
-    .filter(Boolean)
-  let accumulated =
-    historyRoot || (x.path.startsWith('/') ? '' : x.path.startsWith('\\') ? '\\\\' : '')
-  const crumbs = pathParts.map((name) => {
-    accumulated = accumulated
-      ? join(accumulated, name)
-      : x.path.startsWith('/')
-        ? '/' + name
-        : name + '\\'
-    return { name: displayName(accumulated) || name, path: accumulated }
-  })
+  const crumbs = pathCrumbs(x.path, displayName)
   return {
     editingPath,
     pathDraft,
@@ -64,11 +51,6 @@ export function usePathEditor({
     setEditingPath,
     startPathEdit,
     submitPath,
-    crumbs:
-      x.path === 'recent://'
-        ? [{ name: displayName('recent://'), path: x.path }]
-        : historyRoot
-          ? [{ name: '历史版本', path: historyRoot }, ...crumbs]
-          : crumbs,
+    crumbs,
   }
 }

@@ -138,6 +138,7 @@ export default function App() {
             onPreview={(entry) => app.previewEntry(entry, app.right)}
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
             dragPaths={app.selectedAll}
+            displayName={app.displayName}
             width={app.paneWidth}
             onWidthChange={app.setPaneWidth}
           />

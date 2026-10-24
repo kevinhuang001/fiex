@@ -12,6 +12,28 @@ export function parent(path: string): string {
 export function join(path: string, name: string): string {
   return path.replace(/[\\/]+$/, '') + (path.includes('\\') ? '\\' : '/') + name
 }
+export type Crumb = { name: string; path: string }
+
+export function pathCrumbs(
+  path: string,
+  displayName: (path: string) => string = (value) =>
+    value === 'recent://' ? value : basename(value),
+): Crumb[] {
+  const historyRoot = path.match(/^history:\/\/[^/]+\/[^/]+/)?.[0]
+  const parts = (historyRoot ? path.slice(historyRoot.length) : path).split(/[\\/]/).filter(Boolean)
+  let accumulated = historyRoot || (path.startsWith('/') ? '' : path.startsWith('\\') ? '\\\\' : '')
+  const crumbs = parts.map((name) => {
+    accumulated = accumulated
+      ? join(accumulated, name)
+      : path.startsWith('/')
+        ? '/' + name
+        : name + '\\'
+    return { name: displayName(accumulated) || name, path: accumulated }
+  })
+  if (path === 'recent://') return [{ name: displayName('recent://'), path }]
+  return historyRoot ? [{ name: '历史版本', path: historyRoot }, ...crumbs] : crumbs
+}
+
 export function basename(path: string): string {
   return (
     path

@@ -77,7 +77,13 @@ export function useAppController() {
     navigatePreview,
   } = useDialogs(x)
   const chosenAll = split
-    ? [...left.entries, ...right.entries].filter((entry) => selectedAll.includes(entry.path))
+    ? [
+        ...new Map(
+          [...left.entries, ...right.entries]
+            .filter((entry) => selectedAll.includes(entry.path))
+            .map((entry) => [entry.path, entry]),
+        ).values(),
+      ]
     : chosen
 
   useEffect(() => {
