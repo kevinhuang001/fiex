@@ -5,16 +5,12 @@ import {
   ArrowRight,
   ChevronUp,
   Folder,
-  FolderPlus,
   HardDrive,
   LayoutGrid,
   List,
   MoreHorizontal,
-  Pencil,
-  RotateCw,
   Search,
   Server,
-  Trash2,
 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { useMenuPosition } from '@/lib/menuPosition'
@@ -32,42 +28,16 @@ import {
 import { date, kind, size } from '@/lib/files'
 import type { Entry, Listing, Location, RemoteConnection } from '@/lib/types'
 
-type SortKey = 'name' | 'modified' | 'size' | 'kind'
-type GroupKey = 'none' | 'kind' | 'modified' | 'size'
-type PickerDialog =
-  | { kind: 'folder'; value: string }
-  | { kind: 'rename'; entry: Entry; value: string }
-  | { kind: 'trash'; entry: Entry }
-
-const dirname = (path: string) => {
-  const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return index > 0 ? path.slice(0, index) : path
-}
-const join = (directory: string, name: string) =>
-  `${directory.replace(/[/\\]$/, '')}/${name}`.replace(/\/+/g, '/')
-
-const SORT_KEY = 'fiex.picker.sort'
-const GROUP_KEY = 'fiex.picker.group'
-
-function storedSort(): { key: SortKey; direction: 'asc' | 'desc' } {
-  try {
-    const value = JSON.parse(localStorage.getItem(SORT_KEY) || 'null')
-    if (value && ['name', 'modified', 'size', 'kind'].includes(value.key))
-      return { key: value.key, direction: value.direction === 'desc' ? 'desc' : 'asc' }
-  } catch {
-    // fall through
-  }
-  return { key: 'name', direction: 'asc' }
-}
-function storedGroup(): GroupKey {
-  try {
-    const value = localStorage.getItem(GROUP_KEY)
-    if (value && ['none', 'kind', 'modified', 'size'].includes(value)) return value as GroupKey
-  } catch {
-    // fall through
-  }
-  return 'none'
-}
+import { PickerDialogs, type PickerDialogState } from './file-picker/PickerDialogs'
+import { PickerMenu } from './file-picker/PickerMenu'
+import {
+  dirname,
+  join,
+  persistPickerSort,
+  storedGroup,
+  storedSort,
+  type GroupKey,
+} from './file-picker/types'
 
 export function FilePickerDialog() {
   const pending = useSyncExternalStore(subscribeFilePicker, currentFilePicker, () => null)
@@ -102,7 +72,7 @@ function Picker({ request }: { request: FilePickerRequest }) {
     entry?: Entry
     kind: 'row' | 'blank'
   } | null>(null)
-  const [dialog, setDialog] = useState<PickerDialog | null>(null)
+  const [dialog, setDialog] = useState<PickerDialogState | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const nameInput = useRef<HTMLInputElement>(null)
@@ -181,12 +151,7 @@ function Picker({ request }: { request: FilePickerRequest }) {
   }, [saveName, directory])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(SORT_KEY, JSON.stringify(sort))
-      localStorage.setItem(GROUP_KEY, group)
-    } catch {
-      // Preferences are best effort.
-    }
+    persistPickerSort(sort, group)
   }, [sort, group])
 
   useEffect(() => {
@@ -590,204 +555,49 @@ function Picker({ request }: { request: FilePickerRequest }) {
       </div>
       {menu &&
         createPortal(
-          <div
-            ref={menuRef}
-            className="file-picker-menu"
-            style={menuPosition}
-            role="menu"
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {menu.kind === 'row' && menu.entry && (
-              <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    openEntry(menu.entry!)
-                    setMenu(null)
-                  }}
-                >
-                  打开
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setDialog({ kind: 'rename', entry: menu.entry!, value: menu.entry!.name })
-                    setMenu(null)
-                  }}
-                >
-                  <Pencil size={12} /> 重命名…
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="danger"
-                  onClick={() => {
-                    setDialog({ kind: 'trash', entry: menu.entry! })
-                    setMenu(null)
-                  }}
-                >
-                  <Trash2 size={12} /> 移到废纸篓
-                </button>
-              </>
-            )}
-            {menu.kind === 'blank' && (
-              <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setDialog({ kind: 'folder', value: '未命名文件夹' })
-                    setMenu(null)
-                  }}
-                >
-                  <FolderPlus size={12} /> 新建文件夹
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setReload((value) => value + 1)
-                    setMenu(null)
-                  }}
-                >
-                  <RotateCw size={12} /> 刷新
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setView(view === 'list' ? 'grid' : 'list')
-                    setMenu(null)
-                  }}
-                >
-                  {view === 'list' ? <LayoutGrid size={12} /> : <List size={12} />}{' '}
-                  {view === 'list' ? '图标视图' : '列表视图'}
-                </button>
-                <div className="file-picker-menu-label">排序方式</div>
-                {(['name', 'modified', 'size', 'kind'] as SortKey[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={sort.key === key}
-                    onClick={() => {
-                      setSort((old) =>
-                        old.key === key
-                          ? { key, direction: old.direction === 'asc' ? 'desc' : 'asc' }
-                          : { key, direction: 'asc' },
-                      )
-                      setMenu(null)
-                    }}
-                  >
-                    {{ name: '名称', modified: '修改日期', size: '大小', kind: '类型' }[key]}
-                    {sort.key === key ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : ''}
-                  </button>
-                ))}
-                <div className="file-picker-menu-label">分组方式</div>
-                {(['none', 'kind', 'modified', 'size'] as GroupKey[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={group === key}
-                    onClick={() => {
-                      setGroup(key)
-                      setMenu(null)
-                    }}
-                  >
-                    {{ none: '不分组', kind: '类型', modified: '修改日期', size: '大小' }[key]}
-                    {group === key ? ' ✓' : ''}
-                  </button>
-                ))}
-              </>
-            )}
-          </div>,
+          <PickerMenu
+            menu={menu}
+            sort={sort}
+            group={group}
+            view={view}
+            position={menuPosition}
+            menuRef={menuRef}
+            actions={{
+              open: openEntry,
+              rename: (entry) => setDialog({ kind: 'rename', entry, value: entry.name }),
+              trash: (entry) => setDialog({ kind: 'trash', entry }),
+              newFolder: () => setDialog({ kind: 'folder', value: '未命名文件夹' }),
+              refresh: () => setReload((value) => value + 1),
+              toggleView: () => setView(view === 'list' ? 'grid' : 'list'),
+              sortBy: (key) =>
+                setSort((old) =>
+                  old.key === key
+                    ? { key, direction: old.direction === 'asc' ? 'desc' : 'asc' }
+                    : { key, direction: 'asc' },
+                ),
+              groupBy: setGroup,
+              close: () => setMenu(null),
+            }}
+          />,
           document.body,
         )}
-      <Modal
-        open={dialog?.kind === 'folder' || dialog?.kind === 'rename'}
-        onClose={() => setDialog(null)}
-        title={dialog?.kind === 'rename' ? '重命名' : '新建文件夹'}
-        className="file-picker-confirm"
-      >
-        {(dialog?.kind === 'folder' || dialog?.kind === 'rename') && (
-          <>
-            <label className="file-picker-dialog-field">
-              <span>{dialog.kind === 'rename' ? '新名称' : '文件夹名称'}</span>
-              <input
-                ref={dialogInput}
-                value={dialog.value}
-                onChange={(event) =>
-                  setDialog(
-                    dialog.kind === 'rename'
-                      ? { ...dialog, value: event.target.value }
-                      : { ...dialog, value: event.target.value },
-                  )
-                }
-                onKeyDown={(event) => {
-                  if (event.key !== 'Enter') return
-                  event.preventDefault()
-                  if (dialog.kind === 'rename') renameEntry(dialog.entry, dialog.value)
-                  else createFolder(dialog.value)
-                }}
-              />
-            </label>
-            <footer className="file-picker-confirm-actions">
-              <Button variant="outline" onClick={() => setDialog(null)}>
-                取消
-              </Button>
-              <Button
-                disabled={busy || !dialog.value.trim()}
-                onClick={() =>
-                  dialog.kind === 'rename'
-                    ? renameEntry(dialog.entry, dialog.value)
-                    : createFolder(dialog.value)
-                }
-              >
-                {dialog.kind === 'rename' ? '重命名' : '新建'}
-              </Button>
-            </footer>
-          </>
-        )}
-      </Modal>
-      <Modal
-        open={dialog?.kind === 'trash'}
-        onClose={() => setDialog(null)}
-        title="移到废纸篓？"
-        className="file-picker-confirm"
-      >
-        {dialog?.kind === 'trash' && (
-          <>
-            <p className="file-picker-confirm-text">
-              「{dialog.entry.name}」将移到废纸篓，可以再恢复。
-            </p>
-            <footer className="file-picker-confirm-actions">
-              <Button variant="outline" onClick={() => setDialog(null)}>
-                取消
-              </Button>
-              <Button onClick={() => trashEntry(dialog.entry)}>移到废纸篓</Button>
-            </footer>
-          </>
-        )}
-      </Modal>
-      <Modal
-        open={replace}
-        onClose={() => setReplace(false)}
-        title="替换文件？"
-        className="file-picker-confirm"
-      >
-        <p className="file-picker-confirm-text">
-          「{saveName.trim()}」已存在。替换会覆盖原文件，此操作不可撤销。
-        </p>
-        <footer className="file-picker-confirm-actions">
-          <Button variant="outline" onClick={() => setReplace(false)}>
-            取消
-          </Button>
-          <Button onClick={() => settleFilePicker(join(directory, saveName.trim()))}>替换</Button>
-        </footer>
-      </Modal>
+      <PickerDialogs
+        dialog={dialog}
+        replace={replace}
+        saveName={saveName}
+        busy={busy}
+        inputRef={dialogInput}
+        actions={{
+          closeDialog: () => setDialog(null),
+          setDialogValue: (value) =>
+            setDialog((old) => (old && old.kind !== 'trash' ? { ...old, value } : old)),
+          createFolder,
+          rename: renameEntry,
+          trash: trashEntry,
+          confirmReplace: () => settleFilePicker(join(directory, saveName.trim())),
+          cancelReplace: () => setReplace(false),
+        }}
+      />
       <footer className="file-picker-footer">
         {request.mode === 'saveFile' ? (
           <label className="file-picker-name">

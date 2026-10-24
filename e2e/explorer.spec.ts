@@ -317,7 +317,7 @@ test('multi-select and select all', async ({ page }) => {
     .click({ modifiers: ['Control'] })
   await expect(page.locator('.statusbar')).toContainText('已选择 2 项')
   await page.keyboard.press('Control+a')
-  await expect(page.locator('.statusbar')).toContainText('已选择 14 项')
+  await expect(page.locator('.statusbar')).toContainText('已选择 15 项')
 })
 
 test('settings sections keep preferences and release shortcut recording on exit', async ({
@@ -351,7 +351,7 @@ test('ten thousand icons stay virtualized and support end selection and rename',
   page,
 }) => {
   await page.goto('/?demo&count=10000')
-  await expect(page.locator('.statusbar')).toContainText('10,014')
+  await expect(page.locator('.statusbar')).toContainText('10,015')
   await page.getByRole('button', { name: '图标视图', exact: true }).click()
   await expect(page.locator('.virtual-file-grid')).toBeVisible()
   expect(await page.getByRole('gridcell').count()).toBeLessThan(180)

@@ -1,21 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Check,
   Database,
   Download,
-  Globe2,
   KeyRound,
   LoaderCircle,
   Puzzle,
   Settings2,
   ShieldAlert,
   ShieldCheck,
-  Terminal,
   Trash2,
   Upload,
-  AlertTriangle,
 } from 'lucide-react'
 import { call } from '@/lib/api'
+import { PluginErrorsSection } from './plugins/PluginErrorsSection'
+import { PluginListField } from './plugins/PluginListField'
+import { PermissionList } from './plugins/PermissionList'
+import { asList } from './plugins/listValue'
+
 import {
   refreshPluginCatalog,
   usePluginCatalog,
@@ -27,7 +29,6 @@ import { Modal } from '@/components/ui/Modal'
 import { PluginInstaller, pluginIcon } from './PluginInstaller'
 import { PluginActivationDialog } from './PluginActivationDialog'
 import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
-import { permissionHints, permissionLabels } from '@/lib/pluginPermissions'
 
 interface LocalPreview {
   ticket: string
@@ -50,302 +51,6 @@ function iconFor(icon?: string) {
   return pluginIcon(icon)
 }
 
-function PermissionList({
-  plugin,
-  busy,
-  onToggle,
-  onConfigure,
-}: {
-  plugin: PluginInfo
-  busy: boolean
-  onToggle: (permission: string, granted: boolean) => void
-  onConfigure: (permission: string) => void
-}) {
-  const declared = plugin.declaredPermissions || []
-  const granted = plugin.grantedPermissions || []
-  const configurable = (permission: string) => permission === 'network' || permission === 'commands'
-  return (
-    <>
-      {declared.map((permission) => (
-        <div className="plugin-permission-card" key={permission}>
-          <span className="plugin-permission-icon">
-            <ShieldCheck size={15} />
-          </span>
-          <span className="plugin-permission-copy">
-            <strong>{permissionLabels[permission] || permission}</strong>
-            <small>{permissionHints[permission] || permission}</small>
-            {permission === 'commands' && Boolean(plugin.missingCommands?.length) && (
-              <small className="plugin-command-missing">
-                本地未找到：{(plugin.missingCommands || []).join('、')}，插件可能无法正常工作
-              </small>
-            )}
-          </span>
-          {configurable(permission) && (
-            <button
-              type="button"
-              className="plugin-inline-config"
-              aria-label={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
-              title={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
-              disabled={busy || !plugin.approved || !granted.includes(permission)}
-              onClick={() => onConfigure(permission)}
-            >
-              {permission === 'network' ? <Globe2 size={13} /> : <Terminal size={13} />}
-            </button>
-          )}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={granted.includes(permission)}
-            aria-label={`授权 ${permissionLabels[permission] || permission}`}
-            className={`plugin-switch ${granted.includes(permission) ? 'on' : ''}`}
-            disabled={busy || !plugin.approved}
-            onClick={() => onToggle(permission, !granted.includes(permission))}
-          >
-            <span />
-          </button>
-        </div>
-      ))}
-      {!declared.length && <p className="sidebar-hint">此插件未声明受控宿主权限。</p>}
-    </>
-  )
-}
-
-/** Settings stored before `list` existed may be a comma/newline separated
- * string; accept both shapes and always hand the editor a string array. */
-function asList(value: unknown, field: PluginField): string[] {
-  const fallback = field.defaultValue
-  if (Array.isArray(value)) return value.map((item) => String(item))
-  if (typeof value === 'string' && value.trim())
-    return value
-      .split(/[\n,，]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  if (Array.isArray(fallback)) return fallback.map((item) => String(item))
-  if (typeof fallback === 'string' && fallback.trim())
-    return fallback
-      .split(/[\n,，]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  return []
-}
-
-function PluginListField({
-  field,
-  values,
-  onChange,
-}: {
-  field: PluginField
-  values: string[]
-  onChange: (values: string[]) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [draft, setDraft] = useState<string[]>(values)
-  const [selected, setSelected] = useState<number | null>(null)
-  const [edit, setEdit] = useState<{ index: number | null; value: string } | null>(null)
-  const editInput = useRef<HTMLInputElement>(null)
-
-  const show = () => {
-    setDraft(values)
-    setSelected(values.length ? 0 : null)
-    setEdit(null)
-    setOpen(true)
-  }
-  const commit = () => {
-    onChange(draft.map((value) => value.trim()).filter(Boolean))
-    setOpen(false)
-  }
-  const saveEdit = () => {
-    if (!edit) return
-    const value = edit.value.trim()
-    setDraft((old) => {
-      if (edit.index === null) {
-        if (!value) return old
-        setSelected(old.length)
-        return [...old, value]
-      }
-      if (!value) return old.filter((_, index) => index !== edit.index)
-      return old.map((item, index) => (index === edit.index ? value : item))
-    })
-    setEdit(null)
-  }
-
-  useEffect(() => {
-    if (!edit) return
-    const timer = window.setTimeout(() => editInput.current?.focus(), 40)
-    return () => window.clearTimeout(timer)
-  }, [edit])
-
-  return (
-    <>
-      <button type="button" className="plugin-list-trigger" onClick={show}>
-        <span>编辑条目</span>
-        <small>{values.length} 项</small>
-      </button>
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={field.label}
-        className="plugin-list-modal"
-      >
-        <div className="plugin-list-editor">
-          <div className="plugin-list-editor-rows" role="listbox" aria-label={field.label}>
-            {draft.map((value, index) => (
-              <button
-                key={index}
-                type="button"
-                role="option"
-                aria-selected={selected === index}
-                className={`plugin-list-entry ${selected === index ? 'selected' : ''}`}
-                onClick={() => setSelected(index)}
-                onDoubleClick={() => setEdit({ index, value })}
-              >
-                {value}
-              </button>
-            ))}
-            {!draft.length && <p className="plugin-list-empty">还没有条目。</p>}
-          </div>
-          <div className="plugin-list-editor-actions">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEdit({ index: null, value: '' })}
-            >
-              新建
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={selected === null}
-              onClick={() =>
-                selected !== null && setEdit({ index: selected, value: draft[selected] })
-              }
-            >
-              编辑
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={selected === null}
-              onClick={() => {
-                if (selected === null) return
-                setDraft((old) => old.filter((_, index) => index !== selected))
-                setSelected(null)
-              }}
-            >
-              删除
-            </Button>
-          </div>
-        </div>
-        <footer className="plugin-list-footer">
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            取消
-          </Button>
-          <Button onClick={commit}>确定</Button>
-        </footer>
-      </Modal>
-      <Modal
-        open={Boolean(edit)}
-        onClose={() => setEdit(null)}
-        title={edit?.index === null ? '新建条目' : '编辑条目'}
-        className="plugin-list-confirm"
-      >
-        {edit && (
-          <>
-            <label className="plugin-settings-field plugin-list-confirm-field">
-              <span className="plugin-settings-label">{field.label}</span>
-              <input
-                ref={editInput}
-                value={edit.value}
-                placeholder={field.placeholder}
-                onChange={(event) => setEdit({ ...edit, value: event.target.value })}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    saveEdit()
-                  }
-                }}
-              />
-            </label>
-            <footer className="plugin-list-footer">
-              <Button variant="outline" onClick={() => setEdit(null)}>
-                取消
-              </Button>
-              <Button onClick={saveEdit}>{edit.index === null ? '添加' : '确定'}</Button>
-            </footer>
-          </>
-        )}
-      </Modal>
-    </>
-  )
-}
-
-type PluginError = {
-  at: number
-  source: string
-  message: string
-  detail?: string
-}
-
-/** Recent failures Core observed or the plugin reported. Diagnostics only: it
- * never blocks the plugin, and "clear" only empties this log. */
-function PluginErrorsSection({ pluginId }: { pluginId: string }) {
-  const [errors, setErrors] = useState<PluginError[]>([])
-  const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    let alive = true
-    setLoading(true)
-    void call<PluginError[]>('plugin_errors', { pluginId })
-      .then((items) => {
-        if (alive) setErrors(items || [])
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
-    return () => {
-      alive = false
-    }
-  }, [pluginId])
-  const clear = () => {
-    void call('plugin_error_clear', { pluginId })
-      .then(() => setErrors([]))
-      .catch(() => {})
-  }
-  return (
-    <section className="plugin-permission-section">
-      <div className="plugin-section-title">
-        <strong>
-          <AlertTriangle size={15} /> 最近错误
-        </strong>
-        <small>{loading ? '读取中…' : errors.length ? `${errors.length} 条` : '没有记录'}</small>
-      </div>
-      {errors.length ? (
-        <>
-          <ul className="plugin-error-list">
-            {errors.map((entry, index) => (
-              <li key={`${entry.at}-${index}`}>
-                <span className={`plugin-error-source ${entry.source}`}>{entry.source}</span>
-                <div>
-                  <p>{entry.message}</p>
-                  {entry.detail && <pre>{entry.detail}</pre>}
-                  <time>{new Date(entry.at).toLocaleString()}</time>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Button type="button" size="sm" variant="outline" onClick={clear}>
-            清空记录
-          </Button>
-        </>
-      ) : (
-        <p className="sidebar-hint">命令缺失、进程退出、面板或 RPC 失败都会记录在这里。</p>
-      )}
-    </section>
-  )
-}
 export function PluginSettings() {
   const plugins = usePluginCatalog()
   const [storeOpen, setStoreOpen] = useState(false)
