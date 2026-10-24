@@ -91,12 +91,19 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           source: 'plugin',
           title: '校验和',
           pluginId: 'org.fiex.checksum',
+          provider: '校验和',
           rows: [
             {
               label: 'SHA-256',
               value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
             },
+            {
+              label: 'SHA-512',
+              value: 'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a',
+            },
+            { label: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d' },
             { label: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
+            { label: 'CRC32', value: '352441c2' },
           ],
         })
       }
@@ -105,6 +112,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           source: 'plugin',
           title: '压缩包',
           pluginId: 'org.fiex.archive',
+          provider: '压缩与解压',
           rows: [
             { label: '格式', value: ext.toUpperCase() },
             { label: '压缩后大小', value: `${entry.size} B` },
@@ -119,6 +127,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           source: 'plugin',
           title: '文档',
           pluginId: 'org.fiex.office-preview',
+          provider: 'Office 预览',
           rows: [
             { label: '格式', value: ext.toUpperCase() },
             { label: '段落', value: '42' },
@@ -132,6 +141,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           source: 'plugin',
           title: '数据表',
           pluginId: 'org.fiex.data-preview',
+          provider: '数据预览',
           rows: [
             { label: '格式', value: ext.toUpperCase() },
             { label: '数据集', value: '2' },

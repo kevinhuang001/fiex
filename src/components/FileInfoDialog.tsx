@@ -1,5 +1,5 @@
 import { ExternalLink } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
@@ -16,6 +16,7 @@ interface InfoSection {
   source: 'core' | 'plugin'
   title: string
   pluginId?: string
+  provider: string
   rows: InfoRow[]
 }
 
@@ -62,19 +63,28 @@ export function FileInfoDialog({
     }
   }
 
-  const rows: Array<[string, string]> = info
+  const basicRows: InfoRow[] = info
     ? [
-        ['种类', kind(info)],
-        ['大小', info.isDir ? '文件夹' : size(info.size)],
-        ['位置', parent(info.path)],
-        ['创建时间', date(info.created)],
-        ['修改时间', date(info.modified)],
-        ['权限', info.readonly ? '只读' : '可读写'],
-        ['符号链接', info.isSymlink ? '是' : '否'],
-        ...(info.linkTarget ? ([['链接到', info.linkTarget]] as Array<[string, string]>) : []),
-        ...sections.flatMap((section) =>
-          section.rows.map((row) => [row.label, row.value] as [string, string]),
-        ),
+        { label: '种类', value: kind(info) },
+        { label: '大小', value: info.isDir ? '文件夹' : size(info.size) },
+        { label: '位置', value: parent(info.path) },
+        { label: '创建时间', value: date(info.created) },
+        { label: '修改时间', value: date(info.modified) },
+        { label: '权限', value: info.readonly ? '只读' : '可读写' },
+        { label: '符号链接', value: info.isSymlink ? '是' : '否' },
+        ...(info.linkTarget ? [{ label: '链接到', value: info.linkTarget }] : []),
+      ]
+    : []
+  const groups: Array<{ title: string; provider: string; rows: InfoRow[] }> = info
+    ? [
+        { title: '文件', provider: 'Fiex', rows: basicRows },
+        ...sections
+          .filter((section) => section.rows.length > 0)
+          .map((section) => ({
+            title: section.title,
+            provider: section.provider || 'Fiex',
+            rows: section.rows,
+          })),
       ]
     : []
 
@@ -84,26 +94,36 @@ export function FileInfoDialog({
         <div className="file-info">
           <FileIcon entry={info} size={72} />
           <h3>{info.name}</h3>
-          <dl>
-            {rows.map(([key, value], index) => (
-              <div key={`${key}:${index}`}>
-                <dt>{key}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-          {loading && <p className="file-info-status">正在读取媒体与插件信息…</p>}
-          {!loading && error && <p className="file-info-status">{error}</p>}
-          {info.tags.length > 0 && (
-            <div className="file-info-tags">
-              {info.tags.map((tag) => (
-                <span className="tag-chip" key={`${tag.name}:${tag.color}`}>
-                  <i style={{ background: tagHex(tag) }} />
-                  {tag.name}
-                </span>
+          <div className="file-info-scroll">
+            <dl>
+              {groups.map((group, groupIndex) => (
+                <Fragment key={`${group.title}:${groupIndex}`}>
+                  <div className="file-info-group">
+                    <span>{group.title}</span>
+                    {group.provider !== group.title && <small>{group.provider}</small>}
+                  </div>
+                  {group.rows.map((row, rowIndex) => (
+                    <div className="file-info-row" key={`${row.label}:${rowIndex}`}>
+                      <dt>{row.label}</dt>
+                      <dd>{row.value}</dd>
+                    </div>
+                  ))}
+                </Fragment>
               ))}
-            </div>
-          )}
+            </dl>
+            {loading && <p className="file-info-status">正在读取媒体与插件信息…</p>}
+            {!loading && error && <p className="file-info-status">{error}</p>}
+            {info.tags.length > 0 && (
+              <div className="file-info-tags">
+                {info.tags.map((tag) => (
+                  <span className="tag-chip" key={`${tag.name}:${tag.color}`}>
+                    <i style={{ background: tagHex(tag) }} />
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
           <Button variant="secondary" onClick={() => void reveal()}>
             在系统文件管理器中显示
             <ExternalLink />

@@ -473,14 +473,27 @@
   font-size: 11px;
 }
 .file-info-modal {
-  width: min(720px, calc(100vw - 32px));
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .file-info {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   flex-direction: column;
   gap: 14px;
   user-select: text;
+}
+.file-info-scroll {
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 .file-info h3 {
   font-size: 16px;
@@ -493,12 +506,36 @@
   width: 100%;
   margin: 6px 0;
 }
-.file-info dl > div {
+.file-info-row {
   display: flex;
   gap: 14px;
   padding: 8px 0;
   font-size: 11px;
   border-bottom: 1px solid var(--line);
+}
+.file-info-group {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 5px;
+  margin-top: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.file-info-group:first-child {
+  padding-top: 2px;
+}
+.file-info-group span {
+  font-size: 11px;
+  font-weight: 600;
+}
+.file-info-group small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .file-info dt {
   width: 70px;

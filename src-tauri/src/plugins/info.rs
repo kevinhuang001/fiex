@@ -27,6 +27,7 @@ pub struct InfoSection {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_id: Option<String>,
+    pub provider: String,
     pub rows: Vec<InfoRow>,
 }
 
@@ -109,6 +110,7 @@ fn audio_section(path: &Path) -> Option<InfoSection> {
         source: "core".into(),
         title: "音频".into(),
         plugin_id: None,
+        provider: "Fiex".into(),
         rows,
     })
 }
@@ -164,6 +166,7 @@ fn mp4_section(path: &Path) -> Option<InfoSection> {
         source: "core".into(),
         title: "视频".into(),
         plugin_id: None,
+        provider: "Fiex".into(),
         rows,
     })
 }
@@ -212,6 +215,7 @@ fn matroska_section(path: &Path) -> Option<InfoSection> {
         source: "core".into(),
         title: "视频".into(),
         plugin_id: None,
+        provider: "Fiex".into(),
         rows,
     })
 }
@@ -331,6 +335,7 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
                             source: "plugin".into(),
                             title,
                             plugin_id: Some(plugin.id.clone()),
+                            provider: plugin.name.clone(),
                             rows,
                         });
                     }
@@ -339,6 +344,7 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
                     source: "plugin".into(),
                     title,
                     plugin_id: Some(plugin.id.clone()),
+                    provider: plugin.name.clone(),
                     rows: vec![row("错误", error)],
                 }),
             }
