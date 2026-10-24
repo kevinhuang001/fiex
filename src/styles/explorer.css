@@ -1056,3 +1056,7 @@ body.dragging-toolbar {
   cursor: grabbing;
   user-select: none;
 }
+
+.view-switch button svg {
+  transform: translateY(1px);
+}
