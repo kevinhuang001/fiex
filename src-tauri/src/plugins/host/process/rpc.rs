@@ -4,7 +4,7 @@ use super::spawn::{host_exec, run_command};
 use crate::plugin_sdk;
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, VecDeque},
     fs,
     io::{BufReader, Read, Write},
     path::{Component, Path},
@@ -69,7 +69,6 @@ struct TaskEntry {
     owner: String,
     scope: Option<crate::plugin_fs_access::Scope>,
     info: PluginTaskInfo,
-    finished_at: Option<u64>,
 }
 
 struct Actor {
@@ -86,6 +85,7 @@ pub(super) struct Running {
     pending: Mutex<HashMap<u64, mpsc::Sender<Result<Value, RpcFailure>>>>,
     operations: Mutex<HashMap<u64, Operation>>,
     tasks: Mutex<HashMap<String, TaskEntry>>,
+    history: Mutex<VecDeque<PluginTaskInfo>>,
     next_id: AtomicU64,
     initialized: AtomicBool,
     init_lock: Mutex<()>,
@@ -110,6 +110,7 @@ impl Running {
             pending: Mutex::new(HashMap::new()),
             operations: Mutex::new(HashMap::new()),
             tasks: Mutex::new(HashMap::new()),
+            history: Mutex::new(VecDeque::new()),
             next_id: AtomicU64::new(0),
             initialized: AtomicBool::new(false),
             init_lock: Mutex::new(()),
@@ -223,12 +224,10 @@ impl Running {
             .map(|mut tasks| tasks.drain().map(|(_, value)| value).collect())
             .unwrap_or_default();
         for task in tasks {
-            if matches!(task.info.status.as_str(), "running" | "cancelling") {
-                let mut info = task.info.clone();
-                info.status = "cancelled".into();
-                info.error = Some("插件进程已停止".into());
-                self.emit_task(&info);
-            }
+            let mut info = task.info;
+            info.status = "cancelled".into();
+            info.error = Some("插件进程已停止".into());
+            self.emit_task(&info);
             crate::plugin_fs_access::cleanup(&task.owner);
             crate::plugin_ipc::cleanup(&task.owner);
             crate::plugin_net::cleanup(&task.owner);
@@ -250,10 +249,18 @@ impl Running {
     }
 
     pub(super) fn task(&self, id: &str) -> Option<PluginTaskInfo> {
-        self.tasks
+        if let Some(info) = self
+            .tasks
             .lock()
             .ok()
             .and_then(|tasks| tasks.get(id).map(|task| task.info.clone()))
+        {
+            return Some(info);
+        }
+        self.history
+            .lock()
+            .ok()
+            .and_then(|history| history.iter().find(|info| info.task_id == id).cloned())
     }
 
     pub(super) fn cancel_task(&self, id: &str) -> Result<(), String> {
@@ -272,30 +279,31 @@ impl Running {
             "method": "plugin.cancel",
             "params": { "taskId": info.task_id },
         })) {
-            if let Ok(mut tasks) = self.tasks.lock() {
-                if let Some(entry) = tasks.get_mut(id) {
-                    entry.info.status = "failed".into();
-                    entry.info.error = Some("插件进程已断开".into());
-                    entry.finished_at = Some(now_millis());
-                    let info = entry.info.clone();
-                    drop(tasks);
-                    self.emit_task(&info);
-                }
+            if let Some(mut entry) = self
+                .tasks
+                .lock()
+                .ok()
+                .and_then(|mut tasks| tasks.remove(id))
+            {
+                entry.info.status = "failed".into();
+                entry.info.error = Some("插件进程已断开".into());
+                crate::plugin_fs_access::cleanup(&entry.owner);
+                crate::plugin_ipc::cleanup(&entry.owner);
+                crate::plugin_net::cleanup(&entry.owner);
+                self.emit_task(&entry.info);
+                self.remember_task(entry.info);
             }
             return Err(error);
         }
         Ok(())
     }
 
-    fn prune_tasks(tasks: &mut HashMap<String, TaskEntry>) {
-        let mut finished: Vec<(u64, String)> = tasks
-            .iter()
-            .filter_map(|(id, task)| task.finished_at.map(|at| (at, id.clone())))
-            .collect();
-        finished.sort();
-        let excess = finished.len().saturating_sub(MAX_TASK_HISTORY);
-        for (_, id) in finished.into_iter().take(excess) {
-            tasks.remove(&id);
+    fn remember_task(&self, info: PluginTaskInfo) {
+        if let Ok(mut history) = self.history.lock() {
+            history.push_back(info);
+            while history.len() > MAX_TASK_HISTORY {
+                history.pop_front();
+            }
         }
     }
 
@@ -330,6 +338,7 @@ impl Running {
                 .lock()
                 .map_err(|_| "task registry unavailable")?
                 .get(task)
+                .filter(|entry| matches!(entry.info.status.as_str(), "running" | "cancelling"))
                 .cloned()
                 .ok_or_else(|| "task authorization expired".to_string())?;
             return Ok(Actor {
@@ -381,12 +390,7 @@ impl Running {
                     .filter(|label| !label.is_empty())
                     .unwrap_or("插件后台任务");
                 let mut tasks = self.tasks.lock().map_err(|_| "task registry unavailable")?;
-                if tasks
-                    .values()
-                    .filter(|task| matches!(task.info.status.as_str(), "running" | "cancelling"))
-                    .count()
-                    >= MAX_TASKS
-                {
+                if tasks.len() >= MAX_TASKS {
                     return Err("too many background tasks".into());
                 }
                 if tasks.contains_key(task_id) {
@@ -409,10 +413,8 @@ impl Running {
                         owner: format!("{}:task:{task_id}", self.base_owner),
                         scope: operation.scope,
                         info: info.clone(),
-                        finished_at: None,
                     },
                 );
-                Self::prune_tasks(&mut tasks);
                 drop(tasks);
                 self.emit_task(&info);
                 Ok(Value::Null)
@@ -423,26 +425,31 @@ impl Running {
                     .get("taskId")
                     .and_then(Value::as_str)
                     .ok_or("missing task authorization")?;
-                let (info, owner) = {
-                    let mut tasks = self.tasks.lock().map_err(|_| "task registry unavailable")?;
-                    let Some(entry) = tasks.get_mut(task_id) else {
-                        return Ok(Value::Null);
-                    };
-                    entry.info.status = match p.get("status").and_then(Value::as_str) {
-                        Some("completed") => "completed",
-                        Some("cancelled") => "cancelled",
-                        _ => "failed",
-                    }
-                    .to_string();
-                    entry.info.result = p.get("result").cloned().unwrap_or(Value::Null);
-                    entry.info.error = p.get("error").and_then(Value::as_str).map(str::to_owned);
-                    entry.finished_at = Some(now_millis());
-                    (entry.info.clone(), entry.owner.clone())
+                let finished = self
+                    .tasks
+                    .lock()
+                    .map_err(|_| "task registry unavailable")?
+                    .remove(task_id)
+                    .map(|mut entry| {
+                        entry.info.status = match p.get("status").and_then(Value::as_str) {
+                            Some("completed") => "completed",
+                            Some("cancelled") => "cancelled",
+                            _ => "failed",
+                        }
+                        .to_string();
+                        entry.info.result = p.get("result").cloned().unwrap_or(Value::Null);
+                        entry.info.error =
+                            p.get("error").and_then(Value::as_str).map(str::to_owned);
+                        entry
+                    });
+                let Some(entry) = finished else {
+                    return Ok(Value::Null);
                 };
-                crate::plugin_fs_access::cleanup(&owner);
-                crate::plugin_ipc::cleanup(&owner);
-                crate::plugin_net::cleanup(&owner);
-                self.emit_task(&info);
+                crate::plugin_fs_access::cleanup(&entry.owner);
+                crate::plugin_ipc::cleanup(&entry.owner);
+                crate::plugin_net::cleanup(&entry.owner);
+                self.emit_task(&entry.info);
+                self.remember_task(entry.info);
                 Ok(Value::Null)
             }
             "host.task.progress" => {
@@ -873,11 +880,4 @@ impl Running {
             crate::plugin_net::cleanup(&operation.owner);
         }
     }
-}
-
-fn now_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|value| value.as_millis() as u64)
-        .unwrap_or_default()
 }

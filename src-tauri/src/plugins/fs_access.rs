@@ -336,17 +336,46 @@ struct Fingerprint {
     len: u64,
     modified: Option<cap_std::time::SystemTime>,
     readonly: bool,
+    /// Device and inode (or volume/file index) catch replacement by a file
+    /// that happens to keep the same size and timestamp.
+    identity: Option<(u64, u64)>,
 }
 fn writes() -> &'static Mutex<HashMap<String, PendingWrite>> {
     static VALUES: OnceLock<Mutex<HashMap<String, PendingWrite>>> = OnceLock::new();
     VALUES.get_or_init(|| Mutex::new(HashMap::new()))
 }
+/// Best-effort identity of the opened target. It never authorizes access; it
+/// only makes concurrent-replacement conflicts more likely to be detected.
+#[cfg(unix)]
+fn identity(dir: &Dir, path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = dir.open(path).ok()?.into_std().metadata().ok()?;
+    Some((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(windows)]
+fn identity(dir: &Dir, path: &Path) -> Option<(u64, u64)> {
+    use std::os::windows::fs::MetadataExt;
+    let metadata = dir.open(path).ok()?.into_std().metadata().ok()?;
+    Some((metadata.volume_serial_number()?, metadata.file_index()?))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn identity(_dir: &Dir, _path: &Path) -> Option<(u64, u64)> {
+    None
+}
+
+/// Conflict detection covers size, modification time, readonly state and file
+/// identity. It intentionally does not read the whole file on every commit, so
+/// a same-size edit that also preserves all of those metadata fields is not
+/// detected; the atomic rename still prevents partial files.
 fn fingerprint(dir: &Dir, path: &Path) -> Result<Option<Fingerprint>, String> {
     match dir.metadata(path) {
         Ok(metadata) => Ok(Some(Fingerprint {
             len: metadata.len(),
             modified: metadata.modified().ok(),
             readonly: metadata.permissions().readonly(),
+            identity: identity(dir, path),
         })),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.to_string()),
@@ -436,10 +465,13 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
     // commits never wait for a large copy or fsync.
     let mut write = {
         let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
-        pending
-            .remove(handle)
-            .filter(|value| value.owner == owner)
-            .ok_or("write handle unavailable")?
+        if !pending
+            .get(handle)
+            .is_some_and(|value| value.owner == owner)
+        {
+            return Err("write handle unavailable".into());
+        }
+        pending.remove(handle).ok_or("write handle unavailable")?
     };
     let dir = &write.root;
     if fingerprint(dir, &write.path)? != write.original {
@@ -700,6 +732,32 @@ mod tests {
         std::os::unix::fs::symlink(outside.path(), root.path().join("link")).unwrap();
         assert!(read_chunk(&scope, "link/secret", 0, 100).is_err());
         assert!(begin_write("p", &scope, "link/secret", false).is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn replacing_the_file_identity_aborts_commit() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::new(root.path()).unwrap();
+        let path = root.path().join("file");
+        std::fs::write(&path, b"old").unwrap();
+        let handle = begin_write("owner", &scope, "file", false).unwrap();
+        write_chunk("owner", &handle, &STANDARD.encode(b"new")).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(&path, b"other").unwrap();
+        assert!(commit("owner", &handle).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"other");
+    }
+    #[test]
+    fn a_wrong_owner_cannot_consume_another_operation_transaction() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::new(root.path()).unwrap();
+        std::fs::write(root.path().join("file"), b"old").unwrap();
+        let handle = begin_write("owner", &scope, "file", false).unwrap();
+        write_chunk("owner", &handle, &STANDARD.encode(b"new")).unwrap();
+        assert!(commit("other", &handle).is_err());
+        assert_eq!(std::fs::read(root.path().join("file")).unwrap(), b"old");
+        commit("owner", &handle).unwrap();
+        assert_eq!(std::fs::read(root.path().join("file")).unwrap(), b"new");
     }
     #[cfg(unix)]
     #[test]
