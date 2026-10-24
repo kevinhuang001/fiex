@@ -110,7 +110,7 @@ export function PluginMenu({
   unpinTool,
 }: PluginMenuProps) {
   return (
-    <Menu label="插件" icon={<Puzzle weight="regular" size={20} />}>
+    <Menu label="插件" icon={<Puzzle weight="regular" size={20} />} align="center">
       <Label>插件工具</Label>
       {availableTools.map(({ plugin, tool }) => {
         const key = pluginKey(plugin.id, tool.id)

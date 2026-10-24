@@ -6,10 +6,12 @@ export function Menu({
   label,
   children,
   icon,
+  align = 'end',
 }: {
   label: string
   children: ReactNode
   icon: ReactNode
+  align?: 'start' | 'center' | 'end'
 }) {
   return (
     <D.DropdownMenu>
@@ -18,7 +20,7 @@ export function Menu({
           {icon}
         </Button>
       </D.DropdownMenuTrigger>
-      <D.DropdownMenuContent align="end" className="fiex-menu">
+      <D.DropdownMenuContent align={align} className="fiex-menu">
         {children}
       </D.DropdownMenuContent>
     </D.DropdownMenu>
