@@ -309,9 +309,6 @@ pub fn run_command(
 impl Drop for Running {
     fn drop(&mut self) {
         // Dropping SandboxChild terminates the plugin and its process tree.
-        crate::plugin_fs_access::cleanup(&self.resource_owner);
-        crate::plugin_net::cleanup(&self.resource_owner);
-        crate::plugin_ipc::cleanup(&self.resource_owner);
-        let _ = &self.child;
+        self.stop();
     }
 }

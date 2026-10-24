@@ -118,6 +118,7 @@ jobs:
           cp "sdk/rust/target/${{ matrix.target }}/debug/examples/$executable" "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"
           if [ "$RUNNER_OS" != Windows ]; then chmod +x "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"; fi
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_smoke -- org.fiex.mock
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_concurrency
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_search_e2e
       - name: Panel resolution, including context submenus
         shell: bash

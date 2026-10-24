@@ -2,16 +2,14 @@
 use super::super::catalog::{discover, executable};
 use super::super::manifest::{activation_requirements, declared};
 use super::rpc::Running;
-use crate::plugin_sdk;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::thread;
 
 struct Instance {
-    running: Mutex<Running>,
+    running: Arc<Running>,
     kill: crate::plugin_sandbox::KillHandle,
 }
 
@@ -23,6 +21,7 @@ impl PluginHost {
     pub fn stop(&self, id: &str) {
         if let Ok(mut processes) = self.children.lock() {
             if let Some(instance) = processes.remove(id) {
+                instance.running.stop();
                 instance.kill.terminate();
             }
         }
@@ -154,20 +153,9 @@ impl PluginHost {
                 BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
             );
             let kill = sandbox.kill_handle();
-            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            thread::spawn(move || {
-                let mut stdout = stdout;
-                loop {
-                    let frame = plugin_sdk::read_frame(&mut stdout).map_err(|e| e.to_string());
-                    let finished = !matches!(frame, Ok(Some(_)));
-                    if sender.send(frame).is_err() || finished {
-                        break;
-                    }
-                }
-            });
-            let running = Running {
-                plugin_id: plugin_id.to_string(),
-                resource_owner: format!(
+            let running = Running::start(
+                plugin_id.to_string(),
+                format!(
                     "{plugin_id}:{}:{}",
                     std::process::id(),
                     std::time::SystemTime::now()
@@ -176,46 +164,18 @@ impl PluginHost {
                         .as_nanos()
                 ),
                 declared,
-                child: sandbox,
+                sandbox,
                 stdin,
-                stdout: receiver,
-                next_id: 0,
-                task_root: None,
-            };
-            let instance = Arc::new(Instance {
-                running: Mutex::new(running),
-                kill,
-            });
+                stdout,
+            );
+            let instance = Arc::new(Instance { running, kill });
             guard.insert(plugin_id.to_string(), instance.clone());
             instance
         };
         drop(guard);
-        let response = (|| {
-            let mut running = instance
-                .running
-                .lock()
-                .map_err(|_| "plugin instance lock poisoned")?;
-            let result = (|| {
-                if running.next_id == 0 {
-                    let result = running.rpc(
-                        "plugin.initialize",
-                        json!({"protocolVersion":plugin_sdk::PROTOCOL_VERSION}),
-                        None,
-                    )?;
-                    if result.get("pluginId").and_then(Value::as_str) != Some(plugin_id) {
-                        return Err("plugin identity mismatch".into());
-                    }
-                }
-                running.rpc(method, params, task_root)
-            })();
-            // Capabilities and pending writes belong to this operation, never
-            // to the lifetime of the pooled plugin process.
-            running.task_root = None;
-            crate::plugin_fs_access::cleanup(&running.resource_owner);
-            crate::plugin_ipc::cleanup(&running.resource_owner);
-            result
-        })();
-        if response.is_err() {
+        let result = instance.running.rpc(method, params, task_root);
+        if result.is_err() {
+            instance.running.stop();
             instance.kill.terminate();
             if let Ok(mut guard) = self.children.lock() {
                 if guard
@@ -226,7 +186,7 @@ impl PluginHost {
                 }
             }
         }
-        response
+        result
     }
 }
 pub fn global() -> &'static PluginHost {

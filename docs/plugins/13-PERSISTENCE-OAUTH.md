@@ -28,10 +28,11 @@
 ### 2.1 Native 调用
 
 ```rust
-// 拟议 Native SDK v0.1，展示接口使用方式
-fn handle(host: &mut dyn fiex_plugin_sdk::HostServices) {
-    host.storage_set("account-account1", "lastSyncCursor", serde_json::json!("opaque-token")).unwrap();
-    host.secret_set("account-account1", "oauthRefreshToken", "<token>").unwrap();
+// Native SDK：每个请求拿到独立上下文
+fn handle(ctx: fiex_plugin_sdk::RequestContext) -> Result<serde_json::Value, fiex_plugin_sdk::RpcError> {
+    ctx.storage_set("account-account1", "lastSyncCursor", serde_json::json!("opaque-token"))?;
+    ctx.secret_set("account-account1", "oauthRefreshToken", "<token>")?;
+    Ok(serde_json::Value::Null)
 }
 ```
 
