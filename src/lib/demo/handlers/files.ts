@@ -92,7 +92,6 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           title: '校验和',
           pluginId: 'org.fiex.checksum',
           rows: [
-            { label: '大小', value: `${entry.size} B` },
             {
               label: 'SHA-256',
               value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
