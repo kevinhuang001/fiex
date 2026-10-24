@@ -354,6 +354,11 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
 }
 
 pub fn file_info(path: &str) -> Vec<InfoSection> {
+    // Remote/VFS paths are served by their own plugin and do not map to a
+    // local file that Core or another plugin may probe.
+    if path.contains("://") {
+        return Vec::new();
+    }
     let path = Path::new(path);
     let mut sections = media_sections(path);
     sections.extend(plugin_sections(path));
