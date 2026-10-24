@@ -15,4 +15,7 @@ export interface InstallPreview {
   keyId?: string
   publisherKey?: string
   fingerprint?: string
+  isUpdate: boolean
+  previousVersion?: string
+  permissionsChanged: boolean
 }

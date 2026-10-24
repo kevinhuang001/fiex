@@ -158,6 +158,12 @@ pub(crate) fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
     crate::plugin_host::approve_install(&plugin_id)
 }
 #[tauri::command]
+pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::InfoSection> {
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_info::file_info(&path))
+        .await
+        .unwrap_or_default()
+}
+#[tauri::command]
 pub(crate) fn plugin_task(
     plugin_id: String,
     task_id: String,

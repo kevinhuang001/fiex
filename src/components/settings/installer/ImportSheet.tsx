@@ -21,14 +21,19 @@ export function ImportSheet({
   onConfirm: () => void
 }) {
   return (
-    <Modal open={Boolean(preview)} title="确认插件安装及权限" onClose={onDiscard}>
+    <Modal
+      open={Boolean(preview)}
+      title={preview?.isUpdate ? '确认插件更新及权限' : '确认插件安装及权限'}
+      onClose={onDiscard}
+    >
       <div className="plugin-install-review">
         <div className="plugin-install-review-heading">
           <Shield size={21} />
           <div>
             <strong>{preview?.name}</strong>
             <small>
-              {preview?.id} · {preview?.version}
+              {preview?.id} · {preview?.isUpdate ? `${preview?.previousVersion} → ` : ''}
+              {preview?.version}
             </small>
           </div>
         </div>
@@ -90,7 +95,13 @@ export function ImportSheet({
             取消
           </Button>
           <Button type="button" disabled={installing} onClick={() => void onConfirm()}>
-            {installing ? '安装中…' : '安装（权限默认关闭）'}
+            {installing
+              ? preview?.isUpdate
+                ? '更新中…'
+                : '安装中…'
+              : preview?.isUpdate
+                ? '更新（权限变更需重新激活）'
+                : '安装（权限默认关闭）'}
           </Button>
         </footer>
       </div>

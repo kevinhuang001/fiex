@@ -19,6 +19,7 @@
 | `search`       | 搜索来源；Core 查询所有启用来源并合并结果。                                                |
 | `preview`      | 文件预览器；声明扩展名与优先级，可覆盖内置预览（设计见 [23](23-PREVIEW-EXTENSIONS.md)）。  |
 | `hooks`        | 打开文件前接管操作；按优先级执行，可放行或消费（见 [25](25-BEFORE-OPEN-HOOKS.md)）。       |
+| `info`         | 向“显示简介”右列提供元数据；按扩展名匹配（见 [26](26-INFO-EXTENSIONS.md)）。               |
 | `settings`     | 插件配置字段，由 Core 渲染。                                                               |
 
 不再有独立的 `panels` 或 `vfs` 注册：
@@ -49,6 +50,7 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 - [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md) —— 预览器注册、优先级、office-preview
 - [24 插件诊断](24-PLUGIN-DIAGNOSTICS.md) —— 命令可用性、错误来源与设置页
 - [25 打开前钩子](25-BEFORE-OPEN-HOOKS.md)
+- [26 显示简介扩展点](26-INFO-EXTENSIONS.md)
 
 **协议与设计**
 
@@ -78,3 +80,4 @@ Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进
 - [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md)
 - [24 插件诊断](24-PLUGIN-DIAGNOSTICS.md)
 - [25 打开前钩子](25-BEFORE-OPEN-HOOKS.md)
+- [26 显示简介扩展点](26-INFO-EXTENSIONS.md)

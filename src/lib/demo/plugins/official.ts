@@ -154,6 +154,15 @@ export const officialPlugins: DemoPlugin[] = officialMode
               defaultValue: ['__MACOSX'],
             },
           ],
+          info: [
+            {
+              id: 'archive.info',
+              title: '压缩包',
+              command: 'archive.info',
+              extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
+              priority: 100,
+            },
+          ],
         },
       },
       {
@@ -173,6 +182,15 @@ export const officialPlugins: DemoPlugin[] = officialMode
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
         contributions: {
+          info: [
+            {
+              id: 'office.info',
+              title: '文档',
+              command: 'office.info',
+              extensions: ['docx', 'xlsx', 'pptx'],
+              priority: 100,
+            },
+          ],
           preview: [
             {
               id: 'office',
@@ -237,6 +255,28 @@ export const officialPlugins: DemoPlugin[] = officialMode
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
         contributions: {
+          info: [
+            {
+              id: 'data.info',
+              title: '数据表',
+              command: 'data.info',
+              extensions: [
+                'db',
+                'sqlite',
+                'sqlite3',
+                'csv',
+                'tsv',
+                'xlsx',
+                'xls',
+                'parquet',
+                'arrow',
+                'feather',
+                'ipc',
+                'avro',
+              ],
+              priority: 100,
+            },
+          ],
           preview: [
             {
               id: 'data',
@@ -357,16 +397,13 @@ export const officialPlugins: DemoPlugin[] = officialMode
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
         contributions: {
-          contextMenus: [
+          info: [
             {
-              id: 'checksum.calculate',
-              title: '查看校验和',
-              when: 'context.selection.isFile',
-              panel: {
-                entry: 'ui/dist/index.html',
-                title: '校验和',
-                defaultSize: { width: 540, height: 300 },
-              },
+              id: 'checksum.info',
+              title: '校验和',
+              command: 'checksum.info',
+              extensions: [],
+              priority: 100,
             },
           ],
         },

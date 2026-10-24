@@ -439,13 +439,21 @@
 .plugin-store-modal {
   width: min(980px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
+  height: min(760px, calc(100vh - 64px));
   padding: 26px 30px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .plugin-store-modal .plugin-store {
   width: 100%;
   max-width: 850px;
   margin: 0 auto;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .plugin-store-modal .plugin-store-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));

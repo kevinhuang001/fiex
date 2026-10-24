@@ -45,6 +45,7 @@ pub(crate) fn capabilities(contributions: &Value) -> Vec<String> {
         ("themes", "theme"),
         ("preview", "preview"),
         ("hooks", "hooks"),
+        ("info", "info"),
     ] {
         let present = contributions
             .get(key)

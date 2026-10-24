@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { call } from '@/lib/api'
 import { asList } from './plugins/listValue'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
@@ -12,12 +12,37 @@ import { PluginList } from './plugins/PluginList'
 import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
 import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
 import { PluginStore, PluginStoreToolbar } from './plugins/PluginStore'
-import { refreshPluginCatalog, usePluginCatalog, type PluginInfo } from '@/lib/plugins'
+import { PluginCategoryFilter } from './plugins/PluginCategoryFilter'
+import {
+  pluginCategories,
+  refreshPluginCatalog,
+  usePluginCatalog,
+  type PluginInfo,
+} from '@/lib/plugins'
 import { PluginActivationDialog } from './PluginActivationDialog'
 import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
 
 export function PluginSettings() {
   const plugins = usePluginCatalog()
+  const [category, setCategory] = useState('all')
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const plugin of plugins) {
+      for (const id of pluginCategories(plugin.contributions, plugin.requestedCommands)) {
+        counts.set(id, (counts.get(id) || 0) + 1)
+      }
+    }
+    return [...counts].map(([id, count]) => ({ id, count }))
+  }, [plugins])
+  const shown = useMemo(
+    () =>
+      category === 'all'
+        ? plugins
+        : plugins.filter((plugin) =>
+            pluginCategories(plugin.contributions, plugin.requestedCommands).includes(category),
+          ),
+    [plugins, category],
+  )
   const [storeOpen, setStoreOpen] = useState(false)
   const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
@@ -271,8 +296,9 @@ export function PluginSettings() {
           onImport={() => void chooseLocalPlugin()}
           onOpenStore={() => setStoreOpen(true)}
         />
+        <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
         <PluginList
-          plugins={plugins}
+          plugins={shown}
           busy={busy}
           onOpenSettings={(plugin) => {
             setMessage('')
@@ -296,7 +322,7 @@ export function PluginSettings() {
 
       <PluginStore
         open={storeOpen}
-        installedIds={plugins.map((plugin) => plugin.id)}
+        installed={plugins}
         onClose={() => setStoreOpen(false)}
         onInstalled={() => {
           refreshPluginCatalog()

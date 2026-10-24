@@ -1,14 +1,21 @@
-import { Check, Download, LoaderCircle, Puzzle, Search } from 'lucide-react'
-import type { Dispatch, SetStateAction } from 'react'
-import type { MarketplacePlugin } from '@/lib/plugins'
+import { Check, Download, LoaderCircle, Puzzle, RefreshCw, Search } from 'lucide-react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  PLUGIN_CATEGORIES,
+  pluginCategories,
+  isNewerVersion,
+  type MarketplacePlugin,
+  type PluginInfo,
+} from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import { pluginIcon } from './pluginIcon'
+import { PluginCategoryFilter } from '../plugins/PluginCategoryFilter'
 
 /** The catalog sheet: search, alerts and the installable plugin grid. */
 export function MarketplaceList({
   open,
-  installedIds,
+  installed,
   onClose,
   query,
   setQuery,
@@ -20,7 +27,7 @@ export function MarketplaceList({
   onPrepare,
 }: {
   open: boolean
-  installedIds: string[]
+  installed: PluginInfo[]
   onClose: () => void
   query: string
   setQuery: Dispatch<SetStateAction<string>>
@@ -31,14 +38,27 @@ export function MarketplaceList({
   busyId: string
   onPrepare: (entry: MarketplacePlugin) => void
 }) {
+  const [category, setCategory] = useState('all')
+  const categories = (() => {
+    const counts = new Map<string, number>()
+    for (const entry of entries) {
+      for (const id of pluginCategories(entry.contributions, entry.commands)) {
+        counts.set(id, (counts.get(id) || 0) + 1)
+      }
+    }
+    return [...counts].map(([id, count]) => ({ id, count }))
+  })()
+  const versions = new Map(installed.map((plugin) => [plugin.id, plugin.version]))
   const filtered = entries.filter((entry) => {
     const term = query.trim().toLowerCase()
-    return (
+    const matchesSearch =
       !term ||
       entry.name.toLowerCase().includes(term) ||
       entry.id.toLowerCase().includes(term) ||
       entry.description.toLowerCase().includes(term)
-    )
+    const matchesCategory =
+      category === 'all' || pluginCategories(entry.contributions, entry.commands).includes(category)
+    return matchesSearch && matchesCategory
   })
   return (
     <Modal open={open} onClose={onClose} title="获取插件" className="plugin-store-modal">
@@ -54,6 +74,7 @@ export function MarketplaceList({
             />
           </label>
         </div>
+        <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
         {error && (
           <p role="alert" className="connection-error">
             {error}
@@ -71,38 +92,60 @@ export function MarketplaceList({
         ) : (
           <div className="plugin-store-grid">
             {filtered.map((entry) => {
-              const installed = installedIds.includes(entry.id)
+              const currentVersion = versions.get(entry.id)
+              const isInstalled = currentVersion !== undefined
+              const isUpdate = isInstalled && isNewerVersion(entry.version, currentVersion)
               return (
                 <article className="plugin-store-card" key={entry.id}>
                   <div className="plugin-store-card-head">
-                    <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
+                    <div className={`plugin-store-icon ${isInstalled ? 'installed' : ''}`}>
                       {pluginIcon(entry.icon)}
                     </div>
                     <div className="plugin-store-main">
                       <div className="plugin-store-title">
                         <strong>{entry.name}</strong>
                         <span className="plugin-pill">v{entry.version}</span>
-                        {installed && (
+                        {isInstalled && !isUpdate && (
                           <span className="plugin-pill success">
                             <Check size={11} /> 已安装
                           </span>
                         )}
+                        {isUpdate && (
+                          <span className="plugin-pill warn">可更新至 v{entry.version}</span>
+                        )}
                       </div>
                       <p>{entry.description || '没有提供说明。'}</p>
+                      <div className="plugin-card-categories">
+                        {pluginCategories(entry.contributions, entry.commands)
+                          .slice(0, 4)
+                          .map((id) => (
+                            <span className="plugin-category-pill" key={id}>
+                              {PLUGIN_CATEGORIES.find((item) => item.id === id)?.label || id}
+                            </span>
+                          ))}
+                      </div>
                     </div>
                   </div>
                   <Button
                     size="sm"
-                    variant={installed ? 'outline' : 'default'}
-                    disabled={installed || Boolean(busyId)}
+                    variant={isInstalled && !isUpdate ? 'outline' : 'default'}
+                    disabled={(isInstalled && !isUpdate) || Boolean(busyId)}
                     onClick={() => void onPrepare(entry)}
                   >
                     {busyId === entry.id ? (
                       <LoaderCircle className="spin" size={14} />
+                    ) : isUpdate ? (
+                      <RefreshCw size={14} />
                     ) : (
                       <Download size={14} />
                     )}
-                    {installed ? '已安装' : busyId === entry.id ? '获取中…' : '获取'}
+                    {isUpdate
+                      ? '更新'
+                      : isInstalled
+                        ? '已安装'
+                        : busyId === entry.id
+                          ? '获取中…'
+                          : '获取'}
                   </Button>
                 </article>
               )

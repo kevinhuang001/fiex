@@ -81,6 +81,68 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     }
     case 'file_info':
       return state.entries.find((e) => e.path === a.path)
+    case 'file_info_details': {
+      const entry = state.entries.find((e) => e.path === a.path)
+      if (!entry) return []
+      const ext = entry.name.split('.').pop()?.toLowerCase() || ''
+      const sections = []
+      if (!entry.isDir) {
+        sections.push({
+          source: 'plugin',
+          title: '校验和',
+          pluginId: 'org.fiex.checksum',
+          rows: [
+            { label: '大小', value: `${entry.size} B` },
+            {
+              label: 'SHA-256',
+              value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+            },
+            { label: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
+          ],
+        })
+      }
+      if (['zip', '7z', 'rar', 'tar', 'gz', 'tgz'].includes(ext)) {
+        sections.push({
+          source: 'plugin',
+          title: '压缩包',
+          pluginId: 'org.fiex.archive',
+          rows: [
+            { label: '格式', value: ext.toUpperCase() },
+            { label: '压缩后大小', value: `${entry.size} B` },
+            { label: '解压后大小', value: `${Math.round(entry.size * 2.4)} B` },
+            { label: '文件数', value: '18' },
+            { label: '压缩率', value: '58.3%' },
+          ],
+        })
+      }
+      if (['docx', 'xlsx', 'pptx'].includes(ext)) {
+        sections.push({
+          source: 'plugin',
+          title: '文档',
+          pluginId: 'org.fiex.office-preview',
+          rows: [
+            { label: '格式', value: ext.toUpperCase() },
+            { label: '段落', value: '42' },
+            { label: '表格', value: ext === 'xlsx' ? '3' : '1' },
+            { label: '图片', value: '2' },
+          ],
+        })
+      }
+      if (['db', 'sqlite', 'sqlite3', 'csv', 'tsv', 'parquet', 'arrow', 'avro'].includes(ext)) {
+        sections.push({
+          source: 'plugin',
+          title: '数据表',
+          pluginId: 'org.fiex.data-preview',
+          rows: [
+            { label: '格式', value: ext.toUpperCase() },
+            { label: '数据集', value: '2' },
+            { label: '首表列数', value: '6' },
+            { label: '首表行数', value: '128' },
+          ],
+        })
+      }
+      return sections
+    }
     case 'read_preview':
       if (String(a.path).endsWith('/Palette.json'))
         return '{\n  "accent": "#387ca8",\n  "surface": "#f8fafc",\n  "radius": 12\n}'

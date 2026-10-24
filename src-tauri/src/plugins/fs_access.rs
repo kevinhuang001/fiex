@@ -356,8 +356,10 @@ fn identity(dir: &Dir, path: &Path) -> Option<(u64, u64)> {
 #[cfg(windows)]
 fn identity(dir: &Dir, path: &Path) -> Option<(u64, u64)> {
     use std::os::windows::fs::MetadataExt;
+    // `file_index` is still unstable on Windows; creation + write time is the
+    // strongest stable signal available without an extra Win32 dependency.
     let metadata = dir.open(path).ok()?.into_std().metadata().ok()?;
-    Some((metadata.volume_serial_number()?, metadata.file_index()?))
+    Some((metadata.creation_time(), metadata.last_write_time()))
 }
 
 #[cfg(not(any(unix, windows)))]

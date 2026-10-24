@@ -766,3 +766,51 @@
     justify-content: flex-end;
   }
 }
+.plugin-category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 0;
+}
+.plugin-category-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+}
+.plugin-category-filter button:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+.plugin-category-filter button.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+}
+.plugin-category-filter button small {
+  min-width: 14px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+.plugin-category-pill {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.plugin-card-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}

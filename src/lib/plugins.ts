@@ -23,6 +23,13 @@ export interface PluginContribution {
   panel?: PluginPanel
   children?: PluginContribution[]
 }
+export interface PluginInfoContribution {
+  id: string
+  title: string
+  command: string
+  extensions?: string[]
+  priority?: number
+}
 export interface MarketplacePlugin {
   id: string
   name: string
@@ -33,6 +40,7 @@ export interface MarketplacePlugin {
   permissions: string[]
   requestedNetworkDomains: string[]
   commands: string[]
+  contributions?: PluginContributions
   asset: string
   repository: string
 }
@@ -56,28 +64,63 @@ export interface PluginInfo {
   /** Requested commands that Core cannot resolve on PATH right now. */
   missingCommands: string[]
   backendAvailable: boolean
-  contributions?: {
-    connections?: Array<{ id: string; title: string; fields: PluginField[] }>
-    toolbar?: PluginContribution[]
-    contextMenus?: PluginContribution[]
-    search?: Array<{ id: string; title: string; icon?: string }>
-    settings?: PluginField[]
-    hooks?: Array<{
-      id: string
-      event: 'beforeOpen'
-      method: string
-      priority?: number
-      extensions?: string[]
-    }>
-    preview?: Array<{
-      id: string
-      title?: string
-      extensions: string[]
-      priority?: number
-      maxBytes?: number
-      panel: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
-    }>
+  contributions?: PluginContributions
+}
+export interface PluginContributions {
+  connections?: Array<{ id: string; title: string; fields: PluginField[] }>
+  toolbar?: PluginContribution[]
+  contextMenus?: PluginContribution[]
+  search?: Array<{ id: string; title: string; icon?: string }>
+  settings?: PluginField[]
+  hooks?: Array<{
+    id: string
+    event: 'beforeOpen'
+    method: string
+    priority?: number
+    extensions?: string[]
+  }>
+  preview?: Array<{
+    id: string
+    title?: string
+    extensions: string[]
+    priority?: number
+    maxBytes?: number
+    panel: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
+  }>
+  info?: PluginInfoContribution[]
+}
+export const PLUGIN_CATEGORIES = [
+  { id: 'info', label: '简介' },
+  { id: 'preview', label: '预览' },
+  { id: 'contextMenus', label: '右键菜单' },
+  { id: 'toolbar', label: '工具栏' },
+  { id: 'search', label: '搜索' },
+  { id: 'connections', label: '连接' },
+  { id: 'hooks', label: '打开方式' },
+  { id: 'themes', label: '主题' },
+  { id: 'commands', label: '命令' },
+] as const
+export function pluginCategories(
+  contributions?: PluginContributions,
+  commands: string[] = [],
+): string[] {
+  const present = PLUGIN_CATEGORIES.filter(({ id }) => {
+    if (id === 'commands') return false
+    const value = contributions?.[id as keyof PluginContributions]
+    return Array.isArray(value) && value.length > 0
+  }).map(({ id }) => id)
+  if (!present.length && commands.length) present.push('commands')
+  return present
+}
+export function isNewerVersion(candidate: string, installed: string): boolean {
+  const left = candidate.split('-')[0].split('.').map(Number)
+  const right = installed.split('-')[0].split('.').map(Number)
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const a = left[index] || 0
+    const b = right[index] || 0
+    if (a !== b) return a > b
   }
+  return false
 }
 export async function pluginCatalog(): Promise<PluginInfo[]> {
   if (!native && !demo) return []

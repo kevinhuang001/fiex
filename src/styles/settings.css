@@ -472,36 +472,95 @@
 .preview-footer > button:last-child {
   font-size: 11px;
 }
+.file-info-modal {
+  width: min(720px, calc(100vw - 32px));
+}
 .file-info {
   display: flex;
-  align-items: center;
   flex-direction: column;
   gap: 14px;
   user-select: text;
 }
-.file-info h3 {
+.file-info-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.file-info-heading h3 {
   font-size: 16px;
   word-break: break-word;
 }
+.file-info-heading > div > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.file-info-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  width: 100%;
+  align-items: start;
+}
+.file-info-section {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.file-info-section h4 {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.file-info-section h5 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.file-info-section h5 small {
+  overflow: hidden;
+  font-weight: 400;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .file-info dl {
   width: 100%;
-  margin: 10px 0;
+  margin: 4px 0;
 }
 .file-info dl > div {
   display: flex;
-  gap: 20px;
-  padding: 8px 0;
+  gap: 12px;
+  padding: 6px 0;
   font-size: 11px;
   border-bottom: 1px solid var(--line);
 }
 .file-info dt {
-  width: 70px;
+  width: 68px;
   flex-shrink: 0;
   color: var(--muted);
   text-align: right;
 }
 .file-info dd {
+  min-width: 0;
   word-break: break-word;
+}
+.file-info-empty {
+  margin: 8px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.file-info-extra .file-info-group:first-of-type h5 {
+  margin-top: 0;
+}
+@media (max-width: 620px) {
+  .file-info-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .settings .setting-row {
   display: flex;

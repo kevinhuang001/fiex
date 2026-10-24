@@ -1,5 +1,5 @@
 import { Download, Puzzle, Settings2, ShieldCheck, Trash2 } from 'lucide-react'
-import type { PluginInfo } from '@/lib/plugins'
+import { PLUGIN_CATEGORIES, pluginCategories, type PluginInfo } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { pluginIcon } from '../PluginInstaller'
 
@@ -32,6 +32,7 @@ export function PluginList({
         const declared = plugin.declaredPermissions || []
         const enabled = plugin.enabled && plugin.approved
         const hasSettings = (plugin.contributions?.settings || []).length > 0
+        const categories = pluginCategories(plugin.contributions, plugin.requestedCommands)
         return (
           <article className="plugin-row" key={plugin.id}>
             <div className={`plugin-row-icon ${enabled ? 'enabled' : ''}`}>
@@ -51,6 +52,11 @@ export function PluginList({
               </div>
               <p>{plugin.description || '第三方插件'}</p>
               <div className="plugin-row-meta">
+                {categories.slice(0, 3).map((category) => (
+                  <span className="plugin-category-pill" key={category}>
+                    {PLUGIN_CATEGORIES.find((entry) => entry.id === category)?.label || category}
+                  </span>
+                ))}
                 <span>{plugin.author?.name || '未知开发者'}</span>
                 <span aria-hidden>·</span>
                 <span>{declared.length ? `${declared.length} 项权限` : '无需宿主权限'}</span>

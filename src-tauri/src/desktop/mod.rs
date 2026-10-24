@@ -88,6 +88,7 @@ pub fn run() {
             plugin_cancel_task,
             plugin_status,
             plugins_list,
+            file_info_details,
             plugin_errors,
             plugin_error_report,
             plugin_error_clear,
