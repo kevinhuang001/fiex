@@ -2,6 +2,7 @@ import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import { basename } from '@/lib/files'
+import { loadSavedTabs, saveTabs } from '@/lib/tabs'
 import type { Entry } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useState } from 'react'
@@ -19,7 +20,13 @@ import { useWorkspace } from './useWorkspace'
 export function useAppController() {
   const [prefs, update] = usePreferences()
   const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
-  const left = useExplorer(prefs)
+  const left = useExplorer(
+    prefs,
+    undefined,
+    true,
+    'left',
+    prefs.restoreTabs ? loadSavedTabs() : undefined,
+  )
   const {
     x,
     right,
@@ -38,6 +45,9 @@ export function useAppController() {
     openPane,
     closePane,
   } = usePaneLayout(prefs, left)
+  useEffect(() => {
+    if (left.tabs.length) saveTabs(left.tabs, left.tab)
+  }, [left.tabs, left.tab])
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
   const selectedAll = split ? [...new Set([...left.selected, ...right.selected])] : left.selected

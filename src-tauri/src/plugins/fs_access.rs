@@ -252,8 +252,11 @@ pub fn stat(root: &Scope, input: &str) -> Result<Value, String> {
 pub fn create(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
-    dir.open_with(&path, OpenOptions::new().write(true).create_new(true))
-        .map_err(|e| e.to_string())?;
+    dir.open_with(
+        &path,
+        OpenOptions::new().read(true).write(true).create_new(true),
+    )
+    .map_err(|e| e.to_string())?;
     entry(&dir, &path)
 }
 pub fn mkdir(root: &Scope, input: &str) -> Result<Value, String> {
@@ -543,7 +546,10 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
             temp_exists = true;
         } else {
             let mut output = target_dir
-                .open_with(&temp_name, OpenOptions::new().write(true).create_new(true))
+                .open_with(
+                    &temp_name,
+                    OpenOptions::new().read(true).write(true).create_new(true),
+                )
                 .map_err(|e| format!("create commit temp: {e}"))?;
             temp_exists = true;
             write

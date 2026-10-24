@@ -616,7 +616,6 @@ body.dragging-reorder * {
   z-index: 80;
   margin: 0;
   background: var(--canvas);
-  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 20%, transparent);
   pointer-events: none;
   will-change: transform;
 }

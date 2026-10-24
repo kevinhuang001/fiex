@@ -32,6 +32,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     hiddenSections: [],
     toolbarLeftOrder: ['group', 'sort', 'newFolder', 'ide', 'terminal'],
     toolbarRightOrder: ['refresh', 'split', 'activity'],
+    restoreTabs: false,
     favorites: [],
     tags: TAG_PRESETS.map((tag) => ({ ...tag })),
     shortcutStyle: style,
@@ -118,6 +119,8 @@ function load(): Preferences {
             ['refresh', 'split', 'activity'].includes(item),
           )
         : fallback.toolbarRightOrder,
+      restoreTabs:
+        typeof stored.restoreTabs === 'boolean' ? stored.restoreTabs : fallback.restoreTabs,
       shortcutStyle: style,
       shortcuts,
     }

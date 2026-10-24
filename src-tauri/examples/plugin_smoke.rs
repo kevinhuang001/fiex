@@ -73,9 +73,14 @@ fn main() {
         let task_id = task["taskId"].as_str().expect("task id").to_string();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
-            let status = plugin_host::global()
-                .task(&task_id)
-                .expect("Core did not register the plugin task");
+            let Some(status) = plugin_host::global().task(&task_id) else {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Core did not register the plugin task"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            };
             if status.status == "running" || status.status == "cancelling" {
                 assert!(
                     std::time::Instant::now() < deadline,
@@ -101,9 +106,14 @@ fn main() {
         let stale_id = stale["taskId"].as_str().expect("stale task id").to_string();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
-            let status = plugin_host::global()
-                .task(&stale_id)
-                .expect("stale task was not registered");
+            let Some(status) = plugin_host::global().task(&stale_id) else {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "stale task was not registered"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            };
             if status.status == "running" || status.status == "cancelling" {
                 assert!(
                     std::time::Instant::now() < deadline,

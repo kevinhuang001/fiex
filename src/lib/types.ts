@@ -140,6 +140,7 @@ export interface Preferences {
   hiddenSections: SidebarSection[]
   toolbarLeftOrder: string[]
   toolbarRightOrder: string[]
+  restoreTabs: boolean
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap
