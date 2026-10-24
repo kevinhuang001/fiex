@@ -3981,16 +3981,21 @@ body.dragging-reorder * {
   font-size: 10px;
 }
 
+.plugin-list-modal {
+  max-width: 560px;
+  width: 560px;
+}
+
 .plugin-list-editor {
   display: flex;
-  gap: 12px;
-  padding: 4px 20px 12px;
+  gap: 10px;
+  padding: 4px 14px 10px;
 }
 
 .plugin-list-editor-rows {
   flex: 1;
   min-width: 0;
-  height: 240px;
+  height: 320px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -4023,22 +4028,29 @@ body.dragging-reorder * {
 .plugin-list-editor-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
-  width: 84px;
+  width: 70px;
 }
 
 .plugin-list-editor-actions .button {
   width: 100%;
+  min-height: 26px;
+  padding: 2px 6px;
+  font-size: 10.5px;
 }
 
 .plugin-list-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 0 20px 16px;
+  padding: 0 14px 14px;
 }
 
 .plugin-list-confirm-field {
-  padding: 4px 20px 16px;
+  padding: 4px 14px 14px;
+}
+
+.plugin-list-confirm {
+  max-width: 420px;
 }
