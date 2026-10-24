@@ -22,7 +22,7 @@ pub mod plugin_errors;
 pub mod plugin_fs_access;
 #[path = "plugins/host/mod.rs"]
 pub mod plugin_host;
-#[path = "plugins/installer.rs"]
+#[path = "plugins/installer/mod.rs"]
 pub mod plugin_installer;
 #[path = "plugins/ipc.rs"]
 pub mod plugin_ipc;
