@@ -1,33 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Download, Puzzle, Settings2, ShieldAlert, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { call } from '@/lib/api'
 import { asList } from './plugins/listValue'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
+import {
+  PluginImportDialog,
+  PluginMessage,
+  PluginUninstallDialog,
+  type LocalPreview,
+} from './plugins/PluginAlerts'
+import { PluginList } from './plugins/PluginList'
 import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
 import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
+import { PluginStore, PluginStoreToolbar } from './plugins/PluginStore'
 import { refreshPluginCatalog, usePluginCatalog, type PluginInfo } from '@/lib/plugins'
-import { Button } from '@/components/ui/button'
-import { Modal } from '@/components/ui/Modal'
-import { PluginInstaller, pluginIcon } from './PluginInstaller'
 import { PluginActivationDialog } from './PluginActivationDialog'
 import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
-
-interface LocalPreview {
-  ticket: string
-  id: string
-  name: string
-  version: string
-  author?: { name: string }
-  permissions: string[]
-  requestedNetworkDomains: string[]
-  commands: string[]
-  signed: boolean
-  trusted: boolean
-  publisher?: string
-  publisherName?: string
-  keyId?: string
-  fingerprint?: string
-}
 
 export function PluginSettings() {
   const plugins = usePluginCatalog()
@@ -89,6 +76,10 @@ export function PluginSettings() {
     } finally {
       setBusy(false)
     }
+  }
+  const cancelLocalImport = () => {
+    if (localPreview) void call('plugin_cancel_install', { ticket: localPreview.ticket })
+    setLocalPreview(null)
   }
 
   const fields = settingsFor?.contributions?.settings || []
@@ -276,146 +267,34 @@ export function PluginSettings() {
   return (
     <>
       <div className="plugin-page">
-        <div className="plugin-toolbar plugin-toolbar-actions-only">
-          <div className="plugin-toolbar-actions">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void chooseLocalPlugin()}
-            >
-              <Upload size={15} />
-              导入插件
-            </Button>
-            <Button type="button" size="sm" onClick={() => setStoreOpen(true)}>
-              <Download size={15} />
-              获取插件
-            </Button>
-          </div>
-        </div>
-
-        {plugins.length ? (
-          <div className="plugin-list">
-            {plugins.map((plugin) => {
-              const declared = plugin.declaredPermissions || []
-              const enabled = plugin.enabled && plugin.approved
-              const hasSettings = (plugin.contributions?.settings || []).length > 0
-              return (
-                <article className="plugin-row" key={plugin.id}>
-                  <div className={`plugin-row-icon ${enabled ? 'enabled' : ''}`}>
-                    {pluginIcon(plugin.icon)}
-                  </div>
-                  <div className="plugin-row-main">
-                    <div className="plugin-row-title">
-                      <strong>{plugin.name}</strong>
-                      <span className="plugin-pill">v{plugin.version}</span>
-                      <span className={`plugin-state ${enabled ? 'active' : ''}`}>
-                        <span />
-                        {enabled ? '运行中' : '未激活'}
-                      </span>
-                      {!plugin.backendAvailable && (
-                        <span className="plugin-pill warn">当前平台无后端</span>
-                      )}
-                    </div>
-                    <p>{plugin.description || '第三方插件'}</p>
-                    <div className="plugin-row-meta">
-                      <span>{plugin.author?.name || '未知开发者'}</span>
-                      <span aria-hidden>·</span>
-                      <span>{declared.length ? `${declared.length} 项权限` : '无需宿主权限'}</span>
-                      {plugin.contributions?.connections?.length ? (
-                        <>
-                          <span aria-hidden>·</span>
-                          <span>连接提供者</span>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="plugin-row-actions">
-                    <div className="plugin-row-buttons">
-                      {hasSettings && (
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label={`设置 ${plugin.name}`}
-                          title="插件设置"
-                          onClick={() => {
-                            setMessage('')
-                            setSettingsFor(plugin)
-                          }}
-                        >
-                          <Settings2 size={15} />
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="插件详情"
-                        title="插件详情"
-                        onClick={() => {
-                          setMessage('')
-                          setDomainSettingsOpen(false)
-                          setCommandSettingsOpen(false)
-                          setPermissionsFor(plugin)
-                        }}
-                      >
-                        <ShieldCheck size={14} />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        className="plugin-row-remove"
-                        aria-label={`卸载 ${plugin.name}`}
-                        title="卸载插件"
-                        disabled={busy}
-                        onClick={() => {
-                          setMessage('')
-                          setConfirmRemove(plugin)
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={enabled}
-                      aria-label={`${enabled ? '停用' : '激活'} ${plugin.name}`}
-                      className={`plugin-switch ${enabled ? 'on' : ''}`}
-                      disabled={busy || !plugin.backendAvailable}
-                      onClick={() => void updateActivation(plugin, !enabled)}
-                    >
-                      <span />
-                    </button>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="plugin-empty">
-            <div className="plugin-empty-icon">
-              <Puzzle size={26} />
-            </div>
-            <strong>用插件扩展 Fiex</strong>
-            <p>按需添加连接、文件工具和工作流，所有插件都需要你的授权。</p>
-            <Button type="button" onClick={() => setStoreOpen(true)}>
-              <Download size={15} />
-              浏览官方插件
-            </Button>
-          </div>
-        )}
-
-        {message && (
-          <p role="status" className="plugin-page-message">
-            {message}
-          </p>
-        )}
+        <PluginStoreToolbar
+          onImport={() => void chooseLocalPlugin()}
+          onOpenStore={() => setStoreOpen(true)}
+        />
+        <PluginList
+          plugins={plugins}
+          busy={busy}
+          onOpenSettings={(plugin) => {
+            setMessage('')
+            setSettingsFor(plugin)
+          }}
+          onOpenDetails={(plugin) => {
+            setMessage('')
+            setDomainSettingsOpen(false)
+            setCommandSettingsOpen(false)
+            setPermissionsFor(plugin)
+          }}
+          onRemove={(plugin) => {
+            setMessage('')
+            setConfirmRemove(plugin)
+          }}
+          onToggleActivation={(plugin, enabled) => void updateActivation(plugin, enabled)}
+          onBrowseStore={() => setStoreOpen(true)}
+        />
+        <PluginMessage message={message} />
       </div>
 
-      <PluginInstaller
+      <PluginStore
         open={storeOpen}
         installedIds={plugins.map((plugin) => plugin.id)}
         onClose={() => setStoreOpen(false)}
@@ -519,81 +398,20 @@ export function PluginSettings() {
           onDeny={() => setPermissionToApprove(null)}
         />
       )}
-      <Modal open={Boolean(confirmRemove)} title="卸载插件" onClose={() => setConfirmRemove(null)}>
-        <p>
-          确定卸载「{confirmRemove?.name}
-          」吗？将停止插件进程并删除程序文件，插件数据和用户同步目录会保留。
-        </p>
-        <footer className="plugin-consent-actions">
-          <Button variant="outline" onClick={() => setConfirmRemove(null)}>
-            取消
-          </Button>
-          <Button variant="destructive" disabled={busy} onClick={() => void uninstall()}>
-            卸载
-          </Button>
-        </footer>
-      </Modal>
-      <Modal
-        open={Boolean(localPreview)}
-        title="导入插件"
+
+      <PluginUninstallDialog
+        plugin={confirmRemove}
+        busy={busy}
+        onClose={() => setConfirmRemove(null)}
+        onConfirm={() => void uninstall()}
+      />
+      <PluginImportDialog
+        preview={localPreview}
+        busy={busy}
         onClose={() => setLocalPreview(null)}
-        className="plugin-import-modal"
-      >
-        {localPreview && (
-          <div className="plugin-import-page">
-            <div className="plugin-import-profile">
-              <span className="plugin-import-icon">
-                <Puzzle size={24} />
-              </span>
-              <span className="plugin-import-copy">
-                <strong>{localPreview.name}</strong>
-                <small>{localPreview.author?.name || '未知开发者'}</small>
-              </span>
-            </div>
-            <div
-              className={`plugin-import-signature ${
-                localPreview.signed && localPreview.trusted ? 'verified' : 'warning'
-              }`}
-            >
-              {localPreview.signed && localPreview.trusted ? (
-                <>
-                  <ShieldCheck size={16} />
-                  <span>
-                    <strong>签名已验证</strong>
-                    {localPreview.publisherName || localPreview.publisher || '已验证发布者'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <ShieldAlert size={16} />
-                  <span>
-                    <strong>{localPreview.signed ? '未信任的发布者' : '此插件未签名'}</strong>
-                    {localPreview.signed
-                      ? `${localPreview.publisherName || localPreview.publisher || '未知发布者'} · 密钥指纹 ${localPreview.fingerprint || localPreview.keyId || '未知'}`
-                      : '只在你确认来源可信时继续导入。'}
-                  </span>
-                </>
-              )}
-            </div>
-            <footer className="plugin-consent-actions">
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => {
-                  if (localPreview)
-                    void call('plugin_cancel_install', { ticket: localPreview.ticket })
-                  setLocalPreview(null)
-                }}
-              >
-                取消
-              </Button>
-              <Button disabled={busy} onClick={() => void installLocal()}>
-                导入插件
-              </Button>
-            </footer>
-          </div>
-        )}
-      </Modal>
+        onCancel={cancelLocalImport}
+        onConfirm={() => void installLocal()}
+      />
       {activationFor && (
         <PluginActivationDialog
           key={activationFor.id}
