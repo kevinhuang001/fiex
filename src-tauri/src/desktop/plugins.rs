@@ -29,14 +29,30 @@ pub(crate) async fn plugin_invoke(
     method: String,
     params: serde_json::Value,
     directory: Option<String>,
+    selected_paths: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     let id = plugin_id.clone();
     let call = method.clone();
-    tauri::async_runtime::spawn_blocking(move || match directory {
-        Some(directory) => {
-            crate::plugin_host::global().invoke_at(&plugin_id, &method, params, &directory)
-        }
-        None => crate::plugin_host::global().invoke(&plugin_id, &method, params),
+    tauri::async_runtime::spawn_blocking(move || match (directory, selected_paths) {
+        (Some(directory), Some(paths)) => crate::plugin_host::global().invoke_selected(
+            &plugin_id,
+            &method,
+            params,
+            &directory,
+            &paths
+                .into_iter()
+                .map(std::path::PathBuf::from)
+                .collect::<Vec<_>>(),
+        ),
+        (Some(directory), None) => crate::plugin_host::global().invoke_selected(
+            &plugin_id,
+            &method,
+            params,
+            &directory,
+            &[],
+        ),
+        (None, Some(_)) => Err("selected paths require an operation directory".into()),
+        (None, None) => crate::plugin_host::global().invoke(&plugin_id, &method, params),
     })
     .await
     .map_err(|e| e.to_string())?
@@ -162,11 +178,6 @@ pub(crate) async fn plugin_decorations(
     .await
     .map_err(|error| error.to_string())
 }
-#[tauri::command]
-pub(crate) fn plugin_set_active_directory(path: String) -> Result<(), String> {
-    crate::plugin_host::set_active_directory(&path)
-}
-
 #[tauri::command]
 pub(crate) fn plugin_themes() -> Vec<crate::plugin_themes::Theme> {
     crate::plugin_host::themes()

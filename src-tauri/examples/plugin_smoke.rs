@@ -48,9 +48,17 @@ fn main() {
         let root = &test_directory;
         let secret = root.path().join("secret.txt");
         std::fs::write(&secret, "host-only").unwrap();
-        plugin_host::set_active_directory(root.path().to_str().unwrap()).unwrap();
-        let read = plugin_host::global()
+        assert!(plugin_host::global()
             .invoke(&id, "mock.readFile", json!({"path":"secret.txt"}))
+            .is_err());
+        let read = plugin_host::global()
+            .invoke_selected(
+                &id,
+                "mock.readFile",
+                json!({"path":"secret.txt"}),
+                root.path().to_str().unwrap(),
+                &[secret.clone()],
+            )
             .expect("SDK file read failed");
         assert_eq!(read, "host-only");
         let blocked = plugin_host::global()

@@ -14,6 +14,7 @@ import {
   updateActivity,
 } from '@/hooks/useActivity'
 import type { PluginPanelRequest } from './usePanelSession'
+import { operationPaths } from './operationPaths'
 
 export const MAX_PANEL_WIDTH = 720
 export const MAX_PANEL_HEIGHT = 680
@@ -132,6 +133,7 @@ export function usePanelBridge({
     const target = frameRef.current
     dispose.current?.()
     const current = request
+    const chosenPaths = new Set<string>()
     const connect = () => {
       try {
         dispose.current = attachFiexPanel({
@@ -343,6 +345,11 @@ export function usePanelBridge({
                 method: p.method,
                 params: baseParams,
                 directory: current.directory,
+                selectedPaths: operationPaths(baseParams, [
+                  ...current.selection,
+                  ...chosenPaths,
+                  ...(current.selection.length || chosenPaths.size ? [] : [current.directory]),
+                ]),
               })
             }
             if (method.startsWith('dialog.')) {
@@ -362,6 +369,8 @@ export function usePanelBridge({
                 directory: p.directory || current.directory,
                 extensions: p.extensions,
               })
+              if (Array.isArray(picked)) picked.forEach((path) => chosenPaths.add(path))
+              else if (typeof picked === 'string') chosenPaths.add(picked)
               if (method === 'dialog.openFiles')
                 return Array.isArray(picked) ? picked : picked ? [picked] : null
               return typeof picked === 'string' ? picked : null

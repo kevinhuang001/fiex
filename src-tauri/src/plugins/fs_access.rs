@@ -16,11 +16,28 @@ use std::{
 const MAX_CHUNK: usize = 256 * 1024;
 const MAX_HANDLES: usize = 32;
 
+/// A save dialog may select a file that does not exist yet. Canonicalize its
+/// existing parent so a symlinked parent cannot change the selected target.
+pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
+    match dunce::canonicalize(path) {
+        Ok(path) => Ok(path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = path.parent().ok_or("selection has no parent")?;
+            let name = path.file_name().ok_or("selection has no name")?;
+            Ok(dunce::canonicalize(parent)
+                .map_err(|e| e.to_string())?
+                .join(name))
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// Captured once at invocation start, including an open directory capability.
 #[derive(Clone)]
 pub struct Scope {
     path: PathBuf,
     dir: std::sync::Arc<Dir>,
+    allowed: Option<Vec<(PathBuf, bool)>>,
 }
 impl Scope {
     pub fn new(path: &Path) -> Result<Self, String> {
@@ -29,7 +46,30 @@ impl Scope {
         Ok(Self {
             path,
             dir: std::sync::Arc::new(dir),
+            allowed: None,
         })
+    }
+    /// Capture only paths chosen for this operation. A file grants that file;
+    /// a directory grants its descendants. An empty selection grants no files.
+    pub fn selected(path: &Path, paths: &[PathBuf]) -> Result<Self, String> {
+        let mut scope = Self::new(path)?;
+        let mut allowed = Vec::with_capacity(paths.len());
+        for selected in paths {
+            let canonical = canonical_selection(selected)?;
+            let relative = canonical
+                .strip_prefix(&scope.path)
+                .map_err(|_| "selection outside task directory")?
+                .to_path_buf();
+            let relative = if relative.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                relative
+            };
+            let is_dir = scope.dir.metadata(&relative).is_ok_and(|m| m.is_dir());
+            allowed.push((relative, is_dir));
+        }
+        scope.allowed = Some(allowed);
+        Ok(scope)
     }
     pub fn path(&self) -> &Path {
         &self.path
@@ -50,11 +90,49 @@ fn relative(root: &Scope, input: &str) -> Result<PathBuf, String> {
     {
         return Err("path outside task directory".into());
     }
-    Ok(if path.as_os_str().is_empty() {
+    let path = if path.as_os_str().is_empty() {
         PathBuf::from(".")
     } else {
         path.into()
-    })
+    };
+    if let Some(allowed) = &root.allowed {
+        let resolved = match root.dir.canonicalize(&path) {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let parent = path
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .unwrap_or(Path::new("."));
+                root.dir
+                    .canonicalize(parent)
+                    .map_err(|e| e.to_string())?
+                    .join(path.file_name().ok_or("invalid selected path")?)
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+        let normalize = |candidate: &Path| {
+            let normalized: PathBuf = candidate
+                .components()
+                .filter(|part| matches!(part, Component::Normal(_)))
+                .collect();
+            if normalized.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                normalized
+            }
+        };
+        let resolved = normalize(&resolved);
+        let permitted = |candidate: &Path| {
+            allowed.iter().any(|(selected, is_dir)| {
+                candidate == selected
+                    || (*is_dir && (selected == Path::new(".") || candidate.starts_with(selected)))
+            })
+        };
+        if !permitted(&path) || !permitted(&resolved) {
+            return Err("path not selected for this operation".into());
+        }
+    }
+    Ok(path)
 }
 fn directory(root: &Scope) -> Result<Dir, String> {
     root.dir.try_clone().map_err(|e| e.to_string())
@@ -357,6 +435,47 @@ pub fn seek_write(owner: &str, handle: &str, kind: &str, offset: i64) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn operation_selection_does_not_expose_sibling_files() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("chosen"), b"ok").unwrap();
+        std::fs::write(root.path().join("private"), b"secret").unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
+        assert!(read_chunk(&scope, "chosen", 0, 8).is_ok());
+        assert!(read_chunk(&scope, "private", 0, 8).is_err());
+        assert!(list(&scope, ".").is_err());
+        assert!(stat(&scope, "private").is_err());
+        let empty = Scope::selected(root.path(), &[]).unwrap();
+        assert!(read_chunk(&empty, "chosen", 0, 8).is_err());
+    }
+    #[test]
+    fn selected_directory_allows_descendants_only() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("chosen")).unwrap();
+        std::fs::write(root.path().join("chosen/file"), b"ok").unwrap();
+        std::fs::write(root.path().join("other"), b"secret").unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
+        assert!(read_chunk(&scope, "chosen/file", 0, 8).is_ok());
+        assert!(read_chunk(&scope, "other", 0, 8).is_err());
+    }
+    #[test]
+    fn save_selection_allows_only_the_new_target() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("output.txt")]).unwrap();
+        let result = create(&scope, "output.txt");
+        assert!(result.is_ok(), "{result:?}");
+        assert!(create(&scope, "other.txt").is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn selected_folder_cannot_follow_a_link_to_its_sibling() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("chosen")).unwrap();
+        std::fs::write(root.path().join("private"), b"secret").unwrap();
+        std::os::unix::fs::symlink("../private", root.path().join("chosen/link")).unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
+        assert!(read_chunk(&scope, "chosen/link", 0, 8).is_err());
+    }
     #[test]
     fn staged_writes_preserve_conflicts_and_abort() {
         let root = tempfile::tempdir().unwrap();

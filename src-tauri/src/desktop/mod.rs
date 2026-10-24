@@ -92,7 +92,6 @@ pub fn run() {
             plugin_panel_html,
             plugin_panel_asset,
             plugin_permission_allowed,
-            plugin_set_active_directory,
             plugin_network_domains,
             plugin_themes,
             plugin_decorations,

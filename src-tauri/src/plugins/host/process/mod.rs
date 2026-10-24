@@ -7,5 +7,5 @@ mod host;
 mod rpc;
 mod spawn;
 
-pub use host::{active_path, global, set_active_directory, PluginHost};
+pub use host::{global, PluginHost};
 pub use spawn::run_command;

@@ -224,6 +224,8 @@ export function PluginContextActions({
         pluginId,
         method: item.command,
         params: args,
+        directory: path,
+        selectedPaths: [...paths, ...(item.picker ? [args[item.picker.param] as string] : [])],
       })
       finishActivity(
         activityId,
