@@ -7,15 +7,15 @@ import { HashIcon as Hash } from '@phosphor-icons/react/dist/csr/Hash'
 import { PuzzlePieceIcon as Puzzle } from '@phosphor-icons/react/dist/csr/PuzzlePiece'
 
 const pluginIconMap: Record<string, ReactNode> = {
-  'git-branch': <GitBranch weight="duotone" size={20} />,
-  archive: <Archive weight="duotone" size={20} />,
-  hash: <Hash weight="duotone" size={20} />,
-  cloud: <Cloud weight="duotone" size={20} />,
-  'hard-drive': <HardDrive weight="duotone" size={20} />,
+  'git-branch': <GitBranch weight="regular" size={20} />,
+  archive: <Archive weight="regular" size={20} />,
+  hash: <Hash weight="regular" size={20} />,
+  cloud: <Cloud weight="regular" size={20} />,
+  'hard-drive': <HardDrive weight="regular" size={20} />,
 }
 
 export function pluginIcon(name?: string) {
-  return pluginIconMap[name || ''] || <Puzzle weight="duotone" size={20} />
+  return pluginIconMap[name || ''] || <Puzzle weight="regular" size={20} />
 }
 
 export const pluginKey = (pluginId: string, toolId: string) => pluginId + '::' + toolId

@@ -69,7 +69,7 @@ export function ExplorerToolbar({
           title="切换侧栏"
           onClick={() => setSidebar(!sidebar)}
         >
-          <PanelLeft weight="duotone" size={20} />
+          <PanelLeft weight="regular" size={20} />
         </Button>
         <div className="navigation-controls">
           <Button
@@ -80,7 +80,7 @@ export function ExplorerToolbar({
             aria-label="后退"
             onClick={x.back}
           >
-            <ChevronLeft weight="duotone" size={20} />
+            <ChevronLeft weight="regular" size={20} />
           </Button>
           <Button
             variant="ghost"
@@ -90,7 +90,7 @@ export function ExplorerToolbar({
             aria-label="前进"
             onClick={x.forward}
           >
-            <ChevronRight weight="duotone" size={20} />
+            <ChevronRight weight="regular" size={20} />
           </Button>
         </div>
         <h1 data-tauri-drag-region>{x.query ? '搜索' : displayName(x.path) || 'Fiex'}</h1>
@@ -115,7 +115,7 @@ export function ExplorerToolbar({
           disabled={x.directoryReadOnly}
           onClick={() => create(true)}
         >
-          <FolderPlus weight="duotone" size={20} />
+          <FolderPlus weight="regular" size={20} />
         </Button>
         <Button
           variant="ghost"
@@ -161,7 +161,7 @@ export function ExplorerToolbar({
         >
           <RefreshCw
             key={refreshKey}
-            weight="duotone"
+            weight="regular"
             size={20}
             className={refreshKey ? 'refresh-turn' : ''}
           />
@@ -175,7 +175,7 @@ export function ExplorerToolbar({
           aria-pressed={split}
           onClick={onToggleSplit}
         >
-          <Columns2 weight="duotone" size={20} />
+          <Columns2 weight="regular" size={20} />
         </Button>
 
         <Button
@@ -186,7 +186,7 @@ export function ExplorerToolbar({
           aria-label="状态中心"
           onClick={() => activity.setOpen(!activity.open)}
         >
-          <ScrollText weight="duotone" size={20} />
+          <ScrollText weight="regular" size={20} />
         </Button>
         <Button
           variant="ghost"
@@ -196,7 +196,7 @@ export function ExplorerToolbar({
           aria-label="设置"
           onClick={() => setSettings(true)}
         >
-          <Settings2 weight="duotone" size={20} />
+          <Settings2 weight="regular" size={20} />
         </Button>
       </header>
       {picker && (

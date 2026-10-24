@@ -979,7 +979,7 @@
 .plugin-list-modal {
   width: 440px;
   max-width: calc(100vw - 40px);
-  padding: 20px;
+  padding: 18px;
 }
 .plugin-list-modal > header,
 .plugin-list-confirm > header {
@@ -988,15 +988,14 @@
 
 .plugin-list-editor {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   padding: 0;
 }
 
 .plugin-list-editor-rows {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
-  min-height: 96px;
-  max-height: 240px;
+  height: 248px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -1029,6 +1028,7 @@
 .plugin-list-editor-actions {
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   gap: 6px;
   flex: 0 0 auto;
   width: 64px;
@@ -1045,7 +1045,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 4px 0 0;
+  padding: 10px 0 0;
 }
 
 .plugin-list-confirm-field {
@@ -1055,5 +1055,5 @@
 .plugin-list-confirm {
   width: 380px;
   max-width: calc(100vw - 40px);
-  padding: 20px;
+  padding: 18px;
 }

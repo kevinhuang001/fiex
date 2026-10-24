@@ -531,6 +531,8 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
                 .map_err(|e| e.to_string())?;
             std::io::copy(&mut write.staging, &mut output).map_err(|e| e.to_string())?;
             output.sync_all().map_err(|e| e.to_string())?;
+            // Windows refuses to replace a file while this handle is open.
+            drop(output);
         }
         if write.original.is_some() {
             let permissions = dir

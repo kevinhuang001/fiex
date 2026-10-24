@@ -11,10 +11,10 @@ import { RowsIcon as List } from '@phosphor-icons/react/dist/csr/Rows'
 import type { ReactNode } from 'react'
 
 const views: { id: View; name: string; icon: ReactNode }[] = [
-  { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
-  { id: 'list', name: '列表', icon: <List weight="duotone" size={20} /> },
-  { id: 'columns', name: '分栏', icon: <Columns3 weight="duotone" size={20} /> },
-  { id: 'gallery', name: '画廊', icon: <Image weight="duotone" size={20} /> },
+  { id: 'icons', name: '图标', icon: <Grid2X2 weight="regular" size={20} /> },
+  { id: 'list', name: '列表', icon: <List weight="regular" size={20} /> },
+  { id: 'columns', name: '分栏', icon: <Columns3 weight="regular" size={20} /> },
+  { id: 'gallery', name: '画廊', icon: <Image weight="regular" size={20} /> },
 ]
 
 const groupOptions: [Group, string][] = [
