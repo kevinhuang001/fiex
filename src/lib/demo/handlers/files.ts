@@ -1,0 +1,205 @@
+import type { Listing } from '../../types'
+import { basename, join, parent } from '../../files'
+import { demoChanges, ignored, item, repoFor, root, snapshotEntries } from '../data'
+import { notHandled, state } from './shared'
+
+export async function handleFiles(command: string, a: Record<string, unknown>): Promise<unknown> {
+  switch (command) {
+    case 'file_checksums':
+      return [
+        {
+          algorithm: 'SHA-256',
+          value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+        },
+        {
+          algorithm: 'SHA-512',
+          value:
+            'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
+        },
+        { algorithm: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d' },
+        { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
+        { algorithm: 'CRC32', value: '352441c2' },
+      ]
+    case 'list_directory': {
+      if (String(a.path).startsWith('history://')) {
+        const base = String(a.path).match(/^history:\/\/[^/]+\/[^/]+/)![0]
+        const original = atob(base.split('/')[2]) + String(a.path).slice(base.length)
+        return {
+          path: a.path,
+          entries: snapshotEntries
+            .filter(
+              (e) =>
+                parent(e.path) === original &&
+                (a.hidden || !e.name.startsWith('.')) &&
+                !ignored(e.name, a.ignores),
+            )
+            .map((e) => ({
+              ...e,
+              path: base + e.path.slice(atob(base.split('/')[2]).length),
+              readonly: true,
+            })),
+          warnings: [],
+        }
+      }
+
+      const remoteRoot = root + '/.fiex/drives/demo-webdav'
+      if ((a.path as string).startsWith(remoteRoot)) {
+        return {
+          path: a.path,
+          entries: [
+            {
+              ...item(remoteRoot + '/产品截图.png', false, 'image/png', 2_400_000),
+              sync: 'synced',
+            },
+            {
+              ...item(remoteRoot + '/会议记录.md', false, 'text/markdown', 18_000),
+              sync: 'synced',
+            },
+            {
+              ...item(remoteRoot + '/素材.zip', false, 'application/zip', 45_000_000),
+              sync: 'cloud',
+            },
+            { ...item(remoteRoot + '/2026 规划', true), sync: 'cloud' },
+          ],
+          warnings: [],
+        }
+      }
+
+      if (
+        !state.entries.some((e) => e.path === a.path && e.isDir) &&
+        a.path !== root &&
+        a.path !== '/'
+      )
+        throw new Error('文件夹不存在')
+      return {
+        path: a.path as string,
+        entries: state.entries.filter(
+          (e) => parent(e.path) === a.path && (Boolean(a.hidden) || !e.name.startsWith('.')),
+        ),
+        warnings: [],
+      } satisfies Listing
+    }
+    case 'file_info':
+      return state.entries.find((e) => e.path === a.path)
+    case 'read_preview':
+      if (String(a.path).endsWith('/Palette.json'))
+        return '{\n  "accent": "#387ca8",\n  "surface": "#f8fafc",\n  "radius": 12\n}'
+      if (String(a.path).startsWith('history://'))
+        return '# Fiex · 历史版本\n\n这是提交时保存的内容，当前工作区没有改变。'
+      return '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
+    case 'set_tags': {
+      const tags = a.tags as { name: string; color: number }[]
+      state.entries = state.entries.map((entry) =>
+        (a.paths as string[]).includes(entry.path) ? { ...entry, tags } : entry,
+      )
+      return null
+    }
+    case 'search_files':
+      return {
+        entries: state.entries.filter(
+          (e) =>
+            e.path.startsWith(a.root as string) &&
+            e.name.toLowerCase().includes((a.query as string).toLowerCase()) &&
+            !ignored(e.name, a.ignores),
+        ),
+        done: true,
+        elapsedMs: 12,
+        truncated: false,
+        skipped: 0,
+      }
+    case 'create_entry': {
+      const path = join(a.path as string, a.name as string)
+      if (state.entries.some((e) => e.path === path)) throw new Error('同名项目已存在')
+      state.entries.push(item(path, a.folder as boolean))
+      if (!a.folder && repoFor(path)) demoChanges[path] = '??'
+      return path
+    }
+    case 'rename_entry': {
+      const path = join(parent(a.path as string), a.name as string)
+      state.entries = state.entries.map((e) =>
+        e.path === a.path ? { ...e, path, name: a.name as string } : e,
+      )
+      const previous = String(a.path)
+      if (demoChanges[previous]) {
+        demoChanges[path] = demoChanges[previous]
+        delete demoChanges[previous]
+      }
+      return path
+    }
+    case 'recycle':
+      state.entries = state.entries.filter((e) => !(a.paths as string[]).includes(e.path))
+      return { paths: a.paths, errors: [], skipped: 0 }
+    case 'transfer': {
+      const progress = a.onProgress as
+        { onmessage?: (value: { done: number; total: number; step?: string }) => void } | undefined
+      const files = a.paths as string[]
+      if (progress?.onmessage && files.length) {
+        const steps = 3
+        for (let index = 1; index <= steps; index += 1) {
+          progress.onmessage({
+            done: index,
+            total: steps,
+            step: basename(files[Math.min(index - 1, files.length - 1)]),
+          })
+          await new Promise((resolve) => setTimeout(resolve, 120))
+        }
+      }
+      const planned: { source: string; destination: string; action: string }[] = []
+      const conflicts = []
+      for (const source of a.paths as string[]) {
+        let destination = join(String(a.destination), basename(source))
+        if (destination.startsWith(source + '/') || (a.moving && destination === source)) continue
+        const incoming = state.entries.find((e) => e.path === source)
+        const existing = state.entries.find((e) => e.path === destination)
+        const key = source + '\0' + destination
+        let action =
+          (a.resolutions as { key: string; action: string }[] | undefined)?.find(
+            (r) => r.key === key,
+          )?.action || ''
+        if (a.keepBoth) action = 'keepBoth'
+        if (existing && incoming && !action) {
+          conflicts.push({ key, source: incoming, destination: existing })
+          continue
+        }
+        if (action === 'skip') continue
+        if (existing && action === 'keepBoth') {
+          const name = basename(source),
+            dot = name.lastIndexOf('.')
+          const stem = dot > 0 && !incoming?.isDir ? name.slice(0, dot) : name
+          const ext = dot > 0 && !incoming?.isDir ? name.slice(dot) : ''
+          for (let index = 2; ; index++) {
+            const candidate = join(String(a.destination), `${stem} (${index})${ext}`)
+            if (!state.entries.some((e) => e.path === candidate)) {
+              destination = candidate
+              break
+            }
+          }
+        }
+        planned.push({ source, destination, action })
+      }
+      if (conflicts.length) return { paths: [], errors: [], skipped: 0, conflicts }
+      const paths: string[] = []
+      for (const { source, destination, action } of planned) {
+        const selected = state.entries.filter(
+          (e) => e.path === source || e.path.startsWith(source + '/'),
+        )
+        const transferred = selected.map((e) => ({
+          ...e,
+          path: destination + e.path.slice(source.length),
+          name: e.path === source ? basename(destination) : e.name,
+        }))
+        if (action === 'replace')
+          state.entries = state.entries.filter(
+            (e) => e.path !== destination && !e.path.startsWith(destination + '/'),
+          )
+        if (a.moving) state.entries = state.entries.filter((e) => !selected.includes(e))
+        state.entries.push(...transferred)
+        paths.push(destination)
+      }
+      return { paths, errors: [], skipped: 0, conflicts: [] }
+    }
+
+    default:
+      return notHandled
+  }
+}
