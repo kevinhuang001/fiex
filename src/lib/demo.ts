@@ -99,6 +99,7 @@ let entries = [
     15360,
   ),
   item(root + '/Documents/示例数据库.db', false, 'application/vnd.sqlite3', 147456),
+  item(root + '/Documents/预算明细.csv', false, 'text/csv', 4096),
   item(root + '/Documents/Projects/fiex', true),
   item(root + '/Documents/Projects/App.tsx', false, 'text/plain', 18342),
   item(root + '/Documents/Projects/main.rs', false, 'text/plain', 4210),
@@ -510,6 +511,51 @@ const officialPlugins: DemoPlugin[] = officialMode
         },
       },
       {
+        id: 'org.fiex.data-preview',
+        name: '数据预览',
+        version: '0.4.0',
+        description: '表格数据预览：SQLite、CSV、Excel、Parquet、Arrow、Avro。',
+        enabled: true,
+        approved: true,
+        backendAvailable: true,
+        capabilities: ['preview'],
+        declaredPermissions: ['files.read'],
+        grantedPermissions: ['files.read'],
+        requestedCommands: [],
+        allowedCommands: [],
+        requestedNetworkDomains: [],
+        allowedNetworkDomains: [],
+        author: { name: 'Fiex Contributors' },
+        contributions: {
+          preview: [
+            {
+              id: 'data',
+              title: '数据预览',
+              extensions: [
+                'db',
+                'sqlite',
+                'sqlite3',
+                'csv',
+                'tsv',
+                'xlsx',
+                'xls',
+                'parquet',
+                'arrow',
+                'feather',
+                'ipc',
+                'avro',
+              ],
+              priority: 110,
+              panel: {
+                entry: 'ui/index.html',
+                title: '数据预览',
+                defaultSize: { width: 720, height: 640 },
+              },
+            },
+          ],
+        },
+      },
+      {
         id: 'org.fiex.gpg',
         name: 'GPG',
         version: '0.1.0',
@@ -832,6 +878,68 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
       const method = String(a.method || '')
       const params = (a.params || {}) as Record<string, unknown>
       if (officialMode) {
+        if (method === 'data.open' || method === 'data.page') {
+          const path = String(params.path || '')
+          const name = path.split('/').pop() || '数据'
+          const columns = [
+            { name: '部门', kind: 'text' },
+            { name: '月份', kind: 'text' },
+            { name: '预算', kind: 'number' },
+            { name: '实际', kind: 'number' },
+            { name: '差异', kind: 'number' },
+            { name: '备注', kind: 'text' },
+          ]
+          const departments = ['研发', '市场', '运营', '设计', '销售']
+          const rows = Array.from({ length: 126 }, (_, index) => {
+            const budget = 80000 + ((index * 3700) % 60000)
+            const actual = budget + (((index * 913) % 9000) - 4500)
+            return [
+              departments[index % departments.length],
+              `2026-${String((index % 12) + 1).padStart(2, '0')}`,
+              budget,
+              actual,
+              actual - budget,
+              index % 7 === 0 ? null : index % 5 === 0 ? '季度调整' : '',
+            ]
+          })
+          const order = typeof params.order === 'string' ? params.order : null
+          const descending = Boolean(params.descending)
+          const sorted = [...rows]
+          if (order) {
+            const index = columns.findIndex((column) => column.name === order)
+            if (index >= 0)
+              sorted.sort((left, right) => {
+                const a = left[index]
+                const b = right[index]
+                if (a === null) return 1
+                if (b === null) return -1
+                const result =
+                  typeof a === 'number' && typeof b === 'number'
+                    ? a - b
+                    : String(a).localeCompare(String(b))
+                return descending ? -result : result
+              })
+          }
+          const offset = Number(params.offset || 0)
+          const limit = Number(params.limit || 100)
+          const content = {
+            columns,
+            rows: sorted.slice(offset, offset + limit),
+            total: sorted.length,
+            offset,
+            limit,
+            order,
+            descending,
+            note: path.endsWith('.csv') ? '分隔符：逗号' : null,
+          }
+          if (method === 'data.open')
+            return {
+              format: (name.split('.').pop() || 'csv').toLowerCase(),
+              datasets: [{ id: 'data', name, kind: 'table' }],
+              page: content,
+            }
+          return content
+        }
         if (method === 'sqlite.open')
           return {
             tables: [
