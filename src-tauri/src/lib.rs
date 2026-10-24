@@ -20,7 +20,7 @@ pub mod plugin_decorations;
 pub mod plugin_errors;
 #[path = "plugins/fs_access.rs"]
 pub mod plugin_fs_access;
-#[path = "plugins/host.rs"]
+#[path = "plugins/host/mod.rs"]
 pub mod plugin_host;
 #[path = "plugins/installer.rs"]
 pub mod plugin_installer;
