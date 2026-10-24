@@ -57,6 +57,7 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
   const closePane = (side: Side = active) => {
     if (!split) return
     if (side === 'left' && right.path) left.navigate(right.path)
+    tabs.current[left.tab] = { right: null, active: 'left' }
     setSplit(false)
     setActive('left')
   }
@@ -68,6 +69,11 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
   )
   return {
     right,
+    viewReferences: [
+      ...left.referencedPaths,
+      ...(split ? right.referencedPaths : []),
+      ...tabs.current.flatMap((pane) => pane.right?.history || []),
+    ],
     x,
     split,
     setSplit,

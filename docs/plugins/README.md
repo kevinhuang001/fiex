@@ -1,83 +1,72 @@
-# Fiex 插件系统（实验性 1.0）
+# Fiex 插件平台重设计：实施总纲
 
-> **状态：开发分支已实现，协议与 manifest 仍可破坏性修改。** Native IPC 版本 **2.0**，manifest `schemaVersion: 1`。
+> **规范性质：待实施的目标架构与 Coding Agent 工作计划**，不用于描述历史状态或宣称功能已经完成。
+> **设计依据**：Fiex PR #12、fiex-sdk PR #3、fiex-official-plugins PR #9 对应代码及现有 Manifest。版本规划：Manifest schemaVersion 2、Native IPC 3.0、UI Bridge 2.0，作为一次性破坏性重设计目标；各阶段可以先保留内部临时适配，但最终版本不留 legacy 路径。禁止直接用这些目标版本号误判目前二进制已经实现。
 
-## 权限与注册分离
+## 总体决定
 
-- **权限**回答“插件能碰什么数据”，激活时逐项授权目录操作、文件读写、网络及外部命令。
-- **注册**回答“插件向 Fiex 提供什么”，只影响 UI 和路由，不授予任何数据权限。
+1. **插件类型不分特权等级**。一个插件有一个身份 `pluginId`，通过 `contributions` 注册一个或多个扩展点，通过 `permissions` 申请资源操作。官方插件与第三方完全一致；不使用 `capabilities`、`scheme`、`writeMode`、`conflictControl` 或 `sync` Manifest 选择开关。
+2. **Core 掌握资源与状态**：统一路由、挂载 ID、权限、文件句柄、网络代理、缓存、任务、同步、冲突与持久化。Provider 只提供远端文件语义；UI 只进行显示和操作请求。禁止在 Core 写 WebDAV/Git/SMB/OpenList 等插件 ID 特判。
+3. **VFS 是应用内部的资源命名空间**，形式为 `fiex://mount/<Core-id>/...`；Connection 声明自动生成挂载实例，显式 `vfs` 贡献通过批准范围内的 `open_vfs_view` 生成临时/可恢复 View。当前阶段不提供 OS 级 FUSE/WinFsp 挂载。
+4. **一次操作、一份最小授权**：选择文件/目录不自动赋权，后续明确调用才创建 operation scope；后台任务继承并独立持有这一 scope，任务结束立即释放。连接 Provider 的云端文件 ID 不等于宿主磁盘访问授权。
+5. **统一流式资源 I/O**：插件开发者优先使用 Rust `Read/Write/Seek`，SDK 负责共享内存与短消息的自动选择；上传可直接传递 *精确文件句柄*。所有传输长度为 u64，有上限、取消与错误传播。
+6. **连接的核心闭环**：list/stat/read/open + Core 增量缓存、离线固定、恢复、冲突保留、显式解决；连接写入使用单一 `fs.writeFile`，Provider 可在内部采用单 PUT、分段、服务器临时文件或原生协议。
+7. **协议目录单一事实来源**：通过 schema + 生成器产出 IPC 方法表、Rust SDK 类型、TypeScript UI 类型、Manifest JSON Schema 与契约测试；禁止“文档和代码各自手写一套语义”。
+8. **面向实现，而非阶段报告**：每章定义目标接口、必须满足的不变量、模块位置、测试要求；实施顺序见第 07 篇。
 
-`manifest.json` 只有三块：身份、`permissions`、`contributions`。
+## 文档目录（最终仅保留此八篇）
 
-## 注册类别
+| 文件 | 用途 |
+|---|---|
+| [01-ARCHITECTURE.md](01-ARCHITECTURE.md) | 边界、进程、控制流、资源所有权与不变量 |
+| [02-MANIFEST-EXTENSIONS.md](02-MANIFEST-EXTENSIONS.md) | 所有 Manifest 字段、所有贡献点、示例与注册流程 |
+| [03-IPC-CATALOG.md](03-IPC-CATALOG.md) | **完整 Native IPC 方法清单**：双方方向、参数、响应、错误、权限 |
+| [04-SDK-CATALOG.md](04-SDK-CATALOG.md) | **完整 Rust / UI SDK API** 与 IPC 逐项对应 |
+| [05-VFS-CONNECTION-SYNC.md](05-VFS-CONNECTION-SYNC.md) | VFS、Connection、缓存、同步、冲突、数据一致性 |
+| [06-SECURITY-LIFECYCLE.md](06-SECURITY-LIFECYCLE.md) | 操作授权、沙箱、界面边界、升级安装与任务生命周期 |
+| [07-IMPLEMENTATION-PLAN.md](07-IMPLEMENTATION-PLAN.md) | 按依赖拆解的重构任务、验收矩阵、风险、完成定义 |
 
-| 类别           | 用途                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| `connections`  | 远程连接类型；声明字段并实现 `connection.validate` / `fs.*`。注册连接即拥有远程 VFS 能力。 |
-| `toolbar`      | 工具栏动作；`command` 执行命令，`panel` 打开 iframe。                                      |
-| `contextMenus` | 右键菜单动作；同样支持 `command` / `panel`。                                               |
-| `search`       | 搜索来源；Core 查询所有启用来源并合并结果。                                                |
-| `preview`      | 文件预览器；声明扩展名与优先级，可覆盖内置预览（设计见 [23](23-PREVIEW-EXTENSIONS.md)）。  |
-| `hooks`        | 打开文件前接管操作；按优先级执行，可放行或消费（见 [25](25-BEFORE-OPEN-HOOKS.md)）。       |
-| `info`         | 向“显示简介”右列提供元数据；按扩展名匹配（见 [26](26-INFO-EXTENSIONS.md)）。               |
-| `settings`     | 插件配置字段，由 Core 渲染。                                                               |
+## 总体实施依赖
 
-不再有独立的 `panels` 或 `vfs` 注册：
+```mermaid
+flowchart LR
+  A["M0 冻结契约与测试夹具"] --> B["M1 Core IPC/授权基建"]
+  B --> C["M2 SDK 与 UI Bridge"]
+  B --> D["M3 通用 VFS/Connection"]
+  C --> D
+  D --> E["M4 缓存与双向同步"]
+  C --> F["M5 扩展点和官方插件迁移"]
+  E --> F
+  F --> G["M6 跨平台安全、性能与发布验收"]
+```
 
-- iframe 面板直接内联在 `toolbar` / `contextMenus` 条目里；
-- 虚拟路径 scheme 直接内联在 `connections` / `toolbar` 条目里（`schemes: ["history"]`）。
+## 权限与搜索的目标约定
 
-## 官方插件
+所有 `permissions.files.*` 与 `permissions.folders.*` 均为 `{enabled: boolean, ...}` 结构。文件独立声明 `metadata/read/write/create/delete/rename`；文件夹独立声明 `metadata/read/create/delete/rename`。元数据权限与文件内容读取/目录遍历相互独立。
 
-Git、WebDAV、SMB、Archive、Checksum、Everything 搜索。全部为独立进程、独立 crate、独立 Release，不预装。
+当用户触发右键、预览、信息等扩展点，Core 在 **metadata 权限已批准** 时直接随 IPC 发出本次选择对象的 `metadata`，不要求插件另行调用 `stat`；插件主动 `host.fs.stat` 仍须经过 metadata permission 和具体的 OperationScope/TaskScope。未获批准则事件只包含不透明 ref，不提供详细元数据。
 
-## 平台沙箱
+`contributions.search[]` 只含 `id/title/command?` 等基本注册项，**没有 `scope`**。Fiex 搜索始终限定用户当前指定的 root 目录；Everything 使用其全局索引，但查询及 Core 结果过滤都必须遵守该路径范围。
 
-| 平台    | 机制                               | 状态                        |
-| ------- | ---------------------------------- | --------------------------- |
-| Linux   | Arapuca：Landlock + seccomp        | 已实现并集成测试            |
-| macOS   | Arapuca：Seatbelt                  | 已实现，待真机 CI           |
-| Windows | Arapuca：AppContainer + Job Object | 已接入启动器，待 Windows CI |
+## 动态右键菜单约定
 
-沙箱失败时拒绝启动。域名白名单由插件进程校验，不等同于 OS 级网络过滤。
+右键菜单不再有静态 `when`、`children` 或每项 `command`：`"contributions":{"contextMenus":true}` 仅声明参与菜单，用户每次右键时 Core 将本次文件元数据发给每个已启用 Provider 的 `contextMenu.resolve`，由插件返回扁平菜单 `items`（使用 `parentId` 表示多级菜单）；用户点击后才经过独立授权调用 `contextMenu.execute`。具体约定见 [02 Manifest](02-MANIFEST-EXTENSIONS.md)、[03 IPC](03-IPC-CATALOG.md)。
 
-## 文档
+## 统一术语
 
-**动手做插件，先看这两篇：**
+| 术语 | 唯一含义 |
+|---|---|
+| Plugin | 经验证且已授权的一个软件包/运行主体 |
+| Contribution | 声明宿主“在哪里调用”插件，不授予数据权限 |
+| Permission | 声明用户需审批的资源操作类别 |
+| OperationScope | 每次动作按已选择资源形成的短生命周期权限 |
+| TaskScope | 从 OperationScope 派生，显式延续至任务结束 |
+| MountId | Core 生成的持久 Connection 或 View 身份，不可由插件指定 |
+| NodeId | Provider 挂载内的资源标识，不是可信本地路径 |
+| Revision | Provider 在同一 NodeId 下表示内容版本的 *不透明字符串* |
+| Baseline | Core 已物化版本的内容哈希 + 对应远端 Revision |
+| Conflict | Core 同时存在不可安全自动合并的本地与云端更改 |
 
-- [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md) —— iframe 面板、SDK、主题继承、本地 dev server
-- [22 主题包开发指南](22-THEME-AUTHORING.md) —— 主题包形态、token 参考、校验规则、验收
-- [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md) —— 预览器注册、优先级、office-preview
-- [24 插件诊断](24-PLUGIN-DIAGNOSTICS.md) —— 命令可用性、错误来源与设置页
-- [25 打开前钩子](25-BEFORE-OPEN-HOOKS.md)
-- [26 显示简介扩展点](26-INFO-EXTENSIONS.md)
+## 不允许的设计回退
 
-**协议与设计**
-
-- [01 架构](01-ARCHITECTURE.md)
-- [02 VFS 与目录树](02-VFS.md)
-- [03 缓存与选择性同步](03-CACHE-SYNC.md)
-- [04 Native IPC 协议](04-IPC-PROTOCOL.md)
-- [05 iframe UI 扩展点](05-UI-EXTENSIONS.md)
-- [06 任务与活动中心](06-TASKS.md)
-- [07 安全、权限与打包](07-SECURITY-PACKAGING.md)
-- [08 SDK 与第三方开发](08-SDK.md)
-- [09 迁移与 CI 验收](09-MIGRATION-TESTING.md)
-- [10 完整能力场景](10-EXAMPLES.md)
-- [11 UI SDK 与 Host Bridge](11-UI-SDK.md)
-- [12 实现状态](12-IMPLEMENTATION-STATUS.md)
-- [13 Storage / Secrets / OAuth](13-PERSISTENCE-OAUTH.md)
-- [14 GitHub 安装流程](14-GITHUB-INSTALLATION.md)
-- [15 外部仓库与 Release 契约](15-EXTERNAL-REPOSITORIES.md)
-- [16 搜索来源插件](16-SEARCH.md)
-- [16 插件签名](16-SIGNING.md)（历史编号与搜索重复）
-- [17 文件装饰](17-DECORATIONS.md)
-- [18 激活与代理资源](18-ACTIVATION-AND-BROKER.md)
-- [19 插件静态资源与文件图标](19-FILE-ICONS.md)
-- [20 主题与面板生命周期](20-THEMES-AND-PERFORMANCE.md)
-- [21 面板 UI 开发指南](21-PANEL-UI-GUIDE.md)
-- [22 主题包开发指南](22-THEME-AUTHORING.md)
-- [23 预览扩展点设计](23-PREVIEW-EXTENSIONS.md)
-- [24 插件诊断](24-PLUGIN-DIAGNOSTICS.md)
-- [25 打开前钩子](25-BEFORE-OPEN-HOOKS.md)
-- [26 显示简介扩展点](26-INFO-EXTENSIONS.md)
+不再使用仓库内的旧 `history://` 路由、插件分配 scheme、顶层 `capabilities` 或任意隐式授权当前目录。不得用“已有 permission”替代“一次用户操作的选中资源”；不得仅凭本地 mtime/size 决定可以安全覆盖；不得把比较后上传称为原子 CAS。目标 Manifest/IPC 版本为一次性升级，不为尚未发布的兼容负担长期维护双实现。

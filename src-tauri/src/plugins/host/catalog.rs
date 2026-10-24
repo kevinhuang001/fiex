@@ -16,7 +16,6 @@ pub struct PluginInfo {
     pub version: String,
     pub description: String,
     pub icon: Option<String>,
-    pub capabilities: Vec<String>,
     pub contributions: Value,
     pub backend_available: bool,
     pub enabled: bool,
@@ -32,56 +31,6 @@ pub struct PluginInfo {
     /// settings UI marks these red: the plugin is approved to run them but the
     /// machine cannot.
     pub missing_commands: Vec<String>,
-}
-
-pub(crate) fn capabilities(contributions: &Value) -> Vec<String> {
-    let mut values = Vec::new();
-    for (key, capability) in [
-        ("connections", "connection"),
-        ("toolbar", "toolbar"),
-        ("contextMenus", "contextMenu"),
-        ("search", "search"),
-        ("settings", "settings"),
-        ("themes", "theme"),
-        ("preview", "preview"),
-        ("hooks", "hooks"),
-        ("info", "info"),
-    ] {
-        let present = contributions
-            .get(key)
-            .and_then(Value::as_array)
-            .is_some_and(|items| !items.is_empty());
-        if present {
-            values.push(capability.to_string());
-        }
-    }
-    let has_scheme = ["connections", "toolbar"].iter().any(|key| {
-        contributions
-            .get(key)
-            .and_then(Value::as_array)
-            .is_some_and(|items| {
-                items.iter().any(|item| {
-                    item.get("scheme").and_then(Value::as_str).is_some()
-                        || item
-                            .get("schemes")
-                            .and_then(Value::as_array)
-                            .is_some_and(|values| !values.is_empty())
-                })
-            })
-    });
-    if has_scheme {
-        values.push("vfs".to_string());
-    }
-    let has_panel = ["toolbar", "contextMenus"].iter().any(|key| {
-        contributions
-            .get(key)
-            .and_then(Value::as_array)
-            .is_some_and(|items| items.iter().any(|item| item.get("panel").is_some()))
-    });
-    if has_panel {
-        values.push("panel".to_string());
-    }
-    values
 }
 
 fn roots() -> Vec<PathBuf> {
@@ -118,6 +67,10 @@ pub(crate) fn discover() -> Vec<(PluginManifest, PathBuf)> {
             let Ok(manifest) = serde_json::from_slice::<PluginManifest>(&bytes) else {
                 continue;
             };
+            if let Err(error) = super::manifest::validate_contributions(&manifest.contributions) {
+                eprintln!("plugin {} manifest rejected: {error}", manifest.id);
+                continue;
+            }
             if manifest.schema_version != 1
                 || (!crate::plugin_themes::is_theme(&manifest)
                     && manifest.runtime.protocol_version != plugin_sdk::PROTOCOL_VERSION)
@@ -185,7 +138,6 @@ pub fn catalog() -> Vec<PluginInfo> {
             });
             let requested = activation_requirements(&manifest).unwrap_or_default();
             let missing_commands = missing_commands(&requested.commands);
-            let capabilities = capabilities(&manifest.contributions);
             PluginInfo {
                 schema_version: manifest.schema_version,
                 id: manifest.id,
@@ -193,7 +145,6 @@ pub fn catalog() -> Vec<PluginInfo> {
                 version: manifest.version,
                 description: manifest.description,
                 icon: manifest.icon,
-                capabilities,
                 contributions: manifest.contributions,
                 backend_available: backend,
                 enabled: active,

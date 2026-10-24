@@ -13,13 +13,16 @@ pub(crate) fn mount_path(conn: &StoredConnection) -> PathBuf {
 }
 
 /// Refuse requests when a provider has lost one of its declared permissions.
-/// Remote providers may only read; Core owns the destination file and cache.
+/// Core owns caches and upload snapshots; providers receive scoped read access.
 pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, String> {
     let plugin_id = connection_plugin_id(conn);
     let plugin = crate::plugin_host::catalog()
         .into_iter()
-        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
+        .find(|plugin| {
+            plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
+        })
         .ok_or("连接插件未安装、启用或已被撤销授权")?;
+    declared_connection_fields(&plugin_id, &conn.kind)?;
     for permission in &plugin.declared_permissions {
         if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
             return Err(format!("插件权限未授权：{permission}"));
@@ -36,7 +39,9 @@ pub(crate) fn declared_connection_fields(
 ) -> Result<Vec<(String, String)>, String> {
     let plugin = crate::plugin_host::catalog()
         .into_iter()
-        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.backend_available)
+        .find(|plugin| {
+            plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
+        })
         .ok_or("连接插件尚未安装、启用或授权")?;
     let factory = plugin
         .contributions
@@ -171,7 +176,18 @@ fn virtual_target(path: &str) -> Option<PathBuf> {
     Some(target)
 }
 
+pub fn navigation_path(conn: &StoredConnection, relative: &str) -> Result<String, String> {
+    crate::mounts::uri(&conn.mount_id, relative)
+}
+
 pub fn connection_for_path(path: &str) -> Option<(StoredConnection, PathBuf)> {
+    if crate::mounts::handles(path) {
+        let (uri, source) = crate::mounts::resolve(path).ok()?;
+        return match source {
+            crate::mounts::Source::Connection(conn) => Some((conn, PathBuf::from(uri.relative))),
+            _ => None,
+        };
+    }
     let target = virtual_target(path)?;
     for conn in load_stored() {
         let Ok(root) = dunce::canonicalize(mount_path(&conn)) else {
@@ -206,4 +222,33 @@ pub(crate) fn local_for(conn: &StoredConnection, rel: &str) -> PathBuf {
         path.push(part);
     }
     path
+}
+
+/// Background work must never follow a locally inserted symlink out of a mount.
+pub(crate) fn check_cache_path(conn: &StoredConnection, path: &Path) -> Result<(), String> {
+    let root = dunce::canonicalize(mount_path(conn)).map_err(|e| e.to_string())?;
+    let relative = path
+        .strip_prefix(mount_path(conn))
+        .map_err(|_| "invalid cache path")?;
+    let mut current = root.clone();
+    for component in relative.components() {
+        if !matches!(component, std::path::Component::Normal(_)) {
+            return Err("invalid cache component".into());
+        }
+        current.push(component);
+        if let Ok(metadata) = std::fs::symlink_metadata(&current) {
+            if metadata.file_type().is_symlink() {
+                return Err("cache path contains a symlink".into());
+            }
+            let resolved = dunce::canonicalize(&current).map_err(|e| e.to_string())?;
+            if !resolved.starts_with(&root) {
+                return Err("cache path escaped mount".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn connection_by_mount(id: &str) -> Option<StoredConnection> {
+    load_stored().into_iter().find(|c| c.mount_id == id)
 }

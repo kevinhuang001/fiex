@@ -8,7 +8,7 @@ const fixturePlugin: DemoPlugin = {
   enabled: true,
   approved: true,
   backendAvailable: true,
-  capabilities: ['commands', 'contextMenu', 'panel', 'search'],
+
   declaredPermissions: [],
   grantedPermissions: [],
   requestedNetworkDomains: [],
@@ -64,7 +64,7 @@ export const fixturePlugins: DemoPlugin[] = [
     enabled: true,
     approved: true,
     backendAvailable: true,
-    capabilities: ['filesystem', 'toolbar', 'commands'],
+
     declaredPermissions: [
       'folders.read',
       'folders.create',
@@ -91,13 +91,13 @@ export const fixturePlugins: DemoPlugin[] = [
     allowedCommands: ['git'],
     author: { name: 'Fiex Contributors' },
     contributions: {
+      vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
       toolbar: [
         {
           id: 'git.main',
           title: '源代码管理',
           icon: 'git-branch',
           command: 'git.status',
-          schemes: ['history'],
         },
       ],
       settings: [
@@ -113,7 +113,7 @@ export const fixturePlugins: DemoPlugin[] = [
     enabled: true,
     approved: true,
     backendAvailable: true,
-    capabilities: ['commands', 'contextMenu'],
+
     declaredPermissions: ['folders.read', 'files.read'],
     grantedPermissions: ['folders.read', 'files.read'],
     requestedNetworkDomains: [],

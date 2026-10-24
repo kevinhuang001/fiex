@@ -113,7 +113,6 @@ pub fn panel_asset(plugin_id: &str, panel_id: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::catalog::capabilities;
     use super::*;
     use serde_json::json;
 
@@ -238,7 +237,7 @@ mod tests {
             panel.get("entry").and_then(Value::as_str),
             Some("ui/index.html")
         );
-        assert!(capabilities(&manifest.contributions).contains(&"preview".to_string()));
+        assert!(manifest.contributions["preview"].is_array());
     }
 
     #[test]

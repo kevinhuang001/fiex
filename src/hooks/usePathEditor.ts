@@ -42,7 +42,12 @@ export function usePathEditor({
       x.setError(String(error))
     }
   }
-  const crumbs = pathCrumbs(x.path, displayName)
+  let crumbs: ReturnType<typeof pathCrumbs>
+  try {
+    crumbs = pathCrumbs(x.path, displayName)
+  } catch {
+    crumbs = [{ name: '无效地址', path: x.path }]
+  }
   return {
     editingPath,
     pathDraft,

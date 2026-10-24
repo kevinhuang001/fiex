@@ -428,7 +428,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           enabled: false,
           approved: true,
           backendAvailable: true,
-          capabilities: entry.capabilities || [],
+
           declaredPermissions: entry.permissions,
           grantedPermissions: entry.permissions,
           requestedNetworkDomains: entry.requestedNetworkDomains,

@@ -84,6 +84,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             plugin_invoke,
+            vfs_retain_views,
+            materialize_file,
+            plugin_context_directory,
             plugin_task,
             plugin_cancel_task,
             plugin_status,
@@ -155,6 +158,7 @@ pub fn run() {
             remote_download_dir,
             remote_sync,
             remote_unsync,
+            remote_resolve,
             eject_device,
             eject_usb,
             relaunch_elevated,
@@ -182,6 +186,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {
+                crate::mounts::forget_window(window.label());
                 window
                     .state::<Watch>()
                     .lock()
@@ -197,6 +202,30 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let running =
+                    std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
+                loop {
+                    for connection in crate::remote::list_connections() {
+                        let id = connection.id;
+                        if !running.lock().unwrap().insert(id.clone()) {
+                            continue;
+                        }
+                        let running = running.clone();
+                        let handle = handle.clone();
+                        std::thread::spawn(move || {
+                            tauri::async_runtime::block_on(crate::remote::reconcile_connection(
+                                &id,
+                            ));
+                            use tauri::Emitter;
+                            let _ = handle.emit("remote-sync", ());
+                            running.lock().unwrap().remove(&id);
+                        });
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+                }
+            });
             {
                 use tauri::Emitter;
                 let handle = app.handle().clone();
@@ -233,6 +262,11 @@ pub fn run() {
             let _ = app;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Cannot start Fiex");
+        .build(tauri::generate_context!())
+        .expect("Cannot start Fiex")
+        .run(|_, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                crate::plugin_vfs::cleanup_exports();
+            }
+        });
 }

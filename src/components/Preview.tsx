@@ -34,7 +34,30 @@ export function Preview({
   // A plugin previewer renders in the plugin's own sandboxed panel: it gets the
   // file through the preview context instead of reading it in the webview.
   const pluginPreview = previewer?.pluginId ? previewer : null
-  const source = entry && !pluginPreview ? asset(entry.path) : ''
+  const [materialized, setMaterialized] = useState<{ path: string; local: string } | null>(null)
+  useEffect(() => {
+    let active = true
+    if (
+      entry &&
+      !entry.isDir &&
+      native &&
+      /^fiex:/i.test(entry.path) &&
+      (!isText(entry) || pluginPreview)
+    ) {
+      void call<string>('materialize_file', { path: entry.path })
+        .then((local) => {
+          if (active) setMaterialized({ path: entry.path, local })
+        })
+        .catch((error) => {
+          if (active) setError(String(error))
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [entry?.path, Boolean(pluginPreview)])
+  const localPath = entry && materialized?.path === entry.path ? materialized.local : entry?.path
+  const source = localPath && !pluginPreview ? asset(localPath) : ''
   const highlighted = useMemo(
     () => (entry && isText(entry) ? highlightCode(text, entry.extension, entry.name) : null),
     [entry, text],
@@ -102,12 +125,23 @@ export function Preview({
       {entry && (
         <>
           <div className="preview-body" style={fit ? { height: fit.height } : undefined}>
-            {pluginPreview && entry ? (
+            {native &&
+            entry.path.startsWith('fiex:') &&
+            !entry.isDir &&
+            (!isText(entry) || pluginPreview) &&
+            materialized?.path !== entry.path &&
+            !error ? (
+              <p>正在读取…</p>
+            ) : pluginPreview && entry && !error ? (
               <PluginPreviewFrame
-                key={entry.path}
+                key={localPath}
                 pluginId={pluginPreview.pluginId || ''}
                 panelId={pluginPreview.panelId || ''}
-                preview={{ path: entry.path, name: entry.name, extension: entry.extension }}
+                preview={{
+                  path: localPath || entry.path,
+                  name: entry.name,
+                  extension: entry.extension,
+                }}
               />
             ) : error ? (
               <div className="preview-fallback">

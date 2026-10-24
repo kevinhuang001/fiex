@@ -189,7 +189,13 @@ export function usePanelBridge({
               throw new Error('Panel is hidden')
             if (method === 'context.get')
               return {
-                directoryPath: current.directory,
+                directoryPath:
+                  native && current.directory.startsWith('fiex:')
+                    ? await call<string>('plugin_context_directory', {
+                        pluginId: current.pluginId,
+                        path: current.directory,
+                      })
+                    : current.directory,
                 selectionPaths: current.selection,
                 panelId: current.panelId,
                 panelTitle: current.title,

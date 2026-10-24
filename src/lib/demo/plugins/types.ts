@@ -6,7 +6,7 @@ export interface DemoPlugin {
   enabled: boolean
   approved: boolean
   backendAvailable: boolean
-  capabilities: string[]
+
   declaredPermissions: string[]
   grantedPermissions: string[]
   requestedNetworkDomains: string[]

@@ -7,7 +7,6 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use super::{
@@ -16,20 +15,29 @@ use super::{
         safe_child_name,
     },
     store::{load_stored, StoredConnection},
-    sync::{load_meta, save_meta, RemoteMetaFile},
+    sync::{load_meta, save_meta},
 };
 
 #[derive(Clone)]
-struct RemoteFile {
-    name: String,
-    is_dir: bool,
-    size: u64,
-    modified: u64,
+pub(crate) struct RemoteFile {
+    pub(crate) name: String,
+    pub(crate) is_dir: bool,
+    pub(crate) size: u64,
+    pub(crate) modified: u64,
+    pub(crate) node_id: String,
+    pub(crate) revision: String,
 }
 
-async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
+pub(crate) fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFile>, String> {
     let plugin_id = ensure_provider_access(conn)?;
     let config = provider_config(conn);
+    let metadata = load_meta(conn);
+    let directory_id = metadata
+        .files
+        .get(rel)
+        .map(|m| m.node_id.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(rel);
     let mut files = Vec::new();
     let mut cursor: Option<String> = None;
     let mut page_count = 0usize;
@@ -43,7 +51,7 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
             "fs.list",
             serde_json::json!({
                 "connection": config,
-                "directoryId": rel,
+                "directoryId": directory_id,
                 "cursor": cursor.as_deref().unwrap_or("0"),
                 "limit": 500
             }),
@@ -52,6 +60,9 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
             .get("entries")
             .and_then(serde_json::Value::as_array)
             .ok_or("provider response missing entries")?;
+        if entries.len() > 500 || files.len() + entries.len() > 100_000 {
+            return Err("provider exceeded listing limit".into());
+        }
         for entry in entries {
             let name = entry
                 .get("name")
@@ -68,6 +79,16 @@ async fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<RemoteFil
                 return Err("provider returned an unknown node kind".into());
             }
             files.push(RemoteFile {
+                node_id: entry
+                    .get("nodeId")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .into(),
+                revision: entry
+                    .get("revision")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .into(),
                 name: name.into(),
                 is_dir: kind == "directory",
                 size: entry
@@ -106,8 +127,32 @@ pub async fn list_listing(
     let Some((conn, relative)) = connection_for_path(path) else {
         return Ok(None);
     };
-    let files = list_remote(&conn, &rel_string(&relative)).await?;
-    let metadata = load_meta(&conn);
+    ensure_provider_access(&conn)?;
+    let _guard = super::sync::lock(&conn).await;
+    let rel = rel_string(&relative);
+    let mut metadata = load_meta(&conn);
+    let mut warnings = Vec::new();
+    let files = match list_remote(&conn, &rel) {
+        Ok(files) => {
+            remember_listing(&rel, &files, &mut metadata);
+            save_meta(&conn, &metadata)?;
+            files
+        }
+        Err(error) => {
+            if !metadata.listed.contains(&rel) {
+                return Err(error);
+            }
+            warnings.push(format!("离线目录：{error}"));
+            cached_listing(&rel, &metadata)
+        }
+    };
+    warnings.extend(
+        metadata
+            .errors
+            .iter()
+            .filter(|(key, _)| super::sync::in_tree(key, &rel))
+            .map(|(key, error)| format!("{key}: {error}")),
+    );
     let filters = crate::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
     for file in files {
@@ -126,7 +171,7 @@ pub async fn list_listing(
             .is_some_and(|meta| meta.downloaded)
             && local.is_file();
         entries.push(crate::files::Entry {
-            path: local.to_string_lossy().into_owned(),
+            path: super::config::navigation_path(&conn, &child)?,
             name: file.name,
             is_dir: file.is_dir,
             is_symlink: false,
@@ -144,16 +189,35 @@ pub async fn list_listing(
             readonly: true,
             link_target: None,
             tags: Vec::new(),
-            sync: Some(if downloaded { "synced" } else { "cloud" }.into()),
+            sync: Some(
+                metadata
+                    .files
+                    .get(&child)
+                    .map(|m| {
+                        if m.conflict {
+                            "conflict"
+                        } else if super::sync::dirty(&conn, &child, m) {
+                            "pending"
+                        } else if m.pinned {
+                            "pinned"
+                        } else if downloaded {
+                            "synced"
+                        } else {
+                            "cloud"
+                        }
+                    })
+                    .unwrap_or("cloud")
+                    .into(),
+            ),
         });
     }
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
     Ok(Some(crate::files::Listing {
         read_only: true,
         virtual_volume: true,
-        path: path.into(),
+        path: super::config::navigation_path(&conn, &rel)?,
         entries,
-        warnings: Vec::new(),
+        warnings,
     }))
 }
 
@@ -170,19 +234,19 @@ pub struct TransferOptions {
 }
 
 impl TransferOptions {
-    fn cancelled(&self) -> bool {
+    pub(crate) fn cancelled(&self) -> bool {
         self.cancel
             .as_ref()
             .is_some_and(|flag| flag.load(Ordering::Relaxed))
     }
-    fn report(&self, done: u64, total: Option<u64>) {
+    pub(crate) fn report(&self, done: u64, total: Option<u64>) {
         if let Some(progress) = &self.progress {
             progress(done, total);
         }
     }
 }
 
-async fn fetch_remote(
+pub(crate) fn fetch_remote(
     conn: &StoredConnection,
     rel: &str,
     dest: &Path,
@@ -192,11 +256,12 @@ async fn fetch_remote(
     use std::io::Write;
 
     const CHUNK: u64 = 256 * 1024;
-    const MAX_TRANSFER: u64 = 16 * 1024 * 1024 * 1024;
+    const MAX_TRANSFER: u64 = i64::MAX as u64;
     let plugin_id = ensure_provider_access(conn)?;
     if options.cancelled() {
         return Err(crate::operations::CANCELLED.into());
     }
+    super::config::check_cache_path(conn, dest)?;
     let parent = dest.parent().ok_or("invalid download destination")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let mut staging = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
@@ -213,22 +278,30 @@ async fn fetch_remote(
     let total = opened
         .get("size")
         .and_then(serde_json::Value::as_u64)
-        .filter(|size| *size > 0 && *size <= MAX_TRANSFER);
+        .filter(|size| *size <= MAX_TRANSFER);
     let mut offset = 0u64;
-    let close = |stream: &str| {
-        let _ = crate::plugin_host::global().invoke(
-            &plugin_id,
-            "fs.closeRead",
-            serde_json::json!({ "streamId": stream }),
-        );
+    struct ReadLease<'a> {
+        plugin: &'a str,
+        stream: &'a str,
+    }
+    impl Drop for ReadLease<'_> {
+        fn drop(&mut self) {
+            let _ = crate::plugin_host::global().invoke(
+                self.plugin,
+                "fs.closeRead",
+                serde_json::json!({"streamId":self.stream}),
+            );
+        }
+    }
+    let _lease = ReadLease {
+        plugin: &plugin_id,
+        stream: &stream_id,
     };
     loop {
         if options.cancelled() {
-            close(&stream_id);
             return Err(crate::operations::CANCELLED.into());
         }
         if offset >= MAX_TRANSFER {
-            close(&stream_id);
             return Err("remote file exceeds maximum allowed transfer size".into());
         }
         let response = match crate::plugin_host::global().invoke(
@@ -242,7 +315,6 @@ async fn fetch_remote(
         ) {
             Ok(response) => response,
             Err(error) => {
-                close(&stream_id);
                 return Err(error);
             }
         };
@@ -254,7 +326,6 @@ async fn fetch_remote(
             .decode(encoded)
             .map_err(|_| "provider returned invalid base64")?;
         if bytes.len() > CHUNK as usize || offset + bytes.len() as u64 > MAX_TRANSFER {
-            close(&stream_id);
             return Err("provider exceeded the transfer frame size".into());
         }
         let eof = response
@@ -262,7 +333,6 @@ async fn fetch_remote(
             .and_then(serde_json::Value::as_bool)
             .ok_or("provider returned no EOF flag")?;
         if bytes.is_empty() && !eof {
-            close(&stream_id);
             return Err("provider returned an empty nonfinal chunk".into());
         }
         staging.write_all(&bytes).map_err(|e| e.to_string())?;
@@ -272,7 +342,9 @@ async fn fetch_remote(
             break;
         }
     }
-    close(&stream_id);
+    if total.is_some_and(|size| offset != size) {
+        return Err("remote stream length does not match advertised size".into());
+    }
     staging.as_file().sync_all().map_err(|e| e.to_string())?;
     staging.persist(dest).map_err(|e| e.error.to_string())?;
     Ok(offset)
@@ -316,126 +388,162 @@ pub async fn provider_list(
 }
 
 pub async fn download(path: &str, options: &TransferOptions) -> Result<String, String> {
-    let Some((conn, rel)) = connection_for_path(path) else {
+    let Some((conn, _)) = connection_for_path(path) else {
+        crate::mounts::reject_local(path)?;
         return Ok(path.into());
     };
+    let _guard = super::sync::lock(&conn).await;
+    download_inner(path, options)
+}
+
+pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<String, String> {
+    let Some((conn, rel)) = connection_for_path(path) else {
+        crate::mounts::reject_local(path)?;
+        return Ok(path.into());
+    };
+    ensure_provider_access(&conn)?;
     let rel = rel_string(&rel);
     let mut meta = load_meta(&conn);
     let local = local_for(&conn, &rel);
     if local.is_file() && meta.files.get(&rel).is_some_and(|m| m.downloaded) {
         return Ok(local.to_string_lossy().into_owned());
     }
-    if let Some(parent) = local.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    if local.is_file() {
+        return Err("本地已有未登记的文件，已保留；请先备份或处理同步冲突".into());
     }
-    let temp = local.with_extension(format!(
-        "fiex-download-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or_default()
-    ));
-    let size = match fetch_remote(&conn, &rel, &temp, options).await {
-        Ok(size) => size,
-        Err(error) => {
-            let _ = fs::remove_file(&temp);
-            return Err(error);
+    if !meta.files.contains_key(&rel) {
+        let parent = rel.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+        let listing = list_remote(&conn, parent)?;
+        remember_listing(parent, &listing, &mut meta);
+    }
+    if meta.files.get(&rel).is_some_and(|f| f.revision.is_empty()) {
+        let file = &meta.files[&rel];
+        if let Ok(info) = crate::plugin_host::global().invoke(
+            &ensure_provider_access(&conn)?, "fs.stat",
+            serde_json::json!({"connection":provider_config(&conn),"nodeId":if file.node_id.is_empty() { &rel } else { &file.node_id }}),
+        ) {
+            meta.files.get_mut(&rel).unwrap().revision = info["revision"].as_str().unwrap_or("").into();
         }
+    }
+    let entry = meta.files.get(&rel).ok_or("远程文件不存在")?.clone();
+    if entry.is_dir {
+        return Err("不能作为文件打开文件夹".into());
+    }
+    let node = if entry.node_id.is_empty() {
+        &rel
+    } else {
+        &entry.node_id
     };
-    fs::rename(&temp, &local).map_err(|e| e.to_string())?;
-    let modified = meta.files.get(&rel).map(|m| m.modified).unwrap_or_default();
-    meta.files.insert(
-        rel,
-        RemoteMetaFile {
-            size,
-            modified,
-            is_dir: false,
-            downloaded: true,
-        },
-    );
+    fetch_remote(&conn, node, &local, options)?;
+    let file = meta.files.get_mut(&rel).unwrap();
+    file.downloaded = true;
+    file.baseline = super::sync::fingerprint(&local)?;
+    file.local_stamp = super::sync::stamp(&local)?;
     save_meta(&conn, &meta)?;
     Ok(local.to_string_lossy().into_owned())
 }
 
 pub async fn download_dir(path: &str, options: &TransferOptions) -> Result<(), String> {
+    let Some((conn, _)) = connection_for_path(path) else {
+        return Ok(());
+    };
+    let _guard = super::sync::lock(&conn).await;
+    download_dir_inner(path, options)
+}
+
+pub(crate) fn download_dir_inner(path: &str, options: &TransferOptions) -> Result<(), String> {
     let Some((conn, rel)) = connection_for_path(path) else {
         return Ok(());
     };
-    let rel = rel_string(&rel);
-    let mut meta = load_meta(&conn);
-    let mut pending = vec![rel];
+    let mut pending = vec![rel_string(&rel)];
     while let Some(current) = pending.pop() {
         if options.cancelled() {
             return Err(crate::operations::CANCELLED.into());
         }
-        meta.files.insert(
-            current.clone(),
-            RemoteMetaFile {
-                size: 0,
-                modified: 0,
-                is_dir: true,
-                downloaded: true,
-            },
-        );
-        let files = list_remote(&conn, &current).await?;
-        let mut dirs = Vec::new();
+        let mut meta = load_meta(&conn);
+        let files = list_remote(&conn, &current)?;
+        remember_listing(&current, &files, &mut meta);
+        fs::create_dir_all(local_for(&conn, &current)).map_err(|e| e.to_string())?;
+        save_meta(&conn, &meta)?;
         for file in files {
-            let Some(name) = safe_child_name(&file.name) else {
+            let child = child_path(&current, &file.name);
+            if meta.files.get(&child).is_some_and(|f| f.excluded) {
                 continue;
-            };
-            let child = if current.is_empty() {
-                name.to_string()
-            } else {
-                format!("{current}/{name}")
-            };
-            let local = local_for(&conn, &child);
-            if file.is_dir {
-                fs::create_dir_all(&local).map_err(|e| e.to_string())?;
-            } else if let Some(parent) = local.parent() {
-                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             if file.is_dir {
-                dirs.push(child);
+                pending.push(child);
             } else {
-                let local = local_for(&conn, &child);
-                let cached =
-                    meta.files.get(&child).is_some_and(|m| m.downloaded) && local.is_file();
-                if !cached {
-                    let temp = local.with_extension("fiex-download");
-                    let size = match fetch_remote(&conn, &child, &temp, options).await {
-                        Ok(size) => size,
-                        Err(error) => {
-                            let _ = fs::remove_file(&temp);
-                            return Err(error);
-                        }
-                    };
-                    fs::rename(&temp, &local).map_err(|e| e.to_string())?;
-                    meta.files.insert(
-                        child,
-                        RemoteMetaFile {
-                            size,
-                            modified: file.modified,
-                            is_dir: false,
-                            downloaded: true,
-                        },
-                    );
-                }
+                download_inner(&local_for(&conn, &child).to_string_lossy(), options)?;
             }
         }
-        pending.extend(dirs);
     }
-    save_meta(&conn, &meta)
+    Ok(())
+}
+
+pub(crate) fn child_path(parent: &str, name: &str) -> String {
+    if parent.is_empty() {
+        name.into()
+    } else {
+        format!("{parent}/{name}")
+    }
+}
+
+pub(crate) fn remember_listing(
+    parent: &str,
+    files: &[RemoteFile],
+    meta: &mut super::sync::RemoteMeta,
+) {
+    meta.listed.insert(parent.into());
+    let inherited = meta
+        .files
+        .iter()
+        .any(|(key, file)| file.pinned && file.is_dir && super::sync::in_tree(parent, key));
+    // A cached file's revision remains its download baseline. Listing must not
+    // silently advance that baseline before reconciliation checks for conflicts.
+    for file in files {
+        let child = child_path(parent, &file.name);
+        let old = meta.files.entry(child).or_default();
+        if !old.downloaded {
+            old.size = file.size;
+            old.modified = file.modified;
+            old.revision = file.revision.clone();
+        }
+        old.node_id = file.node_id.clone();
+        old.is_dir = file.is_dir;
+        if !old.excluded {
+            old.pinned |= inherited;
+        }
+    }
+}
+
+fn cached_listing(parent: &str, meta: &super::sync::RemoteMeta) -> Vec<RemoteFile> {
+    meta.files
+        .iter()
+        .filter_map(|(key, m)| {
+            let (dir, name) = key.rsplit_once('/').unwrap_or(("", key));
+            (dir == parent).then(|| RemoteFile {
+                name: name.into(),
+                is_dir: m.is_dir,
+                size: m.size,
+                modified: m.modified,
+                node_id: m.node_id.clone(),
+                revision: m.revision.clone(),
+            })
+        })
+        .collect()
 }
 
 pub async fn ensure_downloaded(path: &str, options: &TransferOptions) -> Result<String, String> {
     if connection_for_path(path).is_some() {
         download(path, options).await
     } else {
+        crate::mounts::reject_local(path)?;
         Ok(path.into())
     }
 }
 
 pub fn eject(path: &str) -> Result<(), String> {
+    crate::mounts::reject_local(path)?;
     #[cfg(target_os = "macos")]
     {
         let status = std::process::Command::new("diskutil")
@@ -483,4 +591,117 @@ pub fn eject(path: &str) -> Result<(), String> {
     }
     #[allow(unreachable_code)]
     Err("当前平台不支持弹出设备".into())
+}
+
+/// Metadata remains usable before a file has ever been downloaded.
+pub fn stat(path: &str) -> Result<crate::files::Entry, String> {
+    let (conn, relative) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
+    ensure_provider_access(&conn)?;
+    let rel = rel_string(&relative);
+    let mut meta = load_meta(&conn);
+    if !rel.is_empty() && !meta.files.contains_key(&rel) {
+        let parent = rel.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+        remember_listing(parent, &list_remote(&conn, parent)?, &mut meta);
+        save_meta(&conn, &meta)?;
+    }
+    let file = meta.files.get(&rel);
+    if !rel.is_empty() && file.is_none() {
+        return Err("remote node not found".into());
+    }
+    let name = relative
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| conn.name.clone());
+    Ok(crate::files::Entry {
+        path: super::config::navigation_path(&conn, &rel)?,
+        name,
+        is_dir: file.is_none_or(|m| m.is_dir),
+        is_symlink: false,
+        size: file.map(|m| m.size).unwrap_or(0),
+        modified: file.map(|m| m.modified).unwrap_or(0),
+        created: 0,
+        extension: relative
+            .extension()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
+        mime: mime_guess::from_path(&relative)
+            .first_or_octet_stream()
+            .to_string(),
+        readonly: true,
+        link_target: None,
+        tags: vec![],
+        sync: Some("cloud".into()),
+    })
+}
+/// OS operations receive only a checked materialized cache path.
+pub fn cached_path(path: &str) -> Result<String, String> {
+    let (conn, rel) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
+    ensure_provider_access(&conn)?;
+    let local = local_for(&conn, &rel_string(&rel));
+    super::config::check_cache_path(&conn, &local)?;
+    Ok(local.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::sync::{RemoteMeta, RemoteMetaFile};
+    use super::*;
+    fn remote(name: &str) -> RemoteFile {
+        RemoteFile {
+            name: name.into(),
+            is_dir: false,
+            size: 12,
+            modified: 0,
+            node_id: "stable-id".into(),
+            revision: "new-version".into(),
+        }
+    }
+    #[test]
+    fn offline_listing_survives_metadata_round_trip() {
+        let mut meta = RemoteMeta::default();
+        remember_listing("folder", &[remote("file.txt")], &mut meta);
+        let recovered: RemoteMeta =
+            serde_json::from_slice(&serde_json::to_vec(&meta).unwrap()).unwrap();
+        assert!(recovered.listed.contains("folder"));
+        let files = cached_listing("folder", &recovered);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].node_id, "stable-id");
+        assert!(cached_listing("other", &recovered).is_empty());
+    }
+    #[test]
+    fn listing_cannot_advance_download_revision() {
+        let mut meta = RemoteMeta::default();
+        meta.files.insert(
+            "file.txt".into(),
+            RemoteMetaFile {
+                downloaded: true,
+                revision: "download-version".into(),
+                baseline: "local-hash".into(),
+                ..Default::default()
+            },
+        );
+        remember_listing("", &[remote("file.txt")], &mut meta);
+        assert_eq!(meta.files["file.txt"].revision, "download-version");
+        assert_eq!(meta.files["file.txt"].baseline, "local-hash");
+    }
+    #[test]
+    fn folder_pin_inheritance_respects_explicit_eviction() {
+        let mut meta = RemoteMeta::default();
+        meta.files.insert(
+            "folder".into(),
+            RemoteMetaFile {
+                pinned: true,
+                is_dir: true,
+                ..Default::default()
+            },
+        );
+        remember_listing("folder", &[remote("a"), remote("b")], &mut meta);
+        assert!(meta.files["folder/a"].pinned);
+        let b = meta.files.get_mut("folder/b").unwrap();
+        b.excluded = true;
+        b.pinned = false;
+        remember_listing("folder", &[remote("b")], &mut meta);
+        assert!(!meta.files["folder/b"].pinned);
+    }
 }

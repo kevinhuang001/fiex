@@ -87,7 +87,7 @@ export function handleSystem(command: string): unknown {
           name: '团队 WebDAV',
           kind: 'webdav',
           pluginId: 'org.example.webdav',
-          mountPath: root + '/.fiex/drives/demo-webdav',
+          mountPath: 'fiex://mount/demo-webdav/',
         },
       ]
 

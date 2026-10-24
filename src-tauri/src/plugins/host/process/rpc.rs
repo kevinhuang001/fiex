@@ -514,6 +514,7 @@ impl Running {
         let scope = || arg("scope");
         let key = || arg("key");
         match method {
+            "host.vfs.openView" => crate::mounts::open_view(&self.plugin_id, p, root()?),
             "host.net.http.open" if permitted("network") => {
                 crate::plugin_net::http_open(owner, &self.plugin_id, &self.declared, p)
             }
@@ -852,7 +853,11 @@ impl Running {
             self.finish_operation(id);
             return Err(RpcFailure::fatal(error));
         }
-        let result = match receiver.recv_timeout(REQUEST_TIMEOUT) {
+        let result = match receiver.recv_timeout(if method == "fs.writeFile" {
+            Duration::from_secs(86_520)
+        } else {
+            REQUEST_TIMEOUT
+        }) {
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 Err(RpcFailure::fatal("plugin request deadline exceeded"))

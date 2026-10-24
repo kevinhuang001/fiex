@@ -20,7 +20,7 @@ export interface Entry {
   readonly: boolean
   linkTarget: string | null
   tags: Tag[]
-  sync: 'synced' | 'cloud' | null
+  sync: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | null
 }
 export interface Listing {
   readOnly?: boolean

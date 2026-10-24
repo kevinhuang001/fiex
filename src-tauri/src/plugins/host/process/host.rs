@@ -87,6 +87,27 @@ impl PluginHost {
         directory: &str,
         paths: &[PathBuf],
     ) -> Result<Value, String> {
+        if crate::mounts::handles(directory) {
+            let (uri, source) = crate::mounts::resolve(directory)?;
+            let crate::mounts::Source::View(view) = source else {
+                return Err("connection views cannot grant local filesystem access".into());
+            };
+            if view.descriptor.plugin_id != plugin_id {
+                return Err("PermissionDenied: foreign VFS owner".into());
+            }
+            for path in paths {
+                let selected = path.to_string_lossy();
+                if crate::mounts::handles(&selected) {
+                    let selected = crate::mounts::parse(&selected)?;
+                    if selected.mount_id != uri.mount_id {
+                        return Err("PermissionDenied: foreign mount".into());
+                    }
+                } else {
+                    view.scope.authorize(&selected)?;
+                }
+            }
+            return self.invoke_scoped(plugin_id, method, params, Some(view.scope));
+        }
         let root = if paths.is_empty() {
             if directory.contains("://") {
                 None
@@ -126,6 +147,18 @@ impl PluginHost {
         };
         self.invoke_scoped(plugin_id, method, params, root)
     }
+    pub(crate) fn invoke_vfs(
+        &self,
+        plugin_id: &str,
+        method: &str,
+        params: Value,
+        scope: crate::plugin_fs_access::Scope,
+    ) -> Result<Value, String> {
+        if !method.starts_with("vfs.") {
+            return Err("invalid VFS method".into());
+        }
+        self.invoke_scoped(plugin_id, method, params, Some(scope))
+    }
     fn invoke_scoped(
         &self,
         plugin_id: &str,
@@ -137,6 +170,35 @@ impl PluginHost {
             .into_iter()
             .find(|(m, _)| m.id == plugin_id)
             .ok_or("plugin not installed")?;
+        if method.starts_with("vfs.") {
+            let contribution = params["contributionId"]
+                .as_str()
+                .ok_or("missing VFS contribution")?;
+            if !manifest
+                .contributions
+                .get("vfs")
+                .and_then(Value::as_array)
+                .is_some_and(|items| {
+                    items
+                        .iter()
+                        .any(|item| item["id"].as_str() == Some(contribution))
+                })
+            {
+                return Err("PermissionDenied: explicit VFS contribution required".into());
+            }
+            if task_root.is_none() {
+                return Err("VFS requests require a Core-bound view scope".into());
+            }
+        }
+        if (method.starts_with("fs.") || method.starts_with("connection."))
+            && manifest
+                .contributions
+                .get("connections")
+                .and_then(Value::as_array)
+                .is_none_or(|v| v.is_empty())
+        {
+            return Err("PermissionDenied: connection factory declaration required".into());
+        }
         let required = activation_requirements(&manifest)?;
         let state = crate::plugin_permissions::status(plugin_id, &required.permissions)?;
         if !state.enabled || !crate::plugin_permissions::activation_complete(&state, &required) {

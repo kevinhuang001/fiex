@@ -2,11 +2,7 @@
 //! and the public projection handed to the frontend.
 
 use serde::{Deserialize, Serialize};
-use std::{
-    fs,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::PathBuf};
 
 use super::config::{
     connection_domain, declared_connection_fields, ensure_provider_access, mount_path,
@@ -17,6 +13,8 @@ use super::config::{
 #[serde(rename_all = "camelCase")]
 pub struct StoredConnection {
     pub(crate) id: String,
+    #[serde(default)]
+    pub(crate) mount_id: String,
     pub(crate) name: String,
     pub(crate) kind: String,
     /// The exact installed provider ID, never derived from publisher privilege.
@@ -67,10 +65,55 @@ pub(crate) fn connection_plugin_id(conn: &StoredConnection) -> String {
 }
 
 pub(crate) fn load_stored() -> Vec<StoredConnection> {
+    // Sidebar and the background scheduler may both be the first reader of an
+    // old registry. Serialize assignment so its new identity is persisted once.
+    static MIGRATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let Ok(_guard) = MIGRATION.lock() else {
+        return Vec::new();
+    };
     let mut items: Vec<StoredConnection> = fs::read(connections_path())
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
+    let mut changed = false;
+    items.retain(|c| {
+        !c.id.is_empty()
+            && c.id.len() <= 128
+            && c.id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    });
+    let mut counts = std::collections::HashMap::<String, usize>::new();
+    for item in &items {
+        *counts.entry(format!("id:{}", item.id)).or_default() += 1;
+        if !item.mount_id.is_empty() {
+            *counts
+                .entry(format!("mount:{}", item.mount_id))
+                .or_default() += 1;
+        }
+    }
+    items.retain(|c| {
+        counts[&format!("id:{}", c.id)] == 1
+            && (c.mount_id.is_empty() || counts[&format!("mount:{}", c.mount_id)] == 1)
+    });
+    let mut identities = std::collections::HashSet::new();
+    for item in &mut items {
+        if item.mount_id.is_empty() {
+            let Ok(id) = crate::mounts::new_id() else {
+                continue;
+            };
+            item.mount_id = id;
+            changed = true;
+        }
+        if crate::mounts::uri(&item.mount_id, "").is_err()
+            || !identities.insert(item.mount_id.clone())
+        {
+            // Never silently redirect a duplicated or corrupted identity.
+            item.mount_id.clear();
+        }
+    }
+    items.retain(|c| !c.mount_id.is_empty());
+    if changed && save_stored(&items).is_err() {
+        return Vec::new();
+    }
     for item in &mut items {
         for field in &item.secret_keys {
             if let Ok(value) = crate::plugin_storage::secret_get(
@@ -121,7 +164,7 @@ fn public(conn: &StoredConnection) -> ConnectionInfo {
         name: conn.name.clone(),
         kind: conn.kind.clone(),
         plugin_id: connection_plugin_id(conn),
-        mount_path: mount.to_string_lossy().into_owned(),
+        mount_path: super::config::navigation_path(conn, "").unwrap_or_default(),
     }
 }
 
@@ -180,20 +223,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     }
     let id = match previous.as_ref() {
         Some(conn) => conn.id.clone(),
-        None => {
-            let stamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|duration| duration.as_millis())
-                .unwrap_or_default();
-            let mut sequence = 0u64;
-            loop {
-                let candidate = format!("{stamp:x}-{sequence:x}");
-                if !items.iter().any(|item| item.id == candidate) {
-                    break candidate;
-                }
-                sequence += 1;
-            }
-        }
+        None => crate::mounts::new_id()?,
     };
     let mut settings = input.settings;
     // An empty value in an update keeps the existing keyring credential;
@@ -211,6 +241,10 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     }
     let mut record = StoredConnection {
         id: id.clone(),
+        mount_id: previous
+            .as_ref()
+            .map(|c| c.mount_id.clone())
+            .unwrap_or(crate::mounts::new_id()?),
         name: name.into(),
         kind: kind.into(),
         plugin_id: plugin_id.clone(),

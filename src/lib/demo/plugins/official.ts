@@ -41,7 +41,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         enabled: true,
         approved: true,
         backendAvailable: true,
-        capabilities: ['filesystem', 'toolbar', 'panel'],
+
         declaredPermissions: [
           'folders.read',
           'folders.create',
@@ -68,12 +68,12 @@ export const officialPlugins: DemoPlugin[] = officialMode
         allowedNetworkDomains: ['github.com'],
         author: { name: 'Fiex Contributors' },
         contributions: {
+          vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
           toolbar: [
             {
               id: 'git.main',
               title: '源代码管理',
               icon: 'git-branch',
-              schemes: ['history'],
               panel: {
                 entry: 'ui/dist/index.html',
                 title: '源代码管理',
@@ -94,7 +94,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         enabled: true,
         approved: true,
         backendAvailable: true,
-        capabilities: ['contextMenu', 'panel'],
+
         declaredPermissions: [
           'folders.read',
           'folders.create',
@@ -173,7 +173,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         enabled: true,
         approved: true,
         backendAvailable: true,
-        capabilities: ['preview'],
+
         declaredPermissions: ['files.read'],
         grantedPermissions: ['files.read'],
         requestedCommands: [],
@@ -214,7 +214,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         enabled: true,
         approved: true,
         backendAvailable: true,
-        capabilities: ['preview'],
+
         declaredPermissions: ['files.read'],
         grantedPermissions: ['files.read'],
         requestedCommands: [],
@@ -246,7 +246,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         enabled: true,
         approved: true,
         backendAvailable: true,
-        capabilities: ['preview'],
+
         declaredPermissions: ['files.read'],
         grantedPermissions: ['files.read'],
         requestedCommands: [],
@@ -313,7 +313,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         enabled: true,
         approved: true,
         backendAvailable: true,
-        capabilities: ['contextMenu', 'panel'],
+
         declaredPermissions: ['commands'],
         grantedPermissions: ['commands'],
         requestedCommands: ['gpg'],
@@ -390,7 +390,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         enabled: true,
         approved: true,
         backendAvailable: true,
-        capabilities: ['contextMenu', 'panel'],
+
         declaredPermissions: ['folders.read', 'files.read'],
         grantedPermissions: ['folders.read', 'files.read'],
         requestedNetworkDomains: [],
