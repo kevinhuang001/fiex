@@ -155,6 +155,7 @@ pub fn run() {
             remote_download_dir,
             remote_sync,
             remote_unsync,
+            remote_resolve,
             eject_device,
             eject_usb,
             relaunch_elevated,
@@ -197,6 +198,13 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                tauri::async_runtime::block_on(crate::remote::reconcile());
+                use tauri::Emitter;
+                let _ = handle.emit("remote-sync", ());
+                std::thread::sleep(std::time::Duration::from_secs(30));
+            });
             {
                 use tauri::Emitter;
                 let handle = app.handle().clone();

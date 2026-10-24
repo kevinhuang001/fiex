@@ -207,3 +207,45 @@ pub(crate) fn local_for(conn: &StoredConnection, rel: &str) -> PathBuf {
     }
     path
 }
+
+/// Background work must never follow a locally inserted symlink out of a mount.
+pub(crate) fn check_cache_path(conn: &StoredConnection, path: &Path) -> Result<(), String> {
+    let root = dunce::canonicalize(mount_path(conn)).map_err(|e| e.to_string())?;
+    let relative = path
+        .strip_prefix(mount_path(conn))
+        .map_err(|_| "invalid cache path")?;
+    let mut current = root.clone();
+    for component in relative.components() {
+        if !matches!(component, std::path::Component::Normal(_)) {
+            return Err("invalid cache component".into());
+        }
+        current.push(component);
+        if let Ok(metadata) = std::fs::symlink_metadata(&current) {
+            if metadata.file_type().is_symlink() {
+                return Err("cache path contains a symlink".into());
+            }
+            let resolved = dunce::canonicalize(&current).map_err(|e| e.to_string())?;
+            if !resolved.starts_with(&root) {
+                return Err("cache path escaped mount".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn supports_sync(conn: &StoredConnection) -> bool {
+    crate::plugin_host::catalog()
+        .into_iter()
+        .find(|p| p.id == conn.plugin_id)
+        .and_then(|p| {
+            p.contributions
+                .get("connections")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+        })
+        .is_some_and(|factories| {
+            factories
+                .iter()
+                .any(|f| f["id"].as_str() == Some(&conn.kind) && f["capabilities"]["sync"] == true)
+        })
+}

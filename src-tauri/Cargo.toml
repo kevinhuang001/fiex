@@ -62,6 +62,7 @@ which = "8"
 base64 = "0.22"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 sha2 = "0.10"
+tokio = { version = "1", features = ["sync"] }
 hex = "0.4"
 mime_guess = "2"
 zip = { version = "4", default-features = false, features = ["deflate", "bzip2", "zstd", "aes-crypto"] }

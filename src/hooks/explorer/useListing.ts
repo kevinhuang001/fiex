@@ -45,6 +45,19 @@ export function useListing(
     syncDecorationIcons(decorations)
   }, [decorations])
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
+  useEffect(() => {
+    if (!native || !enabled) return
+    const stop = listen('remote-sync', () => {
+      if (
+        !document.hidden &&
+        connections.some((c) => path.startsWith(c.mountPath + '/') || path === c.mountPath)
+      )
+        reload()
+    })
+    return () => {
+      void stop.then((unlisten) => unlisten())
+    }
+  }, [enabled, connections, path, reload])
   const locationsKey = useRef('')
   const locationsPending = useRef<Promise<Location[]> | null>(null)
   const refreshLocations = useCallback((force = false): Promise<Location[]> => {

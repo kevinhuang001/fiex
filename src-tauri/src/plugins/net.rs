@@ -356,7 +356,12 @@ pub fn http_open(
             request = request.body(bytes.clone());
         }
         let response = request.send().map_err(|e| e.to_string())?;
-        if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
+        // Google resumable uploads use 308 without Location to acknowledge
+        // an incomplete upload. It is a response, not a redirect.
+        if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308)
+            && !(response.status().as_u16() == 308
+                && !response.headers().contains_key(reqwest::header::LOCATION))
+        {
             if redirect == 10 {
                 return Err("too many HTTP redirects".into());
             }

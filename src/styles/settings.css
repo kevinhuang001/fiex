@@ -1705,3 +1705,13 @@ body.dragging-file * {
   color: var(--muted);
   font-size: 10px;
 }
+
+.sync-badge.pinned {
+  color: var(--accent);
+}
+.sync-badge.pending {
+  color: #b77a16;
+}
+.sync-badge.conflict {
+  color: #d14646;
+}

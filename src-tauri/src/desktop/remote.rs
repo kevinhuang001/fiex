@@ -74,7 +74,10 @@ pub(crate) async fn remote_sync(
 }
 #[tauri::command]
 pub(crate) async fn remote_unsync(paths: Vec<String>) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || remote::unsync(&paths))
-        .await
-        .map_err(|error| error.to_string())?
+    remote::unsync(&paths).await
+}
+
+#[tauri::command]
+pub(crate) async fn remote_resolve(path: String, keep_local: bool) -> Result<(), String> {
+    remote::resolve(&path, keep_local).await
 }

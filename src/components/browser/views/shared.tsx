@@ -48,15 +48,18 @@ export type SharedRow = (entry: Entry) => RowBindings
 
 export function SyncBadge({ sync }: { sync: Entry['sync'] }) {
   if (!sync) return null
-  return sync === 'synced' ? (
-    <span className="sync-badge synced" title="已同步">
-      <CloudCheck size={11} />
-      <span>已同步</span>
-    </span>
-  ) : (
-    <span className="sync-badge cloud" title="仅云端，需要连接">
-      <CloudDownload size={11} />
-      <span>仅云端</span>
+  const labels = {
+    synced: '已缓存',
+    cloud: '仅云端',
+    pinned: '始终保留在本地',
+    pending: '等待上传',
+    conflict: '同步冲突',
+  }
+  const label = labels[sync]
+  return (
+    <span className={`sync-badge ${sync}`} title={label}>
+      {sync === 'cloud' ? <CloudDownload size={11} /> : <CloudCheck size={11} />}
+      <span>{label}</span>
     </span>
   )
 }
