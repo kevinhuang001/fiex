@@ -39,13 +39,13 @@ export function useConnectionActions({
       action: async () => {
         await call('eject_device', { path })
         leaveDevice(path)
-        await left.refreshLocations()
+        await left.refreshLocations(true)
       },
     })
   const mountDevice = (device: string) => {
     void run('正在请求挂载…', async () => {
       const path = await call<string>('mount_device', { device })
-      await left.refreshLocations()
+      await left.refreshLocations(true)
       x.navigate(path)
       notify('设备已挂载')
     })
@@ -60,7 +60,7 @@ export function useConnectionActions({
           (location) => location.usbfs && location.device === device,
         )
         await call('eject_usb', { device })
-        await left.refreshLocations()
+        await left.refreshLocations(true)
         if (volume) leaveDevice(volume.path)
       },
     })

@@ -15,7 +15,7 @@ import { Trash2 } from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
 import { PinnedTools } from './toolbar/PinnedTools'
 import { ToolbarPickerMenu, useToolbarPicker } from './toolbar/ToolbarMenus'
-import { ViewControls } from './toolbar/ViewControls'
+import { GroupControl, SortControl, ViewSwitch } from './toolbar/ViewControls'
 import { useToolbarOrder } from './toolbar/useToolbarOrder'
 
 export function ExplorerToolbar({
@@ -60,7 +60,7 @@ export function ExplorerToolbar({
   const activity = useActivity()
   const [refreshKey, setRefreshKey] = useState(0)
   const { picker, pickerRef, pickerPosition, openPicker, closePicker } = useToolbarPicker()
-  const leftDefaults = ['views', 'newFolder', 'ide', 'terminal']
+  const leftDefaults = ['group', 'sort', 'newFolder', 'ide', 'terminal']
   const rightDefaults = ['refresh', 'split', 'activity']
   const ordered = (saved: string[], fallback: string[]) => [
     ...saved.filter((id) => fallback.includes(id)),
@@ -92,7 +92,8 @@ export function ExplorerToolbar({
     return transform ? { transform } : undefined
   }
   const renderLeft = (id: string) => {
-    if (id === 'views') return <ViewControls prefs={prefs} update={update} />
+    if (id === 'group') return <GroupControl prefs={prefs} update={update} />
+    if (id === 'sort') return <SortControl prefs={prefs} update={update} />
     if (id === 'newFolder')
       return (
         <Button
@@ -227,6 +228,7 @@ export function ExplorerToolbar({
         </div>
         <h1 data-tauri-drag-region>{x.query ? '搜索' : displayName(x.path) || 'Fiex'}</h1>
         <div className="toolbar-spacer" data-tauri-drag-region />
+        <ViewSwitch prefs={prefs} update={update} />
         {inTrash && (
           <Button
             variant="ghost"
