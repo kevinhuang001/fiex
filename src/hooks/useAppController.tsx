@@ -2,6 +2,8 @@ import { useExplorerShortcuts } from './useExplorerShortcuts'
 import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
+import { pluginCatalog } from '@/lib/plugins'
+import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import type { DialogState } from '@/lib/dialogs'
 import { basename } from '@/lib/files'
 import { shortcutLabel } from '@/lib/shortcuts'
@@ -111,7 +113,19 @@ export function useAppController() {
       pane.navigate(e.path)
       return
     }
-    void run('正在打开…', () => call('open_path', { path: e.path }))
+    void run('正在打开…', async () => {
+      const plugins = await pluginCatalog()
+      const outcome = await runBeforeOpenHooks(plugins, e)
+      if (outcome.preview) {
+        setPreview(e)
+        return
+      }
+      if (outcome.handled) {
+        pane.reload()
+        return
+      }
+      await call('open_path', { path: e.path })
+    })
   }
   const addWorkspace = async (paths: string[]) => {
     const entries = await Promise.all(

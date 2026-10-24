@@ -62,6 +62,13 @@ export interface PluginInfo {
     contextMenus?: PluginContribution[]
     search?: Array<{ id: string; title: string; icon?: string }>
     settings?: PluginField[]
+    hooks?: Array<{
+      id: string
+      event: 'beforeOpen'
+      method: string
+      priority?: number
+      extensions?: string[]
+    }>
     preview?: Array<{
       id: string
       title?: string

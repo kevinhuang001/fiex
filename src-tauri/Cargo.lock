@@ -1461,7 +1461,7 @@ dependencies = [
 
 [[package]]
 name = "fiex"
-version = "0.4.11"
+version = "0.5.0"
 dependencies = [
  "apfs",
  "arapuca",

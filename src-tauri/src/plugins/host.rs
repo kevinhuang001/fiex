@@ -83,6 +83,16 @@ pub struct PluginPermissions {
     pub network: NetworkPermission,
     #[serde(default)]
     pub commands: CommandsPermission,
+    /// Allows `contributions.hooks` to run before Core acts on a file.
+    #[serde(default)]
+    pub hooks: HooksPermission,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HooksPermission {
+    #[serde(default)]
+    pub enabled: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -180,6 +190,9 @@ pub fn declared_permissions(
     if manifest.permissions.commands.enabled {
         declared.insert("commands".to_string());
     }
+    if manifest.permissions.hooks.enabled {
+        declared.insert("hooks".to_string());
+    }
     crate::plugin_permissions::validate_commands(&declared, &manifest.permissions.commands.allow)?;
     crate::plugin_permissions::validate_network_domains(
         &declared,
@@ -202,6 +215,7 @@ fn capabilities(contributions: &Value) -> Vec<String> {
         ("settings", "settings"),
         ("themes", "theme"),
         ("preview", "preview"),
+        ("hooks", "hooks"),
     ] {
         let present = contributions
             .get(key)

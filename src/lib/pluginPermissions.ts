@@ -12,6 +12,7 @@ export const permissionLabels: Record<string, string> = {
   'files.write': '修改文件',
   network: '网络访问',
   commands: '执行外部命令',
+  hooks: '打开前钩子',
 }
 export const permissionHints: Record<string, string> = {
   'folders.read': '列出当前目录及子目录，读取文件名、大小等元数据。',
@@ -22,6 +23,8 @@ export const permissionHints: Record<string, string> = {
   'files.write': '修改文件内容；通过暂存和提交保存，发生冲突时停止。',
   network: '通过宿主访问单独授权的网络目标，插件自身不能直接联网。',
   commands: commandRisk,
+  hooks:
+    '在打开文件前接管操作（例如把压缩包直接解压到当前目录）。高优先级先执行，钩子可以选择放行或消费这次打开。',
 }
 export interface ActivationConsent {
   permissions: string[]

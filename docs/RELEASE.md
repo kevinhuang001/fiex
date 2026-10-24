@@ -1,3 +1,9 @@
+# Fiex 0.5.0
+
+- New `hooks` permission and `contributions.hooks`: a plugin can run before Core opens a file, in priority order. A hook may pass, consume the open, or hand off to the preview sheet. Failures are logged and never block the file.
+- The archive plugin uses it: opening an archive extracts it next to the archive (conflict-safe names) instead of launching the system app; password-protected archives open the preview for the password.
+- Plugin file dialogs now use the app's own compact file browser (sidebar places, favorites, connections, devices, breadcrumbs, back/forward/up, search, list/grid, centered save name, replace confirmation) instead of the system picker.
+
 # Fiex 0.4.11
 
 - The preview sheet header is compact (44 px), leaving more room for the content.
