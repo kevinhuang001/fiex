@@ -12,6 +12,7 @@ interface PluginTaskEvent {
   total?: number | null
   result?: unknown
   error?: string | null
+  internal?: boolean
 }
 
 function detailOf(result: unknown): string | undefined {
@@ -32,6 +33,7 @@ export function usePluginTasks() {
     let disposed = false
     const unlisten = listen<PluginTaskEvent>('plugin-task', ({ payload }) => {
       if (!payload || typeof payload.taskId !== 'string') return
+      if (payload.internal) return
       if (payload.status === 'running') {
         let activity = activities.get(payload.taskId)
         if (!activity) {
@@ -39,7 +41,10 @@ export function usePluginTasks() {
             payload.label || '插件后台任务',
             undefined,
             () => {
-              void call('plugin_cancel_task', { taskId: payload.taskId }).catch(() => {})
+              void call('plugin_cancel_task', {
+                pluginId: payload.pluginId,
+                taskId: payload.taskId,
+              }).catch(() => {})
             },
             'plugin',
           )

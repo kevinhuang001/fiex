@@ -61,6 +61,7 @@ pub struct PluginTaskInfo {
     pub total: Option<u64>,
     pub result: Value,
     pub error: Option<String>,
+    pub internal: bool,
 }
 
 #[derive(Clone)]
@@ -244,6 +245,7 @@ impl Running {
             total: info.total,
             result: info.result.clone(),
             error: info.error.clone(),
+            internal: info.internal,
         });
     }
 
@@ -399,6 +401,7 @@ impl Running {
                     total: None,
                     result: Value::Null,
                     error: None,
+                    internal: p.get("internal").and_then(Value::as_bool).unwrap_or(false),
                 };
                 tasks.insert(
                     task_id.to_string(),

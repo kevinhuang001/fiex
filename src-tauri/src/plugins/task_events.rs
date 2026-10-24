@@ -17,6 +17,7 @@ pub struct PluginTaskEvent {
     pub total: Option<u64>,
     pub result: Value,
     pub error: Option<String>,
+    pub internal: bool,
 }
 
 type Sink = Box<dyn Fn(PluginTaskEvent) + Send + Sync>;

@@ -357,7 +357,10 @@ export function usePanelBridge({
               const p = params as { taskId?: unknown } | null
               if (!p || typeof p.taskId !== 'string' || !p.taskId)
                 throw new Error('Invalid plugin task id')
-              return await call<JsonValue | null>('plugin_task', { taskId: p.taskId })
+              return await call<JsonValue | null>('plugin_task', {
+                pluginId: current.pluginId,
+                taskId: p.taskId,
+              })
             }
             if (method.startsWith('dialog.')) {
               // The chooser is rendered by the host and only returns the path the
