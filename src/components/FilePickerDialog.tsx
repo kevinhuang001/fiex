@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { ArrowLeft, ArrowRight, ChevronUp, Folder, LayoutGrid, List, Search } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  ChevronUp,
+  Folder,
+  HardDrive,
+  LayoutGrid,
+  List,
+  Search,
+  Server,
+} from 'lucide-react'
 import { call } from '@/lib/api'
+import { usePreferences } from '@/hooks/usePreferences'
+import { commonPlaces } from '@/lib/places'
 import { FileIcon } from '@/components/FileIcon'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
@@ -11,7 +23,7 @@ import {
   type FilePickerRequest,
 } from '@/lib/filePicker'
 import { date, size } from '@/lib/files'
-import type { Entry, Listing, Location } from '@/lib/types'
+import type { Entry, Listing, Location, RemoteConnection } from '@/lib/types'
 
 const dirname = (path: string) => {
   const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
@@ -32,18 +44,22 @@ export function FilePickerDialog() {
 }
 
 function Picker({ request }: { request: FilePickerRequest }) {
+  const [preferences] = usePreferences()
   const [directory, setDirectory] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
-  const [favorites, setFavorites] = useState<Location[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
+  const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [history, setHistory] = useState<string[]>([])
   const [index, setIndex] = useState(-1)
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [filter, setFilter] = useState('')
   const [saveName, setSaveName] = useState(request.suggestedName || '')
+  const [replace, setReplace] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const list = useRef<HTMLDivElement>(null)
+  const nameInput = useRef<HTMLInputElement>(null)
 
   const navigate = (path: string) => {
     if (!path || path === directory) return
@@ -56,9 +72,10 @@ function Picker({ request }: { request: FilePickerRequest }) {
 
   useEffect(() => {
     void call<Location[]>('locations')
-      .then((values) =>
-        setFavorites((values || []).filter((item) => item.kind === 'favorite').slice(0, 8)),
-      )
+      .then((values) => setLocations(values || []))
+      .catch(() => {})
+    void call<RemoteConnection[]>('remote_connections')
+      .then((values) => setConnections(values || []))
       .catch(() => {})
   }, [])
 
@@ -87,6 +104,20 @@ function Picker({ request }: { request: FilePickerRequest }) {
   }, [directory])
 
   useEffect(() => {
+    if (request.mode !== 'saveFile') return
+    // Radix focuses the dialog on mount, so focus the name field right after.
+    const timer = window.setTimeout(() => {
+      const input = nameInput.current
+      if (!input) return
+      input.focus()
+      // Select the basename so typing replaces it, like Finder's save panel.
+      const dot = input.value.lastIndexOf('.')
+      input.setSelectionRange(0, dot > 0 ? dot : input.value.length)
+    }, 60)
+    return () => window.clearTimeout(timer)
+  }, [request.mode])
+
+  useEffect(() => {
     if (!directory && request.directory) navigate(request.directory)
     if (!directory && !request.directory)
       void call<Location[]>('locations').then((values) => {
@@ -110,9 +141,18 @@ function Picker({ request }: { request: FilePickerRequest }) {
         : selectedEntries.length > 0 &&
           (request.mode === 'openFiles' || !selectedEntries[0].isDir || true)
 
+  const target = entries.find((entry) => entry.name === saveName.trim() && !entry.isDir)
   const confirm = () => {
     if (!canConfirm) return
-    if (request.mode === 'saveFile') return settleFilePicker(join(directory, saveName.trim()))
+    if (request.mode === 'saveFile') {
+      // Match Finder/Explorer: ask before replacing an existing file instead of
+      // silently overwriting it.
+      if (target && !replace) {
+        setReplace(true)
+        return
+      }
+      return settleFilePicker(join(directory, saveName.trim()))
+    }
     if (request.mode === 'openDirectory') {
       const folder = selectedEntries.find((entry) => entry.isDir)
       return settleFilePicker(folder ? folder.path : directory)
@@ -146,6 +186,10 @@ function Picker({ request }: { request: FilePickerRequest }) {
   }
 
   useEffect(() => {
+    setReplace(false)
+  }, [saveName, directory])
+
+  useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
@@ -165,6 +209,9 @@ function Picker({ request }: { request: FilePickerRequest }) {
   })
 
   const segments = directory.split('/').filter(Boolean)
+  const places = commonPlaces(locations)
+  const favorites = preferences.favorites || []
+  const disks = locations.filter((location) => location.kind === 'disk')
 
   return (
     <Modal
@@ -184,15 +231,54 @@ function Picker({ request }: { request: FilePickerRequest }) {
     >
       <div className="file-picker-body">
         <aside className="file-picker-sidebar">
-          {favorites.length > 0 && <p className="file-picker-section">常用位置</p>}
-          {favorites.map((item) => (
+          {places.length > 0 && <p className="file-picker-section">常用位置</p>}
+          {places.map((item) => (
             <button
-              key={item.path}
+              key={`place:${item.kind}:${item.path || item.name}`}
               type="button"
               className={`file-picker-place ${directory === item.path ? 'active' : ''}`}
               onClick={() => navigate(item.path)}
             >
               <Folder size={14} />
+              <span>{item.name}</span>
+            </button>
+          ))}
+          <p className="file-picker-section">收藏</p>
+          {!favorites.length && <p className="file-picker-empty">还没有收藏</p>}
+          {favorites.map((item) => (
+            <button
+              key={`favorite:${item.path}`}
+              type="button"
+              className={`file-picker-place ${directory === item.path ? 'active' : ''}`}
+              onClick={() => navigate(item.path)}
+            >
+              <Folder size={14} />
+              <span>{item.name}</span>
+            </button>
+          ))}
+          <p className="file-picker-section">连接</p>
+          {!connections.length && <p className="file-picker-empty">没有连接</p>}
+          {connections.map((item) => (
+            <button
+              key={`connection:${item.id}`}
+              type="button"
+              className={`file-picker-place ${directory === item.mountPath ? 'active' : ''}`}
+              onClick={() => navigate(item.mountPath)}
+            >
+              <Server size={14} />
+              <span>{item.name}</span>
+            </button>
+          ))}
+          <p className="file-picker-section">设备</p>
+          {!disks.length && <p className="file-picker-empty">没有设备</p>}
+          {disks.map((item) => (
+            <button
+              key={`disk:${item.path || item.device}`}
+              type="button"
+              className={`file-picker-place ${directory === item.path ? 'active' : ''}`}
+              onClick={() => item.path && navigate(item.path)}
+            >
+              <HardDrive size={14} />
               <span>{item.name}</span>
             </button>
           ))}
@@ -305,11 +391,28 @@ function Picker({ request }: { request: FilePickerRequest }) {
           </div>
         </section>
       </div>
+      <Modal
+        open={replace}
+        onClose={() => setReplace(false)}
+        title="替换文件？"
+        className="file-picker-confirm"
+      >
+        <p className="file-picker-confirm-text">
+          「{saveName.trim()}」已存在。替换会覆盖原文件，此操作不可撤销。
+        </p>
+        <footer className="file-picker-confirm-actions">
+          <Button variant="outline" onClick={() => setReplace(false)}>
+            取消
+          </Button>
+          <Button onClick={() => settleFilePicker(join(directory, saveName.trim()))}>替换</Button>
+        </footer>
+      </Modal>
       <footer className="file-picker-footer">
         {request.mode === 'saveFile' ? (
           <label className="file-picker-name">
             <span>存储为</span>
             <input
+              ref={nameInput}
               value={saveName}
               onChange={(event) => setSaveName(event.target.value)}
               placeholder="文件名"
@@ -323,13 +426,14 @@ function Picker({ request }: { request: FilePickerRequest }) {
               : '未选择'}
           </span>
         )}
-        <span className="grow" />
-        <Button variant="outline" onClick={() => settleFilePicker(null)}>
-          取消
-        </Button>
-        <Button disabled={!canConfirm} onClick={confirm}>
-          {request.mode === 'saveFile' ? '保存' : '打开'}
-        </Button>
+        <div className="file-picker-actions">
+          <Button variant="outline" onClick={() => settleFilePicker(null)}>
+            取消
+          </Button>
+          <Button disabled={!canConfirm} onClick={confirm}>
+            {request.mode === 'saveFile' ? '保存' : '打开'}
+          </Button>
+        </div>
       </footer>
     </Modal>
   )
