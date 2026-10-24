@@ -108,6 +108,7 @@ export function SecondaryPane({
           searchInput={search}
           searchHint={searchHint}
           ariaLabel="第二个面板的路径"
+          pathLabel="文件夹路径"
           searchLabel="搜索第二个面板"
           close={{
             label: '关闭面板',

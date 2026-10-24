@@ -882,6 +882,7 @@
 .plugin-panel-popover.toolbar-anchored {
   left: auto;
   transform: none;
+  box-shadow: none;
 }
 /* Web demo replacement for the native save/open dialog. */
 .fake-picker-overlay {

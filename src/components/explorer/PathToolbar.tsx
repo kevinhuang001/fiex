@@ -18,6 +18,7 @@ export function PathToolbar({
   searchInput,
   searchHint,
   ariaLabel,
+  pathLabel,
   searchLabel,
   close,
   showGlobalSearch = true,
@@ -34,6 +35,7 @@ export function PathToolbar({
   searchInput: RefObject<HTMLInputElement | null>
   searchHint: string
   ariaLabel: string
+  pathLabel: string
   searchLabel: string
   close?: { label: string; title: string; className: string; onClose: () => void }
   showGlobalSearch?: boolean
@@ -56,7 +58,7 @@ export function PathToolbar({
             <input
               ref={pathInput}
               className="path-input"
-              aria-label={ariaLabel}
+              aria-label={pathLabel}
               value={draft}
               spellCheck={false}
               onChange={(event) => setDraft(event.target.value)}

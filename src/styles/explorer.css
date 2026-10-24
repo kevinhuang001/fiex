@@ -396,10 +396,9 @@
 .breadcrumbs button {
   border-radius: 5px;
   padding: 5px;
-  max-width: 145px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .breadcrumbs button:hover {
   background: var(--control-hover-background);

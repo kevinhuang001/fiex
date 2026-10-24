@@ -278,9 +278,6 @@
   .breadcrumbs button {
     padding: 4px 3px;
   }
-  .breadcrumbs button {
-    max-width: 88px;
-  }
   .search-box {
     flex-basis: 160px;
     min-width: 48px;
@@ -293,7 +290,6 @@
     gap: 1px;
   }
   .breadcrumbs button {
-    max-width: 68px;
     padding: 3px 2px;
   }
   .search-box {
@@ -306,7 +302,6 @@
     gap: 0;
   }
   .breadcrumbs button {
-    max-width: 56px;
     padding: 2px;
   }
   .search-box {

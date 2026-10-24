@@ -44,6 +44,7 @@ export function ExplorerPathBar({
       searchInput={searchInput}
       searchHint={hint('search')}
       ariaLabel="当前位置"
+      pathLabel="文件夹路径"
       searchLabel="搜索文件"
       close={
         split
