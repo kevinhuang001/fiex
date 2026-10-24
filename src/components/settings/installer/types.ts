@@ -1,0 +1,18 @@
+export interface InstallPreview {
+  ticket: string
+  id: string
+  name: string
+  version: string
+  author?: { name: string; url?: string }
+  permissions: string[]
+  requestedNetworkDomains: string[]
+  commands: string[]
+  repository: string
+  signed: boolean
+  trusted: boolean
+  publisher?: string
+  publisherName?: string
+  keyId?: string
+  publisherKey?: string
+  fingerprint?: string
+}

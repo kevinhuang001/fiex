@@ -1,21 +1,20 @@
-import { useExplorerShortcuts } from './useExplorerShortcuts'
 import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
-import { pluginCatalog } from '@/lib/plugins'
-import { runBeforeOpenHooks } from '@/lib/pluginHooks'
-import type { DialogState } from '@/lib/dialogs'
-import { basename } from '@/lib/files'
-import { shortcutLabel } from '@/lib/shortcuts'
-import type { Entry, Location, Tag } from '@/lib/types'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import type { Entry } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect } from 'react'
+import { useConnectionActions } from './controller/useConnectionActions'
+import { useDialogs } from './controller/useDialogs'
+import { useDropTargets } from './controller/useDropTargets'
+import { useOpenActions } from './controller/useOpenActions'
+import { useShortcuts } from './controller/useShortcuts'
+import { useWorkspaceActions } from './controller/useWorkspaceActions'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
-import { useWorkspace } from './useWorkspace'
 import { useFileOperations } from './useFileOperations'
-import { usePathEditor } from './usePathEditor'
 import { usePaneLayout } from './usePaneLayout'
+import { usePathEditor } from './usePathEditor'
+import { useWorkspace } from './useWorkspace'
 export function useAppController() {
   const [prefs, update] = usePreferences()
   const left = useExplorer(prefs)
@@ -44,29 +43,44 @@ export function useAppController() {
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
 
-  const [sidebar, setSidebar] = useState(true)
-  const [preview, setPreview] = useState<Entry | null>(null)
-  const [settings, setSettings] = useState(false)
-  const [info, setInfo] = useState<Entry | null>(null)
-  const [dialog, setDialog] = useState<DialogState | null>(null)
-  const [dialogValue, setDialogValue] = useState('')
-  const [dialogError, setDialogError] = useState('')
-  const [dialogBusy, setDialogBusy] = useState(false)
-  const [toast, setToast] = useState('')
-  const [trashIssue, setTrashIssue] = useState(false)
-  const [tagOpen, setTagOpen] = useState(false)
-  const [connectionOpen, setConnectionOpen] = useState(false)
-  const [tagPaths, setTagPaths] = useState<string[]>([])
-  const [tagInitial, setTagInitial] = useState<Tag[]>([])
-  const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const searchInput = useRef<HTMLInputElement>(null)
-  const chosen = useMemo(() => {
-    const selected = new Set(x.selected)
-    return x.entries.filter((entry) => selected.has(entry.path))
-  }, [x.entries, x.selected])
-  const first = chosen[0]
-  const notify = useCallback((s: string) => setToast(s), [])
+  const {
+    sidebar,
+    setSidebar,
+    preview,
+    setPreview,
+    settings,
+    setSettings,
+    info,
+    setInfo,
+    dialog,
+    setDialog,
+    dialogValue,
+    setDialogValue,
+    dialogError,
+    setDialogError,
+    dialogBusy,
+    setDialogBusy,
+    toast,
+    setToast,
+    trashIssue,
+    setTrashIssue,
+    tagOpen,
+    setTagOpen,
+    connectionOpen,
+    setConnectionOpen,
+    tagPaths,
+    setTagPaths,
+    tagInitial,
+    setTagInitial,
+    menu,
+    setMenu,
+    searchInput,
+    chosen,
+    first,
+    notify,
+    navigatePreview,
+  } = useDialogs(x)
+
   useEffect(() => {
     x.setReadOnly(x.directoryReadOnly)
   }, [x.directoryReadOnly, x.setReadOnly])
@@ -75,17 +89,6 @@ export function useAppController() {
     x.setError('此文件系统只读')
     return false
   }
-  useEffect(() => {
-    if (!toast) return
-    const timer = setTimeout(() => setToast(''), 5000)
-    return () => clearTimeout(timer)
-  }, [toast])
-  useEffect(() => {
-    if (dialog) {
-      setDialogValue(dialog.value || '')
-      setDialogError('')
-    }
-  }, [dialog])
 
   const {
     busy,
@@ -107,145 +110,35 @@ export function useAppController() {
     undo,
   } = useFileOperations({ x, writable, notify, setDialog, trashPath })
 
-  const open = (e: Entry, pane = x) => {
-    if (e.isDir && e.extension !== 'app') {
-      setPreview(null)
-      pane.navigate(e.path)
-      return
-    }
-    void run('正在打开…', async () => {
-      const plugins = await pluginCatalog()
-      const outcome = await runBeforeOpenHooks(plugins, e)
-      if (outcome.preview) {
-        setPreview(e)
-        return
-      }
-      if (outcome.handled) {
-        pane.reload()
-        return
-      }
-      await call('open_path', { path: e.path })
-    })
-  }
-  const addWorkspace = async (paths: string[]) => {
-    const entries = await Promise.all(
-      paths.map(
-        async (path) =>
-          x.entries.find((entry) => entry.path === path) ||
-          (await call<Entry>('file_info', { path }).catch(() => null)),
-      ),
-    )
-    workspace.add(entries.filter((entry): entry is Entry => Boolean(entry)))
-  }
-  const previewEntry = (entry: Entry, pane = x) => {
-    if (!isRemotePath(entry.path)) {
-      setPreview(entry)
-      return
-    }
-    void run('正在下载…', async () => {
-      await call('remote_download', { path: entry.path })
-      setPreview(entry)
-      pane.reload()
-    })
-  }
-  const refreshAll = () => {
-    left.reload()
-    if (split) right.reload()
-    void left.refreshLocations().catch((error) => x.setError(String(error)))
-  }
-  const leaveDevice = (path: string) => {
-    const home = left.locations.find((location) => location.kind === 'favorite')?.path || '/'
-    for (const pane of [left, right]) {
-      if (pane.path === path || pane.path.startsWith(path.replace(/[/\\]$/, '') + '/'))
-        pane.navigate(home)
-    }
-  }
-  const ejectDevice = (path: string) =>
-    setDialog({
-      title: '弹出设备',
-      submit: '弹出',
-      danger: true,
-      action: async () => {
-        await call('eject_device', { path })
-        leaveDevice(path)
-        await left.refreshLocations()
-      },
-    })
-  const mountDevice = (device: string) => {
-    void run('正在请求挂载…', async () => {
-      const path = await call<string>('mount_device', { device })
-      await left.refreshLocations()
-      x.navigate(path)
-      notify('设备已挂载')
-    })
-  }
-  const ejectUsb = (device: string) =>
-    setDialog({
-      title: '弹出 U 盘',
-      submit: '弹出',
-      danger: true,
-      action: async () => {
-        const volume = left.locations.find(
-          (location) => location.usbfs && location.device === device,
-        )
-        await call('eject_usb', { device })
-        await left.refreshLocations()
-        if (volume) leaveDevice(volume.path)
-      },
-    })
-  const removeConnection = (id: string) => {
-    const connection = x.connections.find((item) => item.id === id)
-    if (!connection) return
-    setDialog({
-      title: `关闭“${connection.name}”？`,
-      submit: '关闭连接',
-      danger: true,
-      action: async () => {
-        await call('remove_remote_connection', { id })
-        await x.refreshConnections()
-        if (x.path === connection.mountPath || x.path.startsWith(connection.mountPath + '/')) {
-          const home = x.locations.find((location) => location.kind === 'favorite')?.path
-          x.navigate(home || '/')
-        }
-      },
-    })
-  }
-  const openTrash = async () => {
-    if (!trashPath) {
-      void run('正在打开废纸篓…', () => call('open_trash'))
-      return
-    }
-    try {
-      await call('list_directory', {
-        path: trashPath,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-      })
-      setPreview(null)
-      x.navigate(trashPath)
-    } catch (error) {
-      const message = String(error)
-      if (/permitted|permission|权限/i.test(message)) setTrashIssue(true)
-      else x.setError(message)
-    }
-  }
-  const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
-  const remoteConnection = (path: string) =>
-    x.connections.find(
-      (connection) => path === connection.mountPath || path.startsWith(connection.mountPath + '/'),
-    )
-  const isRemotePath = (path: string) => Boolean(remoteConnection(path))
-  const displayName = (path: string) => {
-    if (/^history:\/\/[^/]+\/[^/]+\/?$/.test(path))
-      return '历史版本 · ' + path.split('/')[3].slice(0, 8)
-    if (path === 'recent://') return '最近使用'
-    if (trashPath && path === trashPath) return '废纸篓'
-    const volume = left.locations.find((location) => location.usbfs && location.path === path)
-    if (volume) return volume.name
-    const connection = remoteConnection(path)
-    if (connection && path === connection.mountPath) return connection.name
-    return basename(path)
-  }
+  const { ejectDevice, ejectUsb, mountDevice, removeConnection, isRemotePath, displayName } =
+    useConnectionActions({ x, left, right, run, notify, setDialog, trashPath })
+
+  const {
+    open,
+    previewEntry,
+    openTrash,
+    openApplications,
+    terminal,
+    openIde,
+    openTags,
+    applyTags,
+  } = useOpenActions({
+    x,
+    prefs,
+    run,
+    notify,
+    writable,
+    first,
+    ides,
+    isRemotePath,
+    tagPaths,
+    setTagPaths,
+    setTagInitial,
+    setTagOpen,
+    setPreview,
+    setTrashIssue,
+    trashPath,
+  })
 
   const {
     editingPath,
@@ -258,228 +151,53 @@ export function useAppController() {
     crumbs,
   } = usePathEditor({ x: left, prefs, displayName })
 
-  const hint = (action: Parameters<typeof shortcutLabel>[1]) =>
-    shortcutLabel(prefs.shortcuts, action, prefs.shortcutStyle)
-  const terminal = (id = prefs.terminal) => {
-    if (!writable()) return
-    void run('正在打开终端…', () =>
-      call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),
-    )
-  }
-  const openIde = (path = first?.path || x.path) => {
-    if (!writable()) return
-    if (!path) return
-    const ide = ides.find((item) => item.id === prefs.ide) || ides[0]
-    if (!ide) {
-      x.setError('没有检测到可用的 IDE')
-      return
-    }
-    void run(`正在用 ${ide.name} 打开…`, () => call('open_in_ide', { path, id: ide.id }))
-  }
-  const openTags = (paths: string[]) => {
-    if (!writable()) return
-    const wanted = new Set(paths)
-    const initial = new Map<string, Tag>()
-    for (const entry of x.entries) {
-      if (!wanted.has(entry.path)) continue
-      for (const tag of entry.tags) initial.set(`${tag.name}\u0000${tag.color}`, tag)
-    }
-    setTagPaths(paths)
-    setTagInitial([...initial.values()])
-    setTagOpen(true)
-  }
-  const applyTags = async (tags: Tag[]) => {
-    if (!writable()) return
-    try {
-      await call('set_tags', { paths: tagPaths, tags })
-      setTagOpen(false)
-      x.reload()
-      notify('标签已更新')
-    } catch (error) {
-      x.setError(String(error))
-    }
-  }
-  const bookmarkPaths = async (paths: string[]) => {
-    const existing = new Set(prefs.favorites.map((item) => item.path))
-    const additions: Location[] = []
-    let files = 0
-    for (const path of paths) {
-      if (existing.has(path)) continue
-      try {
-        const info = await call<Entry>('file_info', { path })
-        if (!info.isDir) {
-          files += 1
-          continue
-        }
-        existing.add(path)
-        additions.push({
-          name: info.name,
-          path,
-          kind: 'favorite',
-          available: 0,
-          total: 0,
-          removable: false,
-          filesystem: '',
-          device: '',
-          mounted: true,
-          usbfs: false,
-        })
-      } catch {
-        /* The item may have disappeared while dragging. */
-      }
-    }
-    if (additions.length) {
-      update({ favorites: [...prefs.favorites, ...additions] })
-      notify(`已收藏 ${additions.length} 个文件夹`)
-    } else if (files) {
-      notify('只能把文件夹加入收藏')
-    } else {
-      notify('这些文件夹已在收藏中')
-    }
-  }
-  const favorite = () => {
-    const path = first?.isDir ? first.path : x.path
-    if (prefs.favorites.some((l) => l.path === path)) {
-      update({ favorites: prefs.favorites.filter((l) => l.path !== path) })
-      notify('已移除收藏')
-    } else {
-      update({
-        favorites: [
-          ...prefs.favorites,
-          {
-            name: basename(path),
-            path,
-            kind: 'favorite',
-            available: 0,
-            total: 0,
-            removable: false,
-            filesystem: '',
-            device: '',
-            mounted: true,
-            usbfs: false,
-          },
-        ],
-      })
-      notify('已添加到收藏')
-    }
-  }
-  const navigatePreview = (delta: number) => {
-    if (!preview) return
-    const i = x.entries.findIndex((e) => e.path === preview.path)
-    const next = x.entries[(i + delta + x.entries.length) % x.entries.length]
-    if (next) {
-      setPreview(next)
-      x.setSelected([next.path])
-    }
-  }
-  useExplorerShortcuts({
-    shortcuts: prefs.shortcuts,
-    blocked: Boolean(
-      dialog || conflict || settings || preview || info || tagOpen || connectionOpen || trashIssue,
-    ),
-    handlers: {
-      settings: () => setSettings(true),
-      search: () => searchInput.current?.focus(),
-      goToFolder: startPathEdit,
-      selectAll: () => x.setSelected(x.entries.map((entry) => entry.path)),
-      copy: () => copy(false),
-      cut: () => copy(true),
-      paste: () => {
-        if (clipboard) transfer(clipboard.paths, x.path, clipboard.moving)
-      },
-      undo,
-      newFolder: () => {
-        void create(true)
-      },
-      newFile: () => {
-        void create(false)
-      },
-      newTab: newWorkspaceTab,
-      closeTab: () => closeWorkspaceTab(left.tab),
-      duplicate,
-      back: x.back,
-      forward: x.forward,
-      up: x.up,
-      quickLook: (event) => {
-        if (first && !event.repeat) previewEntry(first)
-      },
-      rename: () => {
-        if (first) x.beginRename(first.path)
-      },
-      open: () => {
-        if (first) open(first)
-      },
-      trash: () => recycle(),
-      refresh: refreshAll,
-      toggleSidebar: () => setSidebar((value) => !value),
-      info: () => {
-        if (first) setInfo(first)
-      },
-    },
-    onEscape: () => {
-      setMenu(null)
-      x.setSelected([])
-      x.setQuery('')
-    },
+  const { addWorkspace, refreshAll, bookmarkPaths, favorite } = useWorkspaceActions({
+    x,
+    prefs,
+    update,
+    workspace,
+    notify,
+    first,
+    left,
+    right,
+    split,
   })
-  useEffect(() => {
-    if (!native) return
-    let active = true
-    let dispose: (() => void) | undefined
-    type DropPlan = { paths: string[]; moving: boolean }
-    let origin: { key: string; pending: Promise<DropPlan | null> } | null = null
-    const key = (paths: string[]) => [...paths].sort().join('\0')
-    void getCurrentWebviewWindow()
-      .onDragDropEvent((event) => {
-        void call('ci_log', {
-          message: `drop event ${event.payload.type} ${
-            'paths' in event.payload ? JSON.stringify(event.payload.paths) : ''
-          } ${'position' in event.payload ? JSON.stringify(event.payload.position) : ''}`,
-        }).catch(() => {})
-        if (event.payload.type === 'enter') {
-          const paths = event.payload.paths
-          origin = {
-            key: key(paths),
-            pending: call<DropPlan | null>('internal_drop', { paths, consume: false }).catch(
-              () => null,
-            ),
-          }
-          setDragging(true)
-        } else if (event.payload.type === 'leave') {
-          origin = null
-          setDragging(false)
-        } else if (event.payload.type === 'drop') {
-          setDragging(false)
-          const { paths, position } = event.payload
-          const captured = origin?.key === key(paths) ? origin.pending : null
-          origin = null
-          void (async () => {
-            const current = await call<DropPlan | null>('internal_drop', { paths, consume: true })
-            const drop = (await captured) || current || { paths, moving: false }
-            const scale = await getCurrentWindow().scaleFactor()
-            const element = document.elementFromPoint(position.x / scale, position.y / scale)
-            if (element?.closest('[data-bookmark-drop]')) {
-              await bookmarkPaths(drop.paths)
-              return
-            }
-            if (element?.closest('[data-workspace-drop]')) {
-              await addWorkspace(drop.paths)
-              return
-            }
-            const folder = element?.closest<HTMLElement>('[data-drop-folder]')?.dataset.dropFolder
-            transfer(drop.paths, folder || x.path, drop.moving)
-          })().catch((error) => x.setError(String(error)))
-        }
-      })
-      .then((fn) => {
-        if (active) dispose = fn
-        else fn()
-      })
-    return () => {
-      active = false
-      dispose?.()
-    }
-  }, [x.path, conflict, x.directoryReadOnly])
+
+  const { hint } = useShortcuts({
+    prefs,
+    x,
+    left,
+    first,
+    dialog,
+    conflict,
+    settings,
+    preview,
+    info,
+    tagOpen,
+    connectionOpen,
+    trashIssue,
+    searchInput,
+    startPathEdit,
+    copy,
+    clipboard,
+    transfer,
+    undo,
+    create,
+    newWorkspaceTab,
+    closeWorkspaceTab,
+    duplicate,
+    previewEntry,
+    open,
+    recycle,
+    refreshAll,
+    setSidebar,
+    setInfo,
+    setSettings,
+    setMenu,
+  })
+
+  const { dragging } = useDropTargets({ x, conflict, transfer, bookmarkPaths, addWorkspace })
+
   useEffect(() => {
     if (!menu) return
     const close = () => setMenu(null)

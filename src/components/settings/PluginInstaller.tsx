@@ -1,58 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
-import {
-  Archive,
-  Check,
-  Cloud,
-  Download,
-  GitBranch,
-  HardDrive,
-  Hash,
-  LoaderCircle,
-  Puzzle,
-  Search,
-  Server,
-  Shield,
-} from 'lucide-react'
 import { call } from '@/lib/api'
 import { pluginMarketplace, type MarketplacePlugin } from '@/lib/plugins'
-import { Button } from '@/components/ui/button'
-import { Modal } from '@/components/ui/Modal'
+import { ImportSheet } from './installer/ImportSheet'
+import { MarketplaceList } from './installer/MarketplaceList'
+import type { InstallPreview } from './installer/types'
 
-import { permissionLabels as permissionTitles } from '@/lib/pluginPermissions'
-
-interface InstallPreview {
-  ticket: string
-  id: string
-  name: string
-  version: string
-  author?: { name: string; url?: string }
-  permissions: string[]
-  requestedNetworkDomains: string[]
-  commands: string[]
-  repository: string
-  signed: boolean
-  trusted: boolean
-  publisher?: string
-  publisherName?: string
-  keyId?: string
-  publisherKey?: string
-  fingerprint?: string
-}
-
-export function pluginIcon(icon?: string) {
-  const icons: Record<string, ReactNode> = {
-    'git-branch': <GitBranch size={21} />,
-    cloud: <Cloud size={21} />,
-    server: <Server size={21} />,
-    drive: <HardDrive size={21} />,
-    archive: <Archive size={21} />,
-    hash: <Hash size={21} />,
-    search: <Search size={21} />,
-    puzzle: <Puzzle size={21} />,
-  }
-  return icons[icon || 'puzzle'] || <Puzzle size={21} />
-}
+export { pluginIcon } from './installer/pluginIcon'
 
 /**
  * App-store style official plugin catalog. The repository and asset names are
@@ -141,190 +94,28 @@ export function PluginInstaller({
     }
   }
 
-  const filtered = entries.filter((entry) => {
-    const term = query.trim().toLowerCase()
-    return (
-      !term ||
-      entry.name.toLowerCase().includes(term) ||
-      entry.id.toLowerCase().includes(term) ||
-      entry.description.toLowerCase().includes(term)
-    )
-  })
-
   return (
     <>
-      <Modal open={open} onClose={onClose} title="获取插件" className="plugin-store-modal">
-        <div className="plugin-store">
-          <div className="plugin-store-tools">
-            <label className="plugin-store-search">
-              <Search size={15} />
-              <input
-                aria-label="搜索插件"
-                placeholder="搜索插件"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-          </div>
-          {error && (
-            <p role="alert" className="connection-error">
-              {error}
-            </p>
-          )}
-          {message && (
-            <p role="status" className="plugin-store-message">
-              {message}
-            </p>
-          )}
-          {loading && !entries.length ? (
-            <div className="plugin-store-empty">
-              <LoaderCircle className="spin" size={20} /> 正在读取插件目录…
-            </div>
-          ) : (
-            <div className="plugin-store-grid">
-              {filtered.map((entry) => {
-                const installed = installedIds.includes(entry.id)
-                return (
-                  <article className="plugin-store-card" key={entry.id}>
-                    <div className="plugin-store-card-head">
-                      <div className={`plugin-store-icon ${installed ? 'installed' : ''}`}>
-                        {pluginIcon(entry.icon)}
-                      </div>
-                      <div className="plugin-store-main">
-                        <div className="plugin-store-title">
-                          <strong>{entry.name}</strong>
-                          <span className="plugin-pill">v{entry.version}</span>
-                          {installed && (
-                            <span className="plugin-pill success">
-                              <Check size={11} /> 已安装
-                            </span>
-                          )}
-                        </div>
-                        <p>{entry.description || '没有提供说明。'}</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={installed ? 'outline' : 'default'}
-                      disabled={installed || Boolean(busyId)}
-                      onClick={() => void prepare(entry)}
-                    >
-                      {busyId === entry.id ? (
-                        <LoaderCircle className="spin" size={14} />
-                      ) : (
-                        <Download size={14} />
-                      )}
-                      {installed ? '已安装' : busyId === entry.id ? '获取中…' : '获取'}
-                    </Button>
-                  </article>
-                )
-              })}
-              {!filtered.length && !loading && (
-                <div className="plugin-store-empty">
-                  <Puzzle size={22} />
-                  <span>{entries.length ? '没有匹配的插件' : '暂时没有可安装的插件'}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </Modal>
-      <Modal open={Boolean(preview)} title="确认插件安装及权限" onClose={discard}>
-        <div className="plugin-install-review">
-          <div className="plugin-install-review-heading">
-            <Shield size={21} />
-            <div>
-              <strong>{preview?.name}</strong>
-              <small>
-                {preview?.id} · {preview?.version}
-              </small>
-            </div>
-          </div>
-          <div className="plugin-install-meta">
-            <span>作者：{preview?.author?.name || '未知开发者'}</span>
-            <span>来源：GitHub / {preview?.repository}</span>
-          </div>
-          {preview && !preview.trusted && (
-            <div className="plugin-signature-warning">
-              {preview.signed ? (
-                <>
-                  <strong>未信任的发布者</strong>
-                  <span>
-                    {preview.publisherName || preview.publisher || '未知发布者'} · 密钥指纹{' '}
-                    <code>{preview.fingerprint || preview.keyId}</code>
-                  </span>
-                </>
-              ) : (
-                <>
-                  <strong>此插件未签名</strong>
-                  <span>只在你确认来源可信时继续安装。</span>
-                </>
-              )}
-            </div>
-          )}
-          {preview?.signed && preview.trusted && (
-            <div className="plugin-signature-ok">
-              签名已验证 · {preview.publisherName || preview.publisher}
-            </div>
-          )}
-          <strong>请求的权限</strong>
-          <div className="plugin-install-permissions">
-            {preview?.permissions.length ? (
-              preview.permissions.map((permission) => (
-                <div key={permission}>
-                  <Shield size={14} />
-                  {permissionTitles[permission] || permission}
-                </div>
-              ))
-            ) : (
-              <span>无需宿主权限</span>
-            )}
-          </div>
-          {!!preview?.commands?.length && (
-            <>
-              <strong>插件申请的命令</strong>
-              <div className="plugin-install-domains">
-                {(preview.commands || []).map((command) => (
-                  <span key={command}>
-                    <code>{command}</code>
-                  </span>
-                ))}
-              </div>
-              <p className="sidebar-hint">
-                命令由宿主代理执行，插件进程不能直接启动程序；安装后可在设置里增删。
-              </p>
-            </>
-          )}
-          {!!preview?.requestedNetworkDomains.length && (
-            <>
-              <strong>插件申请的网络域名</strong>
-              <div className="plugin-install-domains">
-                {preview.requestedNetworkDomains.map((domain) => (
-                  <span key={domain}>{domain}</span>
-                ))}
-              </div>
-              <p className="sidebar-hint">安装确认会同时授权这些精确域名，之后可以增删。</p>
-            </>
-          )}
-          <p className="sidebar-hint">
-            所有插件（包括 Fiex 官方发布的插件）使用同样的授权流程。插件为 Native
-            程序；在系统沙箱完善前，权限控制仅约束宿主代理的操作，不能阻止插件直接进行系统调用。
-          </p>
-          {error && (
-            <p role="alert" className="connection-error">
-              {error}
-            </p>
-          )}
-          <footer className="plugin-consent-actions">
-            <Button variant="outline" type="button" disabled={installing} onClick={discard}>
-              取消
-            </Button>
-            <Button type="button" disabled={installing} onClick={() => void confirm()}>
-              {installing ? '安装中…' : '安装（权限默认关闭）'}
-            </Button>
-          </footer>
-        </div>
-      </Modal>
+      <MarketplaceList
+        open={open}
+        installedIds={installedIds}
+        onClose={onClose}
+        query={query}
+        setQuery={setQuery}
+        error={error}
+        message={message}
+        loading={loading}
+        entries={entries}
+        busyId={busyId}
+        onPrepare={prepare}
+      />
+      <ImportSheet
+        preview={preview}
+        error={error}
+        installing={installing}
+        onDiscard={discard}
+        onConfirm={confirm}
+      />
     </>
   )
 }

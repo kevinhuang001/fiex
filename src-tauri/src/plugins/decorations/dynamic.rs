@@ -1,82 +1,18 @@
-//! Read-only presentation decorations from plugins.
+//! Dynamic decorations: invoke a plugin method for a directory, sanitize the
+//! response, and merge every provider's contribution into one result.
 //!
-//! A plugin must explicitly declare `contributions.decorations`; plugins that
-//! do not are never called. Declarative rules are applied by Core locally.
+//! Plugin output is untrusted: colors, text, badge counts and field names are
+//! all validated here before the renderer sees them. Merging is priority
+//! ordered so a higher-priority provider can override labels, styles and icons.
+
+use super::rules::{apply_rules, DecorationRule};
+use super::types::{
+    Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle,
+};
 use crate::plugin_host::{self, PluginManifest};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecorationEntry {
-    pub path: String,
-    pub name: String,
-    pub is_dir: bool,
-    #[serde(default)]
-    pub extension: String,
-    #[serde(default)]
-    pub mime: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecorationBadge {
-    #[serde(default)]
-    pub text: String,
-    #[serde(default)]
-    pub color: String,
-    #[serde(default)]
-    pub tooltip: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecorationStyle {
-    #[serde(default)]
-    pub color: Option<String>,
-    #[serde(default)]
-    pub font_weight: Option<String>,
-    #[serde(default)]
-    pub font_style: Option<String>,
-    #[serde(default)]
-    pub background: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecorationField {
-    #[serde(default)]
-    pub badges: Vec<DecorationBadge>,
-    #[serde(default)]
-    pub style: DecorationStyle,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Decoration {
-    pub path: String,
-    #[serde(default)]
-    pub badges: Vec<DecorationBadge>,
-    #[serde(default)]
-    pub label: Option<String>,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub style: DecorationStyle,
-    /// Per-column decorations keyed by `name`, `modified`, `size`, `kind`
-    /// or `row`. `row` only accepts `style`.
-    #[serde(default)]
-    pub fields: HashMap<String, DecorationField>,
-    /// Namespaced reference (`fiex-resource://<plugin-id>/<resource-id>`).
-    #[serde(default)]
-    pub icon: Option<String>,
-    /// Resolved absolute path for the renderer's asset protocol.
-    #[serde(default)]
-    pub icon_path: Option<String>,
-    #[serde(default)]
-    pub providers: Vec<String>,
-}
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,32 +34,6 @@ struct DecorationConfig {
 struct DecorationScope {
     #[serde(default)]
     marker: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DecorationRule {
-    #[serde(default, rename = "match")]
-    matcher: DecorationMatcher,
-    #[serde(default)]
-    badge: Option<DecorationBadge>,
-    #[serde(default)]
-    label: Option<String>,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default)]
-    style: Option<DecorationStyle>,
-    #[serde(default)]
-    fields: HashMap<String, DecorationField>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DecorationMatcher {
-    #[serde(default)]
-    extensions: Vec<String>,
-    #[serde(default)]
-    is_dir: Option<bool>,
 }
 
 fn config(manifest: &PluginManifest) -> DecorationConfig {
@@ -253,12 +163,12 @@ fn marker_matches(directory: &str, marker: &str) -> bool {
     }
 }
 
-struct Pending {
+pub(super) struct Pending {
     priority: i32,
     value: Decoration,
 }
 
-fn merge(
+pub(super) fn merge(
     result: &mut HashMap<String, Pending>,
     entries: &HashMap<String, DecorationEntry>,
     path: &str,
@@ -318,45 +228,6 @@ fn merge(
         }
     }
     pending.priority = pending.priority.max(priority);
-}
-
-fn apply_rules(
-    result: &mut HashMap<String, Pending>,
-    entries: &HashMap<String, DecorationEntry>,
-    provider: &str,
-    priority: i32,
-    rules: &[DecorationRule],
-) {
-    for entry in entries.values() {
-        for rule in rules {
-            if let Some(is_dir) = rule.matcher.is_dir {
-                if entry.is_dir != is_dir {
-                    continue;
-                }
-            }
-            if !rule.matcher.extensions.is_empty()
-                && !rule
-                    .matcher
-                    .extensions
-                    .iter()
-                    .any(|extension| extension.eq_ignore_ascii_case(&entry.extension))
-            {
-                continue;
-            }
-            let value = Decoration {
-                path: entry.path.clone(),
-                badges: rule.badge.clone().into_iter().collect(),
-                label: rule.label.clone(),
-                description: rule.description.clone(),
-                style: rule.style.clone().unwrap_or_default(),
-                fields: rule.fields.clone(),
-                icon: None,
-                icon_path: None,
-                providers: vec![],
-            };
-            merge(result, entries, &entry.path, priority, provider, value);
-        }
-    }
 }
 
 fn dynamic(
@@ -501,7 +372,9 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{allowed_color, safe_badge, safe_fields};
+    use crate::plugin_decorations::types::{DecorationBadge, DecorationField, DecorationStyle};
+    use std::collections::HashMap;
 
     #[test]
     fn rejects_unsafe_values() {
@@ -569,40 +442,5 @@ mod tests {
         assert!(!safe.contains_key("bogus"));
         assert!(safe["row"].badges.is_empty());
         assert_eq!(safe["modified"].style.color.as_deref(), Some("#c2410c"));
-    }
-
-    #[test]
-    fn declarative_rules_apply_without_a_plugin_process() {
-        let entries = vec![DecorationEntry {
-            path: "/tmp/a.zip".into(),
-            name: "a.zip".into(),
-            is_dir: false,
-            extension: "zip".into(),
-            mime: String::new(),
-        }];
-        let map = entries
-            .into_iter()
-            .map(|entry| (entry.path.clone(), entry))
-            .collect::<HashMap<_, _>>();
-        let mut result = HashMap::new();
-        apply_rules(
-            &mut result,
-            &map,
-            "Archive",
-            0,
-            &[DecorationRule {
-                matcher: DecorationMatcher {
-                    extensions: vec!["zip".into()],
-                    is_dir: Some(false),
-                },
-                badge: Some(DecorationBadge {
-                    text: "ZIP".into(),
-                    color: "neutral".into(),
-                    tooltip: None,
-                }),
-                ..Default::default()
-            }],
-        );
-        assert_eq!(result.len(), 1);
     }
 }
