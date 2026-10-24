@@ -75,14 +75,21 @@ export function FileInfoDialog({
         ...(info.linkTarget ? [{ label: '链接到', value: info.linkTarget }] : []),
       ]
     : []
-  const groups: Array<{ title: string; provider: string; rows: InfoRow[] }> = info
+  const groups: Array<{
+    title: string
+    provider: string
+    hideProvider: boolean
+    rows: InfoRow[]
+  }> = info
     ? [
-        { title: '文件', provider: 'Fiex', rows: basicRows },
+        { title: '文件', provider: 'Fiex', hideProvider: true, rows: basicRows },
         ...sections
           .filter((section) => section.rows.length > 0)
           .map((section) => ({
             title: section.title,
             provider: section.provider || 'Fiex',
+            hideProvider:
+              section.source === 'core' || section.pluginId === 'org.fiex.office-preview',
             rows: section.rows,
           })),
       ]
@@ -100,7 +107,9 @@ export function FileInfoDialog({
                 <Fragment key={`${group.title}:${groupIndex}`}>
                   <div className="file-info-group">
                     <span>{group.title}</span>
-                    {group.provider !== group.title && <small>{group.provider}</small>}
+                    {!group.hideProvider && group.provider !== group.title && (
+                      <small>{group.provider}</small>
+                    )}
                   </div>
                   {group.rows.map((row, rowIndex) => (
                     <div className="file-info-row" key={`${row.label}:${rowIndex}`}>
