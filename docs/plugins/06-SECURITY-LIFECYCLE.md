@@ -43,6 +43,32 @@ sequenceDiagram
   P-->>UI: 操作结果
 ```
 
+
+## 2.1 动态右键菜单的 metadata-only 作用域
+
+右键菜单已改为 **每个注册 Provider 每次右键一次 `contextMenu.resolve`，返回 `items[]`**。查询阶段只向插件暴露本次用户明确右键的目标、当前有效选中项的最小显示元数据（类型、名称、扩展名、大小、修改时间、只读状态、不透明资源引用）；不暴露文件内容、秘密、宿主全路径树和未选资源。
+
+这种 metadata-only Session **不能**提升为 `files.read`、`folders.read` 或 `files.write`，即便 Manifest 已声明并获批这些权限也不允许在 `resolve` 阶段触碰真实文件字节；Core 的 Host Broker 必须根据请求阶段拒绝 `host.fs.*` 实际内容与目录遍历。用户点击 `type:action` 才从可验证的 `menuSessionId + itemId + selection` 派生真正的 OperationScope，并重新检查当前 manifest 权限、文件身份与版本。
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant H as Core Menu Host
+  participant P as Menu Provider
+  U->>H: Right click file A
+  H->>P: contextMenu.resolve(metadata(A), menuSession S)
+  P->>H: host.fs.openRead(A) (attempt)
+  H-->>P: PermissionDenied metadataOnly
+  P-->>H: items [extract]
+  U->>H: Click extract
+  H->>H: Verify S + itemId + A's identity + consent
+  H->>P: contextMenu.execute(extract) with scope(A)
+  P->>H: host.fs.openRead(A)
+  H-->>P: Scoped FileReader handle
+```
+
+安全要求：Core 只信任当前已启用插件的真实进程身份，丢弃过期 Session，绑定响应与原请求 `pluginId/menuSessionId`；动态菜单项不能包含任意 `host.*` 方法或未签名的 HTML/JS。一个文件被重命名、替换或选择变化时，必须重新校验或使旧 Session 失效。查询超时/崩溃时丢弃该插件的菜单，不阻塞 Fiex 的原生菜单。禁止用缓存的菜单 Session 直接执行其他资源上的动作。
+
 ## 3. Scope 与句柄生命周期
 
 ```mermaid

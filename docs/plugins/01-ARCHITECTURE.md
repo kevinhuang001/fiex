@@ -69,6 +69,25 @@ sequenceDiagram
 - **Native Plugin IPC**：Core ↔ 插件标准输入输出上的 Length-framed JSON-RPC。
 - **数据通道**：小量 Base64、重复使用的共享内存窗口、Core 持有的文件/HTTP/TCP 句柄；不是独立身份通道。
 
+## 2.1 完全动态的右键菜单 Provider
+
+右键菜单是独立的双阶段入口：Manifest 仅注册 `contributions.contextMenus: true`，每次右键 Core 向本插件发送一条 `contextMenu.resolve` 元数据查询，并发收集所有 Provider 的菜单项。插件只返回本次匹配的 **扁平 `items[]`**，子菜单用 `parentId` 构造，绝无 `when` 或 `children`。用户点击 action 时 Core 验证 Session + itemId，建立一次性 OperationScope，再调用该 owner 的 `contextMenu.execute`。若返回 panel 类型，必须引用 Manifest `contributions.panels[]` 中已经签名验证的静态页面。
+
+```mermaid
+flowchart LR
+  R["User right-click"] --> M["Core metadata-only MenuSession"]
+  M --> F["Fanout: one resolve IPC per enabled plugin"]
+  F --> V["Validate flat items and parentId"]
+  V --> U["Render host-owned native menu"]
+  U --> A{"Selected item"}
+  A -->|"action"| O["Verify owner/session + create operation scope"]
+  O --> E["contextMenu.execute"]
+  A -->|"panel"| P["Open predeclared panelId"]
+  A -->|"dismiss"| D["Revoke session"]
+```
+
+设计必须限定 IPC 查询时间、列表大小、层级与并发；慢插件不能延迟 Fiex 原生菜单。**查询菜单不允许文件内容读取**，也不是用户对后续执行的永久授权。详细字段见 [02](02-MANIFEST-EXTENSIONS.md) 与 [03](03-IPC-CATALOG.md)。
+
 ## 3. 所有权矩阵
 
 | 事项 | Core | 插件 |

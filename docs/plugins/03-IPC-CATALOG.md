@@ -42,6 +42,8 @@ sequenceDiagram
 | `plugin.ping` | 空 | `pong/ok` | 存活检测 |
 | `plugin.shutdown` | 空 | `null` | 优雅退出、在最后期限强杀 |
 | `plugin.cancel` | `taskId` | notification | 协作取消任务 |
+| `contextMenu.resolve` | `menuSessionId,target,selection,directory` | `{items:[...]}` | 每次右键并行向已注册 Provider 发送一次，只读本次文件元数据；不授予文件内容读权限 |
+| `contextMenu.execute` | `menuSessionId,itemId,selection` | `JSON/null` | 仅允许点击了本次 resolve 中有效 `type:action` 项后调用，建立独立 OperationScope |
 | `connection.validate` | `connection` | `{valid:true,...}` | 验证连接配置；不得泄露 Secret |
 | `fs.list` | `connection,directoryId?,cursor?,limit?` | `entries,nextCursor,snapshotToken?,identityStability?` | Connection 远端目录分页 |
 | `fs.stat` | `connection,nodeId` | `revision,size,kind?,modified?` | 获取一致性基线 |
@@ -54,9 +56,73 @@ sequenceDiagram
 | `vfs.stat` | `contributionId,viewContext,nodeId` | `Entry` | 虚拟节点信息 |
 | `vfs.readSmall` | `contributionId,viewContext,nodeId,maxBytes` | `base64` | 小文件读取/临时导出 |
 | `vfs.search` | `contributionId,viewContext,nodeId?,query,limit?,hidden?,ignores?` | `entries` | 在只读 VFS 上检索 |
-| `<custom command>` | 由 contribution 的 `command/args` 和操作上下文决定 | JSON | toolbar、context、search、preview、info、hooks、decorations 的自定义处理 |
+| `<custom command>` | 由其他贡献点注册的 `command/args` 和操作上下文决定 | JSON | toolbar、search、preview、info、hooks、decorations 的自定义处理；右键菜单只允许 `contextMenu.resolve/execute` |
 
 Provider 清单中的 `nodeId` 与 `revision` 均不应当被 Core 当作磁盘路径；所有 `Entry.path` 必须由 Core 根据 mountId 生成。扩展点动态命令原则上不能冒充 `plugin.`、`host.`、`vfs.`、`fs.`、`connection.` 保留前缀。
+
+
+## 2.1 完全动态右键菜单的强制 RPC 合同
+
+Manifest 只需 `"contextMenus": true`，不会出现 `when`、`children`、静态 `command` 或 `panel`。目标流程每次右键向每个已启用、已获授权的插件发送一次 `contextMenu.resolve`；它返回本次菜单，而不是菜单谓词。请求包含本次右键产生的资源元数据，不包含文件字节或宿主任意可访问目录。
+
+```json
+{
+  "jsonrpc":"2.0","id":301,"method":"contextMenu.resolve",
+  "params":{
+    "menuSessionId":"sess-opaque",
+    "target":{"ref":{"mountId":"m1","nodeId":"n7"},"name":"report.zip",
+              "kind":"file","extension":"zip","size":4200,"readOnly":false},
+    "selection":[{"ref":{"mountId":"m1","nodeId":"n7"},"name":"report.zip","kind":"file"}],
+    "directory":{"readOnly":false,"source":"local"}
+  }
+}
+```
+
+```json
+{
+  "jsonrpc":"2.0","id":301,"result":{
+    "items":[
+      {"id":"compress","type":"submenu","title":"压缩为"},
+      {"id":"zip","parentId":"compress","type":"action","title":"ZIP"},
+      {"id":"7z","parentId":"compress","type":"action","title":"7z"},
+      {"id":"settings","type":"panel","title":"高级选项","panelId":"archive.options"}
+    ]
+  }
+}
+```
+
+所有 item 是扁平数组，`parentId` 仅引用同一批返回的 submenu；不用 `children`，也不允许动态 JavaScript。Core 检验 `id` 唯一、`type=action|submenu|panel|separator`、parentId 无环、层数≤4、数量≤80、标题≤128、大小与 deadline 界限。无匹配项直接 `{items:[]}`，不显示该插件菜单。
+
+用户点击 `type:action` 的某个 item 后，Core 确认 `menuSessionId` 仍为有效菜单、`itemId` 曾由当前 owner 返回、该项启用且右键目标未被悄然替换，然后调用：
+
+```json
+{"jsonrpc":"2.0","id":302,"method":"contextMenu.execute",
+ "params":{"menuSessionId":"sess-opaque","itemId":"zip",
+           "selection":[{"ref":{"mountId":"m1","nodeId":"n7"},"name":"report.zip"}]}}
+```
+
+`execute` 从已经用户实际点击的菜单项派生 **OperationScope**；必须经过该方法需要的 Manifest permission 与当前选择的精确对象校验。查询 `resolve` 阶段没有 `files.read/folders.read/files.write` 资源作用域，任何 `host.fs.*` 试图读取实际文件数据或遍历本地路径均返回 `PermissionDenied`。元数据仅来自这一次用户右键对象。Core 不允许前端或其他插件直接调用这两个保留的 Provider RPC。
+
+`type:panel` 在宿主打开预安装、已签名的 `contributions.panels[]` 所引用页面，不执行 `contextMenu.execute`；子菜单展开由 Core 负责，无需额外 IPC。弱网或崩溃应在界限内失败并忽略该插件，不能阻塞宿主原生菜单。菜单 Session 关闭、插件重启或新一次右键后失效，迟到响应不得污染新的菜单。
+
+```mermaid
+sequenceDiagram
+  participant UI as Explorer Context Menu
+  participant C as Core MenuBroker
+  participant P as Provider
+  UI->>C: pointer contextmenu(target)
+  C->>C: Snapshot metadata + session S
+  C-->>UI: 原生菜单先显示
+  C->>P: contextMenu.resolve(S, target, selection)
+  P-->>C: items（可能为空）
+  C->>C: validate tree and owner
+  C-->>UI: Merge dynamic items into menu
+  UI->>C: click item zip from S
+  C->>C: Revalidate session, item, selection, permission
+  C->>P: contextMenu.execute(S, zip) + OperationScope
+  P-->>C: operation result
+  C-->>UI: result
+```
 
 ### Connection 文件契约
 
@@ -145,14 +211,16 @@ Provider 清单中的 `nodeId` 与 `revision` 均不应当被 Core 当作磁盘�
 
 | 来源 | 调用方法名称 | 推荐参数/结果 |
 |---|---|---|
-| Toolbar/ContextMenu | `<plugin>.<action>` | `{selection,directory,args}` → JSON |
+| Toolbar | `<plugin>.<action>` | `{selection,directory,args}` → JSON |
+| ContextMenu 查询 | `contextMenu.resolve` | `{menuSessionId,target,selection,directory}` → `{items}` |
+| ContextMenu 执行 | `contextMenu.execute` | `{menuSessionId,itemId,selection}` → JSON/null |
 | Search | 声明 `command`，默认 `search.query` | `{query,root,hidden,ignores,limit}` → `{entries}` |
 | Info | 声明 `command` | `{path}` → `{rows:[{label,value}]}` |
 | Hooks | 声明 `command` | `{event,path}` → `{action:"pass"|"consume"}` |
 | Dynamic Decorations | 声明 `method` | `{directory,entries}` → 仅装饰，无文件写权限 |
 | Preview | UI `plugin.invoke` | SDK 方法名与参数自定义；遵循 UI Bridge 限额 |
 
-动态命令不属于 `host.*` 白名单，仅能在其贡献点明确注册的触发流程下执行；Core 对所有动态参数进行数据 schema 验证，并绑定最小资源授权。
+动态命令不属于 `host.*` 白名单，仅能在其贡献点明确注册的触发流程下执行；Core 对所有动态参数进行数据 schema 验证，并绑定最小资源授权。右键菜单不接受通过返回值指定任意命令字符串：只有 Core 控制的 `contextMenu.execute` 执行入口；其中 `itemId` 必须出自当前 Session 的 `resolve` 结果。
 
 ## 7. 目标规范落地清单
 

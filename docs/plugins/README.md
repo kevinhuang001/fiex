@@ -40,6 +40,10 @@ flowchart LR
   F --> G["M6 跨平台安全、性能与发布验收"]
 ```
 
+## 动态右键菜单约定
+
+右键菜单不再有静态 `when`、`children` 或每项 `command`：`"contributions":{"contextMenus":true}` 仅声明参与菜单，用户每次右键时 Core 将本次文件元数据发给每个已启用 Provider 的 `contextMenu.resolve`，由插件返回扁平菜单 `items`（使用 `parentId` 表示多级菜单）；用户点击后才经过独立授权调用 `contextMenu.execute`。具体约定见 [02 Manifest](02-MANIFEST-EXTENSIONS.md)、[03 IPC](03-IPC-CATALOG.md)。
+
 ## 统一术语
 
 | 术语 | 唯一含义 |

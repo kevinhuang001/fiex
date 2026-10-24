@@ -44,6 +44,70 @@ fn main() {
 
 `TaskContext` 应完整拥有 `id/files/http/tcp/invoke/report_error/process_run/storage_get/storage_set/secret_get/secret_set/cancel/is_cancelled/progress`。其中 `progress(done,total)` 对应 `host.task.progress`，取消后 SDK 和 Core 都要拒绝再使用旧 TaskScope。`TaskHandle` 的方法为 `id/cancel/is_cancelled/is_finished/status/progress/wait`；`TaskStatus = Running|Completed|Failed|Cancelled`，Rust `RpcError` 有 `method_not_found/invalid_params/internal/cancelled` 构造器，目标补全 `permission_denied/conflict/unavailable/deadline_exceeded` 并保留错误数据。
 
+
+## 2.1 `contextMenu.resolve` 与 `contextMenu.execute` 的 Rust SDK 合同
+
+`contributions.contextMenus: true` 是纯 Provider 注册，**Manifest 不再声明 `when/children`，也不声明菜单项的 `command`**。Rust SDK 常驻进程照常使用同一个 `sdk::serve` 处理两个固定方法：
+
+| 方法 | 目标 SDK 类型 | IPC 输入 → 输出 | 权限 |
+|---|---|---|---|
+| `ctx.method()=="contextMenu.resolve"` | `sdk::context_menu::ResolveRequest` → `MenuResponse` | `target + selection + directory + menuSessionId` → `{items}` | 只读当次用户右键的文件元数据；不可发起文件内容/目录遍历请求 |
+| `ctx.method()=="contextMenu.execute"` | `sdk::context_menu::ExecuteRequest` → JSON | `menuSessionId + itemId + selection` → JSON | 用户实际点击之后的精确 OperationScope |
+| `sdk::context_menu::MenuItem` | `{id,type,title?,icon?,parentId?,enabled?,panelId?,group?,order?}` | 由 `resolve` 序列化至 Core | 只用于显示，不意味着可执行系统调用 |
+
+新的 `sdk::context_menu` 模块是 M3 计划新增的类型安全包装；在其生成之前仍可使用 `ctx.params()` / `serde_json` 实现这两个固定方法。开发者不需要直接发送 `host.*` 控制消息。
+
+```rust
+use fiex_plugin_sdk::{self as sdk, RpcError};
+use serde_json::{json, Value};
+
+fn handle(ctx: sdk::RequestContext) -> Result<Value, RpcError> {
+    match ctx.method() {
+        "contextMenu.resolve" => {
+            let target = &ctx.params()["target"];
+            let is_zip = target["extension"] == "zip";
+            if is_zip {
+                Ok(json!({"items":[
+                    {"id":"archive.extract","type":"action","title":"解压到当前目录"},
+                    {"id":"archive.advanced","type":"panel","title":"高级选项…",
+                     "panelId":"archive.options"}
+                ]}))
+            } else {
+                Ok(json!({"items":[]}))
+            }
+        }
+        "contextMenu.execute" => {
+            let item = ctx.params()["itemId"].as_str().unwrap_or("");
+            match item {
+                "archive.extract" => {
+                    // 用户点击后才可通过 ctx.files() 操作已授权的选中对象。
+                    Ok(json!({"accepted":true}))
+                }
+                _ => Err(RpcError::invalid_params("unknown menu item")),
+            }
+        }
+        other => Err(RpcError::method_not_found(other)),
+    }
+}
+```
+
+注意：`contextMenu.resolve` 的 `ctx.files()` 方法即使存在，也**不会拥有文件内容读取/目录遍历授权**，Core 按本次请求的 metadata-only Scope 执行拒绝。SDK `ExecuteRequest` 的 `menuSessionId` 是宿主 Session 关联值，不能直接当作文件授权令牌；实际权限与资源版本均由 Core 再验证。
+
+```mermaid
+flowchart TD
+  User["Right click"] --> Core["Core snapshots visible metadata"]
+  Core --> Resolve["SDK contextMenu.resolve"]
+  Resolve --> Items["MenuResponse {items}"]
+  Items --> CoreBuild["Core validates item IDs / parentId"]
+  CoreBuild --> Select{"User clicks?"}
+  Select -->|action| Grant["Core creates exact-file OperationScope"]
+  Grant --> Execute["SDK contextMenu.execute"]
+  Select -->|panel| Panel["Core opens registered panelId"]
+  Select -->|dismiss| End["Drop session"]
+  Execute --> End
+  Panel --> End
+```
+
 ## 3. Files、Reader、Writer：完整映射
 
 | 公共 Rust API | 具体 IPC | 说明 |
@@ -199,6 +263,8 @@ sequenceDiagram
   Core-->>Host: result
   Host-->>UI: result
 ```
+
+UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两个 RPC 仅由 Core 在真实用户右键/点击事件上向对应 Native Provider 调用。MenuResponse 引用的 `panelId` 必须存在于 Manifest 的 `contributions.panels[]`，因此插件无法动态加载未验证的 HTML。
 
 不同 UI/Native 会话绝不共享隐式“当前目录”权限。面板关闭不会自动取消已经显式启动、仍被 Core 持有的后台任务，但必须解除 UI panel-local 任务；用户能从活动中心取消后台任务。
 
