@@ -1029,6 +1029,10 @@
   min-width: 0;
   align-items: center;
   gap: 4px;
+  background: var(--decoration-bg-light, var(--decoration-bg-dark, transparent));
+}
+.dark .decorated-value {
+  background: var(--decoration-bg-dark, var(--decoration-bg-light, transparent));
 }
 .decorated-value .decoration-badge {
   flex: 0 0 auto;
@@ -1044,7 +1048,12 @@
 .file-row.decorated-bg:not(.selected),
 .file-tile.decorated-bg:not(.selected),
 .column-row.decorated-bg:not(.selected) {
-  background: var(--decoration-bg);
+  background: var(--decoration-bg-light, var(--decoration-bg-dark, transparent));
+}
+.dark .file-row.decorated-bg:not(.selected),
+.dark .file-tile.decorated-bg:not(.selected),
+.dark .column-row.decorated-bg:not(.selected) {
+  background: var(--decoration-bg-dark, var(--decoration-bg-light, transparent));
 }
 /* Badges in the columns view are inline chips, not flexible columns. */
 .column-row > span.decoration-badge {

@@ -327,17 +327,17 @@
 /* The focused pane gets a faint tint so the active side is obvious in split
    view without drawing another border. */
 .pane-main.pane-active {
-  background: color-mix(in srgb, var(--accent) 5%, var(--canvas));
+  background: color-mix(in srgb, var(--accent) 3%, var(--canvas));
 }
 .secondary-pane.pane-active {
-  background: color-mix(in srgb, var(--accent) 5%, var(--canvas));
+  background: color-mix(in srgb, var(--accent) 3%, var(--canvas));
 }
 .secondary-pane.pane-active > .path-toolbar {
   background: transparent;
 }
 .dark .pane-main.pane-active,
 .dark .secondary-pane.pane-active {
-  background: color-mix(in srgb, var(--accent) 9%, var(--canvas));
+  background: color-mix(in srgb, var(--accent) 5%, var(--canvas));
 }
 
 /* Settings cards are flex children; without this they shrink and clip their

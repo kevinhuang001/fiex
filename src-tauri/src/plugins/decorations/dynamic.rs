@@ -86,7 +86,8 @@ fn safe_badge(value: DecorationBadge) -> Option<DecorationBadge> {
 fn safe_style(value: DecorationStyle) -> DecorationStyle {
     DecorationStyle {
         color: value.color.filter(|value| allowed_color(value)),
-        background: value.background.filter(|value| allowed_color(value)),
+        background_light: value.background_light.filter(|value| allowed_color(value)),
+        background_dark: value.background_dark.filter(|value| allowed_color(value)),
         font_weight: value
             .font_weight
             .filter(|value| matches!(value.as_str(), "normal" | "500" | "600" | "bold")),
@@ -98,7 +99,8 @@ fn safe_style(value: DecorationStyle) -> DecorationStyle {
 
 fn style_is_empty(style: &DecorationStyle) -> bool {
     style.color.is_none()
-        && style.background.is_none()
+        && style.background_light.is_none()
+        && style.background_dark.is_none()
         && style.font_weight.is_none()
         && style.font_style.is_none()
 }
@@ -107,8 +109,11 @@ fn merge_style(target: &mut DecorationStyle, source: &DecorationStyle) {
     if source.color.is_some() {
         target.color.clone_from(&source.color);
     }
-    if source.background.is_some() {
-        target.background.clone_from(&source.background);
+    if source.background_light.is_some() {
+        target.background_light.clone_from(&source.background_light);
+    }
+    if source.background_dark.is_some() {
+        target.background_dark.clone_from(&source.background_dark);
     }
     if source.font_weight.is_some() {
         target.font_weight.clone_from(&source.font_weight);
@@ -421,7 +426,8 @@ mod tests {
                     tooltip: None,
                 }],
                 style: DecorationStyle {
-                    background: Some("#fff9f0".into()),
+                    background_light: Some("#fff9f0".into()),
+                    background_dark: Some("#2b2118".into()),
                     ..Default::default()
                 },
             },

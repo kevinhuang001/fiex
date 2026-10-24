@@ -119,6 +119,7 @@ export default function App() {
               onDrop={app.transfer}
               onBookmark={app.bookmarkPaths}
               onWorkspace={app.addWorkspace}
+              dragPaths={app.selectedAll}
               onExternalDrag={(result) =>
                 app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
               }
@@ -136,6 +137,7 @@ export default function App() {
             onOpen={app.openRight}
             onPreview={(entry) => app.previewEntry(entry, app.right)}
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+            dragPaths={app.selectedAll}
             width={app.paneWidth}
             onWidthChange={app.setPaneWidth}
           />

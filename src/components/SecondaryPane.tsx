@@ -19,6 +19,7 @@ export function SecondaryPane({
   onOpen,
   onPreview,
   onMenu,
+  dragPaths,
   width,
   onWidthChange,
 }: {
@@ -31,6 +32,7 @@ export function SecondaryPane({
   onOpen: (entry: Entry) => void
   onPreview: (entry: Entry) => void
   onMenu: (entry: Entry, x: number, y: number) => void
+  dragPaths?: string[]
   width: number
   onWidthChange: (width: number) => void
 }) {
@@ -194,6 +196,7 @@ export function SecondaryPane({
           onDrop={(paths, destination, moving) => onTransfer(paths, destination, moving)}
           onBookmark={() => {}}
           onWorkspace={() => {}}
+          dragPaths={dragPaths}
           readOnly={x.directoryReadOnly}
         />
       </aside>

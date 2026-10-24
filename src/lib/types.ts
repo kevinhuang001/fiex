@@ -96,7 +96,8 @@ export interface DecorationStyle {
   color?: string
   fontWeight?: string
   fontStyle?: string
-  background?: string
+  backgroundLight?: string
+  backgroundDark?: string
 }
 export interface DecorationField {
   badges?: DecorationBadge[]

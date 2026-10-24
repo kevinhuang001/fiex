@@ -37,6 +37,7 @@ export function useAppController() {
   } = usePaneLayout(prefs, left)
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
+  const selectedAll = split ? [...new Set([...left.selected, ...right.selected])] : left.selected
 
   const {
     sidebar,
@@ -75,6 +76,9 @@ export function useAppController() {
     notify,
     navigatePreview,
   } = useDialogs(x)
+  const chosenAll = split
+    ? [...left.entries, ...right.entries].filter((entry) => selectedAll.includes(entry.path))
+    : chosen
 
   useEffect(() => {
     x.setReadOnly(x.directoryReadOnly)
@@ -257,6 +261,8 @@ export function useAppController() {
     setConflict,
     resolveConflict,
     chosen,
+    chosenAll,
+    selectedAll,
     clipboard,
     setClipboard,
     menu,

@@ -13,6 +13,30 @@ pub struct Theme {
     pub name: String,
     pub mode: String,
     pub tokens: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub dark_tokens: BTreeMap<String, String>,
+}
+fn validate_tokens(tokens: &BTreeMap<String, String>) -> Result<(), String> {
+    for (key, value) in tokens {
+        // Must be a valid custom-property suffix: a lowercase letter first,
+        // then lowercase letters, digits or dashes. The UI SDK and the host
+        // filter tokens with the same rule, so anything else would install
+        // and then be silently ignored.
+        let mut chars = key.chars();
+        let valid_start = chars.next().is_some_and(|c| c.is_ascii_lowercase());
+        if key.is_empty()
+            || key.len() > 64
+            || !valid_start
+            || !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            || value.len() > 512
+            || value.contains([';', '{', '}', '<', '>', '\\'])
+            || value.to_ascii_lowercase().contains("url")
+            || value.contains('@')
+        {
+            return Err("invalid theme token".into());
+        }
+    }
+    Ok(())
 }
 pub fn is_theme(manifest: &PluginManifest) -> bool {
     manifest.runtime.entrypoints.is_empty()
@@ -62,29 +86,12 @@ pub fn load(manifest: &PluginManifest, folder: &Path) -> Result<Vec<Theme>, Stri
             || theme.name.trim().is_empty()
             || theme.name.len() > 128
             || !matches!(theme.mode.as_str(), "light" | "dark")
-            || theme.tokens.len() > 256
+            || theme.tokens.len() + theme.dark_tokens.len() > 256
         {
             return Err("invalid theme metadata".into());
         }
-        for (key, value) in &theme.tokens {
-            // Must be a valid custom-property suffix: a lowercase letter first,
-            // then lowercase letters, digits or dashes. The UI SDK and the host
-            // filter tokens with the same rule, so anything else would install
-            // and then be silently ignored.
-            let mut chars = key.chars();
-            let valid_start = chars.next().is_some_and(|c| c.is_ascii_lowercase());
-            if key.is_empty()
-                || key.len() > 64
-                || !valid_start
-                || !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-                || value.len() > 512
-                || value.contains([';', '{', '}', '<', '>', '\\'])
-                || value.to_ascii_lowercase().contains("url")
-                || value.contains('@')
-            {
-                return Err("invalid theme token".into());
-            }
-        }
+        validate_tokens(&theme.tokens)?;
+        validate_tokens(&theme.dark_tokens)?;
         theme.id = format!("{}:{}", manifest.id, theme.id);
         if themes.iter().any(|t: &Theme| t.id == theme.id) {
             return Err("duplicate theme ID".into());
@@ -141,6 +148,21 @@ mod tests {
         let mut bad_manifest = manifest;
         bad_manifest.contributions["themes"][0]["path"] = json!("../theme.json");
         assert!(load(&bad_manifest, root.path()).is_err());
+    }
+
+    #[test]
+    fn themes_can_carry_a_dark_variant() {
+        let root = tempfile::tempdir().unwrap();
+        let manifest = package(json!([{ "path": "theme.json" }]), json!({}));
+        let mut value = theme("adaptive");
+        value["darkTokens"] = json!({ "accent": "#4cc2ff", "surface": "#202020" });
+        write(root.path(), "theme.json", &value);
+        let loaded = load(&manifest, root.path()).unwrap();
+        assert_eq!(loaded[0].dark_tokens["accent"], "#4cc2ff");
+
+        value["darkTokens"]["accent"] = json!("url(https://example.invalid/a.png)");
+        write(root.path(), "theme.json", &value);
+        assert!(load(&manifest, root.path()).is_err());
     }
 
     #[test]

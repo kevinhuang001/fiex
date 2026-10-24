@@ -27,6 +27,7 @@ export interface Props {
   onBookmark: (paths: string[]) => void
   onWorkspace: (paths: string[]) => void
   onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
+  dragPaths?: string[]
   readOnly?: boolean
   trashPath?: string | null
 }
@@ -70,14 +71,18 @@ function fieldOf(
   return undefined
 }
 
-function styleOf(style: DecorationStyle | undefined): CSSProperties | undefined {
-  if (!style) return undefined
+function decorationVars(style: DecorationStyle): CSSProperties {
   return {
-    color: style.color,
-    fontWeight: style.fontWeight as CSSProperties['fontWeight'],
-    fontStyle: style.fontStyle as CSSProperties['fontStyle'],
-    background: style.background,
-  }
+    '--decoration-color': style.color,
+    '--decoration-weight': style.fontWeight,
+    '--decoration-font-style': style.fontStyle,
+    '--decoration-bg-light': style.backgroundLight,
+    '--decoration-bg-dark': style.backgroundDark,
+  } as CSSProperties
+}
+
+function styleOf(style: DecorationStyle | undefined): CSSProperties | undefined {
+  return style ? decorationVars(style) : undefined
 }
 
 function Badges({ badges }: { badges?: DecorationBadge[] }) {
@@ -125,15 +130,9 @@ export function rowVars(decoration: EntryDecoration | undefined): {
 } {
   const style = fieldOf(decoration, 'row')?.style
   if (!style) return { className: '' }
-  const vars = {
-    '--decoration-color': style.color,
-    '--decoration-weight': style.fontWeight,
-    '--decoration-font-style': style.fontStyle,
-    '--decoration-bg': style.background,
-  } as CSSProperties
   return {
-    className: ` decorated${style.background ? ' decorated-bg' : ''}`,
-    style: vars,
+    className: ` decorated${style.backgroundLight || style.backgroundDark ? ' decorated-bg' : ''}`,
+    style: decorationVars(style),
   }
 }
 

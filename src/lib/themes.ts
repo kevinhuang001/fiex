@@ -4,6 +4,7 @@ export interface Theme {
   name: string
   mode: 'light' | 'dark'
   tokens: Record<string, string>
+  darkTokens?: Record<string, string>
 }
 let applied: string[] = []
 export async function installedThemes(): Promise<Theme[]> {
@@ -19,10 +20,17 @@ export function applyTheme(theme: Theme | undefined, mode: 'light' | 'dark') {
   const root = document.documentElement
   for (const key of applied) root.style.removeProperty('--' + key)
   applied = []
-  root.classList.toggle('dark', theme?.mode === 'dark' || (!theme && mode === 'dark'))
+  const darkTokens = theme?.darkTokens || {}
+  const hasDarkVariant = Object.keys(darkTokens).length > 0
+  const useDark = mode === 'dark' && hasDarkVariant
+  root.classList.toggle(
+    'dark',
+    useDark || (!hasDarkVariant && theme?.mode === 'dark') || (!theme && mode === 'dark'),
+  )
   root.dataset.theme = theme?.id || mode
-  root.style.colorScheme = theme?.mode || mode
-  for (const [key, value] of Object.entries(theme?.tokens || {})) {
+  root.style.colorScheme = useDark ? 'dark' : theme?.mode || mode
+  const tokens = useDark ? { ...theme?.tokens, ...darkTokens } : theme?.tokens || {}
+  for (const [key, value] of Object.entries(tokens)) {
     if (!/^[a-z][a-z0-9-]*$/.test(key) || /[;{}]|url/i.test(value)) continue
     root.style.setProperty('--' + key, value)
     applied.push(key)

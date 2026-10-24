@@ -462,6 +462,27 @@ pub fn abort(owner: &str, handle: &str) -> Result<(), String> {
         Some(_) => Err("write handle unavailable".into()),
     }
 }
+#[cfg(windows)]
+fn replace_file(dir: &Dir, from: &str, to: &str) -> std::io::Result<()> {
+    // Windows can transiently deny replacing a file while a scanner or a
+    // closing handle still holds it. The rename itself is atomic, so a short
+    // retry is safe and avoids failing an otherwise valid commit.
+    let mut last = None;
+    for _ in 0..8 {
+        match dir.rename(from, dir, to) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last = Some(error);
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| std::io::Error::other("replace failed")))
+}
+#[cfg(not(windows))]
+fn replace_file(dir: &Dir, from: &str, to: &str) -> std::io::Result<()> {
+    dir.rename(from, dir, to)
+}
 pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
     // Remove the transaction before touching the target so other independent
     // commits never wait for a large copy or fsync.
@@ -556,8 +577,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
                 .remove_file(&temp_name)
                 .map_err(|e| e.to_string())?;
         } else {
-            target_dir
-                .rename(&temp_name, &target_dir, name)
+            replace_file(&target_dir, &temp_name, &name.to_string_lossy())
                 .map_err(|e| e.to_string())?;
         }
         entry(dir, &write.path)

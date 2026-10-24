@@ -323,7 +323,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
                 modified: { style: { color: '#c2710c' } },
                 size: { badges: [{ text: '新', color: 'green' }] },
                 kind: { style: { color: '#2f6f9f' } },
-                row: { style: { background: '#fff9f0' } },
+                row: { style: { backgroundLight: '#fff9f0', backgroundDark: '#2b2118' } },
               },
               icon: 'fiex-resource://org.example.icon-theme/markdown',
               iconPath: '/plugin-icons/plugin-markdown.svg',

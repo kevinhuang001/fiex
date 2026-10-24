@@ -120,6 +120,7 @@ export function useSelectionBand({
 export function useFileDrag({
   explorer: x,
   selectedPaths,
+  dragPaths,
   readOnly,
   onDrop,
   onBookmark,
@@ -128,6 +129,7 @@ export function useFileDrag({
 }: {
   explorer: Explorer
   selectedPaths: Set<string>
+  dragPaths?: string[]
   readOnly: boolean
   onDrop: Props['onDrop']
   onBookmark: Props['onBookmark']
@@ -139,7 +141,10 @@ export function useFileDrag({
   const beginPointerDrag = (event: ReactPointerEvent, entry: Entry) => {
     if (event.button !== 0 || x.renaming || readOnly) return
     if ((event.target as Element).closest('input,button,a')) return
-    const paths = selectedPaths.has(entry.path) ? [...x.selected] : [entry.path]
+    const paths =
+      selectedPaths.has(entry.path) && dragPaths?.length
+        ? [...new Set([...dragPaths, ...x.selected])]
+        : [entry.path]
     if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !selectedPaths.has(entry.path)) {
       x.setSelected([entry.path])
     }
