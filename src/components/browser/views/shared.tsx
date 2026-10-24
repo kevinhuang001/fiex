@@ -1,0 +1,203 @@
+import { useEffect, useState } from 'react'
+import { CloudCheck, CloudDownload } from 'lucide-react'
+import { FileIcon } from '../../FileIcon'
+import { InlineRename } from '../InlineRename'
+import { asset } from '@/lib/api'
+import { useDecorationIcon } from '@/lib/decorationIcons'
+import { isImage } from '@/lib/files'
+import type { Explorer } from '@/hooks/useExplorer'
+import type {
+  DecorationBadge,
+  DecorationField,
+  DecorationStyle,
+  DecorationTarget,
+  Entry,
+  EntryDecoration,
+  Preferences,
+} from '@/lib/types'
+import type { CSSProperties, MouseEvent, PointerEvent, ReactNode } from 'react'
+
+export interface Props {
+  explorer: Explorer
+  prefs: Preferences
+  onOpen: (e: Entry) => void
+  onPreview: (e: Entry) => void
+  onMenu: (e: Entry, x: number, y: number) => void
+  onDrop: (paths: string[], dest: string, moving: boolean) => void
+  onBookmark: (paths: string[]) => void
+  onWorkspace: (paths: string[]) => void
+  onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
+  readOnly?: boolean
+  trashPath?: string | null
+}
+
+/** Event bindings shared by every row, tile and column item. */
+export interface RowBindings {
+  onClick: (event: MouseEvent) => void
+  onDoubleClick: () => void
+  onContextMenu: (event: MouseEvent) => void
+  onPointerDown: (event: PointerEvent) => void
+  'data-path': string
+  'data-drop-folder': string | undefined
+  'aria-selected': boolean
+  tabIndex: number
+}
+
+export type SharedRow = (entry: Entry) => RowBindings
+
+export function SyncBadge({ sync }: { sync: Entry['sync'] }) {
+  if (!sync) return null
+  return sync === 'synced' ? (
+    <span className="sync-badge synced" title="已同步">
+      <CloudCheck size={11} />
+      <span>已同步</span>
+    </span>
+  ) : (
+    <span className="sync-badge cloud" title="仅云端，需要连接">
+      <CloudDownload size={11} />
+      <span>仅云端</span>
+    </span>
+  )
+}
+
+function fieldOf(
+  decoration: EntryDecoration | undefined,
+  target: DecorationTarget,
+): DecorationField | undefined {
+  const field = decoration?.fields?.[target]
+  if (field) return field
+  if (target === 'name' && decoration) return { badges: decoration.badges, style: decoration.style }
+  return undefined
+}
+
+function styleOf(style: DecorationStyle | undefined): CSSProperties | undefined {
+  if (!style) return undefined
+  return {
+    color: style.color,
+    fontWeight: style.fontWeight as CSSProperties['fontWeight'],
+    fontStyle: style.fontStyle as CSSProperties['fontStyle'],
+    background: style.background,
+  }
+}
+
+function Badges({ badges }: { badges?: DecorationBadge[] }) {
+  return (
+    <>
+      {badges?.map((badge) => (
+        <span
+          key={`${badge.text}-${badge.color}`}
+          className={`decoration-badge ${badge.color.startsWith('#') ? 'custom' : badge.color}`}
+          style={
+            badge.color.startsWith('#')
+              ? { color: badge.color, borderColor: badge.color }
+              : undefined
+          }
+          title={badge.tooltip}
+        >
+          {badge.text}
+        </span>
+      ))}
+    </>
+  )
+}
+
+export function DecoratedValue({
+  decoration,
+  target,
+  children,
+}: {
+  decoration: EntryDecoration | undefined
+  target: Exclude<DecorationTarget, 'name' | 'row'>
+  children: ReactNode
+}) {
+  const field = fieldOf(decoration, target)
+  return (
+    <span className="decorated-value" style={styleOf(field?.style)}>
+      {children}
+      <Badges badges={field?.badges} />
+    </span>
+  )
+}
+
+export function rowVars(decoration: EntryDecoration | undefined): {
+  className: string
+  style?: CSSProperties
+} {
+  const style = fieldOf(decoration, 'row')?.style
+  if (!style) return { className: '' }
+  const vars = {
+    '--decoration-color': style.color,
+    '--decoration-weight': style.fontWeight,
+    '--decoration-font-style': style.fontStyle,
+    '--decoration-bg': style.background,
+  } as CSSProperties
+  return {
+    className: ` decorated${style.background ? ' decorated-bg' : ''}`,
+    style: vars,
+  }
+}
+
+export function NameCell({
+  explorer,
+  entry,
+  className,
+}: {
+  explorer: Explorer
+  entry: Entry
+  className: string
+}) {
+  if (explorer.renaming === entry.path)
+    return (
+      <InlineRename
+        entry={entry}
+        className={className}
+        onCommit={(name) => explorer.renameTo(entry.path, name)}
+        onCancel={explorer.cancelRename}
+      />
+    )
+  const decoration = explorer.decorations?.[entry.path]
+  const field = fieldOf(decoration, 'name')
+  const style = styleOf(field?.style)
+  const title = [entry.name, decoration?.description, decoration?.providers?.join(' · ')]
+    .filter(Boolean)
+    .join(' · ')
+  const label = decoration?.label || entry.name
+  return (
+    <>
+      <span className={className} style={style} title={title}>
+        {entry.name}
+      </span>
+      <Badges badges={field?.badges} />
+      {label !== entry.name && <small className="decoration-label">{label}</small>}
+    </>
+  )
+}
+
+export function Thumbnail({ entry: e, size: s }: { entry: Entry; size: number }) {
+  const [failed, setFailed] = useState(false)
+  const decorationIcon = useDecorationIcon(e.path)
+  useEffect(() => setFailed(false), [e.path])
+  if (decorationIcon)
+    return (
+      <img
+        className="thumbnail"
+        style={{ width: s, height: s }}
+        src={decorationIcon}
+        alt=""
+        draggable={false}
+      />
+    )
+  if (isImage(e) && !failed && asset(e.path))
+    return (
+      <img
+        className="thumbnail"
+        style={{ width: s, height: s }}
+        src={asset(e.path)}
+        alt=""
+        loading="lazy"
+        draggable={false}
+        onError={() => setFailed(true)}
+      />
+    )
+  return <FileIcon entry={e} size={s} />
+}
