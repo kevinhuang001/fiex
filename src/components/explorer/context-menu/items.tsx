@@ -24,6 +24,7 @@ export function contextItems({
   open,
   previewEntry,
   setInfo,
+  openBatchRename,
   platform,
   openTags,
   x,
@@ -106,6 +107,17 @@ export function contextItems({
       disabled: x.directoryReadOnly,
       action: () => x.beginRename(menu.entry.path),
     },
+    ...(x.selected.length > 1
+      ? [
+          {
+            label: '批量重命名…',
+            icon: <Pencil />,
+            hint: '',
+            disabled: x.directoryReadOnly,
+            action: openBatchRename,
+          },
+        ]
+      : []),
     { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
     {
       label: '剪切',

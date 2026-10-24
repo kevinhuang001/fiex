@@ -1,4 +1,5 @@
 import { FileViews } from '@/components/browser/FileViews'
+import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
@@ -161,6 +162,11 @@ export default function App() {
         </div>
       )}
       <FileContextMenu {...app} />
+      <BatchRenameDialog
+        entries={app.batchRename}
+        onClose={() => app.setBatchRename(null)}
+        onApply={app.applyBatchRename}
+      />
       <ExplorerDialogs {...app} />
     </div>
   )

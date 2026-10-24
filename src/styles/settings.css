@@ -1588,3 +1588,84 @@ body.dragging-file * {
 .pane-resizer:active::after {
   inset-inline: 4px;
 }
+
+.batch-rename-modal {
+  width: min(640px, calc(100vw - 32px));
+}
+.batch-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.batch-rename-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.batch-rename-fields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.batch-rename-fields label > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.batch-rename-template {
+  grid-column: 1 / -1;
+}
+.batch-rename-template small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.batch-rename-list {
+  max-height: 270px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.batch-rename-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.batch-rename-row:last-child {
+  border-bottom: 0;
+}
+.batch-rename-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-rename-row > b {
+  color: var(--muted);
+  font-weight: 400;
+}
+.batch-rename-row > span:last-of-type {
+  color: var(--accent);
+}
+.batch-rename-row.invalid > span:last-of-type {
+  color: var(--danger);
+}
+.batch-rename-row > em {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  font-size: 9px;
+  font-style: normal;
+}
+.batch-rename-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 10px;
+}
+.batch-rename-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -30,6 +30,7 @@ export type ContextMenuProps = Pick<
   | 'open'
   | 'previewEntry'
   | 'setInfo'
+  | 'openBatchRename'
   | 'platform'
   | 'openTags'
   | 'x'

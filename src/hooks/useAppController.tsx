@@ -1,9 +1,10 @@
 import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
+import { basename } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useConnectionActions } from './controller/useConnectionActions'
 import { useDialogs } from './controller/useDialogs'
 import { useDropTargets } from './controller/useDropTargets'
@@ -17,6 +18,7 @@ import { usePathEditor } from './usePathEditor'
 import { useWorkspace } from './useWorkspace'
 export function useAppController() {
   const [prefs, update] = usePreferences()
+  const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
   const left = useExplorer(prefs)
   const {
     x,
@@ -93,6 +95,27 @@ export function useAppController() {
         ).values(),
       ]
     : chosen
+  const openBatchRename = () => {
+    if (chosen.length > 1) setBatchRename(chosen)
+  }
+  const applyBatchRename = async (renames: { path: string; name: string }[]) => {
+    const done: { from: string; to: string }[] = []
+    try {
+      for (const item of renames) {
+        const to = await call<string>('rename_entry', { path: item.path, name: item.name })
+        done.push({ from: item.path, to })
+      }
+      setBatchRename(null)
+      x.setSelected([])
+      x.reload()
+      notify(`已重命名 ${done.length} 个项目`)
+    } catch (error) {
+      for (const item of done.reverse()) {
+        await call('rename_entry', { path: item.to, name: basename(item.from) }).catch(() => {})
+      }
+      throw error
+    }
+  }
 
   useEffect(() => {
     x.setReadOnly(x.directoryReadOnly)
@@ -277,6 +300,10 @@ export function useAppController() {
     chosen,
     chosenAll,
     selectedAll,
+    batchRename,
+    setBatchRename,
+    openBatchRename,
+    applyBatchRename,
     clipboard,
     setClipboard,
     menu,
