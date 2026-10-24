@@ -312,11 +312,6 @@
     color: transparent;
   }
 }
-@container (max-width: 330px) {
-  .path-toolbar > button[data-slot='button'] {
-    display: none;
-  }
-}
 
 /* The focused pane gets a faint tint so the active side is obvious in split
    view without drawing another border. */
