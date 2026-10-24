@@ -568,7 +568,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
                 .map_err(|e| e.to_string())?
                 .permissions();
             let temp = target_dir
-                .open(&temp_name)
+                .open_with(&temp_name, OpenOptions::new().read(true).write(true))
                 .map_err(|e| format!("open commit temp: {e}"))?;
             temp.set_permissions(permissions)
                 .map_err(|e| format!("set commit permissions: {e}"))?;
