@@ -199,11 +199,28 @@ pub fn run() {
         })
         .setup(|app| {
             let handle = app.handle().clone();
-            std::thread::spawn(move || loop {
-                tauri::async_runtime::block_on(crate::remote::reconcile());
-                use tauri::Emitter;
-                let _ = handle.emit("remote-sync", ());
-                std::thread::sleep(std::time::Duration::from_secs(30));
+            std::thread::spawn(move || {
+                let running =
+                    std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
+                loop {
+                    for connection in crate::remote::list_connections() {
+                        let id = connection.id;
+                        if !running.lock().unwrap().insert(id.clone()) {
+                            continue;
+                        }
+                        let running = running.clone();
+                        let handle = handle.clone();
+                        std::thread::spawn(move || {
+                            tauri::async_runtime::block_on(crate::remote::reconcile_connection(
+                                &id,
+                            ));
+                            use tauri::Emitter;
+                            let _ = handle.emit("remote-sync", ());
+                            running.lock().unwrap().remove(&id);
+                        });
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+                }
             });
             {
                 use tauri::Emitter;

@@ -852,7 +852,11 @@ impl Running {
             self.finish_operation(id);
             return Err(RpcFailure::fatal(error));
         }
-        let result = match receiver.recv_timeout(REQUEST_TIMEOUT) {
+        let result = match receiver.recv_timeout(if method == "fs.writeFile" {
+            Duration::from_secs(86_520)
+        } else {
+            REQUEST_TIMEOUT
+        }) {
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 Err(RpcFailure::fatal("plugin request deadline exceeded"))

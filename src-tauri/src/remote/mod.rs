@@ -12,7 +12,7 @@ pub use files::{
     download, download_dir, eject, ensure_downloaded, list_listing, provider_list, ProgressFn,
     TransferOptions,
 };
-pub use reconcile::{reconcile, resolve};
+pub use reconcile::{reconcile, reconcile_connection, resolve};
 pub use store::{
     list_connections, remove_connection, save_connection, ConnectionInfo, ConnectionInput,
     StoredConnection,

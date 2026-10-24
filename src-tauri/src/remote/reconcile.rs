@@ -178,10 +178,16 @@ fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
 
 pub async fn reconcile() {
     for conn in load_stored() {
+        reconcile_connection(&conn.id).await;
+    }
+}
+
+pub async fn reconcile_connection(id: &str) {
+    for conn in load_stored().into_iter().filter(|conn| conn.id == id) {
         if !supports_sync(&conn) {
             continue;
         }
-        // Do not let one busy connection delay all other mounts.
+        // The desktop scheduler runs separate connections independently.
         let _guard = lock(&conn).await;
         let meta = load_meta(&conn);
         let pins: Vec<_> = meta
