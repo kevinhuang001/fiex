@@ -44,7 +44,7 @@ export function Sidebar({
             return <Favorites key="favorites" x={x} prefs={prefs} setMenu={setMenu} />
           }
           if (section === 'tags') {
-            return <Tags key="tags" x={x} prefs={prefs} />
+            return prefs.showTags ? <Tags key="tags" x={x} prefs={prefs} /> : null
           }
           if (section === 'connections') {
             return (

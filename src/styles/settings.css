@@ -1669,3 +1669,7 @@ body.dragging-file * {
   justify-content: flex-end;
   gap: 8px;
 }
+
+.sidebar-order-row input[type='checkbox'] {
+  margin-left: auto;
+}

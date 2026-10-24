@@ -29,6 +29,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     sidebarOrder: ['places', 'favorites', 'tags', 'devices', 'connections'],
     placeOrder: [],
     hiddenPlaces: [],
+    showTags: true,
     favorites: [],
     tags: TAG_PRESETS.map((tag) => ({ ...tag })),
     shortcutStyle: style,
@@ -100,6 +101,7 @@ function load(): Preferences {
       hiddenPlaces: Array.isArray(stored.hiddenPlaces)
         ? stored.hiddenPlaces
         : fallback.hiddenPlaces,
+      showTags: typeof stored.showTags === 'boolean' ? stored.showTags : fallback.showTags,
       shortcutStyle: style,
       shortcuts,
     }
