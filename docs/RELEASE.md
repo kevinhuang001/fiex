@@ -1,4 +1,6 @@
-# Fiex 0.5.0
+# Fiex 0.5.1
+
+0.5.1 is a structure-only release: the Rust host, desktop commands, hooks, settings and SDK are split into modules, with no behavior changes.
 
 - New `hooks` permission and `contributions.hooks`: a plugin can run before Core opens a file, in priority order. A hook may pass, consume the open, or hand off to the preview sheet. Failures are logged and never block the file.
 - The archive plugin uses it: opening an archive extracts it next to the archive (conflict-safe names) instead of launching the system app; password-protected archives open the preview for the password.
