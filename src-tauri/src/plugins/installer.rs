@@ -251,7 +251,8 @@ pub fn marketplace(repository: &str) -> Result<Vec<MarketplacePlugin>, String> {
         }
         let value: serde_json::Value =
             serde_json::from_slice(&bytes).map_err(|e| format!("plugin catalog invalid: {e}"))?;
-        return catalog_entries(&value, assets, &release, repository);
+        let descriptions = plugin_descriptions(assets, &client, owner, repo);
+        return catalog_entries(&value, assets, &release, repository, &descriptions);
     }
     fallback_marketplace(assets, &release, repository)
 }
@@ -260,11 +261,75 @@ fn platform_key() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
+/// The release may ship one `plugin-descriptions.json` for every plugin; its
+/// text is the store's introduction, so copy can change without repackaging.
+fn plugin_descriptions(
+    assets: &[serde_json::Value],
+    client: &reqwest::blocking::Client,
+    owner: &str,
+    repo: &str,
+) -> std::collections::HashMap<String, String> {
+    let Some(asset) = assets.iter().find(|asset| {
+        asset.get("name").and_then(serde_json::Value::as_str) == Some("plugin-descriptions.json")
+    }) else {
+        return Default::default();
+    };
+    let Some(url) = asset
+        .get("browser_download_url")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return Default::default();
+    };
+    if !url.starts_with(&format!(
+        "https://github.com/{owner}/{repo}/releases/download/"
+    )) {
+        return Default::default();
+    }
+    let Ok(response) = client
+        .get(url)
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+    else {
+        return Default::default();
+    };
+    let mut bytes = Vec::new();
+    if response.take(512 * 1024).read_to_end(&mut bytes).is_err() {
+        return Default::default();
+    }
+    parse_descriptions(&bytes)
+}
+
+fn parse_descriptions(bytes: &[u8]) -> std::collections::HashMap<String, String> {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return Default::default();
+    };
+    value
+        .get("plugins")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let id = item.get("id").and_then(serde_json::Value::as_str)?;
+                    if !plugin_host::valid_id(id) {
+                        return None;
+                    }
+                    let text = item
+                        .get("description")
+                        .and_then(serde_json::Value::as_str)?;
+                    Some((id.to_string(), text.to_string()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn catalog_entries(
     value: &serde_json::Value,
     release_assets: &[serde_json::Value],
     release: &serde_json::Value,
     repository: &str,
+    descriptions: &std::collections::HashMap<String, String>,
 ) -> Result<Vec<MarketplacePlugin>, String> {
     let platform = platform_key();
     let names = release_assets
@@ -356,11 +421,13 @@ fn catalog_entries(
                 .filter(|value| !value.is_empty())
                 .unwrap_or(version)
                 .into(),
-            description: plugin
-                .get("description")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .into(),
+            description: descriptions.get(id).cloned().unwrap_or_else(|| {
+                plugin
+                    .get("description")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            }),
             author: plugin
                 .get("author")
                 .cloned()
@@ -664,5 +731,27 @@ mod tests {
     fn zip_slip_is_not_accepted() {
         assert!(!normal_relative(Path::new("../outside")));
         assert!(!normal_relative(Path::new("/etc/passwd")));
+    }
+}
+
+#[cfg(test)]
+mod description_tests {
+    use super::*;
+
+    #[test]
+    fn parses_release_descriptions_by_plugin_id() {
+        let map = parse_descriptions(
+            r#"{"schemaVersion":1,"plugins":[{"id":"org.fiex.git","description":"源代码管理"},{"id":"bad id","description":"x"}]}"#.as_bytes(),
+        );
+        assert_eq!(
+            map.get("org.fiex.git").map(String::as_str),
+            Some("源代码管理")
+        );
+        assert!(!map.contains_key("bad id"));
+    }
+
+    #[test]
+    fn rejects_malformed_descriptions() {
+        assert!(parse_descriptions(b"not json").is_empty());
     }
 }

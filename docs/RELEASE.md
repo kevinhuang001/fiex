@@ -5,6 +5,7 @@
 - Plugin file dialogs now use the app's own compact file browser (sidebar places, favorites, connections, devices, breadcrumbs, back/forward/up, search, list/grid, sorting, grouping, new folder, context menu, centered save name, replace dialog) instead of the system picker.
 - Context menus (picker and main window) measure themselves and stay inside the viewport, flipping near the edges.
 - Breadcrumbs show at most the last three levels, with an ellipsis to climb one level, in both the main window and the picker.
+- The plugin store takes each plugin's introduction from the release's `plugin-descriptions.json`, and only lists plugins whose latest release has a package for this platform.
 
 # Fiex 0.4.11
 
