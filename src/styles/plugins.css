@@ -81,7 +81,7 @@
 .plugin-panel-content iframe {
   display: block;
   background: var(--surface);
-  color-scheme: light;
+  color-scheme: light dark;
 }
 .plugin-proxy-status {
   display: inline-flex;
