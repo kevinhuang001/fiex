@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useMenuPosition } from '@/lib/menuPosition'
+import { useRef, useState } from 'react'
 import type { AppController } from '@/hooks/useAppController'
 import { progressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
@@ -78,17 +79,17 @@ export function FileContextMenu({
   | 'setMenu'
 >) {
   const [submenuOpen, setSubmenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
   return (
     <>
       {menu && (
         <div
+          ref={menuRef}
           role="menu"
           aria-label="文件操作"
           className="context-menu"
-          style={{
-            left: Math.min(menu.x, innerWidth - 360),
-            top: Math.max(8, Math.min(menu.y, innerHeight - 440)),
-          }}
+          style={menuPosition}
         >
           {(
             [
@@ -251,7 +252,10 @@ export function FileContextMenu({
                   <ChevronRight className="submenu-arrow" size={13} />
                 </button>
                 {submenuOpen && !a.disabled && (
-                  <div className="context-submenu" role="menu">
+                  <div
+                    className={`context-submenu${menuPosition.left + 380 > window.innerWidth ? ' open-left' : ''}`}
+                    role="menu"
+                  >
                     {a.submenu.map((item) => (
                       <button
                         role="menuitem"

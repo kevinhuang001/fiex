@@ -1,3 +1,4 @@
+import { useMenuPosition } from '@/lib/menuPosition'
 import { Action, Choice, Label, Menu } from '@/components/Menus'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
@@ -312,6 +313,8 @@ export function ExplorerToolbar({
     x: number
     y: number
   } | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const pickerPosition = useMenuPosition(picker?.x ?? 0, picker?.y ?? 0, pickerRef, Boolean(picker))
   useEffect(() => {
     if (!picker) return
     const close = (event: Event) => {
@@ -569,10 +572,11 @@ export function ExplorerToolbar({
       </header>
       {picker && (
         <div
+          ref={pickerRef}
           className="context-menu toolbar-picker"
           role="menu"
           aria-label={picker.kind === 'ide' ? '选择 IDE' : '选择终端'}
-          style={{ left: picker.x, top: picker.y }}
+          style={pickerPosition}
         >
           {(picker.kind === 'ide' ? ides : terminals).map((item) => (
             <button

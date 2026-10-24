@@ -154,3 +154,9 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* Flip a submenu to the left when the parent menu sits near the right edge. */
+.context-submenu.open-left {
+  left: auto;
+  right: calc(100% + 4px);
+}

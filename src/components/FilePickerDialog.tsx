@@ -1,29 +1,43 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowLeft,
   ArrowRight,
   ChevronUp,
   Folder,
+  FolderPlus,
   HardDrive,
   LayoutGrid,
   List,
+  MoreHorizontal,
+  Pencil,
+  RotateCw,
   Search,
   Server,
+  Trash2,
 } from 'lucide-react'
 import { call } from '@/lib/api'
-import { usePreferences } from '@/hooks/usePreferences'
-import { commonPlaces } from '@/lib/places'
+import { useMenuPosition } from '@/lib/menuPosition'
 import { FileIcon } from '@/components/FileIcon'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
+import { usePreferences } from '@/hooks/usePreferences'
+import { commonPlaces } from '@/lib/places'
 import {
   currentFilePicker,
   settleFilePicker,
   subscribeFilePicker,
   type FilePickerRequest,
 } from '@/lib/filePicker'
-import { date, size } from '@/lib/files'
+import { date, kind, size } from '@/lib/files'
 import type { Entry, Listing, Location, RemoteConnection } from '@/lib/types'
+
+type SortKey = 'name' | 'modified' | 'size' | 'kind'
+type GroupKey = 'none' | 'kind' | 'modified' | 'size'
+type PickerDialog =
+  | { kind: 'folder'; value: string }
+  | { kind: 'rename'; entry: Entry; value: string }
+  | { kind: 'trash'; entry: Entry }
 
 const dirname = (path: string) => {
   const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
@@ -31,6 +45,29 @@ const dirname = (path: string) => {
 }
 const join = (directory: string, name: string) =>
   `${directory.replace(/[/\\]$/, '')}/${name}`.replace(/\/+/g, '/')
+
+const SORT_KEY = 'fiex.picker.sort'
+const GROUP_KEY = 'fiex.picker.group'
+
+function storedSort(): { key: SortKey; direction: 'asc' | 'desc' } {
+  try {
+    const value = JSON.parse(localStorage.getItem(SORT_KEY) || 'null')
+    if (value && ['name', 'modified', 'size', 'kind'].includes(value.key))
+      return { key: value.key, direction: value.direction === 'desc' ? 'desc' : 'asc' }
+  } catch {
+    // fall through
+  }
+  return { key: 'name', direction: 'asc' }
+}
+function storedGroup(): GroupKey {
+  try {
+    const value = localStorage.getItem(GROUP_KEY)
+    if (value && ['none', 'kind', 'modified', 'size'].includes(value)) return value as GroupKey
+  } catch {
+    // fall through
+  }
+  return 'none'
+}
 
 export function FilePickerDialog() {
   const pending = useSyncExternalStore(subscribeFilePicker, currentFilePicker, () => null)
@@ -56,10 +93,22 @@ function Picker({ request }: { request: FilePickerRequest }) {
   const [filter, setFilter] = useState('')
   const [saveName, setSaveName] = useState(request.suggestedName || '')
   const [replace, setReplace] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [reload, setReload] = useState(0)
+  const [sort, setSort] = useState(storedSort)
+  const [group, setGroup] = useState<GroupKey>(storedGroup)
+  const [menu, setMenu] = useState<{
+    x: number
+    y: number
+    entry?: Entry
+    kind: 'row' | 'blank'
+  } | null>(null)
+  const [dialog, setDialog] = useState<PickerDialog | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const list = useRef<HTMLDivElement>(null)
   const nameInput = useRef<HTMLInputElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
+  const dialogInput = useRef<HTMLInputElement>(null)
 
   const navigate = (path: string) => {
     if (!path || path === directory) return
@@ -81,41 +130,19 @@ function Picker({ request }: { request: FilePickerRequest }) {
 
   useEffect(() => {
     let alive = true
-    setLoading(true)
     setError('')
     void call<Listing>('list_directory', { path: directory })
       .then((value) => {
         if (!alive) return
-        setEntries(
-          (value.entries || [])
-            .filter((entry) => !entry.name.startsWith('.'))
-            .sort((a, b) => Number(b.isDir) - Number(a.isDir) || a.name.localeCompare(b.name)),
-        )
+        setEntries(value.entries || [])
       })
       .catch((cause) => {
         if (alive) setError(String(cause))
       })
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
     return () => {
       alive = false
     }
-  }, [directory])
-
-  useEffect(() => {
-    if (request.mode !== 'saveFile') return
-    // Radix focuses the dialog on mount, so focus the name field right after.
-    const timer = window.setTimeout(() => {
-      const input = nameInput.current
-      if (!input) return
-      input.focus()
-      // Select the basename so typing replaces it, like Finder's save panel.
-      const dot = input.value.lastIndexOf('.')
-      input.setSelectionRange(0, dot > 0 ? dot : input.value.length)
-    }, 60)
-    return () => window.clearTimeout(timer)
-  }, [request.mode])
+  }, [directory, reload])
 
   useEffect(() => {
     if (!directory && request.directory) navigate(request.directory)
@@ -127,10 +154,115 @@ function Picker({ request }: { request: FilePickerRequest }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (request.mode !== 'saveFile') return
+    // Radix focuses the dialog on mount, so focus the name field right after.
+    const timer = window.setTimeout(() => {
+      const input = nameInput.current
+      if (!input) return
+      input.focus()
+      const dot = input.value.lastIndexOf('.')
+      input.setSelectionRange(0, dot > 0 ? dot : input.value.length)
+    }, 60)
+    return () => window.clearTimeout(timer)
+  }, [request.mode])
+
+  useEffect(() => {
+    if (!dialog) return
+    const timer = window.setTimeout(() => {
+      dialogInput.current?.focus()
+      dialogInput.current?.select()
+    }, 40)
+    return () => window.clearTimeout(timer)
+  }, [dialog])
+
+  useEffect(() => {
+    setReplace(false)
+  }, [saveName, directory])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sort))
+      localStorage.setItem(GROUP_KEY, group)
+    } catch {
+      // Preferences are best effort.
+    }
+  }, [sort, group])
+
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const escape = (event: KeyboardEvent) => event.key === 'Escape' && setMenu(null)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', escape)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', escape)
+    }
+  }, [menu])
+
+  const groupOf = (entry: Entry): { label: string; rank: number } => {
+    if (group === 'kind')
+      return entry.isDir ? { label: '文件夹', rank: 0 } : { label: kind(entry), rank: 1 }
+    if (group === 'size') {
+      if (entry.isDir) return { label: '文件夹', rank: 0 }
+      if (entry.size === 0) return { label: '空', rank: 1 }
+      if (entry.size < 1024 * 1024) return { label: '小于 1 MB', rank: 2 }
+      if (entry.size < 100 * 1024 * 1024) return { label: '小于 100 MB', rank: 3 }
+      return { label: '大于 100 MB', rank: 4 }
+    }
+    if (group === 'modified') {
+      const value = entry.modified * 1000
+      const now = Date.now()
+      if (now - value < 24 * 60 * 60 * 1000) return { label: '今天', rank: 0 }
+      if (now - value < 48 * 60 * 60 * 1000) return { label: '昨天', rank: 1 }
+      if (now - value < 7 * 24 * 60 * 60 * 1000) return { label: '过去 7 天', rank: 2 }
+      if (now - value < 30 * 24 * 60 * 60 * 1000) return { label: '过去 30 天', rank: 3 }
+      return { label: '更早', rank: 4 }
+    }
+    return { label: '', rank: 0 }
+  }
+
   const visible = useMemo(() => {
     const query = filter.trim().toLowerCase()
-    return query ? entries.filter((entry) => entry.name.toLowerCase().includes(query)) : entries
-  }, [entries, filter])
+    const filtered = query
+      ? entries.filter((entry) => entry.name.toLowerCase().includes(query))
+      : entries
+    const direction = sort.direction === 'asc' ? 1 : -1
+    return [...filtered].sort((left, right) => {
+      if (group !== 'none') {
+        const leftGroup = groupOf(left)
+        const rightGroup = groupOf(right)
+        if (leftGroup.rank !== rightGroup.rank) return leftGroup.rank - rightGroup.rank
+        if (leftGroup.label !== rightGroup.label)
+          return leftGroup.label.localeCompare(rightGroup.label)
+      }
+      if (left.isDir !== right.isDir) return left.isDir ? -1 : 1
+      const result =
+        sort.key === 'name'
+          ? left.name.localeCompare(right.name)
+          : sort.key === 'modified'
+            ? left.modified - right.modified
+            : sort.key === 'size'
+              ? left.size - right.size
+              : kind(left).localeCompare(kind(right))
+      return result * direction
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, filter, sort, group])
+
+  const grouped = useMemo(() => {
+    if (group === 'none') return [{ label: null as string | null, entries: visible }]
+    const sections: { label: string | null; entries: Entry[] }[] = []
+    for (const entry of visible) {
+      const label = groupOf(entry).label
+      const last = sections[sections.length - 1]
+      if (last && last.label === label) last.entries.push(entry)
+      else sections.push({ label, entries: [entry] })
+    }
+    return sections
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, group])
 
   const selectedEntries = visible.filter((entry) => selected.includes(entry.path))
   const canConfirm =
@@ -138,10 +270,9 @@ function Picker({ request }: { request: FilePickerRequest }) {
       ? Boolean(saveName.trim()) && Boolean(directory)
       : request.mode === 'openDirectory'
         ? Boolean(directory)
-        : selectedEntries.length > 0 &&
-          (request.mode === 'openFiles' || !selectedEntries[0].isDir || true)
-
+        : selectedEntries.length > 0
   const target = entries.find((entry) => entry.name === saveName.trim() && !entry.isDir)
+
   const confirm = () => {
     if (!canConfirm) return
     if (request.mode === 'saveFile') {
@@ -185,17 +316,48 @@ function Picker({ request }: { request: FilePickerRequest }) {
     }
   }
 
-  useEffect(() => {
-    setReplace(false)
-  }, [saveName, directory])
+  const perform = async (action: () => Promise<unknown>) => {
+    setBusy(true)
+    setError('')
+    try {
+      await action()
+      setDialog(null)
+      setMenu(null)
+      setReload((value) => value + 1)
+    } catch (cause) {
+      setError(String(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const createFolder = (name: string) => {
+    if (!name.trim()) return
+    void perform(async () => {
+      const path = await call<string>('create_entry', {
+        path: directory,
+        name: name.trim(),
+        folder: true,
+      })
+      setSelected([path])
+    })
+  }
+  const renameEntry = (entry: Entry, name: string) => {
+    if (!name.trim() || name.trim() === entry.name) return
+    void perform(() => call<string>('rename_entry', { path: entry.path, name: name.trim() }))
+  }
+  const trashEntry = (entry: Entry) => {
+    void perform(() => call('recycle', { paths: [entry.path] }))
+  }
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
+      if (dialog || replace || menu) return
       if (event.key === 'Escape') {
         event.preventDefault()
         settleFilePicker(null)
       }
-      if (event.key === 'Enter') {
+      if (event.key === 'Enter' && !(event.target as HTMLElement).closest('input')) {
         event.preventDefault()
         confirm()
       }
@@ -212,6 +374,13 @@ function Picker({ request }: { request: FilePickerRequest }) {
   const places = commonPlaces(locations)
   const favorites = preferences.favorites || []
   const disks = locations.filter((location) => location.kind === 'disk')
+
+  const contextMenu = (event: React.MouseEvent, entry?: Entry) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (entry) setSelected([entry.path])
+    setMenu({ x: event.clientX, y: event.clientY, entry, kind: entry ? 'row' : 'blank' })
+  }
 
   return (
     <Modal
@@ -325,6 +494,17 @@ function Picker({ request }: { request: FilePickerRequest }) {
                 </button>
               ))}
             </nav>
+            <button
+              type="button"
+              aria-label="更多"
+              title="新建、排序、分组"
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect()
+                setMenu({ x: Math.max(8, rect.right - 190), y: rect.bottom + 4, kind: 'blank' })
+              }}
+            >
+              <MoreHorizontal size={15} />
+            </button>
             <label className="file-picker-search">
               <Search size={13} />
               <input
@@ -344,33 +524,36 @@ function Picker({ request }: { request: FilePickerRequest }) {
           </div>
           <div
             className={`file-picker-entries ${view}`}
-            ref={list}
             role="listbox"
             aria-label="文件"
+            onContextMenu={(event) => contextMenu(event)}
           >
-            {loading && <p className="file-picker-hint">正在读取…</p>}
             {error && <p className="file-picker-hint error">{error}</p>}
-            {!loading && !error && visible.length === 0 && (
-              <p className="file-picker-hint">此文件夹为空。</p>
-            )}
+            {!error && !visible.length && <p className="file-picker-hint">此文件夹为空。</p>}
             {view === 'list'
-              ? visible.map((entry) => (
-                  <button
-                    key={entry.path}
-                    type="button"
-                    role="option"
-                    aria-selected={selected.includes(entry.path)}
-                    className={`file-picker-row ${selected.includes(entry.path) ? 'selected' : ''}`}
-                    onClick={(event) =>
-                      toggle(entry, event.metaKey || event.ctrlKey || event.shiftKey)
-                    }
-                    onDoubleClick={() => openEntry(entry)}
-                  >
-                    <FileIcon entry={entry} size={22} />
-                    <span className="name">{entry.name}</span>
-                    <span className="meta">{date(entry.modified)}</span>
-                    <span className="meta size">{entry.isDir ? '—' : size(entry.size)}</span>
-                  </button>
+              ? grouped.map((section) => (
+                  <div key={section.label || 'all'}>
+                    {section.label && <p className="file-picker-group">{section.label}</p>}
+                    {section.entries.map((entry) => (
+                      <button
+                        key={entry.path}
+                        type="button"
+                        role="option"
+                        aria-selected={selected.includes(entry.path)}
+                        className={`file-picker-row ${selected.includes(entry.path) ? 'selected' : ''}`}
+                        onClick={(event) =>
+                          toggle(entry, event.metaKey || event.ctrlKey || event.shiftKey)
+                        }
+                        onDoubleClick={() => openEntry(entry)}
+                        onContextMenu={(event) => contextMenu(event, entry)}
+                      >
+                        <FileIcon entry={entry} size={22} />
+                        <span className="name">{entry.name}</span>
+                        <span className="meta">{date(entry.modified)}</span>
+                        <span className="meta size">{entry.isDir ? '—' : size(entry.size)}</span>
+                      </button>
+                    ))}
+                  </div>
                 ))
               : visible.map((entry) => (
                   <button
@@ -383,6 +566,7 @@ function Picker({ request }: { request: FilePickerRequest }) {
                       toggle(entry, event.metaKey || event.ctrlKey || event.shiftKey)
                     }
                     onDoubleClick={() => openEntry(entry)}
+                    onContextMenu={(event) => contextMenu(event, entry)}
                   >
                     <FileIcon entry={entry} size={44} />
                     <span>{entry.name}</span>
@@ -391,6 +575,190 @@ function Picker({ request }: { request: FilePickerRequest }) {
           </div>
         </section>
       </div>
+      {menu &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="file-picker-menu"
+            style={menuPosition}
+            role="menu"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {menu.kind === 'row' && menu.entry && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openEntry(menu.entry!)
+                    setMenu(null)
+                  }}
+                >
+                  打开
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setDialog({ kind: 'rename', entry: menu.entry!, value: menu.entry!.name })
+                    setMenu(null)
+                  }}
+                >
+                  <Pencil size={12} /> 重命名…
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="danger"
+                  onClick={() => {
+                    setDialog({ kind: 'trash', entry: menu.entry! })
+                    setMenu(null)
+                  }}
+                >
+                  <Trash2 size={12} /> 移到废纸篓
+                </button>
+              </>
+            )}
+            {menu.kind === 'blank' && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setDialog({ kind: 'folder', value: '未命名文件夹' })
+                    setMenu(null)
+                  }}
+                >
+                  <FolderPlus size={12} /> 新建文件夹
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setReload((value) => value + 1)
+                    setMenu(null)
+                  }}
+                >
+                  <RotateCw size={12} /> 刷新
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setView(view === 'list' ? 'grid' : 'list')
+                    setMenu(null)
+                  }}
+                >
+                  {view === 'list' ? <LayoutGrid size={12} /> : <List size={12} />}{' '}
+                  {view === 'list' ? '图标视图' : '列表视图'}
+                </button>
+                <div className="file-picker-menu-label">排序方式</div>
+                {(['name', 'modified', 'size', 'kind'] as SortKey[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={sort.key === key}
+                    onClick={() => {
+                      setSort((old) =>
+                        old.key === key
+                          ? { key, direction: old.direction === 'asc' ? 'desc' : 'asc' }
+                          : { key, direction: 'asc' },
+                      )
+                      setMenu(null)
+                    }}
+                  >
+                    {{ name: '名称', modified: '修改日期', size: '大小', kind: '类型' }[key]}
+                    {sort.key === key ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : ''}
+                  </button>
+                ))}
+                <div className="file-picker-menu-label">分组方式</div>
+                {(['none', 'kind', 'modified', 'size'] as GroupKey[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={group === key}
+                    onClick={() => {
+                      setGroup(key)
+                      setMenu(null)
+                    }}
+                  >
+                    {{ none: '不分组', kind: '类型', modified: '修改日期', size: '大小' }[key]}
+                    {group === key ? ' ✓' : ''}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>,
+          document.body,
+        )}
+      <Modal
+        open={dialog?.kind === 'folder' || dialog?.kind === 'rename'}
+        onClose={() => setDialog(null)}
+        title={dialog?.kind === 'rename' ? '重命名' : '新建文件夹'}
+        className="file-picker-confirm"
+      >
+        {(dialog?.kind === 'folder' || dialog?.kind === 'rename') && (
+          <>
+            <label className="file-picker-dialog-field">
+              <span>{dialog.kind === 'rename' ? '新名称' : '文件夹名称'}</span>
+              <input
+                ref={dialogInput}
+                value={dialog.value}
+                onChange={(event) =>
+                  setDialog(
+                    dialog.kind === 'rename'
+                      ? { ...dialog, value: event.target.value }
+                      : { ...dialog, value: event.target.value },
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  if (dialog.kind === 'rename') renameEntry(dialog.entry, dialog.value)
+                  else createFolder(dialog.value)
+                }}
+              />
+            </label>
+            <footer className="file-picker-confirm-actions">
+              <Button variant="outline" onClick={() => setDialog(null)}>
+                取消
+              </Button>
+              <Button
+                disabled={busy || !dialog.value.trim()}
+                onClick={() =>
+                  dialog.kind === 'rename'
+                    ? renameEntry(dialog.entry, dialog.value)
+                    : createFolder(dialog.value)
+                }
+              >
+                {dialog.kind === 'rename' ? '重命名' : '新建'}
+              </Button>
+            </footer>
+          </>
+        )}
+      </Modal>
+      <Modal
+        open={dialog?.kind === 'trash'}
+        onClose={() => setDialog(null)}
+        title="移到废纸篓？"
+        className="file-picker-confirm"
+      >
+        {dialog?.kind === 'trash' && (
+          <>
+            <p className="file-picker-confirm-text">
+              「{dialog.entry.name}」将移到废纸篓，可以再恢复。
+            </p>
+            <footer className="file-picker-confirm-actions">
+              <Button variant="outline" onClick={() => setDialog(null)}>
+                取消
+              </Button>
+              <Button onClick={() => trashEntry(dialog.entry)}>移到废纸篓</Button>
+            </footer>
+          </>
+        )}
+      </Modal>
       <Modal
         open={replace}
         onClose={() => setReplace(false)}

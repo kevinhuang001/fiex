@@ -1,4 +1,5 @@
 import { commonPlaces } from '@/lib/places'
+import { useMenuPosition } from '@/lib/menuPosition'
 import {
   Home,
   Monitor,
@@ -62,6 +63,7 @@ export function Sidebar({
     | null
   >(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
   useEffect(() => {
     if (!menu) return
     // pointerdown fires before click, so an item can only be activated when the
@@ -344,7 +346,7 @@ export function Sidebar({
           className="context-menu sidebar-menu"
           role="menu"
           aria-label={menu.kind === 'trash' ? '废纸篓' : '收藏'}
-          style={{ left: menu.x, top: menu.y }}
+          style={menuPosition}
         >
           {menu.kind === 'trash' ? (
             <>

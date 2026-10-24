@@ -321,3 +321,107 @@
   gap: 8px;
   padding: 0 20px 16px;
 }
+
+.file-picker-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 4px 12px;
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.file-picker-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
+}
+
+.file-picker-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: default;
+}
+
+.file-picker-menu button:hover {
+  background: var(--hover);
+}
+
+.file-picker-menu button.danger {
+  color: var(--danger);
+}
+
+.file-picker-menu-label {
+  margin: 6px 8px 2px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.file-picker-dialog-field {
+  display: grid;
+  gap: 6px;
+  padding: 4px 20px 16px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.file-picker-dialog-field input {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.file-picker-dialog-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* Dark mode: keep the sheet readable instead of relying on translucent grey. */
+html.dark .file-picker-body {
+  border-color: color-mix(in srgb, var(--line) 70%, transparent);
+  box-shadow: none;
+}
+
+html.dark .file-picker-sidebar {
+  background: color-mix(in srgb, var(--canvas) 82%, #000 18%);
+}
+
+html.dark .file-picker-row.selected,
+html.dark .file-picker-tile.selected {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+html.dark .file-picker-menu {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+html.dark .file-picker-name input,
+html.dark .file-picker-search,
+html.dark .file-picker-dialog-field input {
+  background: var(--canvas);
+}
