@@ -41,6 +41,8 @@ pub mod plugin_sandbox;
 pub mod plugin_search;
 #[path = "plugins/storage.rs"]
 pub mod plugin_storage;
+#[path = "plugins/task_events.rs"]
+pub mod plugin_task_events;
 #[path = "plugins/themes.rs"]
 pub mod plugin_themes;
 #[path = "plugins/vfs.rs"]

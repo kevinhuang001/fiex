@@ -18,6 +18,31 @@ use std::{
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_TASKS: usize = 32;
+const MAX_TASK_HISTORY: usize = 64;
+
+/// A plugin call failure. Business errors (a valid JSON-RPC error reply) must
+/// not terminate the resident process; transport and protocol failures must.
+#[derive(Debug)]
+pub(super) struct RpcFailure {
+    pub(super) message: String,
+    pub(super) fatal: bool,
+}
+
+impl RpcFailure {
+    fn business(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            fatal: false,
+        }
+    }
+
+    fn fatal(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            fatal: true,
+        }
+    }
+}
 
 #[derive(Clone)]
 struct Operation {
@@ -25,10 +50,25 @@ struct Operation {
     scope: Option<crate::plugin_fs_access::Scope>,
 }
 
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginTaskInfo {
+    pub task_id: String,
+    pub plugin_id: String,
+    pub label: String,
+    pub status: String,
+    pub done: u64,
+    pub total: Option<u64>,
+    pub result: Value,
+    pub error: Option<String>,
+}
+
 #[derive(Clone)]
 struct TaskEntry {
     owner: String,
     scope: Option<crate::plugin_fs_access::Scope>,
+    info: PluginTaskInfo,
+    finished_at: Option<u64>,
 }
 
 struct Actor {
@@ -42,7 +82,7 @@ pub(super) struct Running {
     declared: BTreeSet<String>,
     child: Mutex<crate::plugin_sandbox::SandboxChild>,
     stdin: Mutex<Box<dyn Write + Send>>,
-    pending: Mutex<HashMap<u64, mpsc::Sender<Result<Value, String>>>>,
+    pending: Mutex<HashMap<u64, mpsc::Sender<Result<Value, RpcFailure>>>>,
     operations: Mutex<HashMap<u64, Operation>>,
     tasks: Mutex<HashMap<String, TaskEntry>>,
     next_id: AtomicU64,
@@ -131,12 +171,12 @@ impl Running {
             return;
         };
         let result = if let Some(error) = message.get("error") {
-            Err(format!("plugin error: {error}"))
+            Err(RpcFailure::business(format!("plugin error: {error}")))
         } else {
             message
                 .get("result")
                 .cloned()
-                .ok_or_else(|| "plugin response missing result".into())
+                .ok_or_else(|| RpcFailure::fatal("plugin response missing result"))
         };
         if let Ok(mut pending) = self.pending.lock() {
             if let Some(sender) = pending.remove(&id) {
@@ -159,7 +199,7 @@ impl Running {
         let message = format!("{message} ({diagnostic})");
         if let Ok(mut pending) = self.pending.lock() {
             for (_, sender) in pending.drain() {
-                let _ = sender.send(Err(message.clone()));
+                let _ = sender.send(Err(RpcFailure::fatal(message.clone())));
             }
         }
     }
@@ -174,6 +214,7 @@ impl Running {
         for operation in operations {
             crate::plugin_fs_access::cleanup(&operation.owner);
             crate::plugin_ipc::cleanup(&operation.owner);
+            crate::plugin_net::cleanup(&operation.owner);
         }
         let tasks: Vec<TaskEntry> = self
             .tasks
@@ -181,8 +222,65 @@ impl Running {
             .map(|mut tasks| tasks.drain().map(|(_, value)| value).collect())
             .unwrap_or_default();
         for task in tasks {
+            if matches!(task.info.status.as_str(), "running" | "cancelling") {
+                let mut info = task.info.clone();
+                info.status = "cancelled".into();
+                info.error = Some("插件进程已停止".into());
+                self.emit_task(&info);
+            }
             crate::plugin_fs_access::cleanup(&task.owner);
             crate::plugin_ipc::cleanup(&task.owner);
+            crate::plugin_net::cleanup(&task.owner);
+        }
+    }
+
+    fn emit_task(&self, info: &PluginTaskInfo) {
+        crate::plugin_task_events::emit(crate::plugin_task_events::PluginTaskEvent {
+            task_id: info.task_id.clone(),
+            plugin_id: info.plugin_id.clone(),
+            label: info.label.clone(),
+            status: info.status.clone(),
+            done: info.done,
+            total: info.total,
+            result: info.result.clone(),
+            error: info.error.clone(),
+        });
+    }
+
+    pub(super) fn task(&self, id: &str) -> Option<PluginTaskInfo> {
+        self.tasks
+            .lock()
+            .ok()
+            .and_then(|tasks| tasks.get(id).map(|task| task.info.clone()))
+    }
+
+    pub(super) fn cancel_task(&self, id: &str) -> Result<(), String> {
+        let info = {
+            let mut tasks = self.tasks.lock().map_err(|_| "task registry unavailable")?;
+            let entry = tasks.get_mut(id).ok_or("background task not found")?;
+            if !matches!(entry.info.status.as_str(), "running" | "cancelling") {
+                return Err("background task has already finished".into());
+            }
+            entry.info.status = "cancelling".into();
+            entry.info.clone()
+        };
+        self.emit_task(&info);
+        self.send_frame(&json!({
+            "jsonrpc": "2.0",
+            "method": "plugin.cancel",
+            "params": { "taskId": info.task_id },
+        }))
+    }
+
+    fn prune_tasks(tasks: &mut HashMap<String, TaskEntry>) {
+        let mut finished: Vec<(u64, String)> = tasks
+            .iter()
+            .filter_map(|(id, task)| task.finished_at.map(|at| (at, id.clone())))
+            .collect();
+        finished.sort();
+        let excess = finished.len().saturating_sub(MAX_TASK_HISTORY);
+        for (_, id) in finished.into_iter().take(excess) {
+            tasks.remove(&id);
         }
     }
 
@@ -262,20 +360,45 @@ impl Running {
                 {
                     return Err("invalid task id".into());
                 }
+                let label = p
+                    .get("label")
+                    .and_then(Value::as_str)
+                    .filter(|label| !label.is_empty())
+                    .unwrap_or("插件后台任务");
                 let mut tasks = self.tasks.lock().map_err(|_| "task registry unavailable")?;
-                if tasks.len() >= MAX_TASKS {
+                if tasks
+                    .values()
+                    .filter(|task| matches!(task.info.status.as_str(), "running" | "cancelling"))
+                    .count()
+                    >= MAX_TASKS
+                {
                     return Err("too many background tasks".into());
                 }
                 if tasks.contains_key(task_id) {
                     return Err("task id already registered".into());
                 }
+                let info = PluginTaskInfo {
+                    task_id: task_id.to_string(),
+                    plugin_id: self.plugin_id.clone(),
+                    label: label.to_string(),
+                    status: "running".into(),
+                    done: 0,
+                    total: None,
+                    result: Value::Null,
+                    error: None,
+                };
                 tasks.insert(
                     task_id.to_string(),
                     TaskEntry {
                         owner: format!("{}:task:{task_id}", self.base_owner),
                         scope: operation.scope,
+                        info: info.clone(),
+                        finished_at: None,
                     },
                 );
+                Self::prune_tasks(&mut tasks);
+                drop(tasks);
+                self.emit_task(&info);
                 Ok(Value::Null)
             }
             "host.task.finish" => {
@@ -284,15 +407,26 @@ impl Running {
                     .get("taskId")
                     .and_then(Value::as_str)
                     .ok_or("missing task authorization")?;
-                let task = self
-                    .tasks
-                    .lock()
-                    .map_err(|_| "task registry unavailable")?
-                    .remove(task_id);
-                if let Some(task) = task {
-                    crate::plugin_fs_access::cleanup(&task.owner);
-                    crate::plugin_ipc::cleanup(&task.owner);
-                }
+                let (info, owner) = {
+                    let mut tasks = self.tasks.lock().map_err(|_| "task registry unavailable")?;
+                    let Some(entry) = tasks.get_mut(task_id) else {
+                        return Ok(Value::Null);
+                    };
+                    entry.info.status = match p.get("status").and_then(Value::as_str) {
+                        Some("completed") => "completed",
+                        Some("cancelled") => "cancelled",
+                        _ => "failed",
+                    }
+                    .to_string();
+                    entry.info.result = p.get("result").cloned().unwrap_or(Value::Null);
+                    entry.info.error = p.get("error").and_then(Value::as_str).map(str::to_owned);
+                    entry.finished_at = Some(now_millis());
+                    (entry.info.clone(), entry.owner.clone())
+                };
+                crate::plugin_fs_access::cleanup(&owner);
+                crate::plugin_ipc::cleanup(&owner);
+                crate::plugin_net::cleanup(&owner);
+                self.emit_task(&info);
                 Ok(Value::Null)
             }
             "host.task.progress" => {
@@ -301,14 +435,19 @@ impl Running {
                     .get("taskId")
                     .and_then(Value::as_str)
                     .ok_or("missing task authorization")?;
-                if !self
-                    .tasks
-                    .lock()
-                    .map_err(|_| "task registry unavailable")?
-                    .contains_key(task_id)
-                {
-                    return Err("task authorization expired".into());
-                }
+                let info = {
+                    let mut tasks = self.tasks.lock().map_err(|_| "task registry unavailable")?;
+                    let Some(entry) = tasks.get_mut(task_id) else {
+                        return Err("task authorization expired".into());
+                    };
+                    if !matches!(entry.info.status.as_str(), "running" | "cancelling") {
+                        return Ok(Value::Null);
+                    }
+                    entry.info.done = p.get("done").and_then(Value::as_u64).unwrap_or(0);
+                    entry.info.total = p.get("total").and_then(Value::as_u64);
+                    entry.info.clone()
+                };
+                self.emit_task(&info);
                 Ok(Value::Null)
             }
             "host.task.cancel" => {
@@ -623,14 +762,14 @@ impl Running {
         }
     }
 
-    fn ensure_initialized(&self) -> Result<(), String> {
+    fn ensure_initialized(&self) -> Result<(), RpcFailure> {
         if self.initialized.load(Ordering::Acquire) {
             return Ok(());
         }
         let _guard = self
             .init_lock
             .lock()
-            .map_err(|_| "plugin initialization lock poisoned")?;
+            .map_err(|_| RpcFailure::fatal("plugin initialization lock poisoned"))?;
         if self.initialized.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -640,7 +779,7 @@ impl Running {
             None,
         )?;
         if result.get("pluginId").and_then(Value::as_str) != Some(self.plugin_id.as_str()) {
-            return Err("plugin identity mismatch".into());
+            return Err(RpcFailure::fatal("plugin identity mismatch"));
         }
         self.initialized.store(true, Ordering::Release);
         Ok(())
@@ -651,9 +790,9 @@ impl Running {
         method: &str,
         params: Value,
         scope: Option<crate::plugin_fs_access::Scope>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, RpcFailure> {
         if self.closed.load(Ordering::Acquire) {
-            return Err("plugin process is not running".into());
+            return Err(RpcFailure::fatal("plugin process is not running"));
         }
         if method != "plugin.initialize" {
             self.ensure_initialized()?;
@@ -662,7 +801,7 @@ impl Running {
         let owner = format!("{}:op:{id}", self.base_owner);
         self.operations
             .lock()
-            .map_err(|_| "operation registry unavailable")?
+            .map_err(|_| RpcFailure::fatal("operation registry unavailable"))?
             .insert(
                 id,
                 Operation {
@@ -673,7 +812,7 @@ impl Running {
         let (sender, receiver) = mpsc::channel();
         self.pending
             .lock()
-            .map_err(|_| "response registry unavailable")?
+            .map_err(|_| RpcFailure::fatal("response registry unavailable"))?
             .insert(id, sender);
         let sent = self.send_frame(&json!({
             "jsonrpc": "2.0",
@@ -686,12 +825,16 @@ impl Running {
                 pending.remove(&id);
             }
             self.finish_operation(id);
-            return Err(error);
+            return Err(RpcFailure::fatal(error));
         }
         let result = match receiver.recv_timeout(REQUEST_TIMEOUT) {
             Ok(result) => result,
-            Err(mpsc::RecvTimeoutError::Timeout) => Err("plugin request deadline exceeded".into()),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Err("plugin process disconnected".into()),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                Err(RpcFailure::fatal("plugin request deadline exceeded"))
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                Err(RpcFailure::fatal("plugin process disconnected"))
+            }
         };
         if let Ok(mut pending) = self.pending.lock() {
             pending.remove(&id);
@@ -709,6 +852,14 @@ impl Running {
         if let Some(operation) = operation {
             crate::plugin_fs_access::cleanup(&operation.owner);
             crate::plugin_ipc::cleanup(&operation.owner);
+            crate::plugin_net::cleanup(&operation.owner);
         }
     }
+}
+
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_millis() as u64)
+        .unwrap_or_default()
 }

@@ -6,7 +6,6 @@ use cap_std::{
     fs::{Dir, OpenOptions},
 };
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     io::{Read, Seek, SeekFrom, Write},
@@ -323,30 +322,35 @@ pub fn rename(root: &Scope, from: &str, to: &str) -> Result<(), String> {
 struct PendingWrite {
     owner: String,
     root: Dir,
+    root_path: PathBuf,
     path: PathBuf,
-    original: Option<Vec<u8>>,
+    original: Option<Fingerprint>,
     staging: tempfile::NamedTempFile,
+}
+
+/// Cheap conflict detector: a full content hash costs a second read of a large
+/// file on begin, commit and abort. Size plus modification time catches the
+/// realistic concurrent changes without blocking on hundreds of gigabytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Fingerprint {
+    len: u64,
+    modified: Option<cap_std::time::SystemTime>,
+    readonly: bool,
 }
 fn writes() -> &'static Mutex<HashMap<String, PendingWrite>> {
     static VALUES: OnceLock<Mutex<HashMap<String, PendingWrite>>> = OnceLock::new();
     VALUES.get_or_init(|| Mutex::new(HashMap::new()))
 }
-fn fingerprint(dir: &Dir, path: &Path) -> Result<Option<Vec<u8>>, String> {
-    let mut file = match dir.open(path) {
-        Ok(f) => f,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-    };
-    let mut hash = Sha256::new();
-    let mut block = [0; 65536];
-    loop {
-        let count = file.read(&mut block).map_err(|e| e.to_string())?;
-        if count == 0 {
-            break;
-        }
-        hash.update(&block[..count]);
+fn fingerprint(dir: &Dir, path: &Path) -> Result<Option<Fingerprint>, String> {
+    match dir.metadata(path) {
+        Ok(metadata) => Ok(Some(Fingerprint {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            readonly: metadata.permissions().readonly(),
+        })),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
     }
-    Ok(Some(hash.finalize().to_vec()))
 }
 pub fn begin_write(owner: &str, root: &Scope, input: &str, create: bool) -> Result<String, String> {
     let dir = directory(root)?;
@@ -378,6 +382,7 @@ pub fn begin_write(owner: &str, root: &Scope, input: &str, create: bool) -> Resu
         PendingWrite {
             owner: owner.into(),
             root: dir,
+            root_path: root.path().to_path_buf(),
             path,
             original,
             staging,
@@ -415,18 +420,27 @@ fn write_bytes(owner: &str, handle: &str, bytes: &[u8]) -> Result<(), String> {
 }
 pub fn abort(owner: &str, handle: &str) -> Result<(), String> {
     let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
-    if !pending.get(handle).is_some_and(|v| v.owner == owner) {
-        return Err("write handle unavailable".into());
+    // Aborting an already-failed commit is a successful cleanup: the commit
+    // path removes the transaction before doing expensive work.
+    match pending.get(handle) {
+        Some(value) if value.owner == owner => {
+            pending.remove(handle);
+            Ok(())
+        }
+        None => Ok(()),
+        Some(_) => Err("write handle unavailable".into()),
     }
-    pending.remove(handle);
-    Ok(())
 }
 pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
-    let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
-    let write = pending
-        .get_mut(handle)
-        .filter(|v| v.owner == owner)
-        .ok_or("write handle unavailable")?;
+    // Remove the transaction before touching the target so other independent
+    // commits never wait for a large copy or fsync.
+    let mut write = {
+        let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
+        pending
+            .remove(handle)
+            .filter(|value| value.owner == owner)
+            .ok_or("write handle unavailable")?
+    };
     let dir = &write.root;
     if fingerprint(dir, &write.path)? != write.original {
         return Err("file changed since write began; commit aborted".into());
@@ -447,26 +461,53 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
             .unwrap_or_default()
             .to_string_lossy()
     );
+    write
+        .staging
+        .as_file()
+        .sync_all()
+        .map_err(|e| e.to_string())?;
+    let mut temp_exists = false;
     let result = (|| {
-        let mut output = target_dir
-            .open_with(&temp_name, OpenOptions::new().write(true).create_new(true))
-            .map_err(|e| e.to_string())?;
-        write
-            .staging
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| e.to_string())?;
-        std::io::copy(&mut write.staging, &mut output).map_err(|e| e.to_string())?;
-        if write.original.is_some() {
-            output
-                .set_permissions(
-                    dir.metadata(&write.path)
-                        .map_err(|e| e.to_string())?
-                        .permissions(),
-                )
-                .map_err(|e| e.to_string())?;
+        // Fast path: when the staging file and the target live on the same
+        // filesystem, an atomic rename avoids copying the whole file. Only use
+        // it while the captured root still resolves to the same directory; a
+        // replaced root path falls back to the capability copy below.
+        let mut moved = false;
+        if let Ok(canonical_parent) = dir.canonicalize(parent) {
+            let absolute_parent = write.root_path.join(&canonical_parent);
+            let root_is_intact = std::fs::canonicalize(&write.root_path)
+                .map(|path| path == write.root_path)
+                .unwrap_or(false);
+            if root_is_intact
+                && std::fs::rename(write.staging.path(), absolute_parent.join(&temp_name)).is_ok()
+            {
+                moved = true;
+            }
         }
-        output.sync_all().map_err(|e| e.to_string())?;
-        drop(output);
+        if moved {
+            temp_exists = true;
+        } else {
+            let mut output = target_dir
+                .open_with(&temp_name, OpenOptions::new().write(true).create_new(true))
+                .map_err(|e| e.to_string())?;
+            temp_exists = true;
+            write
+                .staging
+                .seek(SeekFrom::Start(0))
+                .map_err(|e| e.to_string())?;
+            std::io::copy(&mut write.staging, &mut output).map_err(|e| e.to_string())?;
+            output.sync_all().map_err(|e| e.to_string())?;
+        }
+        if write.original.is_some() {
+            let permissions = dir
+                .metadata(&write.path)
+                .map_err(|e| e.to_string())?
+                .permissions();
+            let temp = target_dir.open(&temp_name).map_err(|e| e.to_string())?;
+            temp.set_permissions(permissions)
+                .map_err(|e| e.to_string())?;
+            temp.sync_all().map_err(|e| e.to_string())?;
+        }
         if fingerprint(dir, &write.path)? != write.original {
             return Err("file changed during commit".into());
         }
@@ -485,11 +526,8 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
         }
         entry(dir, &write.path)
     })();
-    if result.is_err() {
+    if result.is_err() && temp_exists {
         let _ = target_dir.remove_file(&temp_name);
-    }
-    if result.is_ok() {
-        pending.remove(handle);
     }
     result
 }

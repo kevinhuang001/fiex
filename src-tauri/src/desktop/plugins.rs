@@ -158,6 +158,14 @@ pub(crate) fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
     crate::plugin_host::approve_install(&plugin_id)
 }
 #[tauri::command]
+pub(crate) fn plugin_task(task_id: String) -> Option<crate::plugin_host::PluginTaskInfo> {
+    crate::plugin_host::global().task(&task_id)
+}
+#[tauri::command]
+pub(crate) fn plugin_cancel_task(task_id: String) -> Result<(), String> {
+    crate::plugin_host::global().cancel_task(&task_id)
+}
+#[tauri::command]
 pub(crate) fn plugin_status() -> Vec<(String, bool)> {
     crate::plugin_host::catalog()
         .into_iter()

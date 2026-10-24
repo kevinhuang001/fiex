@@ -10,6 +10,7 @@ import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { useAppController } from '@/hooks/useAppController'
+import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
@@ -17,6 +18,7 @@ import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
+  usePluginTasks()
 
   useEffect(() => {
     const navigate = (event: Event) => {

@@ -145,6 +145,7 @@ export function usePanelBridge({
             'context.get',
             'clipboard.writeText',
             'plugin.invoke',
+            'plugin.task',
             'panel.close',
             'panel.resize',
             'plugin.error',
@@ -351,6 +352,12 @@ export function usePanelBridge({
                   ...(current.selection.length || chosenPaths.size ? [] : [current.directory]),
                 ]),
               })
+            }
+            if (method === 'plugin.task') {
+              const p = params as { taskId?: unknown } | null
+              if (!p || typeof p.taskId !== 'string' || !p.taskId)
+                throw new Error('Invalid plugin task id')
+              return await call<JsonValue | null>('plugin_task', { taskId: p.taskId })
             }
             if (method.startsWith('dialog.')) {
               // The chooser is rendered by the host and only returns the path the

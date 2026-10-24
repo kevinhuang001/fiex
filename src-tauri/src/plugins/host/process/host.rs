@@ -26,6 +26,29 @@ impl PluginHost {
             }
         }
     }
+    pub fn task(&self, task_id: &str) -> Option<crate::plugin_host::PluginTaskInfo> {
+        self.children
+            .lock()
+            .ok()?
+            .values()
+            .find_map(|instance| instance.running.task(task_id))
+    }
+    pub fn cancel_task(&self, task_id: &str) -> Result<(), String> {
+        let instance = {
+            let guard = self
+                .children
+                .lock()
+                .map_err(|_| "plugin host lock poisoned")?;
+            guard
+                .values()
+                .find(|instance| instance.running.task(task_id).is_some())
+                .cloned()
+        };
+        instance
+            .ok_or_else(|| "background task not found".to_string())?
+            .running
+            .cancel_task(task_id)
+    }
     pub fn is_installed(&self, id: &str) -> bool {
         discover()
             .into_iter()
@@ -173,20 +196,24 @@ impl PluginHost {
             instance
         };
         drop(guard);
-        let result = instance.running.rpc(method, params, task_root);
-        if result.is_err() {
-            instance.running.stop();
-            instance.kill.terminate();
-            if let Ok(mut guard) = self.children.lock() {
-                if guard
-                    .get(plugin_id)
-                    .is_some_and(|current| Arc::ptr_eq(current, &instance))
-                {
-                    guard.remove(plugin_id);
+        match instance.running.rpc(method, params, task_root) {
+            Ok(value) => Ok(value),
+            Err(failure) => {
+                if failure.fatal {
+                    instance.running.stop();
+                    instance.kill.terminate();
+                    if let Ok(mut guard) = self.children.lock() {
+                        if guard
+                            .get(plugin_id)
+                            .is_some_and(|current| Arc::ptr_eq(current, &instance))
+                        {
+                            guard.remove(plugin_id);
+                        }
+                    }
                 }
+                Err(failure.message)
             }
         }
-        result
     }
 }
 pub fn global() -> &'static PluginHost {
