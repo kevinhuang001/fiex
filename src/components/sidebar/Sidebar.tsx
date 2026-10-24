@@ -27,6 +27,7 @@ export function Sidebar({
       <div className="sidebar-title" data-tauri-drag-region />
       <div className="sidebar-content">
         {prefs.sidebarOrder.map((section) => {
+          if (prefs.hiddenSections.includes(section)) return null
           if (section === 'places') {
             return (
               <Places
@@ -44,7 +45,7 @@ export function Sidebar({
             return <Favorites key="favorites" x={x} prefs={prefs} setMenu={setMenu} />
           }
           if (section === 'tags') {
-            return prefs.showTags ? <Tags key="tags" x={x} prefs={prefs} /> : null
+            return <Tags key="tags" x={x} prefs={prefs} />
           }
           if (section === 'connections') {
             return (

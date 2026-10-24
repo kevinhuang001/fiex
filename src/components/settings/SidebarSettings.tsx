@@ -178,15 +178,19 @@ export function SidebarSettings({
     <>
       <GripVertical size={13} className="drag-handle" />
       <span>{SIDEBAR_LABELS[id]}</span>
-      {id === 'tags' && (
-        <input
-          type="checkbox"
-          aria-label="启用标签"
-          checked={prefs.showTags}
-          onChange={() => update({ showTags: !prefs.showTags })}
-          onPointerDown={(event) => event.stopPropagation()}
-        />
-      )}
+      <input
+        type="checkbox"
+        aria-label={`显示${SIDEBAR_LABELS[id]}`}
+        checked={!prefs.hiddenSections.includes(id)}
+        onChange={() =>
+          update({
+            hiddenSections: prefs.hiddenSections.includes(id)
+              ? prefs.hiddenSections.filter((section) => section !== id)
+              : [...prefs.hiddenSections, id],
+          })
+        }
+        onPointerDown={(event) => event.stopPropagation()}
+      />
     </>
   )
   const placeRow = (location: Location, ghost = false) => {
@@ -247,7 +251,7 @@ export function SidebarSettings({
                 sidebarOrder: ['places', 'favorites', 'tags', 'devices', 'connections'],
                 placeOrder: [],
                 hiddenPlaces: [],
-                showTags: true,
+                hiddenSections: [],
               })
             }
           >
