@@ -3953,3 +3953,92 @@ body.dragging-reorder * {
   color: var(--muted);
   font-size: 11px;
 }
+
+/* Environment-variable style list editor: one trigger, editing happens in a dialog. */
+.plugin-list-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plugin-list-trigger:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.plugin-list-trigger small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.plugin-list-editor {
+  display: flex;
+  gap: 12px;
+  padding: 4px 20px 12px;
+}
+
+.plugin-list-editor-rows {
+  flex: 1;
+  min-width: 0;
+  height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  padding: 3px;
+}
+
+.plugin-list-entry {
+  display: block;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: default;
+}
+
+.plugin-list-entry:hover {
+  background: var(--hover);
+}
+
+.plugin-list-entry.selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.plugin-list-editor-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+  width: 84px;
+}
+
+.plugin-list-editor-actions .button {
+  width: 100%;
+}
+
+.plugin-list-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 20px 16px;
+}
+
+.plugin-list-confirm-field {
+  padding: 4px 20px 16px;
+}
