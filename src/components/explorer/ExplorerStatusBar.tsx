@@ -1,23 +1,28 @@
 import type { AppController } from '@/hooks/useAppController'
+import type { Entry } from '@/lib/types'
 import { size } from '@/lib/files'
 import { ChevronDown, ChevronUp, ListChecks, X } from 'lucide-react'
 export function ExplorerStatusBar({
   x,
-  chosen,
+  chosenAll,
+  selectedAll,
   clipboard,
   setClipboard,
   workspace,
-}: Pick<AppController, 'x' | 'chosen' | 'clipboard' | 'setClipboard' | 'workspace'>) {
+}: Pick<
+  AppController,
+  'x' | 'chosenAll' | 'selectedAll' | 'clipboard' | 'setClipboard' | 'workspace'
+> & { chosenAll: Entry[]; selectedAll: string[] }) {
   return (
     <>
       <footer className="statusbar" data-workspace-drop="true">
         <div className="statusbar-row">
           <span>
             {x.entries.length.toLocaleString()} 个项目
-            {x.selected.length > 0 && ` · 已选择 ${x.selected.length} 项`}
-            {chosen.length > 0 &&
-              !chosen.some((e) => e.isDir) &&
-              ` · ${size(chosen.reduce((a, e) => a + e.size, 0))}`}
+            {selectedAll.length > 0 && ` · 已选择 ${selectedAll.length} 项`}
+            {chosenAll.length > 0 &&
+              !chosenAll.some((e) => e.isDir) &&
+              ` · ${size(chosenAll.reduce((a, e) => a + e.size, 0))}`}
           </span>
           {x.tagFilter && <span>标签：{x.tagFilter}</span>}
           <span>{x.searchStats}</span>

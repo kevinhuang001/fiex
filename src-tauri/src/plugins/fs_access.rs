@@ -6,7 +6,6 @@ use cap_std::{
     fs::{Dir, OpenOptions},
 };
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     io::{Read, Seek, SeekFrom, Write},
@@ -16,11 +15,114 @@ use std::{
 const MAX_CHUNK: usize = 256 * 1024;
 const MAX_HANDLES: usize = 32;
 
+struct PendingRead {
+    owner: String,
+    file: cap_std::fs::File,
+    length: u64,
+    _token: tempfile::NamedTempFile,
+}
+fn reads() -> &'static Mutex<HashMap<String, PendingRead>> {
+    static VALUES: OnceLock<Mutex<HashMap<String, PendingRead>>> = OnceLock::new();
+    VALUES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+pub fn open_read(owner: &str, root: &Scope, input: &str) -> Result<Value, String> {
+    let file = directory(root)?
+        .open(relative(root, input)?)
+        .map_err(|e| e.to_string())?;
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() {
+        return Err("expected a file".into());
+    }
+    let mut reads = reads().lock().map_err(|_| "read registry unavailable")?;
+    if reads.values().filter(|v| v.owner == owner).count() >= MAX_HANDLES {
+        return Err("too many open reads".into());
+    }
+    let token = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
+    let handle = format!(
+        "read-{}",
+        token
+            .path()
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+    );
+    reads.insert(
+        handle.clone(),
+        PendingRead {
+            owner: owner.into(),
+            file,
+            length: metadata.len(),
+            _token: token,
+        },
+    );
+    Ok(json!({"handle": handle, "size": metadata.len()}))
+}
+pub fn read_open(
+    owner: &str,
+    handle: &str,
+    offset: u64,
+    length: usize,
+    buffer: Option<&str>,
+) -> Result<Value, String> {
+    let mut reads = reads().lock().map_err(|_| "read registry unavailable")?;
+    let read = reads
+        .get_mut(handle)
+        .filter(|v| v.owner == owner)
+        .ok_or("read handle unavailable")?;
+    read.file
+        .seek(SeekFrom::Start(offset))
+        .map_err(|e| e.to_string())?;
+    let remaining = read.length.saturating_sub(offset);
+    let capacity = length
+        .min(if buffer.is_some() {
+            4 * 1024 * 1024
+        } else {
+            MAX_CHUNK
+        })
+        .min(usize::try_from(remaining).unwrap_or(usize::MAX));
+    if let Some(id) = buffer {
+        let size = crate::plugin_ipc::read_file_into(owner, id, &mut read.file, capacity)?;
+        Ok(json!({"size": size, "eof": offset.saturating_add(size as u64) >= read.length}))
+    } else {
+        let mut bytes = vec![0; capacity];
+        let size = read.file.read(&mut bytes).map_err(|e| e.to_string())?;
+        bytes.truncate(size);
+        Ok(
+            json!({"base64": STANDARD.encode(&bytes), "size": size, "eof": offset.saturating_add(size as u64) >= read.length}),
+        )
+    }
+}
+pub fn close_read(owner: &str, handle: &str) -> Result<(), String> {
+    let mut reads = reads().lock().map_err(|_| "read registry unavailable")?;
+    if !reads.get(handle).is_some_and(|v| v.owner == owner) {
+        return Err("read handle unavailable".into());
+    }
+    reads.remove(handle);
+    Ok(())
+}
+
+/// A save dialog may select a file that does not exist yet. Canonicalize its
+/// existing parent so a symlinked parent cannot change the selected target.
+pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
+    match dunce::canonicalize(path) {
+        Ok(path) => Ok(path),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let parent = path.parent().ok_or("selection has no parent")?;
+            let name = path.file_name().ok_or("selection has no name")?;
+            Ok(dunce::canonicalize(parent)
+                .map_err(|e| e.to_string())?
+                .join(name))
+        }
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 /// Captured once at invocation start, including an open directory capability.
 #[derive(Clone)]
 pub struct Scope {
     path: PathBuf,
     dir: std::sync::Arc<Dir>,
+    allowed: Option<Vec<(PathBuf, bool)>>,
 }
 impl Scope {
     pub fn new(path: &Path) -> Result<Self, String> {
@@ -29,7 +131,30 @@ impl Scope {
         Ok(Self {
             path,
             dir: std::sync::Arc::new(dir),
+            allowed: None,
         })
+    }
+    /// Capture only paths chosen for this operation. A file grants that file;
+    /// a directory grants its descendants. An empty selection grants no files.
+    pub fn selected(path: &Path, paths: &[PathBuf]) -> Result<Self, String> {
+        let mut scope = Self::new(path)?;
+        let mut allowed = Vec::with_capacity(paths.len());
+        for selected in paths {
+            let canonical = canonical_selection(selected)?;
+            let relative = canonical
+                .strip_prefix(&scope.path)
+                .map_err(|_| "selection outside task directory")?
+                .to_path_buf();
+            let relative = if relative.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                relative
+            };
+            let is_dir = scope.dir.metadata(&relative).is_ok_and(|m| m.is_dir());
+            allowed.push((relative, is_dir));
+        }
+        scope.allowed = Some(allowed);
+        Ok(scope)
     }
     pub fn path(&self) -> &Path {
         &self.path
@@ -50,11 +175,49 @@ fn relative(root: &Scope, input: &str) -> Result<PathBuf, String> {
     {
         return Err("path outside task directory".into());
     }
-    Ok(if path.as_os_str().is_empty() {
+    let path = if path.as_os_str().is_empty() {
         PathBuf::from(".")
     } else {
         path.into()
-    })
+    };
+    if let Some(allowed) = &root.allowed {
+        let resolved = match root.dir.canonicalize(&path) {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let parent = path
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .unwrap_or(Path::new("."));
+                root.dir
+                    .canonicalize(parent)
+                    .map_err(|e| e.to_string())?
+                    .join(path.file_name().ok_or("invalid selected path")?)
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+        let normalize = |candidate: &Path| {
+            let normalized: PathBuf = candidate
+                .components()
+                .filter(|part| matches!(part, Component::Normal(_)))
+                .collect();
+            if normalized.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                normalized
+            }
+        };
+        let resolved = normalize(&resolved);
+        let permitted = |candidate: &Path| {
+            allowed.iter().any(|(selected, is_dir)| {
+                candidate == selected
+                    || (*is_dir && (selected == Path::new(".") || candidate.starts_with(selected)))
+            })
+        };
+        if !permitted(&path) || !permitted(&resolved) {
+            return Err("path not selected for this operation".into());
+        }
+    }
+    Ok(path)
 }
 fn directory(root: &Scope) -> Result<Dir, String> {
     root.dir.try_clone().map_err(|e| e.to_string())
@@ -89,8 +252,11 @@ pub fn stat(root: &Scope, input: &str) -> Result<Value, String> {
 pub fn create(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
-    dir.open_with(&path, OpenOptions::new().write(true).create_new(true))
-        .map_err(|e| e.to_string())?;
+    dir.open_with(
+        &path,
+        OpenOptions::new().read(true).write(true).create_new(true),
+    )
+    .map_err(|e| e.to_string())?;
     entry(&dir, &path)
 }
 pub fn mkdir(root: &Scope, input: &str) -> Result<Value, String> {
@@ -159,30 +325,66 @@ pub fn rename(root: &Scope, from: &str, to: &str) -> Result<(), String> {
 struct PendingWrite {
     owner: String,
     root: Dir,
+    root_path: PathBuf,
     path: PathBuf,
-    original: Option<Vec<u8>>,
+    original: Option<Fingerprint>,
     staging: tempfile::NamedTempFile,
+}
+
+/// Cheap conflict detector: a full content hash costs a second read of a large
+/// file on begin, commit and abort. Size plus modification time catches the
+/// realistic concurrent changes without blocking on hundreds of gigabytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Fingerprint {
+    len: u64,
+    modified: Option<cap_std::time::SystemTime>,
+    readonly: bool,
+    /// Device and inode (or volume/file index) catch replacement by a file
+    /// that happens to keep the same size and timestamp.
+    identity: Option<(u64, u64)>,
 }
 fn writes() -> &'static Mutex<HashMap<String, PendingWrite>> {
     static VALUES: OnceLock<Mutex<HashMap<String, PendingWrite>>> = OnceLock::new();
     VALUES.get_or_init(|| Mutex::new(HashMap::new()))
 }
-fn fingerprint(dir: &Dir, path: &Path) -> Result<Option<Vec<u8>>, String> {
-    let mut file = match dir.open(path) {
-        Ok(f) => f,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-    };
-    let mut hash = Sha256::new();
-    let mut block = [0; 65536];
-    loop {
-        let count = file.read(&mut block).map_err(|e| e.to_string())?;
-        if count == 0 {
-            break;
-        }
-        hash.update(&block[..count]);
+/// Best-effort identity of the opened target. It never authorizes access; it
+/// only makes concurrent-replacement conflicts more likely to be detected.
+#[cfg(unix)]
+fn identity(dir: &Dir, path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = dir.open(path).ok()?.into_std().metadata().ok()?;
+    Some((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(windows)]
+fn identity(dir: &Dir, path: &Path) -> Option<(u64, u64)> {
+    use std::os::windows::fs::MetadataExt;
+    // `file_index` is still unstable on Windows; creation + write time is the
+    // strongest stable signal available without an extra Win32 dependency.
+    let metadata = dir.open(path).ok()?.into_std().metadata().ok()?;
+    Some((metadata.creation_time(), metadata.last_write_time()))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn identity(_dir: &Dir, _path: &Path) -> Option<(u64, u64)> {
+    None
+}
+
+/// Conflict detection covers size, modification time, readonly state and file
+/// identity. It intentionally does not read the whole file on every commit, so
+/// a same-size edit that also preserves all of those metadata fields is not
+/// detected; the atomic rename still prevents partial files.
+fn fingerprint(dir: &Dir, path: &Path) -> Result<Option<Fingerprint>, String> {
+    match dir.metadata(path) {
+        Ok(metadata) => Ok(Some(Fingerprint {
+            len: metadata.len(),
+            modified: metadata.modified().ok(),
+            readonly: metadata.permissions().readonly(),
+            identity: identity(dir, path),
+        })),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.to_string()),
     }
-    Ok(Some(hash.finalize().to_vec()))
 }
 pub fn begin_write(owner: &str, root: &Scope, input: &str, create: bool) -> Result<String, String> {
     let dir = directory(root)?;
@@ -214,6 +416,7 @@ pub fn begin_write(owner: &str, root: &Scope, input: &str, create: bool) -> Resu
         PendingWrite {
             owner: owner.into(),
             root: dir,
+            root_path: root.path().to_path_buf(),
             path,
             original,
             staging,
@@ -226,27 +429,76 @@ pub fn write_chunk(owner: &str, handle: &str, encoded: &str) -> Result<(), Strin
         return Err("write chunk too large".into());
     }
     let bytes = STANDARD.decode(encoded).map_err(|e| e.to_string())?;
+    write_bytes(owner, handle, &bytes)
+}
+pub fn write_buffer(owner: &str, handle: &str, buffer: &str, size: usize) -> Result<(), String> {
+    if size > MAX_CHUNK {
+        return Err("write chunk too large".into());
+    }
+    let bytes = crate::plugin_ipc::read(owner, buffer)?;
+    if size > bytes.len() {
+        return Err("write buffer too small".into());
+    }
+    write_bytes(owner, handle, &bytes[..size])
+}
+fn write_bytes(owner: &str, handle: &str, bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() > MAX_CHUNK {
+        return Err("write chunk too large".into());
+    }
     let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
     let write = pending
         .get_mut(handle)
         .filter(|v| v.owner == owner)
         .ok_or("write handle unavailable")?;
-    write.staging.write_all(&bytes).map_err(|e| e.to_string())
+    write.staging.write_all(bytes).map_err(|e| e.to_string())
 }
 pub fn abort(owner: &str, handle: &str) -> Result<(), String> {
     let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
-    if !pending.get(handle).is_some_and(|v| v.owner == owner) {
-        return Err("write handle unavailable".into());
+    // Aborting an already-failed commit is a successful cleanup: the commit
+    // path removes the transaction before doing expensive work.
+    match pending.get(handle) {
+        Some(value) if value.owner == owner => {
+            pending.remove(handle);
+            Ok(())
+        }
+        None => Ok(()),
+        Some(_) => Err("write handle unavailable".into()),
     }
-    pending.remove(handle);
-    Ok(())
+}
+#[cfg(windows)]
+fn replace_file(dir: &Dir, from: &str, to: &str) -> std::io::Result<()> {
+    // Windows can transiently deny replacing a file while a scanner or a
+    // closing handle still holds it. The rename itself is atomic, so a short
+    // retry is safe and avoids failing an otherwise valid commit.
+    let mut last = None;
+    for _ in 0..8 {
+        match dir.rename(from, dir, to) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last = Some(error);
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| std::io::Error::other("replace failed")))
+}
+#[cfg(not(windows))]
+fn replace_file(dir: &Dir, from: &str, to: &str) -> std::io::Result<()> {
+    dir.rename(from, dir, to)
 }
 pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
-    let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
-    let write = pending
-        .get_mut(handle)
-        .filter(|v| v.owner == owner)
-        .ok_or("write handle unavailable")?;
+    // Remove the transaction before touching the target so other independent
+    // commits never wait for a large copy or fsync.
+    let mut write = {
+        let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
+        if !pending
+            .get(handle)
+            .is_some_and(|value| value.owner == owner)
+        {
+            return Err("write handle unavailable".into());
+        }
+        pending.remove(handle).ok_or("write handle unavailable")?
+    };
     let dir = &write.root;
     if fingerprint(dir, &write.path)? != write.original {
         return Err("file changed since write began; commit aborted".into());
@@ -267,26 +519,61 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
             .unwrap_or_default()
             .to_string_lossy()
     );
+    write
+        .staging
+        .as_file()
+        .sync_all()
+        .map_err(|e| e.to_string())?;
+    let mut temp_exists = false;
     let result = (|| {
-        let mut output = target_dir
-            .open_with(&temp_name, OpenOptions::new().write(true).create_new(true))
-            .map_err(|e| e.to_string())?;
-        write
-            .staging
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| e.to_string())?;
-        std::io::copy(&mut write.staging, &mut output).map_err(|e| e.to_string())?;
-        if write.original.is_some() {
-            output
-                .set_permissions(
-                    dir.metadata(&write.path)
-                        .map_err(|e| e.to_string())?
-                        .permissions(),
-                )
-                .map_err(|e| e.to_string())?;
+        // Fast path: when the staging file and the target live on the same
+        // filesystem, an atomic rename avoids copying the whole file. Only use
+        // it while the captured root still resolves to the same directory; a
+        // replaced root path falls back to the capability copy below.
+        let mut moved = false;
+        if let Ok(canonical_parent) = dir.canonicalize(parent) {
+            let absolute_parent = write.root_path.join(&canonical_parent);
+            let root_is_intact = dunce::canonicalize(&write.root_path)
+                .map(|path| path == write.root_path)
+                .unwrap_or(false);
+            if root_is_intact
+                && std::fs::rename(write.staging.path(), absolute_parent.join(&temp_name)).is_ok()
+            {
+                moved = true;
+            }
         }
-        output.sync_all().map_err(|e| e.to_string())?;
-        drop(output);
+        if moved {
+            temp_exists = true;
+        } else {
+            let mut output = target_dir
+                .open_with(
+                    &temp_name,
+                    OpenOptions::new().read(true).write(true).create_new(true),
+                )
+                .map_err(|e| format!("create commit temp: {e}"))?;
+            temp_exists = true;
+            write
+                .staging
+                .seek(SeekFrom::Start(0))
+                .map_err(|e| e.to_string())?;
+            std::io::copy(&mut write.staging, &mut output)
+                .map_err(|e| format!("copy commit temp: {e}"))?;
+            output.sync_all().map_err(|e| e.to_string())?;
+            // Windows refuses to replace a file while this handle is open.
+            drop(output);
+        }
+        if write.original.is_some() {
+            let permissions = dir
+                .metadata(&write.path)
+                .map_err(|e| e.to_string())?
+                .permissions();
+            let temp = target_dir
+                .open_with(&temp_name, OpenOptions::new().read(true).write(true))
+                .map_err(|e| format!("open commit temp: {e}"))?;
+            temp.set_permissions(permissions)
+                .map_err(|e| format!("set commit permissions: {e}"))?;
+            temp.sync_all().map_err(|e| e.to_string())?;
+        }
         if fingerprint(dir, &write.path)? != write.original {
             return Err("file changed during commit".into());
         }
@@ -299,17 +586,13 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
                 .remove_file(&temp_name)
                 .map_err(|e| e.to_string())?;
         } else {
-            target_dir
-                .rename(&temp_name, &target_dir, name)
-                .map_err(|e| e.to_string())?;
+            replace_file(&target_dir, &temp_name, &name.to_string_lossy())
+                .map_err(|e| format!("replace commit target: {e}"))?;
         }
         entry(dir, &write.path)
     })();
-    if result.is_err() {
+    if result.is_err() && temp_exists {
         let _ = target_dir.remove_file(&temp_name);
-    }
-    if result.is_ok() {
-        pending.remove(handle);
     }
     result
 }
@@ -334,6 +617,9 @@ pub fn write(
     result
 }
 pub fn cleanup(owner: &str) {
+    if let Ok(mut pending) = reads().lock() {
+        pending.retain(|_, v| v.owner != owner);
+    }
     if let Ok(mut pending) = writes().lock() {
         pending.retain(|_, v| v.owner != owner);
     }
@@ -357,6 +643,75 @@ pub fn seek_write(owner: &str, handle: &str, kind: &str, offset: i64) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn open_read_keeps_the_selected_file_and_supports_sparse_large_offsets() {
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("chosen");
+        let mut file = std::fs::File::create(&chosen).unwrap();
+        let far = 5_u64 * 1024 * 1024 * 1024;
+        file.seek(SeekFrom::Start(far)).unwrap();
+        file.write_all(&[0, 255]).unwrap();
+        let scope = Scope::selected(root.path(), std::slice::from_ref(&chosen)).unwrap();
+        let value = open_read("owner", &scope, "chosen").unwrap();
+        let handle = value["handle"].as_str().unwrap();
+        assert_eq!(value["size"], far + 2);
+        assert!(read_open("other", handle, far, 2, None).is_err());
+        std::fs::rename(&chosen, root.path().join("moved")).unwrap();
+        std::fs::write(&chosen, b"replacement").unwrap();
+        let data = read_open("owner", handle, far, 2, None).unwrap();
+        assert_eq!(data["base64"], STANDARD.encode([0, 255]));
+        let descriptor = crate::plugin_ipc::create("owner", 4096, false).unwrap();
+        assert!(read_open("other", handle, far, 2, Some(&descriptor.id)).is_err());
+        assert!(read_open("owner", handle, far, 2, Some(&descriptor.id)).is_ok());
+        assert_eq!(
+            &crate::plugin_ipc::read("owner", &descriptor.id).unwrap()[..2],
+            &[0, 255]
+        );
+        crate::plugin_ipc::release("owner", &descriptor.id).unwrap();
+        close_read("owner", handle).unwrap();
+        assert!(read_open("owner", handle, 0, 1, None).is_err());
+    }
+    #[test]
+    fn operation_selection_does_not_expose_sibling_files() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("chosen"), b"ok").unwrap();
+        std::fs::write(root.path().join("private"), b"secret").unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
+        assert!(read_chunk(&scope, "chosen", 0, 8).is_ok());
+        assert!(read_chunk(&scope, "private", 0, 8).is_err());
+        assert!(list(&scope, ".").is_err());
+        assert!(stat(&scope, "private").is_err());
+        let empty = Scope::selected(root.path(), &[]).unwrap();
+        assert!(read_chunk(&empty, "chosen", 0, 8).is_err());
+    }
+    #[test]
+    fn selected_directory_allows_descendants_only() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("chosen")).unwrap();
+        std::fs::write(root.path().join("chosen/file"), b"ok").unwrap();
+        std::fs::write(root.path().join("other"), b"secret").unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
+        assert!(read_chunk(&scope, "chosen/file", 0, 8).is_ok());
+        assert!(read_chunk(&scope, "other", 0, 8).is_err());
+    }
+    #[test]
+    fn save_selection_allows_only_the_new_target() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("output.txt")]).unwrap();
+        let result = create(&scope, "output.txt");
+        assert!(result.is_ok(), "{result:?}");
+        assert!(create(&scope, "other.txt").is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn selected_folder_cannot_follow_a_link_to_its_sibling() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("chosen")).unwrap();
+        std::fs::write(root.path().join("private"), b"secret").unwrap();
+        std::os::unix::fs::symlink("../private", root.path().join("chosen/link")).unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
+        assert!(read_chunk(&scope, "chosen/link", 0, 8).is_err());
+    }
     #[test]
     fn staged_writes_preserve_conflicts_and_abort() {
         let root = tempfile::tempdir().unwrap();
@@ -382,6 +737,24 @@ mod tests {
         );
         assert!(remove(&scope, ".").is_err());
     }
+    #[test]
+    fn shared_write_is_owned_bounded_and_transactional() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("new")]).unwrap();
+        let handle = begin_write("owner", &scope, "new", true).unwrap();
+        let buffer = crate::plugin_ipc::create("owner", 256 * 1024, true).unwrap();
+        crate::plugin_ipc::write_owned("owner", &buffer.id, &[0, 255, 42]).unwrap();
+        assert!(write_buffer("other", &handle, &buffer.id, 3).is_err());
+        assert!(write_buffer("owner", &handle, &buffer.id, MAX_CHUNK + 1).is_err());
+        write_buffer("owner", &handle, &buffer.id, 3).unwrap();
+        assert!(!root.path().join("new").exists());
+        commit("owner", &handle).unwrap();
+        assert_eq!(
+            std::fs::read(root.path().join("new")).unwrap(),
+            [0, 255, 42]
+        );
+        crate::plugin_ipc::release("owner", &buffer.id).unwrap();
+    }
     #[cfg(unix)]
     #[test]
     fn symlinks_cannot_escape_task_root() {
@@ -392,6 +765,32 @@ mod tests {
         std::os::unix::fs::symlink(outside.path(), root.path().join("link")).unwrap();
         assert!(read_chunk(&scope, "link/secret", 0, 100).is_err());
         assert!(begin_write("p", &scope, "link/secret", false).is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn replacing_the_file_identity_aborts_commit() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::new(root.path()).unwrap();
+        let path = root.path().join("file");
+        std::fs::write(&path, b"old").unwrap();
+        let handle = begin_write("owner", &scope, "file", false).unwrap();
+        write_chunk("owner", &handle, &STANDARD.encode(b"new")).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(&path, b"other").unwrap();
+        assert!(commit("owner", &handle).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"other");
+    }
+    #[test]
+    fn a_wrong_owner_cannot_consume_another_operation_transaction() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::new(root.path()).unwrap();
+        std::fs::write(root.path().join("file"), b"old").unwrap();
+        let handle = begin_write("owner", &scope, "file", false).unwrap();
+        write_chunk("owner", &handle, &STANDARD.encode(b"new")).unwrap();
+        assert!(commit("other", &handle).is_err());
+        assert_eq!(std::fs::read(root.path().join("file")).unwrap(), b"old");
+        commit("owner", &handle).unwrap();
+        assert_eq!(std::fs::read(root.path().join("file")).unwrap(), b"new");
     }
     #[cfg(unix)]
     #[test]

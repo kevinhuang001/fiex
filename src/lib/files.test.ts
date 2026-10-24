@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parent, join, sortEntries, groupKey, uniqueName } from './files'
+import { parent, join, pathCrumbs, sortEntries, groupKey, uniqueName } from './files'
 import type { Entry } from './types'
 const e = (name: string, isDir = false): Entry => ({
   name,
@@ -41,5 +41,19 @@ describe('file models', () => {
     expect(
       groupKey({ ...e('yesterday'), modified: (now - 86400000) / 1000 }, 'modified', now),
     ).toBe('昨天')
+  })
+})
+
+describe('pathCrumbs', () => {
+  it('starts at the root segment without an empty crumb', () => {
+    expect(pathCrumbs('/Users/kevin/Documents').map((crumb) => crumb.name)).toEqual([
+      'Users',
+      'kevin',
+      'Documents',
+    ])
+  })
+
+  it('keeps a virtual location as one crumb', () => {
+    expect(pathCrumbs('recent://')).toEqual([{ name: 'recent://', path: 'recent://' }])
   })
 })

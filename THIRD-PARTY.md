@@ -27,5 +27,8 @@ Fiex incorporates these open-source projects through package managers. Exact res
 | notify               | Filesystem watching                                            | CC0-1.0 — https://github.com/notify-rs/notify                                  |
 | trash                | System Trash                                                   | MIT — https://github.com/Byron/trash-rs                                        |
 | Pantodo              | Native glass configuration and shadcn component starting point | Same author — https://github.com/kevinhuang001/pantodo                         |
+| Lofty                | Audio tag and duration metadata                                | MIT — https://github.com/Serial-ATA/lofty-rs                                   |
+| mp4                  | MP4/MOV container metadata                                     | MIT — https://github.com/alfg/mp4-rust                                         |
+| matroska             | Matroska/WebM container metadata                               | MIT — https://github.com/rust-av/matroska                                      |
 
-The optional Archive, Checksum, Git, WebDAV and SMB plugins live in a separate repository and have their own dependency notices. Core dependencies include serde, serde_json, dirs, open, which, base64, mime_guess, tempfile, sysinfo, image, objc2, clsx, class-variance-authority and tailwind-merge. Development tooling includes Vite, TypeScript, Vitest, Playwright and Prettier.
+The optional Archive, Checksum, Git, WebDAV and SMB plugins live in a separate repository and have their own dependency notices. Core dependencies include serde, serde_json, dirs, open, which, base64, mime_guess, tempfile, sysinfo, image, lofty, mp4, matroska, objc2, clsx, class-variance-authority and tailwind-merge. Development tooling includes Vite, TypeScript, Vitest, Playwright and Prettier.

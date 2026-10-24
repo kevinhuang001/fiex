@@ -38,6 +38,7 @@ export function useListing(
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
+  const locationsRequest = useRef(0)
   const decorationRequest = useRef(0)
   const searchRequest = useRef(0)
   useEffect(() => {
@@ -46,10 +47,12 @@ export function useListing(
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
   const locationsKey = useRef('')
   const locationsPending = useRef<Promise<Location[]> | null>(null)
-  const refreshLocations = useCallback((): Promise<Location[]> => {
-    if (locationsPending.current) return locationsPending.current
+  const refreshLocations = useCallback((force = false): Promise<Location[]> => {
+    if (locationsPending.current && !force) return locationsPending.current
+    const request = ++locationsRequest.current
     const pending = call<Location[]>('locations')
       .then((next) => {
+        if (request !== locationsRequest.current) return next
         const key = JSON.stringify(next)
         if (key !== locationsKey.current) {
           locationsKey.current = key
@@ -58,7 +61,7 @@ export function useListing(
         return next
       })
       .finally(() => {
-        locationsPending.current = null
+        if (request === locationsRequest.current) locationsPending.current = null
       })
     locationsPending.current = pending
     return pending

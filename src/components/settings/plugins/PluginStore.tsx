@@ -1,6 +1,7 @@
 import { Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PluginInstaller } from '../PluginInstaller'
+import type { PluginInfo } from '@/lib/plugins'
 
 /** Entry points above the installed list: local import and the official store. */
 export function PluginStoreToolbar({
@@ -33,19 +34,19 @@ export function PluginStoreToolbar({
  */
 export function PluginStore({
   open,
-  installedIds,
+  installed,
   onClose,
   onInstalled,
 }: {
   open: boolean
-  installedIds: string[]
+  installed: PluginInfo[]
   onClose: () => void
   onInstalled: () => void
 }) {
   return (
     <PluginInstaller
       open={open}
-      installedIds={installedIds}
+      installed={installed}
       onClose={onClose}
       onInstalled={onInstalled}
     />

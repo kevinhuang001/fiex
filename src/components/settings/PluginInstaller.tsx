@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { call } from '@/lib/api'
-import { pluginMarketplace, type MarketplacePlugin } from '@/lib/plugins'
+import { pluginMarketplace, type MarketplacePlugin, type PluginInfo } from '@/lib/plugins'
 import { ImportSheet } from './installer/ImportSheet'
 import { MarketplaceList } from './installer/MarketplaceList'
 import type { InstallPreview } from './installer/types'
@@ -15,12 +15,12 @@ export { pluginIcon } from './installer/pluginIcon'
  */
 export function PluginInstaller({
   open,
-  installedIds,
+  installed,
   onClose,
   onInstalled,
 }: {
   open: boolean
-  installedIds: string[]
+  installed: PluginInfo[]
   onClose: () => void
   onInstalled: () => void
 }) {
@@ -85,7 +85,13 @@ export function PluginInstaller({
       })
       const installed = preview
       setPreview(null)
-      setMessage(`${installed.name} 已安装`)
+      setMessage(
+        installed.isUpdate
+          ? installed.permissionsChanged
+            ? `${installed.name} 已更新到 ${installed.version}；权限有变化，请重新激活并逐项授权。`
+            : `${installed.name} 已更新到 ${installed.version}`
+          : `${installed.name} 已安装`,
+      )
       onInstalled()
     } catch (cause) {
       setError(String(cause))
@@ -98,7 +104,7 @@ export function PluginInstaller({
     <>
       <MarketplaceList
         open={open}
-        installedIds={installedIds}
+        installed={installed}
         onClose={onClose}
         query={query}
         setQuery={setQuery}

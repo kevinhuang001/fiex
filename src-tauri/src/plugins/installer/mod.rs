@@ -29,6 +29,8 @@ struct Staged {
     dir: TempDir,
     manifest: plugin_host::PluginManifest,
     verification: crate::plugin_signing::Verification,
+    update: bool,
+    previous_declared: Option<std::collections::BTreeSet<String>>,
 }
 fn pending() -> &'static Mutex<HashMap<String, Staged>> {
     static PENDING: OnceLock<Mutex<HashMap<String, Staged>>> = OnceLock::new();
@@ -53,6 +55,9 @@ pub struct InstallPreview {
     pub key_id: Option<String>,
     pub publisher_key: Option<String>,
     pub fingerprint: Option<String>,
+    pub is_update: bool,
+    pub previous_version: Option<String>,
+    pub permissions_changed: bool,
 }
 
 pub fn prepare(repository: &str, asset_name: &str) -> Result<InstallPreview, String> {
@@ -118,10 +123,18 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
     )?
     .into_iter()
     .collect::<Vec<_>>();
-    let permissions = declared.into_iter().collect::<Vec<_>>();
-    if install_root()?.join(&manifest.id).exists() {
-        return Err("plugin already installed; uninstall before installing another version".into());
-    }
+    let permissions = declared.clone().into_iter().collect::<Vec<_>>();
+    let existing = install_root()?.join(&manifest.id);
+    let previous_manifest = fs::read(existing.join("manifest.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<plugin_host::PluginManifest>(&bytes).ok());
+    let previous_version = previous_manifest
+        .as_ref()
+        .map(|value| value.version.clone());
+    let previous_declared = previous_manifest
+        .as_ref()
+        .and_then(|value| plugin_host::declared_permissions(value).ok());
+    let update = existing.is_dir();
     // Make only the manifest-declared native executable runnable. No other
     // executable permission is accepted from the downloaded archive.
     if !crate::plugin_themes::is_theme(&manifest) {
@@ -163,6 +176,9 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
         requested_network_domains,
         commands: manifest.permissions.commands.allow.clone(),
         repository: repository.into(),
+        is_update: update,
+        previous_version: previous_version.clone(),
+        permissions_changed: update && previous_declared.as_ref() != Some(&declared),
         signed: verification.signed,
         trusted: verification.trusted,
         publisher: verification.publisher.clone(),
@@ -181,6 +197,8 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
             dir: staging,
             manifest,
             verification,
+            update,
+            previous_declared,
         },
     );
     Ok(info)
@@ -205,22 +223,66 @@ pub fn install(ticket: &str, allow_untrusted: bool) -> Result<String, String> {
     signing::trust_gate(&staged.verification, &staged.manifest, allow_untrusted)?;
     let id = staged.manifest.id.clone();
     let destination = install_root()?.join(&id);
-    if destination.exists() {
-        return Err("plugin is already installed".into());
-    }
-    let declared = plugin_host::declared_permissions(&staged.manifest)?;
     let parent = install_root()?;
     fs::create_dir_all(&parent).map_err(|e| e.to_string())?;
-    fs::rename(staged.dir.path(), &destination).map_err(|e| e.to_string())?;
-    // If persistence of the approval fails, remove the newly installed files.
-    if let Err(error) = plugin_permissions::approve_install_with_domains(
-        &id,
-        &declared,
-        &staged.manifest.permissions.network.domains,
-        &staged.manifest.permissions.commands.allow,
-    ) {
+    let declared = plugin_host::declared_permissions(&staged.manifest)?;
+    let previous_declared = staged.previous_declared.clone();
+    let backup = parent.join(format!(
+        ".backup-{id}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or_default()
+    ));
+    crate::plugin_host::global().stop(&id);
+    if destination.exists() {
+        fs::rename(&destination, &backup).map_err(|e| e.to_string())?;
+    }
+    if let Err(error) = fs::rename(staged.dir.path(), &destination) {
+        if destination.exists() {
+            let _ = fs::remove_dir_all(&destination);
+        }
+        if backup.exists() {
+            let _ = fs::rename(&backup, &destination);
+        }
+        return Err(error.to_string());
+    }
+    let permission_result = if staged.update {
+        if previous_declared.as_ref() == Some(&declared) {
+            // The declared surface did not change; keep the user's existing
+            // activation and per-permission grants.
+            Ok(())
+        } else {
+            // A changed permission surface must be reviewed again.
+            plugin_permissions::revoke_install(&id).and_then(|_| {
+                plugin_permissions::approve_install_with_domains(
+                    &id,
+                    &declared,
+                    &staged.manifest.permissions.network.domains,
+                    &staged.manifest.permissions.commands.allow,
+                )
+                .map(|_| ())
+            })
+        }
+    } else {
+        plugin_permissions::approve_install_with_domains(
+            &id,
+            &declared,
+            &staged.manifest.permissions.network.domains,
+            &staged.manifest.permissions.commands.allow,
+        )
+        .map(|_| ())
+    };
+    if let Err(error) = permission_result {
         let _ = fs::remove_dir_all(&destination);
+        if backup.exists() {
+            let _ = fs::rename(&backup, &destination);
+        }
         return Err(error);
+    }
+    if backup.exists() {
+        let _ = fs::remove_dir_all(&backup);
     }
     Ok(id)
 }

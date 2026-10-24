@@ -37,7 +37,9 @@ pub struct DecorationStyle {
     #[serde(default)]
     pub font_style: Option<String>,
     #[serde(default)]
-    pub background: Option<String>,
+    pub background_light: Option<String>,
+    #[serde(default)]
+    pub background_dark: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

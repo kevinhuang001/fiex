@@ -1,0 +1,712 @@
+/* Shared desktop chrome across browser, sidebar, and preferences. */
+.sidebar-label {
+  font-size: 10px;
+  letter-spacing: 0.35px;
+}
+.nav-item.active {
+  background: var(--nav-active-background);
+  box-shadow: inset 0 0 0 1px var(--nav-active-line);
+  color: var(--text);
+}
+.file-row {
+  height: 40px;
+  border-radius: var(--radius-row);
+}
+.file-row:nth-child(even) {
+  background: var(--row-alt-background);
+}
+.file-row:hover {
+  background: var(--row-hover-background);
+}
+.file-row.selected {
+  background: var(--row-selected-background);
+  border-color: var(--row-selected-line);
+}
+.file-label {
+  font-size: max(var(--label-size, 11px), 12px);
+}
+.list-header {
+  background: var(--canvas);
+  font-size: 11px;
+}
+.settings-card {
+  border-color: var(--line);
+  background: var(--canvas);
+  border-radius: 11px;
+}
+.settings-card-header {
+  font-size: 10px;
+  letter-spacing: 0.15px;
+  text-transform: none;
+}
+.modal {
+  background: var(--canvas);
+  border-color: var(--line);
+  border-radius: 15px;
+}
+.git-panel {
+  top: 76px;
+  border-color: var(--line);
+  border-radius: 15px;
+  background: var(--canvas);
+  box-shadow: 0 20px 60px color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+/* Application chrome and layers. */
+.toolbar button svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+.toolbar .navigation-controls button svg {
+  width: 20px;
+  height: 20px;
+}
+.refresh-turn {
+  animation: spin 550ms ease-in-out 1;
+}
+.tabs {
+  height: 46px;
+  min-height: 46px;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 6px;
+  background: var(--tabbar-background);
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-tab);
+  background: var(--tab-background);
+  flex-shrink: 0;
+}
+.tab.active {
+  background: var(--tab-active-background);
+  border-color: var(--tab-active-line);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 3.14%, transparent);
+}
+.tab.tab-drop {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.tab > button:first-child {
+  min-width: 0;
+  touch-action: none;
+}
+.pane-active {
+  box-shadow: none;
+}
+.pane-resizer {
+  transform: translateX(50%);
+}
+.device-row > .nav-item {
+  padding-right: 34px;
+}
+.device-eject {
+  position: absolute;
+  right: 20px;
+  top: 14px;
+  opacity: 0.7;
+}
+.device-row:focus-within .device-eject,
+.device-row:hover .device-eject {
+  opacity: 1;
+}
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+.settings-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding: 18px 0;
+  background: var(--canvas);
+  border-top: 1px solid var(--line);
+}
+.settings-actions button {
+  padding: 7px 20px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.settings-actions .primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.select-field {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 130px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--canvas);
+  font-size: 12px;
+}
+.select-menu {
+  z-index: 80;
+}
+.workspace-bar {
+  z-index: 45;
+}
+.modal-overlay {
+  z-index: 60;
+}
+.modal {
+  z-index: 61;
+}
+
+/* Compact task sheets share the same rhythm and neutral surfaces. */
+.compress-dialog {
+  width: 430px;
+}
+.preview-text .preview-body {
+  height: auto;
+  min-height: 140px;
+  max-height: 65vh;
+}
+.preview-text .preview-body pre {
+  min-height: 0;
+  padding: 16px 20px;
+}
+.preview-compact {
+  width: 480px;
+}
+.preview-compact .preview-body {
+  height: auto;
+  min-height: 200px;
+  padding: 20px;
+}
+.preview-compact .preview-fallback {
+  gap: 12px;
+}
+.preview-media .preview-body {
+  min-height: 0;
+}
+
+/* --- Desktop polish pass -------------------------------------------------- */
+/* The sidebar keeps its own top strip: macOS puts the native traffic lights
+   there, and every platform uses it to start the sidebar content just below
+   the tab strip instead of touching the window's top edge. */
+.sidebar {
+  position: relative;
+  z-index: 30;
+}
+.sidebar-title {
+  height: 34px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.app[data-platform='macos'] .sidebar-title {
+  padding-left: 84px;
+}
+.sidebar-content {
+  padding-top: 8px;
+}
+.sidebar .context-menu {
+  z-index: 60;
+}
+.sidebar-menu > button:last-child {
+  color: var(--danger);
+}
+
+/* Tabs sit on the lower edge; only the top corners are rounded. */
+.tabs {
+  height: 40px;
+  min-height: 40px;
+  align-items: flex-end;
+  padding: 6px 12px 0;
+  gap: 6px;
+  border-bottom: 0;
+}
+.tab {
+  position: relative;
+  height: 34px;
+  flex: 0 1 220px;
+  min-width: 118px;
+  border: 0;
+  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+  background: var(--tab-background);
+  box-shadow: none;
+}
+.tab:not(.active):hover {
+  background: var(--tab-hover-background);
+}
+.tab.active {
+  top: auto;
+  border: 0;
+  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+  background: var(--tab-active-background);
+  box-shadow: none;
+}
+.tab::before,
+.tab::after,
+.tab.active::before,
+.tab.active::after {
+  content: none;
+  display: none;
+}
+
+/* Path bars are containers: the search field grows and shrinks with the pane
+   instead of keeping a fixed width and squeezing the breadcrumbs. */
+.path-toolbar {
+  container-type: inline-size;
+  min-width: 0;
+}
+.search-box {
+  width: auto;
+  max-width: 260px;
+  min-width: 32px;
+  flex: 0 1 230px;
+}
+@container (max-width: 620px) {
+  .search-box kbd {
+    display: none;
+  }
+  .breadcrumbs {
+    gap: 1px;
+  }
+  .breadcrumbs > button,
+  .breadcrumbs button {
+    padding: 4px 3px;
+  }
+  .search-box {
+    flex-basis: 160px;
+    min-width: 48px;
+    gap: 4px;
+    padding: 4px 7px;
+  }
+}
+@container (max-width: 480px) {
+  .breadcrumbs > span {
+    gap: 1px;
+  }
+  .breadcrumbs button {
+    padding: 3px 2px;
+  }
+  .search-box {
+    flex-basis: 120px;
+    min-width: 32px;
+  }
+}
+@container (max-width: 380px) {
+  .breadcrumbs {
+    gap: 0;
+  }
+  .breadcrumbs button {
+    padding: 2px;
+  }
+  .search-box {
+    flex-basis: 92px;
+    min-width: 24px;
+  }
+  .search-box input::placeholder {
+    color: transparent;
+  }
+}
+
+/* The focused pane gets a faint tint so the active side is obvious in split
+   view without drawing another border. */
+.pane-main.pane-active {
+  background: color-mix(in srgb, var(--accent) 3%, var(--canvas));
+}
+.secondary-pane.pane-active {
+  background: color-mix(in srgb, var(--accent) 3%, var(--canvas));
+}
+.secondary-pane.pane-active > .path-toolbar {
+  background: transparent;
+}
+.dark .pane-main.pane-active,
+.dark .secondary-pane.pane-active {
+  background: color-mix(in srgb, var(--accent) 5%, var(--canvas));
+}
+
+/* Settings cards are flex children; without this they shrink and clip their
+   first row, which made the shortcut preset selector look broken. */
+.settings-content > * {
+  flex: 0 0 auto;
+}
+
+/* The new-tag sheet needs an explicit colour label so the picker is not
+   mistaken for decoration. */
+.create-tag-color-label {
+  display: block;
+  margin-bottom: -8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.create-tag-form .tag-colors {
+  justify-content: flex-start;
+  gap: 8px;
+}
+.create-tag-form .tag-colors button {
+  width: 20px;
+  height: 20px;
+}
+
+/* HSV colour field for custom tags: the square picks saturation/brightness,
+   the rail picks hue, and the hex field accepts an exact value. */
+.color-picker {
+  display: grid;
+  gap: 10px;
+}
+.color-picker-map {
+  position: relative;
+  height: 128px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+.color-picker-hue {
+  position: relative;
+  height: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--danger),
+    var(--warning),
+    var(--success),
+    var(--accent),
+    var(--accent),
+    var(--accent),
+    var(--danger)
+  );
+  cursor: ew-resize;
+  touch-action: none;
+}
+.color-picker-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--text) 40%, transparent),
+    0 2px 5px color-mix(in srgb, var(--text) 26.67%, transparent);
+  pointer-events: none;
+}
+.color-picker-hue .color-picker-thumb {
+  top: 50%;
+}
+.color-picker-hex {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.color-picker-preview {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.color-picker-hash {
+  color: var(--muted);
+  font:
+    11px ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+.color-picker-hex input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font:
+    11px ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  text-transform: uppercase;
+}
+.create-tag-form .tag-colors {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 8px;
+}
+.create-tag-form .tag-colors button {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+/* Split view is tight: shave the path bar chrome so both breadcrumbs and the
+   search field stay usable instead of covering each other. */
+.main.split > .path-toolbar,
+.main.split .secondary-pane > .path-toolbar {
+  padding: 0 8px;
+  gap: 2px;
+}
+.main.split .breadcrumbs {
+  gap: 0;
+}
+.main.split .breadcrumbs > span {
+  gap: 1px;
+}
+.main.split .breadcrumbs > button,
+.main.split .breadcrumbs button {
+  padding: 2px 3px;
+}
+.main.split .search-box {
+  gap: 3px;
+  padding: 3px 6px;
+  min-width: 24px;
+}
+.main.split .path-toolbar > button[data-slot='button'] {
+  width: 26px;
+  height: 28px;
+}
+.main.split .path-toolbar > button[data-slot='button'] svg {
+  width: 14px;
+  height: 14px;
+}
+.main.split .path-toolbar .icon-button {
+  min-width: 20px;
+  min-height: 20px;
+}
+.main.split .pane-close-main,
+.main.split .pane-close-secondary {
+  margin-left: 2px;
+}
+
+/* Reordering in settings lifts the row itself; the other rows slide over the
+   vacated slot with the same easing as the tab strip. */
+.sidebar-order.reordering .sidebar-order-row,
+.place-order.reordering .place-row {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+.sidebar-order-row.reorder-source,
+.place-row.reorder-source {
+  visibility: hidden;
+}
+.reorder-ghost {
+  position: fixed;
+  top: 0;
+  z-index: 200;
+  margin: 0;
+  background: var(--surface);
+  box-shadow:
+    0 16px 36px color-mix(in srgb, var(--text) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 35%, var(--line));
+  pointer-events: none;
+  will-change: transform;
+}
+.reorder-ghost.settling {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-order.reordering .sidebar-order-row,
+  .place-order.reordering .place-row,
+  .reorder-ghost.settling {
+    transition: none;
+  }
+}
+body.dragging-reorder,
+body.dragging-reorder * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* Keep the new-tab control centred instead of bottom-aligned with the tabs. */
+.tabs > .icon-button {
+  align-self: center;
+  flex: 0 0 auto;
+}
+
+/* The left rail is a frosted surface, not a window onto the desktop. */
+.sidebar {
+  background: var(--sidebar-background);
+  backdrop-filter: blur(30px) saturate(140%);
+  border-right-color: var(--sidebar-line);
+}
+
+/* Context menus sit above the workspace dock but below modal sheets. */
+.context-menu {
+  z-index: 55;
+}
+
+/* Lift settings cards and shortcut pills off the dark canvas. */
+.dark .settings-card {
+  background: color-mix(in srgb, var(--surface) 86%, var(--canvas));
+  border-color: color-mix(in srgb, var(--line) 82%, transparent);
+}
+.dark .shortcut-pill {
+  background: color-mix(in srgb, var(--canvas) 78%, var(--surface));
+  border-color: color-mix(in srgb, var(--line) 88%, transparent);
+}
+
+/* --- Platform window chrome --------------------------------------------- */
+/* Windows and Linux are frameless; their caption buttons live at the end of
+   the tab strip. Only the tab list scrolls, so a long row of tabs can never
+   slide underneath the close button. */
+.tabs {
+  overflow: hidden;
+}
+.tabs-scroll {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-self: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+.tabs-new {
+  align-self: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  margin-left: 2px;
+  border-radius: 8px;
+}
+.tabs-new,
+.tabs-new:hover,
+.tabs-new:active {
+  background: transparent;
+}
+.tabs-new svg {
+  width: 18px;
+  height: 18px;
+}
+/* The lifted tab follows the pointer while the rest of the strip slides over
+   the vacated slot, matching the way Chrome's tab strip reorders. */
+.tabs-dragging .tab {
+  transition:
+    transform 170ms cubic-bezier(0.2, 0, 0, 1),
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.tabs-dragging .tab-source {
+  visibility: hidden;
+}
+.tab.tab-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  margin: 0;
+  background: var(--canvas);
+  pointer-events: none;
+  will-change: transform;
+}
+.tab-ghost.settling {
+  transition: transform 170ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs-dragging .tab,
+  .tab-ghost.settling {
+    transition: none;
+  }
+}
+.window-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: stretch;
+  height: 40px;
+  margin: -6px -12px 0 0;
+}
+.window-controls button {
+  width: 46px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  color: var(--muted);
+}
+.window-controls button:hover {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+}
+.window-controls button:active {
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+.window-controls button:focus-visible {
+  outline-offset: -2px;
+}
+.window-controls .window-close:hover,
+.window-controls .window-close:active {
+  background: var(--danger);
+  color: var(--surface);
+}
+/* macOS keeps its native traffic lights in the sidebar's top strip; when the
+   sidebar is collapsed they sit over the tab strip, so leave room for them. */
+.app[data-platform='macos'].sidebar-hidden .tabs {
+  padding-left: 84px;
+}
+
+/* Tags now live in Settings; the sidebar keeps the list but no longer owns
+   creation. */
+.settings-count {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 8px;
+  text-align: center;
+}
+.tag-settings-row .settings-row-label > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-settings-dot {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 7.84%, transparent);
+}
+.tag-settings-action {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+.tag-settings-action:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.tag-settings-delete:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.tag-delete-confirm {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}

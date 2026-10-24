@@ -52,6 +52,7 @@ function readOfficialThemes() {
           name: theme.name,
           mode: theme.mode,
           tokens: theme.tokens || {},
+          darkTokens: theme.darkTokens || {},
         })
       }
     } catch {

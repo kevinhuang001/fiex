@@ -1,6 +1,5 @@
-import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
-import { ArrowUp, ChevronRight, LoaderCircle, Search, X } from 'lucide-react'
+import { PathToolbar } from './PathToolbar'
 export function ExplorerPathBar({
   x,
   startPathEdit,
@@ -31,114 +30,32 @@ export function ExplorerPathBar({
   | 'split'
   | 'closePane'
 >) {
-  // Virtual locations cannot receive a drop.
-  const dropFolder = /^[a-z][a-z0-9+.-]*:\/\//i.test(x.path) ? undefined : x.path
   return (
-    <>
-      <div className="path-toolbar" data-drop-folder={dropFolder}>
-        <Button variant="ghost" size="icon" title="上一级" aria-label="上一级" onClick={x.up}>
-          <ArrowUp />
-        </Button>
-        <nav
-          className="breadcrumbs"
-          aria-label="当前位置"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) startPathEdit()
-          }}
-        >
-          {editingPath ? (
-            <form className="path-editor" onSubmit={submitPath}>
-              <input
-                ref={pathInput}
-                className="path-input"
-                aria-label="文件夹路径"
-                value={pathDraft}
-                spellCheck={false}
-                onChange={(event) => setPathDraft(event.target.value)}
-                onBlur={() => setEditingPath(false)}
-                onKeyDown={(event) => {
-                  event.stopPropagation()
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    setEditingPath(false)
-                    searchInput.current?.focus()
-                  }
-                }}
-              />
-            </form>
-          ) : (
-            <>
-              {crumbs.length > 3 && (
-                <span>
-                  <ChevronRight size={11} />
-                  <button
-                    title="更上层"
-                    aria-label="更上层"
-                    onClick={() => x.navigate(crumbs[crumbs.length - 4].path)}
-                  >
-                    …
-                  </button>
-                </span>
-              )}
-              {crumbs.slice(Math.max(0, crumbs.length - 3)).map((p, i) => (
-                <span key={i}>
-                  <ChevronRight size={11} />
-                  <button
-                    onClick={() =>
-                      i === Math.min(3, crumbs.length) - 1 ? startPathEdit() : x.navigate(p.path)
-                    }
-                  >
-                    {p.name}
-                  </button>
-                </span>
-              ))}
-            </>
-          )}
-        </nav>
-        <div className="search-box">
-          <button
-            className="search-scope"
-            title={x.globalSearch ? '切换为当前文件夹搜索' : '搜索所有可访问的文件'}
-            aria-label="全局搜索"
-            aria-pressed={x.globalSearch}
-            onClick={() => x.setGlobalSearch(!x.globalSearch)}
-          >
-            <Search size={15} />
-          </button>
-          <input
-            ref={searchInput}
-            aria-label="搜索文件"
-            placeholder={x.globalSearch ? '搜索所有可访问位置' : '搜索此文件夹'}
-            value={x.query}
-            onChange={(e) => x.setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key !== 'Escape') return
-              e.stopPropagation()
-              x.setQuery('')
-              e.currentTarget.blur()
-            }}
-          />
-          {x.searching ? (
-            <LoaderCircle className="spin" size={14} />
-          ) : x.query ? (
-            <button className="icon-button" aria-label="清除搜索" onClick={() => x.setQuery('')}>
-              <X size={13} />
-            </button>
-          ) : (
-            <kbd>{hint('search')}</kbd>
-          )}
-        </div>
-        {split && (
-          <button
-            className="icon-button pane-close-main"
-            title="关闭此面板"
-            aria-label="关闭左侧面板"
-            onClick={() => closePane('left')}
-          >
-            <X size={14} />
-          </button>
-        )}
-      </div>
-    </>
+    <PathToolbar
+      x={x}
+      crumbs={crumbs}
+      editing={editingPath}
+      draft={pathDraft}
+      setDraft={setPathDraft}
+      startEdit={startPathEdit}
+      submit={submitPath}
+      stopEdit={() => setEditingPath(false)}
+      pathInput={pathInput}
+      searchInput={searchInput}
+      searchHint={hint('search')}
+      ariaLabel="当前位置"
+      pathLabel="文件夹路径"
+      searchLabel="搜索文件"
+      close={
+        split
+          ? {
+              label: '关闭左侧面板',
+              title: '关闭此面板',
+              className: 'pane-close-main',
+              onClose: () => closePane('left'),
+            }
+          : undefined
+      }
+    />
   )
 }

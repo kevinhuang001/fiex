@@ -19,6 +19,8 @@ pub struct MarketplacePlugin {
     #[serde(default)]
     pub requested_network_domains: Vec<String>,
     pub commands: Vec<String>,
+    #[serde(default)]
+    pub contributions: serde_json::Value,
     pub asset: String,
     pub repository: String,
 }
@@ -337,6 +339,10 @@ fn catalog_entries(
             permissions,
             requested_network_domains,
             commands,
+            contributions: plugin
+                .get("contributions")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
             asset: asset.into(),
             repository: repository.into(),
         });
@@ -373,6 +379,7 @@ fn fallback_marketplace(
             permissions: Vec::new(),
             requested_network_domains: Vec::new(),
             commands: Vec::new(),
+            contributions: serde_json::Value::Null,
             asset: name.into(),
             repository: repository.into(),
         });

@@ -11,10 +11,10 @@ import { RowsIcon as List } from '@phosphor-icons/react/dist/csr/Rows'
 import type { ReactNode } from 'react'
 
 const views: { id: View; name: string; icon: ReactNode }[] = [
-  { id: 'icons', name: '图标', icon: <Grid2X2 weight="duotone" size={20} /> },
-  { id: 'list', name: '列表', icon: <List weight="duotone" size={20} /> },
-  { id: 'columns', name: '分栏', icon: <Columns3 weight="duotone" size={20} /> },
-  { id: 'gallery', name: '画廊', icon: <Image weight="duotone" size={20} /> },
+  { id: 'icons', name: '图标', icon: <Grid2X2 weight="regular" size={20} /> },
+  { id: 'list', name: '列表', icon: <List weight="regular" size={20} /> },
+  { id: 'columns', name: '分栏', icon: <Columns3 weight="regular" size={20} /> },
+  { id: 'gallery', name: '画廊', icon: <Image weight="regular" size={20} /> },
 ]
 
 const groupOptions: [Group, string][] = [
@@ -37,46 +37,51 @@ type ViewControlsProps = {
   update: AppController['update']
 }
 
-export function ViewControls({ prefs, update }: ViewControlsProps) {
+export function ViewSwitch({ prefs, update }: ViewControlsProps) {
   return (
-    <>
-      <div className="view-switch">
-        {views.map((v) => (
-          <Button
-            key={v.id}
-            variant="ghost"
-            size="icon"
-            title={v.name}
-            aria-label={`${v.name}视图`}
-            aria-pressed={prefs.view === v.id}
-            onClick={() => update({ view: v.id })}
-          >
-            {v.icon}
-          </Button>
-        ))}
-      </div>
-      <Menu label="分组方式" icon={<CardsThree weight="regular" size={20} />}>
-        <Label>分组方式</Label>
-        {groupOptions.map(([id, name]) => (
-          <Choice key={id} checked={prefs.group === id} onClick={() => update({ group: id })}>
-            {name}
-          </Choice>
-        ))}
-      </Menu>
-      <Menu label="排序方式" icon={<ArrowsDownUp weight="regular" size={20} />}>
-        <Label>排序方式</Label>
-        {sortOptions.map(([id, name]) => (
-          <Choice key={id} checked={prefs.sort === id} onClick={() => update({ sort: id })}>
-            {name}
-          </Choice>
-        ))}
-        <Choice
-          checked={prefs.descending}
-          onClick={() => update({ descending: !prefs.descending })}
+    <div className="view-switch">
+      {views.map((v) => (
+        <Button
+          key={v.id}
+          variant="ghost"
+          size="icon"
+          title={v.name}
+          aria-label={`${v.name}视图`}
+          aria-pressed={prefs.view === v.id}
+          onClick={() => update({ view: v.id })}
         >
-          降序
+          {v.icon}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+export function GroupControl({ prefs, update }: ViewControlsProps) {
+  return (
+    <Menu label="分组方式" icon={<CardsThree weight="regular" size={20} />}>
+      <Label>分组方式</Label>
+      {groupOptions.map(([id, name]) => (
+        <Choice key={id} checked={prefs.group === id} onClick={() => update({ group: id })}>
+          {name}
         </Choice>
-      </Menu>
-    </>
+      ))}
+    </Menu>
+  )
+}
+
+export function SortControl({ prefs, update }: ViewControlsProps) {
+  return (
+    <Menu label="排序方式" icon={<ArrowsDownUp weight="regular" size={20} />}>
+      <Label>排序方式</Label>
+      {sortOptions.map(([id, name]) => (
+        <Choice key={id} checked={prefs.sort === id} onClick={() => update({ sort: id })}>
+          {name}
+        </Choice>
+      ))}
+      <Choice checked={prefs.descending} onClick={() => update({ descending: !prefs.descending })}>
+        降序
+      </Choice>
+    </Menu>
   )
 }

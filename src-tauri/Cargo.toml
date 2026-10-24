@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.5.1"
+version = "0.6.0"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -69,6 +69,9 @@ tempfile = "3"
 sysinfo = { version = "0.37", default-features = false, features = ["disk"] }
 file_icon_provider = { version = "1", optional = true }
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+lofty = "0.25"
+mp4 = "0.14"
+matroska = "0.30"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

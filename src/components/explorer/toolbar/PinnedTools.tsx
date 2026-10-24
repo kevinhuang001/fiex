@@ -85,6 +85,8 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
         pluginId: plugin.id,
         method: tool.command,
         params: { root: x.path },
+        directory: x.path,
+        selectedPaths: [x.path],
       }).catch((error) => x.setError(String(error)))
       return
     }

@@ -12,7 +12,6 @@
   max-width: min(960px, calc(100vw - 24px));
   max-height: min(86vh, 820px);
   transform: translate(-50%, -50%);
-  box-shadow: 0 20px 60px color-mix(in srgb, var(--text) 18%, transparent);
   /* Laid out but invisible until the plugin reports a settled size. */
   opacity: 0;
   visibility: hidden;
@@ -82,7 +81,7 @@
 .plugin-panel-content iframe {
   display: block;
   background: var(--surface);
-  color-scheme: light;
+  color-scheme: light dark;
 }
 .plugin-proxy-status {
   display: inline-flex;
@@ -439,13 +438,21 @@
 .plugin-store-modal {
   width: min(980px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
+  height: min(760px, calc(100vh - 64px));
   padding: 26px 30px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .plugin-store-modal .plugin-store {
   width: 100%;
   max-width: 850px;
   margin: 0 auto;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .plugin-store-modal .plugin-store-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -874,6 +881,7 @@
 .plugin-panel-popover.toolbar-anchored {
   left: auto;
   transform: none;
+  box-shadow: none;
 }
 /* Web demo replacement for the native save/open dialog. */
 .fake-picker-overlay {
@@ -1021,6 +1029,10 @@
   min-width: 0;
   align-items: center;
   gap: 4px;
+  background: var(--decoration-bg-light, var(--decoration-bg-dark, transparent));
+}
+.dark .decorated-value {
+  background: var(--decoration-bg-dark, var(--decoration-bg-light, transparent));
 }
 .decorated-value .decoration-badge {
   flex: 0 0 auto;
@@ -1036,7 +1048,12 @@
 .file-row.decorated-bg:not(.selected),
 .file-tile.decorated-bg:not(.selected),
 .column-row.decorated-bg:not(.selected) {
-  background: var(--decoration-bg);
+  background: var(--decoration-bg-light, var(--decoration-bg-dark, transparent));
+}
+.dark .file-row.decorated-bg:not(.selected),
+.dark .file-tile.decorated-bg:not(.selected),
+.dark .column-row.decorated-bg:not(.selected) {
+  background: var(--decoration-bg-dark, var(--decoration-bg-light, transparent));
 }
 /* Badges in the columns view are inline chips, not flexible columns. */
 .column-row > span.decoration-badge {

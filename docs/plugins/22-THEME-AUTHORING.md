@@ -68,8 +68,9 @@ org.fiex.theme.vista.fiexplugin    (zip)
 | 主题文件               | ≤ 32 KiB                                                                       |
 | `id`                   | 非空，≤ 64，仅 `A-Z a-z 0-9 - _`                                               |
 | `name`                 | ≤ 128 字符                                                                     |
-| `mode`                 | 必须是 `light` 或 `dark`                                                       |
+| `mode`                 | 必须是 `light` 或 `dark`；作为默认/回退模式                                    |
 | `tokens`               | ≤ 256 项                                                                       |
+| `darkTokens`           | 可选；与 `tokens` 合计 ≤ 256 项，校验规则相同                                  |
 | token 名               | 非空，≤ 64，仅小写字母、数字、`-`（`^[a-z][a-z0-9-]*$`）                       |
 | token 值               | ≤ 512 字符；**不能**包含 `;` `{` `}` `<` `>` `\`，不能出现 `url`，不能包含 `@` |
 | 重复 id                | 同一插件内主题 id 必须唯一                                                     |

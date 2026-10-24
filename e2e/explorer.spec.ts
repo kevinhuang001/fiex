@@ -235,8 +235,11 @@ test('settings are custom controls and theme persists', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '深色', exact: true }).click()
   await expect(page.locator('html')).not.toHaveClass('dark')
-  await page.getByRole('switch').click()
-  await expect(page.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('switch', { name: '显示隐藏文件' }).click()
+  await expect(page.getByRole('switch', { name: '显示隐藏文件' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
   await page.getByRole('button', { name: '确认', exact: true }).click()
   await expect(page.locator('html')).toHaveClass('dark')
   await page.screenshot({ path: 'artifacts/dark.png' })

@@ -181,10 +181,11 @@ export function usePanelDismiss(
     const outside = (event: PointerEvent) => {
       const target = event.target as Element | null
       if (panel.current?.contains(target)) return
-      // A plugin tool button or the plugin menu opens the next panel on click.
-      // Closing here would hide this panel for one frame and then show it again
-      // for the exit animation, which reads as a double flash.
-      if (target?.closest('.plugin-tool-button, [aria-label="插件"]')) return
+      // A pinned plugin tool button opens the next panel on click. Closing here
+      // would hide this panel for one frame and then show it again for the exit
+      // animation, which reads as a double flash. The plugin menu button is a
+      // normal outside click, so opening that menu dismisses the current frame.
+      if (target?.closest('.plugin-tool-button')) return
       onClose()
     }
     const escape = (event: KeyboardEvent) => {

@@ -4,18 +4,24 @@ import { parent } from '@/lib/files'
 /** Path, history, tab state and the transient per-pane view state every
  *  navigation resets: selection, rename target and the last error. The listing
  *  itself is loaded by useListing, which reads these values. */
-export function useNavigation() {
-  const [path, setPath] = useState('')
+export function useNavigation(initialTabs?: { paths: string[]; active: number }) {
+  const initialIndex = initialTabs?.paths.length
+    ? Math.min(Math.max(0, initialTabs.active), initialTabs.paths.length - 1)
+    : -1
+  const initialPath = initialIndex >= 0 ? initialTabs!.paths[initialIndex] : ''
+  const [path, setPath] = useState(initialPath)
   const [selected, setSelected] = useState<string[]>([])
   const [renaming, setRenaming] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [globalSearch, setGlobalSearch] = useState(false)
-  const [history, setHistory] = useState<string[]>([])
-  const [cursor, setCursor] = useState(-1)
-  const [tabs, setTabs] = useState<string[]>([])
-  const [tab, setTab] = useState(0)
-  const tabHistory = useRef<{ paths: string[]; cursor: number }[]>([])
+  const [history, setHistory] = useState<string[]>(initialPath ? [initialPath] : [])
+  const [cursor, setCursor] = useState(initialPath ? 0 : -1)
+  const [tabs, setTabs] = useState<string[]>(initialTabs?.paths || [])
+  const [tab, setTab] = useState(initialIndex >= 0 ? initialIndex : 0)
+  const tabHistory = useRef<{ paths: string[]; cursor: number }[]>(
+    initialTabs?.paths.map((value) => ({ paths: [value], cursor: 0 })) || [],
+  )
   const navigate = useCallback(
     (next: string) => {
       setQuery('')

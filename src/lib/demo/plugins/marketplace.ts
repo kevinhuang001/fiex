@@ -136,6 +136,15 @@ export const marketplace = [
           ],
         },
       ],
+      info: [
+        {
+          id: 'archive.info',
+          title: '压缩包',
+          command: 'archive.info',
+          extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
+          priority: 100,
+        },
+      ],
     },
   },
   {
@@ -150,13 +159,13 @@ export const marketplace = [
     repository: 'kevinhuang001/fiex-official-plugins',
     capabilities: ['commands', 'contextMenu'],
     contributions: {
-      contextMenus: [
+      info: [
         {
-          id: 'checksum.calculate',
-          title: '查看校验和',
-          when: 'context.selection.isFile',
-          command: 'checksum.calculate',
-          resultView: 'checksum',
+          id: 'checksum.info',
+          title: '校验和',
+          command: 'checksum.info',
+          extensions: [],
+          priority: 100,
         },
       ],
     },

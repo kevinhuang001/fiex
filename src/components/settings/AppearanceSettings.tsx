@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
 import type { Preferences } from '@/lib/types'
-import { Eye, Home, Palette, SlidersHorizontal, Sun } from 'lucide-react'
+import { Eye, History, Home, Palette, SlidersHorizontal, Sun } from 'lucide-react'
 
 export function AppearanceSettings({
   prefs,
@@ -81,6 +81,7 @@ export function AppearanceSettings({
           <div className="settings-row-control">
             <button
               role="switch"
+              aria-label="显示隐藏文件"
               aria-checked={prefs.hidden}
               className="switch"
               onClick={() => update({ hidden: !prefs.hidden })}
@@ -108,6 +109,25 @@ export function AppearanceSettings({
               ]}
               onChange={(startPage) => update({ startPage: startPage as Preferences['startPage'] })}
             />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-icon" style={{ background: '#14b8a6' }}>
+              <History size={15} />
+            </span>
+            启动时恢复标签页
+          </div>
+          <div className="settings-row-control">
+            <button
+              role="switch"
+              aria-checked={prefs.restoreTabs}
+              aria-label="启动时恢复标签页"
+              className="switch"
+              onClick={() => update({ restoreTabs: !prefs.restoreTabs })}
+            >
+              <i />
+            </button>
           </div>
         </div>
         <div className="settings-row">

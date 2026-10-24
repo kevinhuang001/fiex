@@ -99,6 +99,7 @@ export function PluginPreviewFrame({
               method: p.method,
               params: p.params ?? null,
               directory,
+              selectedPaths: [preview.path],
             })
           }
           if (method === 'plugin.error') {

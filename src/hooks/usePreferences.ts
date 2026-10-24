@@ -29,6 +29,10 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     sidebarOrder: ['places', 'favorites', 'tags', 'devices', 'connections'],
     placeOrder: [],
     hiddenPlaces: [],
+    hiddenSections: [],
+    toolbarLeftOrder: ['group', 'sort', 'newFolder', 'ide', 'terminal'],
+    toolbarRightOrder: ['refresh', 'split', 'activity'],
+    restoreTabs: false,
     favorites: [],
     tags: TAG_PRESETS.map((tag) => ({ ...tag })),
     shortcutStyle: style,
@@ -100,6 +104,23 @@ function load(): Preferences {
       hiddenPlaces: Array.isArray(stored.hiddenPlaces)
         ? stored.hiddenPlaces
         : fallback.hiddenPlaces,
+      hiddenSections: Array.isArray(stored.hiddenSections)
+        ? stored.hiddenSections.filter((section): section is SidebarSection =>
+            ['places', 'favorites', 'tags', 'devices', 'connections'].includes(section),
+          )
+        : fallback.hiddenSections,
+      toolbarLeftOrder: Array.isArray(stored.toolbarLeftOrder)
+        ? stored.toolbarLeftOrder.filter((item): item is string =>
+            ['group', 'sort', 'newFolder', 'ide', 'terminal'].includes(item),
+          )
+        : fallback.toolbarLeftOrder,
+      toolbarRightOrder: Array.isArray(stored.toolbarRightOrder)
+        ? stored.toolbarRightOrder.filter((item): item is string =>
+            ['refresh', 'split', 'activity'].includes(item),
+          )
+        : fallback.toolbarRightOrder,
+      restoreTabs:
+        typeof stored.restoreTabs === 'boolean' ? stored.restoreTabs : fallback.restoreTabs,
       shortcutStyle: style,
       shortcuts,
     }

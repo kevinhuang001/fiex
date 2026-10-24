@@ -71,6 +71,7 @@ export async function runBeforeOpenHooks(
           directory,
         },
         directory,
+        selectedPaths: [entry.path],
       })
       if (result?.handled) return { handled: true, preview: Boolean(result.preview) }
     } catch (error) {

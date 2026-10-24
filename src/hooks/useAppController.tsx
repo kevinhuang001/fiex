@@ -1,9 +1,11 @@
 import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
+import { basename } from '@/lib/files'
+import { loadSavedTabs, saveTabs } from '@/lib/tabs'
 import type { Entry } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useConnectionActions } from './controller/useConnectionActions'
 import { useDialogs } from './controller/useDialogs'
 import { useDropTargets } from './controller/useDropTargets'
@@ -17,7 +19,14 @@ import { usePathEditor } from './usePathEditor'
 import { useWorkspace } from './useWorkspace'
 export function useAppController() {
   const [prefs, update] = usePreferences()
-  const left = useExplorer(prefs)
+  const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
+  const left = useExplorer(
+    prefs,
+    undefined,
+    true,
+    'left',
+    prefs.restoreTabs ? loadSavedTabs() : undefined,
+  )
   const {
     x,
     right,
@@ -28,6 +37,7 @@ export function useAppController() {
     paneWidth,
     setPaneWidth,
     panePaths,
+    paneActives,
     switchWorkspaceTab,
     newWorkspaceTab,
     closeWorkspaceTab,
@@ -36,12 +46,18 @@ export function useAppController() {
     closePane,
   } = usePaneLayout(prefs, left)
   useEffect(() => {
-    const path = active === 'left' ? left.path : right.path
-    if (!path) return
-    void call('plugin_set_active_directory', { path }).catch(() => {})
-  }, [active, left.path, right.path])
+    if (left.tabs.length) saveTabs(left.tabs, left.tab)
+  }, [left.tabs, left.tab])
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
+  const selectedAll = split ? [...new Set([...left.selected, ...right.selected])] : left.selected
+  const focusSearch = () => {
+    const selector =
+      split && active === 'right'
+        ? '.secondary-pane .search-box input'
+        : '.main > .path-toolbar .search-box input'
+    document.querySelector<HTMLInputElement>(selector)?.focus()
+  }
 
   const {
     sidebar,
@@ -80,6 +96,36 @@ export function useAppController() {
     notify,
     navigatePreview,
   } = useDialogs(x)
+  const chosenAll = split
+    ? [
+        ...new Map(
+          [...left.entries, ...right.entries]
+            .filter((entry) => selectedAll.includes(entry.path))
+            .map((entry) => [entry.path, entry]),
+        ).values(),
+      ]
+    : chosen
+  const openBatchRename = () => {
+    if (chosen.length > 1) setBatchRename(chosen)
+  }
+  const applyBatchRename = async (renames: { path: string; name: string }[]) => {
+    const done: { from: string; to: string }[] = []
+    try {
+      for (const item of renames) {
+        const to = await call<string>('rename_entry', { path: item.path, name: item.name })
+        done.push({ from: item.path, to })
+      }
+      setBatchRename(null)
+      x.setSelected([])
+      x.reload()
+      notify(`已重命名 ${done.length} 个项目`)
+    } catch (error) {
+      for (const item of done.reverse()) {
+        await call('rename_entry', { path: item.to, name: basename(item.from) }).catch(() => {})
+      }
+      throw error
+    }
+  }
 
   useEffect(() => {
     x.setReadOnly(x.directoryReadOnly)
@@ -176,7 +222,7 @@ export function useAppController() {
     tagOpen,
     connectionOpen,
     trashIssue,
-    searchInput,
+    focusSearch,
     startPathEdit,
     copy,
     clipboard,
@@ -262,6 +308,12 @@ export function useAppController() {
     setConflict,
     resolveConflict,
     chosen,
+    chosenAll,
+    selectedAll,
+    batchRename,
+    setBatchRename,
+    openBatchRename,
+    applyBatchRename,
     clipboard,
     setClipboard,
     menu,
@@ -308,6 +360,7 @@ export function useAppController() {
     split,
     paneWidth,
     panePaths,
+    paneActives,
     setPaneWidth,
     setSplit,
     active,

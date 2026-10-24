@@ -12,7 +12,17 @@ import type { Props, SharedRow } from './views/shared'
 import type { MouseEvent } from 'react'
 
 export function FileViews(props: Props) {
-  const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark, onWorkspace } = props
+  const {
+    explorer: x,
+    prefs,
+    onOpen,
+    onPreview,
+    onMenu,
+    onDrop,
+    onBookmark,
+    onWorkspace,
+    dragPaths,
+  } = props
   const readOnly = Boolean(props.readOnly)
   const inTrash = Boolean(props.trashPath && x.path === props.trashPath)
   const entries = useMemo(
@@ -29,6 +39,7 @@ export function FileViews(props: Props) {
   const drag = useFileDrag({
     explorer: x,
     selectedPaths,
+    dragPaths,
     readOnly,
     onDrop,
     onBookmark,

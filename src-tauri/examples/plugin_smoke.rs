@@ -48,11 +48,126 @@ fn main() {
         let root = &test_directory;
         let secret = root.path().join("secret.txt");
         std::fs::write(&secret, "host-only").unwrap();
-        plugin_host::set_active_directory(root.path().to_str().unwrap()).unwrap();
-        let read = plugin_host::global()
+        assert!(plugin_host::global()
             .invoke(&id, "mock.readFile", json!({"path":"secret.txt"}))
+            .is_err());
+        let read = plugin_host::global()
+            .invoke_selected(
+                &id,
+                "mock.readFile",
+                json!({"path":"secret.txt"}),
+                root.path().to_str().unwrap(),
+                std::slice::from_ref(&secret),
+            )
             .expect("SDK file read failed");
         assert_eq!(read, "host-only");
+        let task = plugin_host::global()
+            .invoke_selected(
+                &id,
+                "mock.spawnTask",
+                json!({"path":"secret.txt"}),
+                root.path().to_str().unwrap(),
+                std::slice::from_ref(&secret),
+            )
+            .expect("background task did not start");
+        let task_id = task["taskId"].as_str().expect("task id").to_string();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let Some(status) = plugin_host::global().task(&task_id) else {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Core did not register the plugin task"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            };
+            if status.status == "running" || status.status == "cancelling" {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "background task did not finish"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(25));
+                continue;
+            }
+            assert_eq!(status.status, "completed", "{status:?}");
+            assert_eq!(status.result, "host-only");
+            assert_eq!(status.total, Some(1));
+            break;
+        }
+        let stale = plugin_host::global()
+            .invoke_selected(
+                &id,
+                "mock.captureTaskScope",
+                json!({"path":"secret.txt"}),
+                root.path().to_str().unwrap(),
+                std::slice::from_ref(&secret),
+            )
+            .expect("task scope capture did not start");
+        let stale_id = stale["taskId"].as_str().expect("stale task id").to_string();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let Some(status) = plugin_host::global().task(&stale_id) else {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "stale task was not registered"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            };
+            if status.status == "running" || status.status == "cancelling" {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "task scope capture did not finish"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                continue;
+            }
+            assert_eq!(status.status, "completed", "{status:?}");
+            break;
+        }
+        let denied = plugin_host::global()
+            .invoke(&id, "mock.useFinishedTaskScope", json!({}))
+            .expect_err("a finished task must not authorize a new file handle");
+        assert!(
+            denied.to_ascii_lowercase().contains("authorization")
+                || denied.to_ascii_lowercase().contains("expired"),
+            "{denied}"
+        );
+        let cancelled_task = plugin_host::global()
+            .invoke(&id, "mock.longTask", json!({}))
+            .expect("cancellable task did not start");
+        let cancelled_id = cancelled_task["taskId"]
+            .as_str()
+            .expect("cancellable task id")
+            .to_string();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while plugin_host::global()
+            .task(&cancelled_id)
+            .is_none_or(|task| task.status != "running")
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cancellable task never started"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        plugin_host::global()
+            .cancel_task(&cancelled_id)
+            .expect("Core could not cancel the plugin task");
+        loop {
+            let status = plugin_host::global()
+                .task(&cancelled_id)
+                .expect("cancellable task disappeared");
+            if status.status == "cancelled" {
+                break;
+            }
+            assert_eq!(status.status, "cancelling");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cancellable task did not stop"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         let blocked = plugin_host::global()
             .invoke(&id, "mock.directFile", json!({"path":secret}))
             .expect("direct filesystem access must be blocked");

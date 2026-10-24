@@ -3,7 +3,7 @@ import { useExplorerShortcuts } from '@/hooks/useExplorerShortcuts'
 import type { DialogState } from '@/lib/dialogs'
 import { shortcutLabel } from '@/lib/shortcuts'
 import type { Entry, Preferences } from '@/lib/types'
-import type { Dispatch, RefObject, SetStateAction } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import type { ConflictState, Transfer } from './types'
 
 /** Keyboard wiring: every explorer shortcut, the escape reset and the shortcut
@@ -21,7 +21,7 @@ export function useShortcuts({
   tagOpen,
   connectionOpen,
   trashIssue,
-  searchInput,
+  focusSearch,
   startPathEdit,
   copy,
   clipboard,
@@ -52,7 +52,7 @@ export function useShortcuts({
   tagOpen: boolean
   connectionOpen: boolean
   trashIssue: boolean
-  searchInput: RefObject<HTMLInputElement | null>
+  focusSearch: () => void
   startPathEdit: () => void
   copy: (moving: boolean) => void
   clipboard: { paths: string[]; moving: boolean } | null
@@ -80,7 +80,7 @@ export function useShortcuts({
     ),
     handlers: {
       settings: () => setSettings(true),
-      search: () => searchInput.current?.focus(),
+      search: focusSearch,
       goToFolder: startPathEdit,
       selectAll: () => x.setSelected(x.entries.map((entry) => entry.path)),
       copy: () => copy(false),

@@ -14,6 +14,7 @@ import {
   updateActivity,
 } from '@/hooks/useActivity'
 import type { PluginPanelRequest } from './usePanelSession'
+import { operationPaths } from './operationPaths'
 
 export const MAX_PANEL_WIDTH = 720
 export const MAX_PANEL_HEIGHT = 680
@@ -132,6 +133,7 @@ export function usePanelBridge({
     const target = frameRef.current
     dispose.current?.()
     const current = request
+    const chosenPaths = new Set<string>()
     const connect = () => {
       try {
         dispose.current = attachFiexPanel({
@@ -143,6 +145,7 @@ export function usePanelBridge({
             'context.get',
             'clipboard.writeText',
             'plugin.invoke',
+            'plugin.task',
             'panel.close',
             'panel.resize',
             'plugin.error',
@@ -343,6 +346,20 @@ export function usePanelBridge({
                 method: p.method,
                 params: baseParams,
                 directory: current.directory,
+                selectedPaths: operationPaths(baseParams, [
+                  ...current.selection,
+                  ...chosenPaths,
+                  ...(current.selection.length || chosenPaths.size ? [] : [current.directory]),
+                ]),
+              })
+            }
+            if (method === 'plugin.task') {
+              const p = params as { taskId?: unknown } | null
+              if (!p || typeof p.taskId !== 'string' || !p.taskId)
+                throw new Error('Invalid plugin task id')
+              return await call<JsonValue | null>('plugin_task', {
+                pluginId: current.pluginId,
+                taskId: p.taskId,
               })
             }
             if (method.startsWith('dialog.')) {
@@ -362,6 +379,8 @@ export function usePanelBridge({
                 directory: p.directory || current.directory,
                 extensions: p.extensions,
               })
+              if (Array.isArray(picked)) picked.forEach((path) => chosenPaths.add(path))
+              else if (typeof picked === 'string') chosenPaths.add(picked)
               if (method === 'dialog.openFiles')
                 return Array.isArray(picked) ? picked : picked ? [picked] : null
               return typeof picked === 'string' ? picked : null

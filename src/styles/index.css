@@ -6,5 +6,8 @@
 @import './explorer.css';
 @import './dialogs.css';
 @import './settings.css';
+@import './desktop-chrome.css';
+@import './settings-plugins.css';
+@import './settings-plugin-details.css';
 @import './plugins.css';
 @import './picker.css';

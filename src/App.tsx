@@ -1,4 +1,5 @@
 import { FileViews } from '@/components/browser/FileViews'
+import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
@@ -10,6 +11,7 @@ import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { useAppController } from '@/hooks/useAppController'
+import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
@@ -17,6 +19,7 @@ import { useEffect } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
+  usePluginTasks()
 
   useEffect(() => {
     const navigate = (event: Event) => {
@@ -117,6 +120,7 @@ export default function App() {
               onDrop={app.transfer}
               onBookmark={app.bookmarkPaths}
               onWorkspace={app.addWorkspace}
+              dragPaths={app.selectedAll}
               onExternalDrag={(result) =>
                 app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
               }
@@ -134,6 +138,8 @@ export default function App() {
             onOpen={app.openRight}
             onPreview={(entry) => app.previewEntry(entry, app.right)}
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+            dragPaths={app.selectedAll}
+            displayName={app.displayName}
             width={app.paneWidth}
             onWidthChange={app.setPaneWidth}
           />
@@ -156,6 +162,11 @@ export default function App() {
         </div>
       )}
       <FileContextMenu {...app} />
+      <BatchRenameDialog
+        entries={app.batchRename}
+        onClose={() => app.setBatchRename(null)}
+        onApply={app.applyBatchRename}
+      />
       <ExplorerDialogs {...app} />
     </div>
   )

@@ -6,8 +6,9 @@ export function useExplorer(
   startOverride?: string,
   enabled = true,
   pane = 'left',
+  initialTabs?: { paths: string[]; active: number },
 ) {
-  const nav = useNavigation()
+  const nav = useNavigation(initialTabs)
   const listing = useListing(prefs, nav, enabled, pane, startOverride)
   return {
     path: nav.path,

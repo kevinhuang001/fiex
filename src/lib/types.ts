@@ -96,7 +96,8 @@ export interface DecorationStyle {
   color?: string
   fontWeight?: string
   fontStyle?: string
-  background?: string
+  backgroundLight?: string
+  backgroundDark?: string
 }
 export interface DecorationField {
   badges?: DecorationBadge[]
@@ -136,6 +137,10 @@ export interface Preferences {
   sidebarOrder: SidebarSection[]
   placeOrder: string[]
   hiddenPlaces: string[]
+  hiddenSections: SidebarSection[]
+  toolbarLeftOrder: string[]
+  toolbarRightOrder: string[]
+  restoreTabs: boolean
   favorites: Location[]
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap

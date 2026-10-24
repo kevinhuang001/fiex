@@ -84,15 +84,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             plugin_invoke,
+            plugin_task,
+            plugin_cancel_task,
             plugin_status,
             plugins_list,
+            file_info_details,
             plugin_errors,
             plugin_error_report,
             plugin_error_clear,
             plugin_panel_html,
             plugin_panel_asset,
             plugin_permission_allowed,
-            plugin_set_active_directory,
             plugin_network_domains,
             plugin_themes,
             plugin_decorations,
@@ -195,6 +197,13 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            {
+                use tauri::Emitter;
+                let handle = app.handle().clone();
+                crate::plugin_task_events::set_sink(Box::new(move |event| {
+                    let _ = handle.emit("plugin-task", &event);
+                }));
+            }
             #[cfg(feature = "ci-driver")]
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]

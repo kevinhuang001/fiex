@@ -20,6 +20,7 @@ type DragState = {
 export function ExplorerTabs({
   left,
   panePaths,
+  paneActives,
   displayName,
   switchWorkspaceTab,
   closeWorkspaceTab,
@@ -31,6 +32,7 @@ export function ExplorerTabs({
   AppController,
   | 'left'
   | 'panePaths'
+  | 'paneActives'
   | 'displayName'
   | 'switchWorkspaceTab'
   | 'closeWorkspaceTab'
@@ -59,13 +61,12 @@ export function ExplorerTabs({
     },
     [],
   )
+  const activePath = (path: string, index: number) =>
+    panePaths[index] && paneActives[index] === 'right' ? panePaths[index]! : path
   const tabBody = (path: string, index: number) => (
     <>
       {panePaths[index] ? <Columns2 size={14} /> : <Folder size={13} />}
-      <span>
-        {displayName(path)}
-        {panePaths[index] ? ` · ${displayName(panePaths[index])}` : ''}
-      </span>
+      <span>{displayName(activePath(path, index))}</span>
     </>
   )
   const beginDrag = (event: PointerEvent, from: number) => {
@@ -185,7 +186,7 @@ export function ExplorerTabs({
           >
             <button
               role="tab"
-              title={panePaths[i] ? `${path} · ${panePaths[i]}` : path}
+              title={activePath(path, i)}
               aria-selected={i === left.tab}
               onClick={() => {
                 if (!dragged.current) switchWorkspaceTab(i)

@@ -103,6 +103,38 @@ const sections: Section[] = [
   },
 ]
 
+type SearchEntry = { section: SectionId; label: string; keywords: string[] }
+
+const searchEntries: SearchEntry[] = [
+  { section: 'appearance', label: '主题', keywords: ['theme', '主题', '皮肤'] },
+  {
+    section: 'appearance',
+    label: '外观模式',
+    keywords: ['dark', 'light', '深色', '浅色', '跟随系统'],
+  },
+  { section: 'appearance', label: '显示隐藏文件', keywords: ['hidden', '隐藏文件', '.ds_store'] },
+  { section: 'appearance', label: '启动页', keywords: ['start', '启动', '首页'] },
+  {
+    section: 'appearance',
+    label: '启动时恢复标签页',
+    keywords: ['tab', 'restore', '恢复', '标签页', '会话'],
+  },
+  { section: 'appearance', label: '字体大小', keywords: ['font', '字号', '缩放', '大小'] },
+  { section: 'sidebar', label: '区域顺序', keywords: ['sidebar', '顺序', '排序', '区域'] },
+  { section: 'sidebar', label: '侧边栏分区', keywords: ['显示', '隐藏', '标签', '设备', '连接'] },
+  { section: 'sidebar', label: '常用位置', keywords: ['places', '位置', '显示'] },
+  { section: 'shortcuts', label: '快捷键方案', keywords: ['shortcut', 'preset', '方案', '按键'] },
+  { section: 'shortcuts', label: '自定义快捷键', keywords: ['shortcut', '自定义', '按键'] },
+  { section: 'tags', label: '标签列表', keywords: ['tag', '标签', '颜色'] },
+  { section: 'tags', label: '添加标签', keywords: ['tag', '新建', '颜色'] },
+  { section: 'ignore', label: '忽略规则', keywords: ['ignore', '忽略', 'node_modules'] },
+  { section: 'terminal', label: '终端', keywords: ['terminal', 'shell', '命令行'] },
+  { section: 'terminal', label: 'IDE', keywords: ['editor', '编辑器', '代码'] },
+  { section: 'plugins', label: '已安装插件', keywords: ['plugin', '权限', '激活'] },
+  { section: 'plugins', label: '获取插件', keywords: ['plugin', '商店', '更新'] },
+  { section: 'about', label: '版本信息', keywords: ['version', '版本', '许可', 'license'] },
+]
+
 export function PreferencesDialog({
   open,
   onClose,
@@ -129,15 +161,26 @@ export function PreferencesDialog({
     }
   }, [open])
 
-  const visible = useMemo(() => {
+  const results = useMemo(() => {
     const term = query.trim().toLowerCase()
-    if (!term) return sections
-    return sections.filter(
+    if (!term) return []
+    return searchEntries.filter(
       (item) =>
         item.label.toLowerCase().includes(term) ||
         item.keywords.some((keyword) => keyword.toLowerCase().includes(term)),
     )
   }, [query])
+  const visible = useMemo(() => {
+    const term = query.trim().toLowerCase()
+    if (!term) return sections
+    const matched = new Set(results.map((item) => item.section))
+    return sections.filter(
+      (item) =>
+        matched.has(item.id) ||
+        item.label.toLowerCase().includes(term) ||
+        item.keywords.some((keyword) => keyword.toLowerCase().includes(term)),
+    )
+  }, [query, results])
 
   useEffect(() => {
     if (query && visible.length && !visible.some((item) => item.id === section))
@@ -171,28 +214,51 @@ export function PreferencesDialog({
                 }}
               />
             </label>
-            <nav className="settings-nav-list" aria-label="设置分类">
-              {visible.map((item) => {
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.id}
-                    className={`settings-nav ${section === item.id ? 'active' : ''}`}
-                    aria-current={section === item.id ? 'page' : undefined}
-                    onClick={() => setSection(item.id)}
-                  >
-                    <span
-                      className="settings-nav-icon"
-                      style={{ background: section === item.id ? '#ffffff2e' : item.color }}
+            {query.trim() ? (
+              <div className="settings-search-results" role="listbox" aria-label="设置搜索结果">
+                {results.map((item) => {
+                  const target = sections.find((entry) => entry.id === item.section)
+                  return (
+                    <button
+                      key={`${item.section}:${item.label}`}
+                      role="option"
+                      aria-selected="false"
+                      onClick={() => {
+                        setSection(item.section)
+                        setQuery('')
+                      }}
                     >
-                      <Icon size={15} />
-                    </span>
-                    <span className="settings-nav-label">{item.label}</span>
-                  </button>
-                )
-              })}
-              {visible.length === 0 && <p className="settings-empty">没有匹配的设置</p>}
-            </nav>
+                      <span>{item.label}</span>
+                      <small>{target?.label}</small>
+                    </button>
+                  )
+                })}
+                {!results.length && <p>没有匹配的设置项</p>}
+              </div>
+            ) : (
+              <nav className="settings-nav-list" aria-label="设置分类">
+                {visible.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      className={`settings-nav ${section === item.id ? 'active' : ''}`}
+                      aria-current={section === item.id ? 'page' : undefined}
+                      onClick={() => setSection(item.id)}
+                    >
+                      <span
+                        className="settings-nav-icon"
+                        style={{ background: section === item.id ? '#ffffff2e' : item.color }}
+                      >
+                        <Icon size={15} />
+                      </span>
+                      <span className="settings-nav-label">{item.label}</span>
+                    </button>
+                  )
+                })}
+                {visible.length === 0 && <p className="settings-empty">没有匹配的设置</p>}
+              </nav>
+            )}
           </aside>
 
           <section className="settings-content">

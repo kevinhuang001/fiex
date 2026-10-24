@@ -396,10 +396,9 @@
 .breadcrumbs button {
   border-radius: 5px;
   padding: 5px;
-  max-width: 145px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .breadcrumbs button:hover {
   background: var(--control-hover-background);
@@ -1042,4 +1041,22 @@
   margin-left: auto;
   color: var(--muted);
   font-size: 9px;
+}
+
+.toolbar-order {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.toolbar-order-item {
+  display: flex;
+  flex: 0 0 auto;
+}
+body.dragging-toolbar {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.view-switch button svg {
+  transform: translateY(1px);
 }

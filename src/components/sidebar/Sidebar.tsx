@@ -27,6 +27,7 @@ export function Sidebar({
       <div className="sidebar-title" data-tauri-drag-region />
       <div className="sidebar-content">
         {prefs.sidebarOrder.map((section) => {
+          if (prefs.hiddenSections.includes(section)) return null
           if (section === 'places') {
             return (
               <Places
