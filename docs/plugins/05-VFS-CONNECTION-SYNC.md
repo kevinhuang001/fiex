@@ -21,7 +21,7 @@ flowchart TD
 
 ## 2. Connection Factory 与实例
 
-**Manifest 的 `connections[]` 只定义 Factory，不创建账户连接。** 用户通过 Core 自动表单填写配置，Core 检查字段 schema、用户批准的网络目标与 Provider 激活状态；密钥放系统 Keyring，其他字段存 Core 的连接 Registry。每个用户保存的连接均绑定 `pluginId + factoryId + connectionId + mountId`，两个相同 Provider 的账户彼此独立。Connection 一旦存在，Core 自动提供 VFS 能力；无需 `contributions.vfs`。
+**Manifest 的 `connections[]` 只定义 Factory，不创建账户连接。** 用户通过 Core 自动表单填写配置，Core 检查字段 schema、用户批准的网络目标与 Provider 激活状态；密钥放系统 Keyring，其他字段存 Core 的连接 Registry。每个用户保存的连接均绑定 `pluginId + factoryId + connectionId + mountId`，两个相同 Provider 的账户彼此独立。Connection 一旦存在，Core 自动提供 VFS 能力；无需 `providers.vfs`。
 
 ```mermaid
 sequenceDiagram
@@ -50,6 +50,10 @@ sequenceDiagram
 
 Connection Provider 接收的 `fs.stat({connection,nodeId})` 是 Core 为用户已经建立、已获批准的连接发起的内部 Provider 请求，主要用于版本和同步基线。它不赋予 Provider 访问任意宿主本地文件的权限；也不受普通插件查询 `host.fs.stat` 的操作作用域控制。相反，普通插件主动调用 `ctx.files().metadata(path)` / `host.fs.stat` 必须同时具有 `files.metadata.enabled` 或 `folders.metadata.enabled` 和已确认的 OperationScope。Core 在 Explorer 事件中把已经持有的元数据推送给插件（Push）也只有获批后才允许，且不生成普通文件的读内容授权。
 
+
+### Connection 用户操作也能请求运行时 Panel
+
+`surfaces.connections[]` 在添加/管理连接的宿主 UI 有固定位置。Core 标准表单仍由 `fields[]` 定义，插件在用户点击授权登录、高级设置或编辑连接时，可通过当前 InteractionSession 的 `host.ui.open` 动态选择自己的 OAuth/配置 Panel；Manifest 无须注册 `panels[]`。Panel 创建不自动扩大连接实例的网络目标、文件读写或凭据访问权限。
 
 ## 3. Node/目录分页/身份策略
 

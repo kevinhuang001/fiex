@@ -104,9 +104,17 @@ stateDiagram-v2
 
 ## 5. iframe UI 安全
 
-Plugin UI 必须是离线预编译 HTML/CSS/JS 资产，使用 sandboxed iframe、opaque origin（或明确隔离 origin）、严格 CSP、经一次性 nonce 建立 MessagePort，之后仅用专用 port 通信。禁止给插件 iframe Tauri API、任意 `window.__TAURI__`、Node.js、宿主 DOM、Keyring 或 Native OS 路径。Content-addressed 资产缓存只传静态文件；所有资源加载路径做相对路径/软链检查。UI SDK 是“调用服务”不是“注入宿主 JS”。
+Plugin UI 默认使用安装时校验的包内 HTML/CSS/JS 资产；也允许在本次有效交互中传入有界动态 HTML（仍受同样的沙箱/CSP 约束），使用 sandboxed iframe、opaque origin（或明确隔离 origin）、严格 CSP、经一次性 nonce 建立 MessagePort，之后仅用专用 port 通信。禁止给插件 iframe Tauri API、任意 `window.__TAURI__`、Node.js、宿主 DOM、Keyring 或 Native OS 路径。Content-addressed 资产缓存只传受校验的包内静态文件，动态 HTML 不应被当作不受限远程脚本；所有资源加载路径做相对路径/软链检查。UI SDK 是“调用服务”不是“注入宿主 JS”。
 
 `panel.resize` 宿主夹取最大 720×680、最小 320×220，并考虑当前窗口尺寸；`panel.close` 只能关闭自己。消息限并发数、长度、超时、来源/session ID；面板隐藏期间拒绝非必要请求。UI cancel 要传递至 Core，不得只取消 Promise。
+
+## 5.1 通用运行时 Panel：创建资格、来源与隔离
+
+Panel 不是 Manifest 的一个可预注册贡献点，不设单独的 `panel` permission。`surfaces.toolbar/contextMenus/preview/info/search/connections/settings` 等 UI Surface 在**用户明确触发的操作**中可调用统一的 `host.ui.open`，但不会因为注册某个 Surface 就获得后台弹窗权限。
+
+Core 签发只用于当前操作、插件进程身份和有效时限的 `interactionId`；不能从 `contextMenu.resolve`、`info.resolve`、`search.query`、目录 Decoration 刷新、后台 Hook/Sync 直接打开 Panel。用户点击实际菜单 action、工具栏按钮、搜索结果交互、Info 显式操作、管理连接动作或打开预览等才能派生有效交互；Core 校验后返回自己的 `panelSessionId`。关闭/切换/撤权时会话失效，过期与交叉插件请求拒绝。
+
+运行时 Panel 允许两个受控视图来源：本插件包内已校验的 UI HTML 路径（路径规范化，不能逃离包根、不能指向其他插件文件），或受大小限制的内存 HTML 文档（由调用插件在 IPC 中交付，不能从任意远程 URL/宿主路径直接加载）；对两者强制 opaque-origin `sandbox=allow-scripts` 且不开放 `allow-same-origin`、严格 CSP、MessagePort UI Bridge 白名单、消息身份/长度/并发/会话检查。**运行时 HTML 不等于允许宿主 DOM/Node/Tauri API**。Panel 本身不赋予额外 `files.*`、`folders.*`、网络或进程权限。详见 [09-RUNTIME-UI-PANELS.md](09-RUNTIME-UI-PANELS.md)。
 
 ## 6. 安装、身份、签名与权限撤销
 

@@ -47,13 +47,13 @@ fn main() {
 
 ## 2.1 `contextMenu.resolve` 与 `contextMenu.execute` 的 Rust SDK 合同
 
-`contributions.contextMenus: true` 是纯 Provider 注册，**Manifest 不再声明 `when/children`，也不声明菜单项的 `command`**。Rust SDK 常驻进程照常使用同一个 `sdk::serve` 处理两个固定方法：
+`surfaces.contextMenus: true` 是纯 Provider 注册，**Manifest 不再声明 `when/children`，也不声明菜单项的 `command`**。Rust SDK 常驻进程照常使用同一个 `sdk::serve` 处理两个固定方法：
 
 | 方法 | 目标 SDK 类型 | IPC 输入 → 输出 | 权限 |
 |---|---|---|---|
 | `ctx.method()=="contextMenu.resolve"` | `sdk::context_menu::ResolveRequest` → `MenuResponse` | `target + selection + directory + menuSessionId` → `{items}` | Core 主动附带本次选择的 `metadata?`（仅 files/folders.metadata 已获批时）；不可主动 stat/读内容/遍历 |
 | `ctx.method()=="contextMenu.execute"` | `sdk::context_menu::ExecuteRequest` → JSON | `menuSessionId + itemId + selection` → JSON | 用户实际点击之后的精确 OperationScope |
-| `sdk::context_menu::MenuItem` | `{id,type,title?,icon?,parentId?,enabled?,panelId?,group?,order?}` | 由 `resolve` 序列化至 Core | 只用于显示，不意味着可执行系统调用 |
+| `sdk::context_menu::MenuItem` | `{id,type,title?,icon?,parentId?,enabled?,group?,order?}` | 由 `resolve` 序列化至 Core | 只用于显示，不意味着可执行系统调用 |
 
 新的 `sdk::context_menu` 模块是 M3 计划新增的类型安全包装；在其生成之前仍可使用 `ctx.params()` / `serde_json` 实现这两个固定方法。开发者不需要直接发送 `host.*` 控制消息。
 
@@ -69,8 +69,7 @@ fn handle(ctx: sdk::RequestContext) -> Result<Value, RpcError> {
             if is_zip {
                 Ok(json!({"items":[
                     {"id":"archive.extract","type":"action","title":"解压到当前目录"},
-                    {"id":"archive.advanced","type":"panel","title":"高级选项…",
-                     "panelId":"archive.options"}
+                    {"id":"archive.advanced","type":"action","title":"高级选项…"}
                 ]}))
             } else {
                 Ok(json!({"items":[]}))
@@ -102,7 +101,7 @@ flowchart TD
   CoreBuild --> Select{"User clicks?"}
   Select -->|action| Grant["Core creates exact-file OperationScope"]
   Grant --> Execute["SDK contextMenu.execute"]
-  Select -->|panel| Panel["Core opens registered panelId"]
+  Select -->|advanced action| Panel["Plugin can request host.ui.open dynamically"]
   Select -->|dismiss| End["Drop session"]
   Execute --> End
   Panel --> End
@@ -264,7 +263,7 @@ sequenceDiagram
   Host-->>UI: result
 ```
 
-UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两个 RPC 仅由 Core 在真实用户右键/点击事件上向对应 Native Provider 调用。MenuResponse 引用的 `panelId` 必须存在于 Manifest 的 `contributions.panels[]`，因此插件无法动态加载未验证的 HTML。
+UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两个 RPC 仅由 Core 在真实右键/点击事件上向对应 Native Provider 调用。**面板无静态注册表**：所有用户触发的 Surface 均由相关 Plugin Handler 调用 `ctx.ui().open_panel(...)`，Core 校验当前 interactionId、包内 HTML 或有界运行时 HTML、CSP 与 iframe 沙箱，绝不授予任意宿主 JS/文件权限。
 
 ### 主动元数据查询不等同于事件中自动收到的元数据
 
@@ -284,18 +283,32 @@ UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两
 
 | SDK 导出/逻辑合同 | Core ↔ Provider 入口 | 目标语义 |
 |---|---|---|
-| `preview::PreviewDescriptor` | Host `PreviewRegistry.register` | `id,title,extensions?,mimeTypes?,priority?,panelId?`；内置与外部同形 |
+| `preview::PreviewDescriptor` | Host `PreviewRegistry.register` | `id,title,extensions?,mimeTypes?,priority?`；内置与外部同形，无静态 panelId |
 | `preview::PreviewContext` | `preview.open` | `{sessionId,intent:"preview",resource:{ref,metadata?}}`，以 Ref 代替 host 路径 |
-| `preview::PreviewView` | Host `PreviewHost` | 宿主可识别的渲染目标；第三方只能引用本插件已验证 Panel |
+| `preview::PreviewView` | Host `PreviewHost` | 运行时返回的具体 Renderer 或视图描述，第三方只能请求其本次交互的隔离 Panel |
 | `info::InfoDescriptor` | Host `InfoRegistry.register` | `id,title,extensions?,mimeTypes?,priority?,command?` |
 | `info::InfoContext` | `info.resolve` | `{sessionId,intent:"info",resource:{ref,metadata?}}` |
 | `info::InfoRow` / `InfoSection` / `InfoResponse` | `info.resolve` | `{sections:[{id,title,rows:[{label,value}]}]}`，聚合原生与第三方来源 |
 | `resources::PreviewResourceRef` | Core Scoped Resource Broker | 只读、限量、可取消、支持视频/PDF Range/Seek；插件无法拿到裸本地文件路径 |
 | `preview::PreviewSession` / `info::InfoSession` | Core session owner | 文件切换、对话框关闭/插件禁用、取消时释放资源，后到结果丢弃 |
 
-`preview.open` 对 Core 内置 Provider 是进程内 Adapter 调用，对插件是 Host 统一管理的 Panel/UI Bridge 加载过程，**不是要求插件每次额外跑一遍 Native IPC**。插件注册 `preview[]` 及 `panels[]` 后，由 Core 选择其签名资源。Info Native handler 可以使用 `info.resolve` 或声明的 `command`，但必须返回同形 `InfoResponse`；SDK 应生成可直接实现的 `InfoHandler` 类型。
+`preview.open` 对 Core 内置 Provider 是进程内 Adapter 调用，对插件是 Host 统一管理的 Panel/UI Bridge 加载过程，**不是要求插件每次额外跑一遍 Native IPC**。插件仅注册 `surfaces.preview[]`；打开预览时通过 IPC/Bridge 动态指定本次包内页面或受限 HTML，Core 验证内容与来源。Info Native handler 可以使用 `info.resolve` 或声明的 `command`，但必须返回同形 `InfoResponse`；SDK 应生成可直接实现的 `InfoHandler` 类型。
 
 **权限**：Core 只主动 Push 已获批的本次所选资源 `metadata?`；媒体探测/图片/视频/PDF 内容解析需要相应文件的 `files.read.enabled` + 精确 Scope。内置 Provider 的内部读取不向外部插件暴露特权；所有第三方流由 Broker 代理。完整规范见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
+
+## 7.2 通用运行时 UI SDK：`ctx.ui().open_panel`
+
+`ctx.ui().open_panel(view,presentation)` 由 Native SDK 在上下文内带上 Core 下发的 `interactionId`（插件开发者不手工创建/复用），通过 `host.ui.open` 创建 **PanelSession**；Toolbar、ContextMenu、Preview、Info、Search、Connection 等用户主动触发的 UI Surface 均可使用，无需 Manifest `panels`、`panelId` 或单独 Panel permission。
+
+```rust
+// 目标 API 伪代码，不声称已编译
+ctx.ui().open_panel(
+    sdk::ui::PanelView::Package("ui/options.html".into()),
+    sdk::ui::PanelPresentation::dialog("高级设置", 520, 420)
+)?;
+```
+
+另一种 `PanelView::Html(html)` 通过同一个 IPC 请求提交有界 HTML。SDK / Core 不应自动在菜单 `resolve`、目录搜索 `query`、信息 `resolve`、Decorations 刷新、后台同步等无用户主动打开动作中颁发 `interactionId`。Panel 与 OperationScope 分离，Panel 创建后文件资源访问仍按用户已批准的权限和本次操作 Scope 校验。详见 [09-RUNTIME-UI-PANELS.md](09-RUNTIME-UI-PANELS.md)。
 
 ## 8. Fiex 内部 Tauri command 边界（非插件公开接口）
 

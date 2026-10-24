@@ -43,11 +43,20 @@ flowchart LR
 
 | 编号 | 仓库 | 任务 | 验收 |
 |---|---|---|---|
-| M2.1 | Core | JSON Schema 验证全部 Manifest；file/folder 子权限统一 `{enabled}`，拒绝旧布尔形态 | 拒绝 scheme/capabilities/sync/writeMode/conflictControl 和旧布尔权限 |
-| M2.2 | Core | 删除 `when/children` 与 Manifest 中的静态 context menu item；`contributions.contextMenus:true` 注册 Provider，新增 `panels[]` 静态资源目录；实现一次右键每插件一次并发 `contextMenu.resolve` | 每次只传本次选中元数据；空结果/超时不阻塞 UI；最大 80 项/4 层/无环 |
+| M2.1 | Core | 将 Manifest 旧 `contributions` 拆为 `surfaces`（Connection/Toolbar/ContextMenus/Search/Preview/Info/Decorations/Settings/Themes）、`providers`（显式 VFS/Hooks）、`surfaces.themes[]`；PanelHost 为 Core 通用运行时 UI 服务，验证文件/目录 `{enabled}` | 旧 contributions/布尔权限、scheme/capabilities/sync/writeMode/conflictControl 全部拒绝 |
+| M2.2 | Core | 删除 `when/children` 与 Manifest 中的静态 context menu item；`surfaces.contextMenus:true` 注册 Provider，删除静态 `panels[]` 并接入运行时 PanelHost；实现一次右键每插件一次并发 `contextMenu.resolve` | 每次只传本次选中元数据；空结果/超时不阻塞 UI；最大 80 项/4 层/无环 |
 | M2.3 | Core | 完成 search/preview/info/hooks/decorations/themes/settings 生命周期；Preview/Info 内置与外部共用 ProviderRegistry / 请求响应，删除 `search.scope`，只允许指定目录 `root` 搜索 | 统一 Preview/Info fixtures；Everything 查询和结果限定 root；无全局搜索入口 |
 | M2.4 | Core | 签名校验覆盖 manifest 与 assets，升级触发权限变更检查 | 篡改文件安装失败；新权限重新同意 |
 | M2.5 | SDK | 生成 Manifest Type/Schema/示例包校验工具 | 本地一条命令能 lint 所有官方 manifest |
+
+## 4.0 运行时 Panel UI（所有 UI Surface 共用）
+
+| 编号 | 仓库 | 任务 | 验收 |
+|---|---|---|---|
+| M2.UI1 | Core | 删除 Manifest 所有 Panel 预声明与 panelId，定义 `host.ui.open(PanelSpec)`，允许按本次 IPC 指定包内页面或限额 HTML | 各 UI Surface 不需要 Panel Contribution 就可打开 UI |
+| M2.UI2 | Core/SDK | 使用 Core 签发的 InteractionSession 关联 Toolbar、ContextMenu.execute、Preview.open、Info 显式操作、Search 结果操作、Connection 用户操作 | menu.resolve / info.resolve / search.query / decorations / background 请求打开面板被拒 |
+| M2.UI3 | Core | 统一 PanelHost：沙箱 iframe、CSP、UI Bridge、尺寸、焦点、关闭回收、撤权失效 | 无任意磁盘 HTML/远程 URL、无 UI/Tauri 提权或跨插件 UI 注入 |
+| M2.UI4 | 官方插件 | 删除 panelId 与静态 panels[]，从真实点击处理器发送动态 PanelSpec | 所有官方 UI 实际能用，同一插件一次操作可选不同 View |
 
 ## 4.1 元数据、搜索及动态右键的额外验收任务
 
@@ -61,7 +70,7 @@ flowchart LR
 | 编号 | 仓库 | 任务 | 验收 |
 |---|---|---|---|
 | M2.6 | Core | 新建 MenuBroker：每次右键产生不可复用 MenuSession，向声明 `contextMenus:true` 的 Native 插件并发 `contextMenu.resolve` | 恰好调用一次/插件/右键；不再读取 `when`、静态 `children` |
-| M2.7 | Core | 校验响应扁平 `items[]` 的 `id/type/parentId` 与 `panelId`；无环、最大 4 层/80 项；点击时仅运行 `contextMenu.execute` | 其他插件 ID 注入、任意 host 命令、禁用或已过期 item 全部拒绝 |
+| M2.7 | Core | 校验响应扁平 `items[]` 的 `id/type/parentId`；无环、最大 4 层/80 项；点击 action 后可以调用 `host.ui.open`，但 resolve 不允许直接弹窗 | 其他插件 ID 注入、任意 host 命令、禁用或已过期 item 全部拒绝 |
 | M2.8 | Core | 独立 `files.metadata.enabled` / `folders.metadata.enabled`：Core 在菜单查询时只主动推送已批准的选择对象 metadata，不开放主动 `host.fs.stat`；点击后建立 OperationScope | 未授权不推送；查询主动 stat/openRead 拒绝；原生菜单不阻塞 |
 | M2.9 | Official Plugins | Archive/Git/GPG 等全部从静态 `when/children` 迁移到返回具体菜单项 | 不识别扩展名返回空数组；子菜单通过 `parentId` 表达；不保留旧分支 |
 
@@ -80,9 +89,9 @@ flowchart LR
 | 编号 | 仓库 | 待实施任务 | 完成条件 |
 |---|---|---|---|
 | M3.P1 | Core | PreviewRegistry 统一内置高亮文本、图片、音频、视频、PDF、fallback 与外部 Plugin Preview 的描述符、过滤/排序、优先级、失败回退 | 内置/第三方预览可在同一选择器排序；fallback 稳定 |
-| M3.P2 | Core | 将 `Preview.tsx` 的内容类型判断迁移到内置 Preview Provider；PreviewHost 只管理 Modal、导航、焦点、关闭、会话 | 宿主组件没有按 MIME/扩展名硬编码 renderer 分支 |
-| M3.P3 | Core | InfoRegistry 统一基本文件、lofty 音频、MP4/Matroska 视频与第三方 Info；统一 `InfoResponse.sections[]` | 多个 Provider 并发聚合；一个失败不影响其他 |
-| M3.P4 | Core | 将 `FileInfoDialog.tsx` 的 `basicRows` 与特定插件 ID 判断移除；基础属性作为 `core.info.file` | Dialog 只根据 sections 渲染；同样布局无特例 |
+| M3.P2 | Core | 真正拆分 Preview.tsx 中 Text/Image/Audio/Video/PDF/Fallback 各独立组件和测试，PreviewHost 只处理容器/导航/会话 | 各独立模块可单测、可替换；Preview.tsx 无文件类型渲染分支 |
+| M3.P3 | Core | 将 info.rs 物理拆成 info/mod.rs（只编排）与 metadata.rs、audio.rs、video.rs、types.rs；每个来源独立注册并用统一 InfoResponse | 三个来源分别独立超时/失败隔离，插件不触发 Core 特判 |
+| M3.P4 | Core | 将 `FileInfoDialog.tsx` 的 `basicRows` 与特定插件 ID 判断移除；基础属性作为 `core.info.metadata` | Dialog 只根据 sections 渲染；同样布局无特例 |
 | M3.P5 | Core | 将 `src-tauri/src/plugins/info.rs` 内置解析器拆成可注册 Adapter，消除 `media_sections + plugin_sections` 双路径 | Core/Plugin Info 共享执行时序、异常隔离、序列化 Schema |
 | M3.P6 | Core/SDK | 新增 `PreviewContext/View`、`InfoContext/Response`、`ResourceRef` SDK 类型；补齐 `info.resolve` 和 `preview.open` Host 逻辑合同 | Core/Plugin Adapter 通过同一 contract fixture；无旧 `{path,rows}` 回包 |
 | M3.P7 | Core | Preview/Info 统一限额只读流、资源 URL、范围读取、取消/关闭句柄回收，覆盖本地/Connection/VFS | 无全文件 JSON/base64；跨资源访问拒绝；5 GiB+ 文件稳定 |
@@ -175,7 +184,7 @@ gantt
 - [ ] **安装与升级**：从签名 Release 安装、重新授予权限、禁用和卸载/重装一致；旧文档与 API 无幽灵引用。
 - [ ] **三仓 CI 全绿**：并提供一份三平台完整日志链接、真实 Provider 集成与 mock 失败用例报告。
 
-## 13. 禁止违反的九项决策
+## 13. 禁止违反的十二项决策
 
 1. **不得为每种连接在 Core 写专门同步流程。**
 2. **不得将 `capabilities` 重新加入 Manifest。**
@@ -186,3 +195,8 @@ gantt
 7. **不得在 Manifest 保留 `contextMenus.when/children` 或静态右键子项；所有右键项必须由 IPC 动态返回，并将查询与执行授权隔离。**
 8. **不得继续使用布尔 file/folder 子权限，统一 `{enabled}`，不得把文件创建/删除映射为文件夹权限。**
 9. **不得重加 `search.scope` 或全局搜索入口；Core 主动推送 metadata 必须检查该类元数据权限，插件主动 stat 还需要 OperationScope。**
+
+10. **不得保留内置 Preview/Info 单文件集中业务逻辑：所有来源必须独立模块与测试，Registry 只做调度。**
+11. **Connection 归属有固定 UI 位置的 Surface；顶层 `contributions` 不做兼容，Themes 属于 surfaces.themes，Panel 不在 Manifest 声明。**
+
+12. **不得为任何 UI Surface 预注册具体 Panel；所有 Panel 由真实用户交互的插件 IPC 在运行时选择、请求并由 Core PanelHost 校验创建，不能只适用于 ContextMenu。**

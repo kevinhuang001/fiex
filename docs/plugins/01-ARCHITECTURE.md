@@ -71,7 +71,7 @@ sequenceDiagram
 
 ## 2.1 完全动态的右键菜单 Provider
 
-右键菜单是独立的双阶段入口：Manifest 仅注册 `contributions.contextMenus: true`，每次右键 Core 向本插件发送一条 `contextMenu.resolve` 元数据查询，并发收集所有 Provider 的菜单项。插件只返回本次匹配的 **扁平 `items[]`**，子菜单用 `parentId` 构造，绝无 `when` 或 `children`。用户点击 action 时 Core 验证 Session + itemId，建立一次性 OperationScope，再调用该 owner 的 `contextMenu.execute`。若返回 panel 类型，必须引用 Manifest `contributions.panels[]` 中已经签名验证的静态页面。
+右键菜单是独立的双阶段入口：Manifest 仅注册 `surfaces.contextMenus: true`，每次右键 Core 向本插件发送一条 `contextMenu.resolve` 元数据查询，并发收集所有 Provider 的菜单项。插件只返回本次匹配的 **扁平 `items[]`**，子菜单用 `parentId` 构造，绝无 `when` 或 `children`。用户点击 action 时 Core 验证 Session + itemId，建立一次性 OperationScope，再调用该 owner 的 `contextMenu.execute`。若用户点击 action，插件可通过本次交互的 `host.ui.open` 动态选择页面并请求 Core 创建 Panel；菜单查询本身不能弹窗。
 
 ```mermaid
 flowchart LR
@@ -82,7 +82,7 @@ flowchart LR
   U --> A{"Selected item"}
   A -->|"action"| O["Verify owner/session + create operation scope"]
   O --> E["contextMenu.execute"]
-  A -->|"panel"| P["Open predeclared panelId"]
+  A -->|"action invokes UI"| P["Plugin host.ui.open with interactionId"]
   A -->|"dismiss"| D["Revoke session"]
 ```
 
@@ -110,7 +110,7 @@ flowchart TD
 
 ## 2.3 目录限定的 Search
 
-`contributions.search[]` 不提供 `scope`；所有搜索由 Core 绑定已验证的当前 root。Everything 可以在后台依托全局索引，但必须使用 root 作为路径过滤条件，Core 还要逐项校验结果路径确实属于该目录树；不支持展示跨 root 的全局搜索结果。
+`surfaces.search[]` 不提供 `scope`；所有搜索由 Core 绑定已验证的当前 root。Everything 可以在后台依托全局索引，但必须使用 root 作为路径过滤条件，Core 还要逐项校验结果路径确实属于该目录树；不支持展示跨 root 的全局搜索结果。
 
 ## 2.4 统一 Preview / Info 扩展 Provider，而不是硬编码功能分支
 
@@ -127,6 +127,40 @@ flowchart LR
 ```
 
 **接口相同不等于传输路径相同**：内置组件在宿主进程内部高效运行，第三方必须经过 Broker + iframe 隔离。媒体属性探测涉及文件字节读取，不能把它视为只需 metadata permission 的被动 Core Push。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md) 和 [Roadmap](../../ROADMAP.md)。
+
+## 2.5 Surface 插槽与 Core 多来源实现的边界
+
+UI Surface 是 Core 预设的接入位置，`surfaces.connections[]`（添加连接和侧边栏）、`surfaces.preview[]`、`surfaces.info[]`、`surfaces.contextMenus`、`surfaces.search[]`、`surfaces.toolbar[]`、`surfaces.decorations[]`、`surfaces.settings[]` 都有明确 UI 入口。和它们不同，`providers.vfs[]` 与 `providers.hooks[]` 不绑定一个固定 UI 插槽；`surfaces.themes[]` 对应主题选择器；Panel 不出现在 Manifest，只在用户实际交互时由 IPC 创建。
+
+对 Info：`core.info.metadata`、`core.info.audio`、`core.info.video` 是三个**独立源代码模块**，各自有匹配逻辑、解析、结果和单测，聚合时并发执行、彼此失败隔离。对 Preview：`core.preview.text/image/audio/video/pdf/fallback` 也是各自独立的 Renderer/Provider 模块。内置采用进程内 Adapter，第三方经过 IPC/隔离 UI；两者由同一 Registry 调度、同一宿主展示。
+
+```mermaid
+flowchart TD
+  Slot["Fixed Info Surface"] --> Registry["Info Registry only orchestrates"]
+  Registry --> M["core.info.metadata: own module"]
+  Registry --> A["core.info.audio: own module"]
+  Registry --> V["core.info.video: own module"]
+  Registry --> P["Third-party Info Provider"]
+  M --> Host["Common InfoHost"]
+  A --> Host
+  V --> Host
+  P --> Host
+```
+
+## 2.6 所有 UI Surface 的运行时 PanelHost
+
+`host.ui.open` 不是 ContextMenu 的特殊功能。Toolbar、Preview、Info、Search、Connection 和其他真正由用户触发的 Surface 都可以在本次操作中通过 IPC 决定 `view`（包内 HTML 或限额动态 HTML）、标题、展示方式和建议尺寸。**Manifest 没有 `panels[]`、`panelId` 或 Panel permission**。各 Surface 的实际用户操作创建 `interactionId`，Core 验证后创建独立 PanelSession；自动查询、目录装饰刷新和后台同步不得自动弹窗。Core PanelHost 负责 iframe sandbox、CSP、UI Bridge 和关闭清理。
+
+```mermaid
+flowchart LR
+  U["Actual user UI action"] --> S["Fixed UI Surface"]
+  S --> P["Native provider command"]
+  P --> O["host.ui.open(runtime view + interactionId)"]
+  O --> H["Core validates / creates PanelSession"]
+  H --> F["Sandboxed iframe / common UI Bridge"]
+```
+
+详见 [09-RUNTIME-UI-PANELS.md](09-RUNTIME-UI-PANELS.md)。
 
 ## 3. 所有权矩阵
 

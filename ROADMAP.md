@@ -30,12 +30,18 @@ flowchart LR
   R6 --> R7["R7 QA + Release"]
 ```
 
+## Manifest 分类与 Core 来源拆分原则
+
+`surfaces` 放拥有固定 UI 集成位置的 Connection、Toolbar、ContextMenus、Search、Preview、Info、Decorations、Settings。Connection 在添加连接对话框和侧边栏有固定位置，并不属于无 UI Provider；它创建的持久实例仍由 Core 自动挂载。`providers` 放显式 VFS View 和文件生命周期 Hooks。(no static Panel registry) 放已验证的 Panels、Themes。
+
+**不能仅改 Registry/接口名字**。物理拆分 `src-tauri/src/plugins/info.rs`：`info/mod.rs` 只调度；`metadata.rs`（`core.info.metadata`）、`audio.rs`（`core.info.audio`）、`video.rs`（`core.info.video`）各自实现；`Preview.tsx` 只负责容器，独立的 `TextPreview`、`ImagePreview`、`AudioPreview`、`VideoPreview`、`PdfPreview` 和 `FallbackPreview` 分别注册到同一 PreviewRegistry。
+
 ## R0 · 合同先行（P0）
 
 - [ ] R0-01：为 Manifest、Native IPC、UI Bridge、`PreviewProvider`、`InfoProvider` 和跨进程 `ResourceRef` 建立可机检 JSON Schema。
 - [ ] R0-02：SDK 根据同一 Schema 生成 Rust/TypeScript 类型；Core 与 SDK 不再分别维护不一致的 API 结构。
 - [ ] R0-03：在 Core 建立内置适配器、Mock Plugin 适配器、假 ResourceBroker 的一致性测试夹具。
-- [ ] R0-04：升级/安装拒绝非法 Manifest 字段，避免 `capabilities`、用户自定义 scheme、`sync/writeMode/conflictControl` 等旧开关重新出现。
+- [ ] R0-04：Manifest 顶层仅保留 `surfaces`（Connection/Toolbar/ContextMenus/Search/Preview/Info/Decorations/Settings/Themes）与 `providers`（VFS/Hooks）等声明；**禁止静态 panels[]、panelId**，旧 contributions/capabilities 等字段拒绝解析。
 - [ ] R0-05：整理所有 RPC、UI Bridge、Manifest Contribution 的方法清单，增删接口强制更新文档与测试。
 
 **验收**：Schema ↔ SDK ↔ Core 之间有自动编译与契约测试；不存在文档已定义却完全未注册的公开 API。
@@ -64,17 +70,19 @@ flowchart LR
 - [ ] R2-04：将音频拆为 `core.preview.audio`，将视频拆为 `core.preview.video`，分别负责流式播放和清理。
 - [ ] R2-05：将 PDF 拆为 `core.preview.pdf`，统一有界/范围读取，支持原有 PDF 功能。
 - [ ] R2-06：将目录/未知格式的展示实现为不可完全禁用的 `core.preview.fallback`。
-- [ ] R2-07：第三方预览使用**同一** Registry、优先级、启用/禁用、用户选择、回退；只允许引用包内已验证的 `contributions.panels[].id`。
+- [ ] R2-07：第三方预览和多个内置 Preview 进入同一个 Registry；外部预览在本次 `preview.open` 事件中动态返回 View/PanelSpec，不能通过 Manifest 固定 `panelId`。
 - [ ] R2-08：`Preview.tsx` 最终只管理宿主 Modal/导航/快捷键/生命周期，内部渲染改为 `PreviewHost` 统一分发，移除按格式硬编码的多路条件分支。
+- [ ] R2-08A：物理拆分 Text/Image/Audio/Video/Pdf/Fallback 各预览组件及单独测试；PreviewHost 不再根据 MIME 分支选择渲染。
 - [ ] R2-09：修复“内置文本/图片/音视频只列在候选外，却不能正常与插件同台排序”的逻辑；所有内置和插件能参加排序，按类型/扩展/MIME 匹配。
 
 ### R2-B · 统一 Info 注册与显示
 
 - [ ] R2-10：创建 `InfoRegistry / InfoProvider`，规定唯一回包结构 `InfoResponse { sections: [{id,title,rows:[{label,value}]}] }`，Core 与插件严格一致。
-- [ ] R2-11：将普通文件基本属性（名称/类型、大小、位置、创建/修改时间、只读、符号链接）迁移为 `core.info.file`，不再由 `FileInfoDialog.tsx` 自己组装。
+- [ ] R2-10A：物理拆分 `src-tauri/src/plugins/info.rs` → `info/mod.rs`（仅 Registry 编排）、`metadata.rs`、`audio.rs`、`video.rs`、`types.rs`，三个内置 Provider 分别测试、排序、超时、失败隔离。
+- [ ] R2-11：将普通文件基本属性（名称/类型、大小、位置、创建/修改时间、只读、符号链接）迁移为 `core.info.metadata`，不再由 `FileInfoDialog.tsx` 自己组装。
 - [ ] R2-12：将 lofty 音频元数据解析迁移为 `core.info.audio`，输出相同 `InfoResponse`；读取媒体文件数据时按照内容读取的安全规则进行限额与 Scope 检查。
 - [ ] R2-13：将 MP4 / Matroska 视频元数据迁移为 `core.info.video`，输出相同 `InfoResponse`，保留容器、码流、时长、分辨率等。
-- [ ] R2-14：第三方 `contributions.info[]` 改为和内置 Provider **完全一致的请求/响应合同**，统一上下文为 `ResourceRef + metadata? + sessionId`；删除旧 `path → rows` 形式。
+- [ ] R2-14：第三方 `surfaces.info[]` 改为和内置 Provider **完全一致的请求/响应合同**，统一上下文为 `ResourceRef + metadata? + sessionId`；删除旧 `path → rows` 形式。
 - [ ] R2-15：`FileInfoDialog.tsx` 只消费 `sections[]`，统一展示区块，移除 `basicRows`、硬编码插件 ID 和不同 source 的特殊 UI 路径。
 - [ ] R2-16：`src-tauri/src/plugins/info.rs` 只负责 InfoRegistry/Adapter 编排；基础文件、媒体探测与第三方聚合不再分两套调用代码。
 - [ ] R2-17：本地、`fiex://` 连接、Git VFS、离线副本都可走同一 Info 路由；不因是虚拟文件而无条件返回空数组。
@@ -90,12 +98,17 @@ flowchart LR
 
 **R2 的完成条件**：`Preview.tsx` 不再拥有格式分支；`FileInfoDialog.tsx` 不再手写基本属性；Core 的原生媒体 Info 与第三方 Info 真正进入一套 Registry 和 `InfoResponse`；第三方插件不获得比用户确认操作更广的文件访问。
 
-## R3 · 动态右键菜单与局部搜索（P0）
+## R3 · 动态右键菜单、局部搜索与运行时 Panel（P0）
 
-- [ ] R3-01：`contributions.contextMenus:true` 注册动态 Provider，每次右键 Core 向每个已启用插件发送一次 `contextMenu.resolve`。
-- [ ] R3-02：右键返回扁平 `items[]`，`parentId` 表达子菜单；删除 `when`、`children` 和 Manifest 静态右键项。
+- [ ] R3-00：删除 Manifest 静态 `panels[]`、`panelId`、Panel contribution；实现 `host.ui.open` 与 PanelSpec，插件可在有效用户交互时指定包内 HTML 或有界运行时 HTML，Core 负责 sandbox、CSP、size/focus/session。
+- [ ] R3-00A：Toolbar、ContextMenu（仅 execute 后）、Preview、Info（仅明确点击操作）、Search（仅点击结果/操作）、Connection（用户添加/管理时）等 UI Surface 均可通过相同 PanelHost 打开面板；不可从 `contextMenu.resolve/info.resolve/search.query`、decorations 刷新或后台触发。
+- [ ] R3-00B：Core 签发不可伪造 `interactionId`，Panel 创建时验证插件身份/触发入口/有效期；用户关闭、切换或撤权时回收 UI 会话及绑定句柄。
+
+
+- [ ] R3-01：`surfaces.contextMenus:true` 注册动态 Provider，每次右键 Core 向每个已启用插件发送一次 `contextMenu.resolve`。
+- [ ] R3-02：右键 `resolve` 只返回 `action/submenu/separator` 扁平项；删除 `when`、`children`、`type:panel`。点击 action 后插件才可调用统一的 `host.ui.open`。
 - [ ] R3-03：点击前验证 MenuSession、item 所属插件和当前选择，执行时单独创建 OperationScope。
-- [ ] R3-04：删除 `contributions.search[].scope`，仅将用户当前 root 传给 `search.query`，所有 Provider 必须按该目录限制搜索。
+- [ ] R3-04：删除 `surfaces.search[].scope`，仅将用户当前 root 传给 `search.query`，所有 Provider 必须按该目录限制搜索。
 - [ ] R3-05：Everything 允许依赖全局索引，但查询本身要带路径过滤，Core 对返回结果二次校验路径边界。
 - [ ] R3-06：添加查询超时、取消、批量结果限制与性能基准，UI 不因插件阻塞。
 
@@ -116,7 +129,7 @@ flowchart LR
 
 ## R6 · 其他扩展点及官方插件（P1）
 
-- [ ] R6-01：统一 toolbar / panels / hooks / decorations / settings / themes 的 Manifest、SDK、执行和撤销。
+- [ ] R6-01：Manifest 分为 `surfaces`（固定 UI 插槽，含 Connection/Themes）和 `providers`（VFS/Hooks）；Panel 为通用运行时 UI 服务，所有插件迁移到基于交互的 `host.ui.open`。
 - [ ] R6-02：Vista / Win11 主题；Archive / GPG / Git；Everything；Office/Data 预览/信息实现都按新 Schema 迁移。
 - [ ] R6-03：移除官方插件特殊 ID 判断、重复 iframe 逻辑和未使用的 legacy 分支。
 - [ ] R6-04：在安装、升级和卸载时保证贡献点注销、视图重载、权限重新批准及资源回收。
@@ -139,6 +152,7 @@ flowchart LR
 | [IPC 方法目录](docs/plugins/03-IPC-CATALOG.md) | 所有跨进程消息 |
 | [SDK 方法目录](docs/plugins/04-SDK-CATALOG.md) | Rust/UI SDK 与 Host API 映射 |
 | [Preview + Info 统一方案](docs/plugins/08-UNIFIED-PREVIEW-INFO.md) | **内置与插件使用相同 Provider 协议** |
+| [运行时 UI Panel 协议](docs/plugins/09-RUNTIME-UI-PANELS.md) | 全部 UI Surface 共用交互触发的 Panel 创建，无静态 Panel 注册 |
 | [完整实施任务书](docs/plugins/07-IMPLEMENTATION-PLAN.md) | 分模块实现步骤和验收定义 |
 
 更新原则：设计变化先改合同文档与本 Roadmap；实现 PR 将完成的任务勾选并附 PR/测试证据，未实现的不得标注已完成。
