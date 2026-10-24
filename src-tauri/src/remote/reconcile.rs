@@ -41,6 +41,36 @@ fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<S
         .metadata()
         .map_err(|e| e.to_string())?
         .len();
+    if super::config::write_mode(conn) == "file" {
+        let plugin = ensure_provider_access(conn)?;
+        let source = snapshot
+            .path()
+            .file_name()
+            .ok_or("invalid upload source")?
+            .to_string_lossy()
+            .into_owned();
+        let result = crate::plugin_host::global().invoke_selected(&plugin, "fs.writeFile",
+            json!({"connection":provider_config(conn), "nodeId":file.node_id, "source":source, "size":size, "ifRevision":file.revision}),
+            snapshot.path().parent().ok_or("invalid upload source")?.to_str().ok_or("invalid upload path")?,
+            &[snapshot.path().to_path_buf()])?;
+        let revision = result["revision"]
+            .as_str()
+            .filter(|r| !r.is_empty())
+            .ok_or("missing committed revision")?;
+        let mut meta = load_meta(conn);
+        let entry = meta.files.get_mut(rel).ok_or("cache entry disappeared")?;
+        entry.revision = revision.into();
+        entry.baseline = before;
+        entry.local_stamp = if fingerprint(&local)? == entry.baseline {
+            stamp(&local)?
+        } else {
+            String::new()
+        };
+        entry.size = size;
+        entry.conflict = false;
+        save_meta(conn, &meta)?;
+        return Ok(revision.into());
+    }
     let opened = invoke(
         conn,
         "fs.beginWrite",

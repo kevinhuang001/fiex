@@ -13,7 +13,7 @@ pub(crate) fn mount_path(conn: &StoredConnection) -> PathBuf {
 }
 
 /// Refuse requests when a provider has lost one of its declared permissions.
-/// Remote providers may only read; Core owns the destination file and cache.
+/// Core owns caches and upload snapshots; providers receive scoped read access.
 pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, String> {
     let plugin_id = connection_plugin_id(conn);
     let plugin = crate::plugin_host::catalog()
@@ -248,4 +248,23 @@ pub(crate) fn supports_sync(conn: &StoredConnection) -> bool {
                 .iter()
                 .any(|f| f["id"].as_str() == Some(&conn.kind) && f["capabilities"]["sync"] == true)
         })
+}
+
+pub(crate) fn write_mode(conn: &StoredConnection) -> String {
+    crate::plugin_host::catalog()
+        .into_iter()
+        .find(|p| p.id == conn.plugin_id)
+        .and_then(|p| {
+            p.contributions
+                .get("connections")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+        })
+        .and_then(|factories| {
+            factories
+                .into_iter()
+                .find(|f| f["id"].as_str() == Some(&conn.kind))
+        })
+        .and_then(|f| f["capabilities"]["writeMode"].as_str().map(str::to_owned))
+        .unwrap_or_else(|| "stream".into())
 }

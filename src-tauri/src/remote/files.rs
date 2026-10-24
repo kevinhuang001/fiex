@@ -409,6 +409,17 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
         let listing = list_remote(&conn, parent)?;
         remember_listing(parent, &listing, &mut meta);
     }
+    if meta.files.get(&rel).is_some_and(|f| f.revision.is_empty())
+        && super::config::supports_sync(&conn)
+    {
+        let file = &meta.files[&rel];
+        if let Ok(info) = crate::plugin_host::global().invoke(
+            &ensure_provider_access(&conn)?, "fs.stat",
+            serde_json::json!({"connection":provider_config(&conn),"nodeId":if file.node_id.is_empty() { &rel } else { &file.node_id }}),
+        ) {
+            meta.files.get_mut(&rel).unwrap().revision = info["revision"].as_str().unwrap_or("").into();
+        }
+    }
     let entry = meta.files.get(&rel).ok_or("远程文件不存在")?.clone();
     if entry.is_dir {
         return Err("不能作为文件打开文件夹".into());

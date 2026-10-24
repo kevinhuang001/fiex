@@ -57,6 +57,23 @@ pub fn open_read(owner: &str, root: &Scope, input: &str) -> Result<Value, String
     );
     Ok(json!({"handle": handle, "size": metadata.len()}))
 }
+/// Duplicate only a reader owned by the calling operation/task. The network
+/// layer streams this authorized handle and never accepts a filesystem path.
+pub fn http_body(owner: &str, handle: &str) -> Result<std::fs::File, String> {
+    let registry = reads().lock().map_err(|_| "read registry unavailable")?;
+    let reader = registry
+        .get(handle)
+        .filter(|r| r.owner == owner)
+        .ok_or("read handle unavailable")?;
+    let mut file = reader
+        .file
+        .try_clone()
+        .map_err(|e| e.to_string())?
+        .into_std();
+    file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+    Ok(file)
+}
+
 pub fn read_open(
     owner: &str,
     handle: &str,
@@ -655,6 +672,10 @@ mod tests {
         let value = open_read("owner", &scope, "chosen").unwrap();
         let handle = value["handle"].as_str().unwrap();
         assert_eq!(value["size"], far + 2);
+        assert!(http_body("other", handle).is_err());
+        let mut upload = http_body("owner", handle).unwrap();
+        assert_eq!(upload.metadata().unwrap().len(), far + 2);
+        assert_eq!(upload.stream_position().unwrap(), 0);
         assert!(read_open("other", handle, far, 2, None).is_err());
         std::fs::rename(&chosen, root.path().join("moved")).unwrap();
         std::fs::write(&chosen, b"replacement").unwrap();
@@ -669,6 +690,7 @@ mod tests {
         );
         crate::plugin_ipc::release("owner", &descriptor.id).unwrap();
         close_read("owner", handle).unwrap();
+        assert!(http_body("owner", handle).is_err());
         assert!(read_open("owner", handle, 0, 1, None).is_err());
     }
     #[test]

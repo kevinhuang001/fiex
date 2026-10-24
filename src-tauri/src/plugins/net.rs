@@ -290,7 +290,18 @@ pub fn http_open(
         .get("timeoutMs")
         .and_then(Value::as_u64)
         .unwrap_or(90000)
-        .clamp(1, 120000);
+        .clamp(
+            1,
+            if params
+                .get("bodyReadHandle")
+                .and_then(Value::as_str)
+                .is_some()
+            {
+                86_400_000
+            } else {
+                120_000
+            },
+        );
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(timeout))
         .redirect(reqwest::redirect::Policy::none())
@@ -332,6 +343,14 @@ pub fn http_open(
     if body.as_ref().is_some_and(|b| b.len() > 1024 * 1024) {
         return Err("HTTP request exceeds inline limit".into());
     }
+    let mut file_body = params
+        .get("bodyReadHandle")
+        .and_then(Value::as_str)
+        .map(|id| crate::plugin_fs_access::http_body(owner, id))
+        .transpose()?;
+    if file_body.is_some() && body.as_ref().is_some_and(|b| !b.is_empty()) {
+        return Err("ambiguous HTTP body".into());
+    }
     for redirect in 0..=10 {
         if !matches!(url.scheme(), "http" | "https")
             || !url.username().is_empty()
@@ -352,7 +371,15 @@ pub fn http_open(
                 url.clone(),
             )
             .headers(headers.clone());
-        if let Some(bytes) = &body {
+        if let Some(file) = &mut file_body {
+            use std::io::{Seek, SeekFrom};
+            file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            let size = file.metadata().map_err(|e| e.to_string())?.len();
+            request = request.body(reqwest::blocking::Body::sized(
+                file.try_clone().map_err(|e| e.to_string())?,
+                size,
+            ));
+        } else if let Some(bytes) = &body {
             request = request.body(bytes.clone());
         }
         let response = request.send().map_err(|e| e.to_string())?;
@@ -384,6 +411,7 @@ pub fn http_open(
             {
                 method = "GET".into();
                 body = None;
+                file_body = None;
                 headers.remove(reqwest::header::CONTENT_TYPE);
             }
             url = next;
