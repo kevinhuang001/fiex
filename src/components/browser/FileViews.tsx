@@ -1,209 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import {
-  ChevronRight,
-  CloudCheck,
-  CloudDownload,
-  Files,
-  FolderOpen,
-  LoaderCircle,
-  SearchX,
-} from 'lucide-react'
-import { FileIcon } from '../FileIcon'
-import { BrowserColumn } from './BrowserColumn'
-import { VirtualFileGrid } from './VirtualFileGrid'
-import { InlineRename } from './InlineRename'
-import { TagDots } from '../TagDots'
-import { asset, call, native } from '@/lib/api'
-import { startFileDrag } from '@/lib/drag'
-import { useDecorationIcon } from '@/lib/decorationIcons'
-import { date, groups, isImage, kind, parent, size, sortEntries } from '@/lib/files'
-import type {
-  DecorationBadge,
-  DecorationField,
-  DecorationStyle,
-  DecorationTarget,
-  Entry,
-  EntryDecoration,
-  Listing,
-  Preferences,
-} from '@/lib/types'
-import type { Explorer } from '@/hooks/useExplorer'
-import type { CSSProperties } from 'react'
-
-// macOS stops reporting pointer events once the cursor leaves the window while a
-// button is held, so hand the drag to the OS a few pixels before the boundary.
-const EDGE = 4
-interface Props {
-  explorer: Explorer
-  prefs: Preferences
-  onOpen: (e: Entry) => void
-  onPreview: (e: Entry) => void
-  onMenu: (e: Entry, x: number, y: number) => void
-  onDrop: (paths: string[], dest: string, moving: boolean) => void
-  onBookmark: (paths: string[]) => void
-  onWorkspace: (paths: string[]) => void
-  onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
-  readOnly?: boolean
-  trashPath?: string | null
-}
-
-type DropTarget =
-  | { kind: 'folder'; path: string; element: HTMLElement }
-  | { kind: 'bookmark'; element: HTMLElement }
-  | { kind: 'workspace'; element: HTMLElement }
-
-function dropTargetAt(x: number, y: number): DropTarget | null {
-  const element = document.elementFromPoint(x, y)
-  const folder = element?.closest('[data-drop-folder]') as HTMLElement | null
-  if (folder?.dataset.dropFolder)
-    return { kind: 'folder', path: folder.dataset.dropFolder, element: folder }
-  const bookmark = element?.closest('[data-bookmark-drop]') as HTMLElement | null
-  if (bookmark) return { kind: 'bookmark', element: bookmark }
-  const workspace = element?.closest('[data-workspace-drop]') as HTMLElement | null
-  if (workspace) return { kind: 'workspace', element: workspace }
-  return null
-}
-
-function clearDropHighlight() {
-  document
-    .querySelectorAll('.drop-target')
-    .forEach((element) => element.classList.remove('drop-target'))
-  document
-    .querySelectorAll('.bookmark-drop')
-    .forEach((element) => element.classList.remove('bookmark-drop'))
-  document
-    .querySelectorAll('.workspace-drop')
-    .forEach((element) => element.classList.remove('workspace-drop'))
-}
-
-function SyncBadge({ sync }: { sync: Entry['sync'] }) {
-  if (!sync) return null
-  return sync === 'synced' ? (
-    <span className="sync-badge synced" title="已同步">
-      <CloudCheck size={11} />
-      <span>已同步</span>
-    </span>
-  ) : (
-    <span className="sync-badge cloud" title="仅云端，需要连接">
-      <CloudDownload size={11} />
-      <span>仅云端</span>
-    </span>
-  )
-}
-
-function fieldOf(
-  decoration: EntryDecoration | undefined,
-  target: DecorationTarget,
-): DecorationField | undefined {
-  const field = decoration?.fields?.[target]
-  if (field) return field
-  if (target === 'name' && decoration) return { badges: decoration.badges, style: decoration.style }
-  return undefined
-}
-
-function styleOf(style: DecorationStyle | undefined): CSSProperties | undefined {
-  if (!style) return undefined
-  return {
-    color: style.color,
-    fontWeight: style.fontWeight as CSSProperties['fontWeight'],
-    fontStyle: style.fontStyle as CSSProperties['fontStyle'],
-    background: style.background,
-  }
-}
-
-function Badges({ badges }: { badges?: DecorationBadge[] }) {
-  return (
-    <>
-      {badges?.map((badge) => (
-        <span
-          key={`${badge.text}-${badge.color}`}
-          className={`decoration-badge ${badge.color.startsWith('#') ? 'custom' : badge.color}`}
-          style={
-            badge.color.startsWith('#')
-              ? { color: badge.color, borderColor: badge.color }
-              : undefined
-          }
-          title={badge.tooltip}
-        >
-          {badge.text}
-        </span>
-      ))}
-    </>
-  )
-}
-
-function DecoratedValue({
-  decoration,
-  target,
-  children,
-}: {
-  decoration: EntryDecoration | undefined
-  target: Exclude<DecorationTarget, 'name' | 'row'>
-  children: React.ReactNode
-}) {
-  const field = fieldOf(decoration, target)
-  return (
-    <span className="decorated-value" style={styleOf(field?.style)}>
-      {children}
-      <Badges badges={field?.badges} />
-    </span>
-  )
-}
-
-function rowVars(decoration: EntryDecoration | undefined): {
-  className: string
-  style?: CSSProperties
-} {
-  const style = fieldOf(decoration, 'row')?.style
-  if (!style) return { className: '' }
-  const vars = {
-    '--decoration-color': style.color,
-    '--decoration-weight': style.fontWeight,
-    '--decoration-font-style': style.fontStyle,
-    '--decoration-bg': style.background,
-  } as CSSProperties
-  return {
-    className: ` decorated${style.background ? ' decorated-bg' : ''}`,
-    style: vars,
-  }
-}
-
-function NameCell({
-  explorer,
-  entry,
-  className,
-}: {
-  explorer: Explorer
-  entry: Entry
-  className: string
-}) {
-  if (explorer.renaming === entry.path)
-    return (
-      <InlineRename
-        entry={entry}
-        className={className}
-        onCommit={(name) => explorer.renameTo(entry.path, name)}
-        onCancel={explorer.cancelRename}
-      />
-    )
-  const decoration = explorer.decorations?.[entry.path]
-  const field = fieldOf(decoration, 'name')
-  const style = styleOf(field?.style)
-  const title = [entry.name, decoration?.description, decoration?.providers?.join(' · ')]
-    .filter(Boolean)
-    .join(' · ')
-  const label = decoration?.label || entry.name
-  return (
-    <>
-      <span className={className} style={style} title={title}>
-        {entry.name}
-      </span>
-      <Badges badges={field?.badges} />
-      {label !== entry.name && <small className="decoration-label">{label}</small>}
-    </>
-  )
-}
+import { Files, FolderOpen, LoaderCircle, SearchX } from 'lucide-react'
+import { ColumnsView } from './views/ColumnsView'
+import { GridView } from './views/GridView'
+import { ListView } from './views/ListView'
+import { useFileDrag, useSelectionBand } from './views/useSelectionBand'
+import { groups, sortEntries } from '@/lib/files'
+import type { Entry } from '@/lib/types'
+import type { FlatRow } from './views/ListView'
+import type { Props, SharedRow } from './views/shared'
+import type { MouseEvent } from 'react'
 
 export function FileViews(props: Props) {
   const { explorer: x, prefs, onOpen, onPreview, onMenu, onDrop, onBookmark, onWorkspace } = props
@@ -218,163 +24,19 @@ export function FileViews(props: Props) {
   // stays at the reference size and scales with the rest of the interface.
   const iconSize = 88
   const anchor = useRef<string | null>(null)
-  const suppressClick = useRef(false)
   const container = useRef<HTMLDivElement>(null)
-  const [band, setBand] = useState<{
-    left: number
-    top: number
-    width: number
-    height: number
-  } | null>(null)
-  const bandStart = useRef<{ x: number; y: number; base: string[]; additive: boolean } | null>(null)
-  const bandDragged = useRef(false)
-  const startBand = (event: React.PointerEvent) => {
-    if (event.button !== 0 || !container.current) return
-    // Begin only from empty space: rows, tiles, inputs and buttons keep their
-    // own drag/click behaviour.
-    if ((event.target as Element).closest('[data-path],button,input,a')) return
-    const additive = event.metaKey || event.ctrlKey || event.shiftKey
-    bandStart.current = {
-      x: event.clientX,
-      y: event.clientY,
-      base: additive ? [...x.selected] : [],
-      additive,
-    }
-    bandDragged.current = false
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-  const moveBand = (event: React.PointerEvent) => {
-    const start = bandStart.current
-    if (!start || !container.current) return
-    const left = Math.min(start.x, event.clientX)
-    const top = Math.min(start.y, event.clientY)
-    const width = Math.abs(event.clientX - start.x)
-    const height = Math.abs(event.clientY - start.y)
-    if (width > 3 || height > 3) bandDragged.current = true
-    setBand({ left, top, width, height })
-    const bandRect = { left, top, right: left + width, bottom: top + height }
-    const picked: string[] = []
-    container.current.querySelectorAll<HTMLElement>('[data-path]').forEach((element) => {
-      const rect = element.getBoundingClientRect()
-      const hit =
-        rect.left < bandRect.right &&
-        rect.right > bandRect.left &&
-        rect.top < bandRect.bottom &&
-        rect.bottom > bandRect.top
-      if (hit && element.dataset.path) picked.push(element.dataset.path)
-    })
-    const next = start.additive ? [...new Set([...start.base, ...picked])] : picked
-    x.setSelected(next)
-  }
-  const endBand = () => {
-    bandStart.current = null
-    setBand(null)
-  }
-  const [ghost, setGhost] = useState<{ paths: string[]; x: number; y: number } | null>(null)
-  const beginPointerDrag = (event: React.PointerEvent, entry: Entry) => {
-    if (event.button !== 0 || x.renaming || readOnly) return
-    if ((event.target as Element).closest('input,button,a')) return
-    const paths = selectedPaths.has(entry.path) ? [...x.selected] : [entry.path]
-    if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !selectedPaths.has(entry.path)) {
-      x.setSelected([entry.path])
-    }
-    const startX = event.clientX
-    const startY = event.clientY
-    // Keep pointer events flowing once the cursor crosses the window edge:
-    // without capture macOS/Windows stop reporting moves before the drag can
-    // be handed over to the native drag session.
-    const captureTarget = event.currentTarget as Element
-    const pointerId = event.pointerId
-    try {
-      captureTarget.setPointerCapture(pointerId)
-    } catch {
-      // Older webviews may not support pointer capture; the edge check below
-      // still handles the common case.
-    }
-    const releaseCapture = () => {
-      try {
-        if (captureTarget.hasPointerCapture?.(pointerId))
-          captureTarget.releasePointerCapture(pointerId)
-      } catch {
-        // Capture is already gone.
-      }
-    }
-    let active = false
-    let nativeStarted = false
-    const cleanup = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', finish)
-      window.removeEventListener('pointercancel', finish)
-      document.removeEventListener('mouseleave', leave)
-      releaseCapture()
-      document.body.classList.remove('dragging-file')
-      clearDropHighlight()
-      setGhost(null)
-    }
-    const startNative = (copyRequested = false) => {
-      if (!active || nativeStarted) return
-      nativeStarted = true
-      cleanup()
-      if (!native) return
-      void call('ci_log', {
-        message: `startNative active=${active} inner=${window.innerWidth}x${window.innerHeight} paths=${JSON.stringify(paths)}`,
-      }).catch(() => {})
-      void startFileDrag(
-        paths,
-        (result) => {
-          props.onExternalDrag?.(result)
-          if (result === 'Dropped') x.reload()
-        },
-        copyRequested,
-      ).catch((error) => {
-        x.setError(String(error))
-      })
-    }
-    const leave = (event: MouseEvent) => startNative(event.altKey || event.ctrlKey)
-    const move = (moveEvent: PointerEvent) => {
-      if (!active) {
-        if (Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return
-        active = true
-        document.body.classList.add('dragging-file')
-      }
-      if (
-        native &&
-        (moveEvent.clientX <= EDGE ||
-          moveEvent.clientY <= EDGE ||
-          moveEvent.clientX >= window.innerWidth - EDGE ||
-          moveEvent.clientY >= window.innerHeight - EDGE)
-      ) {
-        startNative(moveEvent.altKey || moveEvent.ctrlKey)
-        return
-      }
-      moveEvent.preventDefault()
-      setGhost({ paths, x: moveEvent.clientX, y: moveEvent.clientY })
-      clearDropHighlight()
-      const target = dropTargetAt(moveEvent.clientX, moveEvent.clientY)
-      if (target?.kind === 'folder') target.element.classList.add('drop-target')
-      else if (target?.kind === 'bookmark') target.element.classList.add('bookmark-drop')
-      else if (target?.kind === 'workspace') target.element.classList.add('workspace-drop')
-    }
-    const finish = (upEvent: PointerEvent) => {
-      cleanup()
-      if (!active || nativeStarted) return
-      suppressClick.current = true
-      setTimeout(() => {
-        suppressClick.current = false
-      }, 0)
-      const target = dropTargetAt(upEvent.clientX, upEvent.clientY)
-      if (target?.kind === 'folder' && !paths.includes(target.path))
-        onDrop(paths, target.path, !(upEvent.altKey || upEvent.ctrlKey))
-      else if (target?.kind === 'bookmark') onBookmark(paths)
-      else if (target?.kind === 'workspace') onWorkspace(paths)
-    }
-    window.addEventListener('pointermove', move, { passive: false })
-    window.addEventListener('pointerup', finish)
-    window.addEventListener('pointercancel', finish)
-    document.addEventListener('mouseleave', leave)
-  }
-  const select = (e: Entry, event: React.MouseEvent) => {
-    if (suppressClick.current) {
+  const band = useSelectionBand({ container, selected: x.selected, setSelected: x.setSelected })
+  const drag = useFileDrag({
+    explorer: x,
+    selectedPaths,
+    readOnly,
+    onDrop,
+    onBookmark,
+    onWorkspace,
+    onExternalDrag: props.onExternalDrag,
+  })
+  const select = (e: Entry, event: MouseEvent) => {
+    if (drag.suppressClick.current) {
       event.preventDefault()
       event.stopPropagation()
       return
@@ -394,26 +56,26 @@ export function FileViews(props: Props) {
       anchor.current = e.path
     }
   }
-  const shared = (e: Entry) => {
+  const shared: SharedRow = (e) => {
     const renaming = x.renaming === e.path
     return {
-      onClick: (event: React.MouseEvent) => select(e, event),
+      onClick: (event: MouseEvent) => select(e, event),
       onDoubleClick: () => {
         if (!renaming) onOpen(e)
       },
-      onContextMenu: (event: React.MouseEvent) => {
+      onContextMenu: (event: MouseEvent) => {
         event.preventDefault()
         if (!selectedPaths.has(e.path)) x.setSelected([e.path])
         onMenu(e, event.clientX, event.clientY)
       },
-      onPointerDown: (event: React.PointerEvent) => beginPointerDrag(event, e),
+      onPointerDown: (event) => drag.beginPointerDrag(event, e),
       'data-path': e.path,
       'data-drop-folder': e.isDir ? e.path : undefined,
       'aria-selected': selectedPaths.has(e.path),
       tabIndex: -1,
     }
   }
-  const flat = useMemo(
+  const flat = useMemo<FlatRow[]>(
     () =>
       groups(entries, prefs.group).flatMap(([heading, files]) => [
         ...(heading ? [{ heading, entry: null }] : []),
@@ -477,7 +139,7 @@ export function FileViews(props: Props) {
       )
   }
   if (prefs.view === 'columns' && !x.query)
-    return <Columns {...props} shared={shared} onKeyDown={onKeyDown} />
+    return <ColumnsView {...props} shared={shared} onKeyDown={onKeyDown} />
   return (
     <div
       className="file-area"
@@ -486,23 +148,21 @@ export function FileViews(props: Props) {
       aria-label="文件"
       tabIndex={0}
       onKeyDown={onKeyDown}
-      onPointerDown={startBand}
-      onPointerMove={moveBand}
-      onPointerUp={endBand}
-      onPointerCancel={endBand}
-      onClick={(e) => {
-        // A finished rubber-band gesture must not collapse the selection.
-        if (bandDragged.current) {
-          bandDragged.current = false
-          return
-        }
-        if (e.target === e.currentTarget) x.setSelected([])
-      }}
+      onPointerDown={band.startBand}
+      onPointerMove={band.moveBand}
+      onPointerUp={band.endBand}
+      onPointerCancel={band.endBand}
+      onClick={band.handleContainerClick}
     >
-      {band && (
+      {band.band && (
         <div
           className="selection-band"
-          style={{ left: band.left, top: band.top, width: band.width, height: band.height }}
+          style={{
+            left: band.band.left,
+            top: band.band.top,
+            width: band.band.width,
+            height: band.band.height,
+          }}
         />
       )}
       {entries.length === 0 && !x.loading && !x.error && (
@@ -529,301 +189,31 @@ export function FileViews(props: Props) {
         </div>
       )}
       {prefs.view === 'list' && entries.length > 0 ? (
-        <>
-          <div className="list-header">
-            <span>名称</span>
-            <span>修改时间</span>
-            <span>大小</span>
-            <span>种类</span>
-          </div>
-          <div style={{ height: virtual.getTotalSize(), position: 'relative' }}>
-            {virtual.getVirtualItems().map((row) => {
-              const item = flat[row.index]
-              const decoration = item.entry ? x.decorations?.[item.entry.path] : undefined
-              const rowDecor = rowVars(decoration)
-              return (
-                <div
-                  key={item.entry?.path || item.heading}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: row.size,
-                    transform: `translateY(${row.start}px)`,
-                  }}
-                >
-                  {item.entry ? (
-                    <div
-                      role="row"
-                      className={`file-row ${selectedPaths.has(item.entry.path) ? 'selected' : ''}${rowDecor.className}`}
-                      style={rowDecor.style}
-                      {...shared(item.entry)}
-                    >
-                      <span className="file-name">
-                        <FileIcon entry={item.entry} size={25} />
-                        <NameCell explorer={x} entry={item.entry} className="file-label" />
-                        <TagDots tags={item.entry.tags} />
-                        <SyncBadge sync={item.entry.sync} />
-                        {item.entry.readonly && x.renaming !== item.entry.path && (
-                          <small>只读</small>
-                        )}
-                      </span>
-                      <DecoratedValue decoration={decoration} target="modified">
-                        {date(item.entry.modified)}
-                      </DecoratedValue>
-                      <DecoratedValue decoration={decoration} target="size">
-                        {item.entry.isDir ? '—' : size(item.entry.size)}
-                      </DecoratedValue>
-                      <DecoratedValue decoration={decoration} target="kind">
-                        {kind(item.entry)}
-                      </DecoratedValue>
-                    </div>
-                  ) : (
-                    <div className="group-heading">{item.heading}</div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </>
+        <ListView
+          explorer={x}
+          flat={flat}
+          rows={virtual.getVirtualItems()}
+          totalSize={virtual.getTotalSize()}
+          selectedPaths={selectedPaths}
+          shared={shared}
+        />
       ) : (
-        <>
-          {prefs.view === 'gallery' && x.selected.length > 0 && (
-            <div
-              className="gallery-preview"
-              onDoubleClick={() => onPreview(entries.find((e) => e.path === x.selected[0])!)}
-            >
-              {(() => {
-                const e = entries.find((e) => e.path === x.selected[0])
-                return e ? (
-                  <>
-                    <Thumbnail entry={e} size={140} />
-                    <NameCell explorer={x} entry={e} className="gallery-name" />
-                    <span>
-                      {kind(e)} · {e.isDir ? '文件夹' : size(e.size)}
-                    </span>
-                    <button onClick={() => onPreview(e)}>空格快速查看</button>
-                  </>
-                ) : null
-              })()}
-            </div>
-          )}
-          {prefs.view === 'icons' && entries.length > 200 ? (
-            <VirtualFileGrid
-              entries={entries}
-              group={prefs.group}
-              tileSize={Math.max(96, iconSize + 38)}
-              rowHeight={iconSize + 76}
-              scrollRef={container}
-              target={x.renaming || x.selected.at(-1) || null}
-              render={(e) => {
-                const decoration = x.decorations?.[e.path]
-                const rowDecor = rowVars(decoration)
-                return (
-                  <div
-                    role="gridcell"
-                    className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}${rowDecor.className}`}
-                    key={e.path}
-                    style={rowDecor.style}
-                    {...shared(e)}
-                  >
-                    <span className="tile-icon">
-                      <Thumbnail entry={e} size={iconSize} />
-                    </span>
-                    <NameCell explorer={x} entry={e} className="tile-label" />
-                    <TagDots tags={e.tags} />
-                    <SyncBadge sync={e.sync} />
-                  </div>
-                )
-              }}
-            />
-          ) : (
-            groups(entries, prefs.group).map(([heading, files]) => (
-              <section key={heading}>
-                {heading && <div className="group-heading">{heading}</div>}
-                <div
-                  className={prefs.view === 'gallery' ? 'gallery-strip' : 'icon-grid'}
-                  style={
-                    prefs.view !== 'gallery'
-                      ? ({
-                          '--tile-size': `${Math.max(96, iconSize + 38)}px`,
-                          '--icon-size': `${iconSize}px`,
-                          '--label-size': '11px',
-                        } as CSSProperties)
-                      : undefined
-                  }
-                  onClick={(event) => {
-                    if (event.target === event.currentTarget) x.setSelected([])
-                  }}
-                >
-                  {files.map((e) => {
-                    const decoration = x.decorations?.[e.path]
-                    const rowDecor = rowVars(decoration)
-                    return (
-                      <div
-                        role="gridcell"
-                        className={`file-tile ${selectedPaths.has(e.path) ? 'selected' : ''}${rowDecor.className}`}
-                        key={e.path}
-                        style={rowDecor.style}
-                        {...shared(e)}
-                      >
-                        <span className="tile-icon">
-                          <Thumbnail entry={e} size={prefs.view === 'gallery' ? 64 : iconSize} />
-                        </span>
-                        <NameCell explorer={x} entry={e} className="tile-label" />
-                        <TagDots tags={e.tags} />
-                        <SyncBadge sync={e.sync} />
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            ))
-          )}
-        </>
+        <GridView
+          explorer={x}
+          prefs={prefs}
+          entries={entries}
+          iconSize={iconSize}
+          selectedPaths={selectedPaths}
+          shared={shared}
+          container={container}
+          onPreview={onPreview}
+        />
       )}
-      {ghost && (
-        <div className="drag-ghost" style={{ left: ghost.x + 14, top: ghost.y + 14 }}>
+      {drag.ghost && (
+        <div className="drag-ghost" style={{ left: drag.ghost.x + 14, top: drag.ghost.y + 14 }}>
           <Files size={14} />
-          {ghost.paths.length} 个项目
+          {drag.ghost.paths.length} 个项目
         </div>
-      )}
-    </div>
-  )
-}
-
-function Thumbnail({ entry: e, size: s }: { entry: Entry; size: number }) {
-  const [failed, setFailed] = useState(false)
-  const decorationIcon = useDecorationIcon(e.path)
-  useEffect(() => setFailed(false), [e.path])
-  if (decorationIcon)
-    return (
-      <img
-        className="thumbnail"
-        style={{ width: s, height: s }}
-        src={decorationIcon}
-        alt=""
-        draggable={false}
-      />
-    )
-  if (isImage(e) && !failed && asset(e.path))
-    return (
-      <img
-        className="thumbnail"
-        style={{ width: s, height: s }}
-        src={asset(e.path)}
-        alt=""
-        loading="lazy"
-        draggable={false}
-        onError={() => setFailed(true)}
-      />
-    )
-  return <FileIcon entry={e} size={s} />
-}
-
-function Columns({
-  explorer: x,
-  prefs,
-  onOpen,
-  onPreview,
-  shared,
-  onKeyDown,
-}: Props & {
-  shared: (e: Entry) => Record<string, unknown>
-  onKeyDown: (e: React.KeyboardEvent) => void
-}) {
-  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
-  const [left, setLeft] = useState<Entry[]>([])
-  const [right, setRight] = useState<Entry[]>([])
-  const [error, setError] = useState('')
-  const selected = x.entries.find((e) => e.path === x.selected[0])
-  useEffect(() => {
-    let active = true
-    void call<Listing>('list_directory', {
-      path: parent(x.path),
-      hidden: prefs.hidden,
-      ignores: prefs.displayIgnore,
-    })
-      .then((l) => {
-        if (active) setLeft(l.entries)
-      })
-      .catch(() => setLeft([]))
-    return () => {
-      active = false
-    }
-  }, [x.path, prefs.hidden, prefs.displayIgnore])
-  useEffect(() => {
-    let active = true
-    setRight([])
-    setError('')
-    if (selected?.isDir)
-      void call<Listing>('list_directory', {
-        path: selected.path,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-      })
-        .then((l) => {
-          if (active) setRight(l.entries)
-        })
-        .catch((e) => {
-          if (active) setError(String(e))
-        })
-    return () => {
-      active = false
-    }
-  }, [selected?.path, selected?.isDir, prefs.hidden, prefs.displayIgnore])
-  const column = (files: Entry[], current: boolean) => (
-    <BrowserColumn
-      entries={files}
-      prefs={prefs}
-      target={current ? x.selected.at(-1) : x.path}
-      render={(e) => {
-        const decoration = x.decorations?.[e.path]
-        const rowDecor = rowVars(decoration)
-        return (
-          <div
-            key={e.path}
-            className={`column-row ${selectedPaths.has(e.path) || e.path === x.path ? 'selected' : ''}${rowDecor.className}`}
-            style={rowDecor.style}
-            data-drop-folder={e.isDir ? e.path : undefined}
-            {...(current
-              ? shared(e)
-              : {
-                  onClick: () => (e.isDir ? x.navigate(e.path) : onPreview(e)),
-                  onDoubleClick: () => onOpen(e),
-                })}
-          >
-            <FileIcon entry={e} size={24} />
-            <NameCell explorer={x} entry={e} className="column-label" />
-            <TagDots tags={e.tags} size={6} />
-            <SyncBadge sync={e.sync} />
-            {e.isDir && <ChevronRight size={13} />}
-          </div>
-        )
-      }}
-    />
-  )
-  return (
-    <div className="columns-view" role="grid" aria-label="文件" tabIndex={0} onKeyDown={onKeyDown}>
-      {column(left, false)}
-      {column(x.entries, true)}
-      {selected?.isDir ? (
-        <>
-          {column(right, false)}
-          {error && <p className="error">{error}</p>}
-        </>
-      ) : selected ? (
-        <div className="column-detail" onDoubleClick={() => onPreview(selected)}>
-          <Thumbnail entry={selected} size={100} />
-          <strong>{selected.name}</strong>
-          <span>
-            {kind(selected)} · {size(selected.size)}
-          </span>
-          <button onClick={() => onPreview(selected)}>快速查看</button>
-        </div>
-      ) : (
-        <div className="column-detail muted" />
       )}
     </div>
   )

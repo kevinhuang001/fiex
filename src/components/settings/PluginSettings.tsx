@@ -1,33 +1,16 @@
 import { useEffect, useState } from 'react'
-import {
-  Check,
-  Database,
-  Download,
-  Globe2,
-  KeyRound,
-  LoaderCircle,
-  Puzzle,
-  Settings2,
-  ShieldAlert,
-  ShieldCheck,
-  Terminal,
-  Trash2,
-  Upload,
-  AlertTriangle,
-} from 'lucide-react'
+import { Download, Puzzle, Settings2, ShieldAlert, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { call } from '@/lib/api'
-import {
-  refreshPluginCatalog,
-  usePluginCatalog,
-  type PluginField,
-  type PluginInfo,
-} from '@/lib/plugins'
+import { asList } from './plugins/listValue'
+import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
+import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
+import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
+import { refreshPluginCatalog, usePluginCatalog, type PluginInfo } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import { PluginInstaller, pluginIcon } from './PluginInstaller'
 import { PluginActivationDialog } from './PluginActivationDialog'
 import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
-import { permissionHints, permissionLabels } from '@/lib/pluginPermissions'
 
 interface LocalPreview {
   ticket: string
@@ -46,195 +29,6 @@ interface LocalPreview {
   fingerprint?: string
 }
 
-function iconFor(icon?: string) {
-  return pluginIcon(icon)
-}
-
-function PermissionList({
-  plugin,
-  busy,
-  onToggle,
-  onConfigure,
-}: {
-  plugin: PluginInfo
-  busy: boolean
-  onToggle: (permission: string, granted: boolean) => void
-  onConfigure: (permission: string) => void
-}) {
-  const declared = plugin.declaredPermissions || []
-  const granted = plugin.grantedPermissions || []
-  const configurable = (permission: string) => permission === 'network' || permission === 'commands'
-  return (
-    <>
-      {declared.map((permission) => (
-        <div className="plugin-permission-card" key={permission}>
-          <span className="plugin-permission-icon">
-            <ShieldCheck size={15} />
-          </span>
-          <span className="plugin-permission-copy">
-            <strong>{permissionLabels[permission] || permission}</strong>
-            <small>{permissionHints[permission] || permission}</small>
-            {permission === 'commands' && Boolean(plugin.missingCommands?.length) && (
-              <small className="plugin-command-missing">
-                本地未找到：{(plugin.missingCommands || []).join('、')}，插件可能无法正常工作
-              </small>
-            )}
-          </span>
-          {configurable(permission) && (
-            <button
-              type="button"
-              className="plugin-inline-config"
-              aria-label={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
-              title={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
-              disabled={busy || !plugin.approved || !granted.includes(permission)}
-              onClick={() => onConfigure(permission)}
-            >
-              {permission === 'network' ? <Globe2 size={13} /> : <Terminal size={13} />}
-            </button>
-          )}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={granted.includes(permission)}
-            aria-label={`授权 ${permissionLabels[permission] || permission}`}
-            className={`plugin-switch ${granted.includes(permission) ? 'on' : ''}`}
-            disabled={busy || !plugin.approved}
-            onClick={() => onToggle(permission, !granted.includes(permission))}
-          >
-            <span />
-          </button>
-        </div>
-      ))}
-      {!declared.length && <p className="sidebar-hint">此插件未声明受控宿主权限。</p>}
-    </>
-  )
-}
-
-/** Settings stored before `list` existed may be a comma/newline separated
- * string; accept both shapes and always hand the editor a string array. */
-function asList(value: unknown, field: PluginField): string[] {
-  const fallback = field.defaultValue
-  if (Array.isArray(value)) return value.map((item) => String(item))
-  if (typeof value === 'string' && value.trim())
-    return value
-      .split(/[\n,，]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  if (Array.isArray(fallback)) return fallback.map((item) => String(item))
-  if (typeof fallback === 'string' && fallback.trim())
-    return fallback
-      .split(/[\n,，]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  return []
-}
-
-function PluginListField({
-  field,
-  values,
-  onChange,
-}: {
-  field: PluginField
-  values: string[]
-  onChange: (values: string[]) => void
-}) {
-  const update = (index: number, value: string) =>
-    onChange(values.map((item, i) => (i === index ? value : item)))
-  return (
-    <div className="plugin-list-field">
-      <div className="plugin-list-rows">
-        {values.map((value, index) => (
-          <div className="plugin-list-row" key={index}>
-            <input
-              aria-label={`${field.label} 第 ${index + 1} 项`}
-              value={value}
-              placeholder={field.placeholder}
-              onChange={(event) => update(index, event.target.value)}
-            />
-            <button
-              type="button"
-              className="plugin-list-remove"
-              aria-label={`删除${field.label}第 ${index + 1} 项`}
-              title="删除"
-              onClick={() => onChange(values.filter((_, i) => i !== index))}
-            >
-              <Trash2 size={13} />
-            </button>
-          </div>
-        ))}
-        {!values.length && <p className="sidebar-hint">还没有条目。</p>}
-      </div>
-      <Button type="button" size="sm" variant="outline" onClick={() => onChange([...values, ''])}>
-        添加条目
-      </Button>
-    </div>
-  )
-}
-
-type PluginError = {
-  at: number
-  source: string
-  message: string
-  detail?: string
-}
-
-/** Recent failures Core observed or the plugin reported. Diagnostics only: it
- * never blocks the plugin, and "clear" only empties this log. */
-function PluginErrorsSection({ pluginId }: { pluginId: string }) {
-  const [errors, setErrors] = useState<PluginError[]>([])
-  const [loading, setLoading] = useState(false)
-  useEffect(() => {
-    let alive = true
-    setLoading(true)
-    void call<PluginError[]>('plugin_errors', { pluginId })
-      .then((items) => {
-        if (alive) setErrors(items || [])
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
-    return () => {
-      alive = false
-    }
-  }, [pluginId])
-  const clear = () => {
-    void call('plugin_error_clear', { pluginId })
-      .then(() => setErrors([]))
-      .catch(() => {})
-  }
-  return (
-    <section className="plugin-permission-section">
-      <div className="plugin-section-title">
-        <strong>
-          <AlertTriangle size={15} /> 最近错误
-        </strong>
-        <small>{loading ? '读取中…' : errors.length ? `${errors.length} 条` : '没有记录'}</small>
-      </div>
-      {errors.length ? (
-        <>
-          <ul className="plugin-error-list">
-            {errors.map((entry, index) => (
-              <li key={`${entry.at}-${index}`}>
-                <span className={`plugin-error-source ${entry.source}`}>{entry.source}</span>
-                <div>
-                  <p>{entry.message}</p>
-                  {entry.detail && <pre>{entry.detail}</pre>}
-                  <time>{new Date(entry.at).toLocaleString()}</time>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Button type="button" size="sm" variant="outline" onClick={clear}>
-            清空记录
-          </Button>
-        </>
-      ) : (
-        <p className="sidebar-hint">命令缺失、进程退出、面板或 RPC 失败都会记录在这里。</p>
-      )}
-    </section>
-  )
-}
 export function PluginSettings() {
   const plugins = usePluginCatalog()
   const [storeOpen, setStoreOpen] = useState(false)
@@ -476,6 +270,8 @@ export function PluginSettings() {
       setBusy(false)
     }
   }
+  const updateDraft = (fieldId: string, value: string | boolean | string[]) =>
+    setDraft((old) => ({ ...old, [fieldId]: value }))
 
   return (
     <>
@@ -507,7 +303,7 @@ export function PluginSettings() {
               return (
                 <article className="plugin-row" key={plugin.id}>
                   <div className={`plugin-row-icon ${enabled ? 'enabled' : ''}`}>
-                    {iconFor(plugin.icon)}
+                    {pluginIcon(plugin.icon)}
                   </div>
                   <div className="plugin-row-main">
                     <div className="plugin-row-title">
@@ -629,330 +425,68 @@ export function PluginSettings() {
         }}
       />
 
-      <Modal
-        open={Boolean(permissionsFor)}
+      <PluginPermissionsSheet
+        plugin={permissionsFor}
+        busy={busy}
+        message={message}
         onClose={() => {
           setPermissionsFor(null)
           setDomainSettingsOpen(false)
           setCommandSettingsOpen(false)
           setMessage('')
         }}
-        title="插件详情"
-        className="plugin-permissions-modal"
-      >
-        {permissionsFor && (
-          <div className="plugin-permissions-page">
-            <div className="plugin-permission-profile">
-              <div
-                className={`plugin-permission-profile-icon ${permissionsFor.enabled ? 'enabled' : ''}`}
-              >
-                {iconFor(permissionsFor.icon)}
-              </div>
-              <div className="plugin-permission-profile-copy">
-                <div className="plugin-permission-profile-title">
-                  <strong>{permissionsFor.name}</strong>
-                  <span className={`plugin-state ${permissionsFor.enabled ? 'active' : ''}`}>
-                    <span />
-                    {permissionsFor.enabled ? '运行中' : '未激活'}
-                  </span>
-                  {!permissionsFor.approved && <span className="plugin-pill warn">待授权</span>}
-                </div>
-                <small>
-                  {permissionsFor.id} · v{permissionsFor.version}
-                </small>
-                <p>{permissionsFor.description || '没有提供说明。'}</p>
-              </div>
-            </div>
-            {!permissionsFor.approved && (
-              <div className="plugin-consent-banner">
-                <ShieldCheck size={18} />
-                <div>
-                  <strong>此插件尚未授权</strong>
-                  <p>激活时会逐项请求权限，允许后才会运行。</p>
-                </div>
-                <Button type="button" size="sm" onClick={() => setActivationFor(permissionsFor)}>
-                  审核并激活
-                </Button>
-              </div>
-            )}
-            <section className="plugin-permission-section">
-              <div className="plugin-section-title">
-                <strong>
-                  <ShieldCheck size={15} /> 权限
-                </strong>
-                <small>
-                  {(permissionsFor.grantedPermissions || []).length} /{' '}
-                  {(permissionsFor.declaredPermissions || []).length} 已授权
-                </small>
-              </div>
-              <div className="plugin-permission-list">
-                <PermissionList
-                  plugin={permissionsFor}
-                  busy={busy}
-                  onToggle={(permission, granted) =>
-                    void updatePermission(permissionsFor, permission, granted)
-                  }
-                  onConfigure={(permission) => {
-                    setMessage('')
-                    if (permission === 'network') setDomainSettingsOpen(true)
-                    else setCommandSettingsOpen(true)
-                  }}
-                />
-              </div>
-            </section>
-            <PluginErrorsSection pluginId={permissionsFor.id} />
-            {message && (
-              <p role="status" className="plugin-page-message">
-                {message}
-              </p>
-            )}
-          </div>
-        )}
-      </Modal>
+        onActivate={setActivationFor}
+        onTogglePermission={(plugin, permission, granted) =>
+          void updatePermission(plugin, permission, granted)
+        }
+        onConfigure={(permission) => {
+          setMessage('')
+          if (permission === 'network') setDomainSettingsOpen(true)
+          else setCommandSettingsOpen(true)
+        }}
+      />
 
       {permissionsFor &&
         domainSettingsOpen &&
         permissionsFor.declaredPermissions.includes('network') && (
-          <Modal
-            open
+          <DomainDialog
+            plugin={permissionsFor}
+            busy={busy}
+            draft={domainDraft}
+            onDraftChange={setDomainDraft}
+            onToggle={(domain, granted) => void updateDomain(permissionsFor, domain, granted)}
+            onAdd={(domain) => void updateDomain(permissionsFor, domain, true)}
             onClose={() => setDomainSettingsOpen(false)}
-            title="网络域名"
-            className="plugin-domain-modal"
-          >
-            <div className="plugin-domain-page">
-              <p className="plugin-domain-hint">
-                允许「{permissionsFor.name}」访问的精确主机；本机和局域网地址也需要授权。
-              </p>
-              <section className="plugin-permission-section plugin-domain-section">
-                <div className="plugin-domain-list">
-                  {[
-                    ...new Set([
-                      ...(permissionsFor.requestedNetworkDomains || []),
-                      ...(permissionsFor.allowedNetworkDomains || []),
-                    ]),
-                  ]
-                    .sort()
-                    .map((domain) => {
-                      const allowed = (permissionsFor.allowedNetworkDomains || []).includes(domain)
-                      const requested = (permissionsFor.requestedNetworkDomains || []).includes(
-                        domain,
-                      )
-                      return (
-                        <div className="plugin-domain-row" key={domain}>
-                          <span>
-                            {domain}
-                            {requested && <small>插件申请</small>}
-                            {!allowed && <small className="muted">未授权</small>}
-                          </span>
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={allowed}
-                            aria-label={allowed ? `移除域名 ${domain}` : `授权域名 ${domain}`}
-                            title={allowed ? '移除域名' : '授权域名'}
-                            className={`plugin-switch ${allowed ? 'on' : ''}`}
-                            disabled={
-                              busy || !permissionsFor.grantedPermissions.includes('network')
-                            }
-                            onClick={() => void updateDomain(permissionsFor, domain, !allowed)}
-                          >
-                            <span />
-                          </button>
-                        </div>
-                      )
-                    })}
-                  {![
-                    ...(permissionsFor.requestedNetworkDomains || []),
-                    ...(permissionsFor.allowedNetworkDomains || []),
-                  ].length && <p className="sidebar-hint">尚未允许任何域名。</p>}
-                </div>
-                <div className="plugin-domain-add">
-                  <input
-                    aria-label="添加允许的域名"
-                    placeholder="域名、IP 或 gitea.example.com"
-                    value={domainDraft}
-                    disabled={busy || !permissionsFor.grantedPermissions.includes('network')}
-                    onChange={(event) => setDomainDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        const domain = domainDraft.trim()
-                        if (domain) void updateDomain(permissionsFor, domain, true)
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      busy ||
-                      !domainDraft.trim() ||
-                      !permissionsFor.grantedPermissions.includes('network')
-                    }
-                    onClick={() => {
-                      const domain = domainDraft.trim()
-                      if (domain) void updateDomain(permissionsFor, domain, true)
-                    }}
-                  >
-                    添加域名
-                  </Button>
-                </div>
-              </section>
-            </div>
-          </Modal>
+          />
         )}
       {permissionsFor &&
         commandSettingsOpen &&
         permissionsFor.declaredPermissions.includes('commands') && (
-          <Modal
-            open
+          <CommandDialog
+            plugin={permissionsFor}
+            busy={busy}
+            draft={commandDraft}
+            onDraftChange={setCommandDraft}
+            onToggle={(command, granted) => void updateCommand(permissionsFor, command, granted)}
+            onAdd={(command) => void updateCommand(permissionsFor, command, true)}
             onClose={() => setCommandSettingsOpen(false)}
-            title="外部命令"
-            className="plugin-domain-modal"
-          >
-            <div className="plugin-domain-page">
-              <p className="plugin-domain-hint">
-                外部命令由宿主从 PATH 解析执行，可能访问授权目录以外的资源。
-              </p>
-              <section className="plugin-permission-section plugin-domain-section">
-                <div className="plugin-domain-list">
-                  {[
-                    ...new Set([
-                      ...(permissionsFor.requestedCommands || []),
-                      ...(permissionsFor.allowedCommands || []),
-                    ]),
-                  ]
-                    .sort()
-                    .map((command) => {
-                      const allowed = (permissionsFor.allowedCommands || []).includes(command)
-                      const requested = (permissionsFor.requestedCommands || []).includes(command)
-                      const missing = (permissionsFor.missingCommands || []).includes(command)
-                      return (
-                        <div
-                          className={`plugin-domain-row ${missing ? 'plugin-command-row-missing' : ''}`}
-                          key={command}
-                        >
-                          <span>
-                            <code>{command}</code>
-                            {requested && <small>插件申请</small>}
-                            {!allowed && <small className="muted">未授权</small>}
-                            {missing && (
-                              <small className="plugin-command-missing">本地未找到</small>
-                            )}
-                          </span>
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={allowed}
-                            aria-label={allowed ? `移除命令 ${command}` : `授权命令 ${command}`}
-                            title={allowed ? '移除命令' : '授权命令'}
-                            className={`plugin-switch ${allowed ? 'on' : ''}`}
-                            disabled={
-                              busy || !permissionsFor.grantedPermissions.includes('commands')
-                            }
-                            onClick={() => void updateCommand(permissionsFor, command, !allowed)}
-                          >
-                            <span />
-                          </button>
-                        </div>
-                      )
-                    })}
-                  {![
-                    ...(permissionsFor.requestedCommands || []),
-                    ...(permissionsFor.allowedCommands || []),
-                  ].length && <p className="sidebar-hint">尚未允许任何命令。</p>}
-                </div>
-                <div className="plugin-domain-add">
-                  <input
-                    aria-label="添加允许的命令"
-                    placeholder="输入可执行文件名称"
-                    value={commandDraft}
-                    disabled={busy || !permissionsFor.grantedPermissions.includes('commands')}
-                    onChange={(event) => setCommandDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        const command = commandDraft.trim()
-                        if (command) void updateCommand(permissionsFor, command, true)
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      busy ||
-                      !commandDraft.trim() ||
-                      !permissionsFor.grantedPermissions.includes('commands')
-                    }
-                    onClick={() => {
-                      const command = commandDraft.trim()
-                      if (command) void updateCommand(permissionsFor, command, true)
-                    }}
-                  >
-                    添加命令
-                  </Button>
-                </div>
-              </section>
-            </div>
-          </Modal>
+          />
         )}
-      <Modal
-        open={Boolean(settingsFor)}
-        onClose={() => {
+
+      <PluginSettingsSheet
+        plugin={settingsFor}
+        fields={fields}
+        draft={draft}
+        busy={busy}
+        message={message}
+        onDraftChange={updateDraft}
+        onSave={() => void saveSettings()}
+        onClose={() => setSettingsFor(null)}
+        onDismiss={() => {
           setSettingsFor(null)
           setMessage('')
         }}
-        title={settingsFor ? `${settingsFor.name} · 设置` : '插件设置'}
-      >
-        <div className="plugin-settings-fields">
-          {fields.map((field: PluginField) => (
-            <label key={field.id} className="plugin-settings-field">
-              <span>
-                {field.type === 'secret' ? <KeyRound size={14} /> : <Database size={14} />}
-                {field.label}
-              </span>
-              {field.type === 'list' ? (
-                <PluginListField
-                  field={field}
-                  values={asList(draft[field.id], field)}
-                  onChange={(values) => setDraft((old) => ({ ...old, [field.id]: values }))}
-                />
-              ) : field.type === 'checkbox' ? (
-                <input
-                  type="checkbox"
-                  checked={Boolean(draft[field.id])}
-                  onChange={(event) =>
-                    setDraft((old) => ({ ...old, [field.id]: event.target.checked }))
-                  }
-                />
-              ) : (
-                <input
-                  type={field.type === 'secret' ? 'password' : field.type}
-                  value={String(draft[field.id] ?? '')}
-                  placeholder={
-                    field.type === 'secret' ? '保留原有凭据（留空不修改）' : field.placeholder
-                  }
-                  onChange={(event) =>
-                    setDraft((old) => ({ ...old, [field.id]: event.target.value }))
-                  }
-                />
-              )}
-            </label>
-          ))}
-          {!fields.length && <p className="sidebar-hint">此插件没有需要配置的设置。</p>}
-          {message && <p role="status">{message}</p>}
-          <footer className="plugin-consent-actions">
-            <Button variant="outline" onClick={() => setSettingsFor(null)}>
-              关闭
-            </Button>
-            <Button disabled={busy || !fields.length} onClick={() => void saveSettings()}>
-              {busy ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}
-              保存插件设置
-            </Button>
-          </footer>
-        </div>
-      </Modal>
+      />
 
       {permissionsFor && domainToApprove && (
         <PluginPermissionPrompt

@@ -1,0 +1,97 @@
+import { root } from '../data'
+import { notHandled } from './shared'
+
+export function handleSystem(command: string): unknown {
+  switch (command) {
+    case 'platform': {
+      // `?platform=windows|linux` lets the browser fixture preview the
+      // frameless window chrome without rebuilding the desktop app.
+      const requested = new URLSearchParams(location.search).get('platform')
+      return requested === 'windows' || requested === 'linux' ? requested : 'macos'
+    }
+    case 'locations':
+      return [
+        {
+          name: '个人文件夹',
+          path: root,
+          kind: 'favorite',
+          available: 0,
+          total: 0,
+          removable: false,
+          filesystem: '',
+          device: '',
+          mounted: true,
+          usbfs: false,
+        },
+        ...['Desktop', 'Downloads', 'Documents', 'Pictures', 'Music', 'Movies'].map((name, i) => ({
+          name: ['桌面', '下载', '文稿', '图片', '音乐', '视频'][i],
+          path: root + '/' + name,
+          kind: 'favorite',
+          available: 0,
+          total: 0,
+          removable: false,
+          filesystem: '',
+          device: '',
+          mounted: true,
+          usbfs: false,
+        })),
+        {
+          name: '应用程序',
+          path: root + '/Applications',
+          kind: 'applications',
+          available: 0,
+          total: 0,
+          removable: false,
+          filesystem: '',
+          device: '',
+          mounted: true,
+          usbfs: false,
+        },
+        {
+          name: 'Macintosh HD',
+          path: '/',
+          kind: 'disk',
+          available: 240e9,
+          total: 500e9,
+          removable: false,
+          filesystem: 'APFS',
+          device: '',
+          mounted: true,
+          usbfs: false,
+        },
+      ]
+    case 'detect_terminals':
+      return [
+        { id: 'default', name: '系统默认终端' },
+        { id: 'Terminal', name: 'Terminal' },
+        { id: 'iTerm', name: 'iTerm2' },
+        { id: 'Tabby', name: 'Tabby' },
+      ]
+    case 'native_icon':
+      throw new Error('UI fixture')
+    case 'trash_path':
+      return root + '/.Trash'
+    case 'open_applications':
+      return null
+    case 'open_in_vscode':
+      return null
+    case 'detect_ides':
+      return [
+        { id: 'vscode', name: 'VS Code' },
+        { id: 'cursor', name: 'Cursor' },
+      ]
+    case 'remote_connections':
+      return [
+        {
+          id: 'demo-webdav',
+          name: '团队 WebDAV',
+          kind: 'webdav',
+          pluginId: 'org.example.webdav',
+          mountPath: root + '/.fiex/drives/demo-webdav',
+        },
+      ]
+
+    default:
+      return notHandled
+  }
+}

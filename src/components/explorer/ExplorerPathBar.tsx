@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
-import { ArrowUp, ChevronRight, HardDrive, LoaderCircle, Search, X } from 'lucide-react'
+import { ArrowUp, ChevronRight, LoaderCircle, Search, X } from 'lucide-react'
 export function ExplorerPathBar({
   x,
   startPathEdit,
@@ -46,9 +46,6 @@ export function ExplorerPathBar({
             if (event.target === event.currentTarget) startPathEdit()
           }}
         >
-          <button onClick={startPathEdit} title="编辑或复制路径" aria-label="编辑路径">
-            <HardDrive size={13} />
-          </button>
           {editingPath ? (
             <form className="path-editor" onSubmit={submitPath}>
               <input
@@ -71,11 +68,25 @@ export function ExplorerPathBar({
             </form>
           ) : (
             <>
-              {crumbs.map((p, i) => (
+              {crumbs.length > 3 && (
+                <span>
+                  <ChevronRight size={11} />
+                  <button
+                    title="更上层"
+                    aria-label="更上层"
+                    onClick={() => x.navigate(crumbs[crumbs.length - 4].path)}
+                  >
+                    …
+                  </button>
+                </span>
+              )}
+              {crumbs.slice(Math.max(0, crumbs.length - 3)).map((p, i) => (
                 <span key={i}>
                   <ChevronRight size={11} />
                   <button
-                    onClick={() => (i === crumbs.length - 1 ? startPathEdit() : x.navigate(p.path))}
+                    onClick={() =>
+                      i === Math.min(3, crumbs.length) - 1 ? startPathEdit() : x.navigate(p.path)
+                    }
                   >
                     {p.name}
                   </button>

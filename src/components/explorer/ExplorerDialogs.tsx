@@ -1,4 +1,5 @@
 import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
+import { FilePickerDialog } from '@/components/FilePickerDialog'
 import { ConflictDialog } from '@/components/ConflictDialog'
 import { ConnectionDialog } from '@/components/ConnectionDialog'
 import { FileInfoDialog } from '@/components/FileInfoDialog'
@@ -96,6 +97,7 @@ export function ExplorerDialogs({
   return (
     <>
       <PluginPanelHost />
+      <FilePickerDialog />
       <ConflictDialog
         request={conflict}
         busy={Boolean(busy)}

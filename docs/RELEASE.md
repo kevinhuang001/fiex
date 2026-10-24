@@ -1,3 +1,13 @@
+# Fiex 0.5.0
+
+- New `hooks` permission and `contributions.hooks`: a plugin can run before Core opens a file, in priority order. A hook may pass, consume the open, or hand off to the preview sheet. Failures are logged and never block the file.
+- The archive plugin uses it: opening an archive extracts it next to the archive (conflict-safe names) instead of launching the system app; password-protected archives open the preview for the password.
+- Plugin file dialogs now use the app's own compact file browser (sidebar places, favorites, connections, devices, breadcrumbs, back/forward/up, search, list/grid, sorting, grouping, new folder, context menu, centered save name, replace dialog) instead of the system picker.
+- Context menus (picker and main window) measure themselves and stay inside the viewport, flipping near the edges.
+- Breadcrumbs show at most the last three levels, with an ellipsis to climb one level, in both the main window and the picker.
+- The plugin store takes each plugin's introduction from the release's `plugin-descriptions.json`, and only lists plugins whose latest release has a package for this platform.
+- Internal cleanup: the Rust plugin host, demo data, panel host, plugin settings, file picker and both SDKs are split into focused modules instead of monolithic files.
+
 # Fiex 0.4.11
 
 - The preview sheet header is compact (44 px), leaving more room for the content.

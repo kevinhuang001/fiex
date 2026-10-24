@@ -14,15 +14,15 @@ mod macos_material;
 mod native_drag;
 #[path = "core/operations.rs"]
 pub mod operations;
-#[path = "plugins/decorations.rs"]
+#[path = "plugins/decorations/mod.rs"]
 pub mod plugin_decorations;
 #[path = "plugins/errors.rs"]
 pub mod plugin_errors;
 #[path = "plugins/fs_access.rs"]
 pub mod plugin_fs_access;
-#[path = "plugins/host.rs"]
+#[path = "plugins/host/mod.rs"]
 pub mod plugin_host;
-#[path = "plugins/installer.rs"]
+#[path = "plugins/installer/mod.rs"]
 pub mod plugin_installer;
 #[path = "plugins/ipc.rs"]
 pub mod plugin_ipc;
@@ -35,7 +35,7 @@ pub mod plugin_resources;
 #[path = "plugins/signing.rs"]
 pub mod plugin_signing;
 pub use fiex_plugin_sdk as plugin_sdk;
-#[path = "plugins/sandbox.rs"]
+#[path = "plugins/sandbox/mod.rs"]
 pub mod plugin_sandbox;
 #[path = "plugins/search.rs"]
 pub mod plugin_search;
