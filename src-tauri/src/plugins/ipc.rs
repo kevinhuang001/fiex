@@ -72,6 +72,35 @@ pub fn write(id: &str, bytes: &[u8]) -> Result<(), String> {
     entry.buffer.fill(bytes)
 }
 
+pub fn write_owned(owner: &str, id: &str, bytes: &[u8]) -> Result<(), String> {
+    let mut buffers = registry()
+        .lock()
+        .map_err(|_| "buffer registry lock poisoned")?;
+    let entry = buffers
+        .get_mut(id)
+        .filter(|entry| entry.owner == owner)
+        .ok_or("shared buffer unavailable")?;
+    entry.buffer.fill(bytes)
+}
+pub fn read_file_into(
+    owner: &str,
+    id: &str,
+    file: &mut impl std::io::Read,
+    limit: usize,
+) -> Result<usize, String> {
+    let mut buffers = registry()
+        .lock()
+        .map_err(|_| "buffer registry lock poisoned")?;
+    let entry = buffers
+        .get_mut(id)
+        .filter(|entry| entry.owner == owner)
+        .ok_or("shared buffer unavailable")?;
+    entry
+        .buffer
+        .fill_from(file, limit)
+        .map_err(|e| e.to_string())
+}
+
 pub fn release(owner: &str, id: &str) -> Result<(), String> {
     let mut buffers = registry()
         .lock()

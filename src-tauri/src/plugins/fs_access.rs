@@ -16,6 +16,92 @@ use std::{
 const MAX_CHUNK: usize = 256 * 1024;
 const MAX_HANDLES: usize = 32;
 
+struct PendingRead {
+    owner: String,
+    file: cap_std::fs::File,
+    length: u64,
+    _token: tempfile::NamedTempFile,
+}
+fn reads() -> &'static Mutex<HashMap<String, PendingRead>> {
+    static VALUES: OnceLock<Mutex<HashMap<String, PendingRead>>> = OnceLock::new();
+    VALUES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+pub fn open_read(owner: &str, root: &Scope, input: &str) -> Result<Value, String> {
+    let file = directory(root)?
+        .open(relative(root, input)?)
+        .map_err(|e| e.to_string())?;
+    let metadata = file.metadata().map_err(|e| e.to_string())?;
+    if !metadata.is_file() {
+        return Err("expected a file".into());
+    }
+    let mut reads = reads().lock().map_err(|_| "read registry unavailable")?;
+    if reads.values().filter(|v| v.owner == owner).count() >= MAX_HANDLES {
+        return Err("too many open reads".into());
+    }
+    let token = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
+    let handle = format!(
+        "read-{}",
+        token
+            .path()
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+    );
+    reads.insert(
+        handle.clone(),
+        PendingRead {
+            owner: owner.into(),
+            file,
+            length: metadata.len(),
+            _token: token,
+        },
+    );
+    Ok(json!({"handle": handle, "size": metadata.len()}))
+}
+pub fn read_open(
+    owner: &str,
+    handle: &str,
+    offset: u64,
+    length: usize,
+    buffer: Option<&str>,
+) -> Result<Value, String> {
+    let mut reads = reads().lock().map_err(|_| "read registry unavailable")?;
+    let read = reads
+        .get_mut(handle)
+        .filter(|v| v.owner == owner)
+        .ok_or("read handle unavailable")?;
+    read.file
+        .seek(SeekFrom::Start(offset))
+        .map_err(|e| e.to_string())?;
+    let remaining = read.length.saturating_sub(offset);
+    let capacity = length
+        .min(if buffer.is_some() {
+            4 * 1024 * 1024
+        } else {
+            MAX_CHUNK
+        })
+        .min(usize::try_from(remaining).unwrap_or(usize::MAX));
+    if let Some(id) = buffer {
+        let size = crate::plugin_ipc::read_file_into(owner, id, &mut read.file, capacity)?;
+        Ok(json!({"size": size, "eof": offset.saturating_add(size as u64) >= read.length}))
+    } else {
+        let mut bytes = vec![0; capacity];
+        let size = read.file.read(&mut bytes).map_err(|e| e.to_string())?;
+        bytes.truncate(size);
+        Ok(
+            json!({"base64": STANDARD.encode(&bytes), "size": size, "eof": offset.saturating_add(size as u64) >= read.length}),
+        )
+    }
+}
+pub fn close_read(owner: &str, handle: &str) -> Result<(), String> {
+    let mut reads = reads().lock().map_err(|_| "read registry unavailable")?;
+    if !reads.get(handle).is_some_and(|v| v.owner == owner) {
+        return Err("read handle unavailable".into());
+    }
+    reads.remove(handle);
+    Ok(())
+}
+
 /// A save dialog may select a file that does not exist yet. Canonicalize its
 /// existing parent so a symlinked parent cannot change the selected target.
 pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
@@ -304,12 +390,28 @@ pub fn write_chunk(owner: &str, handle: &str, encoded: &str) -> Result<(), Strin
         return Err("write chunk too large".into());
     }
     let bytes = STANDARD.decode(encoded).map_err(|e| e.to_string())?;
+    write_bytes(owner, handle, &bytes)
+}
+pub fn write_buffer(owner: &str, handle: &str, buffer: &str, size: usize) -> Result<(), String> {
+    if size > MAX_CHUNK {
+        return Err("write chunk too large".into());
+    }
+    let bytes = crate::plugin_ipc::read(owner, buffer)?;
+    if size > bytes.len() {
+        return Err("write buffer too small".into());
+    }
+    write_bytes(owner, handle, &bytes[..size])
+}
+fn write_bytes(owner: &str, handle: &str, bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() > MAX_CHUNK {
+        return Err("write chunk too large".into());
+    }
     let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
     let write = pending
         .get_mut(handle)
         .filter(|v| v.owner == owner)
         .ok_or("write handle unavailable")?;
-    write.staging.write_all(&bytes).map_err(|e| e.to_string())
+    write.staging.write_all(bytes).map_err(|e| e.to_string())
 }
 pub fn abort(owner: &str, handle: &str) -> Result<(), String> {
     let mut pending = writes().lock().map_err(|_| "write registry unavailable")?;
@@ -412,6 +514,9 @@ pub fn write(
     result
 }
 pub fn cleanup(owner: &str) {
+    if let Ok(mut pending) = reads().lock() {
+        pending.retain(|_, v| v.owner != owner);
+    }
     if let Ok(mut pending) = writes().lock() {
         pending.retain(|_, v| v.owner != owner);
     }
@@ -435,6 +540,34 @@ pub fn seek_write(owner: &str, handle: &str, kind: &str, offset: i64) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn open_read_keeps_the_selected_file_and_supports_sparse_large_offsets() {
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("chosen");
+        let mut file = std::fs::File::create(&chosen).unwrap();
+        let far = 5_u64 * 1024 * 1024 * 1024;
+        file.seek(SeekFrom::Start(far)).unwrap();
+        file.write_all(&[0, 255]).unwrap();
+        let scope = Scope::selected(root.path(), std::slice::from_ref(&chosen)).unwrap();
+        let value = open_read("owner", &scope, "chosen").unwrap();
+        let handle = value["handle"].as_str().unwrap();
+        assert_eq!(value["size"], far + 2);
+        assert!(read_open("other", handle, far, 2, None).is_err());
+        std::fs::rename(&chosen, root.path().join("moved")).unwrap();
+        std::fs::write(&chosen, b"replacement").unwrap();
+        let data = read_open("owner", handle, far, 2, None).unwrap();
+        assert_eq!(data["base64"], STANDARD.encode([0, 255]));
+        let descriptor = crate::plugin_ipc::create("owner", 4096, false).unwrap();
+        assert!(read_open("other", handle, far, 2, Some(&descriptor.id)).is_err());
+        assert!(read_open("owner", handle, far, 2, Some(&descriptor.id)).is_ok());
+        assert_eq!(
+            &crate::plugin_ipc::read("owner", &descriptor.id).unwrap()[..2],
+            &[0, 255]
+        );
+        crate::plugin_ipc::release("owner", &descriptor.id).unwrap();
+        close_read("owner", handle).unwrap();
+        assert!(read_open("owner", handle, 0, 1, None).is_err());
+    }
     #[test]
     fn operation_selection_does_not_expose_sibling_files() {
         let root = tempfile::tempdir().unwrap();
@@ -500,6 +633,24 @@ mod tests {
             [0, 255, 128]
         );
         assert!(remove(&scope, ".").is_err());
+    }
+    #[test]
+    fn shared_write_is_owned_bounded_and_transactional() {
+        let root = tempfile::tempdir().unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("new")]).unwrap();
+        let handle = begin_write("owner", &scope, "new", true).unwrap();
+        let buffer = crate::plugin_ipc::create("owner", 256 * 1024, true).unwrap();
+        crate::plugin_ipc::write_owned("owner", &buffer.id, &[0, 255, 42]).unwrap();
+        assert!(write_buffer("other", &handle, &buffer.id, 3).is_err());
+        assert!(write_buffer("owner", &handle, &buffer.id, MAX_CHUNK + 1).is_err());
+        write_buffer("owner", &handle, &buffer.id, 3).unwrap();
+        assert!(!root.path().join("new").exists());
+        commit("owner", &handle).unwrap();
+        assert_eq!(
+            std::fs::read(root.path().join("new")).unwrap(),
+            [0, 255, 42]
+        );
+        crate::plugin_ipc::release("owner", &buffer.id).unwrap();
     }
     #[cfg(unix)]
     #[test]

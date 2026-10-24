@@ -128,6 +128,26 @@ impl Running {
                 p.get("offset").and_then(Value::as_u64).unwrap_or(0),
                 p.get("length").and_then(Value::as_u64).unwrap_or(262144) as usize,
             ),
+            "host.fs.openRead" if permitted("files.read") => {
+                crate::plugin_fs_access::open_read(&self.resource_owner, root()?, arg("path")?)
+            }
+            "host.fs.readOpen" if permitted("files.read") => crate::plugin_fs_access::read_open(
+                &self.resource_owner,
+                arg("handle")?,
+                p.get("offset")
+                    .and_then(Value::as_u64)
+                    .ok_or("missing offset")?,
+                p.get("length")
+                    .and_then(Value::as_u64)
+                    .ok_or("missing length")?
+                    .try_into()
+                    .map_err(|_| "invalid length")?,
+                p.get("buffer").and_then(Value::as_str),
+            ),
+            "host.fs.closeRead" => {
+                crate::plugin_fs_access::close_read(&self.resource_owner, arg("handle")?)?;
+                Ok(Value::Null)
+            }
             "host.fs.mkdir" if permitted("folders.create") => {
                 crate::plugin_fs_access::mkdir(root()?, arg("path")?)
             }
@@ -160,6 +180,19 @@ impl Running {
                     &self.resource_owner,
                     arg("handle")?,
                     arg("base64")?,
+                )?;
+                Ok(Value::Null)
+            }
+            "host.fs.writeBuffer" if permitted("files.write") => {
+                crate::plugin_fs_access::write_buffer(
+                    &self.resource_owner,
+                    arg("handle")?,
+                    arg("buffer")?,
+                    p.get("size")
+                        .and_then(Value::as_u64)
+                        .ok_or("missing size")?
+                        .try_into()
+                        .map_err(|_| "invalid size")?,
                 )?;
                 Ok(Value::Null)
             }

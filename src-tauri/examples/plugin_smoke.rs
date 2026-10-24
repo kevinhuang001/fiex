@@ -57,7 +57,7 @@ fn main() {
                 "mock.readFile",
                 json!({"path":"secret.txt"}),
                 root.path().to_str().unwrap(),
-                &[secret.clone()],
+                std::slice::from_ref(&secret),
             )
             .expect("SDK file read failed");
         assert_eq!(read, "host-only");
