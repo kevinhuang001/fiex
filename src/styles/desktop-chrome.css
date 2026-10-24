@@ -264,7 +264,7 @@
 .search-box {
   width: auto;
   max-width: 260px;
-  min-width: 84px;
+  min-width: 32px;
   flex: 0 1 230px;
 }
 @container (max-width: 620px) {
@@ -272,47 +272,46 @@
     display: none;
   }
   .breadcrumbs {
-    gap: 2px;
-    font-size: 10.5px;
+    gap: 1px;
   }
   .breadcrumbs > button,
   .breadcrumbs button {
-    padding: 4px;
+    padding: 4px 3px;
   }
   .breadcrumbs button {
-    max-width: 100px;
+    max-width: 88px;
   }
   .search-box {
-    flex-basis: 170px;
-    min-width: 70px;
-    gap: 5px;
-    padding: 5px 8px;
-  }
-  .search-box input {
-    font-size: 10.5px;
+    flex-basis: 160px;
+    min-width: 48px;
+    gap: 4px;
+    padding: 4px 7px;
   }
 }
 @container (max-width: 480px) {
-  .breadcrumbs {
-    font-size: 10px;
+  .breadcrumbs > span {
+    gap: 1px;
   }
   .breadcrumbs button {
-    max-width: 82px;
+    max-width: 68px;
+    padding: 3px 2px;
   }
   .search-box {
-    flex-basis: 140px;
-    min-width: 56px;
-  }
-  .search-box input {
-    font-size: 10px;
+    flex-basis: 120px;
+    min-width: 32px;
   }
 }
 @container (max-width: 380px) {
   .breadcrumbs {
-    font-size: 9.5px;
+    gap: 0;
+  }
+  .breadcrumbs button {
+    max-width: 56px;
+    padding: 2px;
   }
   .search-box {
-    flex-basis: 110px;
+    flex-basis: 92px;
+    min-width: 24px;
   }
   .search-box input::placeholder {
     color: transparent;
@@ -467,12 +466,23 @@
    search field stay usable instead of covering each other. */
 .main.split > .path-toolbar,
 .main.split .secondary-pane > .path-toolbar {
-  padding: 0 10px;
-  gap: 3px;
+  padding: 0 8px;
+  gap: 2px;
+}
+.main.split .breadcrumbs {
+  gap: 0;
+}
+.main.split .breadcrumbs > span {
+  gap: 1px;
 }
 .main.split .breadcrumbs > button,
 .main.split .breadcrumbs button {
-  padding: 3px 4px;
+  padding: 2px 3px;
+}
+.main.split .search-box {
+  gap: 3px;
+  padding: 3px 6px;
+  min-width: 24px;
 }
 .main.split .path-toolbar > button[data-slot='button'] {
   width: 26px;
