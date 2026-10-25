@@ -12,7 +12,7 @@ import {
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
-import { call, asset, native } from '@/lib/api'
+import { call, asset, demo, native } from '@/lib/api'
 import { date, isImage, isText, kind, size } from '@/lib/files'
 import { highlightCode } from '@/lib/highlight'
 import { usePluginCatalog } from '@/lib/plugins'
@@ -108,7 +108,10 @@ export function Preview({
     }
   }, [entry?.path, Boolean(pluginPreview)])
   const localPath = entry && materialized?.path === entry.path ? materialized.local : entry?.path
-  const source = localPath && !pluginPreview ? asset(localPath) : ''
+  const source =
+    localPath && !pluginPreview
+      ? asset(localPath) || (demo && entry?.extension === 'pdf' ? '/demo/sample.pdf' : '')
+      : ''
   const highlighted = useMemo(
     () => (entry && isText(entry) ? highlightCode(text, entry.extension, entry.name) : null),
     [entry, text],
@@ -265,7 +268,7 @@ export function Preview({
                   onError={() => setError('系统不支持此音频编码，可用默认应用打开。')}
                 />
               </div>
-            ) : entry.extension === 'pdf' && native ? (
+            ) : entry.extension === 'pdf' && source ? (
               <Suspense fallback={<p>正在加载 PDF…</p>}>
                 <PdfPreview url={source} />
               </Suspense>
