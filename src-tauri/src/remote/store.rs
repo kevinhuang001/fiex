@@ -365,7 +365,8 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                 .unwrap_or(serde_json::Value::Null);
             if serde_json::to_vec(&state)
                 .map_err(|error| error.to_string())?
-                .len() > 64 * 1024
+                .len()
+                > 64 * 1024
             {
                 return Err("pluginView state exceeds size limit".into());
             }

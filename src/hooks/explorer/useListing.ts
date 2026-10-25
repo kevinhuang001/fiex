@@ -174,7 +174,15 @@ export function useListing(
     }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (!enabled || !path || !native || virtualVolume || path.startsWith('recent://') || path.startsWith('fiex-plugin-view://')) return
+    if (
+      !enabled ||
+      !path ||
+      !native ||
+      virtualVolume ||
+      path.startsWith('recent://') ||
+      path.startsWith('fiex-plugin-view://')
+    )
+      return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>

@@ -67,11 +67,13 @@ export default function App() {
         style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
       >
         <ExplorerTabs {...app} />
-        {!pluginViewId && <ExplorerToolbar
-          {...app}
-          split={app.split}
-          onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
-        />}
+        {!pluginViewId && (
+          <ExplorerToolbar
+            {...app}
+            split={app.split}
+            onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
+          />
+        )}
         {!pluginViewId && <ExplorerPathBar {...app} x={app.left} />}
         {!pluginViewId && app.x.error && (
           <div className="error-banner" role="alert">
@@ -148,14 +150,16 @@ export default function App() {
             onWidthChange={app.setPaneWidth}
           />
         )}
-        {!pluginViewId && <WorkspaceBar
-          items={app.workspace.items}
-          open={app.workspace.open}
-          onOpen={app.open}
-          onRemove={app.workspace.remove}
-          onClear={app.workspace.clear}
-          onClose={() => app.workspace.setOpen(false)}
-        />}
+        {!pluginViewId && (
+          <WorkspaceBar
+            items={app.workspace.items}
+            open={app.workspace.open}
+            onOpen={app.open}
+            onRemove={app.workspace.remove}
+            onClear={app.workspace.clear}
+            onClose={() => app.workspace.setOpen(false)}
+          />
+        )}
         {!pluginViewId && <ExplorerStatusBar {...app} />}
         <ActivityCenter />
       </main>

@@ -36,9 +36,7 @@ export function Connections({
                 )
                   .then((target) =>
                     x.navigate(
-                      target.kind === 'vfs'
-                        ? target.path
-                        : 'fiex-plugin-view://' + connection.id,
+                      target.kind === 'vfs' ? target.path : 'fiex-plugin-view://' + connection.id,
                     ),
                   )
                   .catch((error) => x.setError(String(error)))

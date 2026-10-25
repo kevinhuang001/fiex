@@ -64,14 +64,25 @@ export function PluginConnectionView({
         sessionId: crypto.randomUUID(),
         origin: 'null',
         frame: element,
-        allowedMethods: new Set(['context.get', 'theme.get', 'plugin.invoke', 'plugin.error', 'navigation.open']),
+        allowedMethods: new Set([
+          'context.get',
+          'theme.get',
+          'plugin.invoke',
+          'plugin.error',
+          'navigation.open',
+        ]),
         dispatch: async (method, params): Promise<JsonValue> => {
-          if (method === 'context.get') return { source: 'connection', connectionId, state: view.state }
+          if (method === 'context.get')
+            return { source: 'connection', connectionId, state: view.state }
           if (method === 'theme.get') return themeSnapshot()
           if (method === 'plugin.invoke') {
             const input = params as { method?: unknown; params?: unknown } | null
-            if (!input || typeof input.method !== 'string' || !input.method ||
-              /^(host|core|connection|vfs|fs)\./.test(input.method)) {
+            if (
+              !input ||
+              typeof input.method !== 'string' ||
+              !input.method ||
+              /^(host|core|connection|vfs|fs)\./.test(input.method)
+            ) {
               throw new Error('Invalid plugin method')
             }
             return call<JsonValue>('plugin_invoke', {
@@ -82,13 +93,15 @@ export function PluginConnectionView({
           }
           if (method === 'navigation.open') {
             const input = params as { path?: unknown } | null
-            if (!input || typeof input.path !== 'string') throw new Error('Invalid navigation target')
+            if (!input || typeof input.path !== 'string')
+              throw new Error('Invalid navigation target')
             navigate.current(input.path)
             return null
           }
           if (method === 'plugin.error') {
             const input = params as { message?: unknown; detail?: unknown } | null
-            if (!input || typeof input.message !== 'string' || !input.message.trim()) throw new Error('Invalid error message')
+            if (!input || typeof input.message !== 'string' || !input.message.trim())
+              throw new Error('Invalid error message')
             await call('plugin_error_report', {
               pluginId: view.pluginId,
               source: 'connection-ui',
@@ -109,8 +122,18 @@ export function PluginConnectionView({
     }
   }, [view, connectionId])
 
-  if (error) return <div className="plugin-connection-message" role="alert">{error}</div>
-  if (!view) return <div className="plugin-connection-message" role="status"><LoaderCircle className="spin" size={18} /> 正在打开连接…</div>
+  if (error)
+    return (
+      <div className="plugin-connection-message" role="alert">
+        {error}
+      </div>
+    )
+  if (!view)
+    return (
+      <div className="plugin-connection-message" role="status">
+        <LoaderCircle className="spin" size={18} /> 正在打开连接…
+      </div>
+    )
   return (
     <iframe
       key={view.assetPath}

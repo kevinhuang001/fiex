@@ -264,7 +264,6 @@ mod tests {
     }
 }
 
-
 /// Connection PluginView assets use the same CSP and canonical package checks
 /// as existing panels; the entry is supplied by the native plugin result.
 pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String> {
@@ -283,7 +282,10 @@ pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String>
         return Err("plugin disabled or not approved".into());
     }
     let rel = Path::new(entry);
-    if !rel.components().all(|component| matches!(component, Component::Normal(_))) {
+    if !rel
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+    {
         return Err("invalid pluginView package path".into());
     }
     let file = folder.join(rel);
