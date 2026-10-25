@@ -537,6 +537,10 @@ impl Running {
             }
             "host.net.tcp.read" if permitted("network") => crate::plugin_net::tcp_read(owner, p),
             "host.net.tcp.write" if permitted("network") => crate::plugin_net::tcp_write(owner, p),
+            "host.net.tcp.shutdown" if permitted("network") => {
+                crate::plugin_net::tcp_shutdown(owner, p)?;
+                Ok(Value::Null)
+            }
             "host.net.tcp.close" if permitted("network") => {
                 crate::plugin_net::tcp_close(owner, p)?;
                 Ok(Value::Null)

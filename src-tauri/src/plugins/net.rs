@@ -6,7 +6,7 @@ use crate::{plugin_ipc, plugin_permissions};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -138,7 +138,15 @@ pub fn http(
 
 struct TcpEntry {
     owner: String,
-    stream: std::sync::Arc<Mutex<TcpStream>>,
+    stream: std::sync::Arc<TcpDuplex>,
+}
+
+/// Socket clones share a TCP connection, but readers and writers have
+/// independent locks. A blocked read must never prevent a concurrent write.
+struct TcpDuplex {
+    reader: Mutex<TcpStream>,
+    writer: Mutex<TcpStream>,
+    control: TcpStream,
 }
 
 fn streams() -> &'static Mutex<HashMap<String, TcpEntry>> {
@@ -193,17 +201,23 @@ pub fn tcp_open(
     {
         return Err("too many TCP connections".into());
     }
+    let reader = stream.try_clone().map_err(|error| error.to_string())?;
+    let writer = stream.try_clone().map_err(|error| error.to_string())?;
     entries.insert(
         id.clone(),
         TcpEntry {
             owner: owner.into(),
-            stream: std::sync::Arc::new(Mutex::new(stream)),
+            stream: std::sync::Arc::new(TcpDuplex {
+                reader: Mutex::new(reader),
+                writer: Mutex::new(writer),
+                control: stream,
+            }),
         },
     );
     Ok(json!({"stream": id, "peerAddress": address.to_string()}))
 }
 
-fn tcp_stream(owner: &str, id: &str) -> Result<std::sync::Arc<Mutex<TcpStream>>, String> {
+fn tcp_stream(owner: &str, id: &str) -> Result<std::sync::Arc<TcpDuplex>, String> {
     let entries = streams().lock().map_err(|_| "TCP registry unavailable")?;
     entries
         .get(id)
@@ -220,6 +234,7 @@ pub fn tcp_read(owner: &str, params: &Value) -> Result<Value, String> {
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     let mut bytes = vec![0; size];
     let read = stream
+        .reader
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .read(&mut bytes)
@@ -236,12 +251,24 @@ pub fn tcp_write(owner: &str, params: &Value) -> Result<Value, String> {
     let bytes = plugin_ipc::read(owner, text_param(params, "buffer")?)?;
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     stream
+        .writer
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .write_all(&bytes)
         .map_err(|e| e.to_string())?;
     Ok(json!({"size":bytes.len()}))
 }
+pub fn tcp_shutdown(owner: &str, params: &Value) -> Result<(), String> {
+    let stream = tcp_stream(owner, text_param(params, "stream")?)?;
+    let how = match text_param(params, "direction")? {
+        "read" => Shutdown::Read,
+        "write" => Shutdown::Write,
+        "both" => Shutdown::Both,
+        _ => return Err("invalid TCP shutdown direction".into()),
+    };
+    stream.control.shutdown(how).map_err(|error| error.to_string())
+}
+
 pub fn tcp_close(owner: &str, params: &Value) -> Result<(), String> {
     let id = text_param(params, "stream")?;
     let mut guard = streams().lock().map_err(|_| "TCP registry lock poisoned")?;
@@ -249,7 +276,10 @@ pub fn tcp_close(owner: &str, params: &Value) -> Result<(), String> {
     if entry.owner != owner {
         return Err("TCP stream belongs to another plugin".into());
     }
-    guard.remove(id);
+    let entry = guard.remove(id).ok_or("TCP stream not found")?;
+    drop(guard);
+    // Wake any pending read, including operations holding cloned sockets.
+    let _ = entry.stream.control.shutdown(Shutdown::Both);
     Ok(())
 }
 
@@ -258,6 +288,9 @@ pub fn cleanup(owner: &str) {
         entries.retain(|_, entry| entry.owner != owner);
     }
     if let Ok(mut entries) = streams().lock() {
+        for entry in entries.values().filter(|entry| entry.owner == owner) {
+            let _ = entry.stream.control.shutdown(Shutdown::Both);
+        }
         entries.retain(|_, entry| entry.owner != owner);
     }
 }
@@ -503,6 +536,7 @@ pub fn tcp_read_bytes(owner: &str, params: &Value) -> Result<Value, String> {
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     let mut bytes = vec![0; size];
     let read = stream
+        .reader
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .read(&mut bytes)
@@ -524,9 +558,47 @@ pub fn tcp_write_bytes(owner: &str, params: &Value) -> Result<Value, String> {
         .map_err(|e| e.to_string())?;
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     stream
+        .writer
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .write_all(&bytes)
         .map_err(|e| e.to_string())?;
     Ok(json!({"size":bytes.len()}))
+}
+
+#[cfg(test)]
+mod tcp_tests {
+    use super::*;
+    use std::{net::TcpListener, sync::mpsc, thread};
+
+    #[test]
+    fn reader_does_not_block_a_concurrent_writer() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        let duplex = std::sync::Arc::new(TcpDuplex {
+            reader: Mutex::new(client.try_clone().unwrap()),
+            writer: Mutex::new(client.try_clone().unwrap()),
+            control: client,
+        });
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
+        let reader = duplex.clone();
+        let read_task = thread::spawn(move || {
+            let mut stream = reader.reader.lock().unwrap();
+            ready_tx.send(()).unwrap();
+            let mut bytes = [0; 4];
+            stream.read_exact(&mut bytes).unwrap();
+            result_tx.send(bytes).unwrap();
+        });
+        ready_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        duplex.writer.lock().unwrap().write_all(b"ping").unwrap();
+        server.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        let mut received = [0; 4];
+        server.read_exact(&mut received).unwrap();
+        assert_eq!(&received, b"ping");
+        server.write_all(b"pong").unwrap();
+        assert_eq!(result_rx.recv_timeout(Duration::from_secs(3)).unwrap(), *b"pong");
+        read_task.join().unwrap();
+    }
 }
