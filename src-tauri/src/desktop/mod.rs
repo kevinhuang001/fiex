@@ -85,6 +85,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             plugin_invoke,
+            plugin_before_open,
             plugin_context_menu_resolve,
             plugin_context_menu_children,
             plugin_context_menu_execute,

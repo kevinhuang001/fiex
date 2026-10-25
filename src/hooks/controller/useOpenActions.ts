@@ -1,6 +1,5 @@
 import type { Explorer } from '@/hooks/useExplorer'
 import { call } from '@/lib/api'
-import { pluginCatalog } from '@/lib/plugins'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import type { Entry, Ide, Preferences, Tag } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
@@ -49,8 +48,7 @@ export function useOpenActions({
       return
     }
     void run('正在打开…', async () => {
-      const plugins = await pluginCatalog()
-      const outcome = await runBeforeOpenHooks(plugins, e)
+      const outcome = await runBeforeOpenHooks(e)
       if (outcome.preview) {
         setPreview(e)
         return

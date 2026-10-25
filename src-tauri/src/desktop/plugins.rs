@@ -765,6 +765,92 @@ fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
     })
 }
 
+/// Core-owned before-open event. The UI does not get to invoke protected
+/// hooks methods directly or choose which providers will receive the event.
+#[tauri::command]
+pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value, String> {
+    let local = if crate::mounts::handles(&path) {
+        materialize_file(path.clone()).await?
+    } else {
+        crate::mounts::reject_local(&path)?;
+        path.clone()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        use crate::plugin_permission_policy::{Capability, PermissionPolicy};
+        let file = std::path::Path::new(&local);
+        let snapshot = crate::plugin_resource_context::ResourceSnapshot::new(&path, file);
+        if snapshot.is_dir {
+            return Ok(serde_json::json!({"handled":false}));
+        }
+        let extension = std::path::Path::new(&path)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or(&snapshot.ext)
+            .to_ascii_lowercase();
+        let mime = crate::plugin_match::mime_for(&extension);
+        let providers = crate::plugin_events::matching_plugins(
+            "hooks.invoke",
+            &extension,
+            &mime,
+            false,
+        );
+        for provider in providers {
+            if provider.contribution.get("event").and_then(serde_json::Value::as_str)
+                != Some("beforeOpen")
+            {
+                continue;
+            }
+            let plugin = provider.plugin;
+            let declared = plugin
+                .declared_permissions
+                .iter()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>();
+            let policy = PermissionPolicy::new(&plugin.id, &declared);
+            if !policy.allowed(Capability::Hooks) {
+                continue;
+            }
+            let context = snapshot.context(
+                &plugin.id,
+                policy.allowed(Capability::Metadata),
+                policy.allowed(Capability::FilesRead),
+            );
+            let mut params = serde_json::to_value(context).map_err(|error| error.to_string())?;
+            params["event"] = serde_json::json!("beforeOpen");
+            let directory = file.parent().ok_or("hook target has no parent")?;
+            match crate::plugin_events::invoke_selected(
+                &plugin.id,
+                "hooks.invoke",
+                params,
+                &directory.to_string_lossy(),
+                &[file.to_path_buf()],
+            ) {
+                Ok(response) => {
+                    if response.get("handled").and_then(serde_json::Value::as_bool) == Some(true) {
+                        return Ok(serde_json::json!({
+                            "handled":true,
+                            "preview":response.get("preview")
+                                .and_then(serde_json::Value::as_bool)
+                                .unwrap_or(false)
+                        }));
+                    }
+                }
+                Err(error) => {
+                    let _ = crate::plugin_errors::report(
+                        &plugin.id,
+                        "hooks",
+                        &format!("beforeOpen: {error}"),
+                        None,
+                    );
+                }
+            }
+        }
+        Ok::<_, String>(serde_json::json!({"handled":false}))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub(crate) fn preview_candidates(
     extension: String,
