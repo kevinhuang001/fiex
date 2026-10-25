@@ -497,12 +497,24 @@ impl Running {
         let policy =
             crate::plugin_permission_policy::PermissionPolicy::new(&self.plugin_id, &self.declared);
         let permitted = |name: &str| policy.allowed_name(name);
+        let actor = self.actor(p)?;
+        if let Some(scope) = &actor.scope {
+            scope.authorize_method(method)?;
+        }
+        let mut resolved;
+        let p = if let Some(reference) = p.get("ref") {
+            let scope = actor.scope.as_ref().ok_or("no operation scope")?;
+            resolved = p.clone();
+            resolved["path"] = json!(scope.resolve_reference(reference)?);
+            &resolved
+        } else {
+            p
+        };
         let arg = |key: &str| {
             p.get(key)
                 .and_then(Value::as_str)
                 .ok_or_else(|| format!("missing {key}"))
         };
-        let actor = self.actor(p)?;
         let owner = &actor.owner;
         let root = || {
             actor
@@ -612,14 +624,7 @@ impl Running {
                 p.get("length").and_then(Value::as_u64).unwrap_or(262144) as usize,
             ),
             "host.fs.openRead" if permitted("files.read") => {
-                if let Some(resource_id) = p.get("resourceId").and_then(|value| value.as_str()) {
-                    let session = p.get("sessionId").and_then(|value| value.as_str());
-                    let name =
-                        crate::plugin_scoped_reads::resolve(&self.plugin_id, session, resource_id)?;
-                    crate::plugin_fs_access::open_read(owner, root()?, &name)
-                } else {
-                    crate::plugin_fs_access::open_read(owner, root()?, arg("path")?)
-                }
+                crate::plugin_fs_access::open_read(owner, root()?, arg("path")?)
             }
             "host.fs.readOpen" if permitted("files.read") => crate::plugin_fs_access::read_open(
                 owner,

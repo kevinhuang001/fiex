@@ -93,39 +93,42 @@ pub(crate) async fn plugin_invoke(
             replace(&mut params, &replacements);
         }
     }
-    if let Some(session_id) = preview_session_id {
-        let (scoped_directory, scoped_paths) =
-            crate::plugin_preview::session_scope(&session_id, &plugin_id)?;
-        directory = Some(scoped_directory);
-        selected_paths = Some(
-            scoped_paths
-                .into_iter()
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect(),
-        );
-    }
+    let preview_scope = preview_session_id
+        .as_deref()
+        .map(|session| crate::plugin_preview::session_scope(session, &plugin_id))
+        .transpose()?;
     let id = plugin_id.clone();
     let call = method.clone();
-    tauri::async_runtime::spawn_blocking(move || match (directory, selected_paths) {
-        (Some(directory), Some(paths)) => crate::plugin_host::global().invoke_selected(
-            &plugin_id,
-            &method,
-            params,
-            &directory,
-            &paths
-                .into_iter()
-                .map(std::path::PathBuf::from)
-                .collect::<Vec<_>>(),
-        ),
-        (Some(directory), None) => crate::plugin_host::global().invoke_selected(
-            &plugin_id,
-            &method,
-            params,
-            &directory,
-            &[],
-        ),
-        (None, Some(_)) => Err("selected paths require an operation directory".into()),
-        (None, None) => crate::plugin_host::global().invoke(&plugin_id, &method, params),
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(scope) = preview_scope {
+            return crate::plugin_host::global().invoke_scoped(
+                &plugin_id,
+                &method,
+                params,
+                Some(scope),
+            );
+        }
+        match (directory, selected_paths) {
+            (Some(directory), Some(paths)) => crate::plugin_host::global().invoke_selected(
+                &plugin_id,
+                &method,
+                params,
+                &directory,
+                &paths
+                    .into_iter()
+                    .map(std::path::PathBuf::from)
+                    .collect::<Vec<_>>(),
+            ),
+            (Some(directory), None) => crate::plugin_host::global().invoke_selected(
+                &plugin_id,
+                &method,
+                params,
+                &directory,
+                &[],
+            ),
+            (None, Some(_)) => Err("selected paths require an operation directory".into()),
+            (None, None) => crate::plugin_host::global().invoke(&plugin_id, &method, params),
+        }
     })
     .await
     .map_err(|e| e.to_string())?
@@ -238,10 +241,15 @@ pub(crate) fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
 pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::InfoSection> {
     let display = path.clone();
     let local = if crate::mounts::handles(&path) {
-        if crate::remote::is_remote(&path)
-            && crate::remote::stat(&path).is_ok_and(|entry| entry.is_dir)
-        {
-            return Vec::new();
+        let entry = if crate::remote::is_remote(&path) {
+            crate::remote::stat(&path)
+        } else {
+            crate::plugin_vfs::stat(&path)
+        };
+        if let Ok(entry) = entry {
+            if !crate::plugin_info::requires_content(&entry) {
+                return crate::plugin_info::metadata_info(&display, &entry);
+            }
         }
         match materialize_file(path).await {
             Ok(path) => path,

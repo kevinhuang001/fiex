@@ -159,7 +159,7 @@ impl PluginHost {
         }
         self.invoke_scoped(plugin_id, method, params, Some(scope))
     }
-    fn invoke_scoped(
+    pub(crate) fn invoke_scoped(
         &self,
         plugin_id: &str,
         method: &str,
@@ -203,7 +203,14 @@ impl PluginHost {
         if !state.enabled || !crate::plugin_permissions::activation_complete(&state, &required) {
             return Err("plugin activation requires complete permission consent".into());
         }
-        let mut params = params;
+        let mut task_root = task_root;
+        let metadata_allowed = crate::plugin_permission_policy::PermissionPolicy::new(
+            plugin_id,
+            &declared(&manifest)?,
+        )
+        .allowed(crate::plugin_permission_policy::Capability::Metadata);
+        let mut params =
+            crate::plugin_events::prepare(method, params, &mut task_root, metadata_allowed)?;
         if let Some(object) = params.as_object_mut() {
             object.insert("networkDomains".into(), json!(state.network_domains));
         }

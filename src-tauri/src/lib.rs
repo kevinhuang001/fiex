@@ -48,8 +48,6 @@ pub use fiex_plugin_sdk as plugin_sdk;
 pub mod mounts;
 #[path = "plugins/sandbox/mod.rs"]
 pub mod plugin_sandbox;
-#[path = "plugins/scoped_reads.rs"]
-pub mod plugin_scoped_reads;
 #[path = "plugins/search.rs"]
 pub mod plugin_search;
 #[path = "plugins/storage.rs"]
@@ -80,3 +78,8 @@ pub mod virtual_transfers;
 pub mod volumes;
 #[cfg(feature = "desktop")]
 pub use desktop::run;
+
+#[path = "plugins/events.rs"]
+pub mod plugin_events;
+#[path = "plugins/resource_broker.rs"]
+pub mod plugin_resource_broker;

@@ -140,6 +140,8 @@ pub struct Scope {
     path: PathBuf,
     dir: std::sync::Arc<Dir>,
     allowed: Option<Vec<(PathBuf, bool)>>,
+    references: HashMap<String, String>,
+    metadata_only: bool,
 }
 impl Scope {
     pub fn new(path: &Path) -> Result<Self, String> {
@@ -149,6 +151,8 @@ impl Scope {
             path,
             dir: std::sync::Arc::new(dir),
             allowed: None,
+            references: HashMap::new(),
+            metadata_only: false,
         })
     }
     /// Capture only paths chosen for this operation. A file grants that file;
@@ -172,6 +176,45 @@ impl Scope {
         }
         scope.allowed = Some(allowed);
         Ok(scope)
+    }
+    pub fn restrict_to_metadata(&mut self) {
+        self.metadata_only = true;
+    }
+    pub fn authorize_method(&self, method: &str) -> Result<(), String> {
+        if self.metadata_only
+            && ((method.starts_with("host.fs.")
+                && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
+                || matches!(method, "host.process.run" | "host.exec"))
+        {
+            return Err("menu resolution grants metadata only".into());
+        }
+        Ok(())
+    }
+    pub fn selected_paths(&self) -> Vec<PathBuf> {
+        self.allowed
+            .as_ref()
+            .map(|paths| paths.iter().map(|(p, _)| self.path.join(p)).collect())
+            .unwrap_or_default()
+    }
+    pub fn bind_reference(
+        &mut self,
+        reference: &crate::plugin_contracts::ResourceRef,
+        path: &Path,
+    ) -> Result<(), String> {
+        let path = path.to_string_lossy().into_owned();
+        self.authorize(&path)?;
+        let key = serde_json::to_string(reference).map_err(|e| e.to_string())?;
+        self.references.insert(key, path);
+        Ok(())
+    }
+    pub fn resolve_reference(&self, reference: &serde_json::Value) -> Result<&str, String> {
+        let reference: crate::plugin_contracts::ResourceRef =
+            serde_json::from_value(reference.clone()).map_err(|e| e.to_string())?;
+        let key = serde_json::to_string(&reference).map_err(|e| e.to_string())?;
+        self.references
+            .get(&key)
+            .map(String::as_str)
+            .ok_or_else(|| "resource not selected for this operation".into())
     }
     pub fn authorize(&self, path: &str) -> Result<(), String> {
         relative(self, path).map(|_| ())

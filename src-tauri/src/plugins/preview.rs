@@ -1,12 +1,10 @@
 //! Unified preview registry: built-ins and plugins return the same resolved view.
 //!
 //! Providers are matched by extension/MIME and priority. Built-ins use a
-//! trusted local file; plugins receive a permission-projected `PreviewContext`
+//! trusted local file; plugins receive a permission-projected event request
 //! and return a package-confined `PreviewView`.
-use crate::plugin_contracts::{
-    PreviewContext, PreviewView, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
-    PREVIEW_CONTEXT_VERSION,
-};
+use crate::plugin_contracts::PreviewView;
+use crate::plugin_resource_broker::Resource;
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -61,29 +59,13 @@ impl Builtin {
     }
 }
 
-#[derive(Clone)]
-struct Provider {
-    id: String,
-    provider: String,
-    priority: i64,
-    builtin: Option<Builtin>,
-    plugin: Option<(String, String)>,
-}
-
-impl Provider {
-    fn json(&self) -> Value {
-        serde_json::json!({
-            "id": self.id,
-            "provider": self.provider,
-            "priority": self.priority,
-        })
-    }
-}
+use crate::plugin_events::{self as events, Provider};
 
 struct Session {
     plugin_id: String,
     directory: PathBuf,
     path: PathBuf,
+    reference: crate::plugin_contracts::ResourceRef,
     created: Instant,
 }
 
@@ -143,40 +125,11 @@ fn builtin_candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Builtin> {
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
-    let mut values = builtin_candidates(&ext, mime, is_dir)
+    let builtin = builtin_candidates(&ext, mime, is_dir)
         .into_iter()
-        .map(|builtin| Provider {
-            id: builtin.id().into(),
-            provider: "Fiex".into(),
-            priority: builtin.priority(),
-            builtin: Some(builtin),
-            plugin: None,
-        })
-        .collect::<Vec<_>>();
-    for plugin in crate::plugin_host::catalog() {
-        if !plugin.enabled || !plugin.approved || !plugin.backend_available {
-            continue;
-        }
-        let Some(contribution) = plugin.extensions.get("preview") else {
-            continue;
-        };
-        let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
-        if !rules.matches(&ext, mime, is_dir) {
-            continue;
-        }
-        values.push(Provider {
-            id: format!("plugin:{}", plugin.id),
-            provider: plugin.name.clone(),
-            priority: contribution
-                .get("priority")
-                .and_then(Value::as_u64)
-                .unwrap_or(50) as i64,
-            builtin: None,
-            plugin: Some((plugin.id.clone(), plugin.id.clone())),
-        });
-    }
-    values.sort_by_key(|provider| std::cmp::Reverse(provider.priority));
-    values
+        .map(|kind| Provider::builtin(kind.id(), kind.priority()))
+        .collect();
+    events::registry("preview", &ext, mime, is_dir, builtin)
 }
 
 /// Ordered provider list for the source switcher. User ordering and the
@@ -188,58 +141,26 @@ pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
         .collect()
 }
 
-fn resource_ref(display: &str) -> ResourceRef {
-    if crate::mounts::handles(display) {
-        if let Ok(uri) = crate::mounts::parse(display) {
-            return ResourceRef {
-                mount_id: uri.mount_id,
-                node_id: format!("fiex-resource:{}", uri.relative),
-            };
-        }
-    }
-    ResourceRef {
-        mount_id: "local".into(),
-        node_id: format!(
-            "fiex-resource:{}",
-            crate::mounts::new_id().unwrap_or_default()
-        ),
-    }
-}
-
-fn metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
-    let value = fs::symlink_metadata(local).ok()?;
-    let extension = Path::new(name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.to_ascii_lowercase());
-    Some(ResourceMetadata {
-        name: name.into(),
-        kind: if value.is_dir() { "directory" } else { "file" }.into(),
-        mime: extension.as_deref().map(crate::plugin_match::mime_for),
-        extension,
-        size: (!value.is_dir()).then_some(value.len()),
-        modified: value
-            .modified()
-            .ok()
-            .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|value| value.as_secs() as i64),
-    })
-}
-
 fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, String> {
     let name = name_of(local);
     let ext = extension(local);
     let mime = mime_for(&ext);
     match kind {
         Builtin::Text => {
-            let bytes = fs::read(local).map_err(|error| error.to_string())?;
+            use std::io::Read;
+            let file = fs::File::open(local).map_err(|error| error.to_string())?;
+            let size = file.metadata().map_err(|error| error.to_string())?.len();
+            let mut bytes = Vec::new();
+            file.take((MAX_TEXT + 1) as u64)
+                .read_to_end(&mut bytes)
+                .map_err(|error| error.to_string())?;
             let truncated = bytes.len() > MAX_TEXT;
             let text = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_TEXT)]).into_owned();
             Ok(serde_json::json!({
                 "kind": "text",
                 "text": text,
                 "truncated": truncated,
-                "size": bytes.len(),
+                "size": size,
             }))
         }
         Builtin::Image => Ok(serde_json::json!({
@@ -355,7 +276,6 @@ fn open_plugin(
         .collect::<std::collections::BTreeSet<_>>();
     let policy = crate::plugin_permission_policy::PermissionPolicy::new(plugin_id, &declared);
     let metadata_allowed = policy.allowed(crate::plugin_permission_policy::Capability::Metadata);
-    let read_allowed = policy.allowed(crate::plugin_permission_policy::Capability::FilesRead);
     let contribution = plugin
         .extensions
         .get("preview")
@@ -369,35 +289,15 @@ fn open_plugin(
     if !rules.matches(&ext, &mime_for(&ext), local_path.is_dir()) {
         return Err("preview provider does not match this file type".into());
     }
-    let name = name_of(local_path);
     let directory = local_path
         .parent()
         .ok_or("preview file has no parent")?
         .to_path_buf();
     let session_id = crate::mounts::new_id()?;
-    let context = PreviewContext {
-        version: PREVIEW_CONTEXT_VERSION,
-        session_id: session_id.clone(),
-        intent: "preview".into(),
-        resource: ResourceContext {
-            reference: resource_ref(display),
-            metadata: metadata_allowed
-                .then(|| metadata(local_path, &name))
-                .flatten(),
-            read: read_allowed.then(|| ScopedRead {
-                resource_id: crate::plugin_scoped_reads::register(plugin_id, &session_id, &name),
-            }),
-        },
-    };
-    let params = serde_json::to_value(&context).map_err(|error| error.to_string())?;
-    let selected = [local_path.to_path_buf()];
-    let result = crate::plugin_host::global().invoke_selected(
-        plugin_id,
-        "preview.open",
-        params,
-        &directory.to_string_lossy(),
-        &selected,
-    )?;
+    let resource = Resource::new(display, local_path);
+    let context = resource.request(metadata_allowed, serde_json::json!({}));
+    let result =
+        crate::plugin_events::invoke(plugin_id, "preview.open", context.clone(), local_path)?;
     let view = validate(plugin_id, result)?;
     let mut values = sessions()
         .lock()
@@ -418,6 +318,7 @@ fn open_plugin(
             plugin_id: plugin_id.into(),
             directory,
             path: local_path.to_path_buf(),
+            reference: resource.reference,
             created: Instant::now(),
         },
     );
@@ -449,43 +350,50 @@ pub fn open_provider(
             .ok_or("unknown preview provider")?,
         None => values.first().cloned().ok_or("no preview provider")?,
     };
-    let view = if let Some(builtin) = provider.builtin {
-        builtin_view(builtin, local_path, display)?
-    } else if let Some((plugin_id, contribution_id)) = provider.plugin.as_ref() {
-        let plugin = open_plugin(display, local, plugin_id, contribution_id)?;
-        let mut view = plugin
-            .get("view")
-            .cloned()
-            .ok_or("plugin preview response missing view")?;
-        if let Some(object) = view.as_object_mut() {
-            object.insert("providerId".into(), Value::String(provider.id.clone()));
-            object.insert("provider".into(), Value::String(provider.provider.clone()));
-            if let Some(session) = plugin.get("sessionId") {
-                object.insert("sessionId".into(), session.clone());
+    let view = events::dispatch(
+        &provider,
+        |id| {
+            let kind = builtin_candidates(&ext, &mime, local_path.is_dir())
+                .into_iter()
+                .find(|kind| kind.id() == id)
+                .ok_or("unknown builtin preview")?;
+            builtin_view(kind, local_path, display)
+        },
+        |plugin| {
+            let plugin = open_plugin(display, local, &plugin.id, &plugin.id)?;
+            let mut view = plugin
+                .get("view")
+                .cloned()
+                .ok_or("plugin preview response missing view")?;
+            if let Some(object) = view.as_object_mut() {
+                object.insert("providerId".into(), Value::String(provider.id.clone()));
+                object.insert("provider".into(), Value::String(provider.name.clone()));
+                if let Some(session) = plugin.get("sessionId") {
+                    object.insert("sessionId".into(), session.clone());
+                }
+                if let Some(context) = plugin.get("context") {
+                    object.insert("context".into(), context.clone());
+                }
+                if let Some(plugin_id) = plugin.get("pluginId") {
+                    object.insert("pluginId".into(), plugin_id.clone());
+                }
+                if let Some(contribution_id) = plugin.get("contributionId") {
+                    object.insert("contributionId".into(), contribution_id.clone());
+                }
             }
-            if let Some(context) = plugin.get("context") {
-                object.insert("context".into(), context.clone());
-            }
-            if let Some(plugin_id) = plugin.get("pluginId") {
-                object.insert("pluginId".into(), plugin_id.clone());
-            }
-            if let Some(contribution_id) = plugin.get("contributionId") {
-                object.insert("contributionId".into(), contribution_id.clone());
-            }
-        }
-        view
-    } else {
-        return Err("invalid preview provider".into());
-    };
+            Ok(view)
+        },
+        |view| Ok(view),
+    )?;
     Ok(serde_json::json!({
         "providerId": provider.id,
-        "provider": provider.provider,
+        "provider": provider.name,
         "priority": provider.priority,
         "view": view,
     }))
 }
 
-/// Compatibility wrapper for the plugin-only integration test.
+/// Open a specific plugin provider.
 pub fn open(
     display: &str,
     local: &str,
@@ -504,7 +412,10 @@ pub fn open(
 
 /// Resolve the operation scope for a plugin UI invoking its backend. The
 /// iframe only holds the opaque session id, never the selected path.
-pub fn session_scope(session_id: &str, plugin_id: &str) -> Result<(String, Vec<PathBuf>), String> {
+pub fn session_scope(
+    session_id: &str,
+    plugin_id: &str,
+) -> Result<crate::plugin_fs_access::Scope, String> {
     let mut values = sessions()
         .lock()
         .map_err(|_| "preview session registry unavailable")?;
@@ -513,10 +424,10 @@ pub fn session_scope(session_id: &str, plugin_id: &str) -> Result<(String, Vec<P
     if session.plugin_id != plugin_id {
         return Err("preview session belongs to another plugin".into());
     }
-    Ok((
-        session.directory.to_string_lossy().into_owned(),
-        vec![session.path.clone()],
-    ))
+    let mut scope =
+        crate::plugin_fs_access::Scope::selected(&session.directory, &[session.path.clone()])?;
+    scope.bind_reference(&session.reference, &session.path)?;
+    Ok(scope)
 }
 
 #[cfg(test)]

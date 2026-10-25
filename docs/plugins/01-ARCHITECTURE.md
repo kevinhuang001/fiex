@@ -11,7 +11,7 @@ Fiex Desktop / Sidebar / TabHost
     +-- Resource Broker
     |      fs_access / plugin_net / process / resources / ipc
     +-- VFS / mounts       Core 分配 mountId，处理资源身份与视图
-    +-- Info / Preview     Core 内置与插件共用 Registry 和 DTO
+    +-- events / Broker    Core 内置与插件共用 Provider Registry 和请求封装
     +-- ContentHost        Explorer、VFS 视图、PluginView iframe
     |
     +-- Native Plugin Process
@@ -49,3 +49,5 @@ Manifest permissions
 - Core 对插件响应、路径、HTML 和导航结果一律按不可信输入校验。
 - 大文件通过有界句柄/分块传输，不把完整内容塞进 JSON。
 - 后台任务由 `ctx.spawn_internal_task` / `spawn_task` 管理，任务不延长失效授权。
+
+统一请求、资源身份和调度流程见 [08](08-UNIFIED-PREVIEW-INFO.md)。

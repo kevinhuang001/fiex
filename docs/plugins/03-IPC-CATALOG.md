@@ -19,8 +19,8 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 | `plugin.ping` / `plugin.shutdown`       | 空                                    | `alive` / `null`                         |
 | `connection.validate`                   | `connection`                          | `valid`                                  |
 | `connection.open` / `connection.create` | `connectionId/factoryId/connection…`  | `NavigationTarget`                       |
-| `info.resolve`                          | `InfoContext`                         | `InfoResponse`                           |
-| `preview.open`                          | `PreviewContext`                      | `PreviewView`                            |
+| `info.resolve`                          | `target / selection / options`        | `{ sections: [...] }`                    |
+| `preview.open`                          | `target / selection / options`        | `PreviewView`                            |
 | `decorations.resolve`                   | `DecorationContext`                   | `{decorations:[...]}`                    |
 | `contextMenu.resolve`                   | 菜单 Session、opaque refs             | `{items:[...]}`                          |
 | `contextMenu.execute`                   | `menuSessionId,itemId,interactionId`  | 操作结果                                 |
@@ -33,37 +33,7 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 
 Info / Preview:
 
-```json
-{
-  "sessionId": "opaque",
-  "resource": {
-    "ref": { "mountId": "m1", "nodeId": "n9" },
-    "metadata": {
-      "name": "song.mp3",
-      "kind": "file",
-      "size": 2048,
-      "mime": "audio/mpeg"
-    },
-    "read": { "resourceId": "read-opaque" }
-  }
-}
-```
-
-`metadata` 和 `read` 都只有在对应权限和当前 Scope 通过时才出现。`read.resourceId` 是会话绑定的受限读取引用，不是文件内容。
-
-Decorations 返回直接成员名：
-
-```json
-{
-  "decorations": [
-    {
-      "name": "main.ts",
-      "badge": { "text": "M", "color": "orange" },
-      "style": { "color": "#c2710c" }
-    }
-  ]
-}
-```
+Standard resource requests and permission projection are specified in [08](08-UNIFIED-PREVIEW-INFO.md).
 
 ## 插件 → Core
 

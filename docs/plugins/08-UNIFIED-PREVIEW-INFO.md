@@ -1,92 +1,56 @@
-# 08 · Info 与 Preview
+# Unified event requests and provider dispatch
 
-## 共同点
-
-- Manifest 中 `info` / `preview` 都是**单个对象**，不是数组；
-- 没有贡献 id；Provider 身份是插件 id；
-- 内置 Provider 和插件 Provider 使用同一个 Registry、同一套领域 DTO；
-- 一次打开只匹配一个插件 Provider；
-- `match` 是包含谓词：`extensions`、`mimeTypes`、`kinds`；
-- 元数据和读取权限由 `PermissionPolicy` + 当前 Scope 决定，缓存不会绕过授权。
-
-## Info
-
-插件 Manifest：
-
-```json
-"info": {
-  "priority": 100,
-  "match": { "extensions": ["pdf"], "kinds": ["file"] }
-}
-```
-
-Core 调用 `info.resolve`，传入标准 `InfoContext`：
+Core resource events use the JSON-RPC method as the event name. The one request envelope is:
 
 ```json
 {
-  "sessionId": "opaque",
-  "resource": {
-    "ref": { "mountId": "m1", "nodeId": "n9" },
-    "metadata": { "name": "a.pdf", "kind": "file", "size": 1024 },
-    "read": { "resourceId": "read-opaque" }
-  }
+  "target": {
+    "ref": { "mountId": "local", "nodeId": "opaque" },
+    "metadata": { "name": "song.mp3", "kind": "file", "size": 4194304 }
+  },
+  "selection": [],
+  "options": {}
 }
 ```
 
-插件返回：
+`target` can be null. `selection` contains operation-selected resources. Metadata is optional and projected using the receiving plugin's metadata permission. `options` contains feature-specific parameters. RequestContext exposes `target()`, `selection()` and `params()` (business options for standard events; unchanged parameters for custom methods). `metadata(&ResourceRef)` requests metadata through the existing host broker. `files().open_ref(&ResourceRef)` returns the normal streaming Read/Seek adapter.
 
-```json
-{
-  "sections": [
-    {
-      "id": "document",
-      "title": "文档",
-      "rows": [{ "label": "页数", "value": "12" }]
-    }
-  ]
-}
+The envelope applies to `info.resolve`, `preview.open`, `decorations.resolve`, `contextMenu.resolve`, `contextMenu.execute`, `toolbar.invoke`, `search.query`, and `connection.open`. Custom backend and VFS methods retain their own protocols. Network-domain configuration remains host-injected runtime data.
+
+## Dispatch
+
+```mermaid
+flowchart TD
+  UI[Core UI] --> Broker[Resource Broker]
+  Broker --> Registry[Provider Registry]
+  Registry --> Router[Event dispatch]
+  Router --> Builtin[Core function]
+  Router --> Host[Plugin Host and operation scope]
+  Host --> SDK[Plugin RequestContext]
+  Builtin --> Validate[Feature result validation]
+  SDK --> Validate
+  Validate --> UI
 ```
 
-- section id 由响应提供；Core 不要求 Manifest 提供 id；
-- `read` 只有 `files.read` 被批准时才出现；
-- 插件自己的 section 和 Core 的 metadata/audio/video section 合并展示；
-- 插件失败只影响该 section。
+`plugins/resource_broker.rs` prepares resource identity and metadata once for Info. `plugins/events.rs` owns the shared Info/Preview provider registry, deterministic priority ordering, exception isolation, response size bounds and dispatch boundary. Built-ins run in-process; plugins use the existing PluginHost timeout and process lifecycle. Info validates bounded sections/rows before collecting any provider output. Preview validates package-confined HTML, text bounds and allowed kinds. Feature renderers remain independent.
 
-## Preview
+Info no longer defines InfoContext, ResourceDescriptor, ResourceContext, ScopedRead, InfoResponse or InfoSectionView. Core and SDK use one shared ResourceRef. Core retains InfoSection/InfoRow as the final UI model. Preview retains its distinct result format.
 
-Manifest：
+## Authorization and lifetime
 
-```json
-"preview": {
-  "priority": 80,
-  "maxBytes": 1048576,
-  "match": { "extensions": ["md"], "kinds": ["file"] },
-  "panel": { "entry": "ui/preview.html", "title": "Markdown" }
-}
+Reference-to-path mappings live in the Core operation Scope, never in a global read-token registry. Knowing or forging a ResourceRef grants nothing: lookup must succeed in the calling operation's scope, followed by the ordinary metadata/read/write permission and filesystem confinement checks. Another operation cannot resolve the same ref. Tasks inherit the captured scope; a preview UI session recreates the exact selected scope and rebinds its issued ref after checking plugin ownership and expiry.
+
+Context-menu resolution is metadata-only even if the plugin has a read grant. Content reads, writes and subprocess execution are rejected in that scope; a later confirmed action starts a separate operation. Removing a metadata field does not grant file access. Bulk file contents still use the existing streaming/shared-memory transport.
+
+## SDK example
+
+```rust
+let reference: sdk::ResourceRef = serde_json::from_value(
+    ctx.target().and_then(|target| target.get("ref"))
+        .ok_or_else(|| RpcError::invalid_params("missing target"))?.clone()
+).map_err(|error| RpcError::invalid_params(error.to_string()))?;
+let reader = ctx.files().open_ref(&reference)
+    .map_err(|error| RpcError::internal(error.to_string()))?;
 ```
 
-Provider 列表 id：
-
-```text
-plugin:<plugin-id>
-```
-
-Core 调用 `preview.open`，传标准 `PreviewContext`。插件返回 `PreviewView`：
-
-- `kind: "text"` / `"html"` / `"pdf"` / `"image"` / `"audio"` / `"video"` 等 Core 支持的视图；
-- html 面板必须是插件包内文件，通过 Core CSP/路径校验；
-- 不允许返回任意外部 URL；
-- `providerId` 使用 `plugin:<plugin-id>`。
-
-## 候选选择
-
-- 按 `priority` 降序；
-- 同优先级按注册顺序/内置优先策略；
-- 用户可在预览切换器选择其他候选；
-- 没有 Provider 时使用 fallback。
-
-## 资源读取
-
-- Preview 的 `read.resourceId` 是会话绑定、限期、进程所有权的引用；
-- 大文件分块读取，不内联到 JSON；
-- 预览会话关闭、插件撤权或文件身份变化后，旧引用立即失效。
+The checksum provider uses this route without requiring a projected filename. Metadata-only remote Info can be rendered from an existing Entry without downloading file contents; media/content providers still require materialization. Other feature-specific options and result validators continue to live in their feature modules.
