@@ -82,23 +82,34 @@ impl ResourceSnapshot {
         self.metadata.as_ref()
     }
 
+    pub fn project(
+        &self,
+        owner: &str,
+        session_id: &str,
+        metadata_allowed: bool,
+        read_allowed: bool,
+    ) -> ResourceContext {
+        ResourceContext {
+            reference: self.reference.clone(),
+            metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
+            read: (read_allowed && !self.is_dir).then(|| ScopedRead {
+                resource_id: crate::plugin_scoped_reads::register(
+                    owner,
+                    session_id,
+                    &self.name,
+                ),
+            }),
+        }
+    }
+
     pub fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext {
         let session_id = crate::mounts::new_id().unwrap_or_default();
         EventContext {
-            session_id: session_id.clone(),
-            targets: vec![ResourceContext {
-                reference: self.reference.clone(),
-                metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
-                read: (read_allowed && !self.is_dir).then(|| ScopedRead {
-                    resource_id: crate::plugin_scoped_reads::register(
-                        owner,
-                        &session_id,
-                        &self.name,
-                    ),
-                }),
-            }],
+            targets: vec![self.project(owner, &session_id, metadata_allowed, read_allowed)],
+            session_id,
         }
     }
+
 }
 
 #[cfg(test)]

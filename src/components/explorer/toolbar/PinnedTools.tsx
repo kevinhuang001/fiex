@@ -83,12 +83,10 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
       return
     }
     if (plugin.backendAvailable) {
-      void call('plugin_invoke', {
+      void call('plugin_toolbar_invoke', {
         pluginId: plugin.id,
-        method: 'toolbar.invoke',
-        params: { root: x.path, selection: x.selected },
         directory: x.path,
-        selectedPaths: x.selected.length ? x.selected : [x.path],
+        paths: x.selected,
       }).catch((error) => x.setError(String(error)))
       return
     }

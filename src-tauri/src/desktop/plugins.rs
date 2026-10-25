@@ -767,6 +767,80 @@ fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
 
 /// Core-owned before-open event. The UI does not get to invoke protected
 /// hooks methods directly or choose which providers will receive the event.
+/// Core-owned toolbar action. Plugin UI cannot invoke the protected
+/// toolbar.invoke method directly; only the Explorer toolbar triggers it.
+#[tauri::command]
+pub(crate) async fn plugin_toolbar_invoke(
+    plugin_id: String,
+    directory: String,
+    paths: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let plugin = crate::plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.approved
+            && plugin.backend_available && plugin.extensions.get("toolbar").is_some())
+        .ok_or("toolbar provider not active")?;
+    if paths.len() > 256 {
+        return Err("too many toolbar targets".into());
+    }
+    let mut selected = if paths.is_empty() {
+        vec![directory.clone()]
+    } else {
+        paths
+    };
+    let mut resolved_directory = directory;
+    for path in &mut selected {
+        if crate::mounts::handles(path) {
+            *path = materialize_file(path.clone()).await?;
+        } else {
+            crate::mounts::reject_local(path)?;
+        }
+    }
+    if crate::mounts::handles(&resolved_directory) {
+        resolved_directory = std::path::Path::new(&selected[0])
+            .parent()
+            .ok_or("invalid toolbar directory")?
+            .to_string_lossy()
+            .into_owned();
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        use crate::plugin_permission_policy::{Capability, PermissionPolicy};
+        let declared = plugin
+            .declared_permissions
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let policy = PermissionPolicy::new(&plugin.id, &declared);
+        let session_id = crate::mounts::new_id()?;
+        let targets = selected
+            .iter()
+            .map(|path| {
+                let resource = crate::plugin_resource_context::ResourceSnapshot::new(
+                    path,
+                    std::path::Path::new(path),
+                );
+                resource.project(
+                    &plugin.id,
+                    &session_id,
+                    policy.allowed(Capability::Metadata),
+                    policy.allowed(Capability::FilesRead),
+                )
+            })
+            .collect::<Vec<_>>();
+        let params = serde_json::json!({"sessionId":session_id,"targets":targets});
+        let selected_paths = selected.into_iter().map(std::path::PathBuf::from).collect::<Vec<_>>();
+        crate::plugin_events::invoke_selected(
+            &plugin.id,
+            "toolbar.invoke",
+            params,
+            &resolved_directory,
+            &selected_paths,
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value, String> {
     let local = if crate::mounts::handles(&path) {
