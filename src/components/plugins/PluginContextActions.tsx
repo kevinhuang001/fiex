@@ -11,7 +11,11 @@ interface MenuItem {
   kind: 'action' | 'submenu' | 'separator'
   parentId?: string
 }
-undefined
+interface Menu {
+  pluginId: string
+  menuSessionId: string
+  items: MenuItem[]
+}
 interface Context {
   paths: string[]
   path: string
@@ -84,10 +88,7 @@ function MenuNode({
     return (
       <div
         className="context-submenu-wrap"
-        onMouseEnter={() => {
-          cancel()
-          setExpanded(true)
-        }}
+        onMouseEnter={() => { cancel(); setExpanded(true) }}
         onMouseLeave={() => {
           cancel()
           timer.current = window.setTimeout(() => setExpanded(false), 180)
@@ -148,10 +149,23 @@ export function PluginContextActions({
   useEffect(() => {
     let active = true
     const enabled = plugins.filter((p) => p.enabled && p.extensions?.contextMenus === true)
-undefined    void Promise.all(
+    void Promise.all(
       enabled.map(async (plugin) => {
         try {
-undefined          undefined
+          const response = await call<{ menuSessionId: string; items: unknown }>(
+            'plugin_context_menu_resolve',
+            {
+              pluginId: plugin.id,
+              directory: path,
+              paths: JSON.parse(selectionKey) as string[],
+              isDirectory,
+              readOnly,
+              isRemote,
+            },
+          )
+          return validMenu(response.items)
+            ? { pluginId: plugin.id, menuSessionId: response.menuSessionId, items: response.items }
+            : null
         } catch {
           return null
         }
@@ -164,25 +178,31 @@ undefined          undefined
     }
   }, [plugins, selectionKey, isDirectory, readOnly, isRemote])
 
-  undefined
-undefined
+  const invoke = async (
+    menu: Menu,
+    item: MenuItem,
+    anchor?: { x: number; y: number },
+  ) => {
+    onClose()
+    const pluginId = menu.pluginId
+    const plugin = plugins.find((entry) => entry.id === pluginId)
     let activityId = ''
     try {
       // No content permission is handed out during resolve; executing a real
       // click enters the operation with its exact selected paths.
-undefined      if (
-        response &&
-        typeof response === 'object' &&
-        'kind' in response &&
-        response.kind === 'panel' &&
-        undefined
-      ) {
+      const response = await call<unknown>('plugin_context_menu_execute', {
+        menuSessionId: menu.menuSessionId,
+        itemId: item.id,
+      })
+      if (response && typeof response === 'object' && 'kind' in response &&
+        response.kind === 'panel' && 'assetPath' in response && typeof response.assetPath === 'string') {
         const entry = response as {
-undefined          panelId?: string
+          assetPath: string
+          panelId?: string
           title?: string
           size?: { width: number; height: number }
         }
-undefined        window.dispatchEvent(
+        window.dispatchEvent(
           new CustomEvent(OPEN_PLUGIN_PANEL, {
             detail: {
               pluginId,
@@ -194,7 +214,8 @@ undefined        window.dispatchEvent(
               anchor,
               source: 'contextMenu',
               size: entry.size,
-undefined            },
+              assetPath: entry.assetPath,
+            },
           }),
         )
         return
@@ -227,7 +248,7 @@ undefined            },
               key={menu.pluginId + ':' + item.id}
               item={item}
               items={menu.items}
-              undefined
+              onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
             />
           )),
       )}
