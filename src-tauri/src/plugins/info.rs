@@ -290,6 +290,16 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
         if !plugin.enabled || !plugin.approved || !plugin.backend_available {
             continue;
         }
+        let declared = plugin
+            .declared_permissions
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        if !crate::plugin_permissions::allowed(&plugin.id, &declared, "metadata").unwrap_or(false)
+            || !crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read").unwrap_or(false)
+        {
+            continue;
+        }
         let Some(extensions) = plugin.extensions.get("info").and_then(Value::as_array) else {
             continue;
         };
@@ -315,10 +325,16 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
                 .unwrap_or(&plugin.name)
                 .to_string();
             let selected = [PathBuf::from(path)];
+            let resource_name = path.file_name().unwrap_or_default().to_string_lossy();
             let params = json!({
-                "path": path.to_string_lossy(),
-                "name": path.file_name().unwrap_or_default().to_string_lossy(),
+                "path": resource_name,
+                "name": resource_name,
                 "isDir": is_dir,
+                "resource": {
+                    "name": resource_name,
+                    "extension": ext,
+                    "kind": if is_dir { "directory" } else { "file" },
+                },
             });
             let result = crate::plugin_host::global().invoke_selected(
                 &plugin.id,
