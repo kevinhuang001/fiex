@@ -42,6 +42,24 @@
 .app.has-background .statusbar {
   background: color-mix(in srgb, var(--canvas) 48%, transparent);
 }
+html.dark .app-background {
+  filter: brightness(0.68) saturate(0.9);
+}
+html.dark .app.has-background .main {
+  background: color-mix(in srgb, var(--canvas) 70%, transparent);
+}
+html.dark .app.has-background .sidebar {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+}
+html.dark .app.has-background .toolbar {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+html.dark .app.has-background .tabs {
+  background: color-mix(in srgb, var(--canvas) 62%, transparent);
+}
+html.dark .app.has-background .list-header {
+  background: color-mix(in srgb, var(--canvas) 62%, transparent);
+}
 .sidebar {
   width: 220px;
   min-width: 220px;
