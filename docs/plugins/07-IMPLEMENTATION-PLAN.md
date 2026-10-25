@@ -13,7 +13,7 @@
 | M2 ExtensionRegistry 与标准事件 | M1 | ContextMenu、Info、Preview、Decoration、Search、Toolbar、Hooks、Themes、Settings |
 | M3 ContentHost 与 Connection | M1–M2 | VFS 或全宽 iframe 二分支导航、标签与生命周期 |
 | M4 VFS/离线缓存 | M1–M3 | MountRegistry、Provider 读写流、Pin、同步、冲突处理 |
-| M5 SDK/官方插件 | M2–M4 | 标准 Handler、流式 API、云盘及 Git 等 Provider |
+| M5 SDK/官方插件 | M1–M4 | `std::io` 与可选 Tokio IO、TLS/Transport Adapter、云盘及 Git Provider |
 | M6 发布验收 | 全部 | 跨平台格式、静态检查、单元/集成/E2E、安全与性能基准 |
 
 ## 2. M0 · 协议合同
@@ -31,6 +31,7 @@
 - 单独实现可信 `PermissionPolicy`：`project_event`、`authorize_call`、`audit_response`。Scope 绑定 PluginInstance、SessionId、ResourceRef、实际资源类型和操作。
 - 统一 `permissions.metadata.enabled` 管理文件与文件夹基础属性；文件、目录的读取、创建、删除、重命名与写入权限按真实对象类型核验。
 - ResourceBroker 封装文件列表/Metadata、流式 Reader/Writer、网络 HTTP/TCP、命令、存储、密钥和任务生命周期。大文件使用有界缓冲。
+Core TCP 必须让同一连接的读和写独立推进，并支持半关闭、取消、流回收和统一网络 IP 审核；异步 IPC Handler 可以同时等待并收到 Broker Response。
 - Core 生成标准事件候选 Context 后由 PermissionPolicy 按 grant/Scope 做字段投影；自定义菜单和 UI 通过同一 Broker 按需申请资源。
 - Stream/Handle/Task 随 OperationScope、插件实例和取消/关闭事件撤销；强制防路径逃逸、符号链接、替换竞态、跨账户及重复提交。
 
@@ -76,7 +77,12 @@
 
 ## 7. M5 · SDK 和官方插件
 
-- Rust SDK 对外暴露 FileReader/FileWriter、`stat_batch`、网络 HTTP/TCP、任务、存储、凭据、VFS 与 UI 封装；不要求开发者理解底层 Buffer/Proxy 生命周期。
+- SDK 默认提供 `FileReader: Read+Seek`、`FileWriter: Write+Seek`、`TcpStream: Read+Write`、`HttpResponse: Read`，保留 `stat_batch`、任务、存储、凭据、VFS/UI，隐藏底层 IPC/共享缓冲。`FileWriter` 必须显式 `commit`。
+- Cargo 可选 Feature `tokio-io` 提供 `AsyncFileReader/AsyncFileWriter/AsyncTcpStream/AsyncHttpResponse`，分别实现对应 Tokio `AsyncRead/AsyncWrite/AsyncSeek`；没有启用 Feature 时不引入强制 Tokio 依赖或启动运行时。
+- 新增真正异步的 Native IPC 请求多路复用、`poll_*` 状态/Waker、限额缓冲、取消、背压、Deadline 和 Scope 失效清理；严禁在 `poll_*` 中调用阻塞同步 RPC。
+- Core TCP 支持 clone/split、双向并发、短写、半关闭与 Close；协议库可在 SDK TCP 流上叠加同步/异步 TLS 和 STARTTLS，并验证证书、主机名。
+- HTTP 保持高层 SDK Client 和 FileReader 精确句柄上传，补充通用 `Read` / `AsyncRead` 请求体与同步/异步 HTTP 响应流。
+- 提供 ZIP 标准流、SMB 自定义 Transport、Tokio `io::copy`、异步 TCP 和 TLS/STARTTLS 的可编译示例。第三方库若强制使用原生 `std::fs::File`/`std::net::TcpStream`，须自行寻找可注入 Backend，SDK 不伪造底层句柄。
 - UI SDK 用 MessagePort 访问批准的 Bridge API，提供稳定 Init/Close/Navigation 与用户交互请求；禁止宿主 DOM/Tauri 直通。
 - Archive、GPG、Git、Everything、Office/Data Preview/Info、Vista/Win11 Themes、Google Drive、WebDAV、OpenList、SMB 等官方实现使用相同合同和测试。
 - Git 历史提供 VFS；网盘提供 Connection+VFS；纯账户管理可以只提供 iframe Connection；Info 与 Preview 的内置/插件结果通过同一 Registry 和 DTO 合并。
@@ -86,9 +92,11 @@
 1. Windows/macOS/Linux 运行 Rust fmt、clippy、测试及 UI typecheck/build；提交前执行本地适用测试，CI 检查跨平台覆盖。
 2. E2E 测试每个 `extensions` 类型的注册、触发、授权拒绝、超时、禁用、卸载、恢复和错误提示。
 3. 性能基准覆盖单文件、100/1000 多选、10 个并发插件、冷热 Metadata 缓存、右键菜单首帧/增量合并 p50/p95/p99、慢/离线 VFS、5 GiB 以上流和数千文件目录。
+同时验证 Tokio Worker 不因同步 IPC 阻塞、TCP 全双工无读写互锁、同步/异步缓冲有界，记录两类 IO 吞吐、内存峰值与取消延迟。
 4. 安全负面测试覆盖非法 Connection 导航、非插件所属 iframe/mount、文件/目录越权、命令/网络越权、Symlink、Token 泄露、Session 重放与缓存误授权。
+包含直接 OS Socket 旁路、DNS 解析后 IP/IPv6/内网访问、证书验证/STARTTLS、Scope 过期的 Tokio Pending 任务、未提交 FileWriter 回滚及跨进程 Handle 重放。
 5. 核对文档、Schema、SDK、Core 和官方插件合同一致；只有实际验证的任务才能标记完成。
 
 ## 完成定义
 
-Manifest 只有 `extensions` 一个扩展注册对象；PermissionPolicy 与 Core 业务层解耦；标准 Info/Preview/Decoration 一次事件包含获准标准 Context；自定义菜单和 iframe 使用按需 ResourceBroker；**连接点击只能进入 VFS 或完全替换右侧的插件 iframe**；所有跨平台、安全、性能和同步验收有可复现结果。
+Manifest 只有 `extensions` 一个扩展注册对象；PermissionPolicy 与 Core 业务层解耦；标准 Info/Preview/Decoration 一次事件包含获准标准 Context；自定义菜单和 iframe 使用按需 ResourceBroker；**连接点击只能进入 VFS 或完全替换右侧的插件 iframe**；所有跨平台、安全、性能和同步验收有可复现结果；SDK 的默认同步 `std::io` 与可选 Tokio IO 使用同一 Core PermissionPolicy 和 ResourceBroker。

@@ -18,6 +18,7 @@
 `fiex://mount/<mountId>/<encoded-relative-path>` 是 Core 产生并解析的应用内 URI。mountId 由 Core 分配，mount 绑定 PluginInstance、可选 connectionId 和 VFS Provider ID；插件不能选择 scheme、复用其他账户 Mount，或通过 nodeId 映射宿主绝对路径。
 
 Provider 以 `vfs.list/stat/openRead/readStream/closeRead/writeFile/search` 等方法服务 Core。每页返回：
+Provider 可以使用 SDK 同步标准 `Read/Write/Seek` 或启用 `tokio-io` 使用异步流，实现对远端文件树的协议传输。两者均使用 Core 授权的 Files/HTTP/TCP，而不是通过原生 Socket 绕过 Broker。
 
 ```json
 {
@@ -66,6 +67,7 @@ Core 为每个 VFS 节点维护 `remoteRevision`、`downloadRevision`、`baselin
 ## 5. 上传与冲突
 
 `vfs.writeFile({mountId,nodeId,source,size,ifRevision})` 代表带版本条件的上传意图。Core 先对本地脏内容生成**不可变快照**并为该精确源建立临时只读授权。Provider 借 SDK 的 FileReader 流式上传，不能获得快照所在目录的广泛读权限。
+可选 Tokio 异步 Provider 使用同一精确文件快照的 AsyncFileReader，Scope、revision、冲突校验不可因异步任务而放宽。
 
 - **WebDAV**：优先强 ETag / If-Match CAS；缺乏强保证时拒绝危险的静默覆盖。
 - **Google Drive**：版本/ETag 与 resumable upload 会话严格绑定，依据服务端确认的 Range 重试。

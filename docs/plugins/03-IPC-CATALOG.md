@@ -5,6 +5,7 @@
 Native 插件常驻沙箱进程与 Core 使用双向、异步 JSON-RPC 2.0：`id` 关联请求与响应，`method` 表示调用，`params` 受版本化 Schema 约束；支持取消、错误数据、deadline、流会话和多个并发 in-flight request。对文件块使用有界 IPC buffer 或可回收共享窗口，不把大文件 base64 放进单条 JSON。
 
 任何 Provider 回调等待期间都允许向 Core 发起 `host.*` 请求并收到返回。收发循环与 dispatch 不能持锁等待其正在处理的业务请求完成。
+同步 `Read/Write/Seek` 与可选 Tokio `AsyncRead/AsyncWrite/AsyncSeek` 是 SDK IO Trait，不是两套宿主文件系统。Core Broker 都按相同的 `{pluginInstance,handle,session,scope,requestId}` 审核。异步流通过多路并发 Request/Response 唤醒 Future，不得在 `poll_read/poll_write` 内执行阻塞同步 RPC。流式传输支持背压、取消、EOF 与回收。
 
 ## 2. Core → Plugin 事件
 
@@ -76,6 +77,7 @@ Preview 的事件采用相同 ResourceContext，响应为 PreviewView；Decorati
 | `host.fs.mkdir` | `parentRef,name` | `folders.create` |
 | `host.fs.remove` / `host.fs.rename` | 目标、源与目标 | 按真实文件/目录类型验证对应权限 |
 | `host.net.http.*` / `host.net.tcp.*` | Host、域名、端口、流 | 已批准 Network 目标 |
+| `host.net.tcp.shutdown` | `stream,direction=write/read/both` | Owner、Scope、连接状态及 TCP 半关闭权限 |
 | `host.process.run` | 受限制命令与参数 | 单独高风险 Commands 授权 |
 | `host.storage.*` / `host.secret.*` | 插件命名空间键 | 进程身份与 Secret Broker |
 | `host.ui.open` | 有效 interactionId 与 PanelSpec | 通用用户交互 UI，不替代 Connection 导航 |
@@ -84,6 +86,15 @@ Preview 的事件采用相同 ResourceContext，响应为 PreviewView；Decorati
 `statBatch` 默认目标批次限额为 256（由 Schema 和压测校准），按输入顺序返回 `{results:[{ref,metadata? ,error?}]}`，每项要么 Metadata 要么错误。Core 在授权之后读取有效的 Explorer/VFS Metadata 缓存，响应之前再次审核；缓存不持有授权。批量无权项目不得泄露名称、大小、真实路径或未批准的枚举信息。
 
 **区别**：Core 向一个虚拟文件树 Provider 查询其自己管理的云端节点 `vfs.stat`，不是让该插件主动访问宿主本地文件的 `host.fs.stat`。两者都走受信任 Core Broker 的身份/边界检查。
+
+### 5.1 文件与网络流的统一 IPC 语义
+
+- 文件 `openRead/read/seek/closeRead` 绑定目标文件的只读 Handle；`beginWrite/write/seekWrite/commit/abort` 是写入事务。同步与 Tokio 异步 SDK 使用相同 Core Handle/Grant；`flush` 不等于 `commit`。
+- TCP `open/readBytes/writeBytes/shutdown/close` 支持**同一连接上的读和写独立推进**。阻塞读不能持有排斥写入的共同锁；同方向并发操作必须排序或显式禁止帧交错。
+- `shutdown(write)` 向对端发送 FIN，`close` 清理句柄并取消在途操作。EOF 返回 0，短读/短写须符合标准 IO Trait；撤权/取消/连接关闭必须及时终止等待并产生错误。
+- 网络 `open` 先验证插件目标 Host Grant，再验证解析后实际连接的 IP、端口及 IPv4/IPv6/环回/私网规则；HTTP 跳转每一跳独立审核。两种网络流的 Grant 一致。
+- HTTP 请求和响应使用有界分块；Core `FileReader` 的精确只读 Handle 可直接上传，通用同步 `Read` / Tokio `AsyncRead` 请求体由新的受限流 Session、背压与取消实现，绝不整文件 JSON 化。
+- TLS 和 STARTTLS 由插件在 SDK TCP 字节流上完成端到端协议，Core 不必解密 TLS；SDK 高层 HTTP 由 Core 执行证书和主机名验证。
 
 ## 6. VFS 数据协议
 
@@ -125,3 +136,4 @@ Core 对所有已激活插件并发查询，保持常驻插件进程；原生菜
 ## 8. Session 与错误
 
 每个消息有不可复用的会话标识，资源 Handle 绑定插件实例和 Session；关闭、权限撤销、插件重启、导航或取消都会使旧 Scope 失效。标准错误包括 `invalid_params`、`method_not_found`、`permission_denied`、`conflict`、`cancelled`、`deadline_exceeded`、`unavailable`。拒绝要可追踪，不能把权限失败假装成空目录。
+异步 Pending IO 在 Scope/Handle 失效时必须被唤醒并返回失败，禁止残留永远 Pending 的 Future。

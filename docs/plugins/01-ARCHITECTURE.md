@@ -18,7 +18,7 @@ Fiex Desktop / Sidebar / TabHost
          [grants, session scope, resource identity, DTO projection]
     |
     +-- Native Plugin Process
-         +-- Rust SDK (files/http/tcp/vfs/ui/task)
+         +-- Rust SDK (std IO + opt-in tokio-io / files/http/tcp/vfs/ui/task)
          +-- Plugin-owned HTML iframe (MessagePort → authorized bridge)
 ```
 
@@ -63,12 +63,14 @@ ContentHost 将 VFS 与 PluginView 作为一等导航视图，统一支持后退
 ## 5. 并发与性能
 
 - Native RPC 必须支持双向、可重入、request-id 关联和取消；多个扩展 Handler 并发执行，禁止锁跨越 await 导致嵌套请求死锁。
+- SDK 默认使用标准同步 `Read/Write/Seek`，可选 `tokio-io` 提供真正非阻塞的 `AsyncRead/AsyncWrite/AsyncSeek`。异步 IPC 支持 Waker、取消、背压；Core TCP 的读写独立推进，不允许阻塞读独占写锁。
+- 两类 SDK 流共用 Core Broker、Grant、Scope、StreamRegistry，不等于 `std::fs::File` 或原生 `TcpStream`，不能伪造原始 OS Handle。
 - 标准 Context 优先使用 Core 已有的 Explorer/VFS Metadata 缓存，但无论缓存命中与否都要按插件独立审核 Grant、Scope 与输出字段。
 - 自定义 ContextMenu 多选调用 `host.fs.statBatch`；原生菜单先绘制，动态项在有效 MenuSession 内异步合并。保持鼠标悬停与键盘焦点，丢弃过期响应。
 - 所有流、列表、菜单与 iframe 消息有字节数、并发数、期限与取消上限。远端 VFS 性能波动不能冻结宿主 UI。
 
 ## 6. Core 内部模块划分
 
-`plugin_host/{manifest,registry,runtime,rpc,sessions}`、`permission_policy/{grants,scope,projection,decision}`、`broker/{fs,net,process,buffer}`、`content_host/{navigation,explorer,plugin_view}`、`vfs/{router,mounts,views}`、`remote/{connections,cache,sync,conflicts}`、`info/{mod,metadata,audio,video,types}`、`preview/{mod,text,image,audio,video,pdf,fallback}`。
+`plugin_host/{manifest,registry,runtime,rpc,sessions}`、`permission_policy/{grants,scope,projection,decision}`、`broker/{fs,net,process,buffer,stream_scheduler}`、`content_host/{navigation,explorer,plugin_view}`、`vfs/{router,mounts,views}`、`remote/{connections,cache,sync,conflicts}`、`info/{mod,metadata,audio,video,types}`、`preview/{mod,text,image,audio,video,pdf,fallback}`。
 
 允许代码模块根据职责拆分，但 Registry、PermissionPolicy 和业务 Provider 不互相硬编码插件 ID。

@@ -22,6 +22,7 @@ Manifest
 - ContextMenu 与自定义 HTML UI 根据真实用户操作，按需通过 SDK 申请文件 Metadata 或读写权限。
 - Connection 点击的导航返回值**只有两种**：`vfs`（Core ExplorerView）或 `pluginView`（完整替换右侧主内容区的插件 iframe）。Connection 本身不提供 VFS，网盘必须独立注册 `extensions.vfs`。
 - Core 统一管理 VFS identity、流式读写、缓存、离线固定、同步、冲突；UI 插件不能越过受控 MessagePort 和 ResourceBroker。
+- Rust SDK 默认实现同步标准 `Read/Write/Seek`；可选 `tokio-io` Feature 提供非阻塞 `AsyncRead/AsyncWrite/AsyncSeek` 文件、TCP、HTTP 流。均通过 Core Broker 与 PermissionPolicy，不伪造 OS Socket 或文件句柄。
 
 ## M0 · 契约
 
@@ -34,6 +35,7 @@ Manifest
 - [ ] 构建独立可信的 PermissionPolicy，统一审核 Grant、Scope、事件字段与资源请求/返回值。
 - [ ] 文件与文件夹共用 `permissions.metadata.enabled`；文件/目录其他操作权限逐项分离。
 - [ ] 文件、网络、命令、存储、凭据与任务 API 全部经 Core Broker；支持有界流和作用域撤销。
+- [ ] Core TCP 支持独立读写、真正全双工、半关闭、取消与连接回收；校验 DNS、实际 IP、IPv4/IPv6 与网络目标。
 - [ ] 覆盖跨文件、跨目录、软链接、会话重放和权限撤销负面测试。
 
 ## M2 · 扩展事件
@@ -61,7 +63,9 @@ Manifest
 
 ## M5 · SDK 与官方插件
 
-- [ ] Rust SDK 提供高级 Files、Reader/Writer、statBatch、HTTP/TCP、VFS、UI 和 Task，隐藏底层 IPC/缓冲管理。
+- [ ] 默认 SDK 文件/TCP/HTTP 资源实现 `std::io::{Read,Write,Seek}` 的适用 Trait，可直接注入 ZIP 和第三方自定义 Transport。
+- [ ] 可选 `tokio-io` Feature 提供非阻塞异步文件/TCP/HTTP 流；实现异步 IPC Request/Response、Waker、背压、取消，未启用时不强制依赖 Tokio。
+- [ ] TCP 支持第三方库基于 SDK 流实现 TLS/STARTTLS；HTTP 保留高级 Client、精确 FileReader 句柄上传、通用同步/异步 Body 流。
 - [ ] UI SDK 通过受限 MessagePort/iframe Bridge 访问已授权服务；主内容 PluginView 和其他 Panel 共用沙箱边界。
 - [ ] 官方 Archive/GPG/Git/Everything/Preview/Info/主题与云盘插件完整联调。
 
@@ -70,6 +74,7 @@ Manifest
 - [ ] Windows/macOS/Linux 完成 fmt、clippy、typecheck、单元、集成和 E2E。
 - [ ] 测试多选 100/1000、10 个插件并发、冷热缓存、慢速 VFS、右键首帧及合并的 p50/p95/p99。
 - [ ] 测试 5 GiB+ 流、海量目录、离线与冲突、越权资源/导航、Session 撤销、iframe 沙箱和跨账号隔离。
+- [ ] 测试 ZIP 标准 IO、SMB Transport、Tokio `io::copy`、TCP 并发读写、TLS/STARTTLS、EOF/半关闭，以及 async poll 非阻塞与撤权唤醒。
 - [ ] 每项检查在代码、Schema、文档和真实运行结果一致后再勾选。
 
 ## 规范目录

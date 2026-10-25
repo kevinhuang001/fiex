@@ -51,9 +51,12 @@ Explorer/VFS Metadata 缓存与文件内容缓存保存的是数据，**不是�
 ## 6. 进程、命令与网络隔离
 
 - Native 插件不直接读取本地文件目录、密钥或任意联网；HTTP/TCP 请求由 Core 检查已批准的 host/domain/IP、DNS、重定向、TLS 异常和本地/保留地址策略。
+SDK 的同步或 Tokio Trait **不是**沙箱：平台进程隔离仍须禁止插件直接使用原生 OS Socket，网络只能经 Core Broker。
 - HTTP 提供高层请求及限额流，TCP 保留低层字节流；使用同一网络授权体系。
+插件可以用 rustls 等 TLS 实现叠加 SDK 的获准 TCP 流，支持 STARTTLS；Core 的网络域名/IP 授权与插件 TLS 证书检查依旧必须执行。高层 HTTP 不得默认禁用服务器证书验证。
 - 外部命令执行为更高风险的单独授权；`git/gpg/es` 一类程序可有插件沙箱以外的副作用，Core 不得仅因为文件 Scope 存在就允许任意命令。
 - 插件流程里的 Stream/Handle/Task 均绑定真实进程实例、Session 和所准资源；取消或禁用后拒绝新请求并回收旧句柄。
+Tokio Pending Future 的等待任务在撤权/关闭/超时后必须被唤醒并失败；`spawn_blocking` 或后台任务不得延长过期授权。
 
 ## 7. Connection PluginView 的隔离
 
@@ -68,3 +71,4 @@ Core 保留窗口与 TabHost 控制权。插件不能覆盖左侧栏/原生标�
 ## 9. 安全验收
 
 覆盖用户只授权 A 却请求 B、选中目录范围逃逸、软链接及符号链接切换、MenuSession 重放、失效 read 引用、批量混合权限、离线 VFS 跨账户、悬空 iframe、恶意 MessagePort 调用、网络重定向、未经批准的命令执行、冲突覆盖和断电恢复。使用真实 Windows/macOS/Linux 负面测试，并记录可重现的失败结果。
+测试原生 Socket 网络绕行、读锁阻塞写、跨 Session Handle 重用、异步取消唤醒和 TLS 证书校验失败；Windows/macOS/Linux 的沙箱能力应分别验证。

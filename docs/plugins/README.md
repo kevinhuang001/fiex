@@ -12,6 +12,7 @@
 6. VFS 由 Core 分配 `mountId` 并统一处理导航、流式读写、缓存、离线固定、冲突及恢复。它不等于操作系统的 FUSE/WinFsp 挂载。
 7. Info 和 Preview 的内置与第三方实现使用同一 Registry、领域模型与渲染器：内置直接构建领域响应，第三方经 IPC 反序列化为同样的 Rust 类型。
 8. Native 插件是受限独立进程；插件 HTML 使用 sandboxed iframe 和 MessagePort。插件 UI 不直接触达宿主 DOM、Tauri API、Keyring 或原始本地路径。
+9. SDK 默认符合 `std::io::{Read,Write,Seek}`，可选 `tokio-io` 提供非阻塞异步文件、TCP、HTTP 流。两种 API 均使用 Core Broker，不能替换写死的原生 `std::net::TcpStream`/`std::fs::File`。
 
 ## 二、典型路径
 
@@ -22,6 +23,7 @@
 | Decoration | 目录及当前可见成员 ref、获准 Metadata | 返回当前可见成员的角标/样式 |
 | Connection 点击 | connectionId + 用户 InteractionSession | 返回 **VFS** 或 **全宽主内容 iframe** 的导航目标 |
 | 自定义插件 UI | 插件选择要显示的页面 | 通过 UI Bridge/SDK 请求本次授权范围内的数据 |
+| 第三方 IO 库 | 标准 `Read/Write/Seek` 或可注入 Transport | 可直接传入 SDK 文件/TCP 流；异步库可选 `tokio-io`，权限仍由 Core 管理 |
 
 ## 三、规范索引
 

@@ -82,6 +82,7 @@ InfoRenderer 只接收统一 `InfoResponse`，根据 sections 的稳定 ID、排
 Preview Provider 返回 Core 标准 `PreviewView`：可以是由 Core 支持的文本、图像、媒体、PDF、受限 HTML 预览描述或需要 Core 资源代理的 View。选择预览渲染器必须先完成类型匹配、权限审核和受信任资源 URL 生成。
 
 对于大文件，Core 提供有界只读流和 Range/Seek 资源代理，关闭/切换标签回收句柄，不能整文件编码成 JSON，也不得把本地绝对路径直接交给插件 iframe。
+标准 Context 的受限文件资源可由 SDK 表现为同步 `FileReader: Read+Seek`，也可在可选 `tokio-io` Feature 下转换为 `AsyncFileReader: AsyncRead+AsyncSeek`；两者绑定同一只读 Scope，不授予额外内容权限。
 
 ## 6. 与自定义 UI 的边界
 
@@ -95,4 +96,5 @@ Connection 点击产生的 `PluginView` 则由 ContentHost 占满右侧主内容
 - 没有 `files.read` 时，不提供 read 资源；即便插件构造假 resourceId 也不能读取。
 - 内置与第三方 Info/Preview 使用相同 DTO 并由同一组件渲染。
 - 文本、图片、音频、视频、PDF、fallback 的模块独立测试；5 GiB 以上资源不会整文件载入内存。
+支持 Tokio 的 Preview Provider 在取消、切换标签、撤权后必须唤醒 Pending 读取并关闭 Core Handle，不得后台继续扫描旧文件。
 - 本地、云盘 VFS、只读 Git VFS 的文件资源身份、撤权、取消、资源替换与超时行为一致。
