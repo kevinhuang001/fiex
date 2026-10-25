@@ -577,29 +577,23 @@ fn candidates(resource: &ResourceDescriptor) -> Vec<Candidate> {
             crate::plugin_permissions::allowed(&plugin.id, &declared, "metadata").unwrap_or(false);
         let read_allowed = crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read")
             .unwrap_or(false);
-        let Some(contributions) = plugin
-            .extensions
-            .get("info")
-            .and_then(serde_json::Value::as_array)
-        else {
+        let Some(contribution) = plugin.extensions.get("info") else {
             continue;
         };
-        for contribution in contributions {
-            let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
-            if !rules.matches(&resource.ext, &resource.mime, resource.is_dir) {
-                continue;
-            }
-            values.push(Candidate::Plugin {
-                plugin: Box::new(plugin.clone()),
-                contribution: contribution.clone(),
-                priority: contribution
-                    .get("priority")
-                    .and_then(serde_json::Value::as_u64)
-                    .unwrap_or(50) as i64,
-                metadata_allowed,
-                read_allowed,
-            });
+        let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
+        if !rules.matches(&resource.ext, &resource.mime, resource.is_dir) {
+            continue;
         }
+        values.push(Candidate::Plugin {
+            plugin: Box::new(plugin.clone()),
+            contribution: contribution.clone(),
+            priority: contribution
+                .get("priority")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(50) as i64,
+            metadata_allowed,
+            read_allowed,
+        });
     }
     values.sort_by_key(|candidate| std::cmp::Reverse(candidate.priority()));
     values

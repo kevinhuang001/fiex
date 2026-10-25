@@ -32,15 +32,13 @@
   "extensions": {
     "connections": [{ "id": "cloud", "title": "Example Cloud", "icon": "cloud" }],
     "vfs": [{ "id": "remote", "title": "Cloud Files" }],
-    "info": [
-      {
-        "id": "cloud-info",
-        "title": "Remote Properties",
-        "match": { "mimeTypes": ["image/*"], "kinds": ["file"] }
-      }
-    ],
+    "info": {
+      "id": "cloud-info",
+      "title": "Remote Properties",
+      "match": { "mimeTypes": ["image/*"], "kinds": ["file"] }
+    },
     "decorations": {
-      "match": { "markers": [".cloud"] },
+      "match": { "contains": [".cloud"] },
       "priority": 50
     }
   }
@@ -51,19 +49,19 @@
 
 ## 2. 扩展点
 
-| 字段                      | 类型                            | 触发与返回                                                                         |
-| ------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
-| `extensions.contextMenus` | `true` 或 `{match}`             | 用户右键 → `contextMenu.resolve` 返回扁平 items；点 action → `contextMenu.execute` |
-| `extensions.decorations`  | `{match?,priority?}`            | 每次切换目录 → 标准可见成员 Context → `decorations.resolve`（仅动态）              |
-| `extensions.info`         | `[{id,title,match?,priority?}]` | 用户打开简介 → 标准 InfoContext → InfoResponse                                     |
-| `extensions.preview`      | 同上                            | 用户打开预览 → 标准 PreviewContext → PreviewView                                   |
-| `extensions.connections`  | `[{id,title,icon?}]`            | 添加连接 + 或侧栏点击 → `connection.create/open` → NavigationTarget                |
-| `extensions.vfs`          | `[{id,title}]`                  | VFS Broker 的 mount/list/stat/read/write 处理器                                    |
-| `extensions.search`       | `[{id,title,command?}]`         | 当前限定 root 的 `search.query`                                                    |
-| `extensions.toolbar`      | `[{id,title,icon?,command}]`    | 点击工具栏按钮时执行命令                                                           |
-| `extensions.themes`       | `[{id,title,entry}]`            | 加载经过审核的主题资产                                                             |
-| `extensions.settings`     | `[{id,title,command?}]`         | 插件设置入口                                                                       |
-| `extensions.hooks`        | `[{id,event,priority?}]`        | 文件操作生命周期中的特定钩子                                                       |
+| 字段                      | 类型                          | 触发与返回                                                                         |
+| ------------------------- | ----------------------------- | ---------------------------------------------------------------------------------- |
+| `extensions.contextMenus` | `true` 或 `{match}`           | 用户右键 → `contextMenu.resolve` 返回扁平 items；点 action → `contextMenu.execute` |
+| `extensions.decorations`  | `{match?,priority?}`          | 每次切换目录 → 标准可见成员 Context → `decorations.resolve`（仅动态）              |
+| `extensions.info`         | `{id,title,match?,priority?}` | 用户打开简介 → 标准 InfoContext → InfoResponse                                     |
+| `extensions.preview`      | 同上                          | 用户打开预览 → 标准 PreviewContext → PreviewView                                   |
+| `extensions.connections`  | `[{id,title,icon?}]`          | 添加连接 + 或侧栏点击 → `connection.create/open` → NavigationTarget                |
+| `extensions.vfs`          | `[{id,title}]`                | VFS Broker 的 mount/list/stat/read/write 处理器                                    |
+| `extensions.search`       | `[{id,title,command?}]`       | 当前限定 root 的 `search.query`                                                    |
+| `extensions.toolbar`      | `[{id,title,icon?,command}]`  | 点击工具栏按钮时执行命令                                                           |
+| `extensions.themes`       | `[{id,title,entry}]`          | 加载经过审核的主题资产                                                             |
+| `extensions.settings`     | `[{id,title,command?}]`       | 插件设置入口                                                                       |
+| `extensions.hooks`        | `[{id,event,priority?}]`      | 文件操作生命周期中的特定钩子                                                       |
 
 注册不等于权限。插件可注册多个 Info/Preview/VFS 来源，其 ID 在该插件内唯一。Manifest 不声明每个具体 iframe 页面，也不需要标记某个扩展点是 UI 还是服务。
 
@@ -85,10 +83,10 @@
 | `mimeTypes`  | 全部                  | 精确值或 `type/*`，例如 `text/*`、`image/*`；`*/*` 匹配全部 |
 | `kinds`      | 全部                  | `file` / `directory`（兼容 `dir`）                          |
 | `contains`   | **仅 `decorations`**  | 目录或其祖先包含 `.git`、`package.json` 等名称              |
-| `selection`  | **仅 `contextMenus`** | 精确的选中项数量，例如 `1`、`2`；缺省表示不限               |
+| `selection`  | **仅 `contextMenus`** | `single`（恰好 1 项）、`multi`（≥2 项）或 `any`（默认）     |
 
 - 同一字段内是 OR，不同字段之间是 AND；
-- **`info` / `preview`**：用户在单个资源上打开简介/预览时评估；不会对多选逐个调用。每个 contribution 独立 `match`，不匹配就不会启动/调用该插件；
+- **`info` / `preview`**：用户在单个资源上打开简介/预览时评估；不会对多选逐个调用。`extensions.info` / `extensions.preview` 是**单个对象**，不匹配就不会启动/调用该插件；
 - **`decorations`**：先看 `contains`（目录或祖先），再看当前可见成员中是否至少有一项满足 `extensions/mimeTypes/kinds`；都不满足时不调用插件；
 - **`contextMenus`**：先看 `selection` 与选中数量，再对选中集合中的任意一项判断 `extensions/mimeTypes/kinds`；不满足时插件不会收到菜单请求；
 - `contains` 和 `selection` 是扩展点专用字段；放在其他扩展点会被 manifest 校验拒绝；
@@ -145,7 +143,7 @@ Core 校验目标 mount 的插件/连接归属、iframe 资源所属包、当前
 
 ## 7. 动态右键菜单
 
-`extensions.contextMenus` 可写 `true` 或 `{match}`。`match.selection` 是 contextMenus 特有的：写一个正整数表示“恰好选中几项”时才调用，例如 `1` 表示仅单选、`2` 表示恰好两项；缺省表示不限。菜单项由插件实时返回 `{items:[...]}`，每项可为 `action/submenu/separator`；子菜单使用 `parentId`，不内嵌脚本。Core 按 owner、Session、item ID 和资源身份校验执行。菜单请求里不含完整文件内容，具体读取/写入必须在有效用户操作中经 Broker 授权。
+`extensions.contextMenus` 可写 `true` 或 `{match}`。`match.selection` 是 contextMenus 特有的：`single` 仅单选、`multi` 仅多选、`any`/缺省不限制数量。菜单项由插件实时返回 `{items:[...]}`，每项可为 `action/submenu/separator`；子菜单使用 `parentId`，不内嵌脚本。Core 按 owner、Session、item ID 和资源身份校验执行。菜单请求里不含完整文件内容，具体读取/写入必须在有效用户操作中经 Broker 授权。
 
 ## 8. Schema 验收
 

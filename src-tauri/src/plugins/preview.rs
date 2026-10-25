@@ -170,33 +170,31 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
         if !plugin.enabled || !plugin.approved || !plugin.backend_available {
             continue;
         }
-        let Some(contributions) = plugin.extensions.get("preview").and_then(Value::as_array) else {
+        let Some(contribution) = plugin.extensions.get("preview") else {
             continue;
         };
-        for contribution in contributions {
-            let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
-            if !rules.matches(&ext, mime, is_dir) {
-                continue;
-            }
-            let Some(contribution_id) = contribution.get("id").and_then(Value::as_str) else {
-                continue;
-            };
-            values.push(Provider {
-                id: format!("plugin:{}:{}", plugin.id, contribution_id),
-                provider: plugin.name.clone(),
-                title: contribution
-                    .get("title")
-                    .and_then(Value::as_str)
-                    .unwrap_or(&plugin.name)
-                    .into(),
-                priority: contribution
-                    .get("priority")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(50) as i64,
-                builtin: None,
-                plugin: Some((plugin.id.clone(), contribution_id.into())),
-            });
+        let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
+        if !rules.matches(&ext, mime, is_dir) {
+            continue;
         }
+        let Some(contribution_id) = contribution.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        values.push(Provider {
+            id: format!("plugin:{}:{}", plugin.id, contribution_id),
+            provider: plugin.name.clone(),
+            title: contribution
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or(&plugin.name)
+                .into(),
+            priority: contribution
+                .get("priority")
+                .and_then(Value::as_u64)
+                .unwrap_or(50) as i64,
+            builtin: None,
+            plugin: Some((plugin.id.clone(), contribution_id.into())),
+        });
     }
     values.sort_by_key(|provider| std::cmp::Reverse(provider.priority));
     values
@@ -387,17 +385,15 @@ fn open_plugin(
         crate::plugin_permissions::allowed(plugin_id, &declared, "metadata").unwrap_or(false);
     let read_allowed =
         crate::plugin_permissions::allowed(plugin_id, &declared, "files.read").unwrap_or(false);
-    let contributions = plugin
+    let contribution = plugin
         .extensions
         .get("preview")
-        .and_then(Value::as_array)
-        .ok_or("plugin does not register preview providers")?;
+        .ok_or("plugin does not register a preview provider")?;
     let local_path = Path::new(local);
     let ext = extension(local_path);
-    let contribution = contributions
-        .iter()
-        .find(|entry| entry.get("id").and_then(Value::as_str) == Some(contribution_id))
-        .ok_or("unknown preview provider")?;
+    if contribution.get("id").and_then(Value::as_str) != Some(contribution_id) {
+        return Err("unknown preview provider".into());
+    }
     let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
     if !rules.matches(&ext, &mime_for(&ext), local_path.is_dir()) {
         return Err("preview provider does not match this file type".into());

@@ -166,6 +166,7 @@ export function Preview({
   const current = candidates.find((candidate) => candidate.id === providerId)
   const provider = resolved?.provider || current?.provider || 'Fiex'
   const fromPlugin = providerId?.startsWith('plugin:')
+  const providerLabel = fromPlugin ? provider : 'Fiex 内置'
 
   return (
     <Modal
@@ -291,7 +292,7 @@ export function Preview({
                   onClick={() => setMenuOpen((value) => !value)}
                 >
                   {fromPlugin ? <Puzzle size={13} /> : <Monitor size={13} />}
-                  <span>{provider}</span>
+                  <span>{providerLabel}</span>
                   <ChevronUp
                     size={12}
                     style={{ transform: menuOpen ? undefined : 'rotate(180deg)' }}
@@ -319,8 +320,9 @@ export function Preview({
                           <Monitor size={14} />
                         )}
                         <span className="preview-source-copy">
-                          <span className="preview-source-title">{candidate.title}</span>
-                          <span className="preview-source-provider">{candidate.provider}</span>
+                          <span className="preview-source-title">
+                            {candidate.id.startsWith('plugin:') ? candidate.provider : 'Fiex 内置'}
+                          </span>
                         </span>
                         {providerId === candidate.id && <Check size={14} />}
                       </button>

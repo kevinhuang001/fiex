@@ -259,11 +259,11 @@ fn validate_match(
         }
     }
     if let Some(selection) = object.get("selection") {
-        let count = selection
-            .as_u64()
-            .ok_or("match.selection must be a positive integer")?;
-        if count == 0 || count > 256 {
-            return Err("match.selection must be between 1 and 256".into());
+        let selection = selection
+            .as_str()
+            .ok_or("match.selection must be any, single or multi")?;
+        if !matches!(selection, "any" | "single" | "multi") {
+            return Err("match.selection must be any, single or multi".into());
         }
     }
     Ok(())
@@ -297,18 +297,13 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         }
     }
     for key in ["info", "preview"] {
-        let Some(items) = value.get(key) else {
+        let Some(item) = value.get(key) else {
             continue;
         };
-        let items = items
-            .as_array()
-            .ok_or_else(|| format!("extensions.{key} must be an array"))?;
-        for (index, item) in items.iter().enumerate() {
-            let object = item
-                .as_object()
-                .ok_or_else(|| format!("extensions.{key}[{index}] must be an object"))?;
-            validate_match(object.get("match"), false, false)?;
-        }
+        let object = item
+            .as_object()
+            .ok_or_else(|| format!("extensions.{key} must be an object"))?;
+        validate_match(object.get("match"), false, false)?;
     }
     for key in ["vfs", "connections", "toolbar"] {
         let Some(items) = value.get(key) else {
@@ -426,18 +421,19 @@ mod contribution_tests {
         }))
         .is_ok());
         assert!(validate_extensions(&serde_json::json!({
-            "contextMenus": {"match": {"selection": 1}}
+            "contextMenus": {"match": {"selection": "single"}}
         }))
         .is_ok());
         assert!(validate_extensions(&serde_json::json!({
-            "info": [{"id": "x", "title": "X", "match": {"mimeTypes": ["text/*"]}}]
+            "info": {"id": "x", "title": "X", "match": {"mimeTypes": ["text/*"]}}
         }))
         .is_ok());
         for invalid in [
-            serde_json::json!({"decorations": {"match": {"selection": 1}}}),
+            serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
             serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
-            serde_json::json!({"info": [{"id": "x", "title": "X", "match": {"contains": [".git"]}}]}),
-            serde_json::json!({"contextMenus": {"match": {"selection": 0}}}),
+            serde_json::json!({"info": {"id": "x", "title": "X", "match": {"contains": [".git"]}}}),
+            serde_json::json!({"info": [{"id": "x", "title": "X"}]}),
+            serde_json::json!({"contextMenus": {"match": {"selection": "many"}}}),
         ] {
             assert!(validate_extensions(&invalid).is_err(), "{invalid}");
         }

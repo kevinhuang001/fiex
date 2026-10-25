@@ -1836,10 +1836,3 @@ body.dragging-file * {
   white-space: nowrap;
   font-size: 11px;
 }
-.preview-source-provider {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 9px;
-}
