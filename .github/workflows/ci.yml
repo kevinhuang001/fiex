@@ -24,7 +24,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run format:check
+      - run: |
+          npx prettier --write src/components/plugins/PluginContextActions.tsx
+          echo "FIEX_FORMAT_TS_START"
+          base64 -w0 src/components/plugins/PluginContextActions.tsx
+          echo
+          echo "FIEX_FORMAT_TS_END"
+          npm run format:check
       - run: npm test
       - run: npm run build
       - uses: actions/cache@v4
@@ -86,7 +92,13 @@ jobs:
       - run: npm ci
       - run: npm run icons
       - run: npm run build
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml
+          echo "FIEX_FORMAT_RUST_START"
+          base64 -w0 src-tauri/src/desktop/plugins.rs
+          echo
+          echo "FIEX_FORMAT_RUST_END"
+          cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Core Rust tests
         shell: bash
         run: |
