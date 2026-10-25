@@ -255,22 +255,6 @@ pub fn media_sections(path: &Path) -> Vec<InfoSection> {
     sections
 }
 
-fn extension_matches(contribution: &Value, ext: &str, is_dir: bool) -> bool {
-    let Some(values) = contribution.get("extensions").and_then(Value::as_array) else {
-        return !is_dir;
-    };
-    if values.is_empty() {
-        return !is_dir;
-    }
-    values.iter().filter_map(Value::as_str).any(|value| {
-        let value = value
-            .trim_start_matches("*.")
-            .trim_start_matches('.')
-            .to_ascii_lowercase();
-        value == "*" || value == ext
-    })
-}
-
 fn contribution_rows(value: &Value) -> Vec<InfoRow> {
     let Some(rows) = value.get("rows").and_then(Value::as_array) else {
         return Vec::new();
@@ -403,6 +387,9 @@ fn metadata_section(
     if !extension.is_empty() {
         rows.push(row("扩展名", extension));
     }
+    if let Some(mime) = projected.and_then(|value| value.mime.clone()) {
+        rows.push(row("MIME", mime));
+    }
     if let Some(modified) = projected.and_then(|value| value.modified).or_else(|| {
         metadata
             .as_ref()
@@ -463,6 +450,7 @@ fn projected_metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
         .extension()
         .and_then(|value| value.to_str())
         .map(|value| value.to_ascii_lowercase());
+    let mime = extension.as_deref().map(crate::plugin_match::mime_for);
     Some(ResourceMetadata {
         name: name.into(),
         kind: if metadata.is_dir() {
@@ -472,6 +460,7 @@ fn projected_metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
         }
         .into(),
         extension,
+        mime,
         size: (!metadata.is_dir()).then_some(metadata.len()),
         modified: metadata
             .modified()
@@ -504,6 +493,7 @@ struct ResourceDescriptor {
     reference: ResourceRef,
     is_dir: bool,
     ext: String,
+    mime: String,
     name: String,
 }
 
@@ -514,6 +504,7 @@ impl ResourceDescriptor {
             reference: resource_ref(display),
             is_dir: local.is_dir(),
             ext: extension(local),
+            mime: crate::plugin_match::mime_for(&extension(local)),
             name: name_of(local),
         }
     }
@@ -594,7 +585,8 @@ fn candidates(resource: &ResourceDescriptor) -> Vec<Candidate> {
             continue;
         };
         for contribution in contributions {
-            if !extension_matches(contribution, &resource.ext, resource.is_dir) {
+            let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
+            if !rules.matches(&resource.ext, &resource.mime, resource.is_dir) {
                 continue;
             }
             values.push(Candidate::Plugin {
@@ -692,6 +684,7 @@ fn resolve_plugin(
         "resource": {
             "name": name,
             "extension": extension,
+            "mime": context.resource.metadata.as_ref().and_then(|value| value.mime.clone()),
             "kind": if local.is_dir() { "directory" } else { "file" },
         },
     });
@@ -790,22 +783,6 @@ pub fn file_info(path: &str) -> Vec<InfoSection> {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn extension_matching_handles_wildcards_and_directories() {
-        assert!(extension_matches(&json!({}), "txt", false));
-        assert!(!extension_matches(&json!({}), "txt", true));
-        assert!(extension_matches(
-            &json!({"extensions": ["*.ZIP", "rar"]}),
-            "zip",
-            false
-        ));
-        assert!(!extension_matches(
-            &json!({"extensions": ["zip"]}),
-            "rar",
-            false
-        ));
-    }
 
     #[test]
     fn contribution_rows_accept_objects_and_pairs() {

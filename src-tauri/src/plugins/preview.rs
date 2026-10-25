@@ -153,22 +153,6 @@ fn builtin_candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Builtin> {
     values
 }
 
-fn matches(contribution: &Value, ext: &str) -> bool {
-    let Some(values) = contribution.get("extensions").and_then(Value::as_array) else {
-        return true;
-    };
-    if values.is_empty() {
-        return true;
-    }
-    values.iter().filter_map(Value::as_str).any(|value| {
-        let value = value
-            .trim_start_matches("*.")
-            .trim_start_matches('.')
-            .to_ascii_lowercase();
-        value == "*" || value == ext
-    })
-}
-
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
     let mut values = builtin_candidates(&ext, mime, is_dir)
@@ -190,7 +174,8 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
             continue;
         };
         for contribution in contributions {
-            if !matches(contribution, &ext) {
+            let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
+            if !rules.matches(&ext, mime, is_dir) {
                 continue;
             }
             let Some(contribution_id) = contribution.get("id").and_then(Value::as_str) else {
@@ -246,13 +231,15 @@ fn resource_ref(display: &str) -> ResourceRef {
 
 fn metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
     let value = fs::symlink_metadata(local).ok()?;
+    let extension = Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
     Some(ResourceMetadata {
         name: name.into(),
         kind: if value.is_dir() { "directory" } else { "file" }.into(),
-        extension: Path::new(name)
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(|value| value.to_ascii_lowercase()),
+        mime: extension.as_deref().map(crate::plugin_match::mime_for),
+        extension,
         size: (!value.is_dir()).then_some(value.len()),
         modified: value
             .modified()
@@ -411,7 +398,8 @@ fn open_plugin(
         .iter()
         .find(|entry| entry.get("id").and_then(Value::as_str) == Some(contribution_id))
         .ok_or("unknown preview provider")?;
-    if !matches(contribution, &ext) {
+    let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
+    if !rules.matches(&ext, &mime_for(&ext), local_path.is_dir()) {
         return Err("preview provider does not match this file type".into());
     }
     let name = name_of(local_path);
@@ -576,16 +564,6 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.contains("invalid PreviewView") || error.contains("unsupported"));
-    }
-
-    #[test]
-    fn extension_matching_accepts_wildcards() {
-        assert!(matches(&serde_json::json!({}), "zip"));
-        assert!(matches(
-            &serde_json::json!({"extensions":["*.ZIP","rar"]}),
-            "zip"
-        ));
-        assert!(!matches(&serde_json::json!({"extensions":["zip"]}), "rar"));
     }
 
     #[test]

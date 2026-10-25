@@ -27,6 +27,8 @@ pub struct ResourceMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extension: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modified: Option<i64>,

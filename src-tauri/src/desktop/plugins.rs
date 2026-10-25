@@ -532,12 +532,26 @@ fn context_menu_sessions() -> &'static std::sync::Mutex<ContextMenuRegistry> {
         std::sync::OnceLock::new();
     SESSIONS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
-fn menu_allowed(plugin_id: &str) -> bool {
-    crate::plugin_host::catalog().iter().any(|p| {
-        p.id == plugin_id
-            && p.enabled
-            && p.extensions.get("contextMenus") == Some(&serde_json::Value::Bool(true))
+fn menu_rules(plugin_id: &str) -> Option<crate::plugin_match::MatchRules> {
+    crate::plugin_host::catalog().iter().find_map(|plugin| {
+        if plugin.id != plugin_id || !plugin.enabled {
+            return None;
+        }
+        match plugin.extensions.get("contextMenus") {
+            Some(serde_json::Value::Bool(true)) => Some(Default::default()),
+            Some(value @ serde_json::Value::Object(_)) => Some(
+                value
+                    .get("match")
+                    .map(crate::plugin_match::MatchRules::from_value)
+                    .unwrap_or_default(),
+            ),
+            _ => None,
+        }
     })
+}
+
+fn menu_allowed(plugin_id: &str) -> bool {
+    menu_rules(plugin_id).is_some()
 }
 fn menu_response_valid(
     result: &serde_json::Value,
@@ -641,11 +655,17 @@ fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
         .and_then(|value| value.modified().ok())
         .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|value| value.as_secs());
+    let extension = Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
     serde_json::json!({
         "name": name,
         "kind": if is_directory { "directory" } else { "file" },
         "isDirectory": is_directory,
-        "extension": Path::new(name).extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase(),
+        "extension": extension,
+        "mime": crate::plugin_match::mime_for(&extension),
         "size": metadata.as_ref().map(|value| value.len()),
         "modified": modified,
         "readOnly": metadata.as_ref().map(|value| value.permissions().readonly()),
@@ -696,6 +716,27 @@ pub(crate) async fn plugin_context_menu_resolve(
             || directory.is_empty()
         {
             return Err("menu plugin or selection not allowed".into());
+        }
+        let rules = menu_rules(&plugin_id).ok_or("menu plugin or selection not allowed")?;
+        let selection_matches = paths.iter().any(|path| {
+            let metadata = context_menu_resource_metadata(path);
+            rules.matches(
+                metadata
+                    .get("extension")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(""),
+                metadata
+                    .get("mime")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(""),
+                metadata
+                    .get("isDirectory")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+            )
+        });
+        if !selection_matches {
+            return Ok(serde_json::json!({"menuSessionId": null, "items": []}));
         }
         let session_id = crate::mounts::new_id()?;
         let selection_refs = paths

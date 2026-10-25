@@ -24,7 +24,7 @@ Native 插件常驻沙箱进程与 Core 使用双向、异步 JSON-RPC 2.0：`id
 | `toolbar.invoke` / `settings.invoke` | `interactionId,context`                              | 对应扩展的业务结果             |
 | `hooks.invoke`                       | `event,resourceRef,operationSession`                 | 受约束的 HookResponse          |
 
-`info.resolve`、`preview.open`、`decorations.resolve` 是**预定义上下文的标准事件**。Core 在请求前通过 ContextBuilder 准备候选 Metadata/受限文件访问引用，PermissionPolicy 针对插件 Grant 和 Scope 裁剪后交付。一次 Core→Plugin 请求与一次业务返回即可完成不需要读取大量文件字节的标准处理。
+`info.resolve`、`preview.open`、`decorations.resolve` 是**预定义上下文的标准事件**。三者的 manifest 注册都使用 `match` 作为包含谓词；`decorations` 只有动态模式，方法名固定，不需要在 manifest 写 `method`。Core 在请求前通过 ContextBuilder 准备候选 Metadata/受限文件访问引用，PermissionPolicy 针对插件 Grant 和 Scope 裁剪后交付。一次 Core→Plugin 请求与一次业务返回即可完成不需要读取大量文件字节的标准处理。
 
 `contextMenu.resolve` 是**自定义交互**：默认只给 opaque refs；插件确有需要才通过 `host.fs.stat/statBatch` 申请。所有受保护字段必须由 PermissionPolicy 授权后返回。
 

@@ -232,13 +232,64 @@ pub fn valid_id(id: &str) -> bool {
 }
 
 /// Extensions declare provider eligibility, never resource permissions.
+fn validate_match(value: Option<&Value>) -> Result<(), String> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let object = value.as_object().ok_or("match must be an object")?;
+    for key in ["extensions", "mimeTypes", "kinds", "markers"] {
+        let Some(items) = object.get(key) else {
+            continue;
+        };
+        let items = items
+            .as_array()
+            .ok_or_else(|| format!("match.{key} must be an array"))?;
+        if items.iter().any(|item| !item.is_string()) {
+            return Err(format!("match.{key} entries must be strings"));
+        }
+    }
+    Ok(())
+}
+
 pub fn validate_extensions(value: &Value) -> Result<(), String> {
     if !value.is_null() && !value.is_object() {
         return Err("extensions must be an object".into());
     }
     if let Some(enabled) = value.get("contextMenus") {
-        if !enabled.is_boolean() {
-            return Err("extensions.contextMenus must be a boolean".into());
+        match enabled {
+            Value::Bool(_) => {}
+            Value::Object(object) => validate_match(object.get("match"))?,
+            _ => return Err("extensions.contextMenus must be true or {match}".into()),
+        }
+    }
+    if let Some(decorations) = value.get("decorations") {
+        match decorations {
+            Value::Bool(_) => {}
+            Value::Object(object) => {
+                for forbidden in ["mode", "method", "scope", "rules"] {
+                    if object.contains_key(forbidden) {
+                        return Err(format!(
+                            "extensions.decorations.{forbidden} is removed; decorations are dynamic and use decorations.resolve"
+                        ));
+                    }
+                }
+                validate_match(object.get("match"))?;
+            }
+            _ => return Err("extensions.decorations must be true or {match,priority}".into()),
+        }
+    }
+    for key in ["info", "preview"] {
+        let Some(items) = value.get(key) else {
+            continue;
+        };
+        let items = items
+            .as_array()
+            .ok_or_else(|| format!("extensions.{key} must be an array"))?;
+        for (index, item) in items.iter().enumerate() {
+            let object = item
+                .as_object()
+                .ok_or_else(|| format!("extensions.{key}[{index}] must be an object"))?;
+            validate_match(object.get("match"))?;
         }
     }
     for key in ["vfs", "connections", "toolbar"] {

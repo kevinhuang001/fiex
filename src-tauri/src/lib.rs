@@ -30,6 +30,8 @@ pub mod plugin_info;
 pub mod plugin_installer;
 #[path = "plugins/ipc.rs"]
 pub mod plugin_ipc;
+#[path = "plugins/match_rules.rs"]
+pub mod plugin_match;
 #[path = "plugins/net.rs"]
 pub mod plugin_net;
 #[path = "plugins/permissions.rs"]

@@ -25,13 +25,25 @@ Manifest 使用单一的 `extensions`：
     "files": { "read": { "enabled": true } }
   },
   "extensions": {
-    "info": [{ "id": "audio", "title": "音频信息", "extensions": ["mp3", "flac"] }],
-    "preview": [{ "id": "audio", "title": "音频预览", "extensions": ["mp3", "flac"] }]
+    "info": [
+      {
+        "id": "audio",
+        "title": "音频信息",
+        "match": { "mimeTypes": ["audio/*"], "kinds": ["file"] }
+      }
+    ],
+    "preview": [
+      {
+        "id": "audio",
+        "title": "音频预览",
+        "match": { "mimeTypes": ["audio/*"], "kinds": ["file"] }
+      }
+    ]
   }
 }
 ```
 
-插件仅注册对应扩展处理器。Core 已定义 InfoContext/PreviewContext 的输入；不要求在 Manifest 再声明 `inputs` 或单独“Context Provider”类型。
+插件仅注册对应扩展处理器。`match` 是包含谓词：不满足时 Core 不会调用该插件；它支持 `extensions`、`mimeTypes`、`kinds`、`markers`。Core 已定义 InfoContext/PreviewContext 的输入；不要求在 Manifest 再声明 `inputs` 或单独“Context Provider”类型。
 
 ## 3. 标准输入 Context
 
