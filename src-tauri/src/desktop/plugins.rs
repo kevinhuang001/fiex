@@ -295,13 +295,6 @@ pub(crate) fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<S
     })
 }
 #[tauri::command]
-pub(crate) fn plugin_dynamic_panel_asset(
-    plugin_id: String,
-    entry: String,
-) -> Result<String, String> {
-    crate::plugin_host::plugin_view_asset(&plugin_id, &entry)
-}
-#[tauri::command]
 pub(crate) fn plugin_panel_asset(plugin_id: String, panel_id: String) -> Result<String, String> {
     crate::plugin_host::panel_asset(&plugin_id, &panel_id).inspect_err(|error| {
         record_plugin_error(&plugin_id, "panel", &format!("{panel_id}: {error}"))
@@ -667,4 +660,37 @@ pub(crate) async fn plugin_context_menu_execute(
         }
         Ok::<serde_json::Value, String>(result)
     }).await.map_err(|error| error.to_string())?
+}
+
+#[cfg(test)]
+mod context_menu_session_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn menu_rejects_nested_legacy_fields_and_unknown_parent() {
+        assert!(menu_response_valid(&json!({"items": [
+            {"id":"root","kind":"submenu","title":"Root"},
+            {"id":"open","kind":"action","title":"Open","parentId":"root"}
+        ]})).unwrap().contains("open"));
+        for invalid in [
+            json!({"items":[{"id":"a","title":"A","kind":"action","when":"true"}]}),
+            json!({"items":[{"id":"a","title":"A","kind":"action","children":[]}]}),
+            json!({"items":[{"id":"a","title":"A","kind":"action","parentId":"missing"}]}),
+            json!({"items":[{"id":"a","title":"A","kind":"submenu","parentId":"a"}]}),
+            json!({"items":[{"id":"a","title":"A","kind":"action"},{"id":"a","title":"B","kind":"action"}]}),
+        ] {
+            assert!(menu_response_valid(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn submenu_cannot_be_executed_as_an_action() {
+        let valid = menu_response_valid(&json!({"items":[
+            {"id":"group","title":"Group","kind":"submenu"},
+            {"id":"act","title":"Act","kind":"action","parentId":"group"}
+        ]})).unwrap();
+        assert!(!valid.contains("group"));
+        assert!(valid.contains("act"));
+    }
 }
