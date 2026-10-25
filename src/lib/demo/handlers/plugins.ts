@@ -36,24 +36,34 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       if (!plugin?.enabled || plugin.extensions?.contextMenus !== true) {
         throw new Error('Context menu provider is not active')
       }
-      const selection = Array.isArray(a.paths) ? a.paths.filter((v): v is string => typeof v === 'string') : []
+      const selection = Array.isArray(a.paths)
+        ? a.paths.filter((v): v is string => typeof v === 'string')
+        : []
       if (selection.length === 0) throw new Error('No selected resources')
       const selectionNames = selection.map((path) => path.split(/[\\/]/).pop() || '')
       const entries = [
-        ...(pluginId === 'org.test.fixture' ? [
-          { id: 'fixture.root', title: '测试插件', kind: 'submenu' },
-          { id: 'fixture.panel', title: '信息面板', kind: 'action', parentId: 'fixture.root' },
-          { id: 'fixture.action', title: '检查文件', kind: 'action', parentId: 'fixture.root' },
-        ] : []),
-        ...(pluginId === 'org.example.checksum' && a.isDirectory !== true ? [
-          { id: 'checksum.calculate', title: '查看校验和', kind: 'action' },
-        ] : []),
+        ...(pluginId === 'org.test.fixture'
+          ? [
+              { id: 'fixture.root', title: '测试插件', kind: 'submenu' },
+              { id: 'fixture.panel', title: '信息面板', kind: 'action', parentId: 'fixture.root' },
+              { id: 'fixture.action', title: '检查文件', kind: 'action', parentId: 'fixture.root' },
+            ]
+          : []),
+        ...(pluginId === 'org.example.checksum' && a.isDirectory !== true
+          ? [{ id: 'checksum.calculate', title: '查看校验和', kind: 'action' }]
+          : []),
         ...(pluginId === 'org.fiex.archive'
-          ? selection.length === 1 && /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0])
+          ? selection.length === 1 &&
+            /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0])
             ? [{ id: 'archive.extract', title: '解压缩', kind: 'action' }]
             : [
                 { id: 'archive.compress', title: '压缩', kind: 'submenu' },
-                { id: 'archive.advanced', title: '高级压缩…', kind: 'action', parentId: 'archive.compress' },
+                {
+                  id: 'archive.advanced',
+                  title: '高级压缩…',
+                  kind: 'action',
+                  parentId: 'archive.compress',
+                },
               ]
           : []),
         ...(pluginId === 'org.fiex.gpg'
@@ -71,7 +81,9 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const menuSessionId = crypto.randomUUID()
       demoMenuSessions.set(menuSessionId, {
         pluginId,
-        actions: new Set(entries.filter((entry) => entry.kind === 'action').map((entry) => entry.id)),
+        actions: new Set(
+          entries.filter((entry) => entry.kind === 'action').map((entry) => entry.id),
+        ),
       })
       return { menuSessionId, items: entries }
     }
@@ -84,18 +96,30 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         throw new Error('Invalid or already used menu session')
       }
       const panelId = itemId
-      if (itemId === 'fixture.panel' || itemId === 'archive.advanced' || itemId.startsWith('gpg.')) {
-        const title = itemId === 'fixture.panel' ? '信息面板'
-          : itemId === 'archive.advanced' ? '高级压缩'
-          : itemId === 'gpg.encrypt' ? 'GPG 加密'
-          : itemId === 'gpg.decrypt' ? 'GPG 解密'
-          : itemId === 'gpg.sign' ? 'GPG 签名' : '验证签名'
+      if (
+        itemId === 'fixture.panel' ||
+        itemId === 'archive.advanced' ||
+        itemId.startsWith('gpg.')
+      ) {
+        const title =
+          itemId === 'fixture.panel'
+            ? '信息面板'
+            : itemId === 'archive.advanced'
+              ? '高级压缩'
+              : itemId === 'gpg.encrypt'
+                ? 'GPG 加密'
+                : itemId === 'gpg.decrypt'
+                  ? 'GPG 解密'
+                  : itemId === 'gpg.sign'
+                    ? 'GPG 签名'
+                    : '验证签名'
         return {
           kind: 'panel',
           assetPath: 'demo-plugin-panel',
           panelId,
           title,
-          size: itemId === 'fixture.panel' ? { width: 620, height: 560 } : { width: 520, height: 420 },
+          size:
+            itemId === 'fixture.panel' ? { width: 620, height: 560 } : { width: 520, height: 420 },
         }
       }
       return { ok: true }
@@ -593,6 +617,14 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     case 'plugin_secret_available':
       return true
+    case 'connection_open': {
+      // The browser fixture has one WebDAV connection and it registers a VFS,
+      // so Core's two-branch navigation resolves to the remote Explorer root.
+      if (String(a.id || '') === 'demo-webdav') {
+        return { kind: 'vfs', path: 'fiex://mount/demo-webdav/' }
+      }
+      throw new Error('Unknown demo connection')
+    }
 
     default:
       return notHandled
