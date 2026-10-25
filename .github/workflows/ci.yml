@@ -140,13 +140,10 @@ jobs:
             "version": "1.0.0",
             "runtime": { "protocolVersion": "3.0" },
             "extensions": {
-              "toolbar": [
-                {
-                  "id": "fixture.toolbar",
-                  "title": "Toolbar panel",
-                  "panel": { "entry": "ui/dist/index.html", "title": "Toolbar" }
-                }
-              ]
+              "toolbar": {
+                "title": "Toolbar panel",
+                "panel": { "entry": "ui/dist/index.html", "title": "Toolbar" }
+              }
             }
           }
           JSON

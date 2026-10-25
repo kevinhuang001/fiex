@@ -27,17 +27,12 @@ fn main() {
 
         let mut count = 0usize;
         for key in ["toolbar", "preview"] {
-            if let Some(items) = manifest.extensions.get(key).and_then(Value::as_array) {
-                for item in items {
-                    let Some(panel_id) = item.get("id").and_then(Value::as_str) else {
-                        continue;
-                    };
-                    if item.get("panel").is_some() {
-                        let html = plugin_host::panel_html(&id, panel_id)
-                            .unwrap_or_else(|error| panic!("{id}/{panel_id}: {error}"));
-                        check_panel(&id, panel_id, &html);
-                        count += 1;
-                    }
+            if let Some(item) = manifest.extensions.get(key).and_then(Value::as_object) {
+                if item.get("panel").is_some() {
+                    let html = plugin_host::panel_html(&id, &id)
+                        .unwrap_or_else(|error| panic!("{id}: {error}"));
+                    check_panel(&id, &id, &html);
+                    count += 1;
                 }
             }
         }
