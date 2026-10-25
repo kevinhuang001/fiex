@@ -101,6 +101,8 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
         { id: 'vscode', name: 'VS Code' },
         { id: 'cursor', name: 'Cursor' },
       ]
+    case 'plugin_file_dialog':
+      return '/demo/background.svg'
     case 'remote_connections':
       return demoConnections
     case 'update_connection_session': {

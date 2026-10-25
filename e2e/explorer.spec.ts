@@ -255,6 +255,19 @@ test('opens the Trash inside Fiex', async ({ page }) => {
   await expect(page.getByText('Old draft.txt', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible()
 })
+test('appearance can set and remove a background image', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
+  await page.getByRole('button', { name: '选择图片…' }).click()
+  await expect(page.locator('.app-background')).toHaveCount(0)
+  await page.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.locator('.app.has-background')).toHaveCount(1)
+  await expect(page.getByRole('slider', { name: '背景不透明度' })).toHaveCount(0)
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
+  await page.getByRole('button', { name: '移除', exact: true }).click()
+  await page.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.locator('.app.has-background')).toHaveCount(0)
+})
+
 test('settings are custom controls and theme persists', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '深色', exact: true }).click()

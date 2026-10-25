@@ -527,10 +527,15 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         return []
       })
     }
-    case 'plugin_file_dialog':
+    case 'plugin_file_dialog': {
+      const extensions = Array.isArray(a.extensions) ? a.extensions : []
+      if (a.mode === 'openFile' && extensions.includes('png')) {
+        return '/demo/background.svg'
+      }
       if (a.mode === 'saveFile') return '/Users/kevin/Documents/Archive.zip'
       if (a.mode === 'openFile') return '/Users/kevin/Documents/Archive.zip'
       return '/Users/kevin/Documents'
+    }
     case 'plugin_prepare_local_install':
       return {
         ticket: 'demo-local-install',

@@ -1836,3 +1836,28 @@ body.dragging-file * {
   white-space: nowrap;
   font-size: 11px;
 }
+
+.settings-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-pill-button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.settings-pill-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.settings-pill-button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}

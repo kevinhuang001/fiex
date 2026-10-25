@@ -131,6 +131,8 @@ export interface Preferences {
   ide: string
   theme: 'system' | 'light' | 'dark'
   themeId?: string
+  backgroundImage: string
+  backgroundOpacity: number
   fontSize: number
   startPage: StartPage
   displayIgnore: string[]

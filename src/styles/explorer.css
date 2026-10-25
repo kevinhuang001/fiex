@@ -1,9 +1,46 @@
 .app {
+  position: relative;
+  isolation: isolate;
   display: flex;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   user-select: none;
+}
+.app-background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.app.has-background .sidebar {
+  background: color-mix(in srgb, var(--surface) 52%, transparent);
+}
+.app.has-background .main {
+  background: color-mix(in srgb, var(--canvas) 58%, transparent);
+}
+.app.has-background .toolbar {
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+.app.has-background .tabs {
+  background: color-mix(in srgb, var(--canvas) 48%, transparent);
+  backdrop-filter: blur(14px);
+}
+.app.has-background .path-toolbar {
+  background: transparent;
+}
+.app.has-background .tab.active {
+  background: color-mix(in srgb, var(--canvas) 40%, transparent);
+}
+.app.has-background .list-header {
+  background: color-mix(in srgb, var(--canvas) 45%, transparent);
+}
+.app.has-background .statusbar {
+  background: color-mix(in srgb, var(--canvas) 48%, transparent);
 }
 .sidebar {
   width: 220px;

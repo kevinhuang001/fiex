@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
+import { call } from '@/lib/api'
 import type { Preferences } from '@/lib/types'
-import { Eye, History, Home, Palette, SlidersHorizontal, Sun } from 'lucide-react'
+import {
+  Eye,
+  History,
+  Home,
+  Image as ImageIcon,
+  Palette,
+  SlidersHorizontal,
+  Sun,
+} from 'lucide-react'
 
 export function AppearanceSettings({
   prefs,
@@ -12,6 +21,19 @@ export function AppearanceSettings({
   update: (p: Partial<Preferences>) => void
 }) {
   const [themes, setThemes] = useState<Theme[]>([])
+  const [backgroundError, setBackgroundError] = useState('')
+  const pickBackground = async () => {
+    setBackgroundError('')
+    try {
+      const path = await call<string | null>('plugin_file_dialog', {
+        mode: 'openFile',
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
+      })
+      if (path) update({ backgroundImage: path })
+    } catch (error) {
+      setBackgroundError(String(error))
+    }
+  }
   useEffect(() => {
     let alive = true
     const refresh = () => {
@@ -71,6 +93,59 @@ export function AppearanceSettings({
             </div>
           </div>
         </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-icon" style={{ background: '#ec4899' }}>
+              <ImageIcon size={15} />
+            </span>
+            背景图片
+          </div>
+          <div className="settings-row-control">
+            <div className="settings-inline-actions">
+              <button
+                type="button"
+                className="settings-pill-button"
+                onClick={() => void pickBackground()}
+              >
+                {prefs.backgroundImage ? '更换图片…' : '选择图片…'}
+              </button>
+              {prefs.backgroundImage && (
+                <button
+                  type="button"
+                  className="settings-pill-button ghost"
+                  onClick={() => update({ backgroundImage: '' })}
+                >
+                  移除
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        {prefs.backgroundImage && (
+          <div className="settings-row">
+            <div className="settings-row-label">
+              <span className="settings-row-icon" style={{ background: '#f59e0b' }}>
+                <SlidersHorizontal size={15} />
+              </span>
+              背景不透明度
+            </div>
+            <div className="settings-row-control settings-slider">
+              <input
+                aria-label="背景不透明度"
+                type="range"
+                min="5"
+                max="100"
+                step="5"
+                value={Math.round(prefs.backgroundOpacity * 100)}
+                onChange={(event) =>
+                  update({ backgroundOpacity: Number(event.target.value) / 100 })
+                }
+              />
+              <span>{Math.round(prefs.backgroundOpacity * 100)}%</span>
+            </div>
+          </div>
+        )}
+        {backgroundError && <p className="settings-inline-error">{backgroundError}</p>}
         <div className="settings-row">
           <div className="settings-row-label">
             <span className="settings-row-icon" style={{ background: '#64748b' }}>

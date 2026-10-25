@@ -14,7 +14,7 @@ import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
 import { SshTerminalView } from '@/components/ssh/SshTerminalView'
 import { useAppController } from '@/hooks/useAppController'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
-import { call, native } from '@/lib/api'
+import { asset, call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
 import { useEffect, useRef } from 'react'
@@ -28,6 +28,13 @@ export default function App() {
   const terminalName =
     app.left.connections.find((connection) => connection.id === terminalId)?.name || 'SSH'
   const autostarted = useRef(false)
+  const backgroundPath = app.prefs.backgroundImage
+  const backgroundUrl = backgroundPath
+    ? native && !backgroundPath.includes('://')
+      ? asset(backgroundPath)
+      : backgroundPath
+    : ''
+  const backgroundImage = backgroundUrl ? `url("${backgroundUrl.replace(/"/g, '%22')}")` : undefined
 
   useEffect(() => {
     const navigate = (event: Event) => {
@@ -72,10 +79,17 @@ export default function App() {
   }, [app.prefs.fontSize])
   return (
     <div
-      className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''}`}
+      className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''} ${backgroundUrl ? 'has-background' : ''}`}
       data-platform={app.platform}
       style={{ '--label-size': '11px' } as CSSProperties}
     >
+      {backgroundUrl && (
+        <div
+          className="app-background"
+          aria-hidden="true"
+          style={{ backgroundImage, opacity: app.prefs.backgroundOpacity }}
+        />
+      )}
       <Sidebar
         x={{ ...app.x, locations: app.left.locations, connections: app.left.connections }}
         prefs={app.prefs}
