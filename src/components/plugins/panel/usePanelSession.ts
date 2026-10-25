@@ -11,6 +11,8 @@ export interface PluginPanelRequest {
   anchor?: { x: number; y: number }
   source?: 'toolbar' | 'contextMenu' | 'preview'
   size?: { width: number; height: number }
+  /** A package asset resolved and checked by Core after a dynamic menu action. */
+  assetPath?: string
   /** Set when this panel renders a file preview for a plugin previewer. */
   preview?: { path: string; name: string; extension: string }
 }

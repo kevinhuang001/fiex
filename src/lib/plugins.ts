@@ -21,8 +21,7 @@ export interface PluginContribution {
   icon?: string
   command?: string
   panel?: PluginPanel
-  children?: PluginContribution[]
-}
+ }
 export interface PluginInfoContribution {
   id: string
   title: string
@@ -69,7 +68,7 @@ export interface PluginInfo {
 export interface PluginExtensions {
   connections?: Array<{ id: string; title: string; fields: PluginField[] }>
   toolbar?: PluginContribution[]
-  contextMenus?: PluginContribution[]
+  contextMenus?: boolean
   search?: Array<{ id: string; title: string; icon?: string }>
   settings?: PluginField[]
   hooks?: Array<{
@@ -104,7 +103,7 @@ export function pluginCategories(extensions?: PluginExtensions, commands: string
   const present = PLUGIN_CATEGORIES.filter(({ id }) => {
     if (id === 'commands') return false
     const value = extensions?.[id as keyof PluginExtensions]
-    return Array.isArray(value) && value.length > 0
+    return (Array.isArray(value) && value.length > 0) || value === true
   }).map(({ id }) => id)
   if (!present.length && commands.length) present.push('commands')
   return present
