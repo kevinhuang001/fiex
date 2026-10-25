@@ -1,318 +1,98 @@
-# 08 · Preview 与 Info Provider 统一协议（目标设计）
+# 08 · Info 与 Preview 的统一 Provider 合同
 
-> **待实施设计**。本篇规定内置预览、第三方预览、普通文件元数据、音频/视频解析结果与第三方 Info 贡献点共用同一套抽象和调用/渲染路径。实现任务见仓库根目录 `ROADMAP.md`；不表示代码已实现。Manifest schemaVersion 2 / Native IPC 3.0 / UI Bridge 2.0 是计划版本。
+## 1. Registry 与业务类型
 
-## 1. 必须遵守的设计决定
-
-1. **内置功能也是 Provider**。代码高亮文本、图片、音频、视频、PDF、未知类型 fallback 由 Core 注册为独立的 `PreviewProvider`；基础文件与文件夹元数据、音频属性、视频属性由 Core 注册为独立的 `InfoProvider`。内置每个来源都必须有独立实现模块和测试，不能只是同一个文件中数个分支。外部插件按相同 Surface Provider Descriptor 注册，参与同一 Registry、过滤、排序、调用生命周期、取消和错误降级。
-2. **只统一逻辑接口，不强迫统一隔离层**。内置 Provider 可作为进程内适配器调用，并使用宿主内置 React 视图；第三方 Native 使用 IPC、第三方 UI 使用已验证的沙箱 iframe。两者均接受 `ProviderContext`，返回同一类 `PreviewView` 或 `InfoResponse`；宿主 Host Adapter 负责传输差异。不可要求内置 PDF 也启动插件进程，不可允许第三方绕过 UI Bridge。
-3. **Preview 与 Info 是两个独立扩展点**。Preview 输出可交互的*展示视图*，Info 输出结构化*属性区块*；音频/视频文件可以同时命中媒体预览和媒体 Info。普通文件信息在 Info Registry 内注册为基础 Provider，不在 `FileInfoDialog` 中硬编码拼行。
-4. **不会把数据读取伪装成 metadata 权限**。普通 stat 属性是 `metadata`；解析 ID3/FLAC、MP4、MKV、媒体编码、图片 EXIF 等可能需要读取文件内容。第三方主动解析需要已批准的 `files.read.enabled` + 用户当前查看操作的精确 Scope；只有统一 `permissions.metadata.enabled` 不允许读取文件内容。内置 Core 解析器使用内部受控 FileBroker 访问，不能借此为插件扩权。
-5. **所有数据访问都由 Core Broker 控制**。Preview/Info 事件只接收 opaque `ref` 和会话信息，不附带 metadata；Provider 通过通用 `host.fs.stat` 等 IPC 再申请所需数据，不接收裸绝对路径；**具体 UI 面板不预先声明在 Manifest 中**，由插件随本次用户交互通过 IPC 提供视图描述。大文件从限额可取消的只读资源流/资源代理获取，禁止整文件 base64、任意 materialize 到插件可见路径、跨 Provider 传递原始文件句柄。
-6. **任何 Provider 失败都不应让用户失去默认体验**。Preview 按用户顺序与优先级选择，一个失败换下一个可用 Provider，最终进入始终可用的基础 fallback；Info 同时聚合多个区块，单个 Provider 失败不影响其他区块。
-
-## 2. 一个注册表，两种实现适配
-
-```mermaid
-flowchart TB
-  Resource["Core ResourceRef + scoped metadata"] --> PM["ProviderManager"]
-  PM --> PR["PreviewRegistry: descriptors, matches, ranking"]
-  PM --> IR["InfoRegistry: descriptors, fanout, ordering"]
-  PR --> BI["BuiltinAdapter (in-process)"]
-  PR --> PI["PluginAdapter (Native IPC + sandbox UI)"]
-  IR --> BI
-  IR --> PI
-  BI --> Broker["Core ResourceBroker / readonly streams"]
-  PI --> Broker
-  PR --> PH["PreviewHost: one view contract"]
-  IR --> IH["InfoHost: one sections contract"]
-  PH --> UI["Fiex Preview Window"]
-  IH --> UII["Fiex Info Dialog"]
-```
-
-Registry 接收统一 `ProviderDescriptor`，至少含 `id`、`title`、`owner`（Core 或插件身份）、`priority`、`extensions?`、`mimeTypes?`、`supportsDirectories?`。内置与插件共用 `matches`、排序、启用禁用、用户选中顺序、超时、取消、故障回退。`owner` 仅供权限校验、诊断和显示，不得参与“官方插件优先”的特判。
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant H as Preview/Info Host
-  participant R as Provider Registry
-  participant B as Resource Broker
-  participant P as Selected Provider Adapter
-  U->>H: Preview or Show Info(file)
-  H->>B: resolve immutable resource identity
-  B-->>H: resourceRef + metadata
-  H->>R: match / rank providers
-  R-->>H: ordered providers
-  H->>P: open/resolve(context, cancellation)
-  P->>B: readonly stream (if authorized)
-  B-->>P: bounded read handle
-  P-->>H: PreviewView or InfoResponse
-  H-->>U: host renders common response
-```
-
-## 2.1 Core 内多个来源必须拆成独立实现模块
-
-这里的“统一 Provider”不是只新增一个 Registry 把既有函数原样包起来，而是**物理拆分 Core 内每一个来源**，使它们可独立注册、禁用、排序、测试和替换。建议的模块结构（具体目录可根据代码库调整，职责不可合并）：
+Info 和 Preview 都支持多个内置 Provider 和多个第三方插件 Provider。Core Registry 做统一的匹配、优先级、取消、超时、失败隔离与聚合；无任何特定官方插件 ID 的业务分支。
 
 ```text
-src-tauri/src/plugins/
-  info/
-    mod.rs                    # 仅 InfoRegistry / dispatch / aggregate
-    types.rs                  # InfoContext / InfoResponse
-    metadata.rs               # core.info.metadata：基本 stat 属性
-    audio.rs                  # core.info.audio：lofty 音频信息
-    video.rs                  # core.info.video：MP4 / Matroska 视频信息
-  preview/
-    mod.rs                    # PreviewRegistry / session
-    types.rs                  # PreviewContext / PreviewView
-    resource.rs               # 受控流、seek/range、资源代理
-src/
-  components/
-    Preview.tsx               # 仅外框，移除格式判断
-    FileInfoDialog.tsx        # 仅消费 sections，不再生成 basicRows
-    preview/
-      PreviewHost.tsx         # 导航、错误、取消、回退
-      TextPreview.tsx         # core.preview.text，含代码高亮
-      ImagePreview.tsx        # core.preview.image
-      AudioPreview.tsx        # core.preview.audio
-      VideoPreview.tsx        # core.preview.video
-      PdfPreview.tsx          # core.preview.pdf
-      FallbackPreview.tsx     # core.preview.fallback
-      PluginPreview.tsx       # 第三方 panel 沙箱 Adapter
-  lib/
-    preview/registry.ts       # 所有内置/外部统一匹配和排序
-    info/registry.ts          # 仅汇总多个 Info Provider
+Built-in Info/Preview Adapter ─┐
+                                ├─ InfoResponse / PreviewView → Core Renderer
+Plugin Native RPC → deserialize ┘
 ```
 
-现在 `src-tauri/src/plugins/info.rs` 同时实现 `audio_section`、`mp4_section`、`matroska_section`、`media_sections`、`plugin_sections`；目标应分别迁移到独立模块，`InfoRegistry` 只做编排。`core.info.metadata` 不因 `core.info.audio/video` 异常消失；音频和视频各有自己的解析、匹配与失败隔离。未来新增 EXIF 等属性只需注册一个新模块。
+内置 Provider 直接构造公共 Rust 领域类型，第三方返回遵循同一 Schema 的 JSON 并由 Core 解码成**相同**的类型。UI 只渲染统一领域结果，不维护内置/外部两套响应模型。
 
-现在 `src/components/Preview.tsx` 集中处理文本、图片、音视频、PDF；目标应该把各个内容 Renderer 单独拆出，均作为 `PreviewRegistry` 的内置 Adapter 注册；`PreviewHost` 只负责宿主窗口/键盘/导航和会话。内置分模块不代表启动多个进程，保持进程内高效调度。
+Core 内置实现应分别组织在 `info/{metadata,audio,video,types}` 与 `preview/{text,image,audio,video,pdf,fallback}` 模块。Registry 只负责注册和编排；音频、视频等解析来源可独立失效、不会拖垮基本属性或其他预览类型。
 
-```mermaid
-flowchart LR
-  S["Info UI slot"] --> R["InfoRegistry"]
-  R --> M["core.info.metadata module"]
-  R --> A["core.info.audio module"]
-  R --> V["core.info.video module"]
-  R --> P["N plugin Info modules"]
-  M --> H["InfoHost: common sections"]
-  A --> H
-  V --> H
-  P --> H
-```
+## 2. 标准注册事件
 
-## 2.2 Core 输出与插件响应的审核边界
-
-无论是内置 `info::metadata/audio/video` 还是外部插件 Info，Core Host 均使用统一 `InfoResponse` 对象；不同来源不需要第二套类型。Core 收到插件的 IPC JSON 后先 Schema 解析和来源验证，变为同一 Rust 对象。**向插件交付**资源上下文的部分则必须经独立 PermissionPolicy 审核：Core 只生成含 opaque ref 的 `PreviewContext/InfoContext` 事件；Provider 再通过 `host.fs.stat` 申请，PermissionPolicy 比较唯一的 `permissions.metadata.enabled`、用户批准及事件 Scope，审核请求及 Core 最终返回的数据。它不等于授予文件读取。Core 内置 Provider 可直接使用内部资源上下文，但不能把该上下文原样返回给第三方。
-
-## 3. 通用 ProviderContext：事件与按需资源访问
-
-插件收到的只是 Core 对用户打开预览、点击 Info 等操作创建的**不含 Metadata** 的资源引用和会话：
+Manifest 使用单一的 `extensions`：
 
 ```json
 {
-  "resource": {"ref":{"mountId":"m1","nodeId":"f18"}},
-  "sessionId":"preview-session-opaque",
-  "intent":"preview",
-  "selectionCount":1
-}
-```
-
-插件在事件处理期间自行调用 `host.fs.stat({ref})` 或 `host.fs.openRead({ref})` 申请所需资源。独立 `PermissionPolicy` 校验 Manifest 请求、用户批准、当前事件/操作 Scope 和 Core 实际返回的字段与资源；随后 Core 经 IPC 返回获准的结果或 `PermissionDenied`。只有这一种申请流程，没有 Core 预先提供 metadata 的第二条通道。打开 Preview/Info 可授予本次目标适当的读取作用域；其他未选择对象不允许访问，媒体内容解析仍须 `files.read`。内置 Provider 通过 Core 内部 API 获取资源，**向 Host 返回的对象与插件响应反序列化后的 Rust 业务对象类型完全相同**。
-
-## 4. PreviewProvider —— 所有预览共用接口
-
-统一生命周期：
-
-```text
-register(descriptor) → match(resource) → rank → open(context) → PreviewView
-                                               ↳ fail/cancel → next provider → fallback
-```
-
-```typescript
-interface PreviewDescriptor {
-  id: string
-  title: string
-  extensions?: string[]
-  mimeTypes?: string[]
-  priority?: number
-  supportsDirectories?: boolean
-}
-interface PreviewContext {
-  resource: { ref: ResourceRef }
-  sessionId: string
-  intent: 'preview'
-}
-interface PreviewView {
-  // Core 内置 renderer 进程内使用；外部插件每次运行时选择 view
-  viewer: { kind: 'builtin'; id: string } | { kind: 'panel'; view: PanelViewSpec }
-  resource: ResourceRef
-  title?: string
-}
-interface PreviewProvider {
-  descriptor: PreviewDescriptor
-  match(context: PreviewContext): boolean
-  open(context: PreviewContext): Promise<PreviewView>
-  close(sessionId: string): Promise<void>
-}
-```
-
-`PreviewView.viewer.kind` 是运行时分发结果，**不是** Manifest 配置：内置 Provider 选择其已经编译的宿主 renderer；第三方 Provider 每次用户打开预览才通过 IPC 提供具体 `view`（包内 `entry` 或有界动态 HTML），由 Core 的 PanelHost 在 Preview Surface 内以沙箱 iframe 展示。Manifest 不声明 `panels`、`runtime view`，第三方不得冒用 `builtin`。
-
-| 目标内置 Provider ID | 匹配规则 | 具体实现（仅实现细节） |
-|---|---|---|
-| `core.preview.text` | 文本 MIME / 代码扩展名 | 有界 UTF 解码、代码高亮、可取消；语言检测和语法高亮位于 renderer 内 |
-| `core.preview.image` | 图片 MIME / 支持的图片格式 | 资源代理、缩放/尺寸加载事件、图片错误兜底 |
-| `core.preview.audio` | 音频 MIME | 流式资源 URL、播放器控制 |
-| `core.preview.video` | 视频 MIME | 流式资源 URL、播放器控制、尺寸适配 |
-| `core.preview.pdf` | PDF MIME | 受限 PDF Viewer 与范围请求；不整文件内存化 |
-| `core.preview.fallback` | 任意文件/文件夹 | 默认图标和最小信息展示；不可移除最后 fallback |
-
-所有预览包括插件预览均通过 `PreviewHost` 负责相同的标题、快捷键、前后文件导航、关闭、加载/错误展示、选择器和回退。Provider 只渲染视图**内容**；不得重复实现宿主导航外框。内置文本高亮与图片/音视频/pdf 通过适配器挂接，不应留在 `Preview.tsx` 的类型分支中。未知 MIME、目录、非法文件、无许可、格式不支持等均落入清晰的 fallback 流。
-
-### 4.1 Manifest 只注册预览匹配，不预配置面板
-
-```json
-{
-  "surfaces": {
-    "preview": [{
-      "id":"custom.preview","title":"自定义预览",
-      "extensions":["xyz"],"mimeTypes":["application/x-xyz"],
-      "priority":60
-    }]
+  "permissions": {
+    "metadata": {"enabled": true},
+    "files": {"read":{"enabled":true}}
+  },
+  "extensions": {
+    "info": [{"id":"audio","title":"音频信息","extensions":["mp3","flac"]}],
+    "preview": [{"id":"audio","title":"音频预览","extensions":["mp3","flac"]}]
   }
 }
 ```
 
-默认 `extensions` / `mimeTypes` 仅负责匹配。用户真正打开 Preview 后，插件在 `preview.open` 的响应中动态选择 `view.source="package"`（例如 `ui/preview.html`）或 `view.source="html"`，并可建议标题及尺寸；Core 必须把该 Panel 放进当前 PreviewHost，不能让其任意占用宿主 DOM。复杂格式检测只在获授权打开后进行有限探测，不允许自动遍历文件字节。详见 [09-RUNTIME-UI-PANELS.md](09-RUNTIME-UI-PANELS.md)。
+插件仅注册对应扩展处理器。Core 已定义 InfoContext/PreviewContext 的输入；不要求在 Manifest 再声明 `inputs` 或单独“Context Provider”类型。
 
-## 5. InfoProvider —— 所有元数据共用接口
-
-```typescript
-interface InfoDescriptor {
-  id: string
-  title: string
-  extensions?: string[]
-  mimeTypes?: string[]
-  priority?: number
-  supportsDirectories?: boolean
-  command?: string
-}
-interface InfoContext {
-  resource: { ref: ResourceRef }
-  sessionId: string
-  intent: 'info'
-}
-interface InfoRow { label: string; value: string }
-interface InfoSection {
-  id: string
-  title: string
-  rows: InfoRow[]
-}
-interface InfoResponse { sections: InfoSection[] }
-interface InfoProvider {
-  descriptor: InfoDescriptor
-  resolve(context: InfoContext): Promise<InfoResponse>
-}
-```
-
-`InfoProvider` 的上下文使用统一的资源 Snapshot（意图标记 `info`，不再另造 file-path-only 请求）。**无论 Core 还是第三方**，返回相同 `InfoResponse.sections[]`；每个区块仅接收结构化字符串数据，后续要增加 URL、布尔、尺寸或 duration 等 typed value 时由 JSON Schema 显式扩展，禁止 HTML、JS、样式、可执行回调。
-
-| 内置 Info Provider ID | 数据来源 | 读权限与限制 |
-|---|---|---|
-| `core.info.metadata` | Core Entry/stat：类型、大小、位置、创建/修改时间、只读、链接等 | 独立 metadata Provider；原始 Entry 不对插件开放，插件请求 stat 后审核响应 |
-| `core.info.audio` | lofty 解析音频标签、时长、码率、采样率等 | 通过限额只读句柄解析本次资源，不能等同于 stat |
-| `core.info.video` | mp4/matroska 解析媒体容器、码流、时长、分辨率等 | 通过限额只读句柄解析本次资源，支持超时和降级 |
-
-第三方 Plugin Info 声明 `surfaces.info[]`，使用已经指定的 `command` 并通过 Native SDK 返回同形 `{sections:[...]}`。如果用户选择显示文件信息，则 Core 向所有匹配的 Info Provider 并发请求，按基础文件区块在前、其他区块按用户排序/priority 的一致规则聚合。一个 Provider 返回空 `sections` 意味着不显示其内容。
-
-**UI 解耦要求**：
-- `FileInfoDialog.tsx` 不再生成 `basicRows`，只负责标题、图标、通用区块列表、加载状态及操作按钮。
-- `src-tauri/src/plugins/info.rs` 不再把音视频本地解析写成特殊的 `media_sections + plugin_sections` 逻辑；改成三个内置 Adapter 与通用 `InfoRegistry::resolve_all` 聚合。
-- 删除 `pluginId == "org.fiex.office-preview"` 之类面向特定插件的 UI 逻辑。Provider 是否显示署名由统一的 `InfoSection` 显示策略决定。
-- 路径为 `fiex://...` 时也经相同资源/Provider 管线处理，不得提前直接返回空区块；具体 Provider 的流能力不足时以结构化失败/空结果降级，不错误读取宿主绝对路径。
-
-### 5.1 Info IPC 合同（目标）
+## 3. 标准输入 Context
 
 ```json
 {
-  "jsonrpc":"2.0",
-  "id":77,
-  "method":"info.resolve",
-  "params":{
-    "sessionId":"info-session-opaque",
-    "resource":{"ref":{"mountId":"m1","nodeId":"f18"},
-      "metadata":{"name":"demo.mp4","kind":"file","extension":"mp4"}}
-  }
+  "sessionId": "preview-session-opaque",
+  "resource": {
+    "ref": {"mountId":"m1","nodeId":"a18"},
+    "metadata": {
+      "name":"audio.mp3",
+      "kind":"file",
+      "extension":"mp3",
+      "size":4194304
+    },
+    "read": {"resourceId":"scoped-read-1"}
+  },
+  "intent":"preview"
 }
 ```
+
+ContextBuilder 从 Explorer/VFS 候选资源中取得基础属性；**独立 PermissionPolicy** 根据 Manifest 权限、用户批准与本次查看 Scope 对每个字段和可读资源引用进行审核，之后事件一次交付给 Provider。`metadata` 可选，`read` 也可选；没有相应批准就不交付。Opaque read 引用只允许访问**这一个当前文件**、在会话中按 Range/Seek 延迟读取，关闭预览/撤权即失效，绝不在标准 Context 内预传完整音视频/PDF 字节。
+
+内置 Provider 可以由 Core 内部适配器获取同一资源，第三方通过受控文件流访问，不因为内置类型而对外扩大权限。
+
+## 4. InfoResponse
 
 ```json
 {
-  "jsonrpc":"2.0",
-  "id":77,
-  "result":{"sections":[{"id":"tracks","title":"视频信息",
-    "rows":[{"label":"时长","value":"01:20"},{"label":"分辨率","value":"1920×1080"}]}]}
+  "sections": [
+    {
+      "id":"audio",
+      "title":"音频",
+      "rows":[
+        {"label":"时长","value":"03:25"},
+        {"label":"编码","value":"MP3"}
+      ]
+    }
+  ]
 }
 ```
 
-`info.resolve` 是推荐的固定 Provider 合同。Manifest 中 `info[].command?` 可用于显式注册 Native handler，但它也**必须**接受相同 params、返回相同 `InfoResponse`，不再兼容旧式 `{path} → {rows}` 回包；可以在 SDK 中将可注册的 handler 类型统一成 `InfoHandler`。
+InfoRenderer 只接收统一 `InfoResponse`，根据 sections 的稳定 ID、排序和展示规则渲染。基本文件属性是独立的 Core Info Provider；音频标签、视频编码、EXIF 等若需要读取文件字节，必须具有 `files.read` 和当前资源 Scope，不能仅靠 `metadata` 权限。
 
-## 6. 对齐 IPC / SDK 与资源流
+允许多个 Provider 并发生成 sections；Core 按优先级/稳定顺序合并，超时或单个来源错误不吞掉其他来源，防止恶意 HTML 注入或异常大文本。
 
-| 调用/实现 | 目标方法或类型 | 说明 |
-|---|---|---|
-| Host 打开预览 | `preview.open`（Host→Adapter 逻辑入口） | 统一 `PreviewContext`、运行时 `PreviewView`、错误与取消；内置进程内调用，外部每次指定实际沙箱 Panel 视图 |
-| Host 显示文件简介 | `info.resolve`（Host→Info Provider） | 相同请求/响应 Schema；内置在 Core 内调用，第三方 Native handler 通过 IPC |
-| 插件主动查询基础元数据 | `host.fs.stat` / `Files::metadata` | `permissions.metadata.enabled` + EventScope/OperationScope，响应亦经独立 PermissionPolicy 审核 |
-| 插件读取数据用于预览或媒体解析 | `host.fs.openRead/readOpen/closeRead` | 对应 `files.read.enabled` + 显式查看操作 Scope；禁止暴露任意其它文件 |
-| UI 渲染资源代理 | `PreviewResourceRef` / scoped URL | 按会话、插件身份、目标 ref 限制；支持 Range/Seek 与取消；iframe 不得直接访问宿主全盘 |
-| 会话生命周期 | `PreviewSession` / `InfoSession` | 资源变更、关闭、切换文件、取消操作均撤销句柄和 UI 资源 |
+## 5. PreviewView
 
-注意 `preview.open` 对插件不是要求每次在 Native IPC 上新发一个强制 RPC；可以通过 `PluginPreviewFrame` 的合法 UI Bridge 与已注册面板引用实现。**统一的是 Host→Provider 的类型合同与逻辑流程**，不应因接口统一牺牲图片、音视频的大文件流式性能。
+Preview Provider 返回 Core 标准 `PreviewView`：可以是由 Core 支持的文本、图像、媒体、PDF、受限 HTML 预览描述或需要 Core 资源代理的 View。选择预览渲染器必须先完成类型匹配、权限审核和受信任资源 URL 生成。
 
-## 6.1 所有用户交互 Surface 共享运行时 Panel
+对于大文件，Core 提供有界只读流和 Range/Seek 资源代理，关闭/切换标签回收句柄，不能整文件编码成 JSON，也不得把本地绝对路径直接交给插件 iframe。
 
-Info/Preview 使用的通用 PanelHost 与 Toolbar、ContextMenu、Search、Connection 等 Surface **相同**；不是 Preview 专有功能。任何注册上述 UI Surface 的插件，在用户明确打开某项操作后都可通过 `host.ui.open` 请求建立 Panel，传入本次 `interactionId`、包内页面路径或有界 HTML、标题与布局。Core 在 Preview 场景将 Panel 限定在预览宿主槽位；Info 的自动 `info.resolve` 只返回 sections，只有用户点击扩展出的显式操作才能进一步开 Panel。
+## 6. 与自定义 UI 的边界
 
-自动刷新或后台请求不能作为打开 UI 的依据；Panel 创建也不自动赋予文件读写或元数据查询权限。详见 [09-RUNTIME-UI-PANELS.md](09-RUNTIME-UI-PANELS.md)。
+Info/Preview 作为**标准事件**，可以直接收到已审核的基础 Metadata 与本次可读资源引用。插件若在某个用户操作中打开专门的 HTML UI，可以通过通用 `host.ui.open` 创建受限 Panel 或使用相应 PreviewView 描述；但不能因此多读其他文件。
 
-## 7. 数据流与安全测试
+Connection 点击产生的 `PluginView` 则由 ContentHost 占满右侧主内容区，属于导航类型而非 Info/Preview 弹窗类型。所有 iframe 都使用相同 sandbox 和 UI Bridge 边界。
 
-```mermaid
-flowchart TD
-  Selected["Selected ResourceRef"] --> Ref["Core event includes ref only"]
-  Ref --> Request["Plugin host.fs.stat(ref)"]
-  Request --> Permission{"PermissionPolicy: metadata + EventScope?"}
-  Permission -->|yes| Meta["Core Broker stat + audited response"]
-  Permission -->|no| Denied["PermissionDenied"]
-  Meta --> Render["Provider.resolve / open"]
-  Ref --> Render
-  Render --> NeedRead{"Provider needs file bytes?"}
-  NeedRead -->|yes| Scope["Check read permission + confirmed SessionScope"]
-  NeedRead -->|no| Output["Return PreviewView or InfoResponse"]
-  Scope -->|approved| Stream["Core bounded FileBroker stream"]
-  Scope -->|denied| Fallback["Fallback or omit section"]
-  Stream --> Output
-  Output --> UI["Host common renderer"]
-```
+## 7. 验收
 
-必测：
-- 关闭第三方 Preview/Info 提供方后，内置与其他插件仍可匹配、显示；禁用内置高亮后其他 Preview 可正常顶替。
-- 重复扩展名、用户优先级、MIME、空/未知后缀、多选和目录的行为一致；无 Core 特例取胜。
-- 本地、Connection、Git VFS、离线缓存、超大文件、无权限/过期 ResourceRef、被替换/软链接目标安全。
-- Info 的基本文件、音频、视频和第三方区块可以并存；单个解析器失败不影响其它区块；不得将 Info 错误行伪装成真实属性。
-- 打开预览/简介属于用户发起的 scoped 意图，额外读取内容权限仅作用于当前文件；关闭/换项/取消能回收流与沙箱，后到 IPC 不能污染新会话。
-- Core 事件不带 metadata；插件必须申请目标 stat，PermissionPolicy 同时审核请求与结果；未批准 metadata 或不在 Scope 即拒绝。
-- 图片/视频/PDF 使用范围流/资源代理，不整体导出到临时磁盘、IPC JSON；没有无限内存复制。
-- 快捷键、焦点、视频/音频停止播放、失效 Provider 回退、UI 错误状态与之前功能等价；宿主不因第三方 HTML 注入。
-
-## 8. 完成定义
-
-1. `Preview.tsx` 只管理统一宿主窗口及会话，不再按 `isText/isImage/audio/video/pdf` 分支直接选择 renderer。
-2. `FileInfoDialog.tsx` 只消费 `InfoResponse.sections`，不再生成特殊基础属性，也不区分固定插件 ID。
-3. `src-tauri/src/plugins/info.rs` 的普通文件/音视频核心解析与插件处理，均通过同一个 `InfoRegistry` 路径，保留既有解析能力。
-4. `src/lib/preview.ts` 管理同形内置与第三方 Descriptor，并共同支持匹配、启用、排序、用户选择及可靠回退（修复只按扩展名让内置媒体不进入候选列表的问题）。
-5. Native IPC、SDK、Manifest、UI Bridge 类型、所有官方插件以及测试随实现同步更新；不留旧的返回类型兼容分支。
-6. 在 Windows/macOS/Linux 通过格式化、静态检查与单元/集成测试；大文件压力测试不能静默读取到未授权文件。
+- 文件/目录 Metadata 未批准时，Context 仅有 ref；已批准时基础属性能随事件到达，不要求插件再发 `host.fs.stat`。
+- 没有 `files.read` 时，不提供 read 资源；即便插件构造假 resourceId 也不能读取。
+- 内置与第三方 Info/Preview 使用相同 DTO 并由同一组件渲染。
+- 文本、图片、音频、视频、PDF、fallback 的模块独立测试；5 GiB 以上资源不会整文件载入内存。
+- 本地、云盘 VFS、只读 Git VFS 的文件资源身份、撤权、取消、资源替换与超时行为一致。

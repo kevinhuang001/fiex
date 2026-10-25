@@ -1,145 +1,85 @@
-# 05 · VFS、Connection 与可靠双向同步设计
+# 05 · Connection、VFS、按需缓存与同步
 
-## 1. Core 管理的 VFS：独立于 Connection UI
+## 1. Connection 导航
 
-`fiex://mount/<mountId>/<encoded-relative-path>` 是 Fiex 的受控虚拟导航 URI，由 Core VFS Router 校验每个路径段、对象身份及 mount 的 Provider 归属，防止 `..`、越权、符号链接或节点替换。**注册一个 Connection 不会创建 mount**；只有插件独立声明 `providers.vfs[]` 且用户操作确实申请并通过 VFS Broker 校验时，Core 才建立 mount。相同的 Core MountRegistry 可处理长期云盘文件树和临时 Git 历史树，但生命周期由独立 VFS 创建请求决定。
+`extensions.connections[]` 在添加连接加号和侧栏连接项注册入口。Core 为连接实例分配稳定 `connectionId`，与 `pluginId/factoryId` 绑定；登录参数由插件管理业务含义，Secret 经 Core Keyring Broker 保管。
 
-```mermaid
-flowchart LR
-  Click["User clicks Connection entry"] --> Host["Connection UI Host"]
-  Host --> Handler["Plugin connection.open"]
-  Handler --> Decide{"Plugin chooses navigation"}
-  Decide --> Panel["Runtime Panel / login / settings"]
-  Decide --> Nav["Navigate VFS mount"]
-  Nav --> VFS["Core VFS Router validates ownership"]
-  VFS --> Cloud["Provider VFS fs-like methods"]
-  VFS --> Git["Readonly Git history view"]
-```
+用户点击加号调用 `connection.create`，点击已有侧栏实例调用 `connection.open`。插件必须返回下列二者之一：
 
-`providers.vfs[]` 只声明该插件可作为虚拟文件树来源，并不在 Manifest 中写 `scheme`、`mountId`、`sync`、`writeMode` 或 `readOnly`；只读/可写由对应调用方法与 Provider 响应实际能力决定，写回由 Core 的受控资源操作和授权校验保证。对于 Git 历史，通常只实现读操作；对于网盘，必须按实际需要实现读流、写回及可靠缓存/双向同步。View context 应有大小限制，不能内嵌整个树或明文密钥。
+- `NavigationTarget::Vfs { mountId, nodeRef? }`：Core 使用原生 ExplorerView 显示已验证 VFS。
+- `NavigationTarget::PluginView { packageEntry, state }`：Core 将右侧主内容区**整体**替换为本插件 sandboxed iframe（含该区域的目录面包屑、文件操作工具栏、列表/预览位置）。
 
-## 2. Connection 只贡献两个 UI 入口：添加按钮与侧边栏条目
+**Connection 没有弹窗、侧栏 Panel 或外部 URL 导航结果。** 连接登录、配置、账户主页均可用第二种 PluginView。全局左侧栏与 TabHost 保持由 Core 管理；导航具备后退/前进、标签页生命周期和撤权清理。
 
-Manifest `surfaces.connections[]` 只注册连接提供者的 ID、名称、图标以及在“添加连接 +”选择列表和侧边栏“连接”区的展示。它**不负责文件访问、不承诺固定跳转、不要求 Core 固定填写表单、不自动调用 `fs.*`、不生成 VFS**。
+只有在插件还注册了 `extensions.vfs[]` 并经 Core MountRegistry 创建合法 mount 时，才允许返回 `kind=vfs`。连接实例本身不会获得 VFS。Git 历史等插件可以只注册 VFS 而不注册 Connection。
 
-- 用户点“+”选择插件，Core 通过 `connection.create({factoryId,interactionId})` 通知插件；插件可以在该交互中调用 `host.ui.open` 打开登录/授权/配置 Panel，或返回 `NavigationIntent`。
-- 用户点侧边栏已登记的某项连接，Core 调用 `connection.open({factoryId,connectionId,interactionId})`。插件决定去哪里，返回 `NavigationIntent`：例如跳转它自己的已建立 VFS mount、打开插件设置 Panel、显示登录失效页面。**不是 Core 看到 Connection 就自动 `fiex://mount/...` 导航。**
-- Core 仍管理连接项目的稳定标识 `connectionId`、所有者与基本展示状态，并通过 Keyring/Secret Broker 保管凭据；插件的实际登录、配置和导航语义不由 Core 硬编码。是否创建以及何时持久化连接，由用户/插件交互经 Core connection registry 明确提交。
-- `NavigationIntent` 是命令结果（如 `{"kind":"vfs","mountId":"..."}`，或 `{"kind":"panel","view":{...}}`），并非任意外部 URL/命令：Core 必须校验插件 ID、连接实例所有权、目标类型、mount 是否存在、会话与允许的导航范围，然后真正执行界面跳转。Panel 的来源和隔离沿用统一运行时 PanelHost。
+## 2. VFS 所有权与分页
+
+`fiex://mount/<mountId>/<encoded-relative-path>` 是 Core 产生并解析的应用内 URI。mountId 由 Core 分配，mount 绑定 PluginInstance、可选 connectionId 和 VFS Provider ID；插件不能选择 scheme、复用其他账户 Mount，或通过 nodeId 映射宿主绝对路径。
+
+Provider 以 `vfs.list/stat/openRead/readStream/closeRead/writeFile/search` 等方法服务 Core。每页返回：
 
 ```json
 {
-  "surfaces":{"connections":[{"id":"cloud","title":"Cloud Drive","icon":"cloud"}]},
-  "providers":{"vfs":[{"id":"remote-tree","title":"Cloud files"}]}
+  "entries": [
+    {"nodeId":"opaque-81","name":"a.txt","kind":"file","size":12,"revision":"r42"}
+  ],
+  "nextCursor": null,
+  "snapshotToken": "optional-token",
+  "identityStability": "stable"
 }
 ```
 
-这两个声明相互独立：仅有 Connection 可以提供非文件树的账户管理项；仅有 VFS 可以提供不绑定 Connection 的 Git 历史树。**网盘同时声明二者**。每个连接可按插件明确请求创建、绑定自己的 mount，Core 分配 `mountId` 并保证不同账户与 Provider 隔离。删除某个连接前，Core 必须处理该实例显式关联的 VFS、缓存和未同步脏数据，绝不能误删其他连接的数据。
+Core 校验单个文件名路径段、`..`、重复节点、非法编码、循环游标、单页数量、总分页和目录快照一致性。分页中断不能将未完成的半页快照发布为一致目录。不同账户即便 nodeId 相同也不得共用资源身份。稳定 nodeId 与路径身份的差别必须在 Provider 返回中明确表达。
 
-### 2.1 VFS 数据调用与 SDK 的区别
+Provider 的只读或可写能力由其实际协议支持和 Core 允许的文件操作决定；Git View 可以只读，云盘可读写，Manifest 不用单独声明静态 sync/writeMode/conflictControl。
 
-`vfs.list/stat/openRead/readStream/writeFile` 等为 **Core → VFS Provider** 的数据操作接口（实际方法列表需在 Schema/IPC 目录补全）。Core 不因为用户点“连接”就隐式调用它们；只有导航到了真正存在且已批准的 VFS mount 后，才由 VFS Broker 按需调用。远端 `vfs.stat` 为 Provider 对自身虚拟节点的响应，不等于插件主动访问宿主本地磁盘的 `host.fs.stat`。后者仅在插件收到用户操作事件后通过通用 IPC 发起，必须满足独立 `PermissionPolicy` 对 `permissions.metadata.enabled` + EventScope/OperationScope 的请求及响应审查；同一个 `metadata` 权限覆盖普通文件与目录。
-
-### 2.2 Connection 也使用通用运行时 Panel
-
-用户明确点击添加连接或某个连接项目时，插件可在当前 InteractionSession 使用 `host.ui.open` 动态选择登录、账号设置等 Panel，无需 Manifest `panels[]` 或静态 UI 位置路径。纯后台连接状态刷新不能弹窗；Panel 打开也不扩大本地文件、网络或远端连接授权。
-
-## 3. Node/目录分页/身份策略
-
-Provider 每页返回 `{entries,nextCursor,snapshotToken?,identityStability?}`，`entries[].name` 是单个可打印安全路径段，`nodeId` 不透明，`revision` 版本不透明；Core 校验列表长度、重复 nodeId、重复路径、非法字符、循环 cursor、最大扫描页数。只有完整、无错误的枚举能提交新目录快照；遇到分页途中网络断开保留上次已确认目录快照。
-
-目录 ID 与文件 ID 必须可跨分页稳定查找：Drive 用文件 ID，WebDAV/OpenList/SMB 若用 path ID，则重命名可能变更 ID，需以 `identityStability=path` 申明逻辑身份限制。Stable 身份也不得跨两个不同账号或挂载复用。
-
-## 4. 按需缓存与同步状态机
+## 3. 按需缓存状态
 
 ```mermaid
 stateDiagram-v2
-  [*] --> RemoteOnly: 列表返回元数据
-  RemoteOnly --> Downloading: 首次打开或 Pin
-  Downloading --> CachedClean: revision 与内容校验完成
-  Downloading --> RemoteOnly: 下载失败，丢弃临时文件
-  CachedClean --> CachedDirty: 本地内容改变
-  CachedClean --> RemoteOnly: 释放本地空间
-  CachedClean --> Downloading: 远端单独更新
-  CachedDirty --> Uploading: 云端 revision 不变且允许写回
-  Uploading --> CachedClean: 远端确认并更新 baseline
-  CachedDirty --> Conflict: 云端并发更改/条件写失败
-  Uploading --> Conflict: CAS/revision 不匹配
-  Conflict --> CachedDirty: 用户保留本地、生成新基线
-  Conflict --> CachedClean: 用户保留远端且本地有独立备份
-  Conflict --> Conflict: 操作失败保留两份
+  [*] --> RemoteOnly
+  RemoteOnly --> Downloading: open or pin
+  Downloading --> CachedClean: verified revision and full content
+  Downloading --> RemoteOnly: failure or cancel
+  CachedClean --> CachedDirty: local modification
+  CachedClean --> RemoteOnly: safe release of local copy
+  CachedDirty --> Uploading: revision consistent
+  Uploading --> CachedClean: committed + baseline updated
+  CachedDirty --> Conflict: remote changed
+  Uploading --> Conflict: CAS failure or conflicting revision
+  Conflict --> Conflict: unresolved or failed recovery
+  Conflict --> CachedClean: user chooses remote and local preserved
 ```
 
-**必须独立保存**：`remoteRevision`（枚举观察值）、`downloadRevision`（已下载时固定的版本）、`baselineHash`（下载内容 SHA-256）、`localStamp`（仅快速检测）、`pinned`、`excluded`、`conflict`、`nodeId`、`cachedState`。不能以列表新 revision 直接覆盖下载 baseline。
+Core 为每个 VFS 节点维护 `remoteRevision`、`downloadRevision`、`baselineHash`、`localStamp`、`pinned`、`excluded`、`cachedState`、`conflict`、Mount/Node 身份。下载 baseline 与新一次目录刷新看到的远端 revision 不可混用。
 
-“始终保留本地”对目录递归启用，其子孙允许显式排除；“释放本地空间”必须先逐个确认无任何未同步更改或冲突，禁止对包含本地脏文件的树删除缓存。离线打开已缓存文件不触发云端读取；联网时可延迟验证，但必须保证内容一致性。
+- **按需读取**：首次打开时下载，已经 Pin 的资源断网后仍可读；没有缓存的 RemoteOnly 离线打开返回 Unavailable。
+- **始终保留本地**：目录可以递归 Pin，允许显式子目录排除；删除/释放缓存前确认所有子文件无脏数据或冲突。
+- **释放本地空间**：只删除已验证的干净副本，不触碰远端文件，也不丢失用户修改。
+- **双向同步**：远端变化与本地脏文件并存时保留双方，不能自动“最后写入覆盖”。
 
-## 5. 下载一致性：禁止拼接不同云端版本
+## 4. 下载一致性
 
-```mermaid
-sequenceDiagram
-  participant C as Core
-  participant P as Provider
-  participant F as 临时文件
-  C->>P: fs.stat(nodeId)
-  P-->>C: revision R1,size S
-  C->>P: fs.openRead(nodeId, ifRevision=R1)
-  P-->>C: streamId,revision=R1
-  loop 有界块读取
-    C->>P: fs.readStream(streamId,offset,maxBytes)
-    P-->>C: bytes,eof / revision check
-    C->>F: append/hash
-  end
-  C->>P: fs.closeRead(streamId)
-  C->>P: fs.stat(nodeId)
-  P-->>C: revision R2
-  alt R2 == R1 且大小与哈希一致
-    C->>C: Atomic publish + baseline R1/hash
-  else 版本发生变化或文件不完整
-    C->>C: Discard staging / bounded retry
-  end
-```
+下载开始时用 `vfs.stat` 获取 node 的 revision 与 size，以相同 revision 调用 `vfs.openRead`，在受限流上按块读和计算完整内容 hash，读取完成再次核验 revision、总字节数和完整性，最后以临时文件 fsync + 原子发布。版本改变、字节不完整、错误 Range 或取消时丢弃 staging，并限额重试。没有稳定 revision/ETag 的远端必须清晰报告保证级别，不能把多个版本的块拼接为“已完成”文件。
 
-Provider 应对每块绑定原始 revision 或使用强条件 Range；Core 在开始、结束必须校验版本，且目标大小和总读字节精确一致。对于无稳定 revision 的服务，降级为“无法保证版本一致”，禁止静默宣布完整一致下载；Provider 可实现 snapshot read/临时版本副本。
+## 5. 上传与冲突
 
-## 6. 上传写回与冲突保证
+`vfs.writeFile({mountId,nodeId,source,size,ifRevision})` 代表带版本条件的上传意图。Core 先对本地脏内容生成**不可变快照**并为该精确源建立临时只读授权。Provider 借 SDK 的 FileReader 流式上传，不能获得快照所在目录的广泛读权限。
 
-统一使用：
-`vfs.writeFile({mountId,nodeId,source,size,ifRevision}) -> {revision}`。Core 在提交前从本地内容创建不可变快照，并建立**精确文件**读取授权给 Provider；Provider 可用 SDK `ctx.files().open_read(source)`，对于 HTTP 使用 `ctx.http().put(url).body_reader(reader)`，对于 SMB 使用分块 Read 后服务器端 staging + replace，对于 Drive 使用 resumable 会话与 Range 确认。Provider 不得得到临时快照所在目录的权限。VFS 数据接口必须独立声明并经过 Core VFS Broker，不因 Connection Surface 注册而启用。
+- **WebDAV**：优先强 ETag / If-Match CAS；缺乏强保证时拒绝危险的静默覆盖。
+- **Google Drive**：版本/ETag 与 resumable upload 会话严格绑定，依据服务端确认的 Range 重试。
+- **SMB**：远端 staging + 替换前 revision 复核；无法关闭 TOCTOU 窗口时应明确告知其较弱保证。
+- **OpenList**：服务器端原子条件写若缺失，只可视为 best-effort，危险场景不自动覆盖。
 
-```mermaid
-sequenceDiagram
-  participant C as SyncEngine
-  participant P as Provider
-  participant N as Remote Server
-  C->>C: 基线 R0 + 本地哈希 H1
-  C->>P: fs.stat(nodeId)
-  P-->>C: R0
-  C->>C: 生成只读 immutable snapshot
-  C->>P: fs.writeFile(nodeId,source,size,ifRevision=R0)
-  P->>N: 对应协议的条件写/分块上传
-  N-->>P: 成功及新版 revision R1 或冲突
-  P-->>C: {revision:R1} 或 Conflict
-  alt 成功且远端确认一致
-    C->>C: baseline=H1,R1，清理 snapshot
-  else 冲突或错误
-    C->>C: 保留本地和旧 baseline，不删用户数据
-  end
-```
+远端成功确认并通过一致性验证后才更新 baseline；任何冲突或失败都保留未同步本地文件及旧 baseline。Provider 在运行时返回其实际保障与支持情况，而不是靠 Manifest 自报。
 
-**不能宣称所有 Provider 的同等冲突保证**：
-- WebDAV：强 ETag + `If-Match` 为服务端 CAS；无强 ETag 则 fail closed。
-- SMB：上传临时文件、替换前检查当前 revision；存在校验/替换间的竞争窗口，应优先使用服务器原子协议手段。
-- OpenList：现有 API 通常为比较后写入，可能存在 TOCTOU；必须向 Core 返回可明确表达的 `conditionalWrite:"bestEffort"` 协商结果，并在风险状态下拒绝自动覆盖或要求用户确认。
-- Google Drive：version 与 ETag 复核、resumable session 的响应 Range 验证；服务器部分确认时按实际 committed byte offset 重试；任何 session redirect 逐跳验证网络域名。
-以上安全级别通过 **运行时协议握手与标准返回语义** 获取，不重新引入 Manifest 的 `conflictControl` 字段。
+## 6. 本地变化与崩溃恢复
 
-## 7. 本地脏文件检测与恢复
+`mtime/size` 可用于减少普通扫描，但在清理、覆盖、解决冲突、更新基线等破坏性动作前必须比对实际内容 hash。一个连接实例的缓存元数据事务需要串行化；CPU/大磁盘任务使用 blocking worker。持久化采用 staging、atomic rename 与 fsync，重启后只接受完整事务。
 
-不能只靠 `mtime/size` 决定“无本地编辑”并允许云端覆盖。在远端 revision 改变、清理缓存、解决冲突、更新 baseline 等**破坏性动作之前强制计算实际内容 hash**。mtime/size 只允许用于减少非破坏性扫描工作。并发下载与后台同步同一 VFS 连接实例 需串行元数据事务；实际重 CPU/大磁盘读写放到 blocking pool，避免阻塞 Tokio reactor。元数据提交采取 atomic temp + fsync + rename 并保证断电恢复读到最近完整版本。
+同大小同 mtime 的本地改写、下载期间远端更改、上传中断、百万级目录分页、网络断开、用户取消、不同连接账户同时工作、Pin 子项排除和崩溃恢复均应有测试。
 
-必须测试：同大小同 mtime 的内容改写、传输中远端替换、下载过程中网络掉线、目录 10 万项分页、中断后继续、冲突双方保留、离线 Pin/排除、跨两个账号同时同步、进程重启后 URI 不变。
+## 7. 后续 VFS 文件树操作
 
-## 8. 目标扩展方向
-
-第一阶段只同步已经存在的普通文件的**内容**；本地创建/删除/重命名云端对象、跨挂载 move 等作为单独增量协议，不靠观察缓存目录自动猜测用户意图。应新增受 Core 管理的 `remote.mutate` 显式操作合同与删除墓碑/冲突测试后才启用。
+创建、删除、移动、重命名远端节点需要独立的、受 Core 管理的资源操作合同，包括真实版本前置条件、明确授权、删除墓碑与冲突保护。不能仅根据本地缓存目录出现/消失来推导远端删除。
