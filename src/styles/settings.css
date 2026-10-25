@@ -1724,12 +1724,12 @@ body.dragging-file * {
   align-items: center;
   gap: 6px;
   height: 26px;
-  max-width: 260px;
-  padding: 0 8px;
-  border: 1px solid transparent;
+  max-width: 220px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
   border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
+  background: var(--surface);
+  color: var(--text);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
@@ -1737,7 +1737,7 @@ body.dragging-file * {
 .preview-source-button:hover,
 .preview-source-button[aria-expanded='true'] {
   background: var(--canvas);
-  color: var(--text);
+  border-color: color-mix(in srgb, var(--line) 70%, var(--text));
 }
 .preview-source-button > span {
   max-width: 120px;
@@ -1745,17 +1745,10 @@ body.dragging-file * {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.preview-source-button > small {
-  max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 10px;
-}
 .preview-source-menu {
   position: absolute;
-  left: 0;
+  right: 0;
+  left: auto;
   bottom: calc(100% + 6px);
   z-index: 30;
   width: max-content;

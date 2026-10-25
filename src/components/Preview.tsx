@@ -273,6 +273,15 @@ export function Preview({
             )}
           </div>
           <footer className="preview-footer">
+            <Button variant="ghost" size="icon" title="上一个" onClick={() => onNavigate(-1)}>
+              <ChevronLeft />
+            </Button>
+            <Button variant="ghost" size="icon" title="下一个" onClick={() => onNavigate(1)}>
+              <ChevronRight />
+            </Button>
+            <span>
+              {entry.isDir ? '文件夹' : size(entry.size)} · {date(entry.modified)}
+            </span>
             <div className="preview-source" ref={sourceRef}>
               <button
                 type="button"
@@ -284,7 +293,6 @@ export function Preview({
               >
                 {previewer?.pluginId ? <Puzzle size={13} /> : <Monitor size={13} />}
                 <span>{previewer?.provider || 'Fiex'}</span>
-                <small>{previewer?.title}</small>
                 <ChevronUp
                   size={12}
                   style={{ transform: menuOpen ? undefined : 'rotate(180deg)' }}
@@ -341,15 +349,6 @@ export function Preview({
                 </div>
               )}
             </div>
-            <Button variant="ghost" size="icon" title="上一个" onClick={() => onNavigate(-1)}>
-              <ChevronLeft />
-            </Button>
-            <Button variant="ghost" size="icon" title="下一个" onClick={() => onNavigate(1)}>
-              <ChevronRight />
-            </Button>
-            <span>
-              {entry.isDir ? '文件夹' : size(entry.size)} · {date(entry.modified)}
-            </span>
             <Button variant="secondary" onClick={() => onOpen(entry)}>
               打开
               <ExternalLink />
