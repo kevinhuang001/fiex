@@ -132,7 +132,10 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           return {
             entries: [
               { name: 'Documents/', isDir: true, size: 0 },
+              { name: 'Documents/设计稿.png', isDir: false, size: 524288 },
+              { name: 'Documents/spec.md', isDir: false, size: 1280 },
               { name: 'Projects/', isDir: true, size: 0 },
+              { name: 'Projects/app.ts', isDir: false, size: 8192 },
               { name: 'README.md', isDir: false, size: 2148 },
               { name: '预算明细.csv', isDir: false, size: 4096 },
               { name: '产品截图.png', isDir: false, size: 2411520 },

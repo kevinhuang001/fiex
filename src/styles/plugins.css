@@ -1029,9 +1029,17 @@
   min-width: 0;
   align-items: center;
   gap: 4px;
+}
+/* Only a per-column background paints that column. Row-level decoration
+   variables must not leak into modified/size/kind cells, especially while the
+   row is selected. */
+.decorated-value-bg {
+  padding: 0 4px;
+  margin: 0 -4px;
+  border-radius: 4px;
   background: var(--decoration-bg-light, var(--decoration-bg-dark, transparent));
 }
-.dark .decorated-value {
+.dark .decorated-value-bg {
   background: var(--decoration-bg-dark, var(--decoration-bg-light, transparent));
 }
 .decorated-value .decoration-badge {
@@ -1053,6 +1061,15 @@
 .dark .file-row.decorated-bg:not(.selected),
 .dark .file-tile.decorated-bg:not(.selected),
 .dark .column-row.decorated-bg:not(.selected) {
+  background: var(--decoration-bg-dark, var(--decoration-bg-light, transparent));
+}
+.decoration-name-bg {
+  padding: 0 4px;
+  margin: 0 -4px;
+  border-radius: 4px;
+  background: var(--decoration-bg-light, var(--decoration-bg-dark, transparent));
+}
+.dark .decoration-name-bg {
   background: var(--decoration-bg-dark, var(--decoration-bg-light, transparent));
 }
 /* Badges in the columns view are inline chips, not flexible columns. */
