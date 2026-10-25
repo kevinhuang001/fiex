@@ -345,6 +345,23 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());
         }
     }
+    if let Some(themes) = value.get("themes") {
+        let object = themes
+            .as_object()
+            .ok_or("extensions.themes must be an object")?;
+        if object.contains_key("id") || object.contains_key("title") {
+            return Err(
+                "extensions.themes.id/title are not used; the theme file carries them".into(),
+            );
+        }
+        if object
+            .get("path")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
+        {
+            return Err("extensions.themes.path is required".into());
+        }
+    }
     for key in ["vfs", "connections", "toolbar"] {
         let Some(item) = value.get(key) else {
             continue;
