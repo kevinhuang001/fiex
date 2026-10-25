@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
-import { call } from '@/lib/api'
+import { call, demo } from '@/lib/api'
 import type { Preferences } from '@/lib/types'
 import {
   Eye,
@@ -109,6 +109,17 @@ export function AppearanceSettings({
               >
                 {prefs.backgroundImage ? '更换图片…' : '选择图片…'}
               </button>
+              {demo && (
+                <button
+                  type="button"
+                  className="settings-pill-button ghost"
+                  onClick={() =>
+                    update({ backgroundImage: '/demo/dog.svg', backgroundOpacity: 0.6 })
+                  }
+                >
+                  示例小狗
+                </button>
+              )}
               {prefs.backgroundImage && (
                 <button
                   type="button"
