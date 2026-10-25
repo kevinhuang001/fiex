@@ -654,15 +654,18 @@ fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
 }
 
 #[tauri::command]
-pub(crate) fn preview_providers(extension: String) -> Vec<serde_json::Value> {
-    crate::plugin_preview::providers(&extension)
+pub(crate) fn preview_candidates(
+    extension: String,
+    mime: String,
+    is_dir: bool,
+) -> Vec<serde_json::Value> {
+    crate::plugin_preview::candidates_json(&extension, &mime, is_dir)
 }
 
 #[tauri::command]
 pub(crate) async fn preview_open(
     path: String,
-    plugin_id: String,
-    contribution_id: String,
+    provider_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let display = path.clone();
     let local = if crate::mounts::handles(&path) {
@@ -671,7 +674,7 @@ pub(crate) async fn preview_open(
         path
     };
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_preview::open(&display, &local, &plugin_id, &contribution_id)
+        crate::plugin_preview::open_provider(&display, &local, provider_id.as_deref())
     })
     .await
     .map_err(|error| error.to_string())?

@@ -132,11 +132,15 @@ Core invokes the standard method **`preview.open`** with a `PreviewContext`
 - `text` — bounded inline text (256 KiB).
 - `unsupported` — explicit fallback with a `message`.
 
-Image/media/PDF previews remain built-in Core renderers. A provider that wants
-Core's resource proxy should return `html` and read the selected file through
-`resource.read`; it must not receive a host path. Manifest preview entries
-declare only `id`, `title`, `extensions`, `priority` and optional `maxBytes`;
-they no longer declare `panel` or `command`.
+Built-in previewers use the same registry and resolved-view shape: `text`,
+`image`, `media`, `pdf` and `fallback` are chosen by Core's capability checks
+(text/MIME/extension), not by the browser. Their resolved view carries the
+trusted local path for the WebView; plugin providers still receive only an
+opaque `PreviewContext` and return a package-confined `PreviewView`. The
+browser renders by `view.kind`, and the footer's provider list is Core's ordered
+candidate list filtered by the user's order/disabled preferences. Manifest
+preview entries declare only `id`, `title`, `extensions`, `priority` and
+optional `maxBytes`; they no longer declare `panel` or `command`.
 
 对于大文件，Core 提供有界只读流和 Range/Seek 资源代理，关闭/切换标签回收句柄，不能整文件编码成 JSON，也不得把本地绝对路径直接交给插件 iframe。
 标准 Context 的受限文件资源可由 SDK 表现为同步 `FileReader: Read+Seek`，也可在可选 `tokio-io` Feature 下转换为 `AsyncFileReader: AsyncRead+AsyncSeek`；两者绑定同一只读 Scope，不授予额外内容权限。

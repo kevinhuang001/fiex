@@ -1,77 +1,43 @@
 import { useEffect, useRef, useState } from 'react'
-import { LoaderCircle } from 'lucide-react'
 import { call } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
 import { attachFiexPanel } from '../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../sdk/ui/src/index'
 
-/** Standard plugin preview: Core returns a PreviewView plus the projected
- * PreviewContext; the iframe only sees the opaque session and resource
- * metadata, never a host path. */
+/** Standard plugin preview document returned by Core's PreviewView. The
+ * iframe only sees the opaque session and projected resource context. */
 export function PluginPreviewFrame({
   pluginId,
   contributionId,
-  path,
+  html,
+  context,
+  sessionId,
   name,
   extension,
 }: {
   pluginId: string
   contributionId: string
-  path: string
+  html: string
+  context: unknown
+  sessionId: string
   name: string
   extension: string
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const dispose = useRef<(() => void) | null>(null)
   const emit = useRef<((name: string, payload: JsonValue) => void) | null>(null)
-  const [session, setSession] = useState<{
-    sessionId: string
-    context: JsonValue
-    html: string
-  } | null>(null)
-  const [text, setText] = useState('')
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    let alive = true
-    setSession(null)
-    setText('')
-    setMessage('')
-    setError('')
-    void call<{
-      sessionId: string
-      context: JsonValue
-      view: { kind: string; html?: string; text?: string; message?: string }
-    }>('preview_open', { path, pluginId, contributionId })
-      .then((value) => {
-        if (!alive) return
-        if (value.view.kind === 'html' && value.view.html) {
-          setSession({ sessionId: value.sessionId, context: value.context, html: value.view.html })
-        } else if (value.view.kind === 'text') {
-          setText(value.view.text || '')
-        } else {
-          setMessage(value.view.message || '此文件不支持插件预览')
-        }
-      })
-      .catch((cause) => {
-        if (alive) setError(String(cause))
-      })
-    return () => {
-      alive = false
-    }
-  }, [path, pluginId, contributionId])
-
-  useEffect(() => {
     const element = frame.current
-    if (!session || !element) return
+    if (!element || !sessionId) return
     let attached = false
     const attach = () => {
       if (attached) return
       attached = true
       dispose.current = attachFiexPanel({
         pluginId,
-        sessionId: session.sessionId,
+        sessionId,
         origin: 'null',
         frame: element,
         allowedMethods: new Set([
@@ -98,7 +64,7 @@ export function PluginPreviewFrame({
         dispatch: async (method, params): Promise<JsonValue> => {
           if (method === 'context.get') {
             return {
-              ...(session.context as Record<string, JsonValue>),
+              ...((context || {}) as Record<string, JsonValue>),
               // Compatibility alias for panel code that only needs the name.
               preview: { name, extension },
             } as JsonValue
@@ -112,7 +78,7 @@ export function PluginPreviewFrame({
               pluginId,
               method: p.method,
               params: p.params ?? null,
-              previewSessionId: session.sessionId,
+              previewSessionId: sessionId,
             })
           }
           if (method === 'plugin.error') {
@@ -148,24 +114,17 @@ export function PluginPreviewFrame({
       dispose.current = null
       emit.current = null
     }
-  }, [session, name, extension, pluginId])
+  }, [html, sessionId, pluginId, name, extension, context])
 
   if (error) return <div className="preview-plugin-state">{error}</div>
-  if (text) return <pre className="preview-text">{text}</pre>
-  if (message) return <div className="preview-plugin-state">{message}</div>
-  if (!session)
-    return (
-      <div className="preview-plugin-state">
-        <LoaderCircle className="spin" size={16} /> 正在加载插件…
-      </div>
-    )
   return (
     <iframe
       ref={frame}
       className="preview-plugin-frame"
       sandbox="allow-scripts"
-      srcDoc={session.html}
+      srcDoc={html}
       title={name}
+      data-contribution={contributionId}
     />
   )
 }

@@ -100,7 +100,7 @@ pub fn run() {
             plugin_error_clear,
             plugin_panel_html,
             preview_open,
-            preview_providers,
+            preview_candidates,
             plugin_panel_asset,
             plugin_permission_allowed,
             plugin_network_domains,

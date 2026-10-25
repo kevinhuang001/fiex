@@ -1,8 +1,8 @@
-//! Standard `preview.open` registry.
+//! Unified preview registry: built-ins and plugins return the same resolved view.
 //!
-//! Providers return a `PreviewView` after Core projects an authorized
-//! `PreviewContext`. The provider never receives a host path; it reads the
-//! selected file through the scoped operation or the `read` capability.
+//! Providers are matched by extension/MIME and priority. Built-ins use a
+//! trusted local file; plugins receive a permission-projected `PreviewContext`
+//! and return a package-confined `PreviewView`.
 use crate::plugin_contracts::{
     PreviewContext, PreviewView, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
     PREVIEW_CONTEXT_VERSION,
@@ -20,6 +20,77 @@ const SESSION_TTL: Duration = Duration::from_secs(30 * 60);
 const MAX_SESSIONS: usize = 64;
 const MAX_HTML: u64 = 1024 * 1024;
 const MAX_TEXT: usize = 256 * 1024;
+const TEXT_EXT: &[&str] = &[
+    "txt", "md", "markdown", "rst", "log", "csv", "tsv", "json", "json5", "toml", "yaml", "yml",
+    "ini", "conf", "cfg", "env", "css", "scss", "less", "html", "htm", "xml", "svg", "sh", "bat",
+    "ps1", "py", "rs", "go", "java", "kt", "c", "cc", "cpp", "h", "hpp", "cs", "php", "rb",
+    "swift", "sql", "js", "jsx", "ts", "tsx", "vue", "svelte", "dart", "lua", "r", "tex",
+];
+const IMAGE_EXT: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tif", "tiff", "avif", "heic",
+];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Builtin {
+    Text,
+    Image,
+    Media,
+    Pdf,
+    Fallback,
+}
+
+impl Builtin {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Text => "builtin:text",
+            Self::Image => "builtin:image",
+            Self::Media => "builtin:media",
+            Self::Pdf => "builtin:pdf",
+            Self::Fallback => "builtin:fallback",
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::Text => "文本预览",
+            Self::Image => "图片预览",
+            Self::Media => "音视频预览",
+            Self::Pdf => "PDF 预览",
+            Self::Fallback => "文件信息",
+        }
+    }
+
+    fn priority(self) -> i64 {
+        match self {
+            Self::Text => 10,
+            Self::Image => 20,
+            Self::Media => 30,
+            Self::Pdf => 40,
+            Self::Fallback => 0,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Provider {
+    id: String,
+    provider: String,
+    title: String,
+    priority: i64,
+    builtin: Option<Builtin>,
+    plugin: Option<(String, String)>,
+}
+
+impl Provider {
+    fn json(&self) -> Value {
+        serde_json::json!({
+            "id": self.id,
+            "provider": self.provider,
+            "title": self.title,
+            "priority": self.priority,
+        })
+    }
+}
 
 struct Session {
     plugin_id: String,
@@ -46,6 +117,42 @@ fn name_of(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().into_owned())
 }
 
+fn is_text(ext: &str, mime: &str) -> bool {
+    mime.starts_with("text/")
+        || matches!(
+            mime,
+            "application/json" | "application/xml" | "application/javascript"
+        )
+        || (mime.is_empty() && TEXT_EXT.contains(&ext))
+}
+
+fn is_image(ext: &str, mime: &str) -> bool {
+    mime.starts_with("image/") || (mime.is_empty() && IMAGE_EXT.contains(&ext))
+}
+
+fn builtin_candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Builtin> {
+    if is_dir {
+        return vec![Builtin::Fallback];
+    }
+    let mut values = Vec::new();
+    if is_text(ext, mime) {
+        values.push(Builtin::Text);
+    }
+    if is_image(ext, mime) {
+        values.push(Builtin::Image);
+    }
+    if mime.starts_with("video/") || mime.starts_with("audio/") {
+        values.push(Builtin::Media);
+    }
+    if ext == "pdf" {
+        values.push(Builtin::Pdf);
+    }
+    if values.is_empty() {
+        values.push(Builtin::Fallback);
+    }
+    values
+}
+
 fn matches(contribution: &Value, ext: &str) -> bool {
     let Some(values) = contribution.get("extensions").and_then(Value::as_array) else {
         return true;
@@ -60,6 +167,63 @@ fn matches(contribution: &Value, ext: &str) -> bool {
             .to_ascii_lowercase();
         value == "*" || value == ext
     })
+}
+
+fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
+    let ext = ext.trim_start_matches('.').to_ascii_lowercase();
+    let mut values = builtin_candidates(&ext, mime, is_dir)
+        .into_iter()
+        .map(|builtin| Provider {
+            id: builtin.id().into(),
+            provider: "Fiex".into(),
+            title: builtin.title().into(),
+            priority: builtin.priority(),
+            builtin: Some(builtin),
+            plugin: None,
+        })
+        .collect::<Vec<_>>();
+    for plugin in crate::plugin_host::catalog() {
+        if !plugin.enabled || !plugin.approved || !plugin.backend_available {
+            continue;
+        }
+        let Some(contributions) = plugin.extensions.get("preview").and_then(Value::as_array) else {
+            continue;
+        };
+        for contribution in contributions {
+            if !matches(contribution, &ext) {
+                continue;
+            }
+            let Some(contribution_id) = contribution.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+            values.push(Provider {
+                id: format!("plugin:{}:{}", plugin.id, contribution_id),
+                provider: plugin.name.clone(),
+                title: contribution
+                    .get("title")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&plugin.name)
+                    .into(),
+                priority: contribution
+                    .get("priority")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(50) as i64,
+                builtin: None,
+                plugin: Some((plugin.id.clone(), contribution_id.into())),
+            });
+        }
+    }
+    values.sort_by_key(|provider| std::cmp::Reverse(provider.priority));
+    values
+}
+
+/// Ordered provider list for the source switcher. User ordering and the
+/// disabled list remain presentation preferences.
+pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
+    candidates(ext, mime, is_dir)
+        .iter()
+        .map(Provider::json)
+        .collect()
 }
 
 fn resource_ref(display: &str) -> ResourceRef {
@@ -98,6 +262,82 @@ fn metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
     })
 }
 
+fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, String> {
+    let name = name_of(local);
+    let ext = extension(local);
+    let mime = mime_for(&ext);
+    match kind {
+        Builtin::Text => {
+            let bytes = fs::read(local).map_err(|error| error.to_string())?;
+            let truncated = bytes.len() > MAX_TEXT;
+            let text = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_TEXT)]).into_owned();
+            Ok(serde_json::json!({
+                "kind": "text",
+                "title": Builtin::Text.title(),
+                "text": text,
+                "truncated": truncated,
+                "size": bytes.len(),
+            }))
+        }
+        Builtin::Image => Ok(serde_json::json!({
+            "kind": "image",
+            "title": Builtin::Image.title(),
+            "path": local.to_string_lossy(),
+            "name": name,
+            "mime": mime,
+        })),
+        Builtin::Media => Ok(serde_json::json!({
+            "kind": "media",
+            "title": Builtin::Media.title(),
+            "media": if mime.starts_with("video/") { "video" } else { "audio" },
+            "path": local.to_string_lossy(),
+            "name": name,
+            "mime": mime,
+        })),
+        Builtin::Pdf => Ok(serde_json::json!({
+            "kind": "pdf",
+            "title": Builtin::Pdf.title(),
+            "path": local.to_string_lossy(),
+            "name": name,
+        })),
+        Builtin::Fallback => Ok(serde_json::json!({
+            "kind": "fallback",
+            "title": Builtin::Fallback.title(),
+            "name": name,
+            "extension": ext,
+        })),
+    }
+}
+
+fn mime_for(ext: &str) -> String {
+    match ext {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "flac" => "audio/flac",
+        "m4a" => "audio/mp4",
+        "json" => "application/json",
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "csv" => "text/csv",
+        "md" | "markdown" => "text/markdown",
+        "txt" | "log" => "text/plain",
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "java" | "c" | "cpp" | "h" => {
+            "text/plain"
+        }
+        _ => "application/octet-stream",
+    }
+    .into()
+}
+
 /// Resolve the provider's package-confined HTML document and validate the
 /// returned PreviewView.
 fn validate(plugin_id: &str, value: Value) -> Result<Value, String> {
@@ -133,7 +373,7 @@ fn validate(plugin_id: &str, value: Value) -> Result<Value, String> {
             Ok(serde_json::json!({"kind":"text","title":view.title,"text":text}))
         }
         "unsupported" => Ok(serde_json::json!({
-            "kind": "unsupported",
+            "kind": "fallback",
             "title": view.title,
             "message": view.message.unwrap_or_else(|| "此文件不支持插件预览".into()),
         })),
@@ -141,41 +381,7 @@ fn validate(plugin_id: &str, value: Value) -> Result<Value, String> {
     }
 }
 
-/// Ordered preview providers for an extension. User ordering and the
-/// enabled/disabled list remain presentation preferences; Core owns matching,
-/// permission checks and priority.
-pub fn providers(extension: &str) -> Vec<Value> {
-    let ext = extension.trim_start_matches('.').to_ascii_lowercase();
-    let mut values = Vec::new();
-    for plugin in crate::plugin_host::catalog() {
-        if !plugin.enabled || !plugin.approved || !plugin.backend_available {
-            continue;
-        }
-        let Some(contributions) = plugin.extensions.get("preview").and_then(Value::as_array) else {
-            continue;
-        };
-        for contribution in contributions {
-            if !matches(contribution, &ext) {
-                continue;
-            }
-            let Some(id) = contribution.get("id").and_then(Value::as_str) else {
-                continue;
-            };
-            values.push(serde_json::json!({
-                "pluginId": plugin.id,
-                "contributionId": id,
-                "title": contribution.get("title").and_then(Value::as_str).unwrap_or(&plugin.name),
-                "priority": contribution.get("priority").and_then(Value::as_u64).unwrap_or(50),
-            }));
-        }
-    }
-    values.sort_by_key(|value| std::cmp::Reverse(value["priority"].as_u64().unwrap_or(0)));
-    values
-}
-
-/// Open a provider preview. `display` is the user-visible URI/path; `local` is
-/// the Core-owned file used for scoped reads and metadata.
-pub fn open(
+fn open_plugin(
     display: &str,
     local: &str,
     plugin_id: &str,
@@ -269,6 +475,78 @@ pub fn open(
     }))
 }
 
+/// Open a provider preview using a unified provider id. `display` is the
+/// user-visible URI/path; `local` is the Core-owned file.
+pub fn open_provider(
+    display: &str,
+    local: &str,
+    provider_id: Option<&str>,
+) -> Result<Value, String> {
+    let local_path = Path::new(local);
+    let ext = extension(local_path);
+    let mime = mime_for(&ext);
+    let values = candidates(&ext, &mime, local_path.is_dir());
+    let provider = match provider_id {
+        Some(id) => values
+            .iter()
+            .find(|provider| provider.id == id)
+            .cloned()
+            .ok_or("unknown preview provider")?,
+        None => values.first().cloned().ok_or("no preview provider")?,
+    };
+    let view = if let Some(builtin) = provider.builtin {
+        builtin_view(builtin, local_path, display)?
+    } else if let Some((plugin_id, contribution_id)) = provider.plugin.as_ref() {
+        let plugin = open_plugin(display, local, plugin_id, contribution_id)?;
+        let mut view = plugin
+            .get("view")
+            .cloned()
+            .ok_or("plugin preview response missing view")?;
+        if let Some(object) = view.as_object_mut() {
+            object.insert("providerId".into(), Value::String(provider.id.clone()));
+            object.insert("provider".into(), Value::String(provider.provider.clone()));
+            if let Some(session) = plugin.get("sessionId") {
+                object.insert("sessionId".into(), session.clone());
+            }
+            if let Some(context) = plugin.get("context") {
+                object.insert("context".into(), context.clone());
+            }
+            if let Some(plugin_id) = plugin.get("pluginId") {
+                object.insert("pluginId".into(), plugin_id.clone());
+            }
+            if let Some(contribution_id) = plugin.get("contributionId") {
+                object.insert("contributionId".into(), contribution_id.clone());
+            }
+        }
+        view
+    } else {
+        return Err("invalid preview provider".into());
+    };
+    Ok(serde_json::json!({
+        "providerId": provider.id,
+        "provider": provider.provider,
+        "priority": provider.priority,
+        "view": view,
+    }))
+}
+
+/// Compatibility wrapper for the plugin-only integration test.
+pub fn open(
+    display: &str,
+    local: &str,
+    plugin_id: &str,
+    contribution_id: &str,
+) -> Result<Value, String> {
+    let result = open_plugin(display, local, plugin_id, contribution_id)?;
+    Ok(serde_json::json!({
+        "sessionId": result["sessionId"],
+        "pluginId": plugin_id,
+        "contributionId": contribution_id,
+        "context": result["context"],
+        "view": result["view"],
+    }))
+}
+
 /// Resolve the operation scope for a plugin UI invoking its backend. The
 /// iframe only holds the opaque session id, never the selected path.
 pub fn session_scope(session_id: &str, plugin_id: &str) -> Result<(String, Vec<PathBuf>), String> {
@@ -308,5 +586,19 @@ mod tests {
             "zip"
         ));
         assert!(!matches(&serde_json::json!({"extensions":["zip"]}), "rar"));
+    }
+
+    #[test]
+    fn builtins_are_ordered_and_fallback_is_last() {
+        let values = candidates("md", "text/markdown", false);
+        assert_eq!(values[0].id, "builtin:text");
+        assert!(!values
+            .iter()
+            .any(|provider| provider.id == "builtin:fallback"));
+        let pdf = candidates("pdf", "application/pdf", false);
+        assert!(pdf.iter().any(|provider| provider.id == "builtin:pdf"));
+        let unknown = candidates("xyz", "application/octet-stream", false);
+        assert_eq!(unknown.len(), 1);
+        assert_eq!(unknown[0].id, "builtin:fallback");
     }
 }
