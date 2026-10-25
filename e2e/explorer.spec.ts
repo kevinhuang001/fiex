@@ -375,6 +375,8 @@ test('multi-select and select all', async ({ page }) => {
   await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '快速查看' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '显示简介' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '重新命名' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '批量重命名…' })).toBeVisible()
   await page.keyboard.press('Escape')
 })
 

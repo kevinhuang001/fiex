@@ -140,13 +140,17 @@ export function contextItems({
             : []),
         ]
       : []),
-    {
-      label: '重新命名',
-      icon: <Pencil />,
-      hint: hint('rename'),
-      disabled: x.directoryReadOnly,
-      action: () => x.beginRename(menu.entry.path),
-    },
+    ...(multiple
+      ? []
+      : [
+          {
+            label: '重新命名',
+            icon: <Pencil />,
+            hint: hint('rename'),
+            disabled: x.directoryReadOnly,
+            action: () => x.beginRename(menu.entry.path),
+          },
+        ]),
     ...(x.selected.length > 1
       ? [
           {
