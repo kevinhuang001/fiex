@@ -624,7 +624,9 @@ fn menu_response_valid(
     Ok(actions)
 }
 /// Track submenu depth so a lazy expansion cannot exceed the four-level cap.
-fn root_menu_valid(result: &serde_json::Value) -> Result<std::collections::HashSet<String>, String> {
+fn root_menu_valid(
+    result: &serde_json::Value,
+) -> Result<std::collections::HashSet<String>, String> {
     let items = result
         .get("items")
         .and_then(serde_json::Value::as_array)
@@ -951,10 +953,12 @@ pub(crate) async fn plugin_context_menu_children(
         if session.created.elapsed().as_secs() >= 90 || session.plugin_id != plugin_id {
             return Err("menu session expired".into());
         }
-        if validated.actions
+        if validated
+            .actions
             .iter()
             .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
-            || validated.submenus
+            || validated
+                .submenus
                 .keys()
                 .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
         {

@@ -479,7 +479,11 @@ fn section_from_contract(
     })
 }
 
-fn resolve_builtin(candidate: &Candidate, resource: &ResourceSnapshot, display: &str) -> Vec<InfoSection> {
+fn resolve_builtin(
+    candidate: &Candidate,
+    resource: &ResourceSnapshot,
+    display: &str,
+) -> Vec<InfoSection> {
     match candidate {
         Candidate::Metadata => vec![metadata_section(
             display,
