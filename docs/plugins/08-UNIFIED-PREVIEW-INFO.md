@@ -41,9 +41,7 @@ Core 调用 `info.resolve`，传入标准 `InfoContext`：
     {
       "id": "document",
       "title": "文档",
-      "rows": [
-        { "label": "页数", "value": "12" }
-      ]
+      "rows": [{ "label": "页数", "value": "12" }]
     }
   ]
 }

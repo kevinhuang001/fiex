@@ -13,21 +13,21 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 
 ## Core → 插件
 
-| 方法 | 参数 | 返回 |
-| --- | --- | --- |
-| `plugin.initialize` | `protocolVersion, hostVersion?` | `pluginId, ready` |
-| `plugin.ping` / `plugin.shutdown` | 空 | `alive` / `null` |
-| `connection.validate` | `connection` | `valid` |
-| `connection.open` / `connection.create` | `connectionId/factoryId/connection…` | `NavigationTarget` |
-| `info.resolve` | `InfoContext` | `InfoResponse` |
-| `preview.open` | `PreviewContext` | `PreviewView` |
-| `decorations.resolve` | `DecorationContext` | `{decorations:[...]}` |
-| `contextMenu.resolve` | 菜单 Session、opaque refs | `{items:[...]}` |
-| `contextMenu.execute` | `menuSessionId,itemId,interactionId` | 操作结果 |
-| `search.query` | `query, root, hidden, ignores, limit` | `{entries:[...]}` |
-| `toolbar.invoke` | `root, selection` | 业务结果 |
-| `hooks.invoke` | `event, resource…` | `HookResponse`（生命周期接线未全部完成） |
-| `terminal.open` | `sessionId, cols, rows, connection` | `{started:true}`（SSH 插件） |
+| 方法                                    | 参数                                  | 返回                                     |
+| --------------------------------------- | ------------------------------------- | ---------------------------------------- |
+| `plugin.initialize`                     | `protocolVersion, hostVersion?`       | `pluginId, ready`                        |
+| `plugin.ping` / `plugin.shutdown`       | 空                                    | `alive` / `null`                         |
+| `connection.validate`                   | `connection`                          | `valid`                                  |
+| `connection.open` / `connection.create` | `connectionId/factoryId/connection…`  | `NavigationTarget`                       |
+| `info.resolve`                          | `InfoContext`                         | `InfoResponse`                           |
+| `preview.open`                          | `PreviewContext`                      | `PreviewView`                            |
+| `decorations.resolve`                   | `DecorationContext`                   | `{decorations:[...]}`                    |
+| `contextMenu.resolve`                   | 菜单 Session、opaque refs             | `{items:[...]}`                          |
+| `contextMenu.execute`                   | `menuSessionId,itemId,interactionId`  | 操作结果                                 |
+| `search.query`                          | `query, root, hidden, ignores, limit` | `{entries:[...]}`                        |
+| `toolbar.invoke`                        | `root, selection`                     | 业务结果                                 |
+| `hooks.invoke`                          | `event, resource…`                    | `HookResponse`（生命周期接线未全部完成） |
+| `terminal.open`                         | `sessionId, cols, rows, connection`   | `{started:true}`（SSH 插件）             |
 
 ## 标准事件上下文
 
@@ -67,22 +67,22 @@ Decorations 返回直接成员名：
 
 ## 插件 → Core
 
-| 方法 | 关键参数 | 许可 |
-| --- | --- | --- |
-| `host.fs.stat` / `statBatch` | refs | `metadata` + Scope |
-| `host.fs.list` | directory ref | `folders.read` + Scope |
-| `host.fs.openRead` / `readChunk` | ref / read handle | `files.read` + Scope |
-| `host.fs.read/readOpen/closeRead` | resource/handle | 读取所有权 + Scope |
-| `host.fs.beginWrite/writeChunk/commit/abort` | 目标 ref/缓冲区/句柄 | `files.write` 或 `files.create` |
-| `host.fs.mkdir` | parent,name | `folders.create` |
-| `host.fs.remove` / `rename` | 目标/源+目标 | 按真实对象类型检查对应权限 |
-| `host.net.http.*` | URL/headers/body | 已批准 Network host |
-| `host.net.tcp.open/readBytes/writeBytes/shutdown/close` | host/port/stream | 已批准 Network host，读写独立推进 |
-| `host.process.run` / `host.exec` | 已声明命令 | `commands` |
-| `host.storage.*` / `host.secret.*` | 插件命名空间键 | 插件进程身份 |
-| `host.vfs.openView` | VFS 资源 | 已注册 `vfs` + MountRegistry |
-| `host.terminal.*` | `sessionId`、base64、尺寸 | 终端 Session owner（仅 SSH 插件） |
-| `host.task.*` | 任务/进度/取消 | 当前 operation/task 授权 |
+| 方法                                                    | 关键参数                  | 许可                              |
+| ------------------------------------------------------- | ------------------------- | --------------------------------- |
+| `host.fs.stat` / `statBatch`                            | refs                      | `metadata` + Scope                |
+| `host.fs.list`                                          | directory ref             | `folders.read` + Scope            |
+| `host.fs.openRead` / `readChunk`                        | ref / read handle         | `files.read` + Scope              |
+| `host.fs.read/readOpen/closeRead`                       | resource/handle           | 读取所有权 + Scope                |
+| `host.fs.beginWrite/writeChunk/commit/abort`            | 目标 ref/缓冲区/句柄      | `files.write` 或 `files.create`   |
+| `host.fs.mkdir`                                         | parent,name               | `folders.create`                  |
+| `host.fs.remove` / `rename`                             | 目标/源+目标              | 按真实对象类型检查对应权限        |
+| `host.net.http.*`                                       | URL/headers/body          | 已批准 Network host               |
+| `host.net.tcp.open/readBytes/writeBytes/shutdown/close` | host/port/stream          | 已批准 Network host，读写独立推进 |
+| `host.process.run` / `host.exec`                        | 已声明命令                | `commands`                        |
+| `host.storage.*` / `host.secret.*`                      | 插件命名空间键            | 插件进程身份                      |
+| `host.vfs.openView`                                     | VFS 资源                  | 已注册 `vfs` + MountRegistry      |
+| `host.terminal.*`                                       | `sessionId`、base64、尺寸 | 终端 Session owner（仅 SSH 插件） |
+| `host.task.*`                                           | 任务/进度/取消            | 当前 operation/task 授权          |
 
 ## Connection 导航
 

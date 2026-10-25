@@ -32,19 +32,19 @@
 
 所有扩展点都在 `extensions` 下注册，**每插件最多一个贡献**。
 
-| 扩展点 | 形态 | Core 固定调用 |
-| --- | --- | --- |
-| `contextMenus` | `true` 或 `{match}` | `contextMenu.resolve` / `contextMenu.execute` |
-| `decorations` | `{match?, priority?}` | `decorations.resolve` |
-| `info` | `{match?, priority?}` | `info.resolve` |
-| `preview` | `{match?, priority?, maxBytes?, panel}` | `preview.open` |
-| `connections` | `{title, fields}` | `connection.validate/open/create` |
-| `vfs` | `{title, readOnly?}` | `vfs.list/stat/read…` |
-| `search` | `{icon?, scope?}` | `search.query` |
-| `toolbar` | `{title, icon?, panel?}` | `toolbar.invoke`，有 panel 时打开面板 |
-| `themes` | `{path}` | 主题资产加载 |
-| `settings` | `[{id,label,type,…}]` | 设置字段；字段 id 是存储 key |
-| `hooks` | `{event, priority?, match?}` | `hooks.invoke`（合同已固定，生命周期接线未全部完成） |
+| 扩展点         | 形态                                    | Core 固定调用                                        |
+| -------------- | --------------------------------------- | ---------------------------------------------------- |
+| `contextMenus` | `true` 或 `{match}`                     | `contextMenu.resolve` / `contextMenu.execute`        |
+| `decorations`  | `{match?, priority?}`                   | `decorations.resolve`                                |
+| `info`         | `{match?, priority?}`                   | `info.resolve`                                       |
+| `preview`      | `{match?, priority?, maxBytes?, panel}` | `preview.open`                                       |
+| `connections`  | `{title, fields}`                       | `connection.validate/open/create`                    |
+| `vfs`          | `{title, readOnly?}`                    | `vfs.list/stat/read…`                                |
+| `search`       | `{icon?, scope?}`                       | `search.query`                                       |
+| `toolbar`      | `{title, icon?, panel?}`                | `toolbar.invoke`，有 panel 时打开面板                |
+| `themes`       | `{path}`                                | 主题资产加载                                         |
+| `settings`     | `[{id,label,type,…}]`                   | 设置字段；字段 id 是存储 key                         |
+| `hooks`        | `{event, priority?, match?}`            | `hooks.invoke`（合同已固定，生命周期接线未全部完成） |
 
 不再接受：
 
@@ -129,14 +129,14 @@
 
 ## 权限模型
 
-| 路径 | 含义 |
-| --- | --- |
-| `metadata.enabled` | 文件和文件夹共用的属性读取 |
-| `files.read/write/create/delete/rename.enabled` | 文件内容/对象操作，逐项批准 |
-| `folders.read/create/delete/rename.enabled` | 目录遍历/对象操作，逐项批准 |
-| `network.enabled/domains/all` | HTTP/TCP 访问目标；`all` 表示任意主机 |
-| `commands.enabled/allow` | Core 代理执行外部命令 |
-| `hooks.enabled` | 生命周期钩子 |
+| 路径                                            | 含义                                  |
+| ----------------------------------------------- | ------------------------------------- |
+| `metadata.enabled`                              | 文件和文件夹共用的属性读取            |
+| `files.read/write/create/delete/rename.enabled` | 文件内容/对象操作，逐项批准           |
+| `folders.read/create/delete/rename.enabled`     | 目录遍历/对象操作，逐项批准           |
+| `network.enabled/domains/all`                   | HTTP/TCP 访问目标；`all` 表示任意主机 |
+| `commands.enabled/allow`                        | Core 代理执行外部命令                 |
+| `hooks.enabled`                                 | 生命周期钩子                          |
 
 申请不等于批准。实际有效范围：
 
