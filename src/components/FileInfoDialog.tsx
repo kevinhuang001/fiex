@@ -79,25 +79,12 @@ export function FileInfoDialog({
   // Core's metadata provider owns the basic attributes. Only use the local
   // Entry fallback for old responses or paths Core could not stat.
   const hasCoreMetadata = sections.some((section) => section.id === 'core.metadata')
-  const groups: Array<{
-    title: string
-    provider: string
-    hideProvider: boolean
-    rows: InfoRow[]
-  }> = info
+  const groups: Array<{ title: string; rows: InfoRow[] }> = info
     ? [
-        ...(hasCoreMetadata
-          ? []
-          : [{ title: '文件', provider: 'Fiex', hideProvider: true, rows: basicRows }]),
+        ...(hasCoreMetadata ? [] : [{ title: '文件', rows: basicRows }]),
         ...sections
           .filter((section) => section.rows.length > 0)
-          .map((section) => ({
-            title: section.title,
-            provider: section.provider || 'Fiex',
-            hideProvider:
-              section.source === 'core' || section.pluginId === 'org.fiex.office-preview',
-            rows: section.rows,
-          })),
+          .map((section) => ({ title: section.title, rows: section.rows })),
       ]
     : []
 
@@ -113,9 +100,6 @@ export function FileInfoDialog({
                 <Fragment key={`${group.title}:${groupIndex}`}>
                   <div className="file-info-group">
                     <span>{group.title}</span>
-                    {!group.hideProvider && group.provider !== group.title && (
-                      <small>{group.provider}</small>
-                    )}
                   </div>
                   {group.rows.map((row, rowIndex) => (
                     <div className="file-info-row" key={`${row.label}:${rowIndex}`}>
