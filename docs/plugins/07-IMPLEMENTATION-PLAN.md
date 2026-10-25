@@ -29,10 +29,11 @@
 
 ### Info / Preview / 面板
 
-- Info / Preview 单 Provider；
-- 内置与插件共用 DTO；
+- Info 按优先级汇总多个 Provider，Preview 选择一个可用 Provider；
+- Info 与 Preview 共用资源快照及 `EventContext.targets`；内置 Info 不创建插件专用请求；
 - 插件预览面板与 toolbar 面板走包内 HTML + CSP；
-- Toolbar 固定 `toolbar.invoke`。
+- Toolbar 固定 `toolbar.invoke`；
+- 右键菜单根项目和子菜单按需调用固定的 `contextMenu.resolve`；点击 `contextMenu.execute` 后才绑定被选资源的内容访问 Scope。
 
 ### SSH
 
