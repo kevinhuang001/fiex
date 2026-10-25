@@ -240,12 +240,6 @@ pub fn media_sections(path: &Path) -> Vec<InfoSection> {
     sections
 }
 
-fn name_of(path: &Path) -> String {
-    path.file_name()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.to_string_lossy().into_owned())
-}
-
 fn display_name(path: &str) -> String {
     path.trim_end_matches(['/', '\\'])
         .rsplit(['/', '\\'])

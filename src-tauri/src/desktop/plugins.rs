@@ -672,18 +672,17 @@ fn submenu_depths(result: &serde_json::Value) -> std::collections::HashMap<Strin
 
 /// Validate each lazy submenu response independently. The plugin cannot
 /// supply the parent id or forge actions from another menu session.
+struct ValidatedSubmenu {
+    items: Vec<serde_json::Value>,
+    actions: std::collections::HashSet<String>,
+    submenus: std::collections::HashMap<String, usize>,
+}
+
 fn validated_submenu(
     value: &serde_json::Value,
     parent_id: &str,
     parent_depth: usize,
-) -> Result<
-    (
-        Vec<serde_json::Value>,
-        std::collections::HashSet<String>,
-        std::collections::HashMap<String, usize>,
-    ),
-    String,
-> {
+) -> Result<ValidatedSubmenu, String> {
     let children = value
         .get("items")
         .and_then(serde_json::Value::as_array)
@@ -711,7 +710,11 @@ fn validated_submenu(
         .filter(|(id, _)| id != parent_id)
         .map(|(id, _)| (id, parent_depth + 1))
         .collect();
-    Ok((items.into_iter().skip(1).collect(), actions, submenus))
+    Ok(ValidatedSubmenu {
+        items: items.into_iter().skip(1).collect(),
+        actions,
+        submenus,
+    })
 }
 
 fn context_menu_metadata_allowed(plugin_id: &str) -> bool {
@@ -938,7 +941,7 @@ pub(crate) async fn plugin_context_menu_children(
             &directory,
             &[],
         )?;
-        let (items, actions, submenus) = validated_submenu(&result, &parent_id, depth)?;
+        let validated = validated_submenu(&result, &parent_id, depth)?;
         let mut guard = context_menu_sessions()
             .lock()
             .map_err(|_| "menu registry unavailable")?;
@@ -948,18 +951,18 @@ pub(crate) async fn plugin_context_menu_children(
         if session.created.elapsed().as_secs() >= 90 || session.plugin_id != plugin_id {
             return Err("menu session expired".into());
         }
-        if actions
+        if validated.actions
             .iter()
             .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
-            || submenus
+            || validated.submenus
                 .keys()
                 .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
         {
             return Err("duplicate menu item id".into());
         }
-        session.actions.extend(actions);
-        session.submenus.extend(submenus);
-        Ok::<_, String>(serde_json::json!({"items":items}))
+        session.actions.extend(validated.actions);
+        session.submenus.extend(validated.submenus);
+        Ok::<_, String>(serde_json::json!({"items":validated.items}))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -1070,10 +1073,10 @@ mod context_menu_session_tests {
         let response = serde_json::json!({
             "items":[{"id":"child","kind":"action","title":"Child"}]
         });
-        let (items, actions, submenus) = validated_submenu(&response, "root", 1).unwrap();
-        assert_eq!(items[0]["parentId"], "root");
-        assert!(actions.contains("child"));
-        assert!(submenus.is_empty());
+        let validated = validated_submenu(&response, "root", 1).unwrap();
+        assert_eq!(validated.items[0]["parentId"], "root");
+        assert!(validated.actions.contains("child"));
+        assert!(validated.submenus.is_empty());
         assert!(validated_submenu(&response, "root", 4).is_err());
         let spoof = serde_json::json!({"items":[{
             "id":"child","kind":"action","title":"Child","parentId":"other"
