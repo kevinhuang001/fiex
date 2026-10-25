@@ -115,14 +115,32 @@
 
 ## 4. 权限模型
 
-| 路径                                                        | 含义                                 |
-| ----------------------------------------------------------- | ------------------------------------ |
-| `permissions.metadata.enabled`                              | 文件与文件夹共用的 stat 属性读取授权 |
-| `permissions.files.read/write/create/delete/rename.enabled` | 文件内容与文件对象操作，逐项分别批准 |
-| `permissions.folders.read/create/delete/rename.enabled`     | 目录遍历与目录对象操作，逐项分别批准 |
-| `permissions.network.enabled/domains`                       | HTTP/TCP 经 Core 网络代理访问的目标  |
-| `permissions.commands.enabled/allow`                        | Core 执行外部命令的高风险授权        |
-| `permissions.hooks.enabled`                                 | 特定宿主生命周期钩子授权（如需要）   |
+| 路径                                                        | 含义                                                    |
+| ----------------------------------------------------------- | ------------------------------------------------------- |
+| `permissions.metadata.enabled`                              | 文件与文件夹共用的 stat 属性读取授权                    |
+| `permissions.files.read/write/create/delete/rename.enabled` | 文件内容与文件对象操作，逐项分别批准                    |
+| `permissions.folders.read/create/delete/rename.enabled`     | 目录遍历与目录对象操作，逐项分别批准                    |
+| `permissions.network.enabled/domains/all`                   | HTTP/TCP 经 Core 网络代理访问的目标；`all` 表示任意主机 |
+| `permissions.commands.enabled/allow`                        | Core 执行外部命令的高风险授权                           |
+| `permissions.hooks.enabled`                                 | 特定宿主生命周期钩子授权（如需要）                      |
+
+### 网络权限：白名单与全部网络
+
+```json
+"permissions": {
+  "network": { "enabled": true, "domains": ["api.example.com"] }
+}
+```
+
+默认是**精确白名单**。如果确实需要访问任意主机：
+
+```json
+"permissions": {
+  "network": { "enabled": true, "all": true, "domains": [] }
+}
+```
+
+`all: true` 会在授权界面显示红色危险警告；用户可以拒绝，或切换为白名单后只添加需要的域名。设置里的“网络域名”也可以随时在“全部网络”和“白名单”之间切换；切换为白名单不会自动重新授权全部网络。
 
 每个文件/目录权限项均是带 `enabled` 的对象；其中 `files.create` 是创建不存在的文件，不表示可覆盖现有文件，`files.write` 是修改已存在文件。权限授权实际有效范围 = **Manifest 申请 ∩ 用户批准 ∩ 本次 EventScope/OperationScope ∩ PermissionPolicy 的对象和方法规则**。Metadata 不意味着可读取内容或列举任意目录。
 

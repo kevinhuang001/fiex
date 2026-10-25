@@ -12,7 +12,7 @@ import {
 
 export interface PluginPermissionItem {
   id: string
-  kind: 'permission' | 'network' | 'command' | 'activate'
+  kind: 'permission' | 'network' | 'networkAll' | 'command' | 'activate'
   title: string
   hint?: string
   value?: string
@@ -52,6 +52,17 @@ export function activationPromptItems(plugin: PluginInfo): PluginPermissionItem[
         title: permissionLabels[value] || value,
         hint: permissionHints[value],
       })),
+    ...(consent.networkAll
+      ? [
+          {
+            id: 'network:all',
+            kind: 'networkAll' as const,
+            title: '访问全部网络',
+            warning:
+              '危险：插件将可以连接任意主机，而不只是清单中列出的域名。只在你完全信任该插件时选择。',
+          },
+        ]
+      : []),
     ...consent.domains.map((value) => ({
       id: `domain:${value}`,
       kind: 'network' as const,
@@ -123,19 +134,23 @@ export function PluginPermissionPrompt({
   onDeny: () => void
 }) {
   const question =
-    item.kind === 'network'
-      ? `允许「${pluginName}」访问 ${item.value}？`
-      : item.kind === 'command'
-        ? `允许「${pluginName}」执行 ${item.value}？`
-        : item.kind === 'activate'
-          ? `允许「${pluginName}」运行？`
-          : `允许「${pluginName}」${item.title}？`
+    item.kind === 'networkAll'
+      ? `允许「${pluginName}」访问全部网络？`
+      : item.kind === 'network'
+        ? `允许「${pluginName}」访问 ${item.value}？`
+        : item.kind === 'command'
+          ? `允许「${pluginName}」执行 ${item.value}？`
+          : item.kind === 'activate'
+            ? `允许「${pluginName}」运行？`
+            : `允许「${pluginName}」${item.title}？`
   const hint =
-    item.kind === 'network'
-      ? '仅授权此精确主机，不包含其他子域名；插件本身不能直接联网。'
-      : item.kind === 'command'
-        ? commandRisk
-        : item.hint
+    item.kind === 'networkAll'
+      ? '这不是精确域名授权：插件可以访问任意 HTTP/TCP 目标。建议先改用白名单。'
+      : item.kind === 'network'
+        ? '仅授权此精确主机，不包含其他子域名；插件本身不能直接联网。'
+        : item.kind === 'command'
+          ? commandRisk
+          : item.hint
   return (
     <Modal
       open={open}
@@ -144,7 +159,11 @@ export function PluginPermissionPrompt({
       className="plugin-permission-prompt-modal"
       bare
     >
-      <div className="plugin-permission-prompt" role="group" aria-label={question}>
+      <div
+        className={`plugin-permission-prompt ${item.kind === 'networkAll' ? 'danger' : ''}`}
+        role="group"
+        aria-label={question}
+      >
         <span className="plugin-permission-prompt-app">
           <PluginGlyph icon={icon} size={34} />
         </span>

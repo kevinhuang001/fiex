@@ -68,6 +68,10 @@ pub struct CommandsPermission {
 pub struct NetworkPermission {
     #[serde(default)]
     pub enabled: bool,
+    /// Explicit "all hosts" access. The UI marks this as dangerous and can
+    /// switch the plugin to a whitelist instead.
+    #[serde(default)]
+    pub all: bool,
     #[serde(default)]
     pub domains: Vec<String>,
 }
@@ -180,7 +184,10 @@ pub fn declared_permissions(manifest: &PluginManifest) -> Result<BTreeSet<String
             declared.insert(name.into());
         }
     }
-    if manifest.permissions.network.enabled || !manifest.permissions.network.domains.is_empty() {
+    if manifest.permissions.network.enabled
+        || manifest.permissions.network.all
+        || !manifest.permissions.network.domains.is_empty()
+    {
         declared.insert("network".to_string());
     }
     if manifest.permissions.commands.enabled {
@@ -215,6 +222,7 @@ pub fn activation_requirements(
     )?;
     Ok(crate::plugin_permissions::ActivationConsent {
         permissions,
+        network_all: manifest.permissions.network.all,
         domains,
         commands,
     })

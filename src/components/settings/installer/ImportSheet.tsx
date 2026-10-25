@@ -70,6 +70,11 @@ export function ImportSheet({
             </p>
           </>
         )}
+        {preview?.requestedNetworkAll && (
+          <p className="plugin-install-danger" role="alert">
+            危险：此插件申请访问全部网络，而不只是精确域名。安装后可以在权限设置里切换为白名单。
+          </p>
+        )}
         {!!preview?.requestedNetworkDomains.length && (
           <>
             <strong>插件申请的网络域名</strong>

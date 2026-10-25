@@ -680,6 +680,12 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       }
       return null
     }
+    case 'plugin_set_network_all': {
+      const plugin = demoPlugins.find((entry) => entry.id === String(a.pluginId || ''))
+      if (!plugin) throw new Error('plugin not found')
+      plugin.allowedNetworkAll = Boolean(a.all)
+      return null
+    }
     case 'plugin_set_network_domain': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {

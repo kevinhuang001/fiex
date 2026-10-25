@@ -124,6 +124,7 @@ pub fn run() {
             plugin_activate,
             plugin_set_permission,
             plugin_set_command,
+            plugin_set_network_all,
             plugin_set_network_domain,
             plugin_approve_install,
             plugin_storage_get,

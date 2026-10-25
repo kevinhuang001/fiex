@@ -219,6 +219,10 @@ pub(crate) fn plugin_set_command(
     crate::plugin_host::set_command(&plugin_id, &command, granted)
 }
 #[tauri::command]
+pub(crate) fn plugin_set_network_all(plugin_id: String, all: bool) -> Result<(), String> {
+    crate::plugin_host::set_network_all(&plugin_id, all)
+}
+#[tauri::command]
 pub(crate) fn plugin_set_network_domain(
     plugin_id: String,
     domain: String,

@@ -61,6 +61,15 @@ pub fn permission_allowed(id: &str, permission: &str) -> Result<bool, String> {
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::allowed(id, &declared(&manifest)?, permission)
 }
+pub fn set_network_all(id: &str, all: bool) -> Result<(), String> {
+    let (manifest, _) = discover()
+        .into_iter()
+        .find(|(m, _)| m.id == id)
+        .ok_or("plugin not installed")?;
+    crate::plugin_permissions::set_network_all(id, &declared(&manifest)?, all)?;
+    global().stop(id);
+    Ok(())
+}
 pub fn set_network_domain(id: &str, domain: &str, grant: bool) -> Result<(), String> {
     let (manifest, _) = discover()
         .into_iter()

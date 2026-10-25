@@ -47,6 +47,9 @@ pub struct PluginGrant {
     /// Exact outbound hostnames approved by the user. No wildcards.
     #[serde(default)]
     pub network_domains: BTreeSet<String>,
+    /// Dangerous opt-in: any hostname, not just `network_domains`.
+    #[serde(default)]
+    pub network_all: bool,
     #[serde(default)]
     pub commands: BTreeSet<String>,
 }
@@ -158,6 +161,7 @@ fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String>) -> Plugi
             } else {
                 BTreeSet::new()
             },
+            network_all: declared.contains("network") && r.network_all,
             commands: if declared.contains("commands") {
                 r.commands
                     .iter()
@@ -262,6 +266,23 @@ pub fn set_command(
     })
 }
 
+pub fn set_network_all(
+    id: &str,
+    declared: &BTreeSet<String>,
+    all: bool,
+) -> Result<PluginGrant, String> {
+    if !declared.contains("network") {
+        return Err("plugin did not declare network permission".into());
+    }
+    mutate(id, declared, |current| {
+        if !current.approved {
+            return Err("installation approval required".into());
+        }
+        current.network_all = all;
+        Ok(())
+    })
+}
+
 pub fn set_domain(
     id: &str,
     declared: &BTreeSet<String>,
@@ -295,7 +316,7 @@ pub fn domain_allowed(id: &str, declared: &BTreeSet<String>, domain: &str) -> Re
     Ok(policy.approved
         && policy.enabled
         && policy.granted.contains("network")
-        && policy.network_domains.contains(&domain))
+        && (policy.network_all || policy.network_domains.contains(&domain)))
 }
 
 pub fn revoke_install(id: &str) -> Result<(), String> {
@@ -390,6 +411,7 @@ fn mutate(
 #[serde(rename_all = "camelCase")]
 pub struct ActivationConsent {
     pub permissions: BTreeSet<String>,
+    pub network_all: bool,
     pub domains: BTreeSet<String>,
     pub commands: BTreeSet<String>,
 }
@@ -397,6 +419,7 @@ pub struct ActivationConsent {
 pub fn activation_complete(grant: &PluginGrant, required: &ActivationConsent) -> bool {
     grant.approved
         && required.permissions.is_subset(&grant.granted)
+        && (!required.network_all || grant.network_all)
         && required.domains.is_subset(&grant.network_domains)
         && required.commands.is_subset(&grant.commands)
 }
@@ -416,6 +439,7 @@ pub fn activate(
         current.approved = true;
         current.granted = required.permissions.clone();
         current.network_domains = required.domains.clone();
+        current.network_all = required.network_all;
         current.commands = required.commands.clone();
         current.enabled = true;
         Ok(())
@@ -430,6 +454,7 @@ mod tests {
     fn activation_requires_every_capability_and_target() {
         let required = ActivationConsent {
             permissions: ["files.read".into(), "commands".into(), "network".into()].into(),
+            network_all: false,
             commands: ["tool".into()].into(),
             domains: ["example.com".into()].into(),
         };
@@ -463,12 +488,36 @@ mod tests {
             enabled: true,
             granted: old,
             network_domains: BTreeSet::new(),
+            network_all: false,
             commands: BTreeSet::new(),
         };
         let new = declared(&["files.read", "files.write"]);
         let s = effective(Some(&current), &new);
         assert!(s.granted.contains("files.read") && !s.granted.contains("files.write"));
     }
+    #[test]
+    fn network_all_requires_explicit_approval_and_disappears_if_undeclared() {
+        let required = ActivationConsent {
+            permissions: ["network".into()].into(),
+            network_all: true,
+            domains: BTreeSet::new(),
+            commands: BTreeSet::new(),
+        };
+        let mut grant = PluginGrant {
+            approved: true,
+            enabled: true,
+            granted: required.permissions.clone(),
+            ..Default::default()
+        };
+        assert!(!activation_complete(&grant, &required));
+        grant.network_all = true;
+        assert!(activation_complete(&grant, &required));
+        let hidden = effective(Some(&grant), &BTreeSet::new());
+        assert!(!hidden.network_all);
+        let kept = effective(Some(&grant), &required.permissions);
+        assert!(kept.network_all);
+    }
+
     #[test]
     fn command_grants_are_exact_and_require_declaration() {
         let commands = declared(&["commands"]);
@@ -486,6 +535,7 @@ mod tests {
             enabled: true,
             granted: commands.clone(),
             network_domains: BTreeSet::new(),
+            network_all: false,
             commands: ["git".to_string()].into(),
         };
         assert_eq!(
@@ -518,6 +568,7 @@ mod tests {
                 enabled: true,
                 granted: declared.clone(),
                 network_domains: ["example.com".to_string()].into(),
+                network_all: false,
                 commands: BTreeSet::new(),
             }),
             &declared,

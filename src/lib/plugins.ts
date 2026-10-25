@@ -56,7 +56,9 @@ export interface PluginInfo {
   approved: boolean
   declaredPermissions: string[]
   grantedPermissions: string[]
+  requestedNetworkAll: boolean
   requestedNetworkDomains: string[]
+  allowedNetworkAll: boolean
   allowedNetworkDomains: string[]
   requestedCommands: string[]
   allowedCommands: string[]

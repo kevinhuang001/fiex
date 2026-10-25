@@ -230,6 +230,18 @@ export function PluginSettings() {
       setBusy(false)
     }
   }
+  const updateNetworkAll = async (plugin: PluginInfo, all: boolean) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await call('plugin_set_network_all', { pluginId: plugin.id, all })
+      refreshPluginCatalog()
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
   const updateCommand = async (plugin: PluginInfo, command: string, granted: boolean) => {
     if (granted && commandToApprove !== command) {
       setCommandToApprove(command)
@@ -382,6 +394,7 @@ export function PluginSettings() {
             onDraftChange={setDomainDraft}
             onToggle={(domain, granted) => void updateDomain(permissionsFor, domain, granted)}
             onAdd={(domain) => void updateDomain(permissionsFor, domain, true)}
+            onToggleAll={(all) => void updateNetworkAll(permissionsFor, all)}
             onClose={() => setDomainSettingsOpen(false)}
           />
         )}

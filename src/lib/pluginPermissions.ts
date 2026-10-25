@@ -36,12 +36,14 @@ export const permissionHints: Record<string, string> = {
 }
 export interface ActivationConsent {
   permissions: string[]
+  networkAll: boolean
   domains: string[]
   commands: string[]
 }
 export function activationConsent(plugin: PluginInfo): ActivationConsent {
   return {
     permissions: [...new Set(plugin.declaredPermissions || [])].sort(),
+    networkAll: Boolean(plugin.requestedNetworkAll),
     domains: [...new Set(plugin.requestedNetworkDomains || [])].sort(),
     commands: [...new Set(plugin.requestedCommands || [])].sort(),
   }

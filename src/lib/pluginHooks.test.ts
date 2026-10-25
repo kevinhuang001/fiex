@@ -25,7 +25,9 @@ const plugin = (id: string, priority: number, hooks = true): PluginInfo => ({
   requestedCommands: [],
   allowedCommands: [],
   missingCommands: [],
+  requestedNetworkAll: false,
   requestedNetworkDomains: [],
+  allowedNetworkAll: false,
   allowedNetworkDomains: [],
   extensions: {
     hooks: [{ id: 'beforeOpen', event: 'beforeOpen', method: `${id}.open`, priority }],

@@ -5,6 +5,7 @@ export interface InstallPreview {
   version: string
   author?: { name: string; url?: string }
   permissions: string[]
+  requestedNetworkAll: boolean
   requestedNetworkDomains: string[]
   commands: string[]
   repository: string

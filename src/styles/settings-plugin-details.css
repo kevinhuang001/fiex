@@ -1057,3 +1057,87 @@
   max-width: calc(100vw - 40px);
   padding: 18px;
 }
+
+/* Network all-hosts mode is deliberately loud. */
+.plugin-network-scope {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: 10px;
+}
+.plugin-network-scope strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.plugin-network-scope.danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+}
+.plugin-network-scope.danger strong {
+  color: var(--danger);
+}
+.plugin-network-danger {
+  margin: -2px 0 10px;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.plugin-network-request {
+  margin: -2px 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.plugin-permission-prompt.danger h3 {
+  color: var(--danger);
+}
+.plugin-permission-prompt.danger .plugin-permission-prompt-app {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+.plugin-install-danger {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.plugin-network-scope button.danger {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--line));
+  color: var(--danger);
+}
+
+.plugin-network-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: 10px;
+}
+.plugin-network-mode select {
+  min-width: 120px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 4px 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+}
