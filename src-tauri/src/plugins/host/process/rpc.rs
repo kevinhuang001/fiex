@@ -494,10 +494,9 @@ impl Running {
     }
 
     fn authorized_host_method(&self, method: &str, p: &Value) -> Result<Value, String> {
-        let permitted = |name: &str| {
-            crate::plugin_permissions::allowed(&self.plugin_id, &self.declared, name)
-                .unwrap_or(false)
-        };
+        let policy =
+            crate::plugin_permission_policy::PermissionPolicy::new(&self.plugin_id, &self.declared);
+        let permitted = |name: &str| policy.allowed_name(name);
         let arg = |key: &str| {
             p.get(key)
                 .and_then(Value::as_str)
@@ -516,16 +515,14 @@ impl Running {
         match method {
             "host.vfs.openView" => crate::mounts::open_view(&self.plugin_id, p, root()?),
             "host.net.http.open" if permitted("network") => {
-                crate::plugin_net::http_open(owner, &self.plugin_id, &self.declared, p)
+                crate::plugin_net::http_open(owner, &policy, p)
             }
             "host.net.http.read" if permitted("network") => crate::plugin_net::http_read(owner, p),
             "host.net.http.close" => {
                 crate::plugin_net::http_close(owner, p)?;
                 Ok(Value::Null)
             }
-            "host.net.http" if permitted("network") => {
-                crate::plugin_net::http(owner, &self.plugin_id, &self.declared, p)
-            }
+            "host.net.http" if permitted("network") => crate::plugin_net::http(owner, &policy, p),
             #[cfg(feature = "desktop")]
             "host.terminal.output" => {
                 crate::desktop::ssh::plugin_terminal_output(owner, p)?;
@@ -549,7 +546,7 @@ impl Running {
             | "host.terminal.closed"
             | "host.terminal.end" => Err("终端仅在桌面版可用".into()),
             "host.net.tcp.open" if permitted("network") => {
-                crate::plugin_net::tcp_open(owner, &self.plugin_id, &self.declared, p)
+                crate::plugin_net::tcp_open(owner, &policy, p)
             }
             "host.net.tcp.readBytes" if permitted("network") => {
                 crate::plugin_net::tcp_read_bytes(owner, p)

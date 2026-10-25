@@ -2,7 +2,7 @@
 //!
 //! Plugins never open sockets. HTTP is a structured request/response API;
 //! TCP is a controlled byte stream sharing HTTP's approved hostname/IP list.
-use crate::{plugin_ipc, plugin_permissions};
+use crate::{plugin_ipc, plugin_permission_policy::PermissionPolicy, plugin_permissions};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
@@ -37,12 +37,7 @@ fn http_method(value: &str) -> bool {
     )
 }
 
-pub fn http(
-    owner: &str,
-    permission_id: &str,
-    declared: &std::collections::BTreeSet<String>,
-    params: &Value,
-) -> Result<Value, String> {
+pub fn http(owner: &str, policy: &PermissionPolicy<'_>, params: &Value) -> Result<Value, String> {
     let url = text_param(params, "url")?;
     let method = text_param(params, "method")?.to_ascii_uppercase();
     if !http_method(&method) {
@@ -53,7 +48,7 @@ pub fn http(
         return Err("only http and https are supported".into());
     }
     let host = parsed.host_str().ok_or("URL has no host")?;
-    if !plugin_permissions::domain_allowed(permission_id, declared, host)? {
+    if !policy.domain_allowed(host)? {
         return Err("network domain not granted".into());
     }
     let mut headers = reqwest::header::HeaderMap::new();
@@ -156,8 +151,7 @@ fn streams() -> &'static Mutex<HashMap<String, TcpEntry>> {
 
 pub fn tcp_open(
     owner: &str,
-    permission_id: &str,
-    declared: &std::collections::BTreeSet<String>,
+    policy: &PermissionPolicy<'_>,
     params: &Value,
 ) -> Result<Value, String> {
     let host = text_param(params, "host")?;
@@ -167,8 +161,7 @@ pub fn tcp_open(
         .filter(|p| (1..=65535).contains(p))
         .ok_or("invalid TCP port")? as u16;
     let normalized = plugin_permissions::normalize_domain(host)?;
-    let allowed = plugin_permissions::domain_allowed(permission_id, declared, &normalized)?;
-    if !allowed {
+    if !policy.domain_allowed(&normalized)? {
         return Err("TCP target not granted".into());
     }
     let address = (normalized.as_str(), port)
@@ -309,8 +302,7 @@ fn http_streams() -> &'static Mutex<HashMap<String, HttpEntry>> {
 }
 pub fn http_open(
     owner: &str,
-    permission_id: &str,
-    declared: &std::collections::BTreeSet<String>,
+    policy: &PermissionPolicy<'_>,
     params: &Value,
 ) -> Result<Value, String> {
     let mut url = reqwest::Url::parse(text_param(params, "url")?).map_err(|e| e.to_string())?;
@@ -394,11 +386,7 @@ pub fn http_open(
         {
             return Err("invalid HTTP URL".into());
         }
-        if !plugin_permissions::domain_allowed(
-            permission_id,
-            declared,
-            url.host_str().ok_or("missing HTTP host")?,
-        )? {
+        if !policy.domain_allowed(url.host_str().ok_or("missing HTTP host")?)? {
             return Err("network target not granted".into());
         }
         let mut request = client

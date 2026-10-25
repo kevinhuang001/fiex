@@ -233,7 +233,8 @@ fn dynamic(
         return;
     }
     let declared = plugin_host::declared_permissions(manifest).unwrap_or_default();
-    if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read").unwrap_or(false)
+    if !crate::plugin_permission_policy::PermissionPolicy::new(&manifest.id, &declared)
+        .allowed(crate::plugin_permission_policy::Capability::FoldersRead)
     {
         return;
     }
@@ -339,8 +340,8 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
             continue;
         }
         let declared = plugin_host::declared_permissions(&manifest).unwrap_or_default();
-        if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read")
-            .unwrap_or(false)
+        if !crate::plugin_permission_policy::PermissionPolicy::new(&manifest.id, &declared)
+            .allowed(crate::plugin_permission_policy::Capability::FoldersRead)
         {
             continue;
         }

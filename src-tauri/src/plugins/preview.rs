@@ -353,10 +353,9 @@ fn open_plugin(
         .iter()
         .cloned()
         .collect::<std::collections::BTreeSet<_>>();
-    let metadata_allowed =
-        crate::plugin_permissions::allowed(plugin_id, &declared, "metadata").unwrap_or(false);
-    let read_allowed =
-        crate::plugin_permissions::allowed(plugin_id, &declared, "files.read").unwrap_or(false);
+    let policy = crate::plugin_permission_policy::PermissionPolicy::new(plugin_id, &declared);
+    let metadata_allowed = policy.allowed(crate::plugin_permission_policy::Capability::Metadata);
+    let read_allowed = policy.allowed(crate::plugin_permission_policy::Capability::FilesRead);
     let contribution = plugin
         .extensions
         .get("preview")

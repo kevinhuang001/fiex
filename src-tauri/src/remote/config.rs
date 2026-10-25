@@ -29,11 +29,10 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
         })
         .ok_or("连接插件未安装、启用或已被撤销授权")?;
     declared_connection_fields(&plugin_id, &conn.kind)?;
-    for permission in &plugin.declared_permissions {
-        if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
-            return Err(format!("插件权限未授权：{permission}"));
-        }
-    }
+    let declared = plugin.declared_permissions.iter().cloned().collect();
+    crate::plugin_permission_policy::PermissionPolicy::new(&plugin_id, &declared)
+        .require_all()
+        .map_err(|_| "插件权限未授权".to_string())?;
     Ok(plugin_id)
 }
 

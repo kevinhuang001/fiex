@@ -59,7 +59,11 @@ pub fn permission_allowed(id: &str, permission: &str) -> Result<bool, String> {
         .into_iter()
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
-    crate::plugin_permissions::allowed(id, &declared(&manifest)?, permission)
+    let declared = declared(&manifest)?;
+    Ok(
+        crate::plugin_permission_policy::PermissionPolicy::new(id, &declared)
+            .allowed_name(permission),
+    )
 }
 pub fn set_network_all(id: &str, all: bool) -> Result<(), String> {
     let (manifest, _) = discover()
