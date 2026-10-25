@@ -259,11 +259,11 @@ fn validate_match(
         }
     }
     if let Some(selection) = object.get("selection") {
-        let selection = selection
-            .as_str()
-            .ok_or("match.selection must be a string")?;
-        if !matches!(selection, "any" | "single" | "multi") {
-            return Err("match.selection must be any, single or multi".into());
+        let count = selection
+            .as_u64()
+            .ok_or("match.selection must be a positive integer")?;
+        if count == 0 || count > 256 {
+            return Err("match.selection must be between 1 and 256".into());
         }
     }
     Ok(())
@@ -426,7 +426,7 @@ mod contribution_tests {
         }))
         .is_ok());
         assert!(validate_extensions(&serde_json::json!({
-            "contextMenus": {"match": {"selection": "single"}}
+            "contextMenus": {"match": {"selection": 1}}
         }))
         .is_ok());
         assert!(validate_extensions(&serde_json::json!({
@@ -434,10 +434,10 @@ mod contribution_tests {
         }))
         .is_ok());
         for invalid in [
-            serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
+            serde_json::json!({"decorations": {"match": {"selection": 1}}}),
             serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
             serde_json::json!({"info": [{"id": "x", "title": "X", "match": {"contains": [".git"]}}]}),
-            serde_json::json!({"contextMenus": {"match": {"selection": "many"}}}),
+            serde_json::json!({"contextMenus": {"match": {"selection": 0}}}),
         ] {
             assert!(validate_extensions(&invalid).is_err(), "{invalid}");
         }

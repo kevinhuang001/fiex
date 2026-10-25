@@ -85,7 +85,7 @@
 | `mimeTypes`  | 全部                  | 精确值或 `type/*`，例如 `text/*`、`image/*`；`*/*` 匹配全部 |
 | `kinds`      | 全部                  | `file` / `directory`（兼容 `dir`）                          |
 | `contains`   | **仅 `decorations`**  | 目录或其祖先包含 `.git`、`package.json` 等名称              |
-| `selection`  | **仅 `contextMenus`** | `single`（恰好选中 1 项）、`multi`（≥2 项）或 `any`（默认） |
+| `selection`  | **仅 `contextMenus`** | 精确的选中项数量，例如 `1`、`2`；缺省表示不限               |
 
 - 同一字段内是 OR，不同字段之间是 AND；
 - **`info` / `preview`**：用户在单个资源上打开简介/预览时评估；不会对多选逐个调用。每个 contribution 独立 `match`，不匹配就不会启动/调用该插件；
@@ -145,7 +145,7 @@ Core 校验目标 mount 的插件/连接归属、iframe 资源所属包、当前
 
 ## 7. 动态右键菜单
 
-`extensions.contextMenus` 可写 `true` 或 `{match}`。`match.selection` 是 contextMenus 特有的：`single` 只在恰好选中 1 项时调用，`multi` 只在选中 ≥2 项时调用，`any`/缺省不限制。菜单项由插件实时返回 `{items:[...]}`，每项可为 `action/submenu/separator`；子菜单使用 `parentId`，不内嵌脚本。Core 按 owner、Session、item ID 和资源身份校验执行。菜单请求里不含完整文件内容，具体读取/写入必须在有效用户操作中经 Broker 授权。
+`extensions.contextMenus` 可写 `true` 或 `{match}`。`match.selection` 是 contextMenus 特有的：写一个正整数表示“恰好选中几项”时才调用，例如 `1` 表示仅单选、`2` 表示恰好两项；缺省表示不限。菜单项由插件实时返回 `{items:[...]}`，每项可为 `action/submenu/separator`；子菜单使用 `parentId`，不内嵌脚本。Core 按 owner、Session、item ID 和资源身份校验执行。菜单请求里不含完整文件内容，具体读取/写入必须在有效用户操作中经 Broker 授权。
 
 ## 8. Schema 验收
 

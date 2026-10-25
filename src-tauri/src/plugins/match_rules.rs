@@ -19,10 +19,10 @@ pub struct MatchRules {
     /// Decorations only.
     #[serde(default)]
     pub contains: Vec<String>,
-    /// Context menu selection cardinality: `single`, `multi` or `any`.
+    /// Exact number of selected items. Omitted means any count.
     /// Context menus only.
     #[serde(default)]
-    pub selection: Option<String>,
+    pub selection: Option<u64>,
 }
 
 impl MatchRules {
@@ -120,12 +120,9 @@ impl MatchRules {
 
     /// Context menu selection cardinality.
     pub fn matches_selection(&self, count: usize) -> bool {
-        match self.selection.as_deref().unwrap_or("any") {
-            "any" => true,
-            "single" => count == 1,
-            "multi" => count >= 2,
-            _ => false,
-        }
+        self.selection
+            .map(|expected| count == expected as usize)
+            .unwrap_or(true)
     }
 }
 
@@ -181,7 +178,7 @@ mod tests {
     #[test]
     fn match_is_an_include_predicate() {
         let rules = MatchRules::from_contribution(&json!({
-            "match": {"extensions":["md"],"mimeTypes":["text/*"],"kinds":["file"],"selection":"single"}
+            "match": {"extensions":["md"],"mimeTypes":["text/*"],"kinds":["file"],"selection":1}
         }));
         assert!(rules.matches("md", "text/markdown", false));
         assert!(!rules.matches("png", "image/png", false));
@@ -196,7 +193,7 @@ mod tests {
         assert!(decorations.matches("ts", "text/plain", false));
         assert!(!decorations.matches("md", "text/markdown", false));
         let menu = MatchRules::from_contribution(&json!({
-            "match": {"selection": "single", "extensions": ["zip"]}
+            "match": {"selection": 1, "extensions": ["zip"]}
         }));
         assert!(menu.matches_selection(1));
         assert!(!menu.matches_selection(2));
