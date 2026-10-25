@@ -79,14 +79,14 @@ Manifest
 
 ## 规范目录
 
-| 文档 | 主题 |
-|---|---|
-| [01](docs/plugins/01-ARCHITECTURE.md) | 架构、模块和标准事件 |
-| [02](docs/plugins/02-MANIFEST-EXTENSIONS.md) | `extensions` 与权限声明 |
-| [03](docs/plugins/03-IPC-CATALOG.md) | IPC、标准 Context 与 VFS 方法 |
-| [04](docs/plugins/04-SDK-CATALOG.md) | Rust/UI SDK |
-| [05](docs/plugins/05-VFS-CONNECTION-SYNC.md) | 连接、文件树、云盘缓存和同步 |
-| [06](docs/plugins/06-SECURITY-LIFECYCLE.md) | PermissionPolicy、沙箱、安全 |
-| [07](docs/plugins/07-IMPLEMENTATION-PLAN.md) | 里程碑、验收和交付 |
-| [08](docs/plugins/08-UNIFIED-PREVIEW-INFO.md) | Info 与 Preview |
-| [09](docs/plugins/09-RUNTIME-UI-PANELS.md) | 完整右侧 PluginView、通用 Panel |
+| 文档                                          | 主题                            |
+| --------------------------------------------- | ------------------------------- |
+| [01](docs/plugins/01-ARCHITECTURE.md)         | 架构、模块和标准事件            |
+| [02](docs/plugins/02-MANIFEST-EXTENSIONS.md)  | `extensions` 与权限声明         |
+| [03](docs/plugins/03-IPC-CATALOG.md)          | IPC、标准 Context 与 VFS 方法   |
+| [04](docs/plugins/04-SDK-CATALOG.md)          | Rust/UI SDK                     |
+| [05](docs/plugins/05-VFS-CONNECTION-SYNC.md)  | 连接、文件树、云盘缓存和同步    |
+| [06](docs/plugins/06-SECURITY-LIFECYCLE.md)   | PermissionPolicy、沙箱、安全    |
+| [07](docs/plugins/07-IMPLEMENTATION-PLAN.md)  | 里程碑、验收和交付              |
+| [08](docs/plugins/08-UNIFIED-PREVIEW-INFO.md) | Info 与 Preview                 |
+| [09](docs/plugins/09-RUNTIME-UI-PANELS.md)    | 完整右侧 PluginView、通用 Panel |

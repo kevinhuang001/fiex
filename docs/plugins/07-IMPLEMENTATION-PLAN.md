@@ -6,15 +6,15 @@
 
 涉及 `fiex`（Core / Desktop）、`fiex-sdk`（Rust 和 UI SDK）、`fiex-official-plugins`（标准插件实现）。涉及全部扩展点、权限审核、受限宿主资源代理、Connection 导航、VFS 云盘同步以及 Info/Preview 统一 Provider。
 
-| 里程碑 | 依赖 | 输出 |
-|---|---|---|
-| M0 Schema 与合同 | 无 | extensions Manifest / Native IPC / UI Bridge 的单一 Schema 与 fixture |
-| M1 PermissionPolicy 与 Broker | M0 | 独立授权模块、ResourceRef/Scope、文件网络/任务受控 API |
-| M2 ExtensionRegistry 与标准事件 | M1 | ContextMenu、Info、Preview、Decoration、Search、Toolbar、Hooks、Themes、Settings |
-| M3 ContentHost 与 Connection | M1–M2 | VFS 或全宽 iframe 二分支导航、标签与生命周期 |
-| M4 VFS/离线缓存 | M1–M3 | MountRegistry、Provider 读写流、Pin、同步、冲突处理 |
-| M5 SDK/官方插件 | M1–M4 | `std::io` 与可选 Tokio IO、TLS/Transport Adapter、云盘及 Git Provider |
-| M6 发布验收 | 全部 | 跨平台格式、静态检查、单元/集成/E2E、安全与性能基准 |
+| 里程碑                          | 依赖  | 输出                                                                             |
+| ------------------------------- | ----- | -------------------------------------------------------------------------------- |
+| M0 Schema 与合同                | 无    | extensions Manifest / Native IPC / UI Bridge 的单一 Schema 与 fixture            |
+| M1 PermissionPolicy 与 Broker   | M0    | 独立授权模块、ResourceRef/Scope、文件网络/任务受控 API                           |
+| M2 ExtensionRegistry 与标准事件 | M1    | ContextMenu、Info、Preview、Decoration、Search、Toolbar、Hooks、Themes、Settings |
+| M3 ContentHost 与 Connection    | M1–M2 | VFS 或全宽 iframe 二分支导航、标签与生命周期                                     |
+| M4 VFS/离线缓存                 | M1–M3 | MountRegistry、Provider 读写流、Pin、同步、冲突处理                              |
+| M5 SDK/官方插件                 | M1–M4 | `std::io` 与可选 Tokio IO、TLS/Transport Adapter、云盘及 Git Provider            |
+| M6 发布验收                     | 全部  | 跨平台格式、静态检查、单元/集成/E2E、安全与性能基准                              |
 
 ## 2. M0 · 协议合同
 
@@ -31,7 +31,7 @@
 - 单独实现可信 `PermissionPolicy`：`project_event`、`authorize_call`、`audit_response`。Scope 绑定 PluginInstance、SessionId、ResourceRef、实际资源类型和操作。
 - 统一 `permissions.metadata.enabled` 管理文件与文件夹基础属性；文件、目录的读取、创建、删除、重命名与写入权限按真实对象类型核验。
 - ResourceBroker 封装文件列表/Metadata、流式 Reader/Writer、网络 HTTP/TCP、命令、存储、密钥和任务生命周期。大文件使用有界缓冲。
-Core TCP 必须让同一连接的读和写独立推进，并支持半关闭、取消、流回收和统一网络 IP 审核；异步 IPC Handler 可以同时等待并收到 Broker Response。
+  Core TCP 必须让同一连接的读和写独立推进，并支持半关闭、取消、流回收和统一网络 IP 审核；异步 IPC Handler 可以同时等待并收到 Broker Response。
 - Core 生成标准事件候选 Context 后由 PermissionPolicy 按 grant/Scope 做字段投影；自定义菜单和 UI 通过同一 Broker 按需申请资源。
 - Stream/Handle/Task 随 OperationScope、插件实例和取消/关闭事件撤销；强制防路径逃逸、符号链接、替换竞态、跨账户及重复提交。
 
@@ -39,17 +39,17 @@ Core TCP 必须让同一连接的读和写独立推进，并支持半关闭、�
 
 ## 4. M2 · ExtensionRegistry、事件与性能
 
-| 功能 | 实施 | 验收 |
-|---|---|---|
-| 注册表 | Registry 统一读取 `extensions.*`，注册多个内置和第三方来源 | 不硬编码官方插件 ID；卸载即注销 |
-| Info / Preview | Core ContextBuilder 提供经审核的 Metadata 和受限可读资源引用；各来源共享公共 Rust DTO | 标准事件一次带齐本次获准上下文；大文件流按需读取 |
-| Decoration | 目录切换给当前可见成员的已授权 Metadata | 未授权仍通知但不给属性；不越界枚举 |
-| ContextMenu | `resolve` 仅 opaque refs；可调用单项/批量 stat；`execute` 获得真实点击后的 OperationScope | 无静态业务匹配；动态菜单可超时降级 |
-| `statBatch` | 一个 RPC 批量请求并按输入对应逐项回报授权结果 | 256 项初始候选限额，重复/无权/过期对象不泄漏 |
-| Metadata Cache | Core 复用有效 Explorer/VFS 属性并在返回前审核 | 改名、写入、revision 变更、撤权后不读到错误数据 |
-| 嵌套 IPC | Handler 内发起 `host.*` 请求，Core 可重入异步响应 | 多插件并发不死锁，不串 Session/Request ID |
-| 渐进菜单 | 原生菜单首帧先显示，动态 items 按 Session 合并 | 悬停/焦点不跳动；超时/取消丢弃迟到结果 |
-| 搜索/工具栏/主题/钩子 | 对应标准事件、受限资源范围与 UI 渲染 | 搜索被限制到用户当前 root |
+| 功能                  | 实施                                                                                      | 验收                                             |
+| --------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| 注册表                | Registry 统一读取 `extensions.*`，注册多个内置和第三方来源                                | 不硬编码官方插件 ID；卸载即注销                  |
+| Info / Preview        | Core ContextBuilder 提供经审核的 Metadata 和受限可读资源引用；各来源共享公共 Rust DTO     | 标准事件一次带齐本次获准上下文；大文件流按需读取 |
+| Decoration            | 目录切换给当前可见成员的已授权 Metadata                                                   | 未授权仍通知但不给属性；不越界枚举               |
+| ContextMenu           | `resolve` 仅 opaque refs；可调用单项/批量 stat；`execute` 获得真实点击后的 OperationScope | 无静态业务匹配；动态菜单可超时降级               |
+| `statBatch`           | 一个 RPC 批量请求并按输入对应逐项回报授权结果                                             | 256 项初始候选限额，重复/无权/过期对象不泄漏     |
+| Metadata Cache        | Core 复用有效 Explorer/VFS 属性并在返回前审核                                             | 改名、写入、revision 变更、撤权后不读到错误数据  |
+| 嵌套 IPC              | Handler 内发起 `host.*` 请求，Core 可重入异步响应                                         | 多插件并发不死锁，不串 Session/Request ID        |
+| 渐进菜单              | 原生菜单首帧先显示，动态 items 按 Session 合并                                            | 悬停/焦点不跳动；超时/取消丢弃迟到结果           |
+| 搜索/工具栏/主题/钩子 | 对应标准事件、受限资源范围与 UI 渲染                                                      | 搜索被限制到用户当前 root                        |
 
 软响应预算 120 ms、硬截止 250 ms 仅作为跨平台压测候选值；必须提供真实基准再决定阈值。
 
@@ -92,9 +92,9 @@ Core TCP 必须让同一连接的读和写独立推进，并支持半关闭、�
 1. Windows/macOS/Linux 运行 Rust fmt、clippy、测试及 UI typecheck/build；提交前执行本地适用测试，CI 检查跨平台覆盖。
 2. E2E 测试每个 `extensions` 类型的注册、触发、授权拒绝、超时、禁用、卸载、恢复和错误提示。
 3. 性能基准覆盖单文件、100/1000 多选、10 个并发插件、冷热 Metadata 缓存、右键菜单首帧/增量合并 p50/p95/p99、慢/离线 VFS、5 GiB 以上流和数千文件目录。
-同时验证 Tokio Worker 不因同步 IPC 阻塞、TCP 全双工无读写互锁、同步/异步缓冲有界，记录两类 IO 吞吐、内存峰值与取消延迟。
+   同时验证 Tokio Worker 不因同步 IPC 阻塞、TCP 全双工无读写互锁、同步/异步缓冲有界，记录两类 IO 吞吐、内存峰值与取消延迟。
 4. 安全负面测试覆盖非法 Connection 导航、非插件所属 iframe/mount、文件/目录越权、命令/网络越权、Symlink、Token 泄露、Session 重放与缓存误授权。
-包含直接 OS Socket 旁路、DNS 解析后 IP/IPv6/内网访问、证书验证/STARTTLS、Scope 过期的 Tokio Pending 任务、未提交 FileWriter 回滚及跨进程 Handle 重放。
+   包含直接 OS Socket 旁路、DNS 解析后 IP/IPv6/内网访问、证书验证/STARTTLS、Scope 过期的 Tokio Pending 任务、未提交 FileWriter 回滚及跨进程 Handle 重放。
 5. 核对文档、Schema、SDK、Core 和官方插件合同一致；只有实际验证的任务才能标记完成。
 
 ## 完成定义

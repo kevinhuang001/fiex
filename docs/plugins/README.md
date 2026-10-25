@@ -16,14 +16,14 @@
 
 ## 二、典型路径
 
-| 场景 | Core → 插件 | 插件 → Core |
-|---|---|---|
-| 用户右键 | 选中对象 ref + MenuSession | 可按需申请 Metadata；返回扁平菜单项；点击后按操作申请资源 |
-| Info / Preview | 标准 Context：ref、获准 Metadata、受限可读资源引用 | 返回统一 InfoResponse / PreviewView；文件字节通过受限流读取 |
-| Decoration | 目录及当前可见成员 ref、获准 Metadata | 返回当前可见成员的角标/样式 |
-| Connection 点击 | connectionId + 用户 InteractionSession | 返回 **VFS** 或 **全宽主内容 iframe** 的导航目标 |
-| 自定义插件 UI | 插件选择要显示的页面 | 通过 UI Bridge/SDK 请求本次授权范围内的数据 |
-| 第三方 IO 库 | 标准 `Read/Write/Seek` 或可注入 Transport | 可直接传入 SDK 文件/TCP 流；异步库可选 `tokio-io`，权限仍由 Core 管理 |
+| 场景            | Core → 插件                                        | 插件 → Core                                                           |
+| --------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| 用户右键        | 选中对象 ref + MenuSession                         | 可按需申请 Metadata；返回扁平菜单项；点击后按操作申请资源             |
+| Info / Preview  | 标准 Context：ref、获准 Metadata、受限可读资源引用 | 返回统一 InfoResponse / PreviewView；文件字节通过受限流读取           |
+| Decoration      | 目录及当前可见成员 ref、获准 Metadata              | 返回当前可见成员的角标/样式                                           |
+| Connection 点击 | connectionId + 用户 InteractionSession             | 返回 **VFS** 或 **全宽主内容 iframe** 的导航目标                      |
+| 自定义插件 UI   | 插件选择要显示的页面                               | 通过 UI Bridge/SDK 请求本次授权范围内的数据                           |
+| 第三方 IO 库    | 标准 `Read/Write/Seek` 或可注入 Transport          | 可直接传入 SDK 文件/TCP 流；异步库可选 `tokio-io`，权限仍由 Core 管理 |
 
 ## 三、规范索引
 

@@ -23,7 +23,7 @@ Provider 可以使用 SDK 同步标准 `Read/Write/Seek` 或启用 `tokio-io` �
 ```json
 {
   "entries": [
-    {"nodeId":"opaque-81","name":"a.txt","kind":"file","size":12,"revision":"r42"}
+    { "nodeId": "opaque-81", "name": "a.txt", "kind": "file", "size": 12, "revision": "r42" }
   ],
   "nextCursor": null,
   "snapshotToken": "optional-token",

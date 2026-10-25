@@ -29,9 +29,9 @@ Sidebar connection item / Add connection +
 
 ```json
 {
-  "kind":"pluginView",
-  "view":{"source":"package","entry":"ui/cloud.html"},
-  "state":{"connectionId":"account-1","page":"home"}
+  "kind": "pluginView",
+  "view": { "source": "package", "entry": "ui/cloud.html" },
+  "state": { "connectionId": "account-1", "page": "home" }
 }
 ```
 
@@ -53,11 +53,11 @@ Connection 主导航以外的用户操作（如 Toolbar 点击、有效右键 ac
 
 ```json
 {
-  "method":"host.ui.open",
-  "params":{
-    "interactionId":"interaction-opaque",
-    "view":{"source":"package","entry":"ui/options.html"},
-    "presentation":{"placement":"dialog","title":"高级选项"}
+  "method": "host.ui.open",
+  "params": {
+    "interactionId": "interaction-opaque",
+    "view": { "source": "package", "entry": "ui/options.html" },
+    "presentation": { "placement": "dialog", "title": "高级选项" }
   }
 }
 ```

@@ -33,13 +33,13 @@ sdk::serve("org.example.plugin", |ctx| {
 
 ## 3. 标准 IO Trait 合同
 
-| SDK 对象 | 默认同步 Trait | 可选 `tokio-io` 对象及 Trait | 限制 |
-|---|---|---|---|
-| `FileReader` | `std::io::Read + Seek + Send` | `AsyncFileReader: tokio::io::AsyncRead + AsyncSeek + Send` | 当前文件、只读、可 Seek |
-| `FileWriter` | `std::io::Write + Seek + Send` | `AsyncFileWriter: tokio::io::AsyncWrite + AsyncSeek + Send` | staged 写入；必须显式 `commit` |
-| `TcpStream` | `std::io::Read + Write + Send` | `AsyncTcpStream: tokio::io::AsyncRead + AsyncWrite + Send` | 双向字节流；不支持 Seek |
-| `HttpResponse` | `std::io::Read + Send` | `AsyncHttpResponse: tokio::io::AsyncRead + Send` | 响应体单向流，按需消费 |
-| HTTP request body | `body_reader(FileReader)`；可扩展通用 `Read + Send` 上传流 | `body_async_reader(AsyncRead + Send + Unpin + 'static)` | 通过 Broker 流式上传，不整体序列化 |
+| SDK 对象          | 默认同步 Trait                                             | 可选 `tokio-io` 对象及 Trait                                | 限制                               |
+| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------- |
+| `FileReader`      | `std::io::Read + Seek + Send`                              | `AsyncFileReader: tokio::io::AsyncRead + AsyncSeek + Send`  | 当前文件、只读、可 Seek            |
+| `FileWriter`      | `std::io::Write + Seek + Send`                             | `AsyncFileWriter: tokio::io::AsyncWrite + AsyncSeek + Send` | staged 写入；必须显式 `commit`     |
+| `TcpStream`       | `std::io::Read + Write + Send`                             | `AsyncTcpStream: tokio::io::AsyncRead + AsyncWrite + Send`  | 双向字节流；不支持 Seek            |
+| `HttpResponse`    | `std::io::Read + Send`                                     | `AsyncHttpResponse: tokio::io::AsyncRead + Send`            | 响应体单向流，按需消费             |
+| HTTP request body | `body_reader(FileReader)`；可扩展通用 `Read + Send` 上传流 | `body_async_reader(AsyncRead + Send + Unpin + 'static)`     | 通过 Broker 流式上传，不整体序列化 |
 
 异步对象的类型名与精确泛型可由 SDK 实现微调，但**稳定的公开合同是上述 Trait 与对应资源语义**。`BufRead` / `AsyncBufRead` 不需 SDK 自己实现：插件可包装 `std::io::BufReader` / `tokio::io::BufReader`。`futures::io` 的 `AsyncRead/Write` 可通过可选 `tokio-util::compat` 等适配器接入，不必为所有异步运行时建立独立 Broker。
 
@@ -133,16 +133,16 @@ std::io::copy(&mut response, &mut output)?;
 
 ## 7. 其余 Core API
 
-| SDK | IPC | 语义 |
-|---|---|---|
-| `ctx.files().metadata/stat_batch/list` | `host.fs.stat/statBatch/list` | Scope 限定，按文件授权读元数据或目录 |
-| `ctx.files().open_read/begin_write/create/remove/rename` | `host.fs.*` | Core 控制源/目标及事务 |
-| `ctx.tcp().connect` | `host.net.tcp.open/read/write/close` | 与 HTTP 共享网络 Grant |
-| `ctx.http().get/post/put/delete/request` | `host.net.http.*` | 高层 HTTP 与请求/响应流 |
-| `ctx.vfs().open_view` | `host.vfs.openView` | 经 Core 创建 Mount/View |
-| `ctx.ui().open_panel` | `host.ui.open` | 非 Connection 主导航的受控 UI |
-| `ctx.task().spawn/cancel/progress` | Task Broker | 继承已批准 Scope 的任务 |
-| `ctx.storage()/secrets()/process()` | 对应 Core Broker | 插件隔离的存储、密钥和命令 |
+| SDK                                                      | IPC                                  | 语义                                 |
+| -------------------------------------------------------- | ------------------------------------ | ------------------------------------ |
+| `ctx.files().metadata/stat_batch/list`                   | `host.fs.stat/statBatch/list`        | Scope 限定，按文件授权读元数据或目录 |
+| `ctx.files().open_read/begin_write/create/remove/rename` | `host.fs.*`                          | Core 控制源/目标及事务               |
+| `ctx.tcp().connect`                                      | `host.net.tcp.open/read/write/close` | 与 HTTP 共享网络 Grant               |
+| `ctx.http().get/post/put/delete/request`                 | `host.net.http.*`                    | 高层 HTTP 与请求/响应流              |
+| `ctx.vfs().open_view`                                    | `host.vfs.openView`                  | 经 Core 创建 Mount/View              |
+| `ctx.ui().open_panel`                                    | `host.ui.open`                       | 非 Connection 主导航的受控 UI        |
+| `ctx.task().spawn/cancel/progress`                       | Task Broker                          | 继承已批准 Scope 的任务              |
+| `ctx.storage()/secrets()/process()`                      | 对应 Core Broker                     | 插件隔离的存储、密钥和命令           |
 
 ## 8. 标准事件与 UI SDK
 
@@ -174,13 +174,13 @@ UI SDK 在专有 MessagePort 中按允许列表请求 Native Plugin 和 Core 服
 
 ## 9. 第三方库兼容性与验收
 
-| 第三方库接口 | Fiex 接入方式 |
-|---|---|
-| `std::io::Read/Write/Seek` 泛型 | 直接传 `FileReader/FileWriter/TcpStream` |
-| `tokio::io::AsyncRead/Write/Seek` 泛型 | 启用 `tokio-io`，直接传对应 `Async*` 对象 |
-| `futures::io::AsyncRead/Write` 泛型 | 使用可选 Compat Adapter |
-| 自定义 Transport / FileSystem Trait | 插件提供轻量 Adapter 映射到 SDK IO |
-| 要求 `std::fs::File` / `std::net::TcpStream` / raw FD | 不能直接替换，需库支持其他 Backend |
-| Reqwest/其他自动直连的高层 Client | 不会自动走 Core；优先 SDK HTTP 或自定义 Connector |
+| 第三方库接口                                          | Fiex 接入方式                                     |
+| ----------------------------------------------------- | ------------------------------------------------- |
+| `std::io::Read/Write/Seek` 泛型                       | 直接传 `FileReader/FileWriter/TcpStream`          |
+| `tokio::io::AsyncRead/Write/Seek` 泛型                | 启用 `tokio-io`，直接传对应 `Async*` 对象         |
+| `futures::io::AsyncRead/Write` 泛型                   | 使用可选 Compat Adapter                           |
+| 自定义 Transport / FileSystem Trait                   | 插件提供轻量 Adapter 映射到 SDK IO                |
+| 要求 `std::fs::File` / `std::net::TcpStream` / raw FD | 不能直接替换，需库支持其他 Backend                |
+| Reqwest/其他自动直连的高层 Client                     | 不会自动走 Core；优先 SDK HTTP 或自定义 Connector |
 
 必须增加可复现的 SDK/Core/官方插件集成测试：ZIP `Read+Seek`、ZIP `Write+Seek+commit`；SMB `SmbTransport`；Tokio 的 `tokio::io::copy` 与 async TCP 双向收发；同步阻塞读与并发写；TLS 握手、STARTTLS、正常与异常 EOF、半关闭、取消、断网、连接替换、多个 task；大于 5 GiB 的流和常量内存；错误域名/IP/未授权/过期 Scope。测试应涵盖 Windows/macOS/Linux 的差异。

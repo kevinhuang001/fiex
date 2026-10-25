@@ -9,20 +9,20 @@ Native 插件常驻沙箱进程与 Core 使用双向、异步 JSON-RPC 2.0：`id
 
 ## 2. Core → Plugin 事件
 
-| 事件 | 参数 | 返回 |
-|---|---|---|
-| `plugin.initialize` | `protocolVersion,hostVersion` | `pluginId,ready` |
-| `plugin.ping` / `plugin.shutdown` | 空 | `ok` / `null` |
-| `contextMenu.resolve` | `menuSessionId,targetRef,selectionRefs,directoryRef` | `MenuResponse {items[]}` |
-| `contextMenu.execute` | `menuSessionId,itemId,interactionId` | 业务处理结果 |
-| `info.resolve` | `InfoContext`（标准） | `InfoResponse {sections[]}` |
-| `preview.open` | `PreviewContext`（标准） | `PreviewView` |
-| `decorations.resolve` | `DecorationContext`（标准） | `DecorationResponse {items[]}` |
-| `connection.create` | `factoryId,interactionId` | `NavigationTarget` |
-| `connection.open` | `factoryId,connectionId,interactionId` | `NavigationTarget` |
-| `search.query` | `sessionId,rootRef,query,cursor?` | 受 root 约束的 SearchResponse |
-| `toolbar.invoke` / `settings.invoke` | `interactionId,context` | 对应扩展的业务结果 |
-| `hooks.invoke` | `event,resourceRef,operationSession` | 受约束的 HookResponse |
+| 事件                                 | 参数                                                 | 返回                           |
+| ------------------------------------ | ---------------------------------------------------- | ------------------------------ |
+| `plugin.initialize`                  | `protocolVersion,hostVersion`                        | `pluginId,ready`               |
+| `plugin.ping` / `plugin.shutdown`    | 空                                                   | `ok` / `null`                  |
+| `contextMenu.resolve`                | `menuSessionId,targetRef,selectionRefs,directoryRef` | `MenuResponse {items[]}`       |
+| `contextMenu.execute`                | `menuSessionId,itemId,interactionId`                 | 业务处理结果                   |
+| `info.resolve`                       | `InfoContext`（标准）                                | `InfoResponse {sections[]}`    |
+| `preview.open`                       | `PreviewContext`（标准）                             | `PreviewView`                  |
+| `decorations.resolve`                | `DecorationContext`（标准）                          | `DecorationResponse {items[]}` |
+| `connection.create`                  | `factoryId,interactionId`                            | `NavigationTarget`             |
+| `connection.open`                    | `factoryId,connectionId,interactionId`               | `NavigationTarget`             |
+| `search.query`                       | `sessionId,rootRef,query,cursor?`                    | 受 root 约束的 SearchResponse  |
+| `toolbar.invoke` / `settings.invoke` | `interactionId,context`                              | 对应扩展的业务结果             |
+| `hooks.invoke`                       | `event,resourceRef,operationSession`                 | 受约束的 HookResponse          |
 
 `info.resolve`、`preview.open`、`decorations.resolve` 是**预定义上下文的标准事件**。Core 在请求前通过 ContextBuilder 准备候选 Metadata/受限文件访问引用，PermissionPolicy 针对插件 Grant 和 Scope 裁剪后交付。一次 Core→Plugin 请求与一次业务返回即可完成不需要读取大量文件字节的标准处理。
 
@@ -38,9 +38,9 @@ Native 插件常驻沙箱进程与 Core 使用双向、异步 JSON-RPC 2.0：`id
   "params": {
     "sessionId": "i-opaque",
     "resource": {
-      "ref": {"mountId": "m1", "nodeId": "n9"},
-      "metadata": {"name": "song.mp3", "kind": "file", "size": 2048},
-      "read": {"resourceId": "read-scoped-9"}
+      "ref": { "mountId": "m1", "nodeId": "n9" },
+      "metadata": { "name": "song.mp3", "kind": "file", "size": 2048 },
+      "read": { "resourceId": "read-scoped-9" }
     }
   }
 }
@@ -55,33 +55,37 @@ Preview 的事件采用相同 ResourceContext，响应为 PreviewView；Decorati
 `NavigationTarget` 是精确两分支枚举：
 
 ```json
-{"kind":"vfs","mountId":"m1","nodeRef":{"mountId":"m1","nodeId":"root"}}
+{ "kind": "vfs", "mountId": "m1", "nodeRef": { "mountId": "m1", "nodeId": "root" } }
 ```
 
 ```json
-{"kind":"pluginView","view":{"source":"package","entry":"ui/home.html"},"state":{"connectionId":"c1"}}
+{
+  "kind": "pluginView",
+  "view": { "source": "package", "entry": "ui/home.html" },
+  "state": { "connectionId": "c1" }
+}
 ```
 
 `kind=vfs` 必须指向本插件已获准并已创建的 VFS Mount。 `kind=pluginView` 必须指向该插件安装包内经过校验的 HTML；Core 将整个右侧主内容区替换为 sandboxed iframe，保留左侧栏和全局 TabHost。Connection RPC 不接受 `panel`、`dialog`、`externalUrl`、`modal`、`html` 等导航结果，不能返回任意远程网页地址。
 
 ## 5. Plugin → Core 资源请求
 
-| 方法 | 参数 | 许可 |
-|---|---|---|
-| `host.fs.stat` | `ref` | `permissions.metadata` + EventScope/OperationScope |
-| `host.fs.statBatch` | `refs[]` | 同上，按项审核，逐项返回 Result |
-| `host.fs.list` | `directoryRef,cursor?,limit?` | `folders.read` + 可遍历的 Scope |
-| `host.fs.openRead` | `ref` 或标准事件受限 `read.resourceId` | `files.read` + 当前目标 Scope |
-| `host.fs.readOpen/closeRead` | `handle,offset,length` / `handle` | 有效句柄所有权与会话 |
-| `host.fs.beginWrite/writeChunk/commit/abort` | 目标 ref / 限额 chunks / handle | `files.write` 或 `files.create` + 精确操作范围与冲突检测 |
-| `host.fs.mkdir` | `parentRef,name` | `folders.create` |
-| `host.fs.remove` / `host.fs.rename` | 目标、源与目标 | 按真实文件/目录类型验证对应权限 |
-| `host.net.http.*` / `host.net.tcp.*` | Host、域名、端口、流 | 已批准 Network 目标 |
-| `host.net.tcp.shutdown` | `stream,direction=write/read/both` | Owner、Scope、连接状态及 TCP 半关闭权限 |
-| `host.process.run` | 受限制命令与参数 | 单独高风险 Commands 授权 |
-| `host.storage.*` / `host.secret.*` | 插件命名空间键 | 进程身份与 Secret Broker |
-| `host.ui.open` | 有效 interactionId 与 PanelSpec | 通用用户交互 UI，不替代 Connection 导航 |
-| `host.vfs.openView` | `providerId,context,rootRef?` | 已注册 `extensions.vfs` + MountRegistry 审核 |
+| 方法                                         | 参数                                   | 许可                                                     |
+| -------------------------------------------- | -------------------------------------- | -------------------------------------------------------- |
+| `host.fs.stat`                               | `ref`                                  | `permissions.metadata` + EventScope/OperationScope       |
+| `host.fs.statBatch`                          | `refs[]`                               | 同上，按项审核，逐项返回 Result                          |
+| `host.fs.list`                               | `directoryRef,cursor?,limit?`          | `folders.read` + 可遍历的 Scope                          |
+| `host.fs.openRead`                           | `ref` 或标准事件受限 `read.resourceId` | `files.read` + 当前目标 Scope                            |
+| `host.fs.readOpen/closeRead`                 | `handle,offset,length` / `handle`      | 有效句柄所有权与会话                                     |
+| `host.fs.beginWrite/writeChunk/commit/abort` | 目标 ref / 限额 chunks / handle        | `files.write` 或 `files.create` + 精确操作范围与冲突检测 |
+| `host.fs.mkdir`                              | `parentRef,name`                       | `folders.create`                                         |
+| `host.fs.remove` / `host.fs.rename`          | 目标、源与目标                         | 按真实文件/目录类型验证对应权限                          |
+| `host.net.http.*` / `host.net.tcp.*`         | Host、域名、端口、流                   | 已批准 Network 目标                                      |
+| `host.net.tcp.shutdown`                      | `stream,direction=write/read/both`     | Owner、Scope、连接状态及 TCP 半关闭权限                  |
+| `host.process.run`                           | 受限制命令与参数                       | 单独高风险 Commands 授权                                 |
+| `host.storage.*` / `host.secret.*`           | 插件命名空间键                         | 进程身份与 Secret Broker                                 |
+| `host.ui.open`                               | 有效 interactionId 与 PanelSpec        | 通用用户交互 UI，不替代 Connection 导航                  |
+| `host.vfs.openView`                          | `providerId,context,rootRef?`          | 已注册 `extensions.vfs` + MountRegistry 审核             |
 
 `statBatch` 默认目标批次限额为 256（由 Schema 和压测校准），按输入顺序返回 `{results:[{ref,metadata? ,error?}]}`，每项要么 Metadata 要么错误。Core 在授权之后读取有效的 Explorer/VFS Metadata 缓存，响应之前再次审核；缓存不持有授权。批量无权项目不得泄露名称、大小、真实路径或未批准的枚举信息。
 
@@ -98,13 +102,13 @@ Preview 的事件采用相同 ResourceContext，响应为 PreviewView；Decorati
 
 ## 6. VFS 数据协议
 
-| 方法（Core → VFS Provider） | 语义 |
-|---|---|
-| `vfs.list(mountId,nodeId,cursor?,limit?)` | 目录分页，返回 entries、nextCursor 与可选 snapshotToken |
-| `vfs.stat(mountId,nodeId)` | 节点元信息、revision、identityStability |
-| `vfs.openRead/readStream/closeRead` | 有界可取消只读流，带版本检查 |
+| 方法（Core → VFS Provider）                            | 语义                                                     |
+| ------------------------------------------------------ | -------------------------------------------------------- |
+| `vfs.list(mountId,nodeId,cursor?,limit?)`              | 目录分页，返回 entries、nextCursor 与可选 snapshotToken  |
+| `vfs.stat(mountId,nodeId)`                             | 节点元信息、revision、identityStability                  |
+| `vfs.openRead/readStream/closeRead`                    | 有界可取消只读流，带版本检查                             |
 | `vfs.writeFile(mountId,nodeId,source,size,ifRevision)` | 可写 Provider 的受控写回；只读 Provider 返回 Unsupported |
-| `vfs.search` | 当前 Mount 下的目录限定查询 |
+| `vfs.search`                                           | 当前 Mount 下的目录限定查询                              |
 
 Mount URI 由 Core 构造：`fiex://mount/<mountId>/<encoded-path>`，Provider 不分配 URI scheme 或 mountId。流式、文件对象增删改、远端 revision 和同步状态由 VFS Broker 进行安全协调。
 

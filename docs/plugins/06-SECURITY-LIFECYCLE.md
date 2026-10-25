@@ -30,15 +30,15 @@ Broker candidate resource     → PermissionPolicy.audit_response(...) → Plugi
 
 ## 4. Surface Scope
 
-| 事件或操作 | 可访问范围 |
-|---|---|
-| Info / Preview | 当前打开资源；获准 Metadata 可直接在标准 Context 中交付；已批准文件读则获得该文件的限定只读流引用 |
-| Decoration | 当前目录**已显示**成员的获准 Metadata；不可据此扫描其他目录或读文件内容 |
-| ContextMenu.resolve | 本次目标/选择 ref；需要属性则申请 `host.fs.stat/statBatch`；不读文件字节 |
-| ContextMenu.execute | 真实点击了该插件返回的有效 action 后，允许在单次已确认的资源范围内请求对应读/写/创建等操作 |
-| Connection.open/create | 当前连接身份、导航范围；不能凭 Connection 注册获取 VFS、本地文件或无关账户 |
-| PluginView | 本次用户交互和所属插件资源的会话；iframe 本身不给宿主 FS 权限 |
-| Task | 只继承受确认的 TaskScope，取消、过期、撤权后立即失效 |
+| 事件或操作             | 可访问范围                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| Info / Preview         | 当前打开资源；获准 Metadata 可直接在标准 Context 中交付；已批准文件读则获得该文件的限定只读流引用 |
+| Decoration             | 当前目录**已显示**成员的获准 Metadata；不可据此扫描其他目录或读文件内容                           |
+| ContextMenu.resolve    | 本次目标/选择 ref；需要属性则申请 `host.fs.stat/statBatch`；不读文件字节                          |
+| ContextMenu.execute    | 真实点击了该插件返回的有效 action 后，允许在单次已确认的资源范围内请求对应读/写/创建等操作        |
+| Connection.open/create | 当前连接身份、导航范围；不能凭 Connection 注册获取 VFS、本地文件或无关账户                        |
+| PluginView             | 本次用户交互和所属插件资源的会话；iframe 本身不给宿主 FS 权限                                     |
+| Task                   | 只继承受确认的 TaskScope，取消、过期、撤权后立即失效                                              |
 
 只读流的 `resourceId` 是带期限和进程所有权的访问引用，不应可被另一插件重放；大文件流由 Core FileBroker 有界分块、Seek/Range 和会话回收实现，内存不随文件总大小线性增长。
 
@@ -51,12 +51,12 @@ Explorer/VFS Metadata 缓存与文件内容缓存保存的是数据，**不是�
 ## 6. 进程、命令与网络隔离
 
 - Native 插件不直接读取本地文件目录、密钥或任意联网；HTTP/TCP 请求由 Core 检查已批准的 host/domain/IP、DNS、重定向、TLS 异常和本地/保留地址策略。
-SDK 的同步或 Tokio Trait **不是**沙箱：平台进程隔离仍须禁止插件直接使用原生 OS Socket，网络只能经 Core Broker。
+  SDK 的同步或 Tokio Trait **不是**沙箱：平台进程隔离仍须禁止插件直接使用原生 OS Socket，网络只能经 Core Broker。
 - HTTP 提供高层请求及限额流，TCP 保留低层字节流；使用同一网络授权体系。
-插件可以用 rustls 等 TLS 实现叠加 SDK 的获准 TCP 流，支持 STARTTLS；Core 的网络域名/IP 授权与插件 TLS 证书检查依旧必须执行。高层 HTTP 不得默认禁用服务器证书验证。
+  插件可以用 rustls 等 TLS 实现叠加 SDK 的获准 TCP 流，支持 STARTTLS；Core 的网络域名/IP 授权与插件 TLS 证书检查依旧必须执行。高层 HTTP 不得默认禁用服务器证书验证。
 - 外部命令执行为更高风险的单独授权；`git/gpg/es` 一类程序可有插件沙箱以外的副作用，Core 不得仅因为文件 Scope 存在就允许任意命令。
 - 插件流程里的 Stream/Handle/Task 均绑定真实进程实例、Session 和所准资源；取消或禁用后拒绝新请求并回收旧句柄。
-Tokio Pending Future 的等待任务在撤权/关闭/超时后必须被唤醒并失败；`spawn_blocking` 或后台任务不得延长过期授权。
+  Tokio Pending Future 的等待任务在撤权/关闭/超时后必须被唤醒并失败；`spawn_blocking` 或后台任务不得延长过期授权。
 
 ## 7. Connection PluginView 的隔离
 

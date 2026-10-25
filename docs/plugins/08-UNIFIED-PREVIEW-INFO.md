@@ -21,12 +21,12 @@ Manifest 使用单一的 `extensions`：
 ```json
 {
   "permissions": {
-    "metadata": {"enabled": true},
-    "files": {"read":{"enabled":true}}
+    "metadata": { "enabled": true },
+    "files": { "read": { "enabled": true } }
   },
   "extensions": {
-    "info": [{"id":"audio","title":"音频信息","extensions":["mp3","flac"]}],
-    "preview": [{"id":"audio","title":"音频预览","extensions":["mp3","flac"]}]
+    "info": [{ "id": "audio", "title": "音频信息", "extensions": ["mp3", "flac"] }],
+    "preview": [{ "id": "audio", "title": "音频预览", "extensions": ["mp3", "flac"] }]
   }
 }
 ```
@@ -39,16 +39,16 @@ Manifest 使用单一的 `extensions`：
 {
   "sessionId": "preview-session-opaque",
   "resource": {
-    "ref": {"mountId":"m1","nodeId":"a18"},
+    "ref": { "mountId": "m1", "nodeId": "a18" },
     "metadata": {
-      "name":"audio.mp3",
-      "kind":"file",
-      "extension":"mp3",
-      "size":4194304
+      "name": "audio.mp3",
+      "kind": "file",
+      "extension": "mp3",
+      "size": 4194304
     },
-    "read": {"resourceId":"scoped-read-1"}
+    "read": { "resourceId": "scoped-read-1" }
   },
-  "intent":"preview"
+  "intent": "preview"
 }
 ```
 
@@ -62,11 +62,11 @@ ContextBuilder 从 Explorer/VFS 候选资源中取得基础属性；**独立 Per
 {
   "sections": [
     {
-      "id":"audio",
-      "title":"音频",
-      "rows":[
-        {"label":"时长","value":"03:25"},
-        {"label":"编码","value":"MP3"}
+      "id": "audio",
+      "title": "音频",
+      "rows": [
+        { "label": "时长", "value": "03:25" },
+        { "label": "编码", "value": "MP3" }
       ]
     }
   ]
@@ -96,5 +96,5 @@ Connection 点击产生的 `PluginView` 则由 ContentHost 占满右侧主内容
 - 没有 `files.read` 时，不提供 read 资源；即便插件构造假 resourceId 也不能读取。
 - 内置与第三方 Info/Preview 使用相同 DTO 并由同一组件渲染。
 - 文本、图片、音频、视频、PDF、fallback 的模块独立测试；5 GiB 以上资源不会整文件载入内存。
-支持 Tokio 的 Preview Provider 在取消、切换标签、撤权后必须唤醒 Pending 读取并关闭 Core Handle，不得后台继续扫描旧文件。
+  支持 Tokio 的 Preview Provider 在取消、切换标签、撤权后必须唤醒 Pending 读取并关闭 Core Handle，不得后台继续扫描旧文件。
 - 本地、云盘 VFS、只读 Git VFS 的文件资源身份、撤权、取消、资源替换与超时行为一致。

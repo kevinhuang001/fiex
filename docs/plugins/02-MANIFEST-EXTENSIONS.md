@@ -18,11 +18,11 @@
     }
   },
   "permissions": {
-    "metadata": {"enabled": true},
+    "metadata": { "enabled": true },
     "files": {
-      "read": {"enabled": true},
-      "write": {"enabled": true},
-      "create": {"enabled": true}
+      "read": { "enabled": true },
+      "write": { "enabled": true },
+      "create": { "enabled": true }
     },
     "network": {
       "enabled": true,
@@ -30,9 +30,9 @@
     }
   },
   "extensions": {
-    "connections": [{"id":"cloud","title":"Example Cloud","icon":"cloud"}],
-    "vfs": [{"id":"remote","title":"Cloud Files"}],
-    "info": [{"id":"cloud-info","title":"Remote Properties"}],
+    "connections": [{ "id": "cloud", "title": "Example Cloud", "icon": "cloud" }],
+    "vfs": [{ "id": "remote", "title": "Cloud Files" }],
+    "info": [{ "id": "cloud-info", "title": "Remote Properties" }],
     "decorations": true
   }
 }
@@ -42,32 +42,32 @@
 
 ## 2. 扩展点
 
-| 字段 | 类型 | 触发与返回 |
-|---|---|---|
-| `extensions.contextMenus` | `true` | 用户右键 → `contextMenu.resolve` 返回扁平 items；点 action → `contextMenu.execute` |
-| `extensions.decorations` | `true` | 每次切换目录 → 标准可见成员 Context → `decorations.resolve` |
-| `extensions.info` | `[{id,title,extensions?,mimeTypes?,priority?}]` | 用户打开简介 → 标准 InfoContext → InfoResponse |
-| `extensions.preview` | 同上 | 用户打开预览 → 标准 PreviewContext → PreviewView |
-| `extensions.connections` | `[{id,title,icon?}]` | 添加连接 + 或侧栏点击 → `connection.create/open` → NavigationTarget |
-| `extensions.vfs` | `[{id,title}]` | VFS Broker 的 mount/list/stat/read/write 处理器 |
-| `extensions.search` | `[{id,title,command?}]` | 当前限定 root 的 `search.query` |
-| `extensions.toolbar` | `[{id,title,icon?,command}]` | 点击工具栏按钮时执行命令 |
-| `extensions.themes` | `[{id,title,entry}]` | 加载经过审核的主题资产 |
-| `extensions.settings` | `[{id,title,command?}]` | 插件设置入口 |
-| `extensions.hooks` | `[{id,event,priority?}]` | 文件操作生命周期中的特定钩子 |
+| 字段                      | 类型                                            | 触发与返回                                                                         |
+| ------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `extensions.contextMenus` | `true`                                          | 用户右键 → `contextMenu.resolve` 返回扁平 items；点 action → `contextMenu.execute` |
+| `extensions.decorations`  | `true`                                          | 每次切换目录 → 标准可见成员 Context → `decorations.resolve`                        |
+| `extensions.info`         | `[{id,title,extensions?,mimeTypes?,priority?}]` | 用户打开简介 → 标准 InfoContext → InfoResponse                                     |
+| `extensions.preview`      | 同上                                            | 用户打开预览 → 标准 PreviewContext → PreviewView                                   |
+| `extensions.connections`  | `[{id,title,icon?}]`                            | 添加连接 + 或侧栏点击 → `connection.create/open` → NavigationTarget                |
+| `extensions.vfs`          | `[{id,title}]`                                  | VFS Broker 的 mount/list/stat/read/write 处理器                                    |
+| `extensions.search`       | `[{id,title,command?}]`                         | 当前限定 root 的 `search.query`                                                    |
+| `extensions.toolbar`      | `[{id,title,icon?,command}]`                    | 点击工具栏按钮时执行命令                                                           |
+| `extensions.themes`       | `[{id,title,entry}]`                            | 加载经过审核的主题资产                                                             |
+| `extensions.settings`     | `[{id,title,command?}]`                         | 插件设置入口                                                                       |
+| `extensions.hooks`        | `[{id,event,priority?}]`                        | 文件操作生命周期中的特定钩子                                                       |
 
 注册不等于权限。插件可注册多个 Info/Preview/VFS 来源，其 ID 在该插件内唯一。Manifest 不声明每个具体 iframe 页面，也不需要标记某个扩展点是 UI 还是服务。
 
 ## 3. 权限模型
 
-| 路径 | 含义 |
-|---|---|
-| `permissions.metadata.enabled` | 文件与文件夹共用的 stat 属性读取授权 |
+| 路径                                                        | 含义                                 |
+| ----------------------------------------------------------- | ------------------------------------ |
+| `permissions.metadata.enabled`                              | 文件与文件夹共用的 stat 属性读取授权 |
 | `permissions.files.read/write/create/delete/rename.enabled` | 文件内容与文件对象操作，逐项分别批准 |
-| `permissions.folders.read/create/delete/rename.enabled` | 目录遍历与目录对象操作，逐项分别批准 |
-| `permissions.network.enabled/domains` | HTTP/TCP 经 Core 网络代理访问的目标 |
-| `permissions.commands.enabled/allow` | Core 执行外部命令的高风险授权 |
-| `permissions.hooks.enabled` | 特定宿主生命周期钩子授权（如需要） |
+| `permissions.folders.read/create/delete/rename.enabled`     | 目录遍历与目录对象操作，逐项分别批准 |
+| `permissions.network.enabled/domains`                       | HTTP/TCP 经 Core 网络代理访问的目标  |
+| `permissions.commands.enabled/allow`                        | Core 执行外部命令的高风险授权        |
+| `permissions.hooks.enabled`                                 | 特定宿主生命周期钩子授权（如需要）   |
 
 每个文件/目录权限项均是带 `enabled` 的对象；其中 `files.create` 是创建不存在的文件，不表示可覆盖现有文件，`files.write` 是修改已存在文件。权限授权实际有效范围 = **Manifest 申请 ∩ 用户批准 ∩ 本次 EventScope/OperationScope ∩ PermissionPolicy 的对象和方法规则**。Metadata 不意味着可读取内容或列举任意目录。
 
@@ -89,15 +89,15 @@
 {
   "kind": "vfs",
   "mountId": "m-opaque",
-  "nodeRef": {"mountId": "m-opaque", "nodeId": "root"}
+  "nodeRef": { "mountId": "m-opaque", "nodeId": "root" }
 }
 ```
 
 ```json
 {
   "kind": "pluginView",
-  "view": {"source":"package","entry":"ui/account.html"},
-  "state": {"connectionId":"account-1"}
+  "view": { "source": "package", "entry": "ui/account.html" },
+  "state": { "connectionId": "account-1" }
 }
 ```
 
