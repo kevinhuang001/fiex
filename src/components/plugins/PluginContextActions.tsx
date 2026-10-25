@@ -62,10 +62,12 @@ function MenuNode({
   item,
   items,
   onAction,
+  onExpand,
 }: {
   item: MenuItem
   items: MenuItem[]
   onAction: (item: MenuItem, anchor?: { x: number; y: number }) => void
+  onExpand: (submenuId: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [openUp, setOpenUp] = useState(false)
@@ -84,14 +86,15 @@ function MenuNode({
   if (item.kind === 'separator') return <div role="separator" className="context-divider" />
   if (item.kind === 'submenu') {
     const descendants = items.filter((candidate) => candidate.parentId === item.id)
-    if (!descendants.length) return null
+    const expand = () => {
+      cancel()
+      setExpanded(true)
+      if (!descendants.length) onExpand(item.id)
+    }
     return (
       <div
         className="context-submenu-wrap"
-        onMouseEnter={() => {
-          cancel()
-          setExpanded(true)
-        }}
+        onMouseEnter={expand}
         onMouseLeave={() => {
           cancel()
           timer.current = window.setTimeout(() => setExpanded(false), 180)
@@ -104,7 +107,8 @@ function MenuNode({
           onClick={(event) => {
             event.stopPropagation()
             cancel()
-            setExpanded((value) => !value)
+            if (!expanded) expand()
+            else setExpanded(false)
           }}
         >
           <Puzzle size={15} />
@@ -118,9 +122,19 @@ function MenuNode({
             role="menu"
             onMouseEnter={cancel}
           >
-            {descendants.map((entry) => (
-              <MenuNode key={entry.id} item={entry} items={items} onAction={onAction} />
-            ))}
+            {descendants.length ? (
+              descendants.map((entry) => (
+                <MenuNode
+                  key={entry.id}
+                  item={entry}
+                  items={items}
+                  onAction={onAction}
+                  onExpand={onExpand}
+                />
+              ))
+            ) : (
+              <div className="context-submenu-empty">暂无可用操作</div>
+            )}
           </div>
         )}
       </div>
@@ -148,9 +162,11 @@ export function PluginContextActions({
 }: Context & { onClose: () => void; onError: (error: string) => void }) {
   const plugins = usePluginCatalog()
   const [menus, setMenus] = useState<Menu[]>([])
+  const requestedSubmenus = useRef(new Set<string>())
   const selectionKey = JSON.stringify(paths)
   useEffect(() => {
     let active = true
+    requestedSubmenus.current.clear()
     const enabled = plugins.filter((plugin) => {
       if (!plugin.enabled) return false
       const contribution = plugin.extensions?.contextMenus
@@ -185,6 +201,31 @@ export function PluginContextActions({
       active = false
     }
   }, [plugins, selectionKey, isDirectory, readOnly, isRemote])
+
+  const resolveSubmenu = async (menu: Menu, submenuId: string) => {
+    const key = menu.menuSessionId + ':' + submenuId
+    if (requestedSubmenus.current.has(key)) return
+    requestedSubmenus.current.add(key)
+    try {
+      const response = await call<{ items: unknown }>('plugin_context_menu_children', {
+        menuSessionId: menu.menuSessionId,
+        parentId: submenuId,
+      })
+      setMenus((previous) =>
+        previous.map((candidate) => {
+          if (candidate.menuSessionId !== menu.menuSessionId) return candidate
+          const children = response.items
+          if (!Array.isArray(children) || !validMenu([...candidate.items, ...children])) {
+            throw new Error('Invalid submenu response')
+          }
+          return { ...candidate, items: [...candidate.items, ...children] }
+        }),
+      )
+    } catch (error) {
+      requestedSubmenus.current.delete(key)
+      onError(String(error))
+    }
+  }
 
   const invoke = async (menu: Menu, item: MenuItem, anchor?: { x: number; y: number }) => {
     onClose()
@@ -259,6 +300,7 @@ export function PluginContextActions({
               item={item}
               items={menu.items}
               onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
+              onExpand={(submenuId) => void resolveSubmenu(menu, submenuId)}
             />
           )),
       )}
