@@ -5,13 +5,17 @@
 //! keyboard-interactive/MFA, algorithms and known_hosts behavior in the same
 //! trusted implementation the user already uses. The WebView only receives the
 //! byte stream; it never receives credentials.
+use base64::Engine;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     io::{Read, Write},
     path::Path,
-    sync::{Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, OnceLock,
+    },
 };
 use tauri::ipc::Channel;
 
@@ -81,6 +85,180 @@ struct Session {
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send>,
+}
+
+struct PluginSession {
+    owner: String,
+    input: Arc<Mutex<VecDeque<u8>>>,
+    size: Arc<Mutex<(u16, u16)>>,
+    channel: Channel<SshEvent>,
+    closed: Arc<AtomicBool>,
+}
+
+fn plugin_sessions() -> &'static Mutex<HashMap<String, PluginSession>> {
+    static VALUES: OnceLock<Mutex<HashMap<String, PluginSession>>> = OnceLock::new();
+    VALUES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+struct PluginParts {
+    input: Arc<Mutex<VecDeque<u8>>>,
+    size: Arc<Mutex<(u16, u16)>>,
+    closed: Arc<AtomicBool>,
+    channel: Channel<SshEvent>,
+}
+
+fn plugin_session(owner: &str, id: &str) -> Result<PluginParts, String> {
+    let values = plugin_sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let session = values
+        .get(id)
+        .filter(|session| session.owner == owner)
+        .ok_or("终端会话不存在")?;
+    Ok(PluginParts {
+        input: session.input.clone(),
+        size: session.size.clone(),
+        closed: session.closed.clone(),
+        channel: session.channel.clone(),
+    })
+}
+
+pub(crate) fn plugin_terminal_output(
+    owner: &str,
+    params: &serde_json::Value,
+) -> Result<(), String> {
+    let id = params
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("missing sessionId")?;
+    let data = params
+        .get("dataBase64")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("missing dataBase64")?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|error| error.to_string())?;
+    let session = plugin_session(owner, id)?;
+    session
+        .channel
+        .send(SshEvent::Data { data: bytes })
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn plugin_terminal_input(
+    owner: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let id = params
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("missing sessionId")?;
+    let max = params
+        .get("maxBytes")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(8192)
+        .clamp(1, 1024 * 1024) as usize;
+    let session = plugin_session(owner, id)?;
+    let mut queue = session.input.lock().map_err(|_| "终端输入不可用")?;
+    let size = queue.len().min(max);
+    let bytes = queue.drain(..size).collect::<Vec<_>>();
+    Ok(serde_json::json!({
+        "dataBase64": base64::engine::general_purpose::STANDARD.encode(bytes),
+        "eof": session.closed.load(Ordering::Acquire),
+    }))
+}
+
+pub(crate) fn plugin_terminal_size(
+    owner: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let id = params
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("missing sessionId")?;
+    let session = plugin_session(owner, id)?;
+    let (cols, rows) = *session.size.lock().map_err(|_| "终端尺寸不可用")?;
+    Ok(serde_json::json!({"cols": cols, "rows": rows}))
+}
+
+pub(crate) fn plugin_terminal_closed(
+    owner: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let id = params
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("missing sessionId")?;
+    let session = plugin_session(owner, id)?;
+    Ok(serde_json::json!({"closed": session.closed.load(Ordering::Acquire)}))
+}
+
+pub(crate) fn plugin_terminal_end(owner: &str, params: &serde_json::Value) -> Result<(), String> {
+    let id = params
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("missing sessionId")?;
+    let mut values = plugin_sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let session = values
+        .remove(id)
+        .filter(|session| session.owner == owner)
+        .ok_or("终端会话不存在")?;
+    session.closed.store(true, Ordering::Release);
+    if let Some(message) = params.get("error").and_then(serde_json::Value::as_str) {
+        let _ = session.channel.send(SshEvent::Error {
+            message: message.into(),
+        });
+    }
+    let _ = session.channel.send(SshEvent::Exit { code: None });
+    Ok(())
+}
+
+async fn plugin_ssh_open(
+    connection: crate::remote::StoredConnection,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<SshEvent>,
+) -> Result<String, String> {
+    let id = crate::mounts::new_id()?;
+    let input = Arc::new(Mutex::new(VecDeque::new()));
+    let size = Arc::new(Mutex::new((cols.max(20), rows.max(4))));
+    let closed = Arc::new(AtomicBool::new(false));
+    plugin_sessions()
+        .lock()
+        .map_err(|_| "终端会话表不可用")?
+        .insert(
+            id.clone(),
+            PluginSession {
+                owner: "org.fiex.ssh".into(),
+                input: input.clone(),
+                size: size.clone(),
+                channel: on_event,
+                closed: closed.clone(),
+            },
+        );
+    let plugin_id = "org.fiex.ssh".to_string();
+    let config = crate::remote::provider_config(&connection);
+    let session_id = id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_host::global().invoke(
+            &plugin_id,
+            "terminal.open",
+            serde_json::json!({
+                "sessionId": session_id,
+                "cols": cols,
+                "rows": rows,
+                "connection": config,
+            }),
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())?;
+    if let Err(error) = result {
+        plugin_sessions()
+            .lock()
+            .map_err(|_| "终端会话表不可用")?
+            .remove(&id);
+        return Err(error);
+    }
+    Ok(id)
 }
 
 fn sessions() -> &'static Mutex<HashMap<String, Session>> {
@@ -203,6 +381,10 @@ pub(crate) async fn ssh_open(
     {
         return Err("不是 SSH 连接".into());
     }
+    if connection.plugin_id == "org.fiex.ssh" {
+        crate::remote::ensure_provider_access(&connection)?;
+        return plugin_ssh_open(connection, cols, rows, on_event).await;
+    }
     let host = string_setting(&connection.settings, "host");
     if host.is_empty() {
         return Err("SSH 主机为空".into());
@@ -284,6 +466,16 @@ pub(crate) async fn local_terminal_open(
 
 #[tauri::command]
 pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String> {
+    if let Ok(mut plugin) = plugin_sessions().lock() {
+        if let Some(session) = plugin.get_mut(&session_id) {
+            session
+                .input
+                .lock()
+                .map_err(|_| "终端输入不可用")?
+                .extend(data);
+            return Ok(());
+        }
+    }
     let mut values = sessions().lock().map_err(|_| "终端会话表不可用")?;
     let session = values.get_mut(&session_id).ok_or("终端会话已结束")?;
     session.writer.write_all(&data).map_err(|e| e.to_string())?;
@@ -292,6 +484,12 @@ pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String>
 
 #[tauri::command]
 pub(crate) fn ssh_resize(session_id: String, cols: u16, rows: u16) -> Result<(), String> {
+    if let Ok(plugin) = plugin_sessions().lock() {
+        if let Some(session) = plugin.get(&session_id) {
+            *session.size.lock().map_err(|_| "终端尺寸不可用")? = (cols.max(20), rows.max(4));
+            return Ok(());
+        }
+    }
     let values = sessions().lock().map_err(|_| "终端会话表不可用")?;
     let session = values.get(&session_id).ok_or("终端会话已结束")?;
     session
@@ -307,6 +505,13 @@ pub(crate) fn ssh_resize(session_id: String, cols: u16, rows: u16) -> Result<(),
 
 #[tauri::command]
 pub(crate) fn ssh_close(session_id: String) -> Result<(), String> {
+    if let Ok(mut plugin) = plugin_sessions().lock() {
+        if let Some(session) = plugin.remove(&session_id) {
+            session.closed.store(true, Ordering::Release);
+            let _ = session.channel.send(SshEvent::Exit { code: None });
+            return Ok(());
+        }
+    }
     if let Ok(mut values) = sessions().lock() {
         if let Some(mut session) = values.remove(&session_id) {
             let _ = session.child.kill();

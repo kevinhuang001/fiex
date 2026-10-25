@@ -82,6 +82,7 @@ Preview 的事件采用相同 ResourceContext，响应为 PreviewView；Decorati
 | `host.fs.remove` / `host.fs.rename`          | 目标、源与目标                         | 按真实文件/目录类型验证对应权限                          |
 | `host.net.http.*` / `host.net.tcp.*`         | Host、域名、端口、流                   | 已批准 Network 目标                                      |
 | `host.net.tcp.shutdown`                      | `stream,direction=write/read/both`     | Owner、Scope、连接状态及 TCP 半关闭权限                  |
+| `host.terminal.output/input/size/closed/end` | `sessionId`、base64 字节、终端尺寸     | 仅 `org.fiex.ssh` 的 Core 终端桥                         |
 | `host.process.run`                           | 受限制命令与参数                       | 单独高风险 Commands 授权                                 |
 | `host.storage.*` / `host.secret.*`           | 插件命名空间键                         | 进程身份与 Secret Broker                                 |
 | `host.ui.open`                               | 有效 interactionId 与 PanelSpec        | 通用用户交互 UI，不替代 Connection 导航                  |

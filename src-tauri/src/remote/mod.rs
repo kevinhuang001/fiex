@@ -7,6 +7,8 @@ mod reconcile;
 mod store;
 mod sync;
 
+#[cfg(feature = "desktop")]
+pub(crate) use config::provider_config;
 pub(crate) use config::{connection_by_mount, ensure_provider_access};
 pub use config::{connection_for_path, is_remote};
 pub use files::{

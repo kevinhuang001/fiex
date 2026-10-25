@@ -526,6 +526,28 @@ impl Running {
             "host.net.http" if permitted("network") => {
                 crate::plugin_net::http(owner, &self.plugin_id, &self.declared, p)
             }
+            #[cfg(feature = "desktop")]
+            "host.terminal.output" => {
+                crate::desktop::ssh::plugin_terminal_output(owner, p)?;
+                Ok(Value::Null)
+            }
+            #[cfg(feature = "desktop")]
+            "host.terminal.input" => crate::desktop::ssh::plugin_terminal_input(owner, p),
+            #[cfg(feature = "desktop")]
+            "host.terminal.size" => crate::desktop::ssh::plugin_terminal_size(owner, p),
+            #[cfg(feature = "desktop")]
+            "host.terminal.closed" => crate::desktop::ssh::plugin_terminal_closed(owner, p),
+            #[cfg(feature = "desktop")]
+            "host.terminal.end" => {
+                crate::desktop::ssh::plugin_terminal_end(owner, p)?;
+                Ok(Value::Null)
+            }
+            #[cfg(not(feature = "desktop"))]
+            "host.terminal.output"
+            | "host.terminal.input"
+            | "host.terminal.size"
+            | "host.terminal.closed"
+            | "host.terminal.end" => Err("终端仅在桌面版可用".into()),
             "host.net.tcp.open" if permitted("network") => {
                 crate::plugin_net::tcp_open(owner, &self.plugin_id, &self.declared, p)
             }

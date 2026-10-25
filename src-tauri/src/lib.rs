@@ -1,7 +1,7 @@
 #[cfg(feature = "ci-driver")]
 mod ci_driver;
 #[cfg(feature = "desktop")]
-mod desktop;
+pub(crate) mod desktop;
 #[path = "core/drag_session.rs"]
 pub mod drag_session;
 #[path = "core/files.rs"]

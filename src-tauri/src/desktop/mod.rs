@@ -13,7 +13,7 @@
 mod files;
 #[macro_use]
 mod plugins;
-mod ssh;
+pub(crate) mod ssh;
 #[macro_use]
 mod remote;
 #[macro_use]
