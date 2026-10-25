@@ -525,27 +525,41 @@ fn menu_response_valid(
     result: &serde_json::Value,
 ) -> Result<std::collections::HashSet<String>, String> {
     use std::collections::{HashMap, HashSet};
-    let items = result.get("items").and_then(serde_json::Value::as_array)
+    let items = result
+        .get("items")
+        .and_then(serde_json::Value::as_array)
         .ok_or("menu response requires items[]")?;
-    if items.len() > 100 { return Err("too many menu items".into()); }
+    if items.len() > 100 {
+        return Err("too many menu items".into());
+    }
     let mut ids = HashSet::new();
     let mut kinds = HashMap::new();
     let mut parents = HashMap::new();
     let mut actions = HashSet::new();
     for item in items {
-        let id = item.get("id").and_then(serde_json::Value::as_str)
+        let id = item
+            .get("id")
+            .and_then(serde_json::Value::as_str)
             .ok_or("menu item id missing")?;
-        if id.is_empty() || id.len() > 80 ||
-            !id.bytes().all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c)) ||
-            !ids.insert(id.to_owned()) {
+        if id.is_empty()
+            || id.len() > 80
+            || !id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
+            || !ids.insert(id.to_owned())
+        {
             return Err("invalid or duplicate menu item id".into());
         }
-        let kind = item.get("kind").and_then(serde_json::Value::as_str)
+        let kind = item
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
             .ok_or("menu kind missing")?;
         if !matches!(kind, "action" | "submenu" | "separator") {
             return Err("invalid menu item kind".into());
         }
-        let title = item.get("title").and_then(serde_json::Value::as_str)
+        let title = item
+            .get("title")
+            .and_then(serde_json::Value::as_str)
             .ok_or("menu title missing")?;
         if title.is_empty() || title.len() > 128 {
             return Err("invalid menu item title".into());
@@ -554,9 +568,14 @@ fn menu_response_valid(
             return Err("static nested menus are forbidden".into());
         }
         if let Some(parent) = item.get("parentId") {
-            parents.insert(id.to_owned(), parent.as_str().ok_or("invalid menu parent")?.to_owned());
+            parents.insert(
+                id.to_owned(),
+                parent.as_str().ok_or("invalid menu parent")?.to_owned(),
+            );
         }
-        if kind == "action" { actions.insert(id.to_owned()); }
+        if kind == "action" {
+            actions.insert(id.to_owned());
+        }
         kinds.insert(id.to_owned(), kind.to_owned());
     }
     for id in &ids {
@@ -564,12 +583,13 @@ fn menu_response_valid(
         let mut depth = 1;
         let mut seen = HashSet::new();
         while let Some(parent) = parents.get(current) {
-            if !seen.insert(current)
-                || kinds.get(parent).map(String::as_str) != Some("submenu") {
+            if !seen.insert(current) || kinds.get(parent).map(String::as_str) != Some("submenu") {
                 return Err("menu contains a cycle or invalid parent".into());
             }
             depth += 1;
-            if depth > 4 { return Err("menu nesting exceeds depth limit".into()); }
+            if depth > 4 {
+                return Err("menu nesting exceeds depth limit".into());
+            }
             current = parent;
         }
     }
@@ -585,14 +605,21 @@ pub(crate) async fn plugin_context_menu_resolve(
     is_remote: bool,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        if !menu_allowed(&plugin_id) || paths.is_empty() || paths.len() > 256
-            || directory.is_empty() { return Err("menu plugin or selection not allowed".into()); }
+        if !menu_allowed(&plugin_id)
+            || paths.is_empty()
+            || paths.len() > 256
+            || directory.is_empty()
+        {
+            return Err("menu plugin or selection not allowed".into());
+        }
         let session_id = crate::mounts::new_id()?;
-        let names: Vec<_> = paths.iter()
+        let names: Vec<_> = paths
+            .iter()
             .map(|path| path.rsplit(['/', '\\']).next().unwrap_or("").to_owned())
             .collect();
         let result = crate::plugin_host::global().invoke(
-            &plugin_id, "contextMenu.resolve",
+            &plugin_id,
+            "contextMenu.resolve",
             serde_json::json!({
                 "menuSessionId": session_id,
                 "selectionCount": paths.len(),
@@ -600,29 +627,45 @@ pub(crate) async fn plugin_context_menu_resolve(
                 "isDirectory": is_directory,
                 "readOnly": read_only,
                 "isRemote": is_remote,
-            })
+            }),
         )?;
         let actions = menu_response_valid(&result)?;
-        let mut guard = context_menu_sessions().lock().map_err(|_| "menu registry unavailable")?;
+        let mut guard = context_menu_sessions()
+            .lock()
+            .map_err(|_| "menu registry unavailable")?;
         guard.retain(|_, session| session.created.elapsed().as_secs() < 90);
-        if guard.len() >= 128 { return Err("menu session capacity exceeded".into()); }
-        guard.insert(session_id.clone(), ContextMenuSession {
-            plugin_id, directory, selection: paths,
-            actions, created: std::time::Instant::now()
-        });
+        if guard.len() >= 128 {
+            return Err("menu session capacity exceeded".into());
+        }
+        guard.insert(
+            session_id.clone(),
+            ContextMenuSession {
+                plugin_id,
+                directory,
+                selection: paths,
+                actions,
+                created: std::time::Instant::now(),
+            },
+        );
         Ok(serde_json::json!({"menuSessionId":session_id,"items":result["items"]}))
-    }).await.map_err(|error| error.to_string())?
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 pub(crate) async fn plugin_context_menu_execute(
     menu_session_id: String,
     item_id: String,
 ) -> Result<serde_json::Value, String> {
-    let session = context_menu_sessions().lock().map_err(|_| "menu registry unavailable")?
-        .remove(&menu_session_id).ok_or("menu session invalid or already used")?;
+    let session = context_menu_sessions()
+        .lock()
+        .map_err(|_| "menu registry unavailable")?
+        .remove(&menu_session_id)
+        .ok_or("menu session invalid or already used")?;
     if session.created.elapsed().as_secs() >= 90
         || !session.actions.contains(&item_id)
-        || !menu_allowed(&session.plugin_id) {
+        || !menu_allowed(&session.plugin_id)
+    {
         return Err("menu session expired or item was not offered".into());
     }
     let mut paths = session.selection;
@@ -633,8 +676,11 @@ pub(crate) async fn plugin_context_menu_execute(
         }
     }
     if crate::mounts::handles(&directory) {
-        directory = std::path::Path::new(&paths[0]).parent().ok_or("bad selection")?
-            .to_string_lossy().into_owned();
+        directory = std::path::Path::new(&paths[0])
+            .parent()
+            .ok_or("bad selection")?
+            .to_string_lossy()
+            .into_owned();
     }
     tauri::async_runtime::spawn_blocking(move || {
         let parameters = serde_json::json!({
@@ -647,11 +693,16 @@ pub(crate) async fn plugin_context_menu_execute(
         });
         let selected: Vec<std::path::PathBuf> = paths.iter().map(Into::into).collect();
         let mut result = crate::plugin_host::global().invoke_selected(
-            &session.plugin_id, "contextMenu.execute",
-            parameters, &directory, &selected
+            &session.plugin_id,
+            "contextMenu.execute",
+            parameters,
+            &directory,
+            &selected,
         )?;
         if result.get("kind").and_then(serde_json::Value::as_str) == Some("panel") {
-            let entry = result.get("entry").and_then(serde_json::Value::as_str)
+            let entry = result
+                .get("entry")
+                .and_then(serde_json::Value::as_str)
                 .ok_or("panel result missing entry")?;
             let asset = crate::plugin_host::plugin_view_asset(&session.plugin_id, entry)?;
             let object = result.as_object_mut().ok_or("invalid panel result")?;
@@ -659,7 +710,9 @@ pub(crate) async fn plugin_context_menu_execute(
             object.insert("assetPath".into(), serde_json::json!(asset));
         }
         Ok::<serde_json::Value, String>(result)
-    }).await.map_err(|error| error.to_string())?
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]
@@ -672,7 +725,9 @@ mod context_menu_session_tests {
         assert!(menu_response_valid(&json!({"items": [
             {"id":"root","kind":"submenu","title":"Root"},
             {"id":"open","kind":"action","title":"Open","parentId":"root"}
-        ]})).unwrap().contains("open"));
+        ]}))
+        .unwrap()
+        .contains("open"));
         for invalid in [
             json!({"items":[{"id":"a","title":"A","kind":"action","when":"true"}]}),
             json!({"items":[{"id":"a","title":"A","kind":"action","children":[]}]}),
@@ -689,7 +744,8 @@ mod context_menu_session_tests {
         let valid = menu_response_valid(&json!({"items":[
             {"id":"group","title":"Group","kind":"submenu"},
             {"id":"act","title":"Act","kind":"action","parentId":"group"}
-        ]})).unwrap();
+        ]}))
+        .unwrap();
         assert!(!valid.contains("group"));
         assert!(valid.contains("act"));
     }
