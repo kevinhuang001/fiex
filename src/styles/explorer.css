@@ -1060,3 +1060,19 @@ body.dragging-toolbar {
 .view-switch button svg {
   transform: translateY(1px);
 }
+
+.plugin-connection-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+}
+.plugin-connection-message {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}

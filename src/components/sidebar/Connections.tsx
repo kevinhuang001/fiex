@@ -1,5 +1,6 @@
 import { Plus, Server, X } from 'lucide-react'
 import { Fragment } from 'react'
+import { call } from '@/lib/api'
 import type { SidebarProps } from './types'
 
 /** Remote connections, with the add button and per-connection disconnect. */
@@ -28,7 +29,20 @@ export function Connections({
           <div className="device-row" key={connection.id}>
             <button
               className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
-              onClick={() => x.navigate(connection.mountPath)}
+              onClick={() => {
+                void call<{ kind: 'vfs'; path: string } | { kind: 'pluginView' }>(
+                  'connection_open',
+                  { id: connection.id },
+                )
+                  .then((target) =>
+                    x.navigate(
+                      target.kind === 'vfs'
+                        ? target.path
+                        : 'fiex-plugin-view://' + connection.id,
+                    ),
+                  )
+                  .catch((error) => x.setError(String(error)))
+              }}
             >
               <Server />
               <span>
