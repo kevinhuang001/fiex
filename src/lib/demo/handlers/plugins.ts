@@ -128,6 +128,22 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const method = String(a.method || '')
       const params = (a.params || {}) as Record<string, unknown>
       if (officialMode) {
+        if (method === 'archive.list') {
+          return {
+            entries: [
+              { name: 'Documents/', isDir: true, size: 0 },
+              { name: 'Projects/', isDir: true, size: 0 },
+              { name: 'README.md', isDir: false, size: 2148 },
+              { name: '预算明细.csv', isDir: false, size: 4096 },
+              { name: '产品截图.png', isDir: false, size: 2411520 },
+            ],
+            encrypted: false,
+            supported: true,
+          }
+        }
+        if (method === 'archive.extract') {
+          return '/Users/kevin/Documents'
+        }
         if (method === 'data.open' || method === 'data.page') {
           const path = String(params.path || '')
           const name = path.split('/').pop() || '数据'
