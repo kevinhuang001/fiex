@@ -93,11 +93,7 @@ impl ResourceSnapshot {
             reference: self.reference.clone(),
             metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
             read: (read_allowed && !self.is_dir).then(|| ScopedRead {
-                resource_id: crate::plugin_scoped_reads::register(
-                    owner,
-                    session_id,
-                    &self.name,
-                ),
+                resource_id: crate::plugin_scoped_reads::register(owner, session_id, &self.name),
             }),
         }
     }
@@ -109,7 +105,6 @@ impl ResourceSnapshot {
             session_id,
         }
     }
-
 }
 
 #[cfg(test)]

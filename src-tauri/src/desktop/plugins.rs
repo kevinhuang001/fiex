@@ -777,8 +777,13 @@ pub(crate) async fn plugin_toolbar_invoke(
 ) -> Result<serde_json::Value, String> {
     let plugin = crate::plugin_host::catalog()
         .into_iter()
-        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.approved
-            && plugin.backend_available && plugin.extensions.get("toolbar").is_some())
+        .find(|plugin| {
+            plugin.id == plugin_id
+                && plugin.enabled
+                && plugin.approved
+                && plugin.backend_available
+                && plugin.extensions.get("toolbar").is_some_and(serde_json::Value::is_object)
+        })
         .ok_or("toolbar provider not active")?;
     if paths.len() > 256 {
         return Err("too many toolbar targets".into());
@@ -828,7 +833,10 @@ pub(crate) async fn plugin_toolbar_invoke(
             })
             .collect::<Vec<_>>();
         let params = serde_json::json!({"sessionId":session_id,"targets":targets});
-        let selected_paths = selected.into_iter().map(std::path::PathBuf::from).collect::<Vec<_>>();
+        let selected_paths = selected
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .collect::<Vec<_>>();
         crate::plugin_events::invoke_selected(
             &plugin.id,
             "toolbar.invoke",
@@ -862,14 +870,13 @@ pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value
             .unwrap_or(&snapshot.ext)
             .to_ascii_lowercase();
         let mime = crate::plugin_match::mime_for(&extension);
-        let providers = crate::plugin_events::matching_plugins(
-            "hooks.invoke",
-            &extension,
-            &mime,
-            false,
-        );
+        let providers =
+            crate::plugin_events::matching_plugins("hooks.invoke", &extension, &mime, false);
         for provider in providers {
-            if provider.contribution.get("event").and_then(serde_json::Value::as_str)
+            if provider
+                .contribution
+                .get("event")
+                .and_then(serde_json::Value::as_str)
                 != Some("beforeOpen")
             {
                 continue;

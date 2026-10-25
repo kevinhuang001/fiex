@@ -457,7 +457,9 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             if !registered {
                 return Err("PermissionDenied: VFS extension not registered".into());
             }
-            let node_ref = target.get("nodeRef").ok_or("VFS navigation missing nodeRef")?;
+            let node_ref = target
+                .get("nodeRef")
+                .ok_or("VFS navigation missing nodeRef")?;
             if node_ref.get("mountId").and_then(serde_json::Value::as_str)
                 != Some(connection.mount_id.as_str())
             {
