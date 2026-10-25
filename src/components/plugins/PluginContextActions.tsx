@@ -151,13 +151,12 @@ export function PluginContextActions({
   const selectionKey = JSON.stringify(paths)
   useEffect(() => {
     let active = true
-    const enabled = plugins.filter(
-      (p) =>
-        p.enabled &&
-        (p.extensions?.contextMenus === true ||
-          (typeof p.extensions?.contextMenus === 'object' &&
-            p.extensions.contextMenus !== null)),
-    )
+    const enabled = plugins.filter((plugin) => {
+      if (!plugin.enabled) return false
+      const contribution = plugin.extensions?.contextMenus
+      if (contribution === true) return true
+      return contribution !== null && typeof contribution === 'object'
+    })
     void Promise.all(
       enabled.map(async (plugin) => {
         try {

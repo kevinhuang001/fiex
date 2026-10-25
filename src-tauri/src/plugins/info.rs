@@ -8,7 +8,6 @@ use crate::plugin_contracts::{
     EventContext, InfoResponse, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
 };
 use serde::Serialize;
-use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},

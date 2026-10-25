@@ -37,13 +37,13 @@ pub fn matching_plugins(
         if !plugin.enabled || !plugin.approved || !plugin.backend_available {
             continue;
         }
-        let Some(contribution) = plugin.extensions.get(extension) else {
+        let Some(contribution) = plugin.extensions.get(extension).cloned() else {
             continue;
         };
         if contribution.is_null() || contribution.as_bool() == Some(false) {
             continue;
         }
-        let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
+        let rules = crate::plugin_match::MatchRules::from_contribution(&contribution);
         if !rules.matches(ext, mime, is_dir) {
             continue;
         }
@@ -53,7 +53,7 @@ pub fn matching_plugins(
             .unwrap_or(50);
         providers.push(RegisteredProvider {
             plugin,
-            contribution: contribution.clone(),
+            contribution,
             priority,
         });
     }
