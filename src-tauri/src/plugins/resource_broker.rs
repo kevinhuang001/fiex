@@ -52,6 +52,41 @@ impl Resource {
             metadata,
         }
     }
+    pub fn from_metadata(display: &str, metadata: Value) -> Self {
+        Self {
+            local: PathBuf::from(display),
+            reference: ResourceRef {
+                mount_id: crate::mounts::parse(display)
+                    .map(|uri| uri.mount_id)
+                    .unwrap_or_else(|_| "local".into()),
+                node_id: format!(
+                    "fiex-resource:{}",
+                    crate::mounts::new_id().expect("resource identity")
+                ),
+            },
+            is_dir: metadata["kind"] == "directory" || metadata["isDir"].as_bool().unwrap_or(false),
+            ext: metadata["extension"].as_str().unwrap_or("").into(),
+            mime: metadata["mime"].as_str().unwrap_or("").into(),
+            metadata,
+        }
+    }
+    pub fn resolve(display: &str) -> Result<Self, String> {
+        if !crate::mounts::handles(display) {
+            return Ok(Self::new(display, Path::new(display)));
+        }
+        let entry = if crate::remote::is_remote(display) {
+            crate::remote::stat(display)?
+        } else {
+            crate::plugin_vfs::stat(display)?
+        };
+        let mut resource = Self::new(display, Path::new(display));
+        resource.metadata = Self::metadata_from_entry(&entry);
+        resource.ext = entry.extension;
+        resource.mime = entry.mime;
+        resource.is_dir = entry.is_dir;
+        Ok(resource)
+    }
+
     /// Reuse directory-list/stat output without fetching remote contents.
     pub fn metadata_from_entry(entry: &crate::files::Entry) -> Value {
         json!({"name":entry.name,"kind":if entry.is_dir { "directory" } else { "file" },

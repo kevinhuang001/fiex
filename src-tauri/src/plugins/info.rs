@@ -399,32 +399,34 @@ pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
         resource.is_dir,
         builtin,
     );
-    let mut sections = Vec::new();
-    for provider in providers {
-        let result = events::dispatch(
-            &provider,
-            |id| {
-                let sections = match id {
-                    "core.metadata" => vec![metadata_section(
-                        display,
-                        &resource.local,
-                        Some(&resource.metadata),
-                    )],
-                    "core.media" => media_sections(&resource.local),
-                    _ => return Err("unknown builtin info provider".into()),
-                };
-                Ok(serde_json::json!({"sections": sections}))
-            },
-            |plugin| {
-                events::invoke(
-                    &plugin.id,
-                    "info.resolve",
-                    resource.request(true, serde_json::json!({})),
+    let results = events::EventRouter::resolve(
+        "info.resolve",
+        providers,
+        |_, id| {
+            let sections = match id {
+                "core.metadata" => vec![metadata_section(
+                    display,
                     &resource.local,
-                )
-            },
-            |value| decode_sections(&provider, value),
-        );
+                    Some(&resource.metadata),
+                )],
+                "core.media" => media_sections(&resource.local),
+                _ => return Err("unknown builtin info provider".into()),
+            };
+            Ok(serde_json::json!({"sections": sections}))
+        },
+        |plugin| {
+            events::invoke(
+                &plugin.id,
+                "info.resolve",
+                resource.request(true, serde_json::json!({})),
+                &resource.local,
+            )
+        },
+        |provider, value| decode_sections(provider, value),
+        |_| true,
+    );
+    let mut sections = Vec::new();
+    for (provider, result) in results {
         match result {
             Ok(mut resolved) => sections.append(&mut resolved),
             Err(error) => sections.push(InfoSection {

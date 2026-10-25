@@ -104,7 +104,11 @@ export function Preview({
     setError('')
     setResolved(null)
     setMedia(null)
-    void call<ResolvedPreview>('preview_open', { path: entry.path, providerId })
+    void call<ResolvedPreview>('preview_open', {
+      path: entry.path,
+      providerId,
+      providerOrder: candidates.map((candidate) => candidate.id),
+    })
       .then((value) => {
         if (active) setResolved(value)
       })

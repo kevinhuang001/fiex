@@ -80,6 +80,17 @@ impl SearchState {
             );
             truncated |= root_truncated;
             skipped += root_skipped;
+            let found = crate::plugin_search::resolve(
+                &crate::plugin_search::PluginSearchInput {
+                    query: query.into(),
+                    root: root.clone(),
+                    hidden,
+                    ignores: ignores.to_vec(),
+                    limit: Some(RESULT_LIMIT.saturating_sub(entries.len())),
+                },
+                || Ok(serde_json::json!({"entries":found})),
+                || generation.load(Ordering::Relaxed) != ticket,
+            );
             for item in found {
                 if entries.len() >= RESULT_LIMIT {
                     truncated = true;
@@ -120,6 +131,17 @@ impl SearchState {
             &generation,
             ticket,
             RESULT_LIMIT,
+        );
+        let entries = crate::plugin_search::resolve(
+            &crate::plugin_search::PluginSearchInput {
+                query: query.into(),
+                root: root.into(),
+                hidden,
+                ignores: ignores.to_vec(),
+                limit: Some(RESULT_LIMIT),
+            },
+            || Ok(serde_json::json!({"entries":entries})),
+            || generation.load(Ordering::Relaxed) != ticket,
         );
         if generation.load(Ordering::Relaxed) != ticket {
             return Ok(());

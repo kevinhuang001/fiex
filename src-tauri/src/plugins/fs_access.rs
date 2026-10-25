@@ -142,6 +142,7 @@ pub struct Scope {
     allowed: Option<Vec<(PathBuf, bool)>>,
     references: HashMap<String, String>,
     metadata_only: bool,
+    metadata_refs: HashMap<String, Value>,
 }
 impl Scope {
     pub fn new(path: &Path) -> Result<Self, String> {
@@ -153,6 +154,7 @@ impl Scope {
             allowed: None,
             references: HashMap::new(),
             metadata_only: false,
+            metadata_refs: HashMap::new(),
         })
     }
     /// Capture only paths chosen for this operation. A file grants that file;
@@ -195,6 +197,20 @@ impl Scope {
             .as_ref()
             .map(|paths| paths.iter().map(|(p, _)| self.path.join(p)).collect())
             .unwrap_or_default()
+    }
+    /// Remote metadata is operation-owned; it never confers content access.
+    pub fn bind_metadata(&mut self, reference: &Value, metadata: Value) -> Result<(), String> {
+        let reference: crate::plugin_contracts::ResourceRef =
+            serde_json::from_value(reference.clone()).map_err(|e| e.to_string())?;
+        let key = serde_json::to_string(&reference).map_err(|e| e.to_string())?;
+        self.metadata_refs.insert(key, metadata);
+        Ok(())
+    }
+    pub fn metadata_reference(&self, reference: &Value) -> Result<Option<&Value>, String> {
+        let reference: crate::plugin_contracts::ResourceRef =
+            serde_json::from_value(reference.clone()).map_err(|e| e.to_string())?;
+        let key = serde_json::to_string(&reference).map_err(|e| e.to_string())?;
+        Ok(self.metadata_refs.get(&key))
     }
     pub fn bind_reference(
         &mut self,

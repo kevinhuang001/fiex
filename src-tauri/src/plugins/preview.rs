@@ -117,9 +117,7 @@ fn builtin_candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Builtin> {
     if ext == "pdf" {
         values.push(Builtin::Pdf);
     }
-    if values.is_empty() {
-        values.push(Builtin::Fallback);
-    }
+    values.push(Builtin::Fallback);
     values
 }
 
@@ -338,21 +336,41 @@ pub fn open_provider(
     local: &str,
     provider_id: Option<&str>,
 ) -> Result<Value, String> {
+    open_provider_ordered(display, local, provider_id, None)
+}
+
+pub fn open_provider_ordered(
+    display: &str,
+    local: &str,
+    provider_id: Option<&str>,
+    provider_order: Option<&[String]>,
+) -> Result<Value, String> {
     let local_path = Path::new(local);
     let ext = extension(local_path);
     let mime = mime_for(&ext);
     let values = candidates(&ext, &mime, local_path.is_dir());
-    let provider = match provider_id {
-        Some(id) => values
+    let mut values = values;
+    if let Some(order) = provider_order {
+        values.retain(|p| order.contains(&p.id) || p.id == "builtin:fallback");
+        values.sort_by_key(|p| {
+            order
+                .iter()
+                .position(|id| id == &p.id)
+                .unwrap_or(usize::MAX)
+        });
+    }
+    if let Some(id) = provider_id {
+        let index = values
             .iter()
-            .find(|provider| provider.id == id)
-            .cloned()
-            .ok_or("unknown preview provider")?,
-        None => values.first().cloned().ok_or("no preview provider")?,
-    };
-    let view = events::dispatch(
-        &provider,
-        |id| {
+            .position(|provider| provider.id == id)
+            .ok_or("unknown preview provider")?;
+        let preferred = values.remove(index);
+        values.insert(0, preferred);
+    }
+    let results = events::EventRouter::resolve(
+        "preview.open",
+        values,
+        |_, id| {
             let kind = builtin_candidates(&ext, &mime, local_path.is_dir())
                 .into_iter()
                 .find(|kind| kind.id() == id)
@@ -366,8 +384,6 @@ pub fn open_provider(
                 .cloned()
                 .ok_or("plugin preview response missing view")?;
             if let Some(object) = view.as_object_mut() {
-                object.insert("providerId".into(), Value::String(provider.id.clone()));
-                object.insert("provider".into(), Value::String(provider.name.clone()));
                 if let Some(session) = plugin.get("sessionId") {
                     object.insert("sessionId".into(), session.clone());
                 }
@@ -383,8 +399,34 @@ pub fn open_provider(
             }
             Ok(view)
         },
-        |view| Ok(view),
-    )?;
+        |_, view| {
+            if !matches!(
+                view["kind"].as_str(),
+                Some("html" | "text" | "image" | "media" | "pdf" | "fallback")
+            ) {
+                return Err("invalid preview result kind".into());
+            }
+            Ok(view)
+        },
+        |view| view["kind"] != "fallback",
+    );
+    let mut fallback = None;
+    for (provider, result) in results {
+        if let Ok(mut view) = result {
+            if let Some(object) = view.as_object_mut() {
+                object.insert("providerId".into(), Value::String(provider.id.clone()));
+                object.insert("provider".into(), Value::String(provider.name.clone()));
+            }
+            return Ok(
+                serde_json::json!({"providerId":provider.id,"provider":provider.name,"priority":provider.priority,"view":view}),
+            );
+        }
+        if provider.id == "builtin:fallback" {
+            fallback = Some(provider);
+        }
+    }
+    let provider = fallback.unwrap_or_else(|| Provider::builtin("builtin:fallback", 0));
+    let view = builtin_view(Builtin::Fallback, local_path, display)?;
     Ok(serde_json::json!({
         "providerId": provider.id,
         "provider": provider.name,
@@ -448,9 +490,7 @@ mod tests {
     fn builtins_are_ordered_and_fallback_is_last() {
         let values = candidates("md", "text/markdown", false);
         assert_eq!(values[0].id, "builtin:text");
-        assert!(!values
-            .iter()
-            .any(|provider| provider.id == "builtin:fallback"));
+        assert_eq!(values.last().unwrap().id, "builtin:fallback");
         let pdf = candidates("pdf", "application/pdf", false);
         assert!(pdf.iter().any(|provider| provider.id == "builtin:pdf"));
         let unknown = candidates("xyz", "application/octet-stream", false);

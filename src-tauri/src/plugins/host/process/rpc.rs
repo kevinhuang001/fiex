@@ -504,6 +504,14 @@ impl Running {
         let mut resolved;
         let p = if let Some(reference) = p.get("ref") {
             let scope = actor.scope.as_ref().ok_or("no operation scope")?;
+            if method == "host.fs.stat" {
+                if !permitted("metadata") {
+                    return Err("metadata permission not granted".into());
+                }
+                if let Some(metadata) = scope.metadata_reference(reference)? {
+                    return Ok(metadata.clone());
+                }
+            }
             resolved = p.clone();
             resolved["path"] = json!(scope.resolve_reference(reference)?);
             &resolved
