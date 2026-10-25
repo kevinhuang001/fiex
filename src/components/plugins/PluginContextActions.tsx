@@ -88,7 +88,10 @@ function MenuNode({
     return (
       <div
         className="context-submenu-wrap"
-        onMouseEnter={() => { cancel(); setExpanded(true) }}
+        onMouseEnter={() => {
+          cancel()
+          setExpanded(true)
+        }}
         onMouseLeave={() => {
           cancel()
           timer.current = window.setTimeout(() => setExpanded(false), 180)
@@ -178,11 +181,7 @@ export function PluginContextActions({
     }
   }, [plugins, selectionKey, isDirectory, readOnly, isRemote])
 
-  const invoke = async (
-    menu: Menu,
-    item: MenuItem,
-    anchor?: { x: number; y: number },
-  ) => {
+  const invoke = async (menu: Menu, item: MenuItem, anchor?: { x: number; y: number }) => {
     onClose()
     const pluginId = menu.pluginId
     const plugin = plugins.find((entry) => entry.id === pluginId)
@@ -194,8 +193,14 @@ export function PluginContextActions({
         menuSessionId: menu.menuSessionId,
         itemId: item.id,
       })
-      if (response && typeof response === 'object' && 'kind' in response &&
-        response.kind === 'panel' && 'assetPath' in response && typeof response.assetPath === 'string') {
+      if (
+        response &&
+        typeof response === 'object' &&
+        'kind' in response &&
+        response.kind === 'panel' &&
+        'assetPath' in response &&
+        typeof response.assetPath === 'string'
+      ) {
         const entry = response as {
           assetPath: string
           panelId?: string
