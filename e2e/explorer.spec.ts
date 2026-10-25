@@ -233,8 +233,11 @@ test('built-in SSH opens a full-height terminal', async ({ page }) => {
   await expect(page.locator('.explorer-toolbar')).toHaveCount(0)
   await page.getByRole('button', { name: '新建标签页', exact: true }).click()
   await expect(page.getByRole('tab')).toHaveCount(2)
-  await expect(page.locator('.ssh-terminal-view')).toHaveCount(0)
+  await expect(page.locator('.ssh-terminal-view')).toHaveCount(1)
+  await expect(page.locator('.ssh-terminal-view')).toBeHidden()
   await expect(page.getByText('最近使用', { exact: true }).first()).toBeVisible()
+  await page.getByRole('tab').first().click()
+  await expect(page.locator('.ssh-terminal-view')).toBeVisible()
 })
 
 test('connection sessions can autostart and appear in the add menu', async ({ page }) => {

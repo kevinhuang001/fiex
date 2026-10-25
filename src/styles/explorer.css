@@ -1271,3 +1271,13 @@ body.dragging-toolbar {
   color: var(--accent);
   opacity: 0.85;
 }
+
+/* Keep full-view tabs mounted so SSH/plugin sessions survive tab switches. */
+.full-view-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.full-view-pane[hidden] {
+  display: none;
+}

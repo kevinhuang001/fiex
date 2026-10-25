@@ -22,11 +22,17 @@ import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
   usePluginTasks()
-  const pluginViewId = /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(app.left.path)?.[1]
-  const terminalId = /^fiex-terminal:\/\/([A-Za-z0-9-]{1,128})$/.exec(app.left.path)?.[1]
+  const pluginViewOf = (path: string) =>
+    /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
+  const terminalOf = (path: string) => /^fiex-terminal:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
+  const pluginViewId = pluginViewOf(app.left.path)
+  const terminalId = terminalOf(app.left.path)
   const fullView = Boolean(pluginViewId || terminalId)
-  const terminalName =
-    app.left.connections.find((connection) => connection.id === terminalId)?.name || 'SSH'
+  const fullViews = app.left.tabs.flatMap((path, index) => {
+    const terminal = terminalOf(path)
+    const plugin = pluginViewOf(path)
+    return terminal || plugin ? [{ path, index, terminal, plugin }] : []
+  })
   const autostarted = useRef(false)
   const backgroundPath = app.prefs.backgroundImage
   const backgroundUrl = backgroundPath
@@ -143,41 +149,57 @@ export default function App() {
             {app.x.warnings.join('\n')}
           </details>
         )}
-        {terminalId ? (
-          <SshTerminalView connectionId={terminalId} name={terminalName} />
-        ) : pluginViewId ? (
-          <PluginConnectionView connectionId={pluginViewId} onNavigate={app.left.navigate} />
-        ) : app.left.loading && !app.left.hasListing ? (
-          <div className="loading">
-            <LoaderCircle className="spin" />
-            正在读取文件夹…
-          </div>
-        ) : (
+        {fullViews.map((view) => (
           <div
-            className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
-            onPointerDownCapture={() => app.setActive('left')}
-            data-drop-folder={
-              /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) ? undefined : app.left.path
-            }
+            className="full-view-pane"
+            key={`${view.path}:${view.index}`}
+            hidden={view.index !== app.left.tab}
           >
-            <FileViews
-              readOnly={app.left.directoryReadOnly}
-              trashPath={app.trashPath}
-              explorer={app.left}
-              prefs={app.prefs}
-              onOpen={app.openLeft}
-              onPreview={(entry) => app.previewEntry(entry, app.left)}
-              onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
-              onDrop={app.transfer}
-              onBookmark={app.bookmarkPaths}
-              onWorkspace={app.addWorkspace}
-              dragPaths={app.selectedAll}
-              onExternalDrag={(result) =>
-                app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
-              }
-            />
+            {view.terminal ? (
+              <SshTerminalView
+                connectionId={view.terminal}
+                name={
+                  app.left.connections.find((connection) => connection.id === view.terminal)
+                    ?.name || 'SSH'
+                }
+              />
+            ) : view.plugin ? (
+              <PluginConnectionView connectionId={view.plugin} onNavigate={app.left.navigate} />
+            ) : null}
           </div>
-        )}
+        ))}
+        {!fullView &&
+          (app.left.loading && !app.left.hasListing ? (
+            <div className="loading">
+              <LoaderCircle className="spin" />
+              正在读取文件夹…
+            </div>
+          ) : (
+            <div
+              className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
+              onPointerDownCapture={() => app.setActive('left')}
+              data-drop-folder={
+                /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) ? undefined : app.left.path
+              }
+            >
+              <FileViews
+                readOnly={app.left.directoryReadOnly}
+                trashPath={app.trashPath}
+                explorer={app.left}
+                prefs={app.prefs}
+                onOpen={app.openLeft}
+                onPreview={(entry) => app.previewEntry(entry, app.left)}
+                onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+                onDrop={app.transfer}
+                onBookmark={app.bookmarkPaths}
+                onWorkspace={app.addWorkspace}
+                dragPaths={app.selectedAll}
+                onExternalDrag={(result) =>
+                  app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
+                }
+              />
+            </div>
+          ))}
         {!fullView && app.split && (
           <SecondaryPane
             explorer={app.right}
