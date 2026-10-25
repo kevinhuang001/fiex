@@ -86,27 +86,32 @@ flowchart LR
   A -->|"dismiss"| D["Revoke session"]
 ```
 
-设计必须限定 IPC 查询时间、列表大小、层级与并发；慢插件不能延迟 Fiex 原生菜单。**查询菜单不允许文件内容读取**，也不是用户对后续执行的永久授权。详细字段见 [02](02-MANIFEST-EXTENSIONS.md) 与 [03](03-IPC-CATALOG.md)。
+设计必须限定 IPC 查询时间、列表大小、层级与并发；慢插件不能延迟 Fiex 原生菜单。**菜单查询允许申请当前所选对象 metadata，但不允许文件内容读取**，也不是用户对后续执行的永久授权。详细字段见 [02](02-MANIFEST-EXTENSIONS.md) 与 [03](03-IPC-CATALOG.md)。
 
-## 2.2 事件元数据 Push 与主动资源访问 Pull
+## 2.2 统一的事件驱动资源申请
 
-Core 持有 Explorer / 连接树展示所需的资源元数据。插件订阅 Surface 只登记事件，独立审核模块决定数据交付，不因注册而拥有全局查询文件系统的能力。元数据是**独立的一项** `permissions.metadata.enabled`，**文件和文件夹共用**。用户触发实际事件（如右键、预览）时，Core 先把事件候选载荷送进**独立 PermissionPolicy** 审核，只有获批的一项 `permissions.metadata` 才允许在 IPC params 中附带当前资源 Metadata；如未批准则仅发送不透明 ref。插件无需也不得因这次事件主动调用 `host.fs.stat` 探测其他资源。
+**唯一的插件资源访问流程：**Surface/Provider 在 Manifest 中注册事件 → 用户执行操作（Decoration 是用户切换目录）→ Core 发 `event + SessionId + opaque ResourceRef`，**不附带 metadata/文件内容/目录列表** → 插件按需通过通用 `host.fs.stat/list/openRead/...` 申请 → 独立 `PermissionPolicy` 结合 Manifest、已批准 grant、事件/操作 Scope 审核**请求及 Core 返回的数据** → Core 经 IPC 返回获准的结果。没有「Core 自动发 metadata」这条捷径，也不划分 Push/Pull 两套访问模型。
 
-后续用户执行动作后，插件才在 OperationScope/TaskScope 中使用 `ctx.files().metadata(path)` → `host.fs.stat` 主动查询，仍需同类 metadata 权限；`files.read` 与 `folders.read` 分别控制文件字节与目录枚举，不能替代 metadata 授权。文件/文件夹操作子权限与独立 metadata 权限统一 `{enabled}`，文件创建、删除、改名与文件夹的同名操作分离。
+事件会话代表本次明确的对象集合和阶段：右键菜单的 `contextMenu.resolve` 可以申请**所选对象的 metadata**，但不能在菜单查询期间读取文件字节；点击有效菜单 action 后，可按用户确认及 `files.read/write` 权限建立执行 Scope。Preview/Info 的打开行为可允许本次目标的适当读取；Decoration 的目录切换会话**只**能申请当前目录已显示的成员 metadata，不能凭刷新扫描其他目录或读取文件字节。若所需权限未申请或未批准，资源申请返回 `PermissionDenied`，事件通知仍正常发生。
 
 ```mermaid
-flowchart TD
-  Explorer["用户触发扩展点"] --> Core["Core 持有所选资源 Entry"]
-  Core --> Audit["Independent PermissionPolicy.audit_output"]
-  Audit --> Check{"permissions.metadata.enabled approved?"}
-  Check -->|yes| Push["Core 推送本次选择的 metadata"]
-  Check -->|no| Minimal["仅 opaque ref"]
-  Push --> Plugin["Plugin 处理事件"]
-  Minimal --> Plugin
-  Plugin --> Click{"用户点击执行?"}
-  Click -->|yes| Grant["创建选中范围 OperationScope"]
-  Grant --> Stat["插件主动 host.fs.stat: 再检查 metadata 权限和 Scope"]
-  Click -->|no| End["事件结束"]
+sequenceDiagram
+  participant U as User
+  participant C as Core Event Host
+  participant P as Plugin
+  participant A as Independent PermissionPolicy
+  participant F as Core File Broker
+  U->>C: Trigger menu / preview / info / navigate folder
+  C->>P: event(sessionId, opaque resource refs)
+  P->>C: host.fs.stat(ref)
+  C->>A: authorize(plugin,grant,EventScope,ref,stat)
+  A-->>C: approve or deny
+  C->>F: stat(scoped ref)
+  F-->>C: candidate metadata
+  C->>A: audit_response(candidate,grant,scope)
+  A-->>C: approved metadata
+  C-->>P: response(metadata) or PermissionDenied
+  P-->>C: UI result (menu/info/decoration/preview)
 ```
 
 ## 2.3 目录限定的 Search
@@ -127,7 +132,7 @@ flowchart LR
   H --> U["One UI rendering contract"]
 ```
 
-**接口相同不等于传输路径相同**：内置组件在宿主进程内部高效运行，第三方必须经过 Broker + iframe 隔离。媒体属性探测涉及文件字节读取，不能把它视为只需 metadata permission 的被动 Core Push。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md) 和 [Roadmap](../../ROADMAP.md)。
+**接口相同不等于传输路径相同**：内置组件在宿主进程内部高效运行，第三方必须经过 Broker + iframe 隔离。媒体属性探测涉及文件字节读取，不能把它当成只需 metadata permission 的查询；插件须先发起明确资源请求并由 PermissionPolicy 审核。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md) 和 [Roadmap](../../ROADMAP.md)。
 
 ## 2.5 Surface 插槽与 Core 多来源实现的边界
 
@@ -178,7 +183,7 @@ flowchart LR
 
 `PermissionPolicy` 是独立可测试的权限审核模块（建议 workspace crate，而不是插件进程）：比较 Core 准备交付的数据字段、当前插件获批权限和事件/操作 Scope，决定哪些字段可交付。Core 不在各 Surface Host 内散写授权分支。`permissions.metadata.enabled` **一项覆盖文件和文件夹**；文件与文件夹的读/写/创建/删除等操作权限保持区分。
 
-`surfaces.decorations:true` 只声明**每次目录切换通知插件**。无论有无 Metadata 许可，都触发 `decorations.resolve`；独立审核模块在获批 `permissions.metadata` 后才释放该目录和成员的属性。没有这项许可，事件有通知但无法生成逐文件的有效 Decoration。
+`surfaces.decorations:true` 只声明**每次目录切换通知插件**。无论是否有 Metadata 授权，Core 都发送当前目录及可见成员的 opaque ref，不包含属性。插件自行调用 `host.fs.stat`（可以使用限额批量申请）后，由独立 PermissionPolicy 对 `permissions.metadata` 和本次可见集合进行审核，Core 才返回属性；没有授权的请求被拒绝。
 
 `surfaces.connections[]` 仅在添加连接 + 和侧边栏“连接”区注册入口，点击交给插件 `connection.create/open` 决定导航意图。**网盘需要额外声明 `providers.vfs[]`，连接本身不创建 mount**；VFS 文件树独立于 Connection UI，可用于云盘的可写文件树和 Git 的只读历史。
 

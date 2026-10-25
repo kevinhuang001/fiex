@@ -5,7 +5,7 @@
 ## 1. 设计结论
 
 - Manifest **没有** `panels`、`panelId`、`defaultSize` 等静态 Panel 注册项。插件需要哪个页面、内容、标题、默认尺寸和展示方式，均在**运行时 IPC**里选择；不要求开发者提前列出面板。
-- Toolbar、ContextMenus、Preview、Info、Search、Connections、Decorations、Settings 和 Themes 都是 Core 定义的 UI Surface。其中并非每种自动刷新事件都可以直接打开 Panel：必须有用户交互来源（如点击工具栏按钮、右键具体菜单项、打开预览、点击搜索结果/Info 操作、连接 + /侧栏项目、设置页上的操作）。**注册 Surface 隐含其实际交互流程中的 UI 请求能力**，无需额外的 `panel` 权限。
+- Toolbar、ContextMenus、Preview、Info、Search、Connections、Decorations、Settings 和 Themes 都是 Core 定义的 UI Surface。其中并非每种自动刷新事件都可以直接打开 Panel：必须有用户交互来源（如点击工具栏按钮、右键具体菜单项、打开预览、点击搜索结果/Info 操作、连接 + /侧栏项目、设置页上的操作）。**注册 Surface 意味着可以收到用户真实触发的事件；插件仍需按需申请文件资源，不能在事件中直接收到 metadata。该 Surface 隐含相应交互流程中的 UI 请求能力**，无需额外的 `panel` 权限。
 - Core 对全部 UI Surface 使用同一个 PanelHost / PanelSession / UI Bridge，控制标题栏、尺寸限制、焦点、生命周期和沙箱。一个界面可由多个 PanelSession 打开，打开哪些内容由插件选择。不同 Surface 只是给 PanelSession 提供不同的授权上下文与展示目标。
 - 仅提供功能的 `providers.vfs[]/hooks[]` 没有独立“后台弹窗权限”；如果某个功能由用户在 UI 中实际触发，才通过这次 UI 会话请求展示 Panel。定时 Hook / 后台同步 / 菜单 resolve / Decoration 刷新不得自动弹窗。
 - Panel 的创建**不等于**文件访问授权。插件使用文件、网络、进程、秘密时仍需对应 manifest permission、用户批准和精确 OperationScope。

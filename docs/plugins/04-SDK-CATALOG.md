@@ -45,66 +45,51 @@ fn main() {
 `TaskContext` 应完整拥有 `id/files/http/tcp/invoke/report_error/process_run/storage_get/storage_set/secret_get/secret_set/cancel/is_cancelled/progress`。其中 `progress(done,total)` 对应 `host.task.progress`，取消后 SDK 和 Core 都要拒绝再使用旧 TaskScope。`TaskHandle` 的方法为 `id/cancel/is_cancelled/is_finished/status/progress/wait`；`TaskStatus = Running|Completed|Failed|Cancelled`，Rust `RpcError` 有 `method_not_found/invalid_params/internal/cancelled` 构造器，目标补全 `permission_denied/conflict/unavailable/deadline_exceeded` 并保留错误数据。
 
 
-## 2.1 `contextMenu.resolve` 与 `contextMenu.execute` 的 Rust SDK 合同
+## 2.1 `contextMenu.resolve` 与 `contextMenu.execute` 的统一事件/资源请求
 
-`surfaces.contextMenus: true` 是纯 Provider 注册，**Manifest 不再声明 `when/children`，也不声明菜单项的 `command`**。Rust SDK 常驻进程照常使用同一个 `sdk::serve` 处理两个固定方法：
+`surfaces.contextMenus:true` 只注册右键事件，不给 Metadata 权限。Core 右键通知 `contextMenu.resolve`（包含本次目标的 opaque ref、选中引用和 SessionId），**不主动附带任何 Metadata**。插件按需通过通用 `host.fs.stat` 申请所选对象属性，只有唯一 `permissions.metadata.enabled` 经用户批准且符合当前 EventScope 时，独立 PermissionPolicy 才审核请求并让 Core 返回属性。没有权限则返回 `PermissionDenied`。菜单 resolve 阶段不允许文件内容读取。
 
-| 方法 | 目标 SDK 类型 | IPC 输入 → 输出 | 权限 |
-|---|---|---|---|
-| `ctx.method()=="contextMenu.resolve"` | `sdk::context_menu::ResolveRequest` → `MenuResponse` | `target + selection + directory + menuSessionId` → `{items}` | Core 主动附带本次选择的 `metadata?`（仅统一 permissions.metadata 经独立审核模块批准时）；不可主动 stat/读内容/遍历 |
-| `ctx.method()=="contextMenu.execute"` | `sdk::context_menu::ExecuteRequest` → JSON | `menuSessionId + itemId + selection` → JSON | 用户实际点击之后的精确 OperationScope |
-| `sdk::context_menu::MenuItem` | `{id,type,title?,icon?,parentId?,enabled?,group?,order?}` | 由 `resolve` 序列化至 Core | 只用于显示，不意味着可执行系统调用 |
-
-新的 `sdk::context_menu` 模块是 M3 计划新增的类型安全包装；在其生成之前仍可使用 `ctx.params()` / `serde_json` 实现这两个固定方法。开发者不需要直接发送 `host.*` 控制消息。
+| SDK 方法 / 协议 | 用途 | 资源边界 |
+|---|---|---|
+| `contextMenu.resolve` | 每次右键通知并返回 `{items:[]}` | 仅事件 + opaque refs，无元数据 |
+| `ctx.files().metadata(ref)`（目标签名） | 插件在本次 resolve 阶段申请目标属性 | 统一 `permissions.metadata` 与当前所选 EventScope，响应也经审核 |
+| `contextMenu.execute` | 用户点击有效菜单动作后执行 | 根据被确认操作创建新的读/写 OperationScope |
 
 ```rust
-use fiex_plugin_sdk::{self as sdk, RpcError};
-use serde_json::{json, Value};
-
-fn handle(ctx: sdk::RequestContext) -> Result<Value, RpcError> {
-    match ctx.method() {
-        "contextMenu.resolve" => {
-            let target = &ctx.params()["target"];
-            let is_zip = target["metadata"]["extension"] == "zip";
-            if is_zip {
-                Ok(json!({"items":[
-                    {"id":"archive.extract","type":"action","title":"解压到当前目录"},
-                    {"id":"archive.advanced","type":"action","title":"高级选项…"}
-                ]}))
-            } else {
-                Ok(json!({"items":[]}))
-            }
+// 流程伪代码，签名以未来 SDK 定义为准
+match ctx.method() {
+    "contextMenu.resolve" => {
+        let target_ref = &ctx.params()["target"]["ref"];
+        let metadata = ctx.files().metadata(target_ref)?;
+        if metadata.extension() == "zip" {
+            Ok(json!({"items":[{"id":"extract","type":"action","title":"解压"}]}))
+        } else {
+            Ok(json!({"items":[]}))
         }
-        "contextMenu.execute" => {
-            let item = ctx.params()["itemId"].as_str().unwrap_or("");
-            match item {
-                "archive.extract" => {
-                    // 用户点击后才可通过 ctx.files() 操作已授权的选中对象。
-                    Ok(json!({"accepted":true}))
-                }
-                _ => Err(RpcError::invalid_params("unknown menu item")),
-            }
-        }
-        other => Err(RpcError::method_not_found(other)),
     }
+    "contextMenu.execute" => {
+        // 具体读写请求还要经过 OperationScope 与 PermissionPolicy
+        Ok(json!({"accepted":true}))
+    }
+    _ => Err(RpcError::method_not_found(ctx.method()))
 }
 ```
 
-注意：`contextMenu.resolve` 的 `ctx.files()` 方法即使存在，也**不会拥有主动查询 metadata、读取文件内容或目录遍历的授权**。Core 仅在用户批准 `permissions.metadata.enabled` 时，随请求的 `target.metadata` / `selection[].metadata` 主动推送对应对象的元数据；未批准则字段不存在。SDK `ExecuteRequest` 的 `menuSessionId` 是宿主 Session 关联值，不能直接当作文件授权令牌；实际权限与资源版本均由 Core 再验证。
+该示例表达目标交互方式，不表示当前 Rust SDK 已实现所示 `metadata(ref)` API。
 
 ```mermaid
 flowchart TD
-  User["Right click"] --> Core["Core snapshots visible metadata"]
-  Core --> Resolve["SDK contextMenu.resolve"]
-  Resolve --> Items["MenuResponse {items}"]
-  Items --> CoreBuild["Core validates item IDs / parentId"]
-  CoreBuild --> Select{"User clicks?"}
-  Select -->|action| Grant["Core creates exact-file OperationScope"]
-  Grant --> Execute["SDK contextMenu.execute"]
-  Select -->|advanced action| Panel["Plugin can request host.ui.open dynamically"]
-  Select -->|dismiss| End["Drop session"]
+  User["Right click"] --> Core["Core sends opaque refs + menu session"]
+  Core --> Resolve["Plugin contextMenu.resolve"]
+  Resolve --> Stat["Plugin host.fs.stat(selected ref)"]
+  Stat --> Audit["Independent PermissionPolicy authorize + audit_response"]
+  Audit --> Items["Plugin returns MenuResponse"]
+  Items --> Menu["Core renders menu"]
+  Menu --> Select{"User clicks action?"}
+  Select -->|Yes| Grant["Core creates confirmed OperationScope"]
+  Grant --> Execute["Plugin contextMenu.execute"]
+  Select -->|No| End["End session"]
   Execute --> End
-  Panel --> End
 ```
 
 ## 2.2 Connection 与 VFS 的 SDK 职责互不隐含
@@ -115,7 +100,7 @@ flowchart TD
 
 ## 2.3 Decoration 订阅与审核模块
 
-`surfaces.decorations:true` 只使 Core 每次切换目录时发送一次 `decorations.resolve`；即使未批准 metadata 也会发事件。独立权限审核模块在 Core 候选数据发出前，比较 `permissions.metadata.enabled` 和本次可见目录 Scope，仅批准后把目录与成员 Metadata 发送给插件。SDK 无法通过这个事件额外获取目录读取能力；没有 metadata 则无法返回逐文件有效角标。
+`surfaces.decorations:true` 只使 Core 每次切换目录时发送一次 `decorations.resolve`；即使未批准 metadata 也会发事件。Core 只发送目录切换事件及当前可见成员的 opaque refs；插件通过 `ctx.files().metadata(ref)` 逐项申请（或将来批量 `statBatch`），独立 PermissionPolicy 按 `permissions.metadata.enabled` 和本次目录可见集合审核请求与返回值，Core 才返回 Metadata。SDK 无法通过这个事件额外获取目录读取能力；没有 metadata 则无法返回逐文件有效角标。
 
 ## 3. Files、Reader、Writer：完整映射
 
@@ -136,7 +121,7 @@ flowchart TD
 | `Files::write(path,bytes)` | beginWrite/write/commit | `files.write.enabled`：只修改已存在文件，不隐含新建 |
 | `Files::create(path,bytes)` | beginWrite(create:true)/commit | `files.create.enabled`：只创建不存在的文件并写入初始内容；不需要 `folders.create`，不隐含 `files.write` |
 | `Files::list(path)` | `host.fs.list` | 仅许可目录内 |
-| `Files::metadata(path)` | `host.fs.stat` | **插件主动查询**：统一要求 `permissions.metadata.enabled` + 本次 OperationScope/TaskScope；与 Core 主动推送不同 |
+| `Files::metadata(path)` | `host.fs.stat` | **所有 Metadata 统一按需申请**：要求 `permissions.metadata.enabled` + EventScope/OperationScope/TaskScope，并在返回时二次审核；事件不会带 metadata |
 | `Files::create_dir_all(path)` | `host.fs.mkdir` | `folders.create.enabled`：创建目录，不等于创建新文件 |
 | `Files::remove(path)` | `host.fs.remove` | 按目标类型要求 `files.delete.enabled` 或 `folders.delete.enabled`，检查本次所选范围 |
 | `Files::rename(from,to)` | `host.fs.rename` | 按目标类型要求 `files.rename.enabled` 或 `folders.rename.enabled`，检查双路径 Scope |
@@ -275,15 +260,15 @@ sequenceDiagram
 
 UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两个 RPC 仅由 Core 在真实右键/点击事件上向对应 Native Provider 调用。**面板无静态注册表**：所有用户触发的 Surface 均由相关 Plugin Handler 调用 `ctx.ui().open_panel(...)`，Core 校验当前 interactionId、包内 HTML 或有界运行时 HTML、CSP 与 iframe 沙箱，绝不授予任意宿主 JS/文件权限。
 
-### 主动元数据查询不等同于事件中自动收到的元数据
+### 事件只提供资源引用，插件自行申请元数据
 
 | 触发方式 | Rust SDK / RPC | 授权条件 |
 |---|---|---|
-| 当前文件被右键、预览或显示简介 | `ctx.params()["target"]["metadata"]`（或 selection[].metadata） | 对应的 `permissions.metadata.enabled` 已批准；由 Core 主动提供，不需要调用 stat |
-| 插件需要在执行阶段查询其他已选文件的 stat | `ctx.files().metadata(path)` → `host.fs.stat` | 对应 metadata 权限已批准，且该路径在明确授权的 OperationScope/TaskScope 内 |
+| 当前文件被右键、预览或显示简介 | 事件只给 `ctx.params()["target"]["ref"]` 等 opaque ref | 注册对应 Surface 即收到事件；不附带 Metadata |
+| 插件在事件中申请目标元数据 | `ctx.files().metadata(ref)` → `host.fs.stat` | 唯一 `permissions.metadata.enabled` 已批准，且目标在本次 EventScope/OperationScope/TaskScope 内，由 PermissionPolicy 审核请求和返回值 |
 | 插件主动读取文件内容 | `ctx.files().open_read(path)` → `host.fs.openRead` | `files.read.enabled` + 精确文件 Scope；metadata 权限不能代替 |
 
-查询 `contextMenu.resolve` 时不得调用 `ctx.files().metadata(path)` 探测更多文件；只能读取 Core 提供的 `params.target.metadata?`。无批准则 `metadata` 字段不存在，不能默认包含完整绝对路径。
+查询 `contextMenu.resolve` 时**允许申请当前 target/selection 的 metadata**，但不得请求不属于本次选择的其他文件。未获批则 `host.fs.stat` 返回 `PermissionDenied`，不是事件中 `metadata` 字段消失。
 
 不同 UI/Native 会话绝不共享隐式“当前目录”权限。面板关闭不会自动取消已经显式启动、仍被 Core 持有的后台任务，但必须解除 UI panel-local 任务；用户能从活动中心取消后台任务。
 
@@ -294,17 +279,17 @@ UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两
 | SDK 导出/逻辑合同 | Core ↔ Provider 入口 | 目标语义 |
 |---|---|---|
 | `preview::PreviewDescriptor` | Host `PreviewRegistry.register` | `id,title,extensions?,mimeTypes?,priority?`；内置与外部同形，无静态 panelId |
-| `preview::PreviewContext` | `preview.open` | `{sessionId,intent:"preview",resource:{ref,metadata?}}`，以 Ref 代替 host 路径 |
+| `preview::PreviewContext` | `preview.open` | `{sessionId,intent:"preview",resource:{ref}}`，以 Ref 代替 host 路径 |
 | `preview::PreviewView` | Host `PreviewHost` | 运行时返回的具体 Renderer 或视图描述，第三方只能请求其本次交互的隔离 Panel |
 | `info::InfoDescriptor` | Host `InfoRegistry.register` | `id,title,extensions?,mimeTypes?,priority?,command?` |
-| `info::InfoContext` | `info.resolve` | `{sessionId,intent:"info",resource:{ref,metadata?}}` |
+| `info::InfoContext` | `info.resolve` | `{sessionId,intent:"info",resource:{ref}}` |
 | `info::InfoRow` / `InfoSection` / `InfoResponse` | `info.resolve` | `{sections:[{id,title,rows:[{label,value}]}]}`，聚合原生与第三方来源 |
 | `resources::PreviewResourceRef` | Core Scoped Resource Broker | 只读、限量、可取消、支持视频/PDF Range/Seek；插件无法拿到裸本地文件路径 |
 | `preview::PreviewSession` / `info::InfoSession` | Core session owner | 文件切换、对话框关闭/插件禁用、取消时释放资源，后到结果丢弃 |
 
 `preview.open` 对 Core 内置 Provider 是进程内 Adapter 调用，对插件是 Host 统一管理的 Panel/UI Bridge 加载过程，**不是要求插件每次额外跑一遍 Native IPC**。插件仅注册 `surfaces.preview[]`；打开预览时通过 IPC/Bridge 动态指定本次包内页面或受限 HTML，Core 验证内容与来源。Info Native handler 可以使用 `info.resolve` 或声明的 `command`，但必须返回同形 `InfoResponse`；Core 负责定义 Info Handler 数据契约，SDK 使用通用 IPC 即可，无需单独公开 InfoResponse 类型。
 
-**权限**：独立 PermissionPolicy 只允许 Core Push 已获批的本次所选资源 `metadata?`；媒体探测/图片/视频/PDF 内容解析需要相应文件的 `files.read.enabled` + 精确 Scope。内置 Provider 的内部读取不向外部插件暴露特权；所有第三方流由 Broker 代理。完整规范见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
+**权限**：Preview/Info 事件只给 opaque ref；Provider 必须再通过 `host.fs.stat` 申请 Metadata，独立 PermissionPolicy 审核请求和响应；媒体探测/图片/视频/PDF 内容解析需要相应文件的 `files.read.enabled` + 精确 Scope。内置 Provider 的内部读取不向外部插件暴露特权；所有第三方流由 Broker 代理。完整规范见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
 
 
 **职责限定**：上表描述协议和 Core 业务对象，并非要求 Rust SDK 导出全部 Preview/Info 专有 Struct。插件可以返回遵循协议的 JSON；Core 反序列化成与内置 Provider 构造完全相同的类型，InfoHost/PreviewHost 不区分对象来源。SDK 只需通用 IPC、资源 Broker 和通用运行时 UI 封装。

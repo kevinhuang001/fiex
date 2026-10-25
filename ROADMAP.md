@@ -9,7 +9,7 @@
 | 优先级 | 阶段 | 核心目标 | 依赖 |
 |---|---|---|---|
 | P0 | R0 · 协议基线 | JSON Schema / SDK 类型生成 / Mock Contract Test | 无 |
-| P0 | R1 · 文件权限与 Core Broker | File/Folder 细粒度权限、元数据 Push/Pull、操作 Scope、文件/网络/句柄安全 | R0 |
+| P0 | R1 · 文件权限与 Core Broker | File/Folder 细粒度权限、统一事件后按需资源请求、操作 Scope、文件/网络/句柄安全 | R0 |
 | P0 | R2 · 统一 Preview / Info Provider | **所有内置预览和元数据与第三方插件使用同一 Provider 接口** | R0 + R1 的授权框架 |
 | P0 | R3 · 动态菜单与搜索 | 菜单 RPC Provider、局部搜索、Everything 路径限制 | R0 + R1 |
 | P1 | R4 · VFS 与 Connection | 自动生成 mount、连接生命周期、远端资源引用统一 | R1 |
@@ -46,20 +46,34 @@ flowchart LR
 
 **验收**：Schema ↔ SDK ↔ Core 之间有自动编译与契约测试；不存在文档已定义却完全未注册的公开 API。
 
+## 最新确定的唯一事件资源交互
+
+```text
+Manifest 注册事件
+→ 用户操作/切换目录
+→ Core 通知插件 (Session + opaque refs，无 metadata)
+→ 插件通过统一 IPC 申请所需文件/目录资源
+→ 独立 PermissionPolicy 检查已批准权限、会话作用域及响应数据
+→ Core 返回数据或 PermissionDenied
+→ 插件返回业务结果，Core 创建 UI
+```
+
+不设计 Metadata Push/Pull 双通道。文件/文件夹仅使用一项 `permissions.metadata.enabled`，其余读写/创建/删除操作权限仍然按真实资源类型区分。右键菜单 resolve 阶段可申请当前所选对象的 stat；执行文件读写仍需后续用户动作及对应授权。
+
 ## R1 · 权限与资源访问（P0）
 
 - [ ] R1-01：单独 `permissions.metadata.enabled` 统一控制文件与目录元数据；其余 `permissions.files.*`、`permissions.folders.*` 分别控制对象操作，权限均为带 enabled 的对象。
 - [ ] R1-02：文件权限支持 `read/write/create/delete/rename`；目录独立支持 `read/create/delete/rename`；文件和目录元数据统一使用唯一 `permissions.metadata.enabled`；区分创建文件与创建文件夹、删除文件与删除目录。
-- [ ] R1-03：Core 为 Menu/Preview/Info/Decoration 创建候选 IPC 输出，**独立 PermissionPolicy** 审核统一 `permissions.metadata` 与事件 Scope 后才允许 Push metadata；未获批准仅保留最小事件信息。
-- [ ] R1-04：插件主动调用 `host.fs.stat` / `Files::metadata` 时，除对应的 metadata permission 外必须有已确认的精确 OperationScope/TaskScope，不能因接收事件推送而得到任意 stat 能力。
+- [ ] R1-03：Menu/Preview/Info/Decoration 事件只通知 `SessionId + opaque ResourceRef`，**绝不随事件自动发送 Metadata**；插件在事件回调中用通用 `host.fs.stat/list/openRead` 申请资源，独立 PermissionPolicy 审核请求和 Core 返回内容。
+- [ ] R1-04：所有 `host.fs.stat` 请求都使用唯一 `permissions.metadata.enabled` + 本次 EventScope/OperationScope/TaskScope；右键 resolve 可读所选项 metadata，Decoration 可读本次可见成员 metadata；均不允许无关资源；不再设 Push/Pull 不同路径。
 - [ ] R1-05：文件、网络、共享缓冲、任务、进程执行操作统一经过独立 Broker，按用户最终确认行为发放作用域；句柄绑定操作/进程身份并能取消/撤销。
 - [ ] R1-06：为 Preview/Info 提供 Core 管理的安全限额只读流和受控资源 URL；大文件不一次性加载、base64 或复制给 iframe。
 - [ ] R1-07：为本地/Connection/VFS 提供不可伪造 `ResourceRef` 与会话生命周期；验证符号链接、TOCTOU、资源身份变更和路径逃逸。
 
-**验收**：可以 Push 已批准的选中元数据但不能读内容；第三方不能对未经选中的对象主动 stat；视频/PDF 大文件可流式读且关闭预览会回收句柄。
+**验收**：事件只有 opaque ref；插件申请本次所选 metadata 才经审核返回，未授权返回 PermissionDenied；第三方不能对未经选中的对象主动 stat；视频/PDF 大文件可流式读且关闭预览会回收句柄。
 
 - [ ] R1-08：新增独立 PermissionPolicy/AuthorizationGateway（推荐单独 Rust workspace crate）实现 `audit_output` 与 `authorize_call`，Core 不散写每个 Surface 的字段审核；嵌套 entries/selection 必须经过 Scope+权限审查。
-- [ ] R1-09：`surfaces.decorations:true` 只订阅每次目录切换；`decorations.resolve` 无 metadata 仍通知，但不可交付目录成员属性或生成逐文件 Decoration；批准统一 metadata 后才放行属性。
+- [ ] R1-09：`surfaces.decorations:true` 只订阅每次目录切换；通知只含当前目录及已显示成员 opaque refs。插件用通用 `host.fs.stat`（可优化为 batch）按需申请成员 metadata；有统一 metadata 授权及当前可见 Scope 才能得到属性并生成逐项 Decoration。
 
 ## R2 · 内置与插件统一 Preview / Info（P0，重点）
 
@@ -85,7 +99,7 @@ flowchart LR
 - [ ] R2-11：将普通文件基本属性（名称/类型、大小、位置、创建/修改时间、只读、符号链接）迁移为 `core.info.metadata`，不再由 `FileInfoDialog.tsx` 自己组装。
 - [ ] R2-12：将 lofty 音频元数据解析迁移为 `core.info.audio`，输出相同 `InfoResponse`；读取媒体文件数据时按照内容读取的安全规则进行限额与 Scope 检查。
 - [ ] R2-13：将 MP4 / Matroska 视频元数据迁移为 `core.info.video`，输出相同 `InfoResponse`，保留容器、码流、时长、分辨率等。
-- [ ] R2-14：第三方 `surfaces.info[]` 改为和内置 Provider **完全一致的请求/响应合同**，统一上下文为 `ResourceRef + metadata? + sessionId`；删除旧 `path → rows` 形式。
+- [ ] R2-14：第三方 `surfaces.info[]` 改为和内置 Provider **完全一致的请求/响应合同**，统一上下文为 `ResourceRef + sessionId`（事件不附带 metadata）；删除旧 `path → rows` 形式。
 - [ ] R2-15：`FileInfoDialog.tsx` 只消费 `sections[]`，统一展示区块，移除 `basicRows`、硬编码插件 ID 和不同 source 的特殊 UI 路径。
 - [ ] R2-16：`src-tauri/src/plugins/info.rs` 只负责 InfoRegistry/Adapter 编排；基础文件、媒体探测与第三方聚合不再分两套调用代码。
 - [ ] R2-17：本地、`fiex://` 连接、Git VFS、离线副本都可走同一 Info 路由；不因是虚拟文件而无条件返回空数组。
@@ -94,7 +108,7 @@ flowchart LR
 ### R2-C · SDK、隔离与验收
 
 - [ ] R2-19：Preview/Info 业务类型以 Core 公共协议模块为唯一来源；内置 Provider 直接构造统一 Rust 对象，插件通过通用 IPC 返回 JSON，Core 反序列化为**同一对象类型**；Rust SDK 不要求导出这些专用类型。
-- [ ] R2-20：Core 只为相应已授权 Provider Push 当前资源 metadata；媒体解析属于文件内容读取，不得用 `metadata.enabled` 绕过 `files.read.enabled`。
+- [ ] R2-20：Preview/Info 事件只给 `ref/sessionId`；插件自行申请 `host.fs.stat`/文件流，独立 PermissionPolicy 审核请求/响应；媒体解析需 `files.read.enabled`，不能用 metadata 权限代替。
 - [ ] R2-21：用内置图片、文本高亮、音频、视频、PDF、基础文件 Info、音频 Info、视频 Info、第三方 Preview/Info 的相同 mock contract fixtures 做测试。
 - [ ] R2-22：覆盖无扩展名、伪 MIME、错误编码、大于 5 GiB 文件、缺少权限、切换文件时取消、插件崩溃、资源临时不可用、视频音频停止播放。
 - [ ] R2-23：删除 Preview/Info 重复代码与旧的插件专用渲染/错误格式；保持 UI 体验、性能和键盘交互不回退。

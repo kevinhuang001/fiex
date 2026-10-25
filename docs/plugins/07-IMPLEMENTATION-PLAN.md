@@ -63,8 +63,8 @@ flowchart LR
 | 编号 | 仓库 | 任务 | 验收 |
 |---|---|---|---|
 | M2.AUTH1 | 独立模块/Core 适配 | 在 Core 业务模块之外建立可单测 PermissionPolicy（建议 workspace crate），统一 `audit_output` 与 `authorize_call` | 未经 audit_output 的候选 Core 资源消息禁止交给插件；嵌套字段不泄露 |
-| M2.AUTH2 | Core/IPC | `permissions.metadata.enabled` **只有一项**，文件/目录共用，废止旧的双 metadata 权限；Audit Pipeline 根据批准权限及 EventScope 裁剪 | 一项 metadata 权限分别能控制文件、目录和可见列表成员的属性；没授权则省略 |
-| M2.DEC1 | Core/Plugin | `surfaces.decorations:true` 订阅**每次切换目录**；`decorations.resolve` 是否发事件和是否获批 Metadata 完全解耦 | metadata 未批准仍收到事件但无成员属性；已批准才有逐文件 Decoration |
+| M2.AUTH2 | Core/IPC | `permissions.metadata.enabled` **只有一项**，文件/目录共用，废止旧的双 metadata 权限；PermissionPolicy 审核文件请求和 Core 响应字段 | 一项 metadata 权限控制文件、目录和可见列表成员 stat；未授权请求报 PermissionDenied，事件不变 |
+| M2.DEC1 | Core/Plugin | `surfaces.decorations:true` 订阅**每次切换目录**；`decorations.resolve` 通知只含目录和当前可见成员 opaque ref；插件统一走 `host.fs.stat` 申请属性 | metadata 未批准仍收到事件，申请成员属性时返回 PermissionDenied；批准后申请可见成员 stat 才有逐文件 Decoration |
 | M2.CONN1 | Core/Plugin | Connection 的 + 和侧边栏点击调用 `connection.create/open`；插件运行时返回目标，Core 验证 Navigator；不自动挂载 | 连接项可跳登录/设置 Panel；网盘通过独立 VFS Provider 导航 |
 | M2.VFS1 | Core/SDK/Plugins | 网盘同时注册 `surfaces.connections[]` 与 `providers.vfs[]`；VFS 支持云盘读写和 Git 只读，mount 只由受控请求创建 | 只有 Connection 不能列文件；只有 VFS 能提供独立历史树；同步场景仍可写回 |
 
@@ -72,7 +72,7 @@ flowchart LR
 
 | 编号 | 仓库 | 任务 | 验收 |
 |---|---|---|---|
-| M2.10 | 独立 PermissionPolicy/Core/SDK | 新增**一个**统一 `permissions.metadata.enabled` 权限（文件与目录共用），区分 Core 在事件中主动 Push 和插件 `host.fs.stat` 主动 Pull | metadata=true/read=false 能收到属性不能读内容；metadata=false/read=true 不推送额外属性；无 OperationScope 主动 stat 拒绝 |
+| M2.10 | 独立 PermissionPolicy/Core/SDK | 新增**一个**统一 `permissions.metadata.enabled` 权限（文件与目录共用），统一事件通知 → 插件 `host.fs.stat` 请求 → 审核后返回资源，不设置第二条 Metadata 自动发送通道 | 事件不主动带 metadata；metadata 申请需 grant + 当前 EventScope；未批准 stat 拒绝；右键 resolve 可申请所选对象属性但不能读文件字节 |
 | M2.11 | Core/Official Plugins | 删除 `search.scope`；限定本次 root，Everything 使用索引时加路径过滤，Core 复核结果 | 路径前缀碰撞、符号链接、`..` 和全局结果泄漏被拦截 |
 | M2.12 | Core/SDK | 文件与目录的 create/delete/rename 分别检查 `{enabled}`，修改 SDK/API | 删除文件不靠 folders.delete；新建文件不靠 folders.create；rename 校验双路径 |
 
@@ -81,7 +81,7 @@ flowchart LR
 |---|---|---|---|
 | M2.6 | Core | 新建 MenuBroker：每次右键产生不可复用 MenuSession，向声明 `contextMenus:true` 的 Native 插件并发 `contextMenu.resolve` | 恰好调用一次/插件/右键；不再读取 `when`、静态 `children` |
 | M2.7 | Core | 校验响应扁平 `items[]` 的 `id/type/parentId`；无环、最大 4 层/80 项；点击 action 后可以调用 `host.ui.open`，但 resolve 不允许直接弹窗 | 其他插件 ID 注入、任意 host 命令、禁用或已过期 item 全部拒绝 |
-| M2.8 | Core | 独立 `permissions.metadata.enabled`：Core 在菜单查询时由独立 PermissionPolicy 审核候选 payload 并只发获批 metadata，不开放主动 `host.fs.stat`；点击后建立 OperationScope | 未授权不推送；查询主动 stat/openRead 拒绝；原生菜单不阻塞 |
+| M2.8 | Core | 独立 `permissions.metadata.enabled`：菜单事件只通知 opaque refs；允许插件在 resolve 中调用 `host.fs.stat` 申请本次选择对象 metadata，经独立 PermissionPolicy 双向审核；点击有效菜单 action 后才能获得读写执行 Scope | 未授权 stat 返回 PermissionDenied；查询对所选对象 metadata 可申请，对文件内容 openRead 拒绝；原生菜单不阻塞 |
 | M2.9 | Official Plugins | Archive/Git/GPG 等全部从静态 `when/children` 迁移到返回具体菜单项 | 不识别扩展名返回空数组；子菜单通过 `parentId` 表达；不保留旧分支 |
 
 ## 5. M3 — SDK 与 UI Bridge 完整性
@@ -189,7 +189,7 @@ gantt
 - [ ] **统一 Preview/Info**：内置文本高亮、图片、音频、视频、PDF 与第三方共用 PreviewRegistry；基本文件/音频/视频元数据与第三方共用 InfoRegistry 和 InfoResponse；无格式硬编码、多条宿主渲染路径。
 - [ ] **Core 纯通用**：无官方 Provider ID 特判，无重复 VFS scheme，无旧 capabilities/sync/writeMode/conflictControl。
 - [ ] **同步不丢文件**：本地同大小同 mtime 改动、远端传输中改动、CAS 失败均保留双方完整副本并提示。
-- [ ] **跨平台隔离**：非授权元数据 Push、主动 stat、文件读写、目录遍历、网络、命令、任务和 UI Tauri 越权均有自动负面测试。
+- [ ] **跨平台隔离**：越权元数据请求、资源响应字段泄漏、文件读写、目录遍历、网络、命令、任务和 UI Tauri 越权均有自动负面测试。
 - [ ] **大文件与性能**：不按整个文件大小分配内存，不将大文件复制入 JSON，UI 操作不被后台网络同步阻塞。
 - [ ] **安装与升级**：从签名 Release 安装、重新授予权限、禁用和卸载/重装一致；旧文档与 API 无幽灵引用。
 - [ ] **三仓 CI 全绿**：并提供一份三平台完整日志链接、真实 Provider 集成与 mock 失败用例报告。
@@ -204,7 +204,7 @@ gantt
 6. **不得把弱比较后上传宣传成强 CAS，也不得默认信任插件自身设置的 TLS 例外。**
 7. **不得在 Manifest 保留 `contextMenus.when/children` 或静态右键子项；所有右键项必须由 IPC 动态返回，并将查询与执行授权隔离。**
 8. **不得继续使用布尔 file/folder 子权限，统一 `{enabled}`，不得把文件创建/删除映射为文件夹权限。**
-9. **不得重加 `search.scope` 或全局搜索入口；Core 主动推送 metadata 必须检查该类元数据权限，插件主动 stat 还需要 OperationScope。**
+9. **不得重加 `search.scope` 或全局搜索入口；Core 事件不能主动携带 metadata；插件请求 stat 必须经过唯一 metadata 授权和事件/操作 Scope，最终响应同样审核。**
 
 10. **不得保留内置 Preview/Info 单文件集中业务逻辑：所有来源必须独立模块与测试，Registry 只做调度。**
 11. **Connection 归属有固定 UI 位置的 Surface；顶层 `contributions` 不做兼容，Themes 属于 surfaces.themes，Panel 不在 Manifest 声明。**
@@ -212,5 +212,5 @@ gantt
 12. **不得为任何 UI Surface 预注册具体 Panel；所有 Panel 由真实用户交互的插件 IPC 在运行时选择、请求并由 Core PanelHost 校验创建，不能只适用于 ContextMenu。**
 
 13. **权限审核从 Core 业务模块独立出去；所有 Core→Plugin 候选数据必须在发送前通过 PermissionPolicy，文件/目录共用唯一 `permissions.metadata`。**
-14. **Decoration 订阅和数据授权必须完全分离：声明 decorations 只订阅每次切换目录；未批准 metadata 不能获得成员数据并产生有效逐文件装饰。**
+14. **Decoration 订阅和数据授权必须完全分离：声明 decorations 只订阅每次切换目录；未批准 metadata 则成员 stat 请求拒绝，不能产生基于文件属性的有效逐文件装饰。**
 15. **Connection 仅登记添加按钮和侧栏条目，点击导航由插件经 IPC 返回；不自动生成 VFS；网盘还必须单独声明 `providers.vfs[]`。**

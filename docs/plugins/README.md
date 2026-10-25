@@ -59,9 +59,9 @@ flowchart LR
 
 ## 权限、Decoration、Connection 的三个解耦点
 
-`permissions.metadata.enabled` **只有一项**，覆盖文件/文件夹 metadata。独立的受信 `PermissionPolicy` 审核 Core→Plugin 所有候选输出、逐项比较插件已批准权限与 EventScope，处理嵌套资源字段；插件主动 Core 资源操作也在此模块校验，权限判断不能散落在 Core 各业务组件。
+`permissions.metadata.enabled` **只有一项**，覆盖文件/文件夹 metadata。独立的受信 `PermissionPolicy` 对插件申请文件资源的请求和 Core 实际返回的数据逐项审核已批准权限与事件/操作 Scope；Core 的事件通知不携带原始资源属性，权限判断不能散落在 Core 各业务组件。
 
-`surfaces.decorations:true` 只是订阅**每次目录切换**，不是取得文件信息的权限。Core 必发切换事件；独立审核模块在批准 metadata 后才放行目录和成员 Metadata，没有这个权限无法产生按文件属性判断的有效 Decoration。
+`surfaces.decorations:true` 只是订阅**每次目录切换**，不是取得文件信息的权限。Core 每次只发目录切换事件与当前可见资源 opaque ref；插件自行通过通用文件 IPC 申请 Metadata，独立审核模块检查 `permissions.metadata`、会话作用域及返回值后 Core 才返回；没有这个权限无法产生按文件属性判断的有效 Decoration。
 
 `surfaces.connections[]` 仅注册添加连接的“+”入口和侧栏连接项；点击后插件通过 `connection.create/open` 决定具体导航/面板。网盘还须独立注册 `providers.vfs[]`，Core 不自动挂载 Connection。参见 [02 Manifest](02-MANIFEST-EXTENSIONS.md)、[03 IPC](03-IPC-CATALOG.md)、[05 VFS](05-VFS-CONNECTION-SYNC.md)。
 
@@ -69,7 +69,7 @@ flowchart LR
 
 所有 `permissions.files.*` 与 `permissions.folders.*` 均为 `{enabled: boolean, ...}` 结构。文件独立声明 `read/write/create/delete/rename`；文件夹独立声明 `read/create/delete/rename`；**文件和文件夹共用唯一的 `permissions.metadata.enabled`**。元数据权限与文件内容读取/目录遍历相互独立。
 
-当用户触发右键、预览、信息等扩展点，Core 在 **metadata 权限已批准** 时直接随 IPC 发出本次选择对象的 `metadata`，不要求插件另行调用 `stat`；插件主动 `host.fs.stat` 仍须经过 metadata permission 和具体的 OperationScope/TaskScope。未获批准则事件只包含不透明 ref，不提供详细元数据。
+统一事件链路：插件先注册 Surface → 用户触发 → Core 只通知会话及 opaque 资源引用（不含 Metadata） → 插件通过 `host.fs.stat/list/openRead` 等通用 IPC 按需申请 → 独立 PermissionPolicy 审核权限、当前 EventScope/OperationScope 和 Core 返回数据 → Core 返回结果或 PermissionDenied。不存在 metadata 的单独 Push/Pull 通道；右键 `resolve` 期间可读取本次选择对象的 metadata，但不能读取字节。
 
 `surfaces.search[]` 只含 `id/title/command?` 等基本注册项，**没有 `scope`**。Fiex 搜索始终限定用户当前指定的 root 目录；Everything 使用其全局索引，但查询及 Core 结果过滤都必须遵守该路径范围。
 

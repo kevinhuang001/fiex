@@ -38,7 +38,7 @@ Manifest `surfaces.connections[]` 只注册连接提供者的 ID、名称、图�
 
 ### 2.1 VFS 数据调用与 SDK 的区别
 
-`vfs.list/stat/openRead/readStream/writeFile` 等为 **Core → VFS Provider** 的数据操作接口（实际方法列表需在 Schema/IPC 目录补全）。Core 不因为用户点“连接”就隐式调用它们；只有导航到了真正存在且已批准的 VFS mount 后，才由 VFS Broker 按需调用。远端 `vfs.stat` 为 Provider 对自身虚拟节点的响应，不等于插件主动访问宿主本地磁盘的 `host.fs.stat`。后者仍必须满足独立 `PermissionPolicy` 对 `permissions.metadata.enabled` + OperationScope 的审查；同一个 `metadata` 权限覆盖普通文件与目录。
+`vfs.list/stat/openRead/readStream/writeFile` 等为 **Core → VFS Provider** 的数据操作接口（实际方法列表需在 Schema/IPC 目录补全）。Core 不因为用户点“连接”就隐式调用它们；只有导航到了真正存在且已批准的 VFS mount 后，才由 VFS Broker 按需调用。远端 `vfs.stat` 为 Provider 对自身虚拟节点的响应，不等于插件主动访问宿主本地磁盘的 `host.fs.stat`。后者仅在插件收到用户操作事件后通过通用 IPC 发起，必须满足独立 `PermissionPolicy` 对 `permissions.metadata.enabled` + EventScope/OperationScope 的请求及响应审查；同一个 `metadata` 权限覆盖普通文件与目录。
 
 ### 2.2 Connection 也使用通用运行时 Panel
 

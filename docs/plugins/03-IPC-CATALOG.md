@@ -42,12 +42,12 @@ sequenceDiagram
 | `plugin.ping` | 空 | `pong/ok` | 存活检测 |
 | `plugin.shutdown` | 空 | `null` | 优雅退出、在最后期限强杀 |
 | `plugin.cancel` | `taskId` | notification | 协作取消任务 |
-| `contextMenu.resolve` | `menuSessionId,target,selection,directory` | `{items:[...]}` | Core 每次右键通知插件并经 PermissionPolicy 审核候选 ref；经独立 PermissionPolicy 审核，获批 `permissions.metadata` 才追加 `metadata`；不提供主动查询权限 |
+| `contextMenu.resolve` | `menuSessionId,target,selection,directory`（仅 opaque refs） | `{items:[...]}` | Core 每次右键发送事件且不附带 metadata；插件可在本次 EventScope 内自行申请所选对象 `host.fs.stat`，由独立 PermissionPolicy 审核请求和响应 |
 | `contextMenu.execute` | `menuSessionId,itemId,selection` | `JSON/null` | 仅允许点击了本次 resolve 中有效 `type:action` 项后调用，建立独立 OperationScope |
-| `info.resolve` / `<registered info command>` | `sessionId,resource{ref,metadata?}` | `{sections:[{id,title,rows:[{label,value}]}]}` | 外部 Info Provider 固定响应 Schema；内置 Info Adapter 同合同进程内调用，不必走物理 IPC |
+| `info.resolve` / `<registered info command>` | `sessionId,resource{ref}` | `{sections:[{id,title,rows:[{label,value}]}]}` | 外部 Info Provider 固定响应 Schema；内置 Info Adapter 同合同进程内调用，不必走物理 IPC |
 | `connection.create` | `factoryId,interactionId` | `NavigationIntent?/null` | 用户在添加连接 + 选择插件后调用；插件决定配置/登录 Panel 或经验证导航 |
 | `connection.open` | `factoryId,connectionId,interactionId` | `NavigationIntent?/null` | 用户点击连接侧边栏项目后由插件决定跳转位置 |
-| `decorations.resolve` | `sessionId,directory,entries?` | `{items:[{ref,decoration}]}` | 每次切换目录通知；仅获批 `permissions.metadata` 才附带已审核目录/成员 Metadata，否则仍通知但不提供可装饰的属性 |
+| `decorations.resolve` | `sessionId,directoryRef,visibleRefs[]` | `{items:[{ref,decoration}]}` | 每次切换目录发送 opaque refs；插件另用 `host.fs.stat`/`statBatch` 申请 metadata；拒绝未授权请求，不跳过事件 |
 | `vfs.list` | `mountId,nodeId?,cursor?,limit?` | `entries,nextCursor,snapshotToken?` | 已挂载 VFS 的分页目录浏览；支持网盘与 Git |
 | `vfs.stat` | `mountId,nodeId` | `Entry` | 读取 VFS Provider 的节点属性/版本 |
 | `vfs.readSmall` | `mountId,nodeId,offset,maxBytes` | `base64,eof` | 小片段读取，严格限额 |
@@ -61,11 +61,13 @@ sequenceDiagram
 Provider 清单中的 `nodeId` 与 `revision` 均不应当被 Core 当作磁盘路径；所有 `Entry.path` 必须由 Core 根据 mountId 生成。扩展点动态命令原则上不能冒充 `plugin.`、`host.`、`vfs.`、`fs.`、`connection.` 保留前缀。
 
 
-## 2.0 独立 PermissionPolicy：数据交付和操作调用双向审核
+## 2.0 统一事件回调与按需资源 IPC
 
-Core 构造**候选**事件和响应消息。在序列化并发送给插件前，独立的 `PermissionPolicy` / `AuthorizationGateway` 接收 `{pluginId,approvedGrants,eventScope,candidatePayload,messageSchema}`，审核字段和节点集合，输出已脱敏的 `approvedPayload` 或拒绝。审核覆盖嵌套 `metadata`、`entries[]`、`selection[]` 与响应 DTO；未经审查的数据不得出进程。Core 业务模块只负责生成事件/数据，不自行判断 grant。插件的 `host.*` 主动请求则由同一模块的 `authorize_call` 检查权限、OperationScope 与目标资源。模块建议为**独立可信 crate/服务接口**，不依赖 Core UI 业务、不由插件运行或控制。
+**唯一的插件资源访问流程：**Surface/Provider 在 Manifest 中注册事件 → 用户执行操作（Decoration 是用户切换目录）→ Core 发 `event + SessionId + opaque ResourceRef`，**不附带 metadata/文件内容/目录列表** → 插件按需通过通用 `host.fs.stat/list/openRead/...` 申请 → 独立 `PermissionPolicy` 结合 Manifest、已批准 grant、事件/操作 Scope 审核**请求及 Core 返回的数据** → Core 经 IPC 返回获准的结果。没有「Core 自动发 metadata」这条捷径，也不划分 Push/Pull 两套访问模型。
 
-`surfaces.decorations:true` 只是订阅：每次切换目录都触发 `decorations.resolve`。没有 `permissions.metadata.enabled` 批准时，审核模块只放行最小目录切换通知，不能交付成员 Metadata 或产生逐文件有效装饰；获批才附带经过审核的目录和可见文件/子目录的 Metadata。统一 metadata 权限同时覆盖文件和文件夹，不需 `files.metadata/folders.metadata` 两项。
+事件会话代表本次明确的对象集合和阶段：右键菜单的 `contextMenu.resolve` 可以申请**所选对象的 metadata**，但不能在菜单查询期间读取文件字节；点击有效菜单 action 后，可按用户确认及 `files.read/write` 权限建立执行 Scope。Preview/Info 的打开行为可允许本次目标的适当读取；Decoration 的目录切换会话**只**能申请当前目录已显示的成员 metadata，不能凭刷新扫描其他目录或读取文件字节。若所需权限未申请或未批准，资源申请返回 `PermissionDenied`，事件通知仍正常发生。
+
+独立 PermissionPolicy 在插件调用 `host.fs.*` 时审核请求，Core Broker 取得结果后再由同一模块审核响应对象/字段。事件消息本身只携带 Session 和被限定的 opaque ref，不会因为获批 Metadata 就附上 metadata。Decoration 可以通过 `host.fs.stat` 或待补充的 `host.fs.statBatch` 批量申请**当前已显示成员**的属性；未获批准时资源请求失败，但目录切换事件依旧交付。
 
 ### Connection 与 VFS 是独立 RPC 边界
 
@@ -75,17 +77,15 @@ Core 构造**候选**事件和响应消息。在序列化并发送给插件前�
 
 ## 2.1 完全动态右键菜单的强制 RPC 合同
 
-Manifest 只需 `"contextMenus": true`，不会出现 `when`、`children`、静态 `command` 或 `panel`。目标流程每次右键向每个已启用、已获授权的插件发送一次 `contextMenu.resolve`；它返回本次菜单，而不是菜单谓词。请求总是包含本次右键选中对象的不透明 ref；只有插件获批统一的 `permissions.metadata.enabled`，独立权限审核模块才允许候选消息携带 `metadata` 对象。这是由事件触发的 **Core→Plugin Push**，不是插件在 IPC 里主动查询数据。未批准时必须省略 `metadata`；无论怎样都不包含文件字节或宿主任意可访问目录。
+Manifest 只需 `"contextMenus": true` 注册监听，每次用户右键 Core 向所有已注册插件发送仅含 `menuSessionId`、本次所选 opaque ref 的 `contextMenu.resolve` 事件。事件本身不包含属性；如需扩展名，插件须用当前会话里的 ref 申请 `host.fs.stat`，由独立 PermissionPolicy 对 `permissions.metadata.enabled`、EventScope 和结果字段审核后返回。查询阶段只允许本次 target/selection 的 metadata，不允许内容读取和任意目录遍历。菜单回包仍是本次完整的扁平 `items[]`。
 
 ```json
 {
   "jsonrpc":"2.0","id":301,"method":"contextMenu.resolve",
   "params":{
     "menuSessionId":"sess-opaque",
-    "target":{"ref":{"mountId":"m1","nodeId":"n7"},
-              "metadata":{"name":"report.zip","kind":"file","extension":"zip","size":4200,"readOnly":false}},
-    "selection":[{"ref":{"mountId":"m1","nodeId":"n7"},
-                  "metadata":{"name":"report.zip","kind":"file","extension":"zip"}}],
+    "target":{"ref":{"mountId":"m1","nodeId":"n7"}},
+    "selection":[{"ref":{"mountId":"m1","nodeId":"n7"}}],
     "directory":{"ref":{"mountId":"m1","nodeId":"parent"}}
   }
 }
@@ -114,7 +114,7 @@ Manifest 只需 `"contextMenus": true`，不会出现 `when`、`children`、静�
            "selection":[{"ref":{"mountId":"m1","nodeId":"n7"},"name":"report.zip"}]}}
 ```
 
-`execute` 从已经用户实际点击的菜单项派生 **OperationScope**；必须经过该方法需要的 Manifest permission 与当前选择的精确对象校验。查询 `resolve` 阶段没有任何主动文件 I/O 资源 Scope，**包括主动 `host.fs.stat` 查询**；所有 `host.fs.*` 对查询阶段额外路径的访问均应返回 `PermissionDenied`。在此阶段 `metadata` 只能作为 Core 候选事件经独立 PermissionPolicy 审核通过的 IPC 参数出现，且只包含这次用户右键实际选择并有 metadata 权限的对象。Core 不允许前端或其他插件直接调用这两个保留的 Provider RPC。
+`execute` 从已经用户实际点击的菜单项派生 **OperationScope**；必须经过该方法需要的 Manifest permission 与当前选择的精确对象校验。查询 `resolve` 阶段有严格限定的**metadata-only EventScope**：允许插件通过 `host.fs.stat` 申请当前右键选中对象的属性；其他路径 stat、文件内容读取和目录枚举仍返回 `PermissionDenied`。不再有 Core 提前在菜单事件参数中附带 metadata 的路径。Core 不允许前端或其他插件直接调用这两个保留的 Provider RPC。
 
 菜单项全是 `action/submenu/separator`，是否打开 Panel 由用户点击后的 `contextMenu.execute` 处理器决定：处理器可在当次交互中调用 `host.ui.open` 指定本次 UI，Manifest 不预注册 Panel。子菜单展开由 Core 负责，无需额外 IPC。弱网或崩溃应在界限内失败并忽略该插件，不能阻塞宿主原生菜单。菜单 Session 关闭、插件重启或新一次右键后失效，迟到响应不得污染新的菜单。
 
@@ -156,7 +156,7 @@ sequenceDiagram
 | IPC method | Params | Result | 必要权限 |
 |---|---|---|---|
 | `host.fs.list` | `path` | `Entry[]` | `folders.read.enabled` + scope；返回目录成员，其他属性须按 metadata 权限裁剪 |
-| `host.fs.stat` | `path` | `Entry` | PermissionPolicy 对文件和目录统一要求 `permissions.metadata.enabled` + 精确 OperationScope/TaskScope；菜单/Decoration 自动查询不得主动 stat |
+| `host.fs.stat` | `ref` | `Entry` | 文件/目录统一要求 `permissions.metadata.enabled` + 精确 EventScope/OperationScope/TaskScope；菜单允许所选对象 stat，Decoration 允许可见成员 stat；请求及回包均经 PermissionPolicy 审核 |
 | `host.fs.readChunk` | `path,offset,length` | `base64,size,eof` | `files.read.enabled` + scope |
 | `host.fs.read` | `path,offset,length` | `buffer,size,eof` | `files.read.enabled` + scope；内部低层 |
 | `host.fs.openRead` | `path` | `handle,size` | `files.read.enabled` + scope |
@@ -174,19 +174,20 @@ sequenceDiagram
 | `host.fs.remove` | `path` | `null` | 根据目标类型要求 `files.delete.enabled` **或** `folders.delete.enabled` + scope；目录默认仅删除空目录 |
 | `host.fs.rename` | `from,to` | `null` | 根据源目标类型要求 `files.rename.enabled` **或** `folders.rename.enabled` + 双路径 scope |
 
-统一处理文件目录对象的 race/symlink、原子提交、临时权限与文件大小。文件与目录的 `create/delete/rename` **按对象种类分别经 PermissionPolicy 检查**，创建现有文件与新文件的操作权限不互相隐含；`rename` 要分别校验源和目标所选 Scope。Core 内部为了构建 Explorer UI 而获取元数据不属于插件调用 `host.fs.stat`，只有实际推送给插件时才按 `metadata.enabled` 校验。
+统一处理文件目录对象的 race/symlink、原子提交、临时权限与文件大小。文件与目录的 `create/delete/rename` **按对象种类分别经 PermissionPolicy 检查**，创建现有文件与新文件的操作权限不互相隐含；`rename` 要分别校验源和目标所选 Scope。Core 内部为了 Explorer UI 获取的元数据不能直接交给插件；插件必须发起 `host.fs.stat` 请求，并在执行和响应两个边界经 PermissionPolicy 审核。
 
 
-### 元数据：推送与主动查询严格分离
+### 元数据：一个请求/响应协议，无 Push/Pull 区分
 
-| 数据流 | 方法 | 必要权限 | 是否需要文件操作 Scope |
-|---|---|---|---|
-| Core 因用户操作主动提供所选文件属性 | `contextMenu.resolve` / 预览、信息、工具栏等事件的 `params.target.metadata` | 唯一的 `permissions.metadata.enabled`（文件/目录共用），并且**用户已批准** | 不需要额外点击动作；只绑定当前已触发的事件与当前选择 |
-| Plugin 在执行操作中主动查询任意文件自身属性 | `host.fs.stat` → `Files::metadata(path)` | 对应 `metadata.enabled` 已批准 | **必须**有本次操作/任务对该精确文件或目录的授权 |
-| Plugin 主动列举目录成员 | `host.fs.list` → `Files::list(path)` | `permissions.folders.read.enabled` 已批准 | 必须包含该目录的操作授权；列举的附加字段按 metadata 权限裁剪 |
-| Plugin 主动读取文件字节 | `host.fs.openRead/readOpen` | `permissions.files.read.enabled` 已批准 | 必须包含该文件的操作授权 |
+```text
+Core --[event(sessionId, resourceRefs)]--> Plugin
+Plugin --[host.fs.stat({ref})]------------> Core
+Core --> PermissionPolicy.authorize_call(request, grants, EventScope/OperationScope)
+Core FileBroker -> stat -> PermissionPolicy.audit_response(metadata, scope)
+Core --[metadata or PermissionDenied]-----> Plugin
+```
 
-元数据回包规范目标统一使用可选的 `metadata` 对象：`{name,kind,extension,mime?,size?,modified?,readOnly?,source?}`。没有统一的 metadata 用户批准就**不发送** `metadata`，只给当前事件所需的不透明 `ref`。特别注意：`contextMenu.resolve` 是 Core **主动向插件提供已经持有的元数据**，不能通过菜单的特殊身份暗中开放 `host.fs.stat` 或 `ctx.files().metadata`；插件一旦主动查询，就必须满足更严格的操作/任务授权。VFS Provider 的内部 `vfs.stat` 是另一类由 Core 发起的协议适配，不与 `host.fs.stat` 混淆。
+`permissions.metadata.enabled` 同时适用于文件和文件夹。EventScope 仅覆盖本次右键所选、预览/Info 打开的目标，或 Decoration 目录切换事件中的当前可见节点；不因注册 Surface 或曾收到通知扩大范围。请求返回值按 Schema 裁剪，绝对路径、其他节点 metadata 和文件字节不可借 `host.fs.stat` 泄露。批量元数据申请 `host.fs.statBatch` 为目标优化项，逐项套用相同审核规则，未实现前可逐个调用 `host.fs.stat`。 
 
 ### Search 的局部路径约束
 
@@ -245,10 +246,10 @@ sequenceDiagram
 | ContextMenu 查询 | `contextMenu.resolve` | `{menuSessionId,target,selection,directory}` → `{items}` |
 | ContextMenu 执行 | `contextMenu.execute` | `{menuSessionId,itemId,interactionId,selection}` → JSON/null |
 | Search（仅目录内搜索） | 声明 `command`，默认 `search.query`；Manifest 无 `scope` | `{query,root,hidden,ignores,limit}` → `{entries}`；Provider 限定 root，Core 校验返回路径 |
-| Info | 默认 `info.resolve` 或贡献项声明的 `command` | `{sessionId,resource:{ref,metadata?}}` → `{sections:[{id,title,rows:[{label,value}]}]}`；内置与插件同形，禁止裸路径/旧 rows 回包 |
+| Info | 默认 `info.resolve` 或贡献项声明的 `command` | `{sessionId,resource:{ref}}` → `{sections:[{id,title,rows:[{label,value}]}]}`；内置与插件同形，禁止裸路径/旧 rows 回包 |
 | Hooks | 声明 `command` | `{event,path}` → `{action:"pass"|"consume"}` |
-| Decorations | `surfaces.decorations:true` → 固定 `decorations.resolve` | **每次切换目录通知**，只有独立权限模块审查通过 `permissions.metadata` 才附带文件/文件夹 Metadata，否则无逐项装饰能力 |
-| Preview | Host 逻辑入口 `preview.open` → 动态 `PreviewView` / `host.ui.open` | `{sessionId,resource:{ref,metadata?},intent:"preview"}` → 动态具体视图；内置进程内调用，外部需沙箱 UI Bridge |
+| Decorations | `surfaces.decorations:true` → 固定 `decorations.resolve` | 每次切换目录通知 `{sessionId,directoryRef,visibleRefs}`；插件通过独立资源 IPC 请求 metadata，获批后 Core 才返回 |
+| Preview | Host 逻辑入口 `preview.open` → 动态 `PreviewView` / `host.ui.open` | `{sessionId,resource:{ref},intent:"preview"}` → 动态具体视图；内置进程内调用，外部需沙箱 UI Bridge |
 
 动态命令不属于 `host.*` 白名单，仅能在其贡献点明确注册的触发流程下执行；Core 对所有动态参数进行数据 schema 验证，并绑定最小资源授权。右键菜单不接受通过返回值指定任意命令字符串：只有 Core 控制的 `contextMenu.execute` 执行入口；其中 `itemId` 必须出自当前 Session 的 `resolve` 结果。
 
@@ -273,7 +274,7 @@ sequenceDiagram
 
 **`preview.open` 是统一的 Host→Provider 逻辑入口**：Core 内置渲染器直接通过进程内 Adapter 实现，外部预览在本次用户打开预览时动态选择包内视图或有界 HTML，通过 Core PanelHost 与 UI Bridge 加载；不强制产生额外的 Native RPC。**`info.resolve` 是 Info Provider 的目标固定 IPC 方法**（自定义命令亦必须遵守同一参数/回包）；Core 内置基础文件/音频/视频解析也调用同形的内部实现。所有 Info 结果按 `InfoResponse.sections[]` 聚合，一个失败不能让其他区块消失。
 
-查询插件可见 `metadata?` 时须先通过独立 PermissionPolicy 对 `permissions.metadata.enabled` 和 Scope 的审核；额外解析媒体内容需独立 `files.read.enabled` 与查看操作 Scope。两类 Provider 的大数据访问仅通过 Core ResourceBroker 安全流，不允许经 IPC JSON 传整文件或将任意宿主路径泄露给 iframe。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
+插件请求 Metadata 时须先通过独立 PermissionPolicy 对 `permissions.metadata.enabled` 和会话 Scope 的审核，Core 不在事件中预先交付；额外解析媒体内容需独立 `files.read.enabled` 与查看操作 Scope。两类 Provider 的大数据访问仅通过 Core ResourceBroker 安全流，不允许经 IPC JSON 传整文件或将任意宿主路径泄露给 iframe。详见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
 
 ## 6.2 所有交互式 Surface 共用的 Runtime Panel IPC
 

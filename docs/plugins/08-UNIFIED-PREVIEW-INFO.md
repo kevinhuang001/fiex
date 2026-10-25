@@ -8,7 +8,7 @@
 2. **只统一逻辑接口，不强迫统一隔离层**。内置 Provider 可作为进程内适配器调用，并使用宿主内置 React 视图；第三方 Native 使用 IPC、第三方 UI 使用已验证的沙箱 iframe。两者均接受 `ProviderContext`，返回同一类 `PreviewView` 或 `InfoResponse`；宿主 Host Adapter 负责传输差异。不可要求内置 PDF 也启动插件进程，不可允许第三方绕过 UI Bridge。
 3. **Preview 与 Info 是两个独立扩展点**。Preview 输出可交互的*展示视图*，Info 输出结构化*属性区块*；音频/视频文件可以同时命中媒体预览和媒体 Info。普通文件信息在 Info Registry 内注册为基础 Provider，不在 `FileInfoDialog` 中硬编码拼行。
 4. **不会把数据读取伪装成 metadata 权限**。普通 stat 属性是 `metadata`；解析 ID3/FLAC、MP4、MKV、媒体编码、图片 EXIF 等可能需要读取文件内容。第三方主动解析需要已批准的 `files.read.enabled` + 用户当前查看操作的精确 Scope；只有统一 `permissions.metadata.enabled` 不允许读取文件内容。内置 Core 解析器使用内部受控 FileBroker 访问，不能借此为插件扩权。
-5. **所有数据访问都由 Core Broker 控制**。Preview/Info 接收 `ref` 及已批准的 `metadata?`，不默认接收裸绝对路径；**具体 UI 面板不预先声明在 Manifest 中**，由插件随本次用户交互通过 IPC 提供视图描述。大文件从限额可取消的只读资源流/资源代理获取，禁止整文件 base64、任意 materialize 到插件可见路径、跨 Provider 传递原始文件句柄。
+5. **所有数据访问都由 Core Broker 控制**。Preview/Info 事件只接收 opaque `ref` 和会话信息，不附带 metadata；Provider 通过通用 `host.fs.stat` 等 IPC 再申请所需数据，不接收裸绝对路径；**具体 UI 面板不预先声明在 Manifest 中**，由插件随本次用户交互通过 IPC 提供视图描述。大文件从限额可取消的只读资源流/资源代理获取，禁止整文件 base64、任意 materialize 到插件可见路径、跨 Provider 传递原始文件句柄。
 6. **任何 Provider 失败都不应让用户失去默认体验**。Preview 按用户顺序与优先级选择，一个失败换下一个可用 Provider，最终进入始终可用的基础 fallback；Info 同时聚合多个区块，单个 Provider 失败不影响其他区块。
 
 ## 2. 一个注册表，两种实现适配
@@ -104,30 +104,22 @@ flowchart LR
 
 ## 2.2 Core 输出与插件响应的审核边界
 
-无论是内置 `info::metadata/audio/video` 还是外部插件 Info，Core Host 均使用统一 `InfoResponse` 对象；不同来源不需要第二套类型。Core 收到插件的 IPC JSON 后先 Schema 解析和来源验证，变为同一 Rust 对象。**向插件交付**资源上下文的部分则必须经独立 PermissionPolicy 审核：Core 先创建候选的 `PreviewContext/InfoContext`，PermissionPolicy 比较统一的 `permissions.metadata.enabled`、审批和当前事件 Scope，然后产生安全的 IPC 投影。它不等于授予文件读取。Core 内置 Provider 可直接使用内部资源上下文，但不能把该上下文原样返回给第三方。
+无论是内置 `info::metadata/audio/video` 还是外部插件 Info，Core Host 均使用统一 `InfoResponse` 对象；不同来源不需要第二套类型。Core 收到插件的 IPC JSON 后先 Schema 解析和来源验证，变为同一 Rust 对象。**向插件交付**资源上下文的部分则必须经独立 PermissionPolicy 审核：Core 只生成含 opaque ref 的 `PreviewContext/InfoContext` 事件；Provider 再通过 `host.fs.stat` 申请，PermissionPolicy 比较唯一的 `permissions.metadata.enabled`、用户批准及事件 Scope，审核请求及 Core 最终返回的数据。它不等于授予文件读取。Core 内置 Provider 可直接使用内部资源上下文，但不能把该上下文原样返回给第三方。
 
-## 3. 通用事件上下文：Push ≠ Pull
+## 3. 通用 ProviderContext：事件与按需资源访问
 
-`ProviderContext` 是 Core 对当前用户操作建立的不可变快照：
+插件收到的只是 Core 对用户打开预览、点击 Info 等操作创建的**不含 Metadata** 的资源引用和会话：
 
 ```json
 {
-  "resource": {
-    "ref": {"mountId":"m1","nodeId":"f18"},
-    "metadata": {
-      "name":"demo.mp4","kind":"file","extension":"mp4",
-      "mime":"video/mp4","size":4512000,"modified":1800000000
-    }
-  },
+  "resource": {"ref":{"mountId":"m1","nodeId":"f18"}},
   "sessionId":"preview-session-opaque",
   "intent":"preview",
   "selectionCount":1
 }
 ```
 
-插件收到 `metadata` 的先决条件是统一 `permissions.metadata.enabled` 已获批，且独立 PermissionPolicy 将本次候选资源/字段审核通过；否则整个 `metadata` 属性应被省略。不透明 `ref` 本身既不代表读取授权，也不允许查询任意路径。Core 内置适配器获得的内部 Entry 不得通过序列化泄露给插件。
-
-`PreviewProvider.open` / `InfoProvider.resolve` 属于**Core 发起 Push**；只有用户实际触发预览或显示简介后，Core 才建立可取消、限资源的会话。插件希望主动获取文件/目录的 stat 时走 `ctx.files().metadata` → `host.fs.stat`，仍须已批准的 metadata 权限 + 当前已确认的 OperationScope，不能利用扩展点默认提升作用域。
+插件在事件处理期间自行调用 `host.fs.stat({ref})` 或 `host.fs.openRead({ref})` 申请所需资源。独立 `PermissionPolicy` 校验 Manifest 请求、用户批准、当前事件/操作 Scope 和 Core 实际返回的字段与资源；随后 Core 经 IPC 返回获准的结果或 `PermissionDenied`。只有这一种申请流程，没有 Core 预先提供 metadata 的第二条通道。打开 Preview/Info 可授予本次目标适当的读取作用域；其他未选择对象不允许访问，媒体内容解析仍须 `files.read`。内置 Provider 通过 Core 内部 API 获取资源，**向 Host 返回的对象与插件响应反序列化后的 Rust 业务对象类型完全相同**。
 
 ## 4. PreviewProvider —— 所有预览共用接口
 
@@ -148,7 +140,7 @@ interface PreviewDescriptor {
   supportsDirectories?: boolean
 }
 interface PreviewContext {
-  resource: { ref: ResourceRef; metadata?: FileMetadata }
+  resource: { ref: ResourceRef }
   sessionId: string
   intent: 'preview'
 }
@@ -208,7 +200,7 @@ interface InfoDescriptor {
   command?: string
 }
 interface InfoContext {
-  resource: { ref: ResourceRef; metadata?: FileMetadata }
+  resource: { ref: ResourceRef }
   sessionId: string
   intent: 'info'
 }
@@ -229,7 +221,7 @@ interface InfoProvider {
 
 | 内置 Info Provider ID | 数据来源 | 读权限与限制 |
 |---|---|---|
-| `core.info.metadata` | Core Entry/stat：类型、大小、位置、创建/修改时间、只读、链接等 | 独立 metadata Provider；原始 Entry 不对插件开放，主动 Push 要裁剪 |
+| `core.info.metadata` | Core Entry/stat：类型、大小、位置、创建/修改时间、只读、链接等 | 独立 metadata Provider；原始 Entry 不对插件开放，插件请求 stat 后审核响应 |
 | `core.info.audio` | lofty 解析音频标签、时长、码率、采样率等 | 通过限额只读句柄解析本次资源，不能等同于 stat |
 | `core.info.video` | mp4/matroska 解析媒体容器、码流、时长、分辨率等 | 通过限额只读句柄解析本次资源，支持超时和降级 |
 
@@ -273,7 +265,7 @@ interface InfoProvider {
 |---|---|---|
 | Host 打开预览 | `preview.open`（Host→Adapter 逻辑入口） | 统一 `PreviewContext`、运行时 `PreviewView`、错误与取消；内置进程内调用，外部每次指定实际沙箱 Panel 视图 |
 | Host 显示文件简介 | `info.resolve`（Host→Info Provider） | 相同请求/响应 Schema；内置在 Core 内调用，第三方 Native handler 通过 IPC |
-| 插件主动查询基础元数据 | `host.fs.stat` / `Files::metadata` | 对应 metadata permission + 具体 OperationScope；与 event metadata Push 区分 |
+| 插件主动查询基础元数据 | `host.fs.stat` / `Files::metadata` | `permissions.metadata.enabled` + EventScope/OperationScope，响应亦经独立 PermissionPolicy 审核 |
 | 插件读取数据用于预览或媒体解析 | `host.fs.openRead/readOpen/closeRead` | 对应 `files.read.enabled` + 显式查看操作 Scope；禁止暴露任意其它文件 |
 | UI 渲染资源代理 | `PreviewResourceRef` / scoped URL | 按会话、插件身份、目标 ref 限制；支持 Range/Seek 与取消；iframe 不得直接访问宿主全盘 |
 | 会话生命周期 | `PreviewSession` / `InfoSession` | 资源变更、关闭、切换文件、取消操作均撤销句柄和 UI 资源 |
@@ -290,9 +282,11 @@ Info/Preview 使用的通用 PanelHost 与 Toolbar、ContextMenu、Search、Conn
 
 ```mermaid
 flowchart TD
-  Selected["Selected ResourceRef"] --> Permission{"Plugin has metadata approval?"}
-  Permission -->|yes| Meta["Core event includes metadata"]
-  Permission -->|no| Ref["Core event includes ref only"]
+  Selected["Selected ResourceRef"] --> Ref["Core event includes ref only"]
+  Ref --> Request["Plugin host.fs.stat(ref)"]
+  Request --> Permission{"PermissionPolicy: metadata + EventScope?"}
+  Permission -->|yes| Meta["Core Broker stat + audited response"]
+  Permission -->|no| Denied["PermissionDenied"]
   Meta --> Render["Provider.resolve / open"]
   Ref --> Render
   Render --> NeedRead{"Provider needs file bytes?"}
@@ -310,7 +304,7 @@ flowchart TD
 - 本地、Connection、Git VFS、离线缓存、超大文件、无权限/过期 ResourceRef、被替换/软链接目标安全。
 - Info 的基本文件、音频、视频和第三方区块可以并存；单个解析器失败不影响其它区块；不得将 Info 错误行伪装成真实属性。
 - 打开预览/简介属于用户发起的 scoped 意图，额外读取内容权限仅作用于当前文件；关闭/换项/取消能回收流与沙箱，后到 IPC 不能污染新会话。
-- 由 Core Push 的 metadata 不需要插件主动 stat；未授权 metadata 不得传入插件；插件主动 stat 无 Scope 被拒绝。
+- Core 事件不带 metadata；插件必须申请目标 stat，PermissionPolicy 同时审核请求与结果；未批准 metadata 或不在 Scope 即拒绝。
 - 图片/视频/PDF 使用范围流/资源代理，不整体导出到临时磁盘、IPC JSON；没有无限内存复制。
 - 快捷键、焦点、视频/音频停止播放、失效 Provider 回退、UI 错误状态与之前功能等价；宿主不因第三方 HTML 注入。
 
