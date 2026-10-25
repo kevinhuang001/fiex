@@ -17,6 +17,12 @@ pub(crate) fn remote_connections() -> Vec<remote::ConnectionInfo> {
     remote::list_connections()
 }
 #[tauri::command]
+pub(crate) async fn connection_open(id: String) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || remote::open_navigation(&id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 pub(crate) fn save_remote_connection(
     input: remote::ConnectionInput,
 ) -> Result<remote::ConnectionInfo, String> {

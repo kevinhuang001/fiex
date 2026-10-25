@@ -84,6 +84,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             plugin_invoke,
+            connection_open,
             vfs_retain_views,
             materialize_file,
             plugin_context_directory,

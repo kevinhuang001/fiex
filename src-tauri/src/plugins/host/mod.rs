@@ -12,7 +12,7 @@ pub use manifest::{
     FolderPermission, FolderReadPermission, HooksPermission, NetworkPermission, PluginAuthor,
     PluginManifest, PluginPermissions, PluginPublisher, PluginRuntime,
 };
-pub use panel::{panel_asset, panel_html};
+pub use panel::{panel_asset, panel_html, plugin_view_asset};
 pub use permissions::{
     activate, approve_install, declared_permissions_for, network_domains, permission_allowed,
     set_command, set_enabled, set_network_domain, set_permission,

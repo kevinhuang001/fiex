@@ -15,7 +15,7 @@ pub use files::{
 };
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 pub use store::{
-    list_connections, remove_connection, save_connection, ConnectionInfo, ConnectionInput,
+    list_connections, open_navigation, remove_connection, save_connection, ConnectionInfo, ConnectionInput,
     StoredConnection,
 };
 pub use sync::{sync, sync_one, unsync};
