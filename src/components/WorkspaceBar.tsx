@@ -18,6 +18,7 @@ export function WorkspaceBar({
 }) {
   const [height, setHeight] = useState(108)
   const panel = useRef<HTMLElement>(null)
+  const itemsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handle = panel.current?.querySelector('.workspace-resizer')
@@ -44,6 +45,22 @@ export function WorkspaceBar({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+    const element = itemsRef.current
+    if (!element) return
+    const grow = () => {
+      const needed = element.scrollHeight + 5
+      setHeight((value) =>
+        Math.min(Math.max(value, needed), Math.max(52, window.innerHeight * 0.55)),
+      )
+    }
+    grow()
+    const observer = new ResizeObserver(grow)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [open, items.length])
+
   if (!open) return null
   return (
     <section
@@ -54,7 +71,7 @@ export function WorkspaceBar({
       style={{ height }}
     >
       <div className="workspace-resizer" title="调整工作区高度" />
-      <div className="workspace-items">
+      <div className="workspace-items" ref={itemsRef}>
         {items.length ? (
           items.map((entry) => (
             <div className="workspace-chip" key={entry.path}>

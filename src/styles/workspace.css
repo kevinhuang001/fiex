@@ -192,3 +192,20 @@
   color: var(--muted);
   font-size: 10px;
 }
+.workspace-bar .workspace-items {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.workspace-bar .workspace-items::-webkit-scrollbar {
+  display: none;
+}
+.workspace-bar .workspace-chip {
+  flex: 0 0 172px;
+}
+.workspace-bar .workspace-empty {
+  flex: 1 0 100%;
+  min-height: 44px;
+}
