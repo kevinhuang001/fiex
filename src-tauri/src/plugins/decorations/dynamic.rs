@@ -250,7 +250,20 @@ fn dynamic(
         return;
     };
     for item in items.iter().take(entries.len().max(1)) {
-        let Ok(path) = item.get("path").and_then(Value::as_str).ok_or(()) else {
+        // Prefer the direct child name; Core resolves it against the visible
+        // directory. Legacy `path` is accepted only when it names an entry.
+        let path = match item.get("name").and_then(Value::as_str) {
+            Some(name) => entries
+                .values()
+                .find(|entry| entry.name == name)
+                .map(|entry| entry.path.clone()),
+            None => item
+                .get("path")
+                .and_then(Value::as_str)
+                .filter(|path| entries.contains_key(*path))
+                .map(str::to_owned),
+        };
+        let Some(path) = path else {
             continue;
         };
         let mut badges = Vec::new();
@@ -287,7 +300,7 @@ fn dynamic(
             .map(|(namespace, path)| (Some(namespace), Some(path)))
             .unwrap_or((None, None));
         let value = Decoration {
-            path: path.into(),
+            path: path.clone(),
             badges,
             label: item.get("label").and_then(Value::as_str).map(str::to_owned),
             description: item
@@ -303,7 +316,7 @@ fn dynamic(
         merge(
             result,
             entries,
-            path,
+            &path,
             config.priority,
             &manifest.name,
             value,

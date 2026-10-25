@@ -93,6 +93,26 @@
 
 `decorations` **只有动态模式**，不存在 `mode`、`method`、`scope`、`rules`。Core 固定调用标准方法 `decorations.resolve`。
 
+### 3.1 `decorations.resolve` 的响应只用目录成员名
+
+请求里的 entries 同时带 `path` 和 `name`（插件做 Git 状态等内部查询时可用 `path`），但响应应只返回当前目录中的直接成员名：
+
+```json
+{
+  "decorations": [
+    {
+      "name": "main.ts",
+      "badge": { "text": "M", "color": "orange", "tooltip": "Git：已修改" },
+      "style": { "color": "#c2710c", "fontWeight": "600" }
+    }
+  ]
+}
+```
+
+- Core 在当前目录的可见 entries 里按 `name` 精确解析真实路径；未知名称会被忽略；
+- 响应不再接受任意绝对路径；旧 `path` 仅作为迁移兼容，且必须命中当前目录的可见项；
+- 这样远程 VFS、Windows 分隔符、符号链接和大小写差异都由 Core 处理，插件不需要拼路径。
+
 ## 4. 权限模型
 
 | 路径                                                        | 含义                                 |
