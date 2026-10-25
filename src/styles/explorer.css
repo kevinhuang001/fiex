@@ -1189,7 +1189,7 @@ body.dragging-toolbar {
   padding-top: 8px;
 }
 .device-row > .nav-item.connection-nav {
-  padding-right: 36px;
+  padding-right: 28px;
 }
 .nav-item > .connection-autostart {
   display: inline-flex;
