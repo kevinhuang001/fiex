@@ -36,16 +36,18 @@ Info / Preview 使用相同的目标集合；无需重复的 `target` 和 `selec
 ```json
 {
   "sessionId": "opaque",
-  "targets": [{
-    "ref": { "mountId": "m1", "nodeId": "n9" },
-    "metadata": {
-      "name": "song.mp3",
-      "kind": "file",
-      "size": 2048,
-      "mime": "audio/mpeg"
-    },
-    "read": { "resourceId": "read-opaque" }
-  }]
+  "targets": [
+    {
+      "ref": { "mountId": "m1", "nodeId": "n9" },
+      "metadata": {
+        "name": "song.mp3",
+        "kind": "file",
+        "size": 2048,
+        "mime": "audio/mpeg"
+      },
+      "read": { "resourceId": "read-opaque" }
+    }
+  ]
 }
 ```
 

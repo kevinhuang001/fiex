@@ -25,11 +25,13 @@ Core 调用 `info.resolve`，传入通用 `EventContext`（method 本身就是�
 ```json
 {
   "sessionId": "opaque",
-  "targets": [{
-    "ref": { "mountId": "m1", "nodeId": "n9" },
-    "metadata": { "name": "a.pdf", "kind": "file", "size": 1024 },
-    "read": { "resourceId": "read-opaque" }
-  }]
+  "targets": [
+    {
+      "ref": { "mountId": "m1", "nodeId": "n9" },
+      "metadata": { "name": "a.pdf", "kind": "file", "size": 1024 },
+      "read": { "resourceId": "read-opaque" }
+    }
+  ]
 }
 ```
 

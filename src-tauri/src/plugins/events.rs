@@ -66,9 +66,20 @@ pub fn matching_plugins(
 pub fn is_protected_method(method: &str) -> bool {
     extension_for(method).is_some()
         || [
-            "host.", "core.", "plugin.", "contextMenu.", "vfs.", "fs.",
-            "connection.", "preview.", "info.", "decorations.", "search.",
-            "toolbar.", "hooks.", "terminal.",
+            "host.",
+            "core.",
+            "plugin.",
+            "contextMenu.",
+            "vfs.",
+            "fs.",
+            "connection.",
+            "preview.",
+            "info.",
+            "decorations.",
+            "search.",
+            "toolbar.",
+            "hooks.",
+            "terminal.",
         ]
         .iter()
         .any(|prefix| method.starts_with(prefix))
@@ -82,11 +93,7 @@ fn require_event(method: &str) -> Result<(), String> {
     }
 }
 
-pub fn invoke(
-    plugin_id: &str,
-    method: &str,
-    params: Value,
-) -> Result<Value, String> {
+pub fn invoke(plugin_id: &str, method: &str, params: Value) -> Result<Value, String> {
     require_event(method)?;
     crate::plugin_host::global().invoke(plugin_id, method, params)
 }
@@ -119,8 +126,13 @@ mod tests {
     #[test]
     fn fixed_events_are_core_owned_custom_methods_remain_available() {
         for method in [
-            "info.resolve", "preview.open", "contextMenu.resolve", "search.query",
-            "toolbar.invoke", "hooks.invoke", "host.fs.openRead",
+            "info.resolve",
+            "preview.open",
+            "contextMenu.resolve",
+            "search.query",
+            "toolbar.invoke",
+            "hooks.invoke",
+            "host.fs.openRead",
         ] {
             assert!(is_protected_method(method), "{method}");
         }

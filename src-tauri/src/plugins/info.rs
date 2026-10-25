@@ -593,7 +593,10 @@ fn resolve_builtin(
         Candidate::Metadata => vec![metadata_section(
             display,
             local,
-            context.targets.first().and_then(|target| target.metadata.as_ref()),
+            context
+                .targets
+                .first()
+                .and_then(|target| target.metadata.as_ref()),
         )],
         Candidate::Media => media_sections(local),
         Candidate::Plugin { .. } => Vec::new(),
