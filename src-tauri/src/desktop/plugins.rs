@@ -718,6 +718,9 @@ pub(crate) async fn plugin_context_menu_resolve(
             return Err("menu plugin or selection not allowed".into());
         }
         let rules = menu_rules(&plugin_id).ok_or("menu plugin or selection not allowed")?;
+        if !rules.matches_selection(paths.len()) {
+            return Ok(serde_json::json!({"menuSessionId": null, "items": []}));
+        }
         let selection_matches = paths.iter().any(|path| {
             let metadata = context_menu_resource_metadata(path);
             rules.matches(

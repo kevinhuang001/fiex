@@ -232,12 +232,22 @@ pub fn valid_id(id: &str) -> bool {
 }
 
 /// Extensions declare provider eligibility, never resource permissions.
-fn validate_match(value: Option<&Value>) -> Result<(), String> {
+fn validate_match(
+    value: Option<&Value>,
+    allow_contains: bool,
+    allow_selection: bool,
+) -> Result<(), String> {
     let Some(value) = value else {
         return Ok(());
     };
     let object = value.as_object().ok_or("match must be an object")?;
-    for key in ["extensions", "mimeTypes", "kinds", "markers"] {
+    if !allow_contains && object.contains_key("contains") {
+        return Err("match.contains is only valid for decorations".into());
+    }
+    if !allow_selection && object.contains_key("selection") {
+        return Err("match.selection is only valid for contextMenus".into());
+    }
+    for key in ["extensions", "mimeTypes", "kinds", "contains"] {
         let Some(items) = object.get(key) else {
             continue;
         };
@@ -246,6 +256,14 @@ fn validate_match(value: Option<&Value>) -> Result<(), String> {
             .ok_or_else(|| format!("match.{key} must be an array"))?;
         if items.iter().any(|item| !item.is_string()) {
             return Err(format!("match.{key} entries must be strings"));
+        }
+    }
+    if let Some(selection) = object.get("selection") {
+        let selection = selection
+            .as_str()
+            .ok_or("match.selection must be a string")?;
+        if !matches!(selection, "any" | "single" | "multi") {
+            return Err("match.selection must be any, single or multi".into());
         }
     }
     Ok(())
@@ -258,7 +276,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
     if let Some(enabled) = value.get("contextMenus") {
         match enabled {
             Value::Bool(_) => {}
-            Value::Object(object) => validate_match(object.get("match"))?,
+            Value::Object(object) => validate_match(object.get("match"), false, true)?,
             _ => return Err("extensions.contextMenus must be true or {match}".into()),
         }
     }
@@ -273,7 +291,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                         ));
                     }
                 }
-                validate_match(object.get("match"))?;
+                validate_match(object.get("match"), true, false)?;
             }
             _ => return Err("extensions.decorations must be true or {match,priority}".into()),
         }
@@ -289,7 +307,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             let object = item
                 .as_object()
                 .ok_or_else(|| format!("extensions.{key}[{index}] must be an object"))?;
-            validate_match(object.get("match"))?;
+            validate_match(object.get("match"), false, false)?;
         }
     }
     for key in ["vfs", "connections", "toolbar"] {

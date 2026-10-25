@@ -220,7 +220,7 @@ fn dynamic(
     directory: &str,
     config: &DecorationConfig,
 ) {
-    if !config.rules.matches_markers(directory) {
+    if !config.rules.matches_contains(directory) {
         return;
     }
     if !config.rules.is_empty()

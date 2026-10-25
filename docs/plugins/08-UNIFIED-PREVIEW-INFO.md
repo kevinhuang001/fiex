@@ -43,7 +43,7 @@ Manifest 使用单一的 `extensions`：
 }
 ```
 
-插件仅注册对应扩展处理器。`match` 是包含谓词：不满足时 Core 不会调用该插件；它支持 `extensions`、`mimeTypes`、`kinds`、`markers`。Core 已定义 InfoContext/PreviewContext 的输入；不要求在 Manifest 再声明 `inputs` 或单独“Context Provider”类型。
+插件仅注册对应扩展处理器。`match` 是包含谓词：不满足时 Core 不会调用该插件；它支持 `extensions`、`mimeTypes`、`kinds`；`info`/`preview` 针对用户当前选中的单个资源评估，不针对多选。Core 已定义 InfoContext/PreviewContext 的输入；不要求在 Manifest 再声明 `inputs` 或单独“Context Provider”类型。
 
 ## 3. 标准输入 Context
 

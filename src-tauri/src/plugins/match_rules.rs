@@ -15,9 +15,14 @@ pub struct MatchRules {
     pub mime_types: Vec<String>,
     #[serde(default)]
     pub kinds: Vec<String>,
-    /// Directory markers (`.`git`, `package.json`, ...). Decorations only.
+    /// Directory contains one of these names (`.git`, `package.json`, ...).
+    /// Decorations only.
     #[serde(default)]
-    pub markers: Vec<String>,
+    pub contains: Vec<String>,
+    /// Context menu selection cardinality: `single`, `multi` or `any`.
+    /// Context menus only.
+    #[serde(default)]
+    pub selection: Option<String>,
 }
 
 impl MatchRules {
@@ -51,7 +56,8 @@ impl MatchRules {
         self.extensions.is_empty()
             && self.mime_types.is_empty()
             && self.kinds.is_empty()
-            && self.markers.is_empty()
+            && self.contains.is_empty()
+            && self.selection.is_none()
     }
 
     pub fn matches(&self, ext: &str, mime: &str, is_dir: bool) -> bool {
@@ -89,12 +95,12 @@ impl MatchRules {
         extension_ok && mime_ok && kind_ok
     }
 
-    /// Directory markers can be in the directory or any ancestor.
-    pub fn matches_markers(&self, directory: &str) -> bool {
-        if self.markers.is_empty() {
+    /// Directory `contains` names can be in the directory or any ancestor.
+    pub fn matches_contains(&self, directory: &str) -> bool {
+        if self.contains.is_empty() {
             return true;
         }
-        self.markers.iter().any(|marker| {
+        self.contains.iter().any(|marker| {
             let marker = marker.trim();
             if marker.is_empty() || marker.contains(['/', '\\']) {
                 return false;
@@ -110,6 +116,16 @@ impl MatchRules {
                 current = parent;
             }
         })
+    }
+
+    /// Context menu selection cardinality.
+    pub fn matches_selection(&self, count: usize) -> bool {
+        match self.selection.as_deref().unwrap_or("any") {
+            "any" => true,
+            "single" => count == 1,
+            "multi" => count >= 2,
+            _ => false,
+        }
     }
 }
 
@@ -165,11 +181,26 @@ mod tests {
     #[test]
     fn match_is_an_include_predicate() {
         let rules = MatchRules::from_contribution(&json!({
-            "match": {"extensions":["md"],"mimeTypes":["text/*"],"kinds":["file"]}
+            "match": {"extensions":["md"],"mimeTypes":["text/*"],"kinds":["file"],"selection":"single"}
         }));
         assert!(rules.matches("md", "text/markdown", false));
         assert!(!rules.matches("png", "image/png", false));
         assert!(!rules.matches("md", "text/markdown", true));
+    }
+
+    #[test]
+    fn contains_and_selection_are_scoped_predicates() {
+        let decorations = MatchRules::from_contribution(&json!({
+            "match": {"contains": [".git"], "extensions": ["ts"]}
+        }));
+        assert!(decorations.matches("ts", "text/plain", false));
+        assert!(!decorations.matches("md", "text/markdown", false));
+        let menu = MatchRules::from_contribution(&json!({
+            "match": {"selection": "single", "extensions": ["zip"]}
+        }));
+        assert!(menu.matches_selection(1));
+        assert!(!menu.matches_selection(2));
+        assert!(menu.matches("zip", "application/zip", false));
     }
 
     #[test]

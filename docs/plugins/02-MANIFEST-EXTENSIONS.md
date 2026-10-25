@@ -75,22 +75,23 @@
 "match": {
   "extensions": ["md", "txt"],
   "mimeTypes": ["text/*"],
-  "kinds": ["file"],
-  "markers": [".git"]
+  "kinds": ["file"]
 }
 ```
 
-| 字段         | 含义         | 匹配方式                                                    |
-| ------------ | ------------ | ----------------------------------------------------------- |
-| `extensions` | 扩展名       | 大小写无关；可写 `md`、`.md`、`*.md`、`*`                   |
-| `mimeTypes`  | MIME         | 精确值或 `type/*`，例如 `text/*`、`image/*`；`*/*` 匹配全部 |
-| `kinds`      | 对象类型     | `file` / `directory`（兼容 `dir`）                          |
-| `markers`    | 目录标记文件 | 装饰专用：目录或其祖先包含 `.git` 等文件/目录               |
+| 字段         | 适用扩展点            | 含义与匹配方式                                              |
+| ------------ | --------------------- | ----------------------------------------------------------- |
+| `extensions` | 全部                  | 大小写无关；可写 `md`、`.md`、`*.md`、`*`                   |
+| `mimeTypes`  | 全部                  | 精确值或 `type/*`，例如 `text/*`、`image/*`；`*/*` 匹配全部 |
+| `kinds`      | 全部                  | `file` / `directory`（兼容 `dir`）                          |
+| `contains`   | **仅 `decorations`**  | 目录或其祖先包含 `.git`、`package.json` 等名称              |
+| `selection`  | **仅 `contextMenus`** | `single`（恰好选中 1 项）、`multi`（≥2 项）或 `any`（默认） |
 
 - 同一字段内是 OR，不同字段之间是 AND；
-- `contextMenus.match` 对**当前选择集合**判断，任意一个选中对象匹配即可弹出菜单；
-- `decorations.match` 对**当前目录**判断：`markers` 不满足、或可见成员没有任何一项满足 `extensions/mimeTypes/kinds` 时，不调用插件；
-- `info`/`preview` 每个 contribution 独立 `match`，不匹配就不会启动/调用该插件；
+- **`info` / `preview`**：用户在单个资源上打开简介/预览时评估；不会对多选逐个调用。每个 contribution 独立 `match`，不匹配就不会启动/调用该插件；
+- **`decorations`**：先看 `contains`（目录或祖先），再看当前可见成员中是否至少有一项满足 `extensions/mimeTypes/kinds`；都不满足时不调用插件；
+- **`contextMenus`**：先看 `selection` 与选中数量，再对选中集合中的任意一项判断 `extensions/mimeTypes/kinds`；不满足时插件不会收到菜单请求；
+- `contains` 和 `selection` 是扩展点专用字段；放在其他扩展点会被 manifest 校验拒绝；
 - 旧 manifest 的 `extensions: [...]` 仍作为兼容写法（等价于 `match.extensions`），新插件应使用 `match`。
 
 `decorations` **只有动态模式**，不存在 `mode`、`method`、`scope`、`rules`。Core 固定调用标准方法 `decorations.resolve`。
@@ -144,7 +145,7 @@ Core 校验目标 mount 的插件/连接归属、iframe 资源所属包、当前
 
 ## 7. 动态右键菜单
 
-`extensions.contextMenus: true` 只注册事件。菜单项由插件实时返回 `{items:[...]}`，每项可为 `action/submenu/separator`；子菜单使用 `parentId`，不内嵌脚本。Core 按 owner、Session、item ID 和资源身份校验执行。菜单请求里不含完整文件内容，具体读取/写入必须在有效用户操作中经 Broker 授权。
+`extensions.contextMenus` 可写 `true` 或 `{match}`。`match.selection` 是 contextMenus 特有的：`single` 只在恰好选中 1 项时调用，`multi` 只在选中 ≥2 项时调用，`any`/缺省不限制。菜单项由插件实时返回 `{items:[...]}`，每项可为 `action/submenu/separator`；子菜单使用 `parentId`，不内嵌脚本。Core 按 owner、Session、item ID 和资源身份校验执行。菜单请求里不含完整文件内容，具体读取/写入必须在有效用户操作中经 Broker 授权。
 
 ## 8. Schema 验收
 
