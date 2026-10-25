@@ -86,6 +86,7 @@ pub fn run() {
             platform,
             plugin_invoke,
             plugin_context_menu_resolve,
+            plugin_context_menu_children,
             plugin_context_menu_execute,
             connection_open,
             vfs_retain_views,

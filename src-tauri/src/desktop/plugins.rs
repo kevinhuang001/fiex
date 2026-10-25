@@ -520,6 +520,7 @@ struct ContextMenuSession {
     selection_refs: Vec<String>,
     directory_ref: String,
     actions: std::collections::HashSet<String>,
+    submenus: std::collections::HashMap<String, usize>,
     created: std::time::Instant,
 }
 fn context_menu_sessions() -> &'static std::sync::Mutex<ContextMenuRegistry> {
@@ -622,6 +623,75 @@ fn menu_response_valid(
     }
     Ok(actions)
 }
+/// Track submenu depth so a lazy expansion cannot exceed the four-level cap.
+fn submenu_depths(result: &serde_json::Value) -> std::collections::HashMap<String, usize> {
+    use std::collections::HashMap;
+    let Some(items) = result.get("items").and_then(serde_json::Value::as_array) else {
+        return HashMap::new();
+    };
+    let by_id: HashMap<&str, &serde_json::Value> = items
+        .iter()
+        .filter_map(|item| item.get("id").and_then(serde_json::Value::as_str).map(|id| (id, item)))
+        .collect();
+    let mut depths = HashMap::new();
+    for item in items {
+        if item.get("kind").and_then(serde_json::Value::as_str) != Some("submenu") {
+            continue;
+        }
+        let Some(id) = item.get("id").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        let mut depth = 1;
+        let mut current = item;
+        while let Some(parent) = current.get("parentId").and_then(serde_json::Value::as_str) {
+            depth += 1;
+            let Some(ancestor) = by_id.get(parent) else {
+                break;
+            };
+            current = ancestor;
+        }
+        depths.insert(id.to_string(), depth);
+    }
+    depths
+}
+
+/// Validate each lazy submenu response independently. The plugin cannot
+/// supply the parent id or forge actions from another menu session.
+fn validated_submenu(
+    value: &serde_json::Value,
+    parent_id: &str,
+    parent_depth: usize,
+) -> Result<(Vec<serde_json::Value>, std::collections::HashSet<String>, std::collections::HashMap<String, usize>), String> {
+    let children = value
+        .get("items")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("submenu response requires items[]")?;
+    if children.len() > 99 || (parent_depth >= 4 && !children.is_empty()) {
+        return Err("submenu exceeds item/depth limit".into());
+    }
+    let mut items = Vec::with_capacity(children.len() + 1);
+    items.push(serde_json::json!({"id":parent_id,"kind":"submenu","title":"parent"}));
+    for child in children {
+        let mut child = child
+            .as_object()
+            .ok_or("submenu entry must be an object")?
+            .clone();
+        if child.contains_key("parentId") {
+            return Err("submenu children must not supply parentId".into());
+        }
+        child.insert("parentId".into(), serde_json::json!(parent_id));
+        items.push(serde_json::Value::Object(child));
+    }
+    let response = serde_json::json!({"items":items});
+    let actions = menu_response_valid(&response)?;
+    let submenus = submenu_depths(&response)
+        .into_iter()
+        .filter(|(id, _)| id != parent_id)
+        .map(|(id, _)| (id, parent_depth + 1))
+        .collect();
+    Ok((items.into_iter().skip(1).collect(), actions, submenus))
+}
+
 fn context_menu_metadata_allowed(plugin_id: &str) -> bool {
     let Some(plugin) = crate::plugin_host::catalog()
         .into_iter()
@@ -759,16 +829,17 @@ pub(crate) async fn plugin_context_menu_resolve(
             "targets": targets,
             "directoryRef": directory_ref,
         });
-        let selected: Vec<std::path::PathBuf> =
-            paths.iter().map(std::path::PathBuf::from).collect();
+        // Menu discovery carries metadata only. The operation scope contains
+        // no file selection, so the plugin cannot read content before a click.
         let result = crate::plugin_events::invoke_selected(
             &plugin_id,
             "contextMenu.resolve",
             request,
             &directory,
-            &selected,
+            &[],
         )?;
         let actions = menu_response_valid(&result)?;
+        let submenus = submenu_depths(&result);
         let mut guard = context_menu_sessions()
             .lock()
             .map_err(|_| "menu registry unavailable")?;
@@ -785,6 +856,7 @@ pub(crate) async fn plugin_context_menu_resolve(
                 selection_refs,
                 directory_ref,
                 actions,
+                submenus,
                 created: std::time::Instant::now(),
             },
         );
@@ -793,6 +865,80 @@ pub(crate) async fn plugin_context_menu_resolve(
     .await
     .map_err(|error| error.to_string())?
 }
+/// Resolve children on demand whenever a user opens a submenu. No file
+/// content grant is attached until the user clicks a validated action.
+#[tauri::command]
+pub(crate) async fn plugin_context_menu_children(
+    menu_session_id: String,
+    parent_id: String,
+) -> Result<serde_json::Value, String> {
+    let (plugin_id, directory, paths, refs, directory_ref, depth) = {
+        let guard = context_menu_sessions()
+            .lock()
+            .map_err(|_| "menu registry unavailable")?;
+        let session = guard.get(&menu_session_id).ok_or("menu session expired")?;
+        if session.created.elapsed().as_secs() >= 90 || !menu_allowed(&session.plugin_id) {
+            return Err("menu session expired".into());
+        }
+        let depth = *session.submenus.get(&parent_id).ok_or("unknown submenu")?;
+        (
+            session.plugin_id.clone(),
+            session.directory.clone(),
+            session.selection.clone(),
+            session.selection_refs.clone(),
+            session.directory_ref.clone(),
+            depth,
+        )
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let metadata_allowed = context_menu_metadata_allowed(&plugin_id);
+        let targets = paths
+            .iter()
+            .zip(&refs)
+            .map(|(path, reference)| {
+                serde_json::json!({
+                    "ref":{"mountId":"session","nodeId":reference},
+                    "metadata":metadata_allowed.then(|| context_menu_resource_metadata(path))
+                })
+            })
+            .collect::<Vec<_>>();
+        let params = serde_json::json!({
+            "menuSessionId":menu_session_id,
+            "parentId":parent_id,
+            "interactionId":crate::mounts::new_id()?,
+            "directoryRef":directory_ref,
+            "targets":targets
+        });
+        let result = crate::plugin_events::invoke_selected(
+            &plugin_id,
+            "contextMenu.resolve",
+            params,
+            &directory,
+            &[],
+        )?;
+        let (items, actions, submenus) = validated_submenu(&result, &parent_id, depth)?;
+        let mut guard = context_menu_sessions()
+            .lock()
+            .map_err(|_| "menu registry unavailable")?;
+        let session = guard
+            .get_mut(&menu_session_id)
+            .ok_or("menu session expired")?;
+        if session.created.elapsed().as_secs() >= 90 || session.plugin_id != plugin_id {
+            return Err("menu session expired".into());
+        }
+        if actions.iter().any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
+            || submenus.keys().any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
+        {
+            return Err("duplicate menu item id".into());
+        }
+        session.actions.extend(actions);
+        session.submenus.extend(submenus);
+        Ok::<_, String>(serde_json::json!({"items":items}))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub(crate) async fn plugin_context_menu_execute(
     menu_session_id: String,
@@ -891,6 +1037,22 @@ mod context_menu_session_tests {
         ] {
             assert!(menu_response_valid(&invalid).is_err());
         }
+    }
+
+    #[test]
+    fn dynamic_children_require_a_valid_parent_and_cannot_forge_ids() {
+        let response = serde_json::json!({
+            "items":[{"id":"child","kind":"action","title":"Child"}]
+        });
+        let (items, actions, submenus) = validated_submenu(&response, "root", 1).unwrap();
+        assert_eq!(items[0]["parentId"], "root");
+        assert!(actions.contains("child"));
+        assert!(submenus.is_empty());
+        assert!(validated_submenu(&response, "root", 4).is_err());
+        let spoof = serde_json::json!({"items":[{
+            "id":"child","kind":"action","title":"Child","parentId":"other"
+        }]});
+        assert!(validated_submenu(&spoof, "root", 1).is_err());
     }
 
     #[test]
