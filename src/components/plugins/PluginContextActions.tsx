@@ -211,11 +211,12 @@ export function PluginContextActions({
         menuSessionId: menu.menuSessionId,
         parentId: submenuId,
       })
-      if (!Array.isArray(response.items)) throw new Error('Invalid submenu response')
+      const children = response.items
+      if (!Array.isArray(children)) throw new Error('Invalid submenu response')
       setMenus((previous) =>
         previous.map((candidate) => {
           if (candidate.menuSessionId !== menu.menuSessionId) return candidate
-          const updated = [...candidate.items, ...response.items]
+          const updated = [...candidate.items, ...children]
           return validMenu(updated) ? { ...candidate, items: updated } : candidate
         }),
       )
