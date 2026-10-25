@@ -420,6 +420,30 @@ mod contribution_tests {
         }
     }
     #[test]
+    fn match_predicates_are_scoped_by_extension_point() {
+        assert!(validate_extensions(&serde_json::json!({
+            "decorations": {"match": {"contains": [".git"]}}
+        }))
+        .is_ok());
+        assert!(validate_extensions(&serde_json::json!({
+            "contextMenus": {"match": {"selection": "single"}}
+        }))
+        .is_ok());
+        assert!(validate_extensions(&serde_json::json!({
+            "info": [{"id": "x", "title": "X", "match": {"mimeTypes": ["text/*"]}}]
+        }))
+        .is_ok());
+        for invalid in [
+            serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
+            serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
+            serde_json::json!({"info": [{"id": "x", "title": "X", "match": {"contains": [".git"]}}]}),
+            serde_json::json!({"contextMenus": {"match": {"selection": "many"}}}),
+        ] {
+            assert!(validate_extensions(&invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
     fn metadata_and_file_operations_are_independent_grants() {
         let manifest: PluginManifest = serde_json::from_value(json!({
             "schemaVersion": 2,

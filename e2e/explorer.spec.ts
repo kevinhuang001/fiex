@@ -321,6 +321,10 @@ test('multi-select and select all', async ({ page }) => {
   await expect(page.locator('.statusbar')).toContainText('已选择 2 项')
   await page.keyboard.press('Control+a')
   await expect(page.locator('.statusbar')).toContainText('已选择 15 项')
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '快速查看' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '显示简介' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
 })
 
 test('settings sections keep preferences and release shortcut recording on exit', async ({

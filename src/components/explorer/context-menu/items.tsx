@@ -39,6 +39,7 @@ export function contextItems({
   restoreFromTrash,
   inTrash,
 }: ContextItemsProps): ContextItem[] {
+  const multiple = x.selected.length > 1
   return [
     {
       label: '打开',
@@ -46,18 +47,22 @@ export function contextItems({
       hint: hint('open'),
       action: () => open(menu.entry),
     },
-    {
-      label: '快速查看',
-      icon: <Eye />,
-      hint: hint('quickLook'),
-      action: () => previewEntry(menu.entry),
-    },
-    {
-      label: '显示简介',
-      icon: <Info />,
-      hint: hint('info'),
-      action: () => setInfo(menu.entry),
-    },
+    ...(multiple
+      ? []
+      : [
+          {
+            label: '快速查看',
+            icon: <Eye />,
+            hint: hint('quickLook'),
+            action: () => previewEntry(menu.entry),
+          },
+          {
+            label: '显示简介',
+            icon: <Info />,
+            hint: hint('info'),
+            action: () => setInfo(menu.entry),
+          },
+        ]),
     ...(platform === 'macos'
       ? [
           {
