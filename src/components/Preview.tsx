@@ -1,5 +1,14 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { ExternalLink, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  Check,
+  ChevronUp,
+  Monitor,
+  Puzzle,
+} from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
@@ -7,10 +16,27 @@ import { call, asset, native } from '@/lib/api'
 import { date, isImage, isText, kind, size } from '@/lib/files'
 import { highlightCode } from '@/lib/highlight'
 import { usePluginCatalog } from '@/lib/plugins'
-import { resolvePreviewer } from '@/lib/preview'
+import {
+  BUILTIN_PREVIEWERS,
+  pluginPreviewers,
+  previewDisabled,
+  resolvePreviewer,
+} from '@/lib/preview'
 import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { Entry } from '@/lib/types'
+import type { Previewer } from '@/lib/preview'
 const PdfPreview = lazy(() => import('./PdfPreview'))
+
+function builtinCandidates(entry: Entry): Previewer[] {
+  const values: Previewer[] = []
+  if (isText(entry)) values.push(BUILTIN_PREVIEWERS[0])
+  if (isImage(entry)) values.push(BUILTIN_PREVIEWERS[1])
+  if (entry.mime.startsWith('video/') || entry.mime.startsWith('audio/'))
+    values.push(BUILTIN_PREVIEWERS[2])
+  if (entry.extension === 'pdf') values.push(BUILTIN_PREVIEWERS[3])
+  values.push(BUILTIN_PREVIEWERS[4])
+  return values
+}
 export function Preview({
   entry,
   onClose,
@@ -26,11 +52,30 @@ export function Preview({
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const sourceRef = useRef<HTMLDivElement>(null)
   const plugins = usePluginCatalog()
-  const previewer = useMemo(
-    () => (entry ? resolvePreviewer(plugins, entry.extension) : null),
-    [entry, plugins],
-  )
+  const pluginCandidates = useMemo(() => {
+    if (!entry) return []
+    const disabled = new Set(previewDisabled())
+    return pluginPreviewers(plugins)
+      .filter(
+        (previewer) =>
+          !disabled.has(previewer.id) &&
+          previewer.extensions.includes(entry.extension.toLowerCase()),
+      )
+      .sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id))
+  }, [entry, plugins])
+  const builtins = useMemo(() => (entry ? builtinCandidates(entry) : []), [entry])
+  const candidates = useMemo(() => [...pluginCandidates, ...builtins], [pluginCandidates, builtins])
+  const previewer = useMemo(() => {
+    if (!entry) return null
+    const chosen = candidates.find((candidate) => candidate.id === picked)
+    if (chosen) return chosen
+    const resolved = resolvePreviewer(plugins, entry.extension)
+    return resolved.pluginId ? resolved : builtins[0] || resolved
+  }, [entry, candidates, picked, plugins, builtins])
   // A plugin previewer renders in the plugin's own sandboxed panel: it gets the
   // file through the preview context instead of reading it in the webview.
   const pluginPreview = previewer?.pluginId ? previewer : null
@@ -77,7 +122,18 @@ export function Preview({
   }, [media])
   useEffect(() => {
     setMedia(null)
+    setPicked(null)
+    setMenuOpen(false)
+    setError('')
   }, [entry?.path])
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (event: MouseEvent) => {
+      if (!sourceRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [menuOpen])
   useEffect(() => {
     setText('')
     setError('')
@@ -217,6 +273,74 @@ export function Preview({
             )}
           </div>
           <footer className="preview-footer">
+            <div className="preview-source" ref={sourceRef}>
+              <button
+                type="button"
+                className="preview-source-button"
+                aria-haspopup="listbox"
+                aria-expanded={menuOpen}
+                title="切换预览方式"
+                onClick={() => setMenuOpen((value) => !value)}
+              >
+                {previewer?.pluginId ? <Puzzle size={13} /> : <Monitor size={13} />}
+                <span>{previewer?.provider || 'Fiex'}</span>
+                <small>{previewer?.title}</small>
+                <ChevronUp
+                  size={12}
+                  style={{ transform: menuOpen ? undefined : 'rotate(180deg)' }}
+                />
+              </button>
+              {menuOpen && (
+                <div className="preview-source-menu" role="listbox" aria-label="预览方式">
+                  {pluginCandidates.length > 0 && <div className="preview-source-label">插件</div>}
+                  {pluginCandidates.map((candidate) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={previewer?.id === candidate.id}
+                      className={
+                        'preview-source-item' + (previewer?.id === candidate.id ? ' active' : '')
+                      }
+                      key={candidate.id}
+                      onClick={() => {
+                        setPicked(candidate.id)
+                        setMenuOpen(false)
+                      }}
+                    >
+                      <Puzzle size={14} />
+                      <span className="preview-source-copy">
+                        <span className="preview-source-title">{candidate.title}</span>
+                        <span className="preview-source-provider">{candidate.provider}</span>
+                      </span>
+                      {previewer?.id === candidate.id && <Check size={14} />}
+                    </button>
+                  ))}
+                  <div className="preview-source-label">内置</div>
+                  {builtins.map((candidate) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={previewer?.id === candidate.id}
+                      className={
+                        'preview-source-item' + (previewer?.id === candidate.id ? ' active' : '')
+                      }
+                      key={candidate.id}
+                      onClick={() => {
+                        setPicked(candidate.id)
+                        setMenuOpen(false)
+                      }}
+                    >
+                      <Monitor size={14} />
+                      <span className="preview-source-copy">
+                        <span className="preview-source-title">{candidate.title}</span>
+                        <span className="preview-source-provider">Fiex 内置</span>
+                      </span>
+                      {previewer?.id === candidate.id && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <Button variant="ghost" size="icon" title="上一个" onClick={() => onNavigate(-1)}>
               <ChevronLeft />
             </Button>

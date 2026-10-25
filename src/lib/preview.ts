@@ -11,6 +11,8 @@ export interface Previewer {
   builtin: 'text' | 'image' | 'media' | 'pdf' | 'fallback' | null
   pluginId?: string
   panelId?: string
+  /** Plugin display name for plugin previewers; undefined for built-ins. */
+  provider?: string
 }
 
 const ORDER_KEY = 'fiex.preview.order'
@@ -87,6 +89,7 @@ export function pluginPreviewers(plugins: PluginInfo[]): Previewer[] {
         builtin: null,
         pluginId: plugin.id,
         panelId: id,
+        provider: plugin.name,
       })
     }
   }
