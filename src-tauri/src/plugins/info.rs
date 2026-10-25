@@ -47,14 +47,6 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     }
 }
 
-fn value_text(value: &Value) -> String {
-    match value {
-        Value::String(text) => text.clone(),
-        Value::Null => String::new(),
-        other => other.to_string(),
-    }
-}
-
 fn duration_text(duration: Duration) -> String {
     let total = duration.as_secs();
     let hours = total / 3600;
@@ -254,29 +246,6 @@ pub fn media_sections(path: &Path) -> Vec<InfoSection> {
     sections
 }
 
-fn contribution_rows(value: &Value) -> Vec<InfoRow> {
-    let Some(rows) = value.get("rows").and_then(Value::as_array) else {
-        return Vec::new();
-    };
-    rows.iter()
-        .filter_map(|entry| {
-            if let Some(object) = entry.as_object() {
-                let label = object
-                    .get("label")
-                    .or_else(|| object.get("key"))
-                    .map(value_text)
-                    .unwrap_or_default();
-                let value = object.get("value").map(value_text).unwrap_or_default();
-                (!label.is_empty() && !value.is_empty()).then_some(row(label, value))
-            } else if let Some(pair) = entry.as_array() {
-                (pair.len() >= 2).then(|| row(value_text(&pair[0]), value_text(&pair[1])))
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
 fn name_of(path: &Path) -> String {
     path.file_name()
         .map(|value| value.to_string_lossy().into_owned())
@@ -473,15 +442,8 @@ fn decode_response(value: &serde_json::Value) -> Option<InfoResponse> {
     match serde_json::from_value::<InfoResponse>(value.clone()) {
         Ok(response) => Some(response),
         Err(error) => {
-            // Legacy providers return `{rows:[...]}`. They are migrated in this
-            // change, but accepting the old shape keeps third-party providers
-            // working until they opt into `info.resolve`.
-            if value.get("rows").is_some() {
-                None
-            } else {
-                eprintln!("invalid info response: {error}");
-                None
-            }
+            eprintln!("invalid info response: {error}");
+            None
         }
     }
 }
@@ -662,18 +624,14 @@ fn resolve_plugin(
                     .filter_map(|section| section_from_contract(Some(plugin), section))
                     .collect()
             } else {
-                let rows = contribution_rows(&value);
-                (!rows.is_empty())
-                    .then(|| InfoSection {
-                        id: format!("{}.legacy", plugin.id),
-                        source: "plugin".into(),
-                        title: plugin.name.clone(),
-                        plugin_id: Some(plugin.id.clone()),
-                        provider: plugin.name.clone(),
-                        rows,
-                    })
-                    .into_iter()
-                    .collect()
+                vec![InfoSection {
+                    id: format!("{}.invalid", plugin.id),
+                    source: "plugin".into(),
+                    title: plugin.name.clone(),
+                    plugin_id: Some(plugin.id.clone()),
+                    provider: plugin.name.clone(),
+                    rows: vec![row("错误", "插件返回的 InfoResponse 格式无效")],
+                }]
             }
         }
         Err(error) => vec![InfoSection {
@@ -732,20 +690,6 @@ pub fn file_info(path: &str) -> Vec<InfoSection> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn contribution_rows_accept_objects_and_pairs() {
-        let rows = contribution_rows(&json!({
-            "rows": [
-                {"label": "SHA-256", "value": "abc"},
-                ["大小", "3"]
-            ]
-        }));
-        assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].label, "SHA-256");
-        assert_eq!(rows[1].value, "3");
-    }
 
     #[test]
     fn built_in_metadata_is_a_stable_section() {

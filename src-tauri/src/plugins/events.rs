@@ -23,7 +23,12 @@ fn extension_for(method: &str) -> Option<&'static str> {
     }
 }
 
-pub fn matching_plugins(method: &str, ext: &str, mime: &str, is_dir: bool) -> Vec<RegisteredProvider> {
+pub fn matching_plugins(
+    method: &str,
+    ext: &str,
+    mime: &str,
+    is_dir: bool,
+) -> Vec<RegisteredProvider> {
     let Some(extension) = extension_for(method) else {
         return Vec::new();
     };
@@ -35,14 +40,17 @@ pub fn matching_plugins(method: &str, ext: &str, mime: &str, is_dir: bool) -> Ve
         let Some(contribution) = plugin.extensions.get(extension) else {
             continue;
         };
-        if contribution.is_null() || contribution == false {
+        if contribution.is_null() || contribution.as_bool() == Some(false) {
             continue;
         }
         let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
         if !rules.matches(ext, mime, is_dir) {
             continue;
         }
-        let priority = contribution.get("priority").and_then(Value::as_i64).unwrap_or(50);
+        let priority = contribution
+            .get("priority")
+            .and_then(Value::as_i64)
+            .unwrap_or(50);
         providers.push(RegisteredProvider {
             plugin,
             contribution: contribution.clone(),

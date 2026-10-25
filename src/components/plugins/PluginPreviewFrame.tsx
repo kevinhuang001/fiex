@@ -95,11 +95,18 @@ export function PluginPreviewFrame({
           }
           if (method === 'panel.close' || method === 'panel.resize') return null
           if (method === 'clipboard.writeText') {
-            await call('clipboard.writeText', params as Record<string, unknown>)
+            const text = (params as { text?: unknown } | null)?.text
+            if (typeof text !== 'string' || text.length > 1024 * 1024)
+              throw new Error('Invalid clipboard text')
+            await navigator.clipboard.writeText(text)
             return null
           }
           if (method === 'navigation.open') {
-            await call('navigation.open', params as Record<string, unknown>)
+            const path = (params as { path?: unknown } | null)?.path
+            if (typeof path !== 'string' || !path) throw new Error('Invalid navigation path')
+            window.dispatchEvent(
+              new CustomEvent('fiex:navigate', { detail: { path, pane: 'left' } }),
+            )
             return null
           }
           throw new Error('Method not allowed')
