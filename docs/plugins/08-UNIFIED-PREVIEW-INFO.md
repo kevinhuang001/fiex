@@ -10,7 +10,7 @@ Built-in Info/Preview Adapter ─┐
 Plugin Native RPC → deserialize ┘
 ```
 
-内置 Provider 直接构造公共 Rust 领域类型，第三方返回遵循同一 Schema 的 JSON 并由 Core 解码成**相同**的类型。UI 只渲染统一领域结果，不维护内置/外部两套响应模型。
+内置 Provider 直接构造公共 Rust 领域类型，第三方返回遵循同一 Schema 的 JSON 并由 Core 解码成**相同**的类型。UI 只渲染统一领域结果，不维护内置/外部两套响应模型。内置与插件的区别只在执行适配器：内置使用 Core 的可信本地句柄，插件使用经过 PermissionPolicy 投影的 `InfoContext`；两者都由同一个 Registry 匹配、排序、合并。
 
 Core 内置实现应分别组织在 `info/{metadata,audio,video,types}` 与 `preview/{text,image,audio,video,pdf,fallback}` 模块。Registry 只负责注册和编排；音频、视频等解析来源可独立失效、不会拖垮基本属性或其他预览类型。
 
