@@ -29,7 +29,10 @@ export function AppearanceSettings({
         mode: 'openFile',
         extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
       })
-      if (path) update({ backgroundImage: path })
+      if (path) {
+        localStorage.removeItem('fiex:background-removed')
+        update({ backgroundImage: path })
+      }
     } catch (error) {
       setBackgroundError(String(error))
     }
@@ -113,9 +116,10 @@ export function AppearanceSettings({
                 <button
                   type="button"
                   className="settings-pill-button ghost"
-                  onClick={() =>
+                  onClick={() => {
+                    localStorage.removeItem('fiex:background-removed')
                     update({ backgroundImage: '/demo/dog.svg', backgroundOpacity: 0.6 })
-                  }
+                  }}
                 >
                   示例小狗
                 </button>
@@ -124,7 +128,10 @@ export function AppearanceSettings({
                 <button
                   type="button"
                   className="settings-pill-button ghost"
-                  onClick={() => update({ backgroundImage: '' })}
+                  onClick={() => {
+                    localStorage.setItem('fiex:background-removed', '1')
+                    update({ backgroundImage: '' })
+                  }}
                 >
                   移除
                 </button>

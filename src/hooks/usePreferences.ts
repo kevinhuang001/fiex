@@ -81,13 +81,24 @@ function load(): Preferences {
         ? stored.startPage
         : 'recent'
     const tags = normalizeTags(stored.tags) ?? fallback.tags
+    // In the plain Vite dev URL, show the built-in dog once as a demo. An
+    // explicit backgroundImage (including "") in stored preferences wins.
+    const demoDog =
+      demo &&
+      !new URLSearchParams(location.search).has('demo') &&
+      !localStorage.getItem('fiex:background-removed')
+        ? '/demo/dog.svg'
+        : ''
     return {
       ...fallback,
       ...Object.fromEntries(Object.entries(stored).filter(([key]) => key in fallback)),
       tags,
       startPage,
       fontSize,
-      backgroundImage: typeof stored.backgroundImage === 'string' ? stored.backgroundImage : '',
+      backgroundImage:
+        typeof stored.backgroundImage === 'string' && stored.backgroundImage
+          ? stored.backgroundImage
+          : demoDog,
       backgroundOpacity,
       displayIgnore: Array.isArray(stored.displayIgnore)
         ? stored.displayIgnore

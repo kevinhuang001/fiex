@@ -575,6 +575,15 @@ html.dark .app.has-background .list-header {
 .file-row.selected > span {
   color: var(--row-selected-text);
 }
+.app.has-background .file-row:nth-child(even) {
+  background: color-mix(in srgb, var(--row-alt-background) 55%, transparent);
+}
+.app.has-background .file-row:hover {
+  background: color-mix(in srgb, var(--row-hover-background) 55%, transparent);
+}
+.app.has-background .file-row.selected {
+  background: color-mix(in srgb, var(--row-selected-background) 65%, transparent);
+}
 .file-name {
   display: flex;
   align-items: center;
