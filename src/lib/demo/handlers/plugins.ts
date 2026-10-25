@@ -741,17 +741,17 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         'toml',
         'ini',
       ])
-      const values: Array<{ id: string; provider: string; title: string; priority: number }> = []
+      const values: Array<{ id: string; provider: string; priority: number }> = []
       if (!isDir && (mime.startsWith('text/') || textExt.has(extension)))
-        values.push({ id: 'builtin:text', provider: 'Fiex', title: '文本预览', priority: 10 })
+        values.push({ id: 'builtin:text', provider: 'Fiex', priority: 10 })
       if (!isDir && mime.startsWith('image/'))
-        values.push({ id: 'builtin:image', provider: 'Fiex', title: '图片预览', priority: 20 })
+        values.push({ id: 'builtin:image', provider: 'Fiex', priority: 20 })
       if (!isDir && (mime.startsWith('video/') || mime.startsWith('audio/')))
-        values.push({ id: 'builtin:media', provider: 'Fiex', title: '音视频预览', priority: 30 })
+        values.push({ id: 'builtin:media', provider: 'Fiex', priority: 30 })
       if (!isDir && extension === 'pdf')
-        values.push({ id: 'builtin:pdf', provider: 'Fiex', title: 'PDF 预览', priority: 40 })
+        values.push({ id: 'builtin:pdf', provider: 'Fiex', priority: 40 })
       if (values.length === 0)
-        values.push({ id: 'builtin:fallback', provider: 'Fiex', title: '文件信息', priority: 0 })
+        values.push({ id: 'builtin:fallback', provider: 'Fiex', priority: 0 })
       for (const plugin of demoPlugins) {
         if (!plugin.enabled) continue
         const previews = Array.isArray(plugin.extensions?.preview)
@@ -770,7 +770,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           values.push({
             id: `plugin:${plugin.id}:${contribution.id}`,
             provider: plugin.name,
-            title: contribution.title || plugin.name,
             priority: contribution.priority ?? 50,
           })
         }
@@ -786,7 +785,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         extension,
         mime: '',
         isDir: false,
-      })) as Array<{ id: string; provider: string; title: string; priority: number }>
+      })) as Array<{ id: string; provider: string; priority: number }>
       const provider = candidates.find((value) => value.id === providerId) || candidates[0]
       if (!provider) throw new Error('没有可用的预览方式')
       if (provider.id.startsWith('plugin:')) {
@@ -803,7 +802,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           priority: provider.priority,
           view: {
             kind: 'html',
-            title: provider.title,
             html,
             sessionId,
             pluginId,
@@ -829,7 +827,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           providerId: provider.id,
           provider: provider.provider,
           priority: provider.priority,
-          view: { kind: 'text', title: provider.title, text, truncated: false },
+          view: { kind: 'text', text, truncated: false },
         }
       }
       if (provider.id === 'builtin:pdf') {
@@ -837,7 +835,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           providerId: provider.id,
           provider: provider.provider,
           priority: provider.priority,
-          view: { kind: 'pdf', title: provider.title, path: '/demo/sample.pdf', name },
+          view: { kind: 'pdf', path: '/demo/sample.pdf', name },
         }
       }
       return {
@@ -846,7 +844,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         priority: provider.priority,
         view: {
           kind: 'fallback',
-          title: provider.title,
           name,
           extension,
           message: 'demo 未内置该类型的媒体样本',
@@ -854,6 +851,9 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       }
     }
     case 'connection_open': {
+      if (String(a.id || '') === 'demo-ssh') {
+        return { kind: 'terminal', connectionId: 'demo-ssh' }
+      }
       // The browser fixture has one WebDAV connection and it registers a VFS,
       // so Core's two-branch navigation resolves to the remote Explorer root.
       if (String(a.id || '') === 'demo-webdav') {

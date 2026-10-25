@@ -50,16 +50,6 @@ impl Builtin {
         }
     }
 
-    fn title(self) -> &'static str {
-        match self {
-            Self::Text => "文本预览",
-            Self::Image => "图片预览",
-            Self::Media => "音视频预览",
-            Self::Pdf => "PDF 预览",
-            Self::Fallback => "文件信息",
-        }
-    }
-
     fn priority(self) -> i64 {
         match self {
             Self::Text => 10,
@@ -75,7 +65,6 @@ impl Builtin {
 struct Provider {
     id: String,
     provider: String,
-    title: String,
     priority: i64,
     builtin: Option<Builtin>,
     plugin: Option<(String, String)>,
@@ -86,7 +75,6 @@ impl Provider {
         serde_json::json!({
             "id": self.id,
             "provider": self.provider,
-            "title": self.title,
             "priority": self.priority,
         })
     }
@@ -160,7 +148,6 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
         .map(|builtin| Provider {
             id: builtin.id().into(),
             provider: "Fiex".into(),
-            title: builtin.title().into(),
             priority: builtin.priority(),
             builtin: Some(builtin),
             plugin: None,
@@ -183,11 +170,6 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
         values.push(Provider {
             id: format!("plugin:{}:{}", plugin.id, contribution_id),
             provider: plugin.name.clone(),
-            title: contribution
-                .get("title")
-                .and_then(Value::as_str)
-                .unwrap_or(&plugin.name)
-                .into(),
             priority: contribution
                 .get("priority")
                 .and_then(Value::as_u64)
@@ -258,7 +240,6 @@ fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, St
             let text = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_TEXT)]).into_owned();
             Ok(serde_json::json!({
                 "kind": "text",
-                "title": Builtin::Text.title(),
                 "text": text,
                 "truncated": truncated,
                 "size": bytes.len(),
@@ -266,14 +247,12 @@ fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, St
         }
         Builtin::Image => Ok(serde_json::json!({
             "kind": "image",
-            "title": Builtin::Image.title(),
             "path": local.to_string_lossy(),
             "name": name,
             "mime": mime,
         })),
         Builtin::Media => Ok(serde_json::json!({
             "kind": "media",
-            "title": Builtin::Media.title(),
             "media": if mime.starts_with("video/") { "video" } else { "audio" },
             "path": local.to_string_lossy(),
             "name": name,
@@ -281,13 +260,11 @@ fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, St
         })),
         Builtin::Pdf => Ok(serde_json::json!({
             "kind": "pdf",
-            "title": Builtin::Pdf.title(),
             "path": local.to_string_lossy(),
             "name": name,
         })),
         Builtin::Fallback => Ok(serde_json::json!({
             "kind": "fallback",
-            "title": Builtin::Fallback.title(),
             "name": name,
             "extension": ext,
         })),
@@ -344,7 +321,6 @@ fn validate(plugin_id: &str, value: Value) -> Result<Value, String> {
             let html = fs::read_to_string(&path).map_err(|error| error.to_string())?;
             Ok(serde_json::json!({
                 "kind": "html",
-                "title": view.title,
                 "html": html,
                 "state": view.state,
                 "entry": package.entry,
@@ -355,11 +331,10 @@ fn validate(plugin_id: &str, value: Value) -> Result<Value, String> {
             if text.len() > MAX_TEXT {
                 return Err("preview text exceeds size limit".into());
             }
-            Ok(serde_json::json!({"kind":"text","title":view.title,"text":text}))
+            Ok(serde_json::json!({"kind":"text","text":text}))
         }
         "unsupported" => Ok(serde_json::json!({
             "kind": "fallback",
-            "title": view.title,
             "message": view.message.unwrap_or_else(|| "此文件不支持插件预览".into()),
         })),
         other => Err(format!("unsupported PreviewView kind: {other}")),

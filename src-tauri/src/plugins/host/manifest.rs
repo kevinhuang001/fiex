@@ -303,6 +303,11 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         let object = item
             .as_object()
             .ok_or_else(|| format!("extensions.{key} must be an object"))?;
+        if object.contains_key("title") {
+            return Err(format!(
+                "extensions.{key}.title is removed; the plugin name is used"
+            ));
+        }
         validate_match(object.get("match"), false, false)?;
     }
     for key in ["vfs", "connections", "toolbar"] {
@@ -425,14 +430,15 @@ mod contribution_tests {
         }))
         .is_ok());
         assert!(validate_extensions(&serde_json::json!({
-            "info": {"id": "x", "title": "X", "match": {"mimeTypes": ["text/*"]}}
+            "info": {"id": "x", "match": {"mimeTypes": ["text/*"]}}
         }))
         .is_ok());
         for invalid in [
             serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
             serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
-            serde_json::json!({"info": {"id": "x", "title": "X", "match": {"contains": [".git"]}}}),
-            serde_json::json!({"info": [{"id": "x", "title": "X"}]}),
+            serde_json::json!({"info": {"id": "x", "match": {"contains": [".git"]}}}),
+            serde_json::json!({"info": [{"id": "x"}]}),
+            serde_json::json!({"info": {"id": "x", "title": "X"}}),
             serde_json::json!({"contextMenus": {"match": {"selection": "many"}}}),
         ] {
             assert!(validate_extensions(&invalid).is_err(), "{invalid}");

@@ -3,7 +3,6 @@
 export interface PreviewCandidate {
   id: string
   provider: string
-  title: string
   priority: number
 }
 

@@ -653,11 +653,6 @@ fn resolve_plugin(
     context: &InfoContext,
     local: &Path,
 ) -> Vec<InfoSection> {
-    let title = contribution
-        .get("title")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or(&plugin.name)
-        .to_string();
     let command = contribution
         .get("command")
         .and_then(serde_json::Value::as_str);
@@ -711,7 +706,7 @@ fn resolve_plugin(
                     .then(|| InfoSection {
                         id: format!("{}.legacy", plugin.id),
                         source: "plugin".into(),
-                        title,
+                        title: plugin.name.clone(),
                         plugin_id: Some(plugin.id.clone()),
                         provider: plugin.name.clone(),
                         rows,
@@ -723,7 +718,7 @@ fn resolve_plugin(
         Err(error) => vec![InfoSection {
             id: format!("{}.error", plugin.id),
             source: "plugin".into(),
-            title,
+            title: plugin.name.clone(),
             plugin_id: Some(plugin.id.clone()),
             provider: plugin.name.clone(),
             rows: vec![row("错误", error)],

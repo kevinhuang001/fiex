@@ -26,7 +26,6 @@ interface ResolvedPreview {
   priority: number
   view: {
     kind: 'html' | 'text' | 'image' | 'media' | 'pdf' | 'fallback'
-    title?: string
     html?: string
     text?: string
     truncated?: boolean
