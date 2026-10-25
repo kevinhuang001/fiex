@@ -54,26 +54,20 @@ export function IntegrationSettings({
         <div className="settings-card-header">
           <span>默认终端</span>
         </div>
-        {terminals.length ? (
-          terminals.map((terminal) => (
-            <button
-              key={terminal.id}
-              className={`settings-choice ${prefs.terminal === terminal.id ? 'selected' : ''}`}
-              aria-pressed={prefs.terminal === terminal.id}
-              onClick={() => update({ terminal: terminal.id })}
-            >
-              <span className="settings-choice-icon">
-                <TerminalSquare size={15} />
-              </span>
-              <span>{terminal.name}</span>
-              {prefs.terminal === terminal.id && <Check size={15} />}
-            </button>
-          ))
-        ) : (
-          <div className="settings-row">
-            <div className="settings-row-label">没有检测到可用的终端应用</div>
-          </div>
-        )}
+        {[{ id: 'builtin', name: 'Fiex 内置终端' }, ...terminals].map((terminal) => (
+          <button
+            key={terminal.id}
+            className={`settings-choice ${prefs.terminal === terminal.id ? 'selected' : ''}`}
+            aria-pressed={prefs.terminal === terminal.id}
+            onClick={() => update({ terminal: terminal.id })}
+          >
+            <span className="settings-choice-icon">
+              <TerminalSquare size={15} />
+            </span>
+            <span>{terminal.name}</span>
+            {prefs.terminal === terminal.id && <Check size={15} />}
+          </button>
+        ))}
       </div>
     </>
   )

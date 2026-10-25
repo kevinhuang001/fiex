@@ -44,7 +44,15 @@ function terminalTheme() {
 }
 
 /** Built-in SSH terminal; uses the system OpenSSH client through a real PTY. */
-export function SshTerminalView({ connectionId, name }: { connectionId: string; name: string }) {
+export function TerminalView({
+  connectionId,
+  cwd,
+  name,
+}: {
+  connectionId?: string
+  cwd?: string
+  name: string
+}) {
   const host = useRef<HTMLDivElement>(null)
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<'connecting' | 'open' | 'closed' | 'error' | 'demo'>(
@@ -124,9 +132,9 @@ export function SshTerminalView({ connectionId, name }: { connectionId: string; 
     if (!native) {
       setStatus('demo')
       terminal.write(
-        '\x1b[1;36mFiex SSH\x1b[0m\r\n' +
-          '\x1b[90mWeb 预览不会启动 OpenSSH。打开桌面版后，这里会连接真实终端。\x1b[0m\r\n\r\n' +
-          '\x1b[32muser@server\x1b[0m:\x1b[34m~\x1b[0m$ ',
+        '\x1b[1;36mFiex 终端\x1b[0m\r\n' +
+          '\x1b[90mWeb 预览不会启动本地 shell 或 OpenSSH。打开桌面版后，这里会连接真实终端。\x1b[0m\r\n\r\n' +
+          '\x1b[32muser@fiex\x1b[0m:\x1b[34m~\x1b[0m$ ',
       )
       return () => {
         disposed = true
@@ -147,12 +155,20 @@ export function SshTerminalView({ connectionId, name }: { connectionId: string; 
         setStatus('closed')
       }
     }
-    void call<string>('ssh_open', {
-      connectionId,
-      cols: terminal.cols,
-      rows: terminal.rows,
-      onEvent: channel,
-    })
+    const opening = connectionId
+      ? call<string>('ssh_open', {
+          connectionId,
+          cols: terminal.cols,
+          rows: terminal.rows,
+          onEvent: channel,
+        })
+      : call<string>('local_terminal_open', {
+          cwd: cwd || null,
+          cols: terminal.cols,
+          rows: terminal.rows,
+          onEvent: channel,
+        })
+    opening
       .then((id) => {
         if (disposed) {
           void call('ssh_close', { sessionId: id })
@@ -173,7 +189,7 @@ export function SshTerminalView({ connectionId, name }: { connectionId: string; 
       if (sessionId) void call('ssh_close', { sessionId }).catch(() => {})
       terminal.dispose()
     }
-  }, [connectionId, attempt])
+  }, [connectionId, cwd, attempt])
 
   return (
     <div className="ssh-terminal-view" data-connection={connectionId}>
@@ -198,3 +214,6 @@ export function SshTerminalView({ connectionId, name }: { connectionId: string; 
     </div>
   )
 }
+
+// Backwards-compatible name for existing SSH call sites.
+export const SshTerminalView = TerminalView

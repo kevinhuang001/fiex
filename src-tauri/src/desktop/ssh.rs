@@ -1,15 +1,16 @@
-//! Built-in SSH terminal: spawn the system OpenSSH client inside a real PTY
-//! and stream bytes to the WebView's xterm.js instance.
+//! Built-in terminals: a real PTY through the system OpenSSH client or the
+//! user's local shell, streamed as bytes to the WebView's xterm.js instance.
 //!
-//! Using OpenSSH keeps host-key verification, `~/.ssh/config`, agents,
-//! ProxyJump, keyboard-interactive/MFA, algorithms and known_hosts behavior in
-//! the same trusted implementation the user already uses. The WebView only
-//! receives the byte stream; it never receives credentials.
+//! OpenSSH keeps host-key verification, `~/.ssh/config`, agents, ProxyJump,
+//! keyboard-interactive/MFA, algorithms and known_hosts behavior in the same
+//! trusted implementation the user already uses. The WebView only receives the
+//! byte stream; it never receives credentials.
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::{
     collections::HashMap,
     io::{Read, Write},
+    path::Path,
     sync::{Mutex, OnceLock},
 };
 use tauri::ipc::Channel;
@@ -51,6 +52,85 @@ fn expanded_path(value: &str) -> String {
     value.to_string()
 }
 
+fn home() -> String {
+    dirs::home_dir()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| ".".into())
+}
+
+fn start_session(
+    command: CommandBuilder,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<SshEvent>,
+) -> Result<String, String> {
+    let cols = cols.max(20);
+    let rows = rows.max(4);
+    let pty = native_pty_system();
+    let pair = pty
+        .openpty(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|error| error.to_string())?;
+    let child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|error| format!("无法启动终端：{error}"))?;
+    drop(pair.slave);
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|error| error.to_string())?;
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|error| error.to_string())?;
+    let session_id = crate::mounts::new_id()?;
+    sessions().lock().map_err(|_| "终端会话表不可用")?.insert(
+        session_id.clone(),
+        Session {
+            writer,
+            master: pair.master,
+            child,
+        },
+    );
+    let id = session_id.clone();
+    std::thread::spawn(move || {
+        let mut buffer = [0u8; 16 * 1024];
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(size) => {
+                    if on_event
+                        .send(SshEvent::Data {
+                            data: buffer[..size].to_vec(),
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    let _ = on_event.send(SshEvent::Error {
+                        message: error.to_string(),
+                    });
+                    break;
+                }
+            }
+        }
+        let _ = on_event.send(SshEvent::Exit { code: None });
+        if let Ok(mut values) = sessions().lock() {
+            if let Some(mut session) = values.remove(&id) {
+                let _ = session.child.kill();
+            }
+        }
+    });
+    Ok(session_id)
+}
+
 #[tauri::command]
 pub(crate) async fn ssh_open(
     connection_id: String,
@@ -83,18 +163,7 @@ pub(crate) async fn ssh_open(
     } else {
         terminal
     };
-    let cols = cols.max(20);
-    let rows = rows.max(4);
     tauri::async_runtime::spawn_blocking(move || {
-        let pty = native_pty_system();
-        let pair = pty
-            .openpty(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|error| error.to_string())?;
         let mut command = CommandBuilder::new("ssh");
         command.arg("-tt");
         command.arg("-p");
@@ -114,60 +183,37 @@ pub(crate) async fn ssh_open(
         command.arg(&host);
         command.env("TERM", &terminal);
         command.env("COLORTERM", "truecolor");
-        let child = pair
-            .slave
-            .spawn_command(command)
-            .map_err(|error| format!("无法启动 ssh：{error}"))?;
-        drop(pair.slave);
-        let mut reader = pair
-            .master
-            .try_clone_reader()
-            .map_err(|error| error.to_string())?;
-        let writer = pair
-            .master
-            .take_writer()
-            .map_err(|error| error.to_string())?;
-        let session_id = crate::mounts::new_id()?;
-        sessions().lock().map_err(|_| "SSH 会话表不可用")?.insert(
-            session_id.clone(),
-            Session {
-                writer,
-                master: pair.master,
-                child,
-            },
-        );
-        let id = session_id.clone();
-        std::thread::spawn(move || {
-            let mut buffer = [0u8; 16 * 1024];
-            loop {
-                match reader.read(&mut buffer) {
-                    Ok(0) => break,
-                    Ok(size) => {
-                        if on_event
-                            .send(SshEvent::Data {
-                                data: buffer[..size].to_vec(),
-                            })
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                    Err(error) => {
-                        let _ = on_event.send(SshEvent::Error {
-                            message: error.to_string(),
-                        });
-                        break;
-                    }
-                }
-            }
-            let _ = on_event.send(SshEvent::Exit { code: None });
-            if let Ok(mut values) = sessions().lock() {
-                if let Some(mut session) = values.remove(&id) {
-                    let _ = session.child.kill();
-                }
-            }
-        });
-        Ok(session_id)
+        start_session(command, cols, rows, on_event)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Local integrated terminal. Reuses the same PTY/session/event pipeline as SSH.
+#[tauri::command]
+pub(crate) async fn local_terminal_open(
+    cwd: Option<String>,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<SshEvent>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let shell = if cfg!(windows) {
+            "powershell.exe".to_string()
+        } else {
+            std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into())
+        };
+        let mut command = CommandBuilder::new(shell);
+        if cfg!(windows) {
+            command.arg("-NoLogo");
+        }
+        let directory = cwd
+            .filter(|value| !value.contains("://") && Path::new(value).is_dir())
+            .unwrap_or_else(home);
+        command.cwd(directory);
+        command.env("TERM", "xterm-256color");
+        command.env("COLORTERM", "truecolor");
+        start_session(command, cols, rows, on_event)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -175,16 +221,16 @@ pub(crate) async fn ssh_open(
 
 #[tauri::command]
 pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String> {
-    let mut values = sessions().lock().map_err(|_| "SSH 会话表不可用")?;
-    let session = values.get_mut(&session_id).ok_or("SSH 会话已结束")?;
+    let mut values = sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let session = values.get_mut(&session_id).ok_or("终端会话已结束")?;
     session.writer.write_all(&data).map_err(|e| e.to_string())?;
     session.writer.flush().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub(crate) fn ssh_resize(session_id: String, cols: u16, rows: u16) -> Result<(), String> {
-    let values = sessions().lock().map_err(|_| "SSH 会话表不可用")?;
-    let session = values.get(&session_id).ok_or("SSH 会话已结束")?;
+    let values = sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let session = values.get(&session_id).ok_or("终端会话已结束")?;
     session
         .master
         .resize(PtySize {

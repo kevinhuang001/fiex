@@ -1281,3 +1281,106 @@ body.dragging-toolbar {
 .full-view-pane[hidden] {
   display: none;
 }
+
+/* Integrated terminal panel (local shell / SSH-style PTY). */
+.terminal-panel {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 120px;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.terminal-panel.closed {
+  display: none;
+}
+.terminal-panel-resizer {
+  height: 5px;
+  flex: 0 0 5px;
+  cursor: ns-resize;
+  background: transparent;
+}
+.terminal-panel-resizer:hover {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.terminal-panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+.terminal-panel-tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  gap: 2px;
+  overflow: auto;
+}
+.terminal-panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px 6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.terminal-panel-tab.active {
+  background: var(--surface);
+  color: var(--text);
+}
+.terminal-panel-tab > button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.terminal-panel-tab > button:first-child {
+  padding: 5px 7px;
+}
+.terminal-panel-close {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  opacity: 0.55;
+}
+.terminal-panel-close:hover {
+  opacity: 1;
+}
+.terminal-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.terminal-panel-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.terminal-panel-actions button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.terminal-panel-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.terminal-panel-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.terminal-panel-pane[hidden] {
+  display: none;
+}

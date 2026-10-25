@@ -94,6 +94,15 @@ export function useOpenActions({
   }
   const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
   const terminal = (id = prefs.terminal) => {
+    if (id === 'builtin') {
+      const cwd = first?.isDir ? first.path : x.path
+      window.dispatchEvent(
+        new CustomEvent('fiex:open-builtin-terminal', {
+          detail: { cwd: isRemotePath(cwd) ? '' : cwd },
+        }),
+      )
+      return
+    }
     if (!writable()) return
     void run('正在打开终端…', () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),

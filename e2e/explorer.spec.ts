@@ -226,6 +226,26 @@ test('Applications entry and search control', async ({ page }) => {
   await expect(page.getByText('Fiex.app', { exact: true })).toBeVisible()
   await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeVisible()
 })
+test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
+  await page.goto('/?demo')
+  await page.evaluate(() => {
+    const key = 'fiex:preferences'
+    const prefs = JSON.parse(localStorage.getItem(key) || '{}')
+    localStorage.setItem(key, JSON.stringify({ ...prefs, terminal: 'builtin' }))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Open in Terminal' }).click()
+  await expect(page.locator('.terminal-panel')).toBeVisible()
+  await expect(page.locator('.terminal-panel-tab')).toHaveCount(1)
+  await expect(page.locator('.terminal-panel')).toContainText('Fiex 终端')
+  await page.getByRole('button', { name: '新建终端' }).click()
+  await expect(page.locator('.terminal-panel-tab')).toHaveCount(2)
+  await page.getByRole('button', { name: '收起终端' }).click()
+  await expect(page.locator('.terminal-panel')).toBeHidden()
+  await page.getByRole('button', { name: 'Open in Terminal' }).click()
+  await expect(page.locator('.terminal-panel')).toBeVisible()
+})
+
 test('built-in SSH opens a full-height terminal', async ({ page }) => {
   await page.getByText('生产服务器', { exact: true }).click()
   await expect(page.locator('.ssh-terminal-view')).toBeVisible()

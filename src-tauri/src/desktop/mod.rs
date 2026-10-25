@@ -103,6 +103,7 @@ pub fn run() {
             preview_open,
             preview_candidates,
             ssh::ssh_open,
+            ssh::local_terminal_open,
             ssh::ssh_write,
             ssh::ssh_resize,
             ssh::ssh_close,

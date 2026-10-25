@@ -12,6 +12,7 @@ import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
 import { SshTerminalView } from '@/components/ssh/SshTerminalView'
+import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { asset, call, native } from '@/lib/api'
@@ -217,6 +218,7 @@ export default function App() {
             onWidthChange={app.setPaneWidth}
           />
         )}
+        <TerminalPanel />
         {!fullView && (
           <WorkspaceBar
             items={app.workspace.items}

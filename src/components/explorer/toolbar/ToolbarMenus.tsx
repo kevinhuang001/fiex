@@ -61,7 +61,8 @@ export function ToolbarPickerMenu({
   ides,
   terminals,
 }: ToolbarPickerMenuProps) {
-  const items = picker.kind === 'ide' ? ides : terminals
+  const items =
+    picker.kind === 'ide' ? ides : [{ id: 'builtin', name: 'Fiex 内置终端' }, ...terminals]
   return (
     <div
       ref={pickerRef}

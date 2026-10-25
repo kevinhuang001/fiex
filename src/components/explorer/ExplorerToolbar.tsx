@@ -129,7 +129,11 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={`在 ${terminals.find((t) => t.id === prefs.terminal)?.name || '终端'} 中打开`}
+          title={`在 ${
+            prefs.terminal === 'builtin'
+              ? '内置终端'
+              : terminals.find((t) => t.id === prefs.terminal)?.name || '终端'
+          } 中打开`}
           aria-label="Open in Terminal"
           disabled={x.directoryReadOnly}
           onClick={() => terminal()}
