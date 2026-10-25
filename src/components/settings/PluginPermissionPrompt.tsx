@@ -21,12 +21,16 @@ export interface PluginPermissionItem {
 }
 
 const permissionOrder = [
+  'metadata',
   'folders.read',
   'folders.create',
   'folders.delete',
   'folders.rename',
   'files.read',
   'files.write',
+  'files.create',
+  'files.delete',
+  'files.rename',
   'network',
   'commands',
 ]

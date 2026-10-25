@@ -434,7 +434,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           requestedNetworkDomains: entry.requestedNetworkDomains,
           allowedNetworkDomains: entry.requestedNetworkDomains,
           author: entry.author,
-          contributions: entry.contributions || {},
+          extensions: entry.extensions || {},
         })
       }
       return entry.id

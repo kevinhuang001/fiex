@@ -611,12 +611,10 @@ impl Running {
             "host.fs.mkdir" if permitted("folders.create") => {
                 crate::plugin_fs_access::mkdir(root()?, arg("path")?)
             }
-            "host.fs.beginWrite" if permitted("files.write") => {
+            "host.fs.beginWrite" => {
                 let create = p.get("create").and_then(Value::as_bool).unwrap_or(false);
-                if create && !permitted("folders.create") {
-                    return Err(
-                        "creating a file requires directory entry creation permission".into(),
-                    );
+                if !permitted(if create { "files.create" } else { "files.write" }) {
+                    return Err("file operation permission denied".into());
                 }
                 Ok(json!(crate::plugin_fs_access::begin_write(
                     owner,
@@ -625,7 +623,10 @@ impl Running {
                     create
                 )?))
             }
-            "host.fs.seekWrite" if permitted("files.write") => {
+            "host.fs.seekWrite" => {
+                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                    return Err("file operation permission denied".into());
+                }
                 Ok(json!(crate::plugin_fs_access::seek_write(
                     owner,
                     arg("handle")?,
@@ -635,11 +636,17 @@ impl Running {
                         .ok_or("missing seek offset")?
                 )?))
             }
-            "host.fs.writeChunk" if permitted("files.write") => {
+            "host.fs.writeChunk" => {
+                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                    return Err("file operation permission denied".into());
+                }
                 crate::plugin_fs_access::write_chunk(owner, arg("handle")?, arg("base64")?)?;
                 Ok(Value::Null)
             }
-            "host.fs.writeBuffer" if permitted("files.write") => {
+            "host.fs.writeBuffer" => {
+                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                    return Err("file operation permission denied".into());
+                }
                 crate::plugin_fs_access::write_buffer(
                     owner,
                     arg("handle")?,
@@ -652,7 +659,10 @@ impl Running {
                 )?;
                 Ok(Value::Null)
             }
-            "host.fs.commit" if permitted("files.write") => {
+            "host.fs.commit" => {
+                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                    return Err("file operation permission denied".into());
+                }
                 crate::plugin_fs_access::commit(owner, arg("handle")?)
             }
             "host.fs.abort" => {
@@ -663,12 +673,16 @@ impl Running {
                 let path = p.get("path").and_then(Value::as_str).unwrap_or(".");
                 crate::plugin_fs_access::list(root()?, path)
             }
-            "host.fs.stat" if permitted("folders.read") || permitted("files.read") => {
+            "host.fs.stat" if permitted("metadata") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
                 crate::plugin_fs_access::stat(root()?, path)
+            }
+            "host.fs.statBatch" if permitted("metadata") => {
+                let paths = p.get("paths").and_then(Value::as_array).ok_or("missing paths")?;
+                crate::plugin_fs_access::stat_batch(root()?, paths)
             }
             "host.fs.read" if permitted("files.read") => {
                 let path = p
@@ -682,14 +696,14 @@ impl Running {
                     .unwrap_or(1024 * 1024) as usize;
                 crate::plugin_fs_access::read(owner, root()?, path, offset, length)
             }
-            "host.fs.create" if permitted("folders.create") => {
+            "host.fs.create" if permitted("files.create") => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
                 crate::plugin_fs_access::create(root()?, path)
             }
-            "host.fs.write" if permitted("files.write") => {
+            "host.fs.write" => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
@@ -699,25 +713,41 @@ impl Running {
                     .and_then(Value::as_str)
                     .ok_or("missing buffer")?;
                 let mode = p.get("mode").and_then(Value::as_str).unwrap_or("truncate");
-                if mode == "create" && !permitted("folders.create") {
-                    return Err("folder write permission is required to create a file".into());
+                if !permitted(if mode == "create" { "files.create" } else { "files.write" }) {
+                    return Err("file operation permission denied".into());
                 }
                 crate::plugin_fs_access::write(owner, root()?, path, buffer, mode)
             }
-            "host.fs.remove" if permitted("folders.delete") => {
+            "host.fs.remove" => {
                 let path = p
                     .get("path")
                     .and_then(Value::as_str)
                     .ok_or("missing path")?;
+                let required = if crate::plugin_fs_access::is_directory(root()?, path)? {
+                    "folders.delete"
+                } else {
+                    "files.delete"
+                };
+                if !permitted(required) {
+                    return Err("file operation permission denied".into());
+                }
                 crate::plugin_fs_access::remove(root()?, path)?;
                 Ok(Value::Null)
             }
-            "host.fs.rename" if permitted("folders.rename") => {
+            "host.fs.rename" => {
                 let from = p
                     .get("from")
                     .and_then(Value::as_str)
                     .ok_or("missing from")?;
                 let to = p.get("to").and_then(Value::as_str).ok_or("missing to")?;
+                let required = if crate::plugin_fs_access::is_directory(root()?, from)? {
+                    "folders.rename"
+                } else {
+                    "files.rename"
+                };
+                if !permitted(required) {
+                    return Err("file operation permission denied".into());
+                }
                 crate::plugin_fs_access::rename(root()?, from, to)?;
                 Ok(Value::Null)
             }

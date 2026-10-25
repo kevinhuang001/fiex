@@ -249,7 +249,7 @@ export function PluginContextActions({
         .filter((p) => p.enabled)
         .flatMap((plugin) => {
           const items =
-            (plugin.contributions as { contextMenus?: Item[] } | undefined)?.contextMenus || []
+            (plugin.extensions as { contextMenus?: Item[] } | undefined)?.contextMenus || []
           if (!valid(items)) return []
           return items.map((item) => (
             <MenuNode

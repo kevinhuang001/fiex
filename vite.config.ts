@@ -41,7 +41,7 @@ function readOfficialThemes() {
     const folder = path.join(officialPluginRoot, entry.name)
     try {
       const manifest = JSON.parse(fs.readFileSync(path.join(folder, 'manifest.json'), 'utf8'))
-      for (const contribution of manifest.contributions?.themes || []) {
+      for (const contribution of manifest.extensions?.themes || []) {
         const file = path.resolve(folder, String(contribution.path || ''))
         if (!file.startsWith(folder + path.sep) || !fs.existsSync(file)) continue
         const theme = JSON.parse(fs.readFileSync(file, 'utf8'))

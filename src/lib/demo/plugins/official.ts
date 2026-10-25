@@ -67,7 +67,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: ['github.com'],
         allowedNetworkDomains: ['github.com'],
         author: { name: 'Fiex Contributors' },
-        contributions: {
+        extensions: {
           vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
           toolbar: [
             {
@@ -114,7 +114,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
+        extensions: {
           contextMenus: [
             {
               id: 'archive.compress',
@@ -181,7 +181,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
+        extensions: {
           info: [
             {
               id: 'office.info',
@@ -222,7 +222,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
+        extensions: {
           preview: [
             {
               id: 'sqlite',
@@ -254,7 +254,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
+        extensions: {
           info: [
             {
               id: 'data.info',
@@ -321,7 +321,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
+        extensions: {
           toolbar: [
             {
               id: 'gpg.keys',
@@ -396,7 +396,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
+        extensions: {
           info: [
             {
               id: 'checksum.info',

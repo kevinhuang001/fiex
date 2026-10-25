@@ -1,4 +1,4 @@
-//! Declarative, process-free theme contributions. No CSS selectors or scripts.
+//! Declarative, process-free theme extensions. No CSS selectors or scripts.
 use crate::plugin_host::PluginManifest;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -41,13 +41,13 @@ fn validate_tokens(tokens: &BTreeMap<String, String>) -> Result<(), String> {
 pub fn is_theme(manifest: &PluginManifest) -> bool {
     manifest.runtime.entrypoints.is_empty()
         && manifest
-            .contributions
+            .extensions
             .get("themes")
             .and_then(serde_json::Value::as_array)
             .is_some_and(|items| !items.is_empty())
 }
 pub fn load(manifest: &PluginManifest, folder: &Path) -> Result<Vec<Theme>, String> {
-    let Some(items) = manifest.contributions.get("themes") else {
+    let Some(items) = manifest.extensions.get("themes") else {
         return Ok(Vec::new());
     };
     let items = items.as_array().ok_or("themes must be an array")?;
@@ -108,12 +108,12 @@ mod tests {
 
     fn package(themes: Value, entrypoints: Value) -> PluginManifest {
         serde_json::from_value(json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "id": "test.theme",
             "name": "Theme",
             "version": "1.0.0",
-            "runtime": { "protocolVersion": "2.0", "entrypoints": entrypoints },
-            "contributions": { "themes": themes }
+            "runtime": { "protocolVersion": "3.0", "entrypoints": entrypoints },
+            "extensions": { "themes": themes }
         }))
         .unwrap()
     }
@@ -146,7 +146,7 @@ mod tests {
         write(root.path(), "theme.json", &bad);
         assert!(load(&manifest, root.path()).is_err());
         let mut bad_manifest = manifest;
-        bad_manifest.contributions["themes"][0]["path"] = json!("../theme.json");
+        bad_manifest.extensions["themes"][0]["path"] = json!("../theme.json");
         assert!(load(&bad_manifest, root.path()).is_err());
     }
 
@@ -166,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn only_pure_contributions_count_as_themes() {
+    fn only_pure_extensions_count_as_themes() {
         let pure = package(json!([{ "path": "theme.json" }]), json!({}));
         assert!(is_theme(&pure));
         let native = package(
@@ -293,7 +293,7 @@ mod tests {
         write(root.path(), "theme.json", &theme("light"));
         for path in ["/etc/passwd", "ui/../theme.json", "a/b.json", ""] {
             let mut bad = manifest.clone();
-            bad.contributions["themes"][0]["path"] = json!(path);
+            bad.extensions["themes"][0]["path"] = json!(path);
             assert!(
                 load(&bad, root.path()).is_err(),
                 "path must be rejected: {path:?}"

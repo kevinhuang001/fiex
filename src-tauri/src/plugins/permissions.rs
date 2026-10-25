@@ -1,7 +1,8 @@
 //! Host-authorized plugin capabilities.
 //!
 //! The user-facing permission model is deliberately small:
-//! - `folders.read`: list directories and read entry metadata (including decoration data);
+//! - `metadata`: read attributes of the selected file or directory;
+//! - `folders.read`: list directories within the approved scope;
 //! - `folders.create`, `folders.delete`, `folders.rename`: independent entry operations;
 //! - `files.read`: read file contents;
 //! - `files.write`: modify file contents;
@@ -20,12 +21,16 @@ use std::{
 };
 
 pub const PERMISSIONS: &[&str] = &[
+    "metadata",
     "folders.read",
     "folders.create",
     "folders.delete",
     "folders.rename",
     "files.read",
     "files.write",
+    "files.create",
+    "files.delete",
+    "files.rename",
     "network",
     "commands",
 ];

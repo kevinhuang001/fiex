@@ -25,7 +25,7 @@ export function beforeOpenHooks(plugins: PluginInfo[], entry: Entry): BeforeOpen
   for (const plugin of plugins) {
     if (!plugin.enabled || !plugin.approved) continue
     if (!(plugin.grantedPermissions || []).includes('hooks')) continue
-    for (const hook of plugin.contributions?.hooks || []) {
+    for (const hook of plugin.extensions?.hooks || []) {
       if (hook.event !== 'beforeOpen' || !hook.method) continue
       const extensions = (hook.extensions || []).map((item) =>
         item.toLowerCase().replace(/^\./, ''),

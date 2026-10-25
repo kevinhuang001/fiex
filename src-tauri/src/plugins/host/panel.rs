@@ -42,7 +42,7 @@ fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Va
     }
     ["toolbar", "contextMenus", "preview"]
         .iter()
-        .filter_map(|key| manifest.contributions.get(key).and_then(Value::as_array))
+        .filter_map(|key| manifest.extensions.get(key).and_then(Value::as_array))
         .find_map(|items| walk(items, panel_id, 1))
 }
 /// Host-approved precompiled, self-contained iframe HTML. Plugins cannot
@@ -116,13 +116,13 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn manifest(contributions: Value) -> PluginManifest {
+    fn manifest(extensions: Value) -> PluginManifest {
         serde_json::from_value(json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "id": "test.panels",
             "name": "Panels",
             "version": "1.0.0",
-            "contributions": contributions
+            "extensions": extensions
         }))
         .unwrap()
     }
@@ -214,14 +214,14 @@ mod tests {
     #[test]
     fn preview_panels_resolve_like_toolbar_panels() {
         let manifest: PluginManifest = serde_json::from_value(json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "id": "org.test.preview",
             "name": "Preview",
             "version": "0.1.0",
             "description": "fixture",
-            "runtime": { "protocolVersion": "2.0", "entrypoints": {} },
+            "runtime": { "protocolVersion": "3.0", "entrypoints": {} },
             "permissions": {},
-            "contributions": {
+            "extensions": {
                 "preview": [{
                     "id": "docx",
                     "title": "Word",
@@ -237,7 +237,7 @@ mod tests {
             panel.get("entry").and_then(Value::as_str),
             Some("ui/index.html")
         );
-        assert!(manifest.contributions["preview"].is_array());
+        assert!(manifest.extensions["preview"].is_array());
     }
 
     #[test]

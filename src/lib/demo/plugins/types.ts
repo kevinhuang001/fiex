@@ -14,5 +14,5 @@ export interface DemoPlugin {
   requestedCommands?: string[]
   allowedCommands?: string[]
   author?: { name: string; url?: string }
-  contributions?: Record<string, unknown>
+  extensions?: Record<string, unknown>
 }

@@ -69,7 +69,7 @@ export function togglePreviewer(id: string, enabled: boolean) {
 export function pluginPreviewers(plugins: PluginInfo[]): Previewer[] {
   const values: Previewer[] = []
   for (const plugin of plugins) {
-    const entries = plugin.contributions?.preview
+    const entries = plugin.extensions?.preview
     if (!Array.isArray(entries)) continue
     for (const entry of entries) {
       const id = typeof entry?.id === 'string' ? entry.id : ''

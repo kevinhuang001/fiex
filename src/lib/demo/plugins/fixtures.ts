@@ -14,7 +14,7 @@ const fixturePlugin: DemoPlugin = {
   requestedNetworkDomains: [],
   allowedNetworkDomains: [],
   author: { name: 'Fiex Fixtures' },
-  contributions: {
+  extensions: {
     toolbar: [
       {
         id: 'fixture.tool',
@@ -90,7 +90,7 @@ export const fixturePlugins: DemoPlugin[] = [
     requestedCommands: ['git'],
     allowedCommands: ['git'],
     author: { name: 'Fiex Contributors' },
-    contributions: {
+    extensions: {
       vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
       toolbar: [
         {
@@ -119,7 +119,7 @@ export const fixturePlugins: DemoPlugin[] = [
     requestedNetworkDomains: [],
     allowedNetworkDomains: [],
     author: { name: 'Fiex Contributors' },
-    contributions: {
+    extensions: {
       contextMenus: [
         {
           id: 'checksum.calculate',

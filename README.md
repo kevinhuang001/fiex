@@ -13,7 +13,7 @@ macOS Finder tags appear as colored dots in list, icon and column views. Tags ca
 
 ### Find it quickly
 
-Search is a live filesystem walk backed by ripgrep's [`ignore`](https://crates.io/crates/ignore) walker. There is no persistent index and no background reindexing: every query sees the current directory state, respects the **display-ignore** rules from Settings, and stops at 500 results. Application bundles (`.app`, `.framework` and friends) are returned as results but never traversed. Advanced indexed or semantic search is supplied by optional plugins through `contributions.search`.
+Search is a live filesystem walk backed by ripgrep's [`ignore`](https://crates.io/crates/ignore) walker. There is no persistent index and no background reindexing: every query sees the current directory state, respects the **display-ignore** rules from Settings, and stops at 500 results. Application bundles (`.app`, `.framework` and friends) are returned as results but never traversed. Advanced indexed or semantic search is supplied by optional plugins through `extensions.search`.
 
 ### Work with your files
 

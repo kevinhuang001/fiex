@@ -31,8 +31,8 @@ export function PluginList({
       {plugins.map((plugin) => {
         const declared = plugin.declaredPermissions || []
         const enabled = plugin.enabled && plugin.approved
-        const hasSettings = (plugin.contributions?.settings || []).length > 0
-        const categories = pluginCategories(plugin.contributions, plugin.requestedCommands)
+        const hasSettings = (plugin.extensions?.settings || []).length > 0
+        const categories = pluginCategories(plugin.extensions, plugin.requestedCommands)
         return (
           <article className="plugin-row" key={plugin.id}>
             <div className={`plugin-row-icon ${enabled ? 'enabled' : ''}`}>
@@ -60,7 +60,7 @@ export function PluginList({
                 <span>{plugin.author?.name || '未知开发者'}</span>
                 <span aria-hidden>·</span>
                 <span>{declared.length ? `${declared.length} 项权限` : '无需宿主权限'}</span>
-                {plugin.contributions?.connections?.length ? (
+                {plugin.extensions?.connections?.length ? (
                   <>
                     <span aria-hidden>·</span>
                     <span>连接提供者</span>

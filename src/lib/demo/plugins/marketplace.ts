@@ -17,7 +17,7 @@ export const marketplace = [
     requestedNetworkDomains: ['github.com'],
     asset: 'git-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    contributions: {
+    extensions: {
       vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
       toolbar: [
         {
@@ -52,7 +52,7 @@ export const marketplace = [
     asset: 'webdav-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
+    extensions: {
       connections: [
         {
           id: 'webdav',
@@ -86,7 +86,7 @@ export const marketplace = [
     asset: 'smb-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
+    extensions: {
       connections: [
         {
           id: 'smb',
@@ -119,7 +119,7 @@ export const marketplace = [
     asset: 'archive-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
+    extensions: {
       contextMenus: [
         {
           id: 'archive.compress',
@@ -157,7 +157,7 @@ export const marketplace = [
     asset: 'checksum-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
+    extensions: {
       info: [
         {
           id: 'checksum.info',

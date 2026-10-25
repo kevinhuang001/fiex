@@ -148,7 +148,7 @@ pub fn owner(plugin_id: &str, contribution: &str) -> Result<(), String> {
         .find(|p| p.id == plugin_id && p.enabled && p.approved && p.backend_available)
         .ok_or("PermissionDenied: VFS owner unavailable")?;
     if !plugin
-        .contributions
+        .extensions
         .get("vfs")
         .and_then(Value::as_array)
         .is_some_and(|items| items.iter().any(|v| v["id"].as_str() == Some(contribution)))

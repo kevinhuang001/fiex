@@ -269,6 +269,39 @@ pub fn list(root: &Scope, input: &str) -> Result<Value, String> {
 pub fn stat(root: &Scope, input: &str) -> Result<Value, String> {
     entry(&directory(root)?, &relative(root, input)?)
 }
+pub fn is_directory(root: &Scope, input: &str) -> Result<bool, String> {
+    let path = relative(root, input)?;
+    let metadata = directory(root)?.symlink_metadata(path).map_err(|e| e.to_string())?;
+    Ok(metadata.is_dir())
+}
+/// Preserve input order and isolate failures so one inaccessible selection does
+/// not disclose its attributes or prevent metadata for the other selections.
+pub fn stat_batch(root: &Scope, paths: &[Value]) -> Result<Value, String> {
+    if paths.len() > 256 {
+        return Err("stat batch exceeds 256 entries".into());
+    }
+    let dir = directory(root)?;
+    let mut seen = std::collections::HashSet::new();
+    let results: Vec<Value> = paths
+        .iter()
+        .map(|value| {
+            let Some(path) = value.as_str() else {
+                return json!({"error": "invalid path"});
+            };
+            let Ok(relative) = relative(root, path) else {
+                return json!({"error": "permission denied"});
+            };
+            if !seen.insert(relative.clone()) {
+                return json!({"error": "duplicate selection"});
+            }
+            match entry(&dir, &relative) {
+                Ok(metadata) => json!({"metadata": metadata}),
+                Err(_) => json!({"error": "metadata unavailable"}),
+            }
+        })
+        .collect();
+    Ok(json!({"results": results}))
+}
 pub fn create(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
@@ -349,6 +382,11 @@ struct PendingWrite {
     path: PathBuf,
     original: Option<Fingerprint>,
     staging: tempfile::NamedTempFile,
+}
+pub fn writer_permission(owner: &str, handle: &str) -> Result<&'static str, String> {
+    let pending = writes().lock().map_err(|_| "write registry unavailable")?;
+    let write = pending.get(handle).filter(|v| v.owner == owner).ok_or("write handle unavailable")?;
+    Ok(if write.original.is_some() { "files.write" } else { "files.create" })
 }
 
 /// Cheap conflict detector: a full content hash costs a second read of a large
@@ -705,6 +743,24 @@ mod tests {
         assert!(stat(&scope, "private").is_err());
         let empty = Scope::selected(root.path(), &[]).unwrap();
         assert!(read_chunk(&empty, "chosen", 0, 8).is_err());
+    }
+    #[test]
+    fn batch_stat_keeps_order_and_hides_unselected_entries() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("chosen"), b"ok").unwrap();
+        std::fs::write(root.path().join("private"), b"secret").unwrap();
+        let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
+        let result = stat_batch(
+            &scope,
+            &[json!("chosen"), json!("private"), json!("chosen"), json!(null)],
+        )
+        .unwrap();
+        assert_eq!(result["results"][0]["metadata"]["name"], "chosen");
+        assert!(result["results"][1].get("metadata").is_none());
+        assert_eq!(result["results"][1]["error"], "permission denied");
+        assert_eq!(result["results"][2]["error"], "duplicate selection");
+        assert_eq!(result["results"][3]["error"], "invalid path");
+        assert!(stat_batch(&scope, &vec![json!("chosen"); 257]).is_err());
     }
     #[test]
     fn selected_directory_allows_descendants_only() {

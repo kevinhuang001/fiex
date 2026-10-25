@@ -19,9 +19,9 @@ export function ConnectionDialog({
   const choices = useMemo(
     () =>
       plugins.flatMap((plugin) => {
-        const ok = plugin.enabled && Boolean(plugin.contributions?.connections?.length)
+        const ok = plugin.enabled && Boolean(plugin.extensions?.connections?.length)
         return ok
-          ? (plugin.contributions?.connections || []).map((factory) => ({
+          ? (plugin.extensions?.connections || []).map((factory) => ({
               plugin,
               factory,
             }))

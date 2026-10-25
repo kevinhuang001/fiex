@@ -2,7 +2,7 @@
 //!
 //! There is no persistent index: each query walks the current filesystem state
 //! with `ignore::WalkBuilder`. Advanced indexed/semantic search belongs in a
-//! plugin through `contributions.search`.
+//! plugin through `extensions.search`.
 use crate::{
     files::{entry, Entry},
     ignores::IgnoreSet,

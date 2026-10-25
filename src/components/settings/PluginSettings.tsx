@@ -28,7 +28,7 @@ export function PluginSettings() {
   const categories = useMemo(() => {
     const counts = new Map<string, number>()
     for (const plugin of plugins) {
-      for (const id of pluginCategories(plugin.contributions, plugin.requestedCommands)) {
+      for (const id of pluginCategories(plugin.extensions, plugin.requestedCommands)) {
         counts.set(id, (counts.get(id) || 0) + 1)
       }
     }
@@ -39,7 +39,7 @@ export function PluginSettings() {
       category === 'all'
         ? plugins
         : plugins.filter((plugin) =>
-            pluginCategories(plugin.contributions, plugin.requestedCommands).includes(category),
+            pluginCategories(plugin.extensions, plugin.requestedCommands).includes(category),
           ),
     [plugins, category],
   )
@@ -107,7 +107,7 @@ export function PluginSettings() {
     setLocalPreview(null)
   }
 
-  const fields = settingsFor?.contributions?.settings || []
+  const fields = settingsFor?.extensions?.settings || []
   useEffect(() => {
     if (!settingsFor) return
     let alive = true

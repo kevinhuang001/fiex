@@ -1,6 +1,6 @@
 //! Read-only presentation decorations from plugins.
 //!
-//! A plugin must explicitly declare `contributions.decorations`; plugins that
+//! A plugin must explicitly declare `extensions.decorations`; plugins that
 //! do not are never called. Declarative rules are applied by Core locally.
 //!
 //! The `types` module holds the serialized value types, `rules` evaluates

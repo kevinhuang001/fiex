@@ -41,7 +41,7 @@ fn main() {
         plugin_host::activate(&id, &consent).expect("permission activation failed");
         let mut panels = Vec::new();
         for key in ["toolbar", "contextMenus"] {
-            if let Some(items) = manifest.contributions.get(key).and_then(Value::as_array) {
+            if let Some(items) = manifest.extensions.get(key).and_then(Value::as_array) {
                 collect_panels(items, 1, &mut panels);
             }
         }

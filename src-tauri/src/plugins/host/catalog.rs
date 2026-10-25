@@ -16,7 +16,7 @@ pub struct PluginInfo {
     pub version: String,
     pub description: String,
     pub icon: Option<String>,
-    pub contributions: Value,
+    pub extensions: Value,
     pub backend_available: bool,
     pub enabled: bool,
     pub author: Option<PluginAuthor>,
@@ -67,11 +67,11 @@ pub(crate) fn discover() -> Vec<(PluginManifest, PathBuf)> {
             let Ok(manifest) = serde_json::from_slice::<PluginManifest>(&bytes) else {
                 continue;
             };
-            if let Err(error) = super::manifest::validate_contributions(&manifest.contributions) {
+            if let Err(error) = super::manifest::validate_extensions(&manifest.extensions) {
                 eprintln!("plugin {} manifest rejected: {error}", manifest.id);
                 continue;
             }
-            if manifest.schema_version != 1
+            if manifest.schema_version != 2
                 || (!crate::plugin_themes::is_theme(&manifest)
                     && manifest.runtime.protocol_version != plugin_sdk::PROTOCOL_VERSION)
                 || !valid_id(&manifest.id)
@@ -145,7 +145,7 @@ pub fn catalog() -> Vec<PluginInfo> {
                 version: manifest.version,
                 description: manifest.description,
                 icon: manifest.icon,
-                contributions: manifest.contributions,
+                extensions: manifest.extensions,
                 backend_available: backend,
                 enabled: active,
                 author: manifest.author,

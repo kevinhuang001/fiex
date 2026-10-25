@@ -22,7 +22,7 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
   const lastPointer = useRef({ x: window.innerWidth - 18, y: 96 })
   const pinnedKeys = prefs.pinnedPluginTools || []
   const availableTools: PluginToolEntry[] = plugins.flatMap((plugin) =>
-    plugin.enabled ? (plugin.contributions?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
+    plugin.enabled ? (plugin.extensions?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
   )
   const pinnedTools = pinnedKeys.flatMap((key) => {
     const found = availableTools.find(({ plugin, tool }) => pluginKey(plugin.id, tool.id) === key)

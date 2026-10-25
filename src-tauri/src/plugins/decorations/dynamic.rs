@@ -38,11 +38,8 @@ struct DecorationScope {
 
 fn config(manifest: &PluginManifest) -> DecorationConfig {
     manifest
-        .permissions
-        .folders
-        .read
-        .decorations
-        .as_ref()
+        .extensions
+        .get("decorations")
         .and_then(|value| serde_json::from_value(value.clone()).ok())
         .unwrap_or_default()
 }

@@ -1,6 +1,6 @@
-//! "Show info" metadata: Core-native media probes plus plugin contributions.
+//! "Show info" metadata: Core-native media probes plus plugin extensions.
 //!
-//! Plugins declare `contributions.info` entries with a command, optional
+//! Plugins declare `extensions.info` entries with a command, optional
 //! extensions and a title. Core invokes a matching plugin for the selected file
 //! through the normal operation-scoped plugin bridge, then renders the returned
 //! rows beside the native file facts.
@@ -290,10 +290,10 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
         if !plugin.enabled || !plugin.approved || !plugin.backend_available {
             continue;
         }
-        let Some(contributions) = plugin.contributions.get("info").and_then(Value::as_array) else {
+        let Some(extensions) = plugin.extensions.get("info").and_then(Value::as_array) else {
             continue;
         };
-        let mut matching = contributions
+        let mut matching = extensions
             .iter()
             .filter(|contribution| extension_matches(contribution, &ext, is_dir))
             .collect::<Vec<_>>();

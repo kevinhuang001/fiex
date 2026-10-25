@@ -355,7 +355,7 @@ pub(crate) fn plugin_secret_set(
     let permitted = crate::plugin_host::catalog()
         .into_iter()
         .find(|p| p.id == plugin_id)
-        .and_then(|p| p.contributions.get("settings").cloned())
+        .and_then(|p| p.extensions.get("settings").cloned())
         .and_then(|v| v.as_array().cloned())
         .is_some_and(|fields| {
             fields.iter().any(|f| {

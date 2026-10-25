@@ -40,7 +40,7 @@ export interface MarketplacePlugin {
   permissions: string[]
   requestedNetworkDomains: string[]
   commands: string[]
-  contributions?: PluginContributions
+  extensions?: PluginExtensions
   asset: string
   repository: string
 }
@@ -64,9 +64,9 @@ export interface PluginInfo {
   /** Requested commands that Core cannot resolve on PATH right now. */
   missingCommands: string[]
   backendAvailable: boolean
-  contributions?: PluginContributions
+  extensions?: PluginExtensions
 }
-export interface PluginContributions {
+export interface PluginExtensions {
   connections?: Array<{ id: string; title: string; fields: PluginField[] }>
   toolbar?: PluginContribution[]
   contextMenus?: PluginContribution[]
@@ -100,13 +100,10 @@ export const PLUGIN_CATEGORIES = [
   { id: 'themes', label: '主题' },
   { id: 'commands', label: '命令' },
 ] as const
-export function pluginCategories(
-  contributions?: PluginContributions,
-  commands: string[] = [],
-): string[] {
+export function pluginCategories(extensions?: PluginExtensions, commands: string[] = []): string[] {
   const present = PLUGIN_CATEGORIES.filter(({ id }) => {
     if (id === 'commands') return false
-    const value = contributions?.[id as keyof PluginContributions]
+    const value = extensions?.[id as keyof PluginExtensions]
     return Array.isArray(value) && value.length > 0
   }).map(({ id }) => id)
   if (!present.length && commands.length) present.push('commands')

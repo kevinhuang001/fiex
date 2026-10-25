@@ -263,7 +263,7 @@ mod tests {
             hash_file(&temp.path().join("payload.bin")).unwrap(),
         )]);
         let manifest = PluginManifest {
-            schema_version: 1,
+            schema_version: 2,
             id: "com.example.test".into(),
             name: "Test".into(),
             version: "1.0.0".into(),
@@ -271,7 +271,7 @@ mod tests {
             icon: None,
             runtime: crate::plugin_host::PluginRuntime::default(),
             permissions: crate::plugin_host::PluginPermissions::default(),
-            contributions: Value::Null,
+            extensions: Value::Null,
             author: None,
             publisher: Some(publisher),
             files,

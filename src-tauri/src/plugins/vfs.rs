@@ -1,8 +1,8 @@
 //! Generic plugin-owned virtual filesystems.
 //!
-//! Explicit VFS contributions are routed through Core-owned view identities.
+//! Explicit VFS extensions are routed through Core-owned view identities.
 //! Connections use the same URI resolver and the existing remote I/O adapter.
-//! UI contributions never confer provider eligibility.
+//! UI extensions never confer provider eligibility.
 use crate::files::{Entry, Listing};
 use serde_json::{json, Value};
 

@@ -25,7 +25,7 @@ pub fn query(request: &PluginSearchInput) -> Vec<Entry> {
             continue;
         }
         let Some(searches) = plugin
-            .contributions
+            .extensions
             .get("search")
             .and_then(serde_json::Value::as_array)
         else {

@@ -44,7 +44,7 @@ pub(crate) fn declared_connection_fields(
         })
         .ok_or("连接插件尚未安装、启用或授权")?;
     let factory = plugin
-        .contributions
+        .extensions
         .get("connections")
         .and_then(serde_json::Value::as_array)
         .and_then(|factories| {

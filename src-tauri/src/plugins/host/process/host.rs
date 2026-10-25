@@ -175,7 +175,7 @@ impl PluginHost {
                 .as_str()
                 .ok_or("missing VFS contribution")?;
             if !manifest
-                .contributions
+                .extensions
                 .get("vfs")
                 .and_then(Value::as_array)
                 .is_some_and(|items| {
@@ -192,12 +192,21 @@ impl PluginHost {
         }
         if (method.starts_with("fs.") || method.starts_with("connection."))
             && manifest
-                .contributions
+                .extensions
                 .get("connections")
                 .and_then(Value::as_array)
                 .is_none_or(|v| v.is_empty())
         {
             return Err("PermissionDenied: connection factory declaration required".into());
+        }
+        if method.starts_with("fs.")
+            && manifest
+                .extensions
+                .get("vfs")
+                .and_then(Value::as_array)
+                .is_none_or(|providers| providers.is_empty())
+        {
+            return Err("PermissionDenied: VFS provider declaration required".into());
         }
         let required = activation_requirements(&manifest)?;
         let state = crate::plugin_permissions::status(plugin_id, &required.permissions)?;
