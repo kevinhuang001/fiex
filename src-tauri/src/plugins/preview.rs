@@ -3,9 +3,8 @@
 //! Providers are matched by extension/MIME and priority. Built-ins use a
 //! trusted local file; plugins receive a permission-projected `EventContext`
 //! and return a package-confined `PreviewView`.
-use crate::plugin_contracts::{
-    EventContext, PreviewView, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
-};
+use crate::plugin_contracts::PreviewView;
+use crate::plugin_resource_context::ResourceSnapshot;
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -175,44 +174,6 @@ pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
         .collect()
 }
 
-fn resource_ref(display: &str) -> ResourceRef {
-    if crate::mounts::handles(display) {
-        if let Ok(uri) = crate::mounts::parse(display) {
-            return ResourceRef {
-                mount_id: uri.mount_id,
-                node_id: format!("fiex-resource:{}", uri.relative),
-            };
-        }
-    }
-    ResourceRef {
-        mount_id: "local".into(),
-        node_id: format!(
-            "fiex-resource:{}",
-            crate::mounts::new_id().unwrap_or_default()
-        ),
-    }
-}
-
-fn metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
-    let value = fs::symlink_metadata(local).ok()?;
-    let extension = Path::new(name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.to_ascii_lowercase());
-    Some(ResourceMetadata {
-        name: name.into(),
-        kind: if value.is_dir() { "directory" } else { "file" }.into(),
-        mime: extension.as_deref().map(crate::plugin_match::mime_for),
-        extension,
-        size: (!value.is_dir()).then_some(value.len()),
-        modified: value
-            .modified()
-            .ok()
-            .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|value| value.as_secs() as i64),
-    })
-}
-
 fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, String> {
     let name = name_of(local);
     let ext = extension(local);
@@ -356,24 +317,13 @@ fn open_plugin(
     if !rules.matches(&ext, &mime_for(&ext), local_path.is_dir()) {
         return Err("preview provider does not match this file type".into());
     }
-    let name = name_of(local_path);
     let directory = local_path
         .parent()
         .ok_or("preview file has no parent")?
         .to_path_buf();
-    let session_id = crate::mounts::new_id()?;
-    let context = EventContext {
-        session_id: session_id.clone(),
-        targets: vec![ResourceContext {
-            reference: resource_ref(display),
-            metadata: metadata_allowed
-                .then(|| metadata(local_path, &name))
-                .flatten(),
-            read: read_allowed.then(|| ScopedRead {
-                resource_id: crate::plugin_scoped_reads::register(plugin_id, &session_id, &name),
-            }),
-        }],
-    };
+    let snapshot = ResourceSnapshot::new(display, local_path);
+    let context = snapshot.context(plugin_id, metadata_allowed, read_allowed);
+    let session_id = context.session_id.clone();
     let params = serde_json::to_value(&context).map_err(|error| error.to_string())?;
     let selected = [local_path.to_path_buf()];
     let result = crate::plugin_events::invoke_selected(

@@ -4,13 +4,12 @@
 //! Core builds an `EventContext` after permission projection, invokes the
 //! matching provider, and merges the decoded `InfoResponse` with native
 //! metadata and media probes.
-use crate::plugin_contracts::{
-    EventContext, InfoResponse, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
-};
+use crate::plugin_contracts::{EventContext, InfoResponse, ResourceMetadata};
+use crate::plugin_resource_context::ResourceSnapshot;
 use serde::Serialize;
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::Path,
     time::Duration,
 };
 
@@ -311,9 +310,9 @@ fn size_text(bytes: u64) -> String {
 fn metadata_section(
     display: &str,
     local: &Path,
+    metadata: Option<&std::fs::Metadata>,
     projected: Option<&ResourceMetadata>,
 ) -> InfoSection {
-    let metadata = std::fs::symlink_metadata(local).ok();
     let is_dir = metadata.as_ref().is_some_and(|value| value.is_dir());
     let name = projected
         .map(|value| value.name.clone())
@@ -393,79 +392,12 @@ fn metadata_section(
     }
 }
 
-fn resource_ref(display: &str) -> ResourceRef {
-    if crate::mounts::handles(display) {
-        if let Ok(uri) = crate::mounts::parse(display) {
-            return ResourceRef {
-                mount_id: uri.mount_id,
-                node_id: format!("fiex-resource:{}", uri.relative),
-            };
-        }
-    }
-    ResourceRef {
-        mount_id: "local".into(),
-        node_id: format!(
-            "fiex-resource:{}",
-            crate::mounts::new_id().unwrap_or_default()
-        ),
-    }
-}
-
-fn projected_metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
-    let metadata = std::fs::symlink_metadata(local).ok()?;
-    let extension = Path::new(name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.to_ascii_lowercase());
-    let mime = extension.as_deref().map(crate::plugin_match::mime_for);
-    Some(ResourceMetadata {
-        name: name.into(),
-        kind: if metadata.is_dir() {
-            "directory"
-        } else {
-            "file"
-        }
-        .into(),
-        extension,
-        mime,
-        size: (!metadata.is_dir()).then_some(metadata.len()),
-        modified: metadata
-            .modified()
-            .ok()
-            .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|value| value.as_secs() as i64),
-    })
-}
-
 fn decode_response(value: &serde_json::Value) -> Option<InfoResponse> {
     match serde_json::from_value::<InfoResponse>(value.clone()) {
         Ok(response) => Some(response),
         Err(error) => {
             eprintln!("invalid info response: {error}");
             None
-        }
-    }
-}
-
-#[derive(Clone)]
-struct ResourceDescriptor {
-    local: PathBuf,
-    reference: ResourceRef,
-    is_dir: bool,
-    ext: String,
-    mime: String,
-    name: String,
-}
-
-impl ResourceDescriptor {
-    fn new(display: &str, local: &Path) -> Self {
-        Self {
-            local: local.to_path_buf(),
-            reference: resource_ref(display),
-            is_dir: local.is_dir(),
-            ext: extension(local),
-            mime: crate::plugin_match::mime_for(&extension(local)),
-            name: name_of(local),
         }
     }
 }
@@ -492,32 +424,7 @@ impl Candidate {
     }
 }
 
-fn make_context(
-    resource: &ResourceDescriptor,
-    owner: &str,
-    metadata_allowed: bool,
-    read_allowed: bool,
-) -> EventContext {
-    let session_id = crate::mounts::new_id().unwrap_or_default();
-    EventContext {
-        session_id: session_id.clone(),
-        targets: vec![ResourceContext {
-            reference: resource.reference.clone(),
-            metadata: metadata_allowed
-                .then(|| projected_metadata(&resource.local, &resource.name))
-                .flatten(),
-            read: (read_allowed && !resource.is_dir).then(|| ScopedRead {
-                resource_id: crate::plugin_scoped_reads::register(
-                    owner,
-                    &session_id,
-                    &resource.name,
-                ),
-            }),
-        }],
-    }
-}
-
-fn candidates(resource: &ResourceDescriptor) -> Vec<Candidate> {
+fn candidates(resource: &ResourceSnapshot) -> Vec<Candidate> {
     let mut values = vec![Candidate::Metadata];
     if !resource.is_dir {
         values.push(Candidate::Media);
@@ -587,11 +494,13 @@ fn resolve_builtin(
     context: &EventContext,
     local: &Path,
     display: &str,
+    resource_stat: Option<&std::fs::Metadata>,
 ) -> Vec<InfoSection> {
     match candidate {
         Candidate::Metadata => vec![metadata_section(
             display,
             local,
+            resource_stat,
             context
                 .targets
                 .first()
@@ -651,13 +560,13 @@ fn resolve_plugin(
 /// remote materializations; `local` is the Core-owned file used for probes.
 pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
     let local_path = Path::new(local);
-    let resource = ResourceDescriptor::new(display, local_path);
+    let resource = ResourceSnapshot::new(display, local_path);
     let mut sections = Vec::new();
     for candidate in candidates(&resource) {
         match &candidate {
             Candidate::Metadata | Candidate::Media => {
-                let context = make_context(&resource, "__core__", true, !resource.is_dir);
-                let mut resolved = resolve_builtin(&candidate, &context, local_path, display);
+                let context = resource.context("__core__", true, !resource.is_dir);
+                let mut resolved = resolve_builtin(&candidate, &context, local_path, display, resource.stat.as_ref());
                 if let Candidate::Metadata = candidate {
                     // Use the display path Core originally received.
                     if let Some(section) = resolved.first_mut() {
@@ -677,7 +586,7 @@ pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
                 read_allowed,
                 ..
             } => {
-                let context = make_context(&resource, &plugin.id, *metadata_allowed, *read_allowed);
+                let context = resource.context(&plugin.id, *metadata_allowed, *read_allowed);
                 sections.extend(resolve_plugin(plugin, contribution, &context, local_path));
             }
         }
