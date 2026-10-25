@@ -32,25 +32,7 @@ const fixturePlugin: DemoPlugin = {
         command: 'search.query',
       },
     ],
-    contextMenus: [
-      {
-        id: 'fixture.root',
-        title: '测试插件',
-        when: 'context.selection.count > 0',
-        children: [
-          {
-            id: 'fixture.panel',
-            title: '信息面板',
-            panel: {
-              entry: 'ui/index.html',
-              title: '信息面板',
-              defaultSize: { width: 620, height: 560 },
-            },
-          },
-          { id: 'fixture.action', title: '检查文件', command: 'fixture.inspect' },
-        ],
-      },
-    ],
+    contextMenus: true,
   },
 }
 
@@ -120,15 +102,7 @@ export const fixturePlugins: DemoPlugin[] = [
     allowedNetworkDomains: [],
     author: { name: 'Fiex Contributors' },
     extensions: {
-      contextMenus: [
-        {
-          id: 'checksum.calculate',
-          title: '查看校验和',
-          when: 'context.selection.isFile',
-          command: 'checksum.calculate',
-          resultView: 'checksum',
-        },
-      ],
+      contextMenus: true,
     },
   },
 ]

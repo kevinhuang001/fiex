@@ -4,33 +4,6 @@ export const query = new URLSearchParams(location.search)
 export const officialMode =
   query.has('officialPlugins') ||
   (import.meta.env.DEV && !query.has('demo') && !query.has('pluginFixture'))
-const archiveFormats = [
-  ['zip', 'ZIP'],
-  ['rar', 'RAR'],
-  ['7z', '7z'],
-  ['tar', 'TAR'],
-  ['tar.gz', 'TAR.GZ'],
-  ['tar.bz2', 'TAR.BZ2'],
-  ['tar.xz', 'TAR.XZ'],
-] as const
-const archiveItems = (picker: boolean) =>
-  archiveFormats.map(([format, title]) => ({
-    id: `archive.${picker ? 'to.' : ''}${format}`,
-    title,
-    command: 'archive.compress',
-    args: { format },
-    ...(picker
-      ? {
-          picker: {
-            mode: 'saveFile',
-            suggestedName: `Archive.${format}`,
-            extensions: [format.split('.').pop()],
-            param: 'destination',
-          },
-        }
-      : {}),
-  }))
-
 export const officialPlugins: DemoPlugin[] = officialMode
   ? [
       {
@@ -115,31 +88,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
         extensions: {
-          contextMenus: [
-            {
-              id: 'archive.compress',
-              title: '压缩',
-              when: 'context.selection.isNotArchive',
-              children: [
-                ...archiveItems(false),
-                {
-                  id: 'archive.advanced',
-                  title: '高级压缩…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: '高级压缩',
-                    defaultSize: { width: 400, height: 420 },
-                  },
-                },
-              ],
-            },
-            {
-              id: 'archive.extract',
-              title: '解压缩',
-              when: 'context.selection.isArchive',
-              command: 'archive.extract',
-            },
-          ],
+          contextMenus: true,
           settings: [
             {
               id: 'compressIgnores',
@@ -334,52 +283,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
               },
             },
           ],
-          contextMenus: [
-            {
-              id: 'gpg.menu',
-              title: 'GPG',
-              when: 'context.selection.count > 0',
-              children: [
-                {
-                  id: 'gpg.encrypt',
-                  title: '加密…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: 'GPG 加密',
-                    defaultSize: { width: 560, height: 520 },
-                  },
-                },
-                {
-                  id: 'gpg.decrypt',
-                  title: '解密…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: 'GPG 解密',
-                    defaultSize: { width: 520, height: 400 },
-                  },
-                },
-                {
-                  id: 'gpg.sign',
-                  title: '签名…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: 'GPG 签名',
-                    defaultSize: { width: 540, height: 470 },
-                  },
-                },
-                {
-                  id: 'gpg.verify',
-                  title: '验证签名…',
-                  when: 'context.selection.count == 1',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: '验证签名',
-                    defaultSize: { width: 520, height: 420 },
-                  },
-                },
-              ],
-            },
-          ],
+          contextMenus: true,
         },
       },
       {
