@@ -530,7 +530,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
     case 'plugin_file_dialog': {
       const extensions = Array.isArray(a.extensions) ? a.extensions : []
       if (a.mode === 'openFile' && extensions.includes('png')) {
-        return '/demo/background.svg'
+        return '/demo/dog.svg'
       }
       if (a.mode === 'saveFile') return '/Users/kevin/Documents/Archive.zip'
       if (a.mode === 'openFile') return '/Users/kevin/Documents/Archive.zip'
