@@ -73,13 +73,6 @@ pub fn is_protected_method(method: &str) -> bool {
             "vfs.",
             "fs.",
             "connection.",
-            "preview.",
-            "info.",
-            "decorations.",
-            "search.",
-            "toolbar.",
-            "hooks.",
-            "terminal.",
         ]
         .iter()
         .any(|prefix| method.starts_with(prefix))
@@ -136,7 +129,13 @@ mod tests {
         ] {
             assert!(is_protected_method(method), "{method}");
         }
-        for method in ["checksum.calculate", "git.stage", "archive.compress"] {
+        for method in [
+            "checksum.calculate",
+            "git.stage",
+            "archive.compress",
+            "search.status",
+            "search.rebuild",
+        ] {
             assert!(!is_protected_method(method), "{method}");
         }
     }
