@@ -43,6 +43,76 @@ function terminalTheme() {
   }
 }
 
+/** Tiny interactive shell used only by the web demo. It never executes input. */
+function attachDemoShell(terminal: { write: (value: string) => void }, cwd?: string) {
+  const home = cwd && !cwd.includes('://') ? cwd : '/Users/kevin/Documents'
+  let line = ''
+  const prompt = '\x1b[32muser@fiex\x1b[0m:\x1b[34m~\x1b[0m$ '
+  const write = (value: string) => terminal.write(value)
+  write(
+    '\x1b[1;36mFiex 终端\x1b[0m\r\n' +
+      '\x1b[90mWeb demo shell — 桌面版会在这里启动真实本地 shell。输入 help 查看命令。\x1b[0m\r\n\r\n' +
+      prompt,
+  )
+  const run = (command: string) => {
+    const [name, ...args] = command.trim().split(/\s+/)
+    const arg = args.join(' ')
+    switch (name) {
+      case '':
+        break
+      case 'help':
+        write('\r\n可用命令：ls  pwd  echo  whoami  date  clear  help\r\n')
+        break
+      case 'ls':
+        write('\r\nDocuments  Downloads  Music  Pictures  README.md  package.json\r\n')
+        break
+      case 'pwd':
+        write(`\r\n${home}\r\n`)
+        break
+      case 'echo':
+        write(`\r\n${arg}\r\n`)
+        break
+      case 'whoami':
+        write('\r\nuser\r\n')
+        break
+      case 'date':
+        write(`\r\n${new Date().toString()}\r\n`)
+        break
+      case 'clear':
+        write('\x1b[2J\x1b[H')
+        return
+      default:
+        write(`\r\ncommand not found: ${name}（这是 Web 演示终端）\r\n`)
+    }
+  }
+  const disposable = (
+    terminal as unknown as {
+      onData: (listener: (data: string) => void) => { dispose: () => void }
+    }
+  ).onData((data) => {
+    for (const character of data) {
+      if (character === '\r' || character === '\n') {
+        write('\r\n')
+        run(line)
+        line = ''
+        write(prompt)
+      } else if (character === '\x7f') {
+        if (line) {
+          line = line.slice(0, -1)
+          write('\b \b')
+        }
+      } else if (character === '\x03') {
+        write('^C\r\n' + prompt)
+        line = ''
+      } else if (character >= ' ') {
+        line += character
+        write(character)
+      }
+    }
+  })
+  return () => disposable.dispose()
+}
+
 /** Built-in SSH terminal; uses the system OpenSSH client through a real PTY. */
 export function TerminalView({
   connectionId,
@@ -131,15 +201,12 @@ export function TerminalView({
     setError('')
     if (!native) {
       setStatus('demo')
-      terminal.write(
-        '\x1b[1;36mFiex 终端\x1b[0m\r\n' +
-          '\x1b[90mWeb 预览不会启动本地 shell 或 OpenSSH。打开桌面版后，这里会连接真实终端。\x1b[0m\r\n\r\n' +
-          '\x1b[32muser@fiex\x1b[0m:\x1b[34m~\x1b[0m$ ',
-      )
+      const disposeShell = attachDemoShell(terminal, cwd)
       return () => {
         disposed = true
         observer.disconnect()
         window.removeEventListener('fiex:theme-changed', applyTheme)
+        disposeShell()
         terminal.dispose()
       }
     }
