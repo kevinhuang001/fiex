@@ -242,6 +242,9 @@ fn exports() -> &'static std::sync::Mutex<std::collections::HashMap<String, temp
     > = std::sync::OnceLock::new();
     EXPORTS.get_or_init(Default::default)
 }
+// On Windows, writable temp exports must be cleared before removal. This code
+// is compiled only for Windows; its Unix permission semantics are irrelevant.
+#[cfg_attr(windows, allow(clippy::permissions_set_readonly_false))]
 pub fn cleanup_exports() {
     if let Ok(mut exports) = exports().lock() {
         #[cfg(windows)]
