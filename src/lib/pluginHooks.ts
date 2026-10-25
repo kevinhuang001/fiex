@@ -6,10 +6,9 @@ import type { Entry } from './types'
  * first; a hook returns `handled: true` to consume the open, or anything else
  * to let the next hook (and finally Core's default open) run. */
 export interface BeforeOpenHook {
-  id: string
   pluginId: string
   pluginName: string
-  method: string
+  event: 'beforeOpen'
   priority: number
   extensions: string[]
 }
@@ -26,22 +25,21 @@ export function beforeOpenHooks(plugins: PluginInfo[], entry: Entry): BeforeOpen
     if (!plugin.enabled || !plugin.approved) continue
     if (!(plugin.grantedPermissions || []).includes('hooks')) continue
     for (const hook of plugin.extensions?.hooks || []) {
-      if (hook.event !== 'beforeOpen' || !hook.method) continue
+      if (hook.event !== 'beforeOpen') continue
       const extensions = (hook.extensions || []).map((item) =>
         item.toLowerCase().replace(/^\./, ''),
       )
       if (extensions.length && !extensions.includes(extension)) continue
       hooks.push({
-        id: `${plugin.id}:${hook.id}`,
         pluginId: plugin.id,
         pluginName: plugin.name,
-        method: hook.method,
+        event: 'beforeOpen',
         priority: hook.priority ?? 100,
         extensions,
       })
     }
   }
-  return hooks.sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id))
+  return hooks.sort((a, b) => b.priority - a.priority || a.pluginId.localeCompare(b.pluginId))
 }
 
 export interface BeforeOpenOutcome {
@@ -63,8 +61,9 @@ export async function runBeforeOpenHooks(
     try {
       const result = await call<{ handled?: boolean; preview?: boolean }>('plugin_invoke', {
         pluginId: hook.pluginId,
-        method: hook.method,
+        method: 'hooks.invoke',
         params: {
+          event: hook.event,
           path: entry.path,
           name: entry.name,
           extension: entry.extension,
@@ -78,7 +77,7 @@ export async function runBeforeOpenHooks(
       void call('plugin_error_report', {
         pluginId: hook.pluginId,
         source: 'plugin',
-        message: `${hook.method}: ${String(error).slice(0, 400)}`,
+        message: `${hook.event}: ${String(error).slice(0, 400)}`,
       }).catch(() => {})
     }
   }

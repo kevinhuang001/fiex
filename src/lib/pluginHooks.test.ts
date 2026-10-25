@@ -30,12 +30,12 @@ const plugin = (id: string, priority: number, hooks = true): PluginInfo => ({
   allowedNetworkAll: false,
   allowedNetworkDomains: [],
   extensions: {
-    hooks: [{ id: 'beforeOpen', event: 'beforeOpen', method: `${id}.open`, priority }],
+    hooks: [{ event: 'beforeOpen', priority }],
   },
 })
 
 describe('beforeOpenHooks', () => {
-  it('orders by priority and breaks ties by id', () => {
+  it('orders by priority and breaks ties by plugin id', () => {
     const hooks = beforeOpenHooks([plugin('b', 100), plugin('a', 100), plugin('c', 300)], entry)
     expect(hooks.map((hook) => hook.pluginId)).toEqual(['c', 'a', 'b'])
   })

@@ -316,7 +316,31 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                 "extensions.{key}.title is removed; the plugin name is used"
             ));
         }
+        if key == "info" && object.contains_key("id") {
+            return Err("extensions.info.id is not used; remove it".into());
+        }
         validate_match(object.get("match"), false, false)?;
+    }
+    for key in ["search", "hooks"] {
+        let Some(items) = value.get(key) else {
+            continue;
+        };
+        let items = items
+            .as_array()
+            .ok_or_else(|| format!("extensions.{key} must be an array"))?;
+        for item in items {
+            let object = item
+                .as_object()
+                .ok_or_else(|| format!("extensions.{key} entries must be objects"))?;
+            if key == "search" && (object.contains_key("title") || object.contains_key("command")) {
+                return Err(
+                    "extensions.search.title/command are removed; search.query is fixed".into(),
+                );
+            }
+            if key == "hooks" && object.contains_key("method") {
+                return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());
+            }
+        }
     }
     for key in ["vfs", "connections", "toolbar"] {
         let Some(items) = value.get(key) else {
@@ -438,15 +462,16 @@ mod contribution_tests {
         }))
         .is_ok());
         assert!(validate_extensions(&serde_json::json!({
-            "info": {"id": "x", "match": {"mimeTypes": ["text/*"]}}
+            "info": {"match": {"mimeTypes": ["text/*"]}}
         }))
         .is_ok());
         for invalid in [
             serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
             serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
-            serde_json::json!({"info": {"id": "x", "match": {"contains": [".git"]}}}),
+            serde_json::json!({"info": {"match": {"contains": [".git"]}}}),
             serde_json::json!({"info": [{"id": "x"}]}),
-            serde_json::json!({"info": {"id": "x", "title": "X"}}),
+            serde_json::json!({"info": {"title": "X"}}),
+            serde_json::json!({"info": {"id": "x"}}),
             serde_json::json!({"contextMenus": {"match": {"selection": "many"}}}),
         ] {
             assert!(validate_extensions(&invalid).is_err(), "{invalid}");

@@ -31,14 +31,10 @@ pub fn query(request: &PluginSearchInput) -> Vec<Entry> {
         else {
             continue;
         };
-        for search in searches {
-            let method = search
-                .get("command")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("search.query");
+        for _search in searches {
             let response = match crate::plugin_host::global().invoke(
                 &plugin.id,
-                method,
+                "search.query",
                 serde_json::json!({
                     "query": request.query,
                     "root": request.root,

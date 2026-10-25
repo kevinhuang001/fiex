@@ -23,9 +23,7 @@ export interface PluginContribution {
   panel?: PluginPanel
 }
 export interface PluginInfoContribution {
-  id: string
-  title: string
-  command: string
+  command?: string
   extensions?: string[]
   priority?: number
 }
@@ -71,12 +69,10 @@ export interface PluginExtensions {
   connections?: Array<{ id: string; title: string; fields: PluginField[] }>
   toolbar?: PluginContribution[]
   contextMenus?: boolean
-  search?: Array<{ id: string; title: string; icon?: string }>
+  search?: Array<{ icon?: string; scope?: string }>
   settings?: PluginField[]
   hooks?: Array<{
-    id: string
     event: 'beforeOpen'
-    method: string
     priority?: number
     extensions?: string[]
   }>
