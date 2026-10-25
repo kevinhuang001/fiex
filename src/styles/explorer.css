@@ -1123,3 +1123,81 @@ body.dragging-toolbar {
   font: inherit;
   cursor: pointer;
 }
+
+/* Saved-session menus in the Connections sidebar. */
+.connection-add {
+  position: relative;
+}
+.connection-session-menu {
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 172px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.connection-session-menu.plus {
+  position: fixed;
+  width: 232px;
+  max-height: min(420px, 60vh);
+  overflow: auto;
+}
+.connection-session-menu.floating {
+  position: fixed;
+}
+.connection-session-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.connection-session-menu button:hover {
+  background: var(--hover);
+}
+.connection-session-menu button.danger {
+  color: var(--danger);
+}
+.connection-session-menu button > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+.connection-session-menu strong {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connection-session-menu small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.connection-session-menu .connection-session-new {
+  margin-top: 3px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 7px 7px;
+  padding-top: 8px;
+}
+.connection-autostart {
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--selected);
+  color: var(--accent);
+  font-size: 8px;
+}

@@ -26,6 +26,16 @@ pub struct StoredConnection {
     /// Secret field identifiers whose values are persisted in the OS keyring.
     #[serde(default)]
     pub(crate) secret_keys: Vec<String>,
+    /// Saved sessions appear in the connection + menu.
+    #[serde(default = "saved_default")]
+    pub(crate) saved: bool,
+    /// Open this session automatically when Fiex starts.
+    #[serde(default)]
+    pub(crate) autostart: bool,
+}
+
+fn saved_default() -> bool {
+    true
 }
 
 #[derive(Deserialize)]
@@ -48,6 +58,8 @@ pub struct ConnectionInfo {
     pub kind: String,
     pub plugin_id: String,
     pub mount_path: String,
+    pub saved: bool,
+    pub autostart: bool,
 }
 
 pub(crate) fn fiex_dir() -> PathBuf {
@@ -172,6 +184,8 @@ fn public(conn: &StoredConnection) -> ConnectionInfo {
         } else {
             super::config::navigation_path(conn, "").unwrap_or_default()
         },
+        saved: conn.saved,
+        autostart: conn.autostart,
     }
 }
 
@@ -308,6 +322,8 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         plugin_id: plugin_id.clone(),
         settings,
         secret_keys,
+        saved: previous.as_ref().map(|conn| conn.saved).unwrap_or(true),
+        autostart: previous.as_ref().is_some_and(|conn| conn.autostart),
     };
     if !builtin {
         ensure_provider_access(&record)?;
@@ -347,6 +363,27 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     }
     save_stored(&items)?;
     Ok(public(&record))
+}
+
+pub fn update_connection_session(
+    id: &str,
+    saved: Option<bool>,
+    autostart: Option<bool>,
+) -> Result<ConnectionInfo, String> {
+    let mut items = load_stored();
+    let connection = items
+        .iter_mut()
+        .find(|connection| connection.id == id)
+        .ok_or("connection not found")?;
+    if let Some(value) = saved {
+        connection.saved = value;
+    }
+    if let Some(value) = autostart {
+        connection.autostart = value;
+    }
+    let result = public(connection);
+    save_stored(&items)?;
+    Ok(result)
 }
 
 pub fn remove_connection(id: &str) -> Result<(), String> {

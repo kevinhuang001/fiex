@@ -29,6 +29,15 @@ pub(crate) fn save_remote_connection(
     remote::save_connection(input)
 }
 #[tauri::command]
+pub(crate) fn update_connection_session(
+    id: String,
+    saved: Option<bool>,
+    autostart: Option<bool>,
+) -> Result<remote::ConnectionInfo, String> {
+    remote::update_connection_session(&id, saved, autostart)
+}
+
+#[tauri::command]
 pub(crate) fn remove_remote_connection(id: String) -> Result<(), String> {
     remote::remove_connection(&id)
 }

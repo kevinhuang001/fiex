@@ -17,7 +17,7 @@ import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
@@ -27,6 +27,7 @@ export default function App() {
   const fullView = Boolean(pluginViewId || terminalId)
   const terminalName =
     app.left.connections.find((connection) => connection.id === terminalId)?.name || 'SSH'
+  const autostarted = useRef(false)
 
   useEffect(() => {
     const navigate = (event: Event) => {
@@ -37,6 +38,22 @@ export default function App() {
     window.addEventListener('fiex:navigate', navigate)
     return () => window.removeEventListener('fiex:navigate', navigate)
   }, [app.left])
+
+  useEffect(() => {
+    if (!native || autostarted.current || !app.left.hasListing) return
+    autostarted.current = true
+    const sessions = app.left.connections.filter(
+      (connection) =>
+        connection.kind === 'ssh' &&
+        connection.autostart &&
+        connection.saved !== false &&
+        !app.left.tabs.includes(`fiex-terminal://${connection.id}`),
+    )
+    for (const session of sessions) {
+      app.newWorkspaceTab()
+      app.left.navigate(`fiex-terminal://${session.id}`)
+    }
+  }, [app.left.hasListing, app.left.connections, app.left.tabs])
 
   // The label size is the reference size: every window is zoomed by the same
   // ratio so the preference scales the sidebar, toolbar, dialogs and file list
@@ -62,6 +79,7 @@ export default function App() {
         onApplications={app.openApplications}
         onAddConnection={() => app.setConnectionOpen(true)}
         onRemoveConnection={app.removeConnection}
+        notify={app.notify}
         onEject={app.ejectDevice}
         onEjectDevice={app.ejectUsb}
         onMount={app.mountDevice}

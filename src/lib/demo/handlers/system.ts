@@ -1,7 +1,28 @@
 import { root } from '../data'
 import { notHandled } from './shared'
 
-export function handleSystem(command: string): unknown {
+const demoConnections = [
+  {
+    id: 'demo-webdav',
+    name: '团队 WebDAV',
+    kind: 'webdav',
+    pluginId: 'org.example.webdav',
+    mountPath: 'fiex://mount/demo-webdav/',
+    saved: true,
+    autostart: false,
+  },
+  {
+    id: 'demo-ssh',
+    name: '生产服务器',
+    kind: 'ssh',
+    pluginId: '__builtin__',
+    mountPath: 'fiex-terminal://demo-ssh',
+    saved: true,
+    autostart: false,
+  },
+]
+
+export function handleSystem(command: string, a: Record<string, unknown> = {}): unknown {
   switch (command) {
     case 'platform': {
       // `?platform=windows|linux` lets the browser fixture preview the
@@ -81,22 +102,14 @@ export function handleSystem(command: string): unknown {
         { id: 'cursor', name: 'Cursor' },
       ]
     case 'remote_connections':
-      return [
-        {
-          id: 'demo-webdav',
-          name: '团队 WebDAV',
-          kind: 'webdav',
-          pluginId: 'org.example.webdav',
-          mountPath: 'fiex://mount/demo-webdav/',
-        },
-        {
-          id: 'demo-ssh',
-          name: '生产服务器',
-          kind: 'ssh',
-          pluginId: '__builtin__',
-          mountPath: 'fiex-terminal://demo-ssh',
-        },
-      ]
+      return demoConnections
+    case 'update_connection_session': {
+      const connection = demoConnections.find((item) => item.id === String(a.id || ''))
+      if (!connection) throw new Error('connection not found')
+      if (typeof a.saved === 'boolean') connection.saved = a.saved
+      if (typeof a.autostart === 'boolean') connection.autostart = a.autostart
+      return connection
+    }
 
     default:
       return notHandled

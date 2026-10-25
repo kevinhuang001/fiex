@@ -164,6 +164,7 @@ pub fn run() {
             open_path,
             remote_connections,
             save_remote_connection,
+            update_connection_session,
             remove_remote_connection,
             remote_download,
             remote_download_dir,

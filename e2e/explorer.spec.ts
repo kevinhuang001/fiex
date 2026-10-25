@@ -237,6 +237,19 @@ test('built-in SSH opens a full-height terminal', async ({ page }) => {
   await expect(page.getByText('最近使用', { exact: true }).first()).toBeVisible()
 })
 
+test('connection sessions can autostart and appear in the add menu', async ({ page }) => {
+  await page.locator('.device-row').filter({ hasText: '生产服务器' }).click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '保存 Session' })).toBeVisible()
+  const context = await page.locator('.connection-session-menu.floating').boundingBox()
+  expect(context && context.y + context.height).toBeLessThanOrEqual(780)
+  await page.getByRole('menuitem', { name: '设置为自启动' }).click()
+  await expect(page.locator('.connection-autostart')).toHaveText('自启动')
+  await page.getByRole('button', { name: '添加连接' }).click()
+  await expect(page.getByRole('menuitem', { name: '生产服务器 ssh' })).toBeVisible()
+  const plus = await page.locator('.connection-session-menu.plus').boundingBox()
+  expect(plus && plus.y + plus.height).toBeLessThanOrEqual(780)
+})
+
 test('opens the Trash inside Fiex', async ({ page }) => {
   await page.getByRole('button', { name: '废纸篓', exact: true }).click()
   await expect(page.getByText('Old draft.txt', { exact: true })).toBeVisible()
@@ -317,6 +330,7 @@ test('PDF preview renders a real document', async ({ page }) => {
 test('core connection entrypoint and no preinstalled optional plugin', async ({ page }) => {
   await page.goto('/?demo')
   await page.getByRole('button', { name: '添加连接' }).click()
+  await page.getByRole('menuitem', { name: '新建连接…' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   await page.getByRole('button', { name: '关闭', exact: true }).click()

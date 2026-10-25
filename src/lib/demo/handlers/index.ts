@@ -11,7 +11,7 @@ export async function mock(command: string, a: Record<string, unknown>): Promise
   if (plugins !== notHandled) return plugins
   const git = handleGit(command, a)
   if (git !== notHandled) return git
-  const system = handleSystem(command)
+  const system = handleSystem(command, a)
   if (system !== notHandled) return system
   return null
 }

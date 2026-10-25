@@ -165,6 +165,8 @@ export interface RemoteConnection {
   kind: string
   pluginId: string
   mountPath: string
+  saved?: boolean
+  autostart?: boolean
 }
 
 export interface GitRefs {
