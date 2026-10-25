@@ -624,6 +624,17 @@ fn menu_response_valid(
     Ok(actions)
 }
 /// Track submenu depth so a lazy expansion cannot exceed the four-level cap.
+fn root_menu_valid(result: &serde_json::Value) -> Result<std::collections::HashSet<String>, String> {
+    let items = result
+        .get("items")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("menu response requires items[]")?;
+    if items.iter().any(|item| item.get("parentId").is_some()) {
+        return Err("root menu must not include submenu children".into());
+    }
+    menu_response_valid(result)
+}
+
 fn submenu_depths(result: &serde_json::Value) -> std::collections::HashMap<String, usize> {
     use std::collections::HashMap;
     let Some(items) = result.get("items").and_then(serde_json::Value::as_array) else {
@@ -849,7 +860,7 @@ pub(crate) async fn plugin_context_menu_resolve(
             &directory,
             &[],
         )?;
-        let actions = menu_response_valid(&result)?;
+        let actions = root_menu_valid(&result)?;
         let submenus = submenu_depths(&result);
         let mut guard = context_menu_sessions()
             .lock()
@@ -1068,6 +1079,19 @@ mod context_menu_session_tests {
             "id":"child","kind":"action","title":"Child","parentId":"other"
         }]});
         assert!(validated_submenu(&spoof, "root", 1).is_err());
+    }
+
+    #[test]
+    fn root_menu_requires_lazy_submenu_children() {
+        let nested = serde_json::json!({"items":[
+            {"id":"group","kind":"submenu","title":"Group"},
+            {"id":"run","kind":"action","title":"Run","parentId":"group"}
+        ]});
+        assert!(root_menu_valid(&nested).is_err());
+        let root = serde_json::json!({"items":[
+            {"id":"group","kind":"submenu","title":"Group"}
+        ]});
+        assert!(root_menu_valid(&root).unwrap().is_empty());
     }
 
     #[test]
