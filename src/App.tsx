@@ -66,7 +66,7 @@ export default function App() {
     autostarted.current = true
     const sessions = app.left.connections.filter(
       (connection) =>
-        connection.kind === 'ssh' &&
+        (connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh') &&
         connection.autostart &&
         connection.saved !== false &&
         !app.left.tabs.includes(`fiex-terminal://${connection.id}`),

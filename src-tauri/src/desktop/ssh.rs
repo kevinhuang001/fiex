@@ -199,7 +199,7 @@ pub(crate) async fn ssh_open(
     if !matches!(
         connection.plugin_id.as_str(),
         "__builtin__" | "org.fiex.ssh"
-    ) || connection.kind != "ssh"
+    ) || (connection.plugin_id == "__builtin__" && connection.kind != "ssh")
     {
         return Err("不是 SSH 连接".into());
     }
