@@ -1,12 +1,11 @@
 //! "Show info" registry: built-in providers plus standard `info.resolve`.
 //!
 //! Built-in and plugin providers return the same section/row domain types.
-//! Core builds an `InfoContext` after permission projection, invokes the
+//! Core builds an `EventContext` after permission projection, invokes the
 //! matching provider, and merges the decoded `InfoResponse` with native
 //! metadata and media probes.
 use crate::plugin_contracts::{
-    InfoContext, InfoResponse, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
-    INFO_CONTEXT_VERSION,
+    EventContext, InfoResponse, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -537,13 +536,11 @@ fn make_context(
     owner: &str,
     metadata_allowed: bool,
     read_allowed: bool,
-) -> InfoContext {
+) -> EventContext {
     let session_id = crate::mounts::new_id().unwrap_or_default();
-    InfoContext {
-        version: INFO_CONTEXT_VERSION,
+    EventContext {
         session_id: session_id.clone(),
-        intent: "info".into(),
-        resource: ResourceContext {
+        targets: vec![ResourceContext {
             reference: resource.reference.clone(),
             metadata: metadata_allowed
                 .then(|| projected_metadata(&resource.local, &resource.name))
@@ -555,7 +552,7 @@ fn make_context(
                     &resource.name,
                 ),
             }),
-        },
+        }],
     }
 }
 
@@ -564,10 +561,13 @@ fn candidates(resource: &ResourceDescriptor) -> Vec<Candidate> {
     if !resource.is_dir {
         values.push(Candidate::Media);
     }
-    for plugin in crate::plugin_host::catalog() {
-        if !plugin.enabled || !plugin.approved || !plugin.backend_available {
-            continue;
-        }
+    for registered in crate::plugin_events::matching_plugins(
+        "info.resolve",
+        &resource.ext,
+        &resource.mime,
+        resource.is_dir,
+    ) {
+        let plugin = registered.plugin;
         let declared = plugin
             .declared_permissions
             .iter()
@@ -577,20 +577,11 @@ fn candidates(resource: &ResourceDescriptor) -> Vec<Candidate> {
             crate::plugin_permissions::allowed(&plugin.id, &declared, "metadata").unwrap_or(false);
         let read_allowed = crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read")
             .unwrap_or(false);
-        let Some(contribution) = plugin.extensions.get("info") else {
-            continue;
-        };
-        let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
-        if !rules.matches(&resource.ext, &resource.mime, resource.is_dir) {
-            continue;
-        }
+        let contribution = registered.contribution;
         values.push(Candidate::Plugin {
             plugin: Box::new(plugin.clone()),
-            contribution: contribution.clone(),
-            priority: contribution
-                .get("priority")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(50) as i64,
+            contribution,
+            priority: registered.priority,
             metadata_allowed,
             read_allowed,
         });
@@ -632,7 +623,7 @@ fn section_from_contract(
 
 fn resolve_builtin(
     candidate: &Candidate,
-    context: &InfoContext,
+    context: &EventContext,
     local: &Path,
     display: &str,
 ) -> Vec<InfoSection> {
@@ -640,7 +631,7 @@ fn resolve_builtin(
         Candidate::Metadata => vec![metadata_section(
             display,
             local,
-            context.resource.metadata.as_ref(),
+            context.targets.first().and_then(|target| target.metadata.as_ref()),
         )],
         Candidate::Media => media_sections(local),
         Candidate::Plugin { .. } => Vec::new(),
@@ -650,13 +641,13 @@ fn resolve_builtin(
 fn resolve_plugin(
     plugin: &crate::plugin_host::PluginInfo,
     _contribution: &serde_json::Value,
-    context: &InfoContext,
+    context: &EventContext,
     local: &Path,
 ) -> Vec<InfoSection> {
     let params = serde_json::to_value(context).unwrap_or(serde_json::Value::Null);
     let directory = local.parent().unwrap_or(Path::new("."));
     let selected = [local.to_path_buf()];
-    match crate::plugin_host::global().invoke_selected(
+    match crate::plugin_events::invoke_selected(
         &plugin.id,
         "info.resolve",
         params,

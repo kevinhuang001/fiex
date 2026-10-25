@@ -6,9 +6,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const INFO_CONTEXT_VERSION: u32 = 1;
-pub const PREVIEW_CONTEXT_VERSION: u32 = 1;
-
 /// Opaque resource identity owned by Core.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,14 +51,13 @@ pub struct ResourceContext {
     pub read: Option<ScopedRead>,
 }
 
+/// Shared request payload for Core-owned events. JSON-RPC method is the event
+/// identity; targets are the only affected-resource collection.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoContext {
-    pub version: u32,
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EventContext {
     pub session_id: String,
-    #[serde(rename = "intent")]
-    pub intent: String,
-    pub resource: ResourceContext,
+    pub targets: Vec<ResourceContext>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,16 +84,6 @@ pub struct InfoSectionView {
 pub struct InfoResponse {
     #[serde(default)]
     pub sections: Vec<InfoSectionView>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreviewContext {
-    pub version: u32,
-    pub session_id: String,
-    #[serde(rename = "intent")]
-    pub intent: String,
-    pub resource: ResourceContext,
 }
 
 /// A package-confined HTML preview entry returned by a provider.
@@ -149,23 +135,22 @@ mod tests {
 
     #[test]
     fn context_uses_opaque_ref_and_optional_projection() {
-        let context = InfoContext {
-            version: INFO_CONTEXT_VERSION,
+        let context = EventContext {
             session_id: "s1".into(),
-            intent: "info".into(),
-            resource: ResourceContext {
+            targets: vec![ResourceContext {
                 reference: ResourceRef {
                     mount_id: "local".into(),
                     node_id: "fiex-resource:opaque".into(),
                 },
                 metadata: None,
                 read: None,
-            },
+            }],
         };
         let value = serde_json::to_value(&context).unwrap();
-        assert_eq!(value["resource"]["ref"]["nodeId"], "fiex-resource:opaque");
-        assert!(value["resource"].get("metadata").is_none());
-        assert!(value["resource"].get("read").is_none());
+        assert_eq!(value["targets"][0]["ref"]["nodeId"], "fiex-resource:opaque");
+        assert!(value["targets"][0].get("metadata").is_none());
+        assert!(value["targets"][0].get("read").is_none());
+        assert!(value.get("resource").is_none());
     }
 
     #[test]

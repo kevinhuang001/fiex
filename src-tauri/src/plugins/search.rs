@@ -31,7 +31,7 @@ pub fn query(request: &PluginSearchInput) -> Vec<Entry> {
         {
             continue;
         }
-        let response = match crate::plugin_host::global().invoke(
+        let response = match crate::plugin_events::invoke(
             &plugin.id,
             "search.query",
             serde_json::json!({

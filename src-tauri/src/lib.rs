@@ -20,6 +20,8 @@ pub mod plugin_contracts;
 pub mod plugin_decorations;
 #[path = "plugins/errors.rs"]
 pub mod plugin_errors;
+#[path = "plugins/events.rs"]
+pub mod plugin_events;
 #[path = "plugins/fs_access.rs"]
 pub mod plugin_fs_access;
 #[path = "plugins/host/mod.rs"]

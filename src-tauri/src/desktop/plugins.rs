@@ -32,15 +32,7 @@ pub(crate) async fn plugin_invoke(
     selected_paths: Option<Vec<String>>,
     preview_session_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    if method.starts_with("contextMenu.")
-        || method.starts_with("vfs.")
-        || method.starts_with("fs.")
-        || method.starts_with("connection.")
-        || method.starts_with("preview.")
-        || method.starts_with("info.")
-        || method.starts_with("host.")
-        || method.starts_with("core.")
-    {
+    if crate::plugin_events::is_protected_method(&method) {
         return Err("PermissionDenied: provider and host methods are Core-only".into());
     }
     let mut directory = directory;
@@ -525,7 +517,6 @@ struct ContextMenuSession {
     plugin_id: String,
     directory: String,
     selection: Vec<String>,
-    target_ref: String,
     selection_refs: Vec<String>,
     directory_ref: String,
     actions: std::collections::HashSet<String>,
@@ -750,27 +741,27 @@ pub(crate) async fn plugin_context_menu_resolve(
             .iter()
             .map(|_| crate::mounts::new_id().map(|id| format!("fiex-resource:{id}")))
             .collect::<Result<Vec<_>, _>>()?;
-        let target_ref = selection_refs
-            .first()
-            .cloned()
-            .ok_or("selection is empty")?;
         let directory_ref = format!("fiex-resource:{}", crate::mounts::new_id()?);
-        let mut request = serde_json::json!({
+        let metadata_allowed = context_menu_metadata_allowed(&plugin_id);
+        let targets = paths
+            .iter()
+            .zip(&selection_refs)
+            .map(|(path, reference)| {
+                serde_json::json!({
+                    "ref": {"mountId": "session", "nodeId": reference},
+                    "metadata": metadata_allowed.then(|| context_menu_resource_metadata(path)),
+                })
+            })
+            .collect::<Vec<_>>();
+        let request = serde_json::json!({
             "menuSessionId": session_id,
             "interactionId": crate::mounts::new_id()?,
-            "targetRef": target_ref,
-            "selectionRefs": selection_refs,
+            "targets": targets,
             "directoryRef": directory_ref,
         });
-        if context_menu_metadata_allowed(&plugin_id) {
-            request["selectionMetadata"] = serde_json::json!(paths
-                .iter()
-                .map(|path| context_menu_resource_metadata(path))
-                .collect::<Vec<_>>());
-        }
         let selected: Vec<std::path::PathBuf> =
             paths.iter().map(std::path::PathBuf::from).collect();
-        let result = crate::plugin_host::global().invoke_selected(
+        let result = crate::plugin_events::invoke_selected(
             &plugin_id,
             "contextMenu.resolve",
             request,
@@ -791,7 +782,6 @@ pub(crate) async fn plugin_context_menu_resolve(
                 plugin_id,
                 directory,
                 selection: paths,
-                target_ref,
                 selection_refs,
                 directory_ref,
                 actions,
@@ -834,19 +824,29 @@ pub(crate) async fn plugin_context_menu_execute(
             .into_owned();
     }
     tauri::async_runtime::spawn_blocking(move || {
+        let metadata_allowed = context_menu_metadata_allowed(&session.plugin_id);
+        let targets = paths
+            .iter()
+            .zip(&session.selection_refs)
+            .map(|(path, reference)| {
+                serde_json::json!({
+                    "ref": {"mountId": "session", "nodeId": reference},
+                    "metadata": metadata_allowed.then(|| context_menu_resource_metadata(path)),
+                })
+            })
+            .collect::<Vec<_>>();
         let parameters = serde_json::json!({
             "menuSessionId": menu_session_id,
             "itemId": item_id,
             "interactionId": crate::mounts::new_id()?,
-            "targetRef": session.target_ref,
-            "selectionRefs": session.selection_refs,
+            "targets": targets,
             "directoryRef": session.directory_ref,
             "paths": paths,
             "path": paths[0],
             "root": directory
         });
         let selected: Vec<std::path::PathBuf> = paths.iter().map(Into::into).collect();
-        let mut result = crate::plugin_host::global().invoke_selected(
+        let mut result = crate::plugin_events::invoke_selected(
             &session.plugin_id,
             "contextMenu.execute",
             parameters,

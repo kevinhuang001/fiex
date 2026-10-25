@@ -19,8 +19,8 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 | `plugin.ping` / `plugin.shutdown`       | 空                                    | `alive` / `null`                         |
 | `connection.validate`                   | `connection`                          | `valid`                                  |
 | `connection.open` / `connection.create` | `connectionId/factoryId/connection…`  | `NavigationTarget`                       |
-| `info.resolve`                          | `InfoContext`                         | `InfoResponse`                           |
-| `preview.open`                          | `PreviewContext`                      | `PreviewView`                            |
+| `info.resolve`                          | `EventContext.targets`                | `InfoResponse`                           |
+| `preview.open`                          | `EventContext.targets`                | `PreviewView`                            |
 | `decorations.resolve`                   | `DecorationContext`                   | `{decorations:[...]}`                    |
 | `contextMenu.resolve`                   | 菜单 Session、opaque refs             | `{items:[...]}`                          |
 | `contextMenu.execute`                   | `menuSessionId,itemId,interactionId`  | 操作结果                                 |
@@ -31,12 +31,12 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 
 ## 标准事件上下文
 
-Info / Preview:
+Info / Preview 使用相同的目标集合；无需重复的 `target` 和 `selection` 字段，RPC `method` 代表事件类型：
 
 ```json
 {
   "sessionId": "opaque",
-  "resource": {
+  "targets": [{
     "ref": { "mountId": "m1", "nodeId": "n9" },
     "metadata": {
       "name": "song.mp3",
@@ -45,7 +45,7 @@ Info / Preview:
       "mime": "audio/mpeg"
     },
     "read": { "resourceId": "read-opaque" }
-  }
+  }]
 }
 ```
 

@@ -1,11 +1,10 @@
 //! Unified preview registry: built-ins and plugins return the same resolved view.
 //!
 //! Providers are matched by extension/MIME and priority. Built-ins use a
-//! trusted local file; plugins receive a permission-projected `PreviewContext`
+//! trusted local file; plugins receive a permission-projected `EventContext`
 //! and return a package-confined `PreviewView`.
 use crate::plugin_contracts::{
-    PreviewContext, PreviewView, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
-    PREVIEW_CONTEXT_VERSION,
+    EventContext, PreviewView, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
 };
 use serde_json::Value;
 use std::{
@@ -153,24 +152,12 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
             plugin: None,
         })
         .collect::<Vec<_>>();
-    for plugin in crate::plugin_host::catalog() {
-        if !plugin.enabled || !plugin.approved || !plugin.backend_available {
-            continue;
-        }
-        let Some(contribution) = plugin.extensions.get("preview") else {
-            continue;
-        };
-        let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
-        if !rules.matches(&ext, mime, is_dir) {
-            continue;
-        }
+    for registered in crate::plugin_events::matching_plugins("preview.open", &ext, mime, is_dir) {
+        let plugin = registered.plugin;
         values.push(Provider {
             id: format!("plugin:{}", plugin.id),
             provider: plugin.name.clone(),
-            priority: contribution
-                .get("priority")
-                .and_then(Value::as_u64)
-                .unwrap_or(50) as i64,
+            priority: registered.priority,
             builtin: None,
             plugin: Some((plugin.id.clone(), plugin.id.clone())),
         });
@@ -375,11 +362,9 @@ fn open_plugin(
         .ok_or("preview file has no parent")?
         .to_path_buf();
     let session_id = crate::mounts::new_id()?;
-    let context = PreviewContext {
-        version: PREVIEW_CONTEXT_VERSION,
+    let context = EventContext {
         session_id: session_id.clone(),
-        intent: "preview".into(),
-        resource: ResourceContext {
+        targets: vec![ResourceContext {
             reference: resource_ref(display),
             metadata: metadata_allowed
                 .then(|| metadata(local_path, &name))
@@ -387,11 +372,11 @@ fn open_plugin(
             read: read_allowed.then(|| ScopedRead {
                 resource_id: crate::plugin_scoped_reads::register(plugin_id, &session_id, &name),
             }),
-        },
+        }],
     };
     let params = serde_json::to_value(&context).map_err(|error| error.to_string())?;
     let selected = [local_path.to_path_buf()];
-    let result = crate::plugin_host::global().invoke_selected(
+    let result = crate::plugin_events::invoke_selected(
         plugin_id,
         "preview.open",
         params,

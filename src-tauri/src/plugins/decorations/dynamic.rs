@@ -243,7 +243,7 @@ fn dynamic(
         "entries": entries.values().collect::<Vec<_>>(),
     });
     let Ok(response) =
-        plugin_host::global().invoke_at(&manifest.id, "decorations.resolve", payload, directory)
+        crate::plugin_events::invoke_at(&manifest.id, "decorations.resolve", payload, directory)
     else {
         return;
     };
