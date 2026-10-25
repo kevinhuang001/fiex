@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Cloud, HardDrive, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
-import { call } from '@/lib/api'
+import { call, demo } from '@/lib/api'
 import { usePluginCatalog, type PluginField } from '@/lib/plugins'
 import type { RemoteConnection } from '@/lib/types'
 
@@ -51,7 +51,7 @@ export function ConnectionDialog({
           }))
         : []
     })
-    return [builtin, ...remote]
+    return demo ? [builtin, ...remote] : remote
   }, [plugins])
   const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')

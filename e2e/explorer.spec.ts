@@ -100,7 +100,7 @@ test('workspace opens as a compact dock and can be collapsed', async ({ page }) 
   await page.getByRole('button', { name: '工作区' }).click()
   const dock = page.getByRole('region', { name: '工作区' })
   await expect(dock.getByText('工作区为空')).toBeVisible()
-  await dock.getByRole('button', { name: '收起工作区' }).click()
+  await page.getByRole('button', { name: '工作区' }).click()
   await expect(dock).toHaveCount(0)
 })
 test('create, rename, recycle and terminal selection', async ({ page }) => {

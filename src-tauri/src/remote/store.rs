@@ -168,8 +168,16 @@ fn save_stored(items: &[StoredConnection]) -> Result<(), String> {
     Ok(())
 }
 
+fn terminal_connection(conn: &StoredConnection) -> bool {
+    conn.kind == "ssh"
+        && matches!(
+            connection_plugin_id(conn).as_str(),
+            super::config::BUILTIN_PLUGIN_ID | "org.fiex.ssh"
+        )
+}
+
 fn public(conn: &StoredConnection) -> ConnectionInfo {
-    let builtin = connection_plugin_id(conn) == super::config::BUILTIN_PLUGIN_ID;
+    let builtin = terminal_connection(conn);
     if !builtin {
         let mount = mount_path(conn);
         let _ = fs::create_dir_all(&mount);
@@ -353,7 +361,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     for field in &record.secret_keys {
         record.settings.remove(field);
     }
-    if !builtin {
+    if !terminal_connection(&record) {
         fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
     }
     if let Some(index) = existing {
@@ -419,6 +427,12 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
         return Err("内置连接类型不支持".into());
     }
     let plugin_id = ensure_provider_access(&connection)?;
+    if terminal_connection(&connection) {
+        return Ok(serde_json::json!({
+            "kind": "terminal",
+            "connectionId": connection.id,
+        }));
+    }
     let target = crate::plugin_host::global().invoke(
         &plugin_id,
         "connection.open",

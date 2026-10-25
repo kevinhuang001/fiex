@@ -1,4 +1,4 @@
-import { FolderOpen, TerminalSquare, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
 
@@ -7,9 +7,6 @@ export function WorkspaceBar({
   open,
   onOpen,
   onRemove,
-  onClear,
-  onClose,
-  onTerminal,
 }: {
   items: Entry[]
   open: boolean
@@ -19,36 +16,53 @@ export function WorkspaceBar({
   onClose: () => void
   onTerminal: () => void
 }) {
+  const [height, setHeight] = useState(108)
+  const panel = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const handle = panel.current?.querySelector('.workspace-resizer')
+    if (!handle) return
+    let bottom = 0
+    const move = (event: MouseEvent) => {
+      const next = bottom - event.clientY
+      setHeight(Math.min(Math.max(64, window.innerHeight * 0.6), Math.max(52, next)))
+    }
+    const up = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+    }
+    const start = () => {
+      bottom = panel.current?.getBoundingClientRect().bottom ?? window.innerHeight
+      document.addEventListener('mousemove', move)
+      document.addEventListener('mouseup', up)
+    }
+    handle.addEventListener('mousedown', start)
+    return () => {
+      handle.removeEventListener('mousedown', start)
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+    }
+  }, [])
+
   if (!open) return null
   return (
-    <section className="workspace-bar" data-workspace-drop="true" aria-label="工作区">
-      <header className="workspace-header">
-        <button
-          className="workspace-terminal"
-          title="打开终端"
-          aria-label="打开终端"
-          onClick={onTerminal}
-        >
-          <TerminalSquare size={14} />
-        </button>
-        <FolderOpen size={15} />
-        <strong>工作区</strong>
-        <span>{items.length}</span>
-        <div className="workspace-spacer" />
-        {items.length > 0 && (
-          <button className="workspace-clear" onClick={onClear} title="清空工作区">
-            <Trash2 size={14} /> 清空
-          </button>
-        )}
-        <button className="workspace-close" aria-label="收起工作区" onClick={onClose}>
-          <X size={15} />
-        </button>
-      </header>
+    <section
+      ref={panel}
+      className="workspace-bar"
+      data-workspace-drop="true"
+      aria-label="工作区"
+      style={{ height }}
+    >
+      <div className="workspace-resizer" title="调整工作区高度" />
       <div className="workspace-items">
         {items.length ? (
           items.map((entry) => (
             <div className="workspace-chip" key={entry.path}>
-              <button className="workspace-open" title={entry.path} onClick={() => onOpen(entry)}>
+              <button
+                className="workspace-open"
+                title={`打开 ${entry.name}`}
+                onClick={() => onOpen(entry)}
+              >
                 <FileIcon entry={entry} size={27} />
                 <span>{entry.name}</span>
               </button>
@@ -57,7 +71,7 @@ export function WorkspaceBar({
                 aria-label={`移出工作区 ${entry.name}`}
                 onClick={() => onRemove(entry.path)}
               >
-                <X size={13} />
+                x
               </button>
             </div>
           ))

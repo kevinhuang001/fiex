@@ -196,8 +196,12 @@ pub(crate) async fn ssh_open(
         .into_iter()
         .find(|connection| connection.id == connection_id)
         .ok_or("SSH 连接不存在")?;
-    if connection.plugin_id != "__builtin__" || connection.kind != "ssh" {
-        return Err("不是内置 SSH 连接".into());
+    if !matches!(
+        connection.plugin_id.as_str(),
+        "__builtin__" | "org.fiex.ssh"
+    ) || connection.kind != "ssh"
+    {
+        return Err("不是 SSH 连接".into());
     }
     let host = string_setting(&connection.settings, "host");
     if host.is_empty() {

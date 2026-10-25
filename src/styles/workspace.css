@@ -163,3 +163,32 @@
 .workspace-terminal {
   color: var(--muted);
 }
+.workspace-bar {
+  min-height: 52px;
+}
+.workspace-resizer {
+  height: 5px;
+  cursor: ns-resize;
+  background: transparent;
+}
+.workspace-resizer:hover {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.workspace-bar .workspace-items {
+  height: calc(100% - 5px);
+  min-height: 0;
+  align-items: center;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+.workspace-empty {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 10px;
+}

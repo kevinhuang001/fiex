@@ -1,7 +1,7 @@
 import type { AppController } from '@/hooks/useAppController'
 import type { Entry } from '@/lib/types'
 import { size } from '@/lib/files'
-import { ChevronDown, ChevronUp, ListChecks, TerminalSquare, X } from 'lucide-react'
+import { ListChecks, TerminalSquare, X } from 'lucide-react'
 export function ExplorerStatusBar({
   x,
   chosenAll,
@@ -54,7 +54,6 @@ export function ExplorerStatusBar({
             <ListChecks size={13} />
             工作区
             <span className="workspace-count">{workspace.items.length}</span>
-            {workspace.open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
         </div>
       </footer>
