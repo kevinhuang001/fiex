@@ -11,10 +11,7 @@ interface MenuItem {
   kind: 'action' | 'submenu' | 'separator'
   parentId?: string
 }
-interface Menu {
-  pluginId: string
-  items: MenuItem[]
-}
+undefined
 interface Context {
   paths: string[]
   path: string
@@ -151,24 +148,10 @@ export function PluginContextActions({
   useEffect(() => {
     let active = true
     const enabled = plugins.filter((p) => p.enabled && p.extensions?.contextMenus === true)
-    const selectionNames = JSON.parse(selectionKey).map(
-      (value: string) => value.split(/[\\/]/).pop() || '',
-    ) as string[]
-    void Promise.all(
+undefined    void Promise.all(
       enabled.map(async (plugin) => {
         try {
-          const response = await call<{ items: unknown }>('plugin_invoke', {
-            pluginId: plugin.id,
-            method: 'contextMenu.resolve',
-            params: {
-              selectionCount: selectionNames.length,
-              selectionNames,
-              isDirectory,
-              readOnly,
-              isRemote,
-            },
-          })
-          return validMenu(response.items) ? { pluginId: plugin.id, items: response.items } : null
+undefined          undefined
         } catch {
           return null
         }
@@ -181,39 +164,25 @@ export function PluginContextActions({
     }
   }, [plugins, selectionKey, isDirectory, readOnly, isRemote])
 
-  const invoke = async (pluginId: string, item: MenuItem, anchor?: { x: number; y: number }) => {
-    onClose()
-    const plugin = plugins.find((entry) => entry.id === pluginId)
+  undefined
+undefined
     let activityId = ''
     try {
       // No content permission is handed out during resolve; executing a real
       // click enters the operation with its exact selected paths.
-      const response = await call<unknown>('plugin_invoke', {
-        pluginId,
-        method: 'contextMenu.execute',
-        params: { itemId: item.id, paths, path: paths[0], root: path },
-        directory: path,
-        selectedPaths: paths,
-      })
-      if (
+undefined      if (
         response &&
         typeof response === 'object' &&
         'kind' in response &&
         response.kind === 'panel' &&
-        'entry' in response &&
-        typeof response.entry === 'string'
+        undefined
       ) {
         const entry = response as {
-          entry: string
-          panelId?: string
+undefined          panelId?: string
           title?: string
           size?: { width: number; height: number }
         }
-        const assetPath = await call<string>('plugin_dynamic_panel_asset', {
-          pluginId,
-          entry: entry.entry,
-        })
-        window.dispatchEvent(
+undefined        window.dispatchEvent(
           new CustomEvent(OPEN_PLUGIN_PANEL, {
             detail: {
               pluginId,
@@ -225,8 +194,7 @@ export function PluginContextActions({
               anchor,
               source: 'contextMenu',
               size: entry.size,
-              assetPath,
-            },
+undefined            },
           }),
         )
         return
@@ -259,7 +227,7 @@ export function PluginContextActions({
               key={menu.pluginId + ':' + item.id}
               item={item}
               items={menu.items}
-              onAction={(selected, anchor) => void invoke(menu.pluginId, selected, anchor)}
+              undefined
             />
           )),
       )}
