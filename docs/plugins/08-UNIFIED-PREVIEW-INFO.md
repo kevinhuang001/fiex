@@ -4,8 +4,8 @@
 
 - Manifest 中 `info` / `preview` 都是**单个对象**，不是数组；
 - 没有贡献 id；Provider 身份是插件 id；
-- 内置 Provider 和插件 Provider 使用同一个 Registry、同一套领域 DTO；
-- 一次打开只匹配一个插件 Provider；
+- 内置 Provider 和插件 Provider 共享事件匹配规则、`EventContext.targets` 和调用入口；
+- Info 可匹配多个插件 Provider 并汇总 sections；Preview 根据优先级选择一个 Provider；
 - `match` 是包含谓词：`extensions`、`mimeTypes`、`kinds`；
 - 元数据和读取权限由 `PermissionPolicy` + 当前 Scope 决定，缓存不会绕过授权。
 
@@ -20,16 +20,16 @@
 }
 ```
 
-Core 调用 `info.resolve`，传入标准 `InfoContext`：
+Core 调用 `info.resolve`，传入通用 `EventContext`（method 本身就是事件名称）：
 
 ```json
 {
   "sessionId": "opaque",
-  "resource": {
+  "targets": [{
     "ref": { "mountId": "m1", "nodeId": "n9" },
     "metadata": { "name": "a.pdf", "kind": "file", "size": 1024 },
     "read": { "resourceId": "read-opaque" }
-  }
+  }]
 }
 ```
 
@@ -71,7 +71,7 @@ Provider 列表 id：
 plugin:<plugin-id>
 ```
 
-Core 调用 `preview.open`，传标准 `PreviewContext`。插件返回 `PreviewView`：
+Core 调用 `preview.open`，传入相同的 `EventContext.targets`。插件返回 `PreviewView`：
 
 - `kind: "text"` / `"html"` / `"pdf"` / `"image"` / `"audio"` / `"video"` 等 Core 支持的视图；
 - html 面板必须是插件包内文件，通过 Core CSP/路径校验；
