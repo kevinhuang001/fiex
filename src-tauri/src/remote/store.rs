@@ -430,11 +430,10 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             "connectionId": connection.id,
         }));
     }
-    let target = crate::plugin_host::global().invoke(
+    let target = crate::plugin_events::invoke(
         &plugin_id,
         "connection.open",
         serde_json::json!({
-            "factoryId": connection.kind,
             "connectionId": connection.id,
             "mountId": connection.mount_id,
             "interactionId": crate::mounts::new_id()?,
@@ -458,11 +457,16 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             if !registered {
                 return Err("PermissionDenied: VFS extension not registered".into());
             }
-            let node_id = target
-                .get("nodeRef")
-                .and_then(|node| node.get("nodeId"))
+            let node_ref = target.get("nodeRef").ok_or("VFS navigation missing nodeRef")?;
+            if node_ref.get("mountId").and_then(serde_json::Value::as_str)
+                != Some(connection.mount_id.as_str())
+            {
+                return Err("PermissionDenied: foreign nodeRef mount".into());
+            }
+            let node_id = node_ref
+                .get("nodeId")
                 .and_then(serde_json::Value::as_str)
-                .unwrap_or("");
+                .ok_or("VFS navigation missing nodeId")?;
             Ok(serde_json::json!({
                 "kind": "vfs",
                 "path": crate::mounts::uri(&connection.mount_id, node_id)?,
