@@ -613,7 +613,11 @@ impl Running {
             }
             "host.fs.beginWrite" => {
                 let create = p.get("create").and_then(Value::as_bool).unwrap_or(false);
-                if !permitted(if create { "files.create" } else { "files.write" }) {
+                if !permitted(if create {
+                    "files.create"
+                } else {
+                    "files.write"
+                }) {
                     return Err("file operation permission denied".into());
                 }
                 Ok(json!(crate::plugin_fs_access::begin_write(
@@ -624,7 +628,10 @@ impl Running {
                 )?))
             }
             "host.fs.seekWrite" => {
-                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                if !permitted(crate::plugin_fs_access::writer_permission(
+                    owner,
+                    arg("handle")?,
+                )?) {
                     return Err("file operation permission denied".into());
                 }
                 Ok(json!(crate::plugin_fs_access::seek_write(
@@ -637,14 +644,20 @@ impl Running {
                 )?))
             }
             "host.fs.writeChunk" => {
-                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                if !permitted(crate::plugin_fs_access::writer_permission(
+                    owner,
+                    arg("handle")?,
+                )?) {
                     return Err("file operation permission denied".into());
                 }
                 crate::plugin_fs_access::write_chunk(owner, arg("handle")?, arg("base64")?)?;
                 Ok(Value::Null)
             }
             "host.fs.writeBuffer" => {
-                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                if !permitted(crate::plugin_fs_access::writer_permission(
+                    owner,
+                    arg("handle")?,
+                )?) {
                     return Err("file operation permission denied".into());
                 }
                 crate::plugin_fs_access::write_buffer(
@@ -660,7 +673,10 @@ impl Running {
                 Ok(Value::Null)
             }
             "host.fs.commit" => {
-                if !permitted(crate::plugin_fs_access::writer_permission(owner, arg("handle")?)?) {
+                if !permitted(crate::plugin_fs_access::writer_permission(
+                    owner,
+                    arg("handle")?,
+                )?) {
                     return Err("file operation permission denied".into());
                 }
                 crate::plugin_fs_access::commit(owner, arg("handle")?)
@@ -681,7 +697,10 @@ impl Running {
                 crate::plugin_fs_access::stat(root()?, path)
             }
             "host.fs.statBatch" if permitted("metadata") => {
-                let paths = p.get("paths").and_then(Value::as_array).ok_or("missing paths")?;
+                let paths = p
+                    .get("paths")
+                    .and_then(Value::as_array)
+                    .ok_or("missing paths")?;
                 crate::plugin_fs_access::stat_batch(root()?, paths)
             }
             "host.fs.read" if permitted("files.read") => {
@@ -713,7 +732,11 @@ impl Running {
                     .and_then(Value::as_str)
                     .ok_or("missing buffer")?;
                 let mode = p.get("mode").and_then(Value::as_str).unwrap_or("truncate");
-                if !permitted(if mode == "create" { "files.create" } else { "files.write" }) {
+                if !permitted(if mode == "create" {
+                    "files.create"
+                } else {
+                    "files.write"
+                }) {
                     return Err("file operation permission denied".into());
                 }
                 crate::plugin_fs_access::write(owner, root()?, path, buffer, mode)

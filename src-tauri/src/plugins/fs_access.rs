@@ -271,7 +271,9 @@ pub fn stat(root: &Scope, input: &str) -> Result<Value, String> {
 }
 pub fn is_directory(root: &Scope, input: &str) -> Result<bool, String> {
     let path = relative(root, input)?;
-    let metadata = directory(root)?.symlink_metadata(path).map_err(|e| e.to_string())?;
+    let metadata = directory(root)?
+        .symlink_metadata(path)
+        .map_err(|e| e.to_string())?;
     Ok(metadata.is_dir())
 }
 /// Preserve input order and isolate failures so one inaccessible selection does
@@ -385,8 +387,15 @@ struct PendingWrite {
 }
 pub fn writer_permission(owner: &str, handle: &str) -> Result<&'static str, String> {
     let pending = writes().lock().map_err(|_| "write registry unavailable")?;
-    let write = pending.get(handle).filter(|v| v.owner == owner).ok_or("write handle unavailable")?;
-    Ok(if write.original.is_some() { "files.write" } else { "files.create" })
+    let write = pending
+        .get(handle)
+        .filter(|v| v.owner == owner)
+        .ok_or("write handle unavailable")?;
+    Ok(if write.original.is_some() {
+        "files.write"
+    } else {
+        "files.create"
+    })
 }
 
 /// Cheap conflict detector: a full content hash costs a second read of a large
@@ -752,7 +761,12 @@ mod tests {
         let scope = Scope::selected(root.path(), &[root.path().join("chosen")]).unwrap();
         let result = stat_batch(
             &scope,
-            &[json!("chosen"), json!("private"), json!("chosen"), json!(null)],
+            &[
+                json!("chosen"),
+                json!("private"),
+                json!("chosen"),
+                json!(null),
+            ],
         )
         .unwrap();
         assert_eq!(result["results"][0]["metadata"]["name"], "chosen");
