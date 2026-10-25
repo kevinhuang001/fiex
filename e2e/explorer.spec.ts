@@ -245,7 +245,7 @@ test('connection sessions can autostart and appear in the add menu', async ({ pa
   await page.getByRole('menuitem', { name: '设置为自启动' }).click()
   await expect(page.locator('.connection-autostart')).toHaveText('自启动')
   await page.getByRole('button', { name: '添加连接' }).click()
-  await expect(page.getByRole('menuitem', { name: '生产服务器 ssh' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: '生产服务器' })).toBeVisible()
   const plus = await page.locator('.connection-session-menu.plus').boundingBox()
   expect(plus && plus.y + plus.height).toBeLessThanOrEqual(780)
 })

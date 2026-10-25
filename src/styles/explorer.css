@@ -1142,8 +1142,8 @@ body.dragging-toolbar {
 }
 .connection-session-menu.plus {
   position: fixed;
-  width: 232px;
-  max-height: min(420px, 60vh);
+  width: 208px;
+  max-height: 220px;
   overflow: auto;
 }
 .connection-session-menu.floating {
@@ -1156,7 +1156,7 @@ body.dragging-toolbar {
   width: 100%;
   border: 0;
   border-radius: 7px;
-  padding: 7px 9px;
+  padding: 6px 8px;
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -1174,18 +1174,13 @@ body.dragging-toolbar {
   display: flex;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 1px;
+  align-items: center;
 }
 .connection-session-menu strong {
   overflow: hidden;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.connection-session-menu small {
-  color: var(--muted);
-  font-size: 9px;
 }
 .connection-session-menu .connection-session-new {
   margin-top: 3px;

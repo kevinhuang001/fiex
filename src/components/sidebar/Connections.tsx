@@ -1,4 +1,4 @@
-import { Plus, Server, TerminalSquare, X } from 'lucide-react'
+import { Plus, Server, TerminalSquare } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { useMenuPosition } from '@/lib/menuPosition'
@@ -124,7 +124,6 @@ export function Connections({
                     )}
                     <span>
                       <strong>{connection.name}</strong>
-                      <small>{connection.kind}</small>
                     </span>
                   </button>
                 ))
@@ -171,13 +170,6 @@ export function Connections({
                 </span>
                 <small>{connection.kind}</small>
               </span>
-            </button>
-            <button
-              className="device-eject icon-button"
-              title="关闭连接"
-              onClick={() => onRemoveConnection(connection.id)}
-            >
-              <X size={13} />
             </button>
           </div>
         ))
