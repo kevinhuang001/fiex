@@ -131,19 +131,35 @@ export function useAppController() {
     if (chosen.length > 1) setBatchRename(chosen)
   }
   const applyBatchRename = async (renames: { path: string; name: string }[]) => {
-    const done: { from: string; to: string }[] = []
+    // Two-phase rename: move every source to a unique temporary name first,
+    // then to its final name. This supports swaps (a↔b) and avoids a target
+    // colliding with another source that has not moved yet.
+    const staged: { original: string; temp: string; name: string }[] = []
+    const final: { path: string; original: string; temp: string }[] = []
     try {
-      for (const item of renames) {
-        const to = await call<string>('rename_entry', { path: item.path, name: item.name })
-        done.push({ from: item.path, to })
+      for (const [index, item] of renames.entries()) {
+        const tempName = `.fiex-batch-${crypto.randomUUID().slice(0, 8)}-${index}`
+        const temp = await call<string>('rename_entry', { path: item.path, name: tempName })
+        staged.push({ original: item.path, temp, name: item.name })
+      }
+      for (const item of staged) {
+        const path = await call<string>('rename_entry', { path: item.temp, name: item.name })
+        final.push({ path, original: item.original, temp: item.temp })
       }
       setBatchRename(null)
       x.setSelected([])
       x.reload()
-      notify(`已重命名 ${done.length} 个项目`)
+      notify(`已重命名 ${final.length} 个项目`)
     } catch (error) {
-      for (const item of done.reverse()) {
-        await call('rename_entry', { path: item.to, name: basename(item.from) }).catch(() => {})
+      // Park finalized targets back under temporary names first, so swaps
+      // (a↔b) do not collide when restoring.
+      for (const item of final.reverse()) {
+        await call('rename_entry', { path: item.path, name: basename(item.temp) }).catch(() => {})
+      }
+      for (const item of staged.reverse()) {
+        await call('rename_entry', { path: item.temp, name: basename(item.original) }).catch(
+          () => {},
+        )
       }
       throw error
     }

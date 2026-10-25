@@ -255,6 +255,18 @@ test('opens the Trash inside Fiex', async ({ page }) => {
   await expect(page.getByText('Old draft.txt', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible()
 })
+test('batch rename previews and applies a pattern', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).click()
+  await page.getByText('Meeting.txt', { exact: true }).click({ modifiers: ['Control'] })
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '批量重命名…' }).click()
+  await page.getByRole('textbox', { name: '文件名格式' }).fill('{name}_renamed')
+  await expect(page.locator('.batch-rename-list')).toContainText('Notes_renamed.md')
+  await page.getByRole('button', { name: '开始重命名', exact: true }).click()
+  await expect(page.getByText('Notes_renamed.md', { exact: true })).toBeVisible()
+  await expect(page.getByText('Meeting_renamed.txt', { exact: true })).toBeVisible()
+})
+
 test('appearance can set and remove a background image', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '选择图片…' }).click()

@@ -1625,41 +1625,212 @@ body.dragging-file * {
 }
 
 .batch-rename-modal {
-  width: min(640px, calc(100vw - 32px));
+  display: flex;
+  width: min(1080px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  flex-direction: column;
+  overflow: hidden;
 }
 .batch-rename {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 16px;
+  height: min(620px, calc(100vh - 190px));
+  min-height: 320px;
+}
+.batch-rename-side {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 3px;
+}
+.batch-rename-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.batch-rename-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-.batch-rename-fields label {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-.batch-rename-fields label > span {
-  color: var(--muted);
-  font-size: 10px;
-}
-.batch-rename-template {
-  grid-column: 1 / -1;
-}
-.batch-rename-template small {
-  color: var(--muted);
-  font-size: 9px;
-  line-height: 1.5;
-}
-.batch-rename-list {
-  max-height: 270px;
-  overflow: auto;
+  gap: 8px;
+  padding: 11px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
+}
+.batch-rename-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.batch-rename-template-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.batch-rename-presets,
+.batch-rename-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.batch-rename-presets button,
+.batch-rename-tokens button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 6px;
+  background: var(--canvas);
+  color: var(--muted);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.batch-rename-presets button:hover,
+.batch-rename-tokens button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.batch-rename-tokens button {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.batch-rename-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.batch-rename-pair .text-field {
+  min-width: 0;
+  font-size: 11px;
+}
+.batch-rename-checks {
+  display: flex;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.batch-rename-checks label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.batch-rename-checks input {
+  accent-color: var(--accent);
+}
+.batch-rename-inline-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0;
+  color: var(--danger);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.batch-rename-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--segmented-background);
+}
+.batch-rename-segmented button {
+  flex: 1;
+  border: 0;
+  border-radius: 5px;
+  padding: 4px 3px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.batch-rename-segmented button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.batch-rename-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.batch-rename-select select {
+  min-width: 120px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 4px 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+}
+.batch-rename-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.batch-rename-numbers label {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.batch-rename-numbers input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 6px;
+  background: var(--canvas);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+.batch-rename-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+.batch-rename-preview {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.batch-rename-preview > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+}
+.batch-rename-preview > header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.batch-rename-list {
+  flex: 1;
+  min-height: 120px;
+  overflow: auto;
 }
 .batch-rename-row {
   display: grid;
@@ -1683,7 +1854,11 @@ body.dragging-file * {
   font-weight: 400;
 }
 .batch-rename-row > span:last-of-type {
+  color: var(--text);
+}
+.batch-rename-row.changed > span:last-of-type {
   color: var(--accent);
+  font-weight: 500;
 }
 .batch-rename-row.invalid > span:last-of-type {
   color: var(--danger);
@@ -1696,15 +1871,38 @@ body.dragging-file * {
 }
 .batch-rename-error {
   margin: 0;
+  padding: 7px 10px;
+  border-top: 1px solid var(--line);
   color: var(--danger);
   font-size: 10px;
 }
 .batch-rename-footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--line);
 }
-
+.batch-rename-footer > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 9px;
+}
+@media (max-width: 760px) {
+  .batch-rename {
+    grid-template-columns: 1fr;
+  }
+  .batch-rename {
+    height: auto;
+    max-height: 72vh;
+    grid-template-columns: 1fr;
+  }
+  .batch-rename-side,
+  .batch-rename-preview {
+    max-height: 42vh;
+  }
+}
 .sidebar-order-row input[type='checkbox'] {
   margin-left: auto;
 }
