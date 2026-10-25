@@ -5,21 +5,15 @@ import { usePluginCatalog } from '@/lib/plugins'
 import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/PluginPanelHost'
 
-interface Item {
+interface MenuItem {
   id: string
   title: string
-  icon?: string
-  when?: string
-  command?: string
-  panel?: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
-  children?: Item[]
-  args?: Record<string, unknown>
-  picker?: {
-    mode: 'saveFile' | 'openFile' | 'openDirectory'
-    suggestedName?: string
-    extensions?: string[]
-    param: string
-  }
+  kind: 'action' | 'submenu' | 'separator'
+  parentId?: string
+}
+interface Menu {
+  pluginId: string
+  items: MenuItem[]
 }
 interface Context {
   paths: string[]
@@ -28,133 +22,107 @@ interface Context {
   readOnly: boolean
   isRemote: boolean
 }
-const archiveExtensions = new Set([
-  'zip',
-  'rar',
-  '7z',
-  'tar',
-  'gz',
-  'tgz',
-  'bz2',
-  'tbz2',
-  'xz',
-  'txz',
-])
-const isArchivePath = (path: string) =>
-  archiveExtensions.has(path.split('.').pop()?.toLowerCase() || '')
-function matches(when: string | undefined, c: Context): boolean {
-  if (!when) return true
-  switch (when.trim()) {
-    case 'context.selection.count > 0':
-      return c.paths.length > 0
-    case 'context.selection.count == 1':
-      return c.paths.length === 1
-    case 'context.selection.isFile':
-      return c.paths.length === 1 && !c.isDirectory
-    case 'context.selection.isDirectory':
-      return c.paths.length === 1 && c.isDirectory
-    case 'context.selection.isArchive':
-      return c.paths.length === 1 && !c.isDirectory && isArchivePath(c.paths[0])
-    case 'context.selection.isNotArchive':
-      return c.paths.length > 0 && c.paths.every((path) => !isArchivePath(path))
-    case 'context.directory.canWrite':
-      return !c.readOnly
-    case 'context.directory.isLocal':
-      return !c.isRemote
-    default:
-      return false
-  }
-}
-function valid(nodes: Item[]): boolean {
+
+function validMenu(items: unknown): items is MenuItem[] {
+  if (!Array.isArray(items) || items.length > 100) return false
   const ids = new Set<string>()
-  let count = 0
-  const check = (items: Item[], depth: number): boolean => {
-    if (depth > 4) return false
-    for (const item of items) {
-      count++
-      if (count > 100 || !item.id || !item.title || ids.has(item.id)) return false
-      ids.add(item.id)
-      if (
-        Number(Boolean(item.children)) +
-          Number(Boolean(item.command)) +
-          Number(Boolean(item.panel)) !==
-        1
-      )
-        return false
-      if (item.children && (!item.children.length || !check(item.children, depth + 1))) return false
+  for (const item of items) {
+    if (!item || typeof item !== 'object') return false
+    const node = item as Record<string, unknown>
+    if (
+      typeof node.id !== 'string' ||
+      !/^[\w.-]{1,80}$/.test(node.id) ||
+      ids.has(node.id) ||
+      typeof node.title !== 'string' ||
+      node.title.length > 128 ||
+      !['action', 'submenu', 'separator'].includes(String(node.kind)) ||
+      ('parentId' in node && typeof node.parentId !== 'string')
+    ) {
+      return false
     }
-    return true
+    ids.add(node.id)
   }
-  return check(nodes, 1)
+  const byId = new Map(items.map((item) => [item.id, item as MenuItem]))
+  for (const item of items as MenuItem[]) {
+    let depth = 1
+    let current = item
+    const seen = new Set<string>([item.id])
+    while (current.parentId) {
+      const parent = byId.get(current.parentId)
+      if (!parent || parent.kind !== 'submenu' || seen.has(parent.id) || ++depth > 4) return false
+      seen.add(parent.id)
+      current = parent
+    }
+  }
+  return true
 }
+
 function MenuNode({
   item,
+  items,
   onAction,
-  ctx,
 }: {
-  item: Item
-  onAction: (item: Item, anchor?: { x: number; y: number }) => void
-  ctx: Context
+  item: MenuItem
+  items: MenuItem[]
+  onAction: (item: MenuItem, anchor?: { x: number; y: number }) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [openUp, setOpenUp] = useState(false)
   const submenu = useRef<HTMLDivElement>(null)
-  const closeTimer = useRef<number | null>(null)
-  const cancelClose = () => {
-    if (closeTimer.current !== null) {
-      window.clearTimeout(closeTimer.current)
-      closeTimer.current = null
-    }
+  const timer = useRef<number | null>(null)
+  const cancel = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
   }
-  const openSubmenu = () => {
-    cancelClose()
-    setExpanded(true)
-  }
-  const scheduleClose = () => {
-    cancelClose()
-    closeTimer.current = window.setTimeout(() => {
-      closeTimer.current = null
-      setExpanded(false)
-    }, 180)
-  }
-  useEffect(() => cancelClose, [])
+  useEffect(() => cancel, [])
   useLayoutEffect(() => {
-    if (!expanded || !submenu.current) return
-    const rect = submenu.current.getBoundingClientRect()
-    setOpenUp(rect.bottom > window.innerHeight - 8)
-  }, [expanded, item.children])
-  if (!matches(item.when, ctx)) return null
-  return item.children ? (
-    <div className="context-submenu-wrap" onMouseEnter={openSubmenu} onMouseLeave={scheduleClose}>
-      <button
-        role="menuitem"
-        aria-haspopup="menu"
-        aria-expanded={expanded}
-        onClick={(event) => {
-          event.stopPropagation()
-          cancelClose()
-          setExpanded(!expanded)
+    if (expanded && submenu.current) {
+      setOpenUp(submenu.current.getBoundingClientRect().bottom > window.innerHeight - 8)
+    }
+  }, [expanded])
+  if (item.kind === 'separator') return <div role="separator" className="context-divider" />
+  if (item.kind === 'submenu') {
+    const descendants = items.filter((candidate) => candidate.parentId === item.id)
+    if (!descendants.length) return null
+    return (
+      <div
+        className="context-submenu-wrap"
+        onMouseEnter={() => { cancel(); setExpanded(true) }}
+        onMouseLeave={() => {
+          cancel()
+          timer.current = window.setTimeout(() => setExpanded(false), 180)
         }}
       >
-        <Puzzle size={15} />
-        {item.title}
-        <ChevronRight size={13} className="submenu-arrow" />
-      </button>
-      {expanded && (
-        <div
-          ref={submenu}
-          className={`context-submenu${openUp ? ' open-up' : ''}`}
-          role="menu"
-          onMouseEnter={openSubmenu}
-          onMouseLeave={scheduleClose}
+        <button
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation()
+            cancel()
+            setExpanded((value) => !value)
+          }}
         >
-          {item.children.map((child) => (
-            <MenuNode key={child.id} item={child} onAction={onAction} ctx={ctx} />
-          ))}
-        </div>
-      )}
-    </div>
-  ) : (
+          <Puzzle size={15} />
+          {item.title}
+          <ChevronRight size={13} className="submenu-arrow" />
+        </button>
+        {expanded && (
+          <div
+            ref={submenu}
+            className={'context-submenu' + (openUp ? ' open-up' : '')}
+            role="menu"
+            onMouseEnter={cancel}
+          >
+            {descendants.map((entry) => (
+              <MenuNode key={entry.id} item={entry} items={items} onAction={onAction} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+  return (
     <button
       role="menuitem"
       onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
@@ -164,6 +132,7 @@ function MenuNode({
     </button>
   )
 }
+
 export function PluginContextActions({
   paths,
   path,
@@ -172,68 +141,102 @@ export function PluginContextActions({
   isRemote,
   onClose,
   onError,
-}: Context & {
-  onClose: () => void
-  onError: (error: string) => void
-}) {
+}: Context & { onClose: () => void; onError: (error: string) => void }) {
   const plugins = usePluginCatalog()
-  const ctx: Context = { paths, path, isDirectory, readOnly, isRemote }
-  const invoke = async (pluginId: string, item: Item, anchor?: { x: number; y: number }) => {
-    onClose()
-    if (item.panel) {
-      window.dispatchEvent(
-        new CustomEvent(OPEN_PLUGIN_PANEL, {
-          detail: {
-            pluginId,
-            panelId: item.id,
-            title: item.panel.title || item.title,
-            icon: item.icon || plugins.find((plugin) => plugin.id === pluginId)?.icon,
-            selection: paths,
-            directory: path,
-            anchor,
-            source: 'contextMenu',
-            size: item.panel.defaultSize,
-          },
-        }),
-      )
-      return
+  const [menus, setMenus] = useState<Menu[]>([])
+  const selectionKey = JSON.stringify(paths)
+  useEffect(() => {
+    let active = true
+    const enabled = plugins.filter((p) => p.enabled && p.extensions?.contextMenus === true)
+    const selectionNames = JSON.parse(selectionKey).map((value: string) =>
+      value.split(/[\\/]/).pop() || '',
+    ) as string[]
+    void Promise.all(
+      enabled.map(async (plugin) => {
+        try {
+          const response = await call<{ items: unknown }>('plugin_invoke', {
+            pluginId: plugin.id,
+            method: 'contextMenu.resolve',
+            params: {
+              selectionCount: selectionNames.length,
+              selectionNames,
+              isDirectory,
+              readOnly,
+              isRemote,
+            },
+          })
+          return validMenu(response.items)
+            ? { pluginId: plugin.id, items: response.items }
+            : null
+        } catch {
+          return null
+        }
+      }),
+    ).then((results) => {
+      if (active) setMenus(results.filter((result): result is Menu => result !== null))
+    })
+    return () => {
+      active = false
     }
-    if (!item.command) return
+  }, [plugins, selectionKey, isDirectory, readOnly, isRemote])
+
+  const invoke = async (
+    pluginId: string,
+    item: MenuItem,
+    anchor?: { x: number; y: number },
+  ) => {
+    onClose()
     const plugin = plugins.find((entry) => entry.id === pluginId)
     let activityId = ''
     try {
-      const args: Record<string, unknown> = { ...item.args, paths, path: paths[0], root: path }
-      if (item.picker) {
-        const selected = await call<string | null>('plugin_file_dialog', {
-          mode: item.picker.mode,
-          directory: path,
-          suggestedName: item.picker.suggestedName,
-          extensions: item.picker.extensions,
+      // No content permission is handed out during resolve; executing a real
+      // click enters the operation with its exact selected paths.
+      const response = await call<unknown>('plugin_invoke', {
+        pluginId,
+        method: 'contextMenu.execute',
+        params: { itemId: item.id, paths, path: paths[0], root: path },
+        directory: path,
+        selectedPaths: paths,
+      })
+      if (response && typeof response === 'object' && 'kind' in response &&
+        response.kind === 'panel' && 'entry' in response && typeof response.entry === 'string') {
+        const entry = response as {
+          entry: string
+          panelId?: string
+          title?: string
+          size?: { width: number; height: number }
+        }
+        const assetPath = await call<string>('plugin_dynamic_panel_asset', {
+          pluginId,
+          entry: entry.entry,
         })
-        if (!selected) return
-        args[item.picker.param] = selected
+        window.dispatchEvent(
+          new CustomEvent(OPEN_PLUGIN_PANEL, {
+            detail: {
+              pluginId,
+              panelId: entry.panelId || item.id,
+              title: entry.title || item.title,
+              icon: plugin?.icon,
+              selection: paths,
+              directory: path,
+              anchor,
+              source: 'contextMenu',
+              size: entry.size,
+              assetPath,
+            },
+          }),
+        )
+        return
       }
       activityId = beginActivity(
-        `${plugin?.name || '插件'} · ${item.title}`,
-        `${paths.length} 个项目`,
+        (plugin?.name || '插件') + ' · ' + item.title,
+        paths.length + ' 个项目',
         undefined,
         'plugin',
       )
       updateActivity(activityId, { indeterminate: true })
-      const response = await call<unknown>('plugin_invoke', {
-        pluginId,
-        method: item.command,
-        params: args,
-        directory: path,
-        selectedPaths: [...paths, ...(item.picker ? [args[item.picker.param] as string] : [])],
-      })
-      finishActivity(
-        activityId,
-        undefined,
-        typeof response === 'string' && response ? response : '已完成',
-      )
-      // A path or null result belongs in the activity detail, not a modal.
-      if (response !== null && typeof response === 'object') {
+      finishActivity(activityId, undefined, '已提交')
+      if (response && typeof response === 'object') {
         window.dispatchEvent(
           new CustomEvent(PLUGIN_RESULT_EVENT, { detail: { title: item.title, result: response } }),
         )
@@ -245,21 +248,18 @@ export function PluginContextActions({
   }
   return (
     <>
-      {plugins
-        .filter((p) => p.enabled)
-        .flatMap((plugin) => {
-          const items =
-            (plugin.extensions as { contextMenus?: Item[] } | undefined)?.contextMenus || []
-          if (!valid(items)) return []
-          return items.map((item) => (
+      {menus.flatMap((menu) =>
+        menu.items
+          .filter((item) => !item.parentId)
+          .map((item) => (
             <MenuNode
-              key={plugin.id + ':' + item.id}
+              key={menu.pluginId + ':' + item.id}
               item={item}
-              ctx={ctx}
-              onAction={(action, at) => void invoke(plugin.id, action, at)}
+              items={menu.items}
+              onAction={(selected, anchor) => void invoke(menu.pluginId, selected, anchor)}
             />
-          ))
-        })}
+          )),
+      )}
     </>
   )
 }
