@@ -4,6 +4,7 @@ import { notHandled } from './shared'
 
 const pluginSettings = new Map<string, unknown>()
 const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
+const demoMenuSessions = new Map<string, { pluginId: string; actions: Set<string> }>()
 
 export async function handlePlugins(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
@@ -28,6 +29,76 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       if (query.has('pluginFixture'))
         return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type==='fiex.bridge.probe'){window.parent.postMessage({type:'fiex.bridge.listening'},'*');return;}\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selectionPaths||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
       throw new Error('No installed fixture plugin')
+    }
+    case 'plugin_context_menu_resolve': {
+      const pluginId = String(a.pluginId || '')
+      const plugin = demoPlugins.find((p) => p.id === pluginId)
+      if (!plugin?.enabled || plugin.extensions?.contextMenus !== true) {
+        throw new Error('Context menu provider is not active')
+      }
+      const selection = Array.isArray(a.paths) ? a.paths.filter((v): v is string => typeof v === 'string') : []
+      if (selection.length === 0) throw new Error('No selected resources')
+      const selectionNames = selection.map((path) => path.split(/[\\/]/).pop() || '')
+      const entries = [
+        ...(pluginId === 'org.test.fixture' ? [
+          { id: 'fixture.root', title: '测试插件', kind: 'submenu' },
+          { id: 'fixture.panel', title: '信息面板', kind: 'action', parentId: 'fixture.root' },
+          { id: 'fixture.action', title: '检查文件', kind: 'action', parentId: 'fixture.root' },
+        ] : []),
+        ...(pluginId === 'org.example.checksum' && a.isDirectory !== true ? [
+          { id: 'checksum.calculate', title: '查看校验和', kind: 'action' },
+        ] : []),
+        ...(pluginId === 'org.fiex.archive'
+          ? selection.length === 1 && /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0])
+            ? [{ id: 'archive.extract', title: '解压缩', kind: 'action' }]
+            : [
+                { id: 'archive.compress', title: '压缩', kind: 'submenu' },
+                { id: 'archive.advanced', title: '高级压缩…', kind: 'action', parentId: 'archive.compress' },
+              ]
+          : []),
+        ...(pluginId === 'org.fiex.gpg'
+          ? [
+              { id: 'gpg.menu', title: 'GPG', kind: 'submenu' },
+              { id: 'gpg.encrypt', title: '加密…', kind: 'action', parentId: 'gpg.menu' },
+              { id: 'gpg.decrypt', title: '解密…', kind: 'action', parentId: 'gpg.menu' },
+              { id: 'gpg.sign', title: '签名…', kind: 'action', parentId: 'gpg.menu' },
+              ...(selection.length === 1
+                ? [{ id: 'gpg.verify', title: '验证签名…', kind: 'action', parentId: 'gpg.menu' }]
+                : []),
+            ]
+          : []),
+      ]
+      const menuSessionId = crypto.randomUUID()
+      demoMenuSessions.set(menuSessionId, {
+        pluginId,
+        actions: new Set(entries.filter((entry) => entry.kind === 'action').map((entry) => entry.id)),
+      })
+      return { menuSessionId, items: entries }
+    }
+    case 'plugin_context_menu_execute': {
+      const menuSessionId = String(a.menuSessionId || '')
+      const session = demoMenuSessions.get(menuSessionId)
+      demoMenuSessions.delete(menuSessionId)
+      const itemId = String(a.itemId || '')
+      if (!session || !session.actions.has(itemId)) {
+        throw new Error('Invalid or already used menu session')
+      }
+      const panelId = itemId
+      if (itemId === 'fixture.panel' || itemId === 'archive.advanced' || itemId.startsWith('gpg.')) {
+        const title = itemId === 'fixture.panel' ? '信息面板'
+          : itemId === 'archive.advanced' ? '高级压缩'
+          : itemId === 'gpg.encrypt' ? 'GPG 加密'
+          : itemId === 'gpg.decrypt' ? 'GPG 解密'
+          : itemId === 'gpg.sign' ? 'GPG 签名' : '验证签名'
+        return {
+          kind: 'panel',
+          assetPath: 'demo-plugin-panel',
+          panelId,
+          title,
+          size: itemId === 'fixture.panel' ? { width: 620, height: 560 } : { width: 520, height: 420 },
+        }
+      }
+      return { ok: true }
     }
     case 'plugin_invoke': {
       const method = String(a.method || '')
