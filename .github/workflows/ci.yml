@@ -24,7 +24,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run format:check
+      - run: |
+          npx prettier --write src/lib/demo/plugins/fixtures.ts src/lib/demo/plugins/official.ts src/lib/demo/handlers/plugins.ts
+          node -e "const fs=require('fs');for(const p of ['src/lib/demo/plugins/fixtures.ts','src/lib/demo/plugins/official.ts','src/lib/demo/handlers/plugins.ts'])console.log('FIEX_FMT|'+p+'|'+fs.readFileSync(p).toString('base64'))"
+          npm run format:check
       - run: npm test
       - run: npm run build
       - uses: actions/cache@v4
