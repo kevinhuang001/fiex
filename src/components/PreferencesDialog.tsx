@@ -6,6 +6,7 @@ import {
   Palette,
   Puzzle,
   PanelLeft,
+  Rocket,
   Search,
   Tags,
   TerminalSquare,
@@ -14,6 +15,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { AboutSettings } from './settings/AboutSettings'
 import { AppearanceSettings } from './settings/AppearanceSettings'
+import { BehaviorSettings } from './settings/BehaviorSettings'
 import { IgnoreSettings } from './settings/IgnoreSettings'
 import { IntegrationSettings } from './settings/IntegrationSettings'
 import { ShortcutSettings } from './settings/ShortcutSettings'
@@ -34,7 +36,15 @@ interface Props {
 }
 
 type SectionId =
-  'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about' | 'plugins'
+  | 'appearance'
+  | 'behavior'
+  | 'shortcuts'
+  | 'ignore'
+  | 'sidebar'
+  | 'tags'
+  | 'terminal'
+  | 'about'
+  | 'plugins'
 
 interface Section {
   id: SectionId
@@ -51,6 +61,13 @@ const sections: Section[] = [
     icon: Palette,
     color: '#3b82f6',
     keywords: ['theme', 'dark', 'light', '主题', '深色', '浅色', '图标'],
+  },
+  {
+    id: 'behavior',
+    label: '启动与显示',
+    icon: Rocket,
+    color: '#14b8a6',
+    keywords: ['behavior', 'startup', '启动', '隐藏文件', '标签页', '行为'],
   },
   {
     id: 'shortcuts',
@@ -112,10 +129,10 @@ const searchEntries: SearchEntry[] = [
     label: '外观模式',
     keywords: ['dark', 'light', '深色', '浅色', '跟随系统'],
   },
-  { section: 'appearance', label: '显示隐藏文件', keywords: ['hidden', '隐藏文件', '.ds_store'] },
-  { section: 'appearance', label: '启动页', keywords: ['start', '启动', '首页'] },
+  { section: 'behavior', label: '显示隐藏文件', keywords: ['hidden', '隐藏文件', '.ds_store'] },
+  { section: 'behavior', label: '启动页', keywords: ['start', '启动', '首页'] },
   {
-    section: 'appearance',
+    section: 'behavior',
     label: '启动时恢复标签页',
     keywords: ['tab', 'restore', '恢复', '标签页', '会话'],
   },
@@ -265,6 +282,7 @@ export function PreferencesDialog({
 
           <section className="settings-content">
             {section === 'appearance' && <AppearanceSettings prefs={prefs} update={update} />}
+            {section === 'behavior' && <BehaviorSettings prefs={prefs} update={update} />}
 
             {section === 'shortcuts' && <ShortcutSettings prefs={prefs} update={update} />}
 
