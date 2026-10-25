@@ -13,7 +13,7 @@ describe('plugin catalog helpers', () => {
     const categories = pluginCategories(
       {
         info: [{ id: 'x', title: 'x', command: 'x.info' }],
-        contextMenus: [{ id: 'y', title: 'y' }],
+        contextMenus: true,
         preview: [],
       },
       ['git'],
