@@ -78,6 +78,10 @@ impl ResourceSnapshot {
         }
     }
 
+    pub fn metadata(&self) -> Option<&ResourceMetadata> {
+        self.metadata.as_ref()
+    }
+
     pub fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext {
         let session_id = crate::mounts::new_id().unwrap_or_default();
         EventContext {

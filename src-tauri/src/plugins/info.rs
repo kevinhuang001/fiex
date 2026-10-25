@@ -485,24 +485,15 @@ fn section_from_contract(
     })
 }
 
-fn resolve_builtin(
-    candidate: &Candidate,
-    context: &EventContext,
-    local: &Path,
-    display: &str,
-    resource_stat: Option<&std::fs::Metadata>,
-) -> Vec<InfoSection> {
+fn resolve_builtin(candidate: &Candidate, resource: &ResourceSnapshot, display: &str) -> Vec<InfoSection> {
     match candidate {
         Candidate::Metadata => vec![metadata_section(
             display,
-            local,
-            resource_stat,
-            context
-                .targets
-                .first()
-                .and_then(|target| target.metadata.as_ref()),
+            &resource.local,
+            resource.stat.as_ref(),
+            resource.metadata(),
         )],
-        Candidate::Media => media_sections(local),
+        Candidate::Media => media_sections(&resource.local),
         Candidate::Plugin { .. } => Vec::new(),
     }
 }
@@ -561,14 +552,7 @@ pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
     for candidate in candidates(&resource) {
         match &candidate {
             Candidate::Metadata | Candidate::Media => {
-                let context = resource.context("__core__", true, !resource.is_dir);
-                let mut resolved = resolve_builtin(
-                    &candidate,
-                    &context,
-                    local_path,
-                    display,
-                    resource.stat.as_ref(),
-                );
+                let mut resolved = resolve_builtin(&candidate, &resource, display);
                 if let Candidate::Metadata = candidate {
                     // Use the display path Core originally received.
                     if let Some(section) = resolved.first_mut() {
