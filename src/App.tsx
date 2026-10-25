@@ -71,7 +71,7 @@ export default function App() {
           {...app}
           split={app.split}
           onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
-        />}
+        />}}
         {!pluginViewId && <ExplorerPathBar {...app} x={app.left} />}
         {!pluginViewId && app.x.error && (
           <div className="error-banner" role="alert">
