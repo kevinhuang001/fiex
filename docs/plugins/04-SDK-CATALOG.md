@@ -102,6 +102,12 @@ flowchart TD
 
 `surfaces.decorations:true` 只使 Core 每次切换目录时发送一次 `decorations.resolve`；即使未批准 metadata 也会发事件。Core 只发送目录切换事件及当前可见成员的 opaque refs；插件通过 `ctx.files().metadata(ref)` 逐项申请（或将来批量 `statBatch`），独立 PermissionPolicy 按 `permissions.metadata.enabled` 和本次目录可见集合审核请求与返回值，Core 才返回 Metadata。SDK 无法通过这个事件额外获取目录读取能力；没有 metadata 则无法返回逐文件有效角标。
 
+### 2.4 批量 stat、缓存与嵌套 IPC 的 SDK 要求
+
+`Files::stat_batch(&[ResourceRef])` 是**目标高层 SDK API**（尚未实现），内部调用同一 `host.fs.statBatch`，无需开发者知道 IPC 细节，亦不导出 Preview/Info 特殊类型。对单选使用 `Files::metadata(ref)` 即可；多选（ContextMenu）和大量可见对象（Decoration）应优先使用批量调用，SDK 有界拆批并支持取消。返回格式应逐 ref 关联成功或错误，禁止无声丢掉 `PermissionDenied` 导致索引错位。
+
+SDK 的常驻 `serve` / IPC 读循环必须支持 **Provider 回调进行中再发起 Host RPC、异步收到响应并继续回调**；同一个进程可并发多个 Provider 请求，通过 JSON-RPC ID + 会话身份精准匹配。不得在持有请求队列、进程写锁或会话锁时同步等待 Core 返回，也不得因为处理 `contextMenu.resolve` 就暂停处理嵌套 Host RPC 的响应。Core 的 Metadata 缓存和权限审核属于宿主，不在 SDK 内再次缓存未经授权的全局文件元数据。
+
 ## 3. Files、Reader、Writer：完整映射
 
 | 公共 Rust API | 具体 IPC | 说明 |
@@ -121,7 +127,8 @@ flowchart TD
 | `Files::write(path,bytes)` | beginWrite/write/commit | `files.write.enabled`：只修改已存在文件，不隐含新建 |
 | `Files::create(path,bytes)` | beginWrite(create:true)/commit | `files.create.enabled`：只创建不存在的文件并写入初始内容；不需要 `folders.create`，不隐含 `files.write` |
 | `Files::list(path)` | `host.fs.list` | 仅许可目录内 |
-| `Files::metadata(path)` | `host.fs.stat` | **所有 Metadata 统一按需申请**：要求 `permissions.metadata.enabled` + EventScope/OperationScope/TaskScope，并在返回时二次审核；事件不会带 metadata |
+| `Files::metadata(ref)`（目标签名） | `host.fs.stat` | **所有 Metadata 统一按需申请**：要求 `permissions.metadata.enabled` + EventScope/OperationScope/TaskScope，返回二次审核；事件不会带 metadata |
+| `Files::stat_batch(&[ResourceRef])`（目标新增） | `host.fs.statBatch` | 一次 IPC 批量请求，返回按输入顺序排列的逐项 Result；SDK 按 Schema 上限拆批，调用者逐项处理无权/不可用结果；不增加授权范围 |
 | `Files::create_dir_all(path)` | `host.fs.mkdir` | `folders.create.enabled`：创建目录，不等于创建新文件 |
 | `Files::remove(path)` | `host.fs.remove` | 按目标类型要求 `files.delete.enabled` 或 `folders.delete.enabled`，检查本次所选范围 |
 | `Files::rename(from,to)` | `host.fs.rename` | 按目标类型要求 `files.rename.enabled` 或 `folders.rename.enabled`，检查双路径 Scope |

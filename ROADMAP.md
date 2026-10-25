@@ -129,6 +129,11 @@ Manifest 注册事件
 - [ ] R3-05：Everything 允许依赖全局索引，但查询本身要带路径过滤，Core 对返回结果二次校验路径边界。
 - [ ] R3-06：添加查询超时、取消、批量结果限制与性能基准，UI 不因插件阻塞。
 
+- [ ] R3-07：实现 `host.fs.statBatch`（SDK `Files::stat_batch`）为 ContextMenu 多选与 Decoration 可见成员的统一批量 Metadata 申请；逐资源审核 `permissions.metadata` + EventScope，按项返回、不额外授权。
+- [ ] R3-08：Core FileBroker 在权限审查后复用 Explorer/VFS 有效 Metadata 缓存；按资源身份/版本失效，响应仍逐项审核；不复用缓存授权。
+- [ ] R3-09：Core 和 SDK 支持 ContextMenu resolve 回调内部嵌套 Host RPC 并行响应，不能持锁跨 await 或阻塞 IPC 接收循环；限并发、支持取消。
+- [ ] R3-10：右键先显示原生菜单，插件结果在有效会话中增量合并；旧 Session/超时响应丢弃，焦点与悬停稳定；跨平台基准校准软/硬预算。
+
 ## R4 · VFS 与 Connection（P1）
 
 - [ ] R4-00：点击 Connection 加号和侧栏条目分别触发 `connection.create/open`，插件决定导航目标，Core 校验该 NavigationIntent；不因注册或保存 Connection 自动创建 VFS。
@@ -158,7 +163,7 @@ Manifest 注册事件
 ## R7 · 测试与发布门禁（P1）
 
 - [ ] R7-01：Windows/macOS/Linux 执行格式化、Rust clippy、前端 typecheck、单元/集成测试。
-- [ ] R7-02：性能基准覆盖 5 GiB+ 大文件、数千文件目录、并发 Provider、按需缓存、弱网、取消。
+- [ ] R7-02：性能基准覆盖 5 GiB+ 大文件、数千文件目录、并发 Provider、按需缓存、弱网、取消；右键特测单选、多选 100/1000、10 插件、statBatch 冷热缓存、慢/离线 VFS、嵌套 IPC 死锁及原生菜单首帧/增量合并 p50/p95/p99。
 - [ ] R7-03：安全回归覆盖权限撤销、非选中路径读取、元数据泄露、扩展点伪造、目录逃逸、恶意 UI Bridge 调用。
 - [ ] R7-04：官方插件逐一完成端到端安装/调用/禁用/卸载验收。
 - [ ] R7-05：所有新 API 均有 Schema、SDK 封装、Core Host 路由、文档与契约测试；无死路径。

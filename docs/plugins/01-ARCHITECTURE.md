@@ -114,6 +114,10 @@ sequenceDiagram
   P-->>C: UI result (menu/info/decoration/preview)
 ```
 
+### 2.2.1 菜单查询与资源申请的性能分层
+
+保留事件不含 Metadata 的单一路径，**多一次 IPC 往返用批量、有效缓存与可重入调度消除主要开销**。插件对多选使用 `host.fs.statBatch`（SDK `Files::stat_batch`），Core 的独立 PermissionPolicy 在每条资源访问**前**检查权限/Scope、返回前审核属性；然后尽可能使用 Explorer/VFS 已有 Metadata 缓存，失效则经受限 Broker 查询。缓存从不作为授权凭据。多个菜单插件并发，回调内部发起的 Host RPC 也要在 `resolve` 尚未完成时得到响应，不能持锁阻塞 dispatcher；原生菜单首帧不等动态 Provider，超时/取消/新菜单使旧会话结果无效。性能验收需结合本地与远端 VFS 的 p50/p95/p99，而非未经测量声称固定延迟。
+
 ## 2.3 目录限定的 Search
 
 `surfaces.search[]` 不提供 `scope`；所有搜索由 Core 绑定已验证的当前 root。Everything 可以在后台依托全局索引，但必须使用 root 作为路径过滤条件，Core 还要逐项校验结果路径确实属于该目录树；不支持展示跨 root 的全局搜索结果。

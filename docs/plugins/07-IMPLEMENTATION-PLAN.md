@@ -44,7 +44,7 @@ flowchart LR
 | 编号 | 仓库 | 任务 | 验收 |
 |---|---|---|---|
 | M2.1 | Core | 将 Manifest 旧 `contributions` 拆为 `surfaces`（Connection/Toolbar/ContextMenus/Search/Preview/Info/Decorations/Settings/Themes）、`providers`（显式 VFS/Hooks）、`surfaces.themes[]`；PanelHost 为 Core 通用运行时 UI 服务，验证文件/目录 `{enabled}` | 旧 contributions/布尔权限、scheme/capabilities/sync/writeMode/conflictControl 全部拒绝 |
-| M2.2 | Core | 删除 `when/children` 与 Manifest 中的静态 context menu item；`surfaces.contextMenus:true` 注册 Provider，删除静态 `panels[]` 并接入运行时 PanelHost；实现一次右键每插件一次并发 `contextMenu.resolve` | 每次只传本次选中元数据；空结果/超时不阻塞 UI；最大 80 项/4 层/无环 |
+| M2.2 | Core | 删除 `when/children` 与 Manifest 中的静态 context menu item；`surfaces.contextMenus:true` 注册 Provider，删除静态 `panels[]` 并接入运行时 PanelHost；实现一次右键每插件一次并发 `contextMenu.resolve` | 每次只传本次选择的 opaque ref，不附带 metadata；空结果/超时不阻塞原生 UI；最大 80 项/4 层/无环 |
 | M2.3 | Core | 完成 search/preview/info/hooks/订阅式 decorations/themes/settings 生命周期；Preview/Info 内置与外部共用 ProviderRegistry / 请求响应，删除 `search.scope`，只允许指定目录 `root` 搜索 | 统一 Preview/Info fixtures；Everything 查询和结果限定 root；无全局搜索入口 |
 | M2.4 | Core | 签名校验覆盖 manifest 与 assets，升级触发权限变更检查 | 篡改文件安装失败；新权限重新同意 |
 | M2.5 | SDK | 生成 Manifest Type/Schema/示例包校验工具 | 本地一条命令能 lint 所有官方 manifest |
@@ -79,6 +79,11 @@ flowchart LR
 
 | 编号 | 仓库 | 任务 | 验收 |
 |---|---|---|---|
+| M2.13 | Core/SDK/IPC Schema | 实现 `host.fs.statBatch` + `Files::stat_batch`，对多选/Decoration 以单次有界 IPC 批量申请 Metadata，按输入顺序返回逐项成功或拒绝 | 批量与单项 `host.fs.stat` 使用同一 Grant/Scope/返回审查；混合有权/无权及重复 ref 无泄漏，超限分批/拒绝行为明确 |
+| M2.14 | Core FileBroker | 在已通过 PermissionPolicy 的请求中复用 Explorer/VFS 有效 Metadata 缓存；请求与响应都不省略授权，按节点身份/revision/失效事件校验新鲜度 | 热缓存少一次底层 stat，但撤权、重命名、文件写入、VFS revision 变化和过期 ref 均不能读到无权或错误资源 |
+| M2.15 | Core/SDK | ContextMenu Provider 并发查询，SDK `serve` 与 Core RPC 分发支持回调内部嵌套的 `host.fs.statBatch` 响应，关联 request/session ID、取消和限额 | 无跨 await 菜单/插件/RPC 锁；多个插件同时嵌套调用不死锁、不串数据；取消后不合并迟到响应 |
+| M2.16 | Core UI/Tests | 原生菜单先显示，动态项目在未关闭 MenuSession 内增量合并，限时降级；记录首帧/审核/缓存/远端/IPC/菜单合并耗时 | Windows/macOS/Linux 冷热缓存、本地单选、多选 100/1000、10 插件并发、慢/离线 VFS 的 p50/p95/p99；焦点/悬停不跳动，迟到结果丢弃 |
+
 | M2.6 | Core | 新建 MenuBroker：每次右键产生不可复用 MenuSession，向声明 `contextMenus:true` 的 Native 插件并发 `contextMenu.resolve` | 恰好调用一次/插件/右键；不再读取 `when`、静态 `children` |
 | M2.7 | Core | 校验响应扁平 `items[]` 的 `id/type/parentId`；无环、最大 4 层/80 项；点击 action 后可以调用 `host.ui.open`，但 resolve 不允许直接弹窗 | 其他插件 ID 注入、任意 host 命令、禁用或已过期 item 全部拒绝 |
 | M2.8 | Core | 独立 `permissions.metadata.enabled`：菜单事件只通知 opaque refs；允许插件在 resolve 中调用 `host.fs.stat` 申请本次选择对象 metadata，经独立 PermissionPolicy 双向审核；点击有效菜单 action 后才能获得读写执行 Scope | 未授权 stat 返回 PermissionDenied；查询对所选对象 metadata 可申请，对文件内容 openRead 拒绝；原生菜单不阻塞 |

@@ -279,7 +279,9 @@ Core 在用户点击 `action` 后发送 `contextMenu.execute({menuSessionId,item
 
 Core 按单次菜单 Session 保存已返回的 `itemId/type/owner`，执行前核验 Session 未过期、资源未被无声替换、item 已启用且归属同一插件；异步返回必须绑定当前 Session，不能覆盖下一次右键的菜单。
 
-**性能预算（目标）**：Core 并发调用所有 Provider，每个插件仅一次 IPC；内置菜单优先显示，插件菜单增量合并且不改变用户已悬停条目的位置。采用软预算 120 ms、硬截止 250 ms（数值需跨平台基准测试校准），超时/崩溃不阻塞主菜单，丢弃过期结果；每个 Provider 最多 80 项、最大四层，拒绝 parentId 环及超大响应。常驻进程复用，绝不为一次右键启动一个进程。每次右键都必须重新查询，不把旧菜单缓存当成实时结果。
+**性能预算（目标）**：每次右键每个已启用插件收到一次 `contextMenu.resolve` **事件**，但事件处理期间允许再通过统一 Broker 发送 `host.fs.stat/host.fs.statBatch` 等嵌套资源 RPC；不能误解成整次交互只能发生一次 IPC。所有插件并发查询，原生菜单先显示，动态菜单在有效 Session 内增量合并并保持焦点/已悬停项稳定。软预算 120 ms、硬截止 250 ms 只是待 Windows/macOS/Linux 基准验证的候选值；超时、崩溃、远端 VFS 慢响应均不得阻塞原生菜单。每 Provider 最多 80 项、最大四层，拒绝环及超大响应。常驻进程复用，绝不为单次右键另启插件进程；每次右键重新查询菜单结果，**Metadata 缓存只能在按次授权审核后复用，不能缓存菜单结果替代当前判断**。
+
+**统一资源接口的优化约束**：`host.fs.statBatch` 与单项 `host.fs.stat` 使用完全相同的 `permissions.metadata.enabled` 和本次 EventScope；Core 先授权，再复用 Explorer/VFS 已取得且有效的 Metadata 缓存，返回前逐项审核。多选一次申请、请求可重入且不能被 `resolve` 等待锁阻塞；插件查询慢或无权限不延迟原生菜单。详情以 [03 IPC](03-IPC-CATALOG.md) 的性能合同为准。
 
 **最小授权**：`resolve` 阶段可以调用 `host.fs.stat` 主动申请**本次 target/selection** 的 metadata，必须通过统一 Metadata 授权和事件 Scope；其他对象的 stat、内容读取及目录遍历都要拒绝。`execute` 在用户点击后才由 Core 根据真实 selection 建立 OperationScope，并按每一种文件或文件夹权限重新检查。`contextMenus:true` 不自动授予元数据或内容读取权限。
 
@@ -291,14 +293,19 @@ sequenceDiagram
   participant G as Git 插件
   U->>C: 右键 report.zip
   C->>C: 创建 menuSession + 所选 ref 快照
-  par 每插件一次并发查询
+  C-->>U: 立即展示原生菜单
+  par 每插件一次并发事件
     C->>A: contextMenu.resolve(ref,session)
+    A->>C: host.fs.statBatch(selected refs)
+    C-->>A: Policy审核 + Cache/Broker返回
     A-->>C: items: ZIP, 7z, Extract
   and
     C->>G: contextMenu.resolve(ref,session)
+    G->>C: host.fs.stat(ref)
+    C-->>G: Policy审核 + Cache/Broker返回
     G-->>C: items: Git actions 或 []
   end
-  C-->>U: 展示本次动态菜单
+  C-->>U: 如会话有效则增量合并动态项
   U->>C: 点击 ZIP
   C->>C: 验证 menuSession/item/权限与选择
   C->>A: contextMenu.execute(itemId,scope)

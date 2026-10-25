@@ -89,6 +89,14 @@ Manifest 中 `permissions.metadata` 是**文件和文件夹共用**的单个 `{e
 
 Connection 只在添加连接 +、侧边栏注册 UI 条目。用户点击经 `connection.create/open` 通知插件，插件决定打开什么 Panel/导航到哪个目标。网盘还须另行注册 `providers.vfs[]`，独立 VFS Broker 创建 mount 并处理文件流和写回，不因 Connection 注册扩大文件系统权限。
 
+## 2.4 批量请求和 Metadata 缓存的权限不变量
+
+`host.fs.statBatch` 是多次 `host.fs.stat` 的**受限批处理**，不是一项新的权限，也不扩大 EventScope。独立 PermissionPolicy 必须在读取 Core 缓存前逐 ref 审核插件身份、`permissions.metadata.enabled`、有效 Session 和真实资源所有权；从 Core 缓存或文件系统取得候选属性后，还必须按同一 ref/Scope 审核最终响应。混合有权限与无权限的列表应逐项返回成功或拒绝，不得泄露拒绝项名称、大小、时间、真实宿主路径；不得通过错误处理、计数、补全或缓存命中状态形成旁路。强制请求项数、载荷字节数、每插件并发和 deadline 限额。
+
+Core 可复用 Explorer、VFS 导航已经获得的有效 Metadata，但缓存的**数据不包含授权或文件访问凭证**，必须基于 mount/稳定节点身份、版本/快照代次和对象种类校验；节点改名、删除、写回、观察到的磁盘/VFS revision 变化、Session 撤销及不能可靠验证的新鲜度均不得继续提供旧属性。远端缓存过期或离线只允许显式标记不确定/返回 unavailable，不能伪装成实时结果；缓存数据不得替代写回、删除及冲突检测前的真正版本复核。
+
+Core 并发运行多个 `contextMenu.resolve` 时，插件可能在回调中向 Core 再发 `host.fs.statBatch`。IPC 收发循环、授权处理、Core FileBroker、插件 SDK 均须异步可重入，**不得持锁跨 await、阻塞接收循环或使用非重入单线程 RPC 等待链**。过期的 MenuSession、取消的任务、被撤销授权不得在缓存命中后继续返回 metadata；响应只能匹配发起调用的 pluginProcessInstance + requestId + sessionId。
+
 ## 3. Scope 与句柄生命周期
 
 ```mermaid

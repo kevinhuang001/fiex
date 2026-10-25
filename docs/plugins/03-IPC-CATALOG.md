@@ -124,9 +124,12 @@ sequenceDiagram
   participant C as Core MenuBroker
   participant P as Provider
   UI->>C: pointer contextmenu(target)
-  C->>C: Snapshot metadata + session S
+  C->>C: Snapshot selected opaque refs + session S
   C-->>UI: 原生菜单先显示
-  C->>P: contextMenu.resolve(S, target, selection)
+  C->>P: contextMenu.resolve(S, target, selection refs)
+  P->>C: host.fs.statBatch(selected refs)
+  C->>C: PermissionPolicy → metadata cache / bounded stat
+  C-->>P: approved per-ref metadata or errors
   P-->>C: items（可能为空）
   C->>C: validate tree and owner
   C-->>UI: Merge dynamic items into menu
@@ -136,6 +139,17 @@ sequenceDiagram
   P-->>C: operation result
   C-->>UI: result
 ```
+
+### 2.1.1 右键菜单嵌套 IPC 与首帧响应性能（目标规范）
+
+**保留事件 → 插件请求资源 → Core 审核返回** 的唯一流程，绝不为提速在 `contextMenu.resolve` 事件里夹带 Metadata。右键事件及单次嵌套 `host.fs.statBatch` 在理想情况下构成两次 RPC 往返（resolve 往返内部包含 statBatch 往返），比直接事件附带 Metadata 多一次资源请求 RTT；用下列机制控制延迟：
+
+1. **聚合批量请求**：多选右键由插件向 `host.fs.statBatch` 一次提交本次所选资源 refs；单文件仍可用 `host.fs.stat`。Core Broker 限额、去重、按项审核并返回；同批中未获准的资源绝不通过其它条目泄漏属性。Decoration 的可见成员也可复用此接口，但不能扩大 EventScope。
+2. **复用 Core Metadata 缓存**：Explorer 已获取的基础 stat 和 VFS 页内 Metadata 可在**通过 PermissionPolicy.authorize_call 之后**进入相同 Broker 的缓存读取路径，取得候选结果后仍必须通过 `audit_response` 才交付插件。缓存键必须含 mount/node 稳定身份、版本/快照代次及对象种类；监听/目录刷新、文件写删改名、VFS revision 变化、权限撤销或重新绑定时失效/重新验证。缓存不包含权限授权本身，不允许因命中而跳过 Grant/Scope；不可靠远端缓存必须有有界新鲜度或降级重新取数。缓存只用于展示属性，不作为写回/删除等破坏性操作的最终一致性证明。
+3. **并发且可重入的 IPC**：Core 对已激活的所有 ContextMenu Provider 并发 `resolve`；插件在处理 `resolve` 期间可发 `host.fs.stat/host.fs.statBatch` 并得到响应。双向消息的 request-id 匹配、读循环、dispatcher 和 Broker 必须独立推进；任何一方不得持有 MenuSession/PluginRegistry/IPC 写锁跨越 `await` 或阻塞等待对方的嵌套调用。SDK 的 `serve` 亦不得单线程串行等待当前 resolve 完成才接收 host response。背压、每插件/每 Session 并发与总量限制由 Core 统一实施。
+4. **原生菜单先绘制**：右键立即显示内置/原生菜单，插件菜单在有效 `menuSessionId` 中异步增量合并，Core 应保持已悬停或正在键盘导航的条目顺序/焦点稳定；一旦用户点击、关闭、再次右键或 Session 失效，不得合并迟到结果。插件过慢时退化为只有原生菜单，不等待网络盘或重试阻塞 UI。
+
+软预算 **120 ms**、硬截止 **250 ms** 仅作为初始候选目标，须在 Windows/macOS/Linux 的真实负载中校准，而不是已测得或已保证的响应时间。分别记录点击到原生菜单首帧、发出 resolve、`statBatch` 审核/缓存命中/缓存未命中及远端查询、插件回包、动态菜单合并的 p50/p95/p99；目标是验证**额外 IPC RTT 不明显损害本地单选右键体验**。需测试单选、100/1000 多选、10 个并发插件、慢/离线 VFS、冷热缓存、取消、权限撤销、过期 Session，以及在回调中嵌套调用不死锁的压力场景。
 
 ### VFS 文件树数据契约（Connection 不隐含文件操作）
 
@@ -157,6 +171,7 @@ sequenceDiagram
 |---|---|---|---|
 | `host.fs.list` | `path` | `Entry[]` | `folders.read.enabled` + scope；返回目录成员，其他属性须按 metadata 权限裁剪 |
 | `host.fs.stat` | `ref` | `Entry` | 文件/目录统一要求 `permissions.metadata.enabled` + 精确 EventScope/OperationScope/TaskScope；菜单允许所选对象 stat，Decoration 允许可见成员 stat；请求及回包均经 PermissionPolicy 审核 |
+| `host.fs.statBatch`（目标新增） | `refs:ResourceRef[]` | `{results:[{ref,metadata?,error?}]}` | 一个 RPC 批量申请，按输入顺序逐项审核、逐项返回（metadata 与 error 二选一），单项失败不泄露其属性；同一统一 metadata 权限，无新增批量特权 |
 | `host.fs.readChunk` | `path,offset,length` | `base64,size,eof` | `files.read.enabled` + scope |
 | `host.fs.read` | `path,offset,length` | `buffer,size,eof` | `files.read.enabled` + scope；内部低层 |
 | `host.fs.openRead` | `path` | `handle,size` | `files.read.enabled` + scope |
@@ -187,7 +202,7 @@ Core FileBroker -> stat -> PermissionPolicy.audit_response(metadata, scope)
 Core --[metadata or PermissionDenied]-----> Plugin
 ```
 
-`permissions.metadata.enabled` 同时适用于文件和文件夹。EventScope 仅覆盖本次右键所选、预览/Info 打开的目标，或 Decoration 目录切换事件中的当前可见节点；不因注册 Surface 或曾收到通知扩大范围。请求返回值按 Schema 裁剪，绝对路径、其他节点 metadata 和文件字节不可借 `host.fs.stat` 泄露。批量元数据申请 `host.fs.statBatch` 为目标优化项，逐项套用相同审核规则，未实现前可逐个调用 `host.fs.stat`。 
+`permissions.metadata.enabled` 同时适用于文件和文件夹。EventScope 仅覆盖本次右键所选、预览/Info 打开的目标，或 Decoration 目录切换事件中的当前可见节点；不因注册 Surface 或曾收到通知扩大范围。请求返回值按 Schema 裁剪，绝对路径、其他节点 metadata 和文件字节不可借 `host.fs.stat` 泄露。批量元数据接口 `host.fs.statBatch` 是**正式待实现的性能合同**，而非第二条元数据分发路径；单个 `host.fs.stat` 同样保留。请求只接受不透明 `ResourceRef[]`，Core 在批次上限内按引用去重、按输入顺序回填，每项都通过相同的授权、真实对象身份和响应字段审核；每项只返回 `{ref,metadata}` 或 `{ref,error:PermissionDenied|Unavailable|...}`。**任何缓存命中和批处理都不能跳过 PermissionPolicy**。默认批次上限目标为 256 项（由 Schema 固定且可按基准调整），超过则拒绝整批、SDK 按限额拆批；支持取消、deadline 和远端受限并发，避免把 1000 个单文件 stat 变成 1000 个串行往返。 
 
 ### Search 的局部路径约束
 
