@@ -107,7 +107,14 @@ export const officialPlugins: DemoPlugin[] = officialMode
             {
               id: 'archive.info',
               title: '压缩包',
-              command: 'archive.info',
+              extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
+              priority: 100,
+            },
+          ],
+          preview: [
+            {
+              id: 'archive',
+              title: '压缩包预览',
               extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
               priority: 100,
             },

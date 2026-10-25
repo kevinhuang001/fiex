@@ -62,6 +62,8 @@ Connection 主导航以外的用户操作（如 Toolbar 点击、有效右键 ac
 }
 ```
 
+Plugin preview HTML renders content only: Core owns the preview title/close/navigation header, so the document must not draw its own title bar. Toolbars/tabs are allowed; a duplicated file/dataset header is not.
+
 此 Panel 与 Connection 的完整 PluginView 是不同的宿主布局方式；二者共享 iframe 安全与受控 UI Bridge。自动 Decoration 刷新、后台同步、Menu.resolve 查询本身不生成有权弹出 Panel 的交互身份。插件不需要在 Manifest 列出具体 UI 页面。
 
 ## 6. UI Bridge 安全

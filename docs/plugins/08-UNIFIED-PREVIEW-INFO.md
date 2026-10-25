@@ -56,7 +56,36 @@ ContextBuilder 从 Explorer/VFS 候选资源中取得基础属性；**独立 Per
 
 内置 Provider 可以由 Core 内部适配器获取同一资源，第三方通过受控文件流访问，不因为内置类型而对外扩大权限。
 
-## 4. InfoResponse
+## 4. Wire contract and InfoResponse
+
+Core invokes the standard method **`info.resolve`** with an `InfoContext`
+directly as `params`:
+
+```json
+{
+  "version": 1,
+  "sessionId": "info-session-opaque",
+  "intent": "info",
+  "resource": {
+    "ref": { "mountId": "m1", "nodeId": "a18" },
+    "metadata": {
+      "name": "audio.mp3",
+      "kind": "file",
+      "extension": "mp3",
+      "size": 4194304,
+      "modified": 1792920000
+    },
+    "read": { "resourceId": "fiex-read:opaque" }
+  }
+}
+```
+
+`metadata` is omitted without `permissions.metadata.enabled`; `read` is omitted
+without `permissions.files.read.enabled`. `read.resourceId` is opened with
+`host.fs.openRead` (SDK: `ctx.files().open_resource(id, sessionId)`) and is
+bound to the plugin instance and this event session.
+
+Plugins return:
 
 ```json
 {
@@ -73,13 +102,39 @@ ContextBuilder 从 Explorer/VFS 候选资源中取得基础属性；**独立 Per
 }
 ```
 
+Section ids are namespaced by Core as `<pluginId>.<sectionId>`; built-in
+sections use `core.metadata`, `core.audio`, `core.video.mp4` and
+`core.video.matroska`.
+
 InfoRenderer 只接收统一 `InfoResponse`，根据 sections 的稳定 ID、排序和展示规则渲染。基本文件属性是独立的 Core Info Provider；音频标签、视频编码、EXIF 等若需要读取文件字节，必须具有 `files.read` 和当前资源 Scope，不能仅靠 `metadata` 权限。
 
 允许多个 Provider 并发生成 sections；Core 按优先级/稳定顺序合并，超时或单个来源错误不吞掉其他来源，防止恶意 HTML 注入或异常大文本。
 
 ## 5. PreviewView
 
-Preview Provider 返回 Core 标准 `PreviewView`：可以是由 Core 支持的文本、图像、媒体、PDF、受限 HTML 预览描述或需要 Core 资源代理的 View。选择预览渲染器必须先完成类型匹配、权限审核和受信任资源 URL 生成。
+Core invokes the standard method **`preview.open`** with a `PreviewContext`
+(same shape as `InfoContext`, `intent: "preview"`). The provider returns:
+
+```json
+{
+  "kind": "html",
+  "title": "压缩包预览",
+  "view": { "source": "package", "entry": "ui/preview.html" },
+  "state": {}
+}
+```
+
+`kind` is a closed enum:
+
+- `html` — `view.source` must be `package` and `entry` must be a single package-relative path. Core resolves and sanitizes the document, returns the HTML plus an opaque preview session, and rejects paths outside the package or documents larger than 1 MiB.
+- `text` — bounded inline text (256 KiB).
+- `unsupported` — explicit fallback with a `message`.
+
+Image/media/PDF previews remain built-in Core renderers. A provider that wants
+Core's resource proxy should return `html` and read the selected file through
+`resource.read`; it must not receive a host path. Manifest preview entries
+declare only `id`, `title`, `extensions`, `priority` and optional `maxBytes`;
+they no longer declare `panel` or `command`.
 
 对于大文件，Core 提供有界只读流和 Range/Seek 资源代理，关闭/切换标签回收句柄，不能整文件编码成 JSON，也不得把本地绝对路径直接交给插件 iframe。
 标准 Context 的受限文件资源可由 SDK 表现为同步 `FileReader: Read+Seek`，也可在可选 `tokio-io` Feature 下转换为 `AsyncFileReader: AsyncRead+AsyncSeek`；两者绑定同一只读 Scope，不授予额外内容权限。

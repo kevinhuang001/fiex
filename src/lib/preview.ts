@@ -78,7 +78,7 @@ export function pluginPreviewers(plugins: PluginInfo[]): Previewer[] {
             .filter((item: unknown): item is string => typeof item === 'string')
             .map((item: string) => item.toLowerCase().replace(/^\./, ''))
         : []
-      if (!id || !extensions.length || !entry?.panel) continue
+      if (!id || !extensions.length) continue
       values.push({
         id: `${plugin.id}:${id}`,
         title: typeof entry.title === 'string' && entry.title ? entry.title : plugin.name,

@@ -1,11 +1,15 @@
-//! "Show info" metadata: Core-native media probes plus plugin extensions.
+//! "Show info" registry: built-in providers plus standard `info.resolve`.
 //!
-//! Plugins declare `extensions.info` entries with a command, optional
-//! extensions and a title. Core invokes a matching plugin for the selected file
-//! through the normal operation-scoped plugin bridge, then renders the returned
-//! rows beside the native file facts.
+//! Built-in and plugin providers return the same section/row domain types.
+//! Core builds an `InfoContext` after permission projection, invokes the
+//! matching provider, and merges the decoded `InfoResponse` with native
+//! metadata and media probes.
+use crate::plugin_contracts::{
+    InfoContext, InfoResponse, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
+    INFO_CONTEXT_VERSION,
+};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -22,6 +26,8 @@ pub struct InfoRow {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoSection {
+    /// Stable section id (`core.metadata`, `<plugin>.<section>`).
+    pub id: String,
     /// `core` for built-in probes, `plugin` for an extension contribution.
     pub source: String,
     pub title: String,
@@ -107,6 +113,7 @@ fn audio_section(path: &Path) -> Option<InfoSection> {
         rows.insert(0, row("格式", format!("{:?}", tagged.file_type())));
     }
     (!rows.is_empty()).then(|| InfoSection {
+        id: "core.audio".into(),
         source: "core".into(),
         title: "音频".into(),
         plugin_id: None,
@@ -163,6 +170,7 @@ fn mp4_section(path: &Path) -> Option<InfoSection> {
     }
     rows.push(row("容器", mp4.major_brand().to_string()));
     Some(InfoSection {
+        id: "core.video.mp4".into(),
         source: "core".into(),
         title: "视频".into(),
         plugin_id: None,
@@ -212,6 +220,7 @@ fn matroska_section(path: &Path) -> Option<InfoSection> {
     }
     rows.push(row("容器", "Matroska"));
     (!rows.is_empty()).then(|| InfoSection {
+        id: "core.video.matroska".into(),
         source: "core".into(),
         title: "视频".into(),
         plugin_id: None,
@@ -281,10 +290,195 @@ fn contribution_rows(value: &Value) -> Vec<InfoRow> {
         .collect()
 }
 
-fn plugin_sections(path: &Path) -> Vec<InfoSection> {
-    let ext = extension(path);
-    let is_dir = path.is_dir();
-    let directory = path.parent().unwrap_or(Path::new("."));
+fn name_of(path: &Path) -> String {
+    path.file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned())
+}
+
+fn display_name(path: &str) -> String {
+    path.trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(path)
+        .to_string()
+}
+
+fn display_parent(path: &str) -> String {
+    let trimmed = path.trim_end_matches(['/', '\\']);
+    trimmed
+        .rsplit_once(['/', '\\'])
+        .map(|(parent, _)| parent.to_string())
+        .unwrap_or_default()
+}
+
+fn timestamp_text(seconds: i64) -> String {
+    // UTC civil date without pulling a formatting crate into Core.
+    let days = seconds.div_euclid(86_400);
+    let remaining = seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02} {:02}:{:02}",
+        remaining / 3600,
+        (remaining % 3600) / 60
+    )
+}
+
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let days = days + 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let doe = days - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+fn size_text(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+fn metadata_section(display: &str, local: &Path) -> InfoSection {
+    let metadata = std::fs::symlink_metadata(local).ok();
+    let is_dir = metadata.as_ref().is_some_and(|value| value.is_dir());
+    let name = display_name(display);
+    let extension = Path::new(&name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mut rows = vec![
+        row("种类", if is_dir { "文件夹" } else { "文件" }),
+        row(
+            "大小",
+            if is_dir {
+                "—".to_string()
+            } else {
+                metadata
+                    .as_ref()
+                    .map(|value| size_text(value.len()))
+                    .unwrap_or_else(|| "—".into())
+            },
+        ),
+        row("位置", display_parent(display)),
+    ];
+    if !extension.is_empty() {
+        rows.push(row("扩展名", extension));
+    }
+    if let Some(modified) = metadata
+        .as_ref()
+        .and_then(|value| value.modified().ok())
+        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|value| value.as_secs() as i64)
+    {
+        rows.push(row("修改时间", timestamp_text(modified)));
+    }
+    if let Some(permissions) = metadata.as_ref().map(|value| value.permissions()) {
+        rows.push(row(
+            "权限",
+            if permissions.readonly() {
+                "只读"
+            } else {
+                "可读写"
+            },
+        ));
+    }
+    if let Some(link) = metadata
+        .as_ref()
+        .filter(|value| value.file_type().is_symlink())
+        .and_then(|_| std::fs::read_link(local).ok())
+    {
+        rows.push(row("符号链接", link.to_string_lossy()));
+    }
+    InfoSection {
+        id: "core.metadata".into(),
+        source: "core".into(),
+        title: "文件".into(),
+        plugin_id: None,
+        provider: "Fiex".into(),
+        rows,
+    }
+}
+
+fn resource_ref(display: &str) -> ResourceRef {
+    if crate::mounts::handles(display) {
+        if let Ok(uri) = crate::mounts::parse(display) {
+            return ResourceRef {
+                mount_id: uri.mount_id,
+                node_id: format!("fiex-resource:{}", uri.relative),
+            };
+        }
+    }
+    ResourceRef {
+        mount_id: "local".into(),
+        node_id: format!(
+            "fiex-resource:{}",
+            crate::mounts::new_id().unwrap_or_default()
+        ),
+    }
+}
+
+fn projected_metadata(local: &Path, name: &str) -> Option<ResourceMetadata> {
+    let metadata = std::fs::symlink_metadata(local).ok()?;
+    let extension = Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+    Some(ResourceMetadata {
+        name: name.into(),
+        kind: if metadata.is_dir() {
+            "directory"
+        } else {
+            "file"
+        }
+        .into(),
+        extension,
+        size: (!metadata.is_dir()).then_some(metadata.len()),
+        modified: metadata
+            .modified()
+            .ok()
+            .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|value| value.as_secs() as i64),
+    })
+}
+
+fn decode_response(value: &serde_json::Value) -> Option<InfoResponse> {
+    match serde_json::from_value::<InfoResponse>(value.clone()) {
+        Ok(response) => Some(response),
+        Err(error) => {
+            // Legacy providers return `{rows:[...]}`. They are migrated in this
+            // change, but accepting the old shape keeps third-party providers
+            // working until they opt into `info.resolve`.
+            if value.get("rows").is_some() {
+                None
+            } else {
+                eprintln!("invalid info response: {error}");
+                None
+            }
+        }
+    }
+}
+
+fn plugin_sections(display: &str, local: &Path) -> Vec<InfoSection> {
+    let name = name_of(local);
+    let ext = extension(local);
+    let is_dir = local.is_dir();
+    let directory = local.parent().unwrap_or(Path::new("."));
     let mut sections = Vec::new();
     for plugin in crate::plugin_host::catalog() {
         if !plugin.enabled || !plugin.approved || !plugin.backend_available {
@@ -295,13 +489,15 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
             .iter()
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();
-        if !crate::plugin_permissions::allowed(&plugin.id, &declared, "metadata").unwrap_or(false)
-            || !crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read")
-                .unwrap_or(false)
-        {
-            continue;
-        }
-        let Some(extensions) = plugin.extensions.get("info").and_then(Value::as_array) else {
+        let metadata_allowed =
+            crate::plugin_permissions::allowed(&plugin.id, &declared, "metadata").unwrap_or(false);
+        let read_allowed = crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read")
+            .unwrap_or(false);
+        let Some(extensions) = plugin
+            .extensions
+            .get("info")
+            .and_then(serde_json::Value::as_array)
+        else {
             continue;
         };
         let mut matching = extensions
@@ -312,52 +508,102 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
             std::cmp::Reverse(
                 contribution
                     .get("priority")
-                    .and_then(Value::as_u64)
+                    .and_then(serde_json::Value::as_u64)
                     .unwrap_or(50),
             )
         });
         for contribution in matching {
-            let Some(command) = contribution.get("command").and_then(Value::as_str) else {
-                continue;
-            };
             let title = contribution
                 .get("title")
-                .and_then(Value::as_str)
+                .and_then(serde_json::Value::as_str)
                 .unwrap_or(&plugin.name)
                 .to_string();
-            let selected = [PathBuf::from(path)];
-            let resource_name = path.file_name().unwrap_or_default().to_string_lossy();
-            let params = json!({
-                "path": resource_name,
-                "name": resource_name,
+            let selected = [PathBuf::from(local)];
+            let session_id = crate::mounts::new_id().unwrap_or_default();
+            let context = InfoContext {
+                version: INFO_CONTEXT_VERSION,
+                session_id: session_id.clone(),
+                intent: "info".into(),
+                resource: ResourceContext {
+                    reference: resource_ref(display),
+                    metadata: metadata_allowed
+                        .then(|| projected_metadata(local, &name))
+                        .flatten(),
+                    read: read_allowed.then(|| ScopedRead {
+                        resource_id: crate::plugin_scoped_reads::register(
+                            &plugin.id,
+                            &session_id,
+                            &name,
+                        ),
+                    }),
+                },
+            };
+            let standard = serde_json::to_value(&context).unwrap_or(serde_json::Value::Null);
+            let legacy = serde_json::json!({
+                "path": name,
+                "name": name,
                 "isDir": is_dir,
                 "resource": {
-                    "name": resource_name,
+                    "name": name,
                     "extension": ext,
                     "kind": if is_dir { "directory" } else { "file" },
                 },
             });
+            let command = contribution
+                .get("command")
+                .and_then(serde_json::Value::as_str);
+            let (method, params) = match command {
+                Some(command) => (command, legacy),
+                None => ("info.resolve", standard),
+            };
             let result = crate::plugin_host::global().invoke_selected(
                 &plugin.id,
-                command,
+                method,
                 params,
                 &directory.to_string_lossy(),
                 &selected,
             );
             match result {
                 Ok(value) => {
-                    let rows = contribution_rows(&value);
-                    if !rows.is_empty() {
-                        sections.push(InfoSection {
-                            source: "plugin".into(),
-                            title,
-                            plugin_id: Some(plugin.id.clone()),
-                            provider: plugin.name.clone(),
-                            rows,
-                        });
+                    let mut accepted = Vec::new();
+                    if let Some(response) = decode_response(&value) {
+                        for section in response.sections {
+                            let rows = section
+                                .rows
+                                .into_iter()
+                                .map(|row| InfoRow {
+                                    label: row.label,
+                                    value: row.value,
+                                })
+                                .collect::<Vec<_>>();
+                            if !rows.is_empty() {
+                                accepted.push(InfoSection {
+                                    id: format!("{}.{}", plugin.id, section.id),
+                                    source: "plugin".into(),
+                                    title: section.title,
+                                    plugin_id: Some(plugin.id.clone()),
+                                    provider: plugin.name.clone(),
+                                    rows,
+                                });
+                            }
+                        }
+                    } else {
+                        let rows = contribution_rows(&value);
+                        if !rows.is_empty() {
+                            accepted.push(InfoSection {
+                                id: format!("{}.legacy", plugin.id),
+                                source: "plugin".into(),
+                                title,
+                                plugin_id: Some(plugin.id.clone()),
+                                provider: plugin.name.clone(),
+                                rows,
+                            });
+                        }
                     }
+                    sections.extend(accepted);
                 }
                 Err(error) => sections.push(InfoSection {
+                    id: format!("{}.error", plugin.id),
                     source: "plugin".into(),
                     title,
                     plugin_id: Some(plugin.id.clone()),
@@ -370,21 +616,24 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
     sections
 }
 
-pub fn file_info(path: &str) -> Vec<InfoSection> {
-    // Remote/VFS paths are served by their own plugin and do not map to a
-    // local file that Core or another plugin may probe.
-    if path.contains("://") {
-        return Vec::new();
-    }
-    let path = Path::new(path);
-    let mut sections = media_sections(path);
-    sections.extend(plugin_sections(path));
+/// Resolve info for a local path. `display` preserves the user-facing path for
+/// remote materializations; `local` is the Core-owned file used for probes.
+pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
+    let local = Path::new(local);
+    let mut sections = vec![metadata_section(display, local)];
+    sections.extend(media_sections(local));
+    sections.extend(plugin_sections(display, local));
     sections
+}
+
+pub fn file_info(path: &str) -> Vec<InfoSection> {
+    file_info_at(path, path)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn extension_matching_handles_wildcards_and_directories() {
@@ -413,6 +662,21 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].label, "SHA-256");
         assert_eq!(rows[1].value, "3");
+    }
+
+    #[test]
+    fn built_in_metadata_is_a_stable_section() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hello.txt");
+        std::fs::write(&path, b"abc").unwrap();
+        let details = file_info_at(path.to_str().unwrap(), path.to_str().unwrap());
+        let metadata = details
+            .iter()
+            .find(|section| section.id == "core.metadata")
+            .expect("core.metadata section");
+        assert!(metadata.rows.iter().any(|row| row.label == "大小"));
+        assert!(metadata.rows.iter().any(|row| row.label == "扩展名"));
+        assert_eq!(timestamp_text(0), "1970-01-01 00:00");
     }
 
     #[test]

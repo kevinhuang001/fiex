@@ -12,11 +12,13 @@ function officialPluginDevServer(): Plugin {
     name: 'fiex-official-plugin-dev-server',
     configureServer(server) {
       server.middlewares.use('/__fiex_official_plugin', (req, res, next) => {
-        const slug = (req.url || '').split('/')[1]?.replace(/[^a-z0-9_-]/gi, '')
+        const parts = (req.url || '').split('?')[0].split('/').filter(Boolean)
+        const slug = parts[0]?.replace(/[^a-z0-9_-]/gi, '')
         if (!slug) return next()
-        const built = path.join(officialPluginRoot, slug, 'ui', 'dist', 'index.html')
+        const entry = parts[1] && /^[a-z0-9_.-]+\.html$/i.test(parts[1]) ? parts[1] : 'index.html'
+        const built = path.join(officialPluginRoot, slug, 'ui', 'dist', entry)
         // Self-contained plugins ship ui/index.html without a build step.
-        const source = path.join(officialPluginRoot, slug, 'ui', 'index.html')
+        const source = path.join(officialPluginRoot, slug, 'ui', entry)
         const file = fs.existsSync(built) ? built : source
         if (!fs.existsSync(file)) {
           res.statusCode = 404

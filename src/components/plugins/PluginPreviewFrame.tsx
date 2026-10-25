@@ -5,36 +5,54 @@ import { themeSnapshot } from '@/lib/themes'
 import { attachFiexPanel } from '../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../sdk/ui/src/index'
 
-const dirname = (path: string) => {
-  const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return index > 0 ? path.slice(0, index) : path
-}
-
-/** A plugin previewer rendered *inside* the preview sheet, with the same
- * sandbox and bridge as a panel. The file is passed as context; the plugin's
- * backend reads it through its own permissions. */
+/** Standard plugin preview: Core returns a PreviewView plus the projected
+ * PreviewContext; the iframe only sees the opaque session and resource
+ * metadata, never a host path. */
 export function PluginPreviewFrame({
   pluginId,
-  panelId,
-  preview,
+  contributionId,
+  path,
+  name,
+  extension,
 }: {
   pluginId: string
-  panelId: string
-  preview: { path: string; name: string; extension: string }
+  contributionId: string
+  path: string
+  name: string
+  extension: string
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const dispose = useRef<(() => void) | null>(null)
   const emit = useRef<((name: string, payload: JsonValue) => void) | null>(null)
-  const [html, setHtml] = useState('')
+  const [session, setSession] = useState<{
+    sessionId: string
+    context: JsonValue
+    html: string
+  } | null>(null)
+  const [text, setText] = useState('')
+  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
     let alive = true
-    setHtml('')
+    setSession(null)
+    setText('')
+    setMessage('')
     setError('')
-    void call<string>('plugin_panel_html', { pluginId, panelId })
+    void call<{
+      sessionId: string
+      context: JsonValue
+      view: { kind: string; html?: string; text?: string; message?: string }
+    }>('preview_open', { path, pluginId, contributionId })
       .then((value) => {
-        if (alive) setHtml(value)
+        if (!alive) return
+        if (value.view.kind === 'html' && value.view.html) {
+          setSession({ sessionId: value.sessionId, context: value.context, html: value.view.html })
+        } else if (value.view.kind === 'text') {
+          setText(value.view.text || '')
+        } else {
+          setMessage(value.view.message || '此文件不支持插件预览')
+        }
       })
       .catch((cause) => {
         if (alive) setError(String(cause))
@@ -42,20 +60,18 @@ export function PluginPreviewFrame({
     return () => {
       alive = false
     }
-  }, [pluginId, panelId])
+  }, [path, pluginId, contributionId])
 
   useEffect(() => {
     const element = frame.current
-    if (!html || !element) return
-    const sessionId = crypto.randomUUID()
-    const directory = dirname(preview.path)
+    if (!session || !element) return
     let attached = false
     const attach = () => {
       if (attached) return
       attached = true
       dispose.current = attachFiexPanel({
         pluginId,
-        sessionId,
+        sessionId: session.sessionId,
         origin: 'null',
         frame: element,
         allowedMethods: new Set([
@@ -69,7 +85,7 @@ export function PluginPreviewFrame({
           'panel.resize',
         ]),
         onReady: () => emit.current?.('theme.changed', themeSnapshot()),
-        onError: (message) => setError(message),
+        onError: (value) => setError(value),
         subscribe: (send) => {
           emit.current = send
           const changed = () => send('theme.changed', themeSnapshot())
@@ -80,15 +96,13 @@ export function PluginPreviewFrame({
           }
         },
         dispatch: async (method, params): Promise<JsonValue> => {
-          if (method === 'context.get')
+          if (method === 'context.get') {
             return {
-              directoryPath: directory,
-              selectionPaths: [preview.path],
-              panelId,
-              panelTitle: preview.name,
-              source: 'preview',
-              preview,
-            }
+              ...(session.context as Record<string, JsonValue>),
+              // Compatibility alias for panel code that only needs the name.
+              preview: { name, extension },
+            } as JsonValue
+          }
           if (method === 'theme.get') return themeSnapshot()
           if (method === 'plugin.invoke') {
             const p = params as { method?: unknown; params?: unknown } | null
@@ -98,8 +112,7 @@ export function PluginPreviewFrame({
               pluginId,
               method: p.method,
               params: p.params ?? null,
-              directory,
-              selectedPaths: [preview.path],
+              previewSessionId: session.sessionId,
             })
           }
           if (method === 'plugin.error') {
@@ -128,7 +141,6 @@ export function PluginPreviewFrame({
       })
     }
     element.addEventListener('load', attach)
-    // A srcdoc frame may already have loaded before this effect runs.
     if (element.contentDocument?.readyState === 'complete') attach()
     return () => {
       element.removeEventListener('load', attach)
@@ -136,10 +148,12 @@ export function PluginPreviewFrame({
       dispose.current = null
       emit.current = null
     }
-  }, [html, pluginId, panelId, preview.path])
+  }, [session, name, extension, pluginId])
 
   if (error) return <div className="preview-plugin-state">{error}</div>
-  if (!html)
+  if (text) return <pre className="preview-text">{text}</pre>
+  if (message) return <div className="preview-plugin-state">{message}</div>
+  if (!session)
     return (
       <div className="preview-plugin-state">
         <LoaderCircle className="spin" size={16} /> 正在加载插件…
@@ -150,8 +164,8 @@ export function PluginPreviewFrame({
       ref={frame}
       className="preview-plugin-frame"
       sandbox="allow-scripts"
-      srcDoc={html}
-      title={preview.name}
+      srcDoc={session.html}
+      title={name}
     />
   )
 }

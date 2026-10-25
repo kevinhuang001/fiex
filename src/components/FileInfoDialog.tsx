@@ -13,6 +13,7 @@ interface InfoRow {
   value: string
 }
 interface InfoSection {
+  id: string
   source: 'core' | 'plugin'
   title: string
   pluginId?: string
@@ -75,6 +76,9 @@ export function FileInfoDialog({
         ...(info.linkTarget ? [{ label: '链接到', value: info.linkTarget }] : []),
       ]
     : []
+  // Core's metadata provider owns the basic attributes. Only use the local
+  // Entry fallback for old responses or paths Core could not stat.
+  const hasCoreMetadata = sections.some((section) => section.id === 'core.metadata')
   const groups: Array<{
     title: string
     provider: string
@@ -82,7 +86,9 @@ export function FileInfoDialog({
     rows: InfoRow[]
   }> = info
     ? [
-        { title: '文件', provider: 'Fiex', hideProvider: true, rows: basicRows },
+        ...(hasCoreMetadata
+          ? []
+          : [{ title: '文件', provider: 'Fiex', hideProvider: true, rows: basicRows }]),
         ...sections
           .filter((section) => section.rows.length > 0)
           .map((section) => ({

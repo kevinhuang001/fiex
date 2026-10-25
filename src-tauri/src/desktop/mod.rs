@@ -99,6 +99,8 @@ pub fn run() {
             plugin_error_report,
             plugin_error_clear,
             plugin_panel_html,
+            preview_open,
+            preview_providers,
             plugin_panel_asset,
             plugin_permission_allowed,
             plugin_network_domains,

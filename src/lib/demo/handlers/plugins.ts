@@ -131,6 +131,78 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         if (method === 'data.open' || method === 'data.page') {
           const path = String(params.path || '')
           const name = path.split('/').pop() || '数据'
+          if (/\.(db|sqlite|sqlite3)$/i.test(name)) {
+            const tables: Record<
+              string,
+              { columns: { name: string; kind: string }[]; rows: (string | number | null)[][] }
+            > = {
+              users: {
+                columns: [
+                  { name: 'id', kind: 'number' },
+                  { name: 'name', kind: 'text' },
+                  { name: 'email', kind: 'text' },
+                  { name: 'created_at', kind: 'text' },
+                ],
+                rows: [
+                  [1, 'Ada Lovelace', 'ada@example.com', '2026-01-04 09:12:00'],
+                  [2, 'Grace Hopper', 'grace@example.com', '2026-02-11 14:05:00'],
+                  [3, 'Alan Turing', null, '2026-03-02 08:30:00'],
+                  [4, 'Katherine Johnson', 'katherine@example.com', null],
+                ],
+              },
+              orders: {
+                columns: [
+                  { name: 'id', kind: 'number' },
+                  { name: 'user_id', kind: 'number' },
+                  { name: 'total', kind: 'number' },
+                  { name: 'created_at', kind: 'text' },
+                ],
+                rows: [
+                  [1, 1, 128.5, '2026-04-01 10:00:00'],
+                  [2, 2, 64, '2026-04-02 11:30:00'],
+                  [3, 1, 512.75, '2026-04-03 16:20:00'],
+                ],
+              },
+              active_users: {
+                columns: [
+                  { name: 'id', kind: 'number' },
+                  { name: 'name', kind: 'text' },
+                ],
+                rows: [
+                  [1, 'Ada Lovelace'],
+                  [2, 'Grace Hopper'],
+                ],
+              },
+            }
+            const datasets = [
+              { id: 'users', name: 'users', kind: 'table' },
+              { id: 'orders', name: 'orders', kind: 'table' },
+              { id: 'active_users', name: 'active_users', kind: 'view' },
+            ]
+            const table = tables[String(params.dataset || 'users')] || tables.users
+            const offset = Number(params.offset || 0)
+            const limit = Number(params.limit || 100)
+            const page = {
+              columns: table.columns,
+              rows: table.rows.slice(offset, offset + limit),
+              total: table.rows.length,
+              offset,
+              limit,
+            }
+            if (method === 'data.open') {
+              return {
+                format: 'sqlite',
+                datasets,
+                page,
+                summary: {
+                  datasets: datasets.length,
+                  columns: table.columns.length,
+                  rows: table.rows.length,
+                },
+              }
+            }
+            return page
+          }
           const columns = [
             { name: '部门', kind: 'text' },
             { name: '月份', kind: 'text' },
@@ -617,6 +689,35 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     case 'plugin_secret_available':
       return true
+    case 'preview_open': {
+      const pluginId = String(a.pluginId || '')
+      const contributionId = String(a.contributionId || '')
+      const slug = pluginId.split('.').pop() || ''
+      const entry = pluginId === 'org.fiex.archive' ? 'preview.html' : 'index.html'
+      const response = await fetch(`/__fiex_official_plugin/${slug}/${entry}`)
+      if (!response.ok) throw new Error(await response.text())
+      const html = await response.text()
+      const path = String(a.path || '')
+      const name = path.split(/[\\/]/).pop() || ''
+      const extension = name.includes('.') ? name.split('.').pop() || '' : ''
+      const sessionId = crypto.randomUUID()
+      return {
+        sessionId,
+        pluginId,
+        contributionId,
+        context: {
+          version: 1,
+          sessionId,
+          intent: 'preview',
+          resource: {
+            ref: { mountId: 'local', nodeId: `fiex-resource:${sessionId}` },
+            metadata: { name, kind: 'file', extension, size: null },
+            read: { resourceId: `fiex-read:${sessionId}` },
+          },
+        },
+        view: { kind: 'html', title: name, html },
+      }
+    }
     case 'connection_open': {
       // The browser fixture has one WebDAV connection and it registers a VFS,
       // so Core's two-branch navigation resolves to the remote Explorer root.

@@ -593,7 +593,14 @@ impl Running {
                 p.get("length").and_then(Value::as_u64).unwrap_or(262144) as usize,
             ),
             "host.fs.openRead" if permitted("files.read") => {
-                crate::plugin_fs_access::open_read(owner, root()?, arg("path")?)
+                if let Some(resource_id) = p.get("resourceId").and_then(|value| value.as_str()) {
+                    let session = p.get("sessionId").and_then(|value| value.as_str());
+                    let name =
+                        crate::plugin_scoped_reads::resolve(&self.plugin_id, session, resource_id)?;
+                    crate::plugin_fs_access::open_read(owner, root()?, &name)
+                } else {
+                    crate::plugin_fs_access::open_read(owner, root()?, arg("path")?)
+                }
             }
             "host.fs.readOpen" if permitted("files.read") => crate::plugin_fs_access::read_open(
                 owner,

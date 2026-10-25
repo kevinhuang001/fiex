@@ -30,11 +30,14 @@ pub(crate) async fn plugin_invoke(
     params: serde_json::Value,
     directory: Option<String>,
     selected_paths: Option<Vec<String>>,
+    preview_session_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     if method.starts_with("contextMenu.")
         || method.starts_with("vfs.")
         || method.starts_with("fs.")
         || method.starts_with("connection.")
+        || method.starts_with("preview.")
+        || method.starts_with("info.")
         || method.starts_with("host.")
         || method.starts_with("core.")
     {
@@ -89,6 +92,17 @@ pub(crate) async fn plugin_invoke(
             }
             replace(&mut params, &replacements);
         }
+    }
+    if let Some(session_id) = preview_session_id {
+        let (scoped_directory, scoped_paths) =
+            crate::plugin_preview::session_scope(&session_id, &plugin_id)?;
+        directory = Some(scoped_directory);
+        selected_paths = Some(
+            scoped_paths
+                .into_iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+        );
     }
     let id = plugin_id.clone();
     let call = method.clone();
@@ -218,7 +232,8 @@ pub(crate) fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
 }
 #[tauri::command]
 pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::InfoSection> {
-    let path = if crate::mounts::handles(&path) {
+    let display = path.clone();
+    let local = if crate::mounts::handles(&path) {
         if crate::remote::is_remote(&path)
             && crate::remote::stat(&path).is_ok_and(|entry| entry.is_dir)
         {
@@ -231,7 +246,7 @@ pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::I
     } else {
         path
     };
-    tauri::async_runtime::spawn_blocking(move || crate::plugin_info::file_info(&path))
+    tauri::async_runtime::spawn_blocking(move || crate::plugin_info::file_info_at(&display, &local))
         .await
         .unwrap_or_default()
 }
@@ -636,6 +651,30 @@ fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
         "readOnly": metadata.as_ref().map(|value| value.permissions().readonly()),
         "remote": crate::mounts::handles(path),
     })
+}
+
+#[tauri::command]
+pub(crate) fn preview_providers(extension: String) -> Vec<serde_json::Value> {
+    crate::plugin_preview::providers(&extension)
+}
+
+#[tauri::command]
+pub(crate) async fn preview_open(
+    path: String,
+    plugin_id: String,
+    contribution_id: String,
+) -> Result<serde_json::Value, String> {
+    let display = path.clone();
+    let local = if crate::mounts::handles(&path) {
+        materialize_file(path).await?
+    } else {
+        path
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_preview::open(&display, &local, &plugin_id, &contribution_id)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

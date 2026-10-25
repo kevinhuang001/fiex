@@ -133,16 +133,17 @@ std::io::copy(&mut response, &mut output)?;
 
 ## 7. 其余 Core API
 
-| SDK                                                      | IPC                                  | 语义                                 |
-| -------------------------------------------------------- | ------------------------------------ | ------------------------------------ |
-| `ctx.files().metadata/stat_batch/list`                   | `host.fs.stat/statBatch/list`        | Scope 限定，按文件授权读元数据或目录 |
-| `ctx.files().open_read/begin_write/create/remove/rename` | `host.fs.*`                          | Core 控制源/目标及事务               |
-| `ctx.tcp().connect`                                      | `host.net.tcp.open/read/write/close` | 与 HTTP 共享网络 Grant               |
-| `ctx.http().get/post/put/delete/request`                 | `host.net.http.*`                    | 高层 HTTP 与请求/响应流              |
-| `ctx.vfs().open_view`                                    | `host.vfs.openView`                  | 经 Core 创建 Mount/View              |
-| `ctx.ui().open_panel`                                    | `host.ui.open`                       | 非 Connection 主导航的受控 UI        |
-| `ctx.task().spawn/cancel/progress`                       | Task Broker                          | 继承已批准 Scope 的任务              |
-| `ctx.storage()/secrets()/process()`                      | 对应 Core Broker                     | 插件隔离的存储、密钥和命令           |
+| SDK                                                      | IPC                                  | 语义                                       |
+| -------------------------------------------------------- | ------------------------------------ | ------------------------------------------ |
+| `ctx.files().metadata/stat_batch/list`                   | `host.fs.stat/statBatch/list`        | Scope 限定，按文件授权读元数据或目录       |
+| `ctx.files().open_resource(resourceId, sessionId)`       | `host.fs.openRead` (resourceId)      | 打开 Info/Preview 标准事件下发的受限读引用 |
+| `ctx.files().open_read/begin_write/create/remove/rename` | `host.fs.*`                          | Core 控制源/目标及事务                     |
+| `ctx.tcp().connect`                                      | `host.net.tcp.open/read/write/close` | 与 HTTP 共享网络 Grant                     |
+| `ctx.http().get/post/put/delete/request`                 | `host.net.http.*`                    | 高层 HTTP 与请求/响应流                    |
+| `ctx.vfs().open_view`                                    | `host.vfs.openView`                  | 经 Core 创建 Mount/View                    |
+| `ctx.ui().open_panel`                                    | `host.ui.open`                       | 非 Connection 主导航的受控 UI              |
+| `ctx.task().spawn/cancel/progress`                       | Task Broker                          | 继承已批准 Scope 的任务                    |
+| `ctx.storage()/secrets()/process()`                      | 对应 Core Broker                     | 插件隔离的存储、密钥和命令                 |
 
 ## 8. 标准事件与 UI SDK
 

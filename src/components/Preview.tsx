@@ -41,8 +41,9 @@ export function Preview({
       entry &&
       !entry.isDir &&
       native &&
+      !pluginPreview &&
       /^fiex:/i.test(entry.path) &&
-      (!isText(entry) || pluginPreview)
+      !isText(entry)
     ) {
       void call<string>('materialize_file', { path: entry.path })
         .then((local) => {
@@ -136,12 +137,10 @@ export function Preview({
               <PluginPreviewFrame
                 key={localPath}
                 pluginId={pluginPreview.pluginId || ''}
-                panelId={pluginPreview.panelId || ''}
-                preview={{
-                  path: localPath || entry.path,
-                  name: entry.name,
-                  extension: entry.extension,
-                }}
+                contributionId={pluginPreview.panelId || ''}
+                path={localPath || entry.path}
+                name={entry.name}
+                extension={entry.extension}
               />
             ) : error ? (
               <div className="preview-fallback">

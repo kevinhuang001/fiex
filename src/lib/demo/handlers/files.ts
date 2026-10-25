@@ -98,6 +98,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       const sections = []
       if (!entry.isDir) {
         sections.push({
+          id: 'org.fiex.checksum.checksum',
           source: 'plugin',
           title: '校验和',
           pluginId: 'org.fiex.checksum',
@@ -119,6 +120,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       }
       if (['zip', '7z', 'rar', 'tar', 'gz', 'tgz'].includes(ext)) {
         sections.push({
+          id: 'org.fiex.archive.archive',
           source: 'plugin',
           title: '压缩包',
           pluginId: 'org.fiex.archive',
@@ -134,6 +136,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       }
       if (['docx', 'xlsx', 'pptx'].includes(ext)) {
         sections.push({
+          id: 'org.fiex.office-preview.office',
           source: 'plugin',
           title: '文档',
           pluginId: 'org.fiex.office-preview',
@@ -148,6 +151,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       }
       if (['db', 'sqlite', 'sqlite3', 'csv', 'tsv', 'parquet', 'arrow', 'avro'].includes(ext)) {
         sections.push({
+          id: 'org.fiex.data-preview.data',
           source: 'plugin',
           title: '数据表',
           pluginId: 'org.fiex.data-preview',
