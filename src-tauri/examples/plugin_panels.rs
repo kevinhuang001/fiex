@@ -44,13 +44,17 @@ fn main() {
 
         if manifest.extensions["contextMenus"].as_bool() == Some(true) {
             let response = plugin_host::global()
-                .invoke(&id, "contextMenu.resolve", json!({
-                    "selectionCount": 1,
-                    "selectionNames": ["example.txt"],
-                    "isDirectory": false,
-                    "readOnly": false,
-                    "isRemote": false
-                }))
+                .invoke(
+                    &id,
+                    "contextMenu.resolve",
+                    json!({
+                        "selectionCount": 1,
+                        "selectionNames": ["example.txt"],
+                        "isDirectory": false,
+                        "readOnly": false,
+                        "isRemote": false
+                    }),
+                )
                 .expect("dynamic menu resolve failed");
             let items = response["items"].as_array().expect("menu has items");
             assert!(!items.is_empty(), "dynamic menu is unexpectedly empty");
@@ -69,10 +73,14 @@ fn main() {
                     continue;
                 }
                 let result = plugin_host::global()
-                    .invoke(&id, "contextMenu.execute", json!({
-                        "itemId": item_id,
-                        "paths": ["example.txt"]
-                    }))
+                    .invoke(
+                        &id,
+                        "contextMenu.execute",
+                        json!({
+                            "itemId": item_id,
+                            "paths": ["example.txt"]
+                        }),
+                    )
                     .expect("menu panel execute failed");
                 if result["kind"] == "panel" {
                     let entry = result["entry"].as_str().expect("missing panel entry");
