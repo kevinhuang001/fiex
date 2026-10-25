@@ -29,9 +29,17 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
     restore(index)
     left.switchTab(index)
   }
+  const startPath = () => {
+    if (prefs.startPage === 'recent') return 'recent://'
+    if (prefs.startPage === 'last') return localStorage.getItem('fiex:lastPath') || 'recent://'
+    const place = left.locations.find((item) =>
+      prefs.startPage === 'home' ? item.name === '个人文件夹' : item.name === '文稿',
+    )
+    return place?.path || 'recent://'
+  }
   const newWorkspaceTab = () => {
     save()
-    left.newTab(x.path)
+    left.newTab(startPath())
     setSplit(false)
     setActive('left')
     tabs.current.push({ right: null, active: 'left' })

@@ -231,6 +231,10 @@ test('built-in SSH opens a full-height terminal', async ({ page }) => {
   await expect(page.locator('.ssh-terminal-view')).toBeVisible()
   await expect(page.locator('.ssh-terminal-view')).toContainText('Fiex SSH')
   await expect(page.locator('.explorer-toolbar')).toHaveCount(0)
+  await page.getByRole('button', { name: '新建标签页', exact: true }).click()
+  await expect(page.getByRole('tab')).toHaveCount(2)
+  await expect(page.locator('.ssh-terminal-view')).toHaveCount(0)
+  await expect(page.getByText('最近使用', { exact: true }).first()).toBeVisible()
 })
 
 test('opens the Trash inside Fiex', async ({ page }) => {
