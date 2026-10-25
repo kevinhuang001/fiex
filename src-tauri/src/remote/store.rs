@@ -317,6 +317,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
         serde_json::json!({
             "factoryId": connection.kind,
             "connectionId": connection.id,
+            "mountId": connection.mount_id,
             "interactionId": crate::mounts::new_id()?,
             "connection": provider_config(&connection),
         }),
