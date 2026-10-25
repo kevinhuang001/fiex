@@ -296,7 +296,8 @@ fn plugin_sections(path: &Path) -> Vec<InfoSection> {
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();
         if !crate::plugin_permissions::allowed(&plugin.id, &declared, "metadata").unwrap_or(false)
-            || !crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read").unwrap_or(false)
+            || !crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read")
+                .unwrap_or(false)
         {
             continue;
         }

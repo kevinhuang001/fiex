@@ -614,7 +614,7 @@ fn context_menu_metadata_allowed(plugin_id: &str) -> bool {
 
 fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
     use std::path::Path;
-    let name = path.rsplit(['/', '\\\\']).next().unwrap_or(path);
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
     let metadata = if crate::mounts::handles(path) {
         None
     } else {
@@ -660,7 +660,10 @@ pub(crate) async fn plugin_context_menu_resolve(
             .iter()
             .map(|_| crate::mounts::new_id().map(|id| format!("fiex-resource:{id}")))
             .collect::<Result<Vec<_>, _>>()?;
-        let target_ref = selection_refs.first().cloned().ok_or("selection is empty")?;
+        let target_ref = selection_refs
+            .first()
+            .cloned()
+            .ok_or("selection is empty")?;
         let directory_ref = format!("fiex-resource:{}", crate::mounts::new_id()?);
         let mut request = serde_json::json!({
             "menuSessionId": session_id,
@@ -670,9 +673,10 @@ pub(crate) async fn plugin_context_menu_resolve(
             "directoryRef": directory_ref,
         });
         if context_menu_metadata_allowed(&plugin_id) {
-            request["selectionMetadata"] = serde_json::json!(
-                paths.iter().map(|path| context_menu_resource_metadata(path)).collect::<Vec<_>>()
-            );
+            request["selectionMetadata"] = serde_json::json!(paths
+                .iter()
+                .map(|path| context_menu_resource_metadata(path))
+                .collect::<Vec<_>>());
         }
         let selected: Vec<std::path::PathBuf> =
             paths.iter().map(std::path::PathBuf::from).collect();
