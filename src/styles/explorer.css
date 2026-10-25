@@ -785,7 +785,7 @@ html.dark .app.has-background .list-header {
 /* Finder-style icon grid: fixed cells, left aligned, no stretched columns. */
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--tile-size, 126px));
+  grid-template-columns: repeat(auto-fill, var(--tile-size, 102px));
   justify-content: start;
   align-content: start;
   gap: 4px;
@@ -799,13 +799,13 @@ html.dark .app.has-background .list-header {
   gap: 7px;
   width: 100%;
   min-width: 0;
-  min-height: calc(var(--icon-size, 88px) + 48px);
+  min-height: calc(var(--icon-size, 64px) + 42px);
   border-radius: 10px;
   padding: 10px 6px 8px;
   border: 1px solid transparent;
 }
 .tile-icon {
-  height: var(--icon-size, 88px);
+  height: var(--icon-size, 64px);
   display: flex;
   align-items: center;
   justify-content: center;

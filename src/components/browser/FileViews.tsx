@@ -32,7 +32,7 @@ export function FileViews(props: Props) {
   const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
   // The window is zoomed from the font-size preference, so the tile geometry
   // stays at the reference size and scales with the rest of the interface.
-  const iconSize = 88
+  const iconSize = 64
   const anchor = useRef<string | null>(null)
   const container = useRef<HTMLDivElement>(null)
   const band = useSelectionBand({ container, selected: x.selected, setSelected: x.setSelected })
