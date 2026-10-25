@@ -104,6 +104,7 @@ pub fn run() {
             preview_candidates,
             ssh::ssh_open,
             ssh::local_terminal_open,
+            ssh::detect_shells,
             ssh::ssh_write,
             ssh::ssh_resize,
             ssh::ssh_close,

@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, Plus, X } from 'lucide-react'
 import { TerminalView } from '@/components/ssh/SshTerminalView'
+import { call } from '@/lib/api'
 
 interface TerminalTab {
   id: string
   cwd: string
+  shell?: string
+  shellName?: string
+}
+
+interface ShellChoice {
+  id: string
+  name: string
+  path: string
 }
 
 /** VS Code-style integrated terminal panel. Tabs stay mounted while the panel
@@ -14,7 +23,25 @@ export function TerminalPanel() {
   const [active, setActive] = useState('')
   const [open, setOpen] = useState(false)
   const [height, setHeight] = useState(260)
+  const [shells, setShells] = useState<ShellChoice[]>([])
+  const [shellMenu, setShellMenu] = useState(false)
   const lastCwd = useRef('')
+  const panel = useRef<HTMLElement>(null)
+  const shellMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    void call<ShellChoice[]>('detect_shells')
+      .then((items) => setShells(Array.isArray(items) ? items : []))
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    if (!shellMenu) return
+    const close = (event: MouseEvent) => {
+      if (!shellMenuRef.current?.contains(event.target as Node)) setShellMenu(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [shellMenu])
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -22,7 +49,10 @@ export function TerminalPanel() {
       const cwd = detail?.cwd || lastCwd.current
       if (cwd) lastCwd.current = cwd
       const id = crypto.randomUUID()
-      setTabs((values) => [...values, { id, cwd }])
+      setTabs((values) => [
+        ...values,
+        { id, cwd, shell: shells[0]?.path, shellName: shells[0]?.name },
+      ])
       setActive(id)
       setOpen(true)
     }
@@ -31,9 +61,29 @@ export function TerminalPanel() {
   }, [])
 
   useEffect(() => {
+    const show = (event: Event) => {
+      const detail = (event as CustomEvent<{ cwd?: string }>).detail
+      const cwd = detail?.cwd || lastCwd.current
+      if (cwd) lastCwd.current = cwd
+      if (tabs.length) {
+        setOpen(true)
+        if (!active || !tabs.some((tab) => tab.id === active)) setActive(tabs[tabs.length - 1].id)
+        return
+      }
+      const id = crypto.randomUUID()
+      setTabs([{ id, cwd, shell: shells[0]?.path, shellName: shells[0]?.name }])
+      setActive(id)
+      setOpen(true)
+    }
+    window.addEventListener('fiex:show-terminal-panel', show)
+    return () => window.removeEventListener('fiex:show-terminal-panel', show)
+  }, [tabs, active, shells])
+
+  useEffect(() => {
     if (!tabs.length) return
+    let bottom = 0
     const move = (event: MouseEvent) => {
-      const next = window.innerHeight - event.clientY
+      const next = bottom - event.clientY
       setHeight(Math.min(Math.max(140, window.innerHeight * 0.72), Math.max(120, next)))
     }
     const up = () => {
@@ -41,6 +91,7 @@ export function TerminalPanel() {
       document.removeEventListener('mouseup', up)
     }
     const start = () => {
+      bottom = panel.current?.getBoundingClientRect().bottom ?? window.innerHeight
       document.addEventListener('mousemove', move)
       document.addEventListener('mouseup', up)
     }
@@ -54,11 +105,15 @@ export function TerminalPanel() {
   }, [tabs.length])
 
   if (!tabs.length) return null
-  const add = () => {
+  const add = (shell?: ShellChoice) => {
     const id = crypto.randomUUID()
-    setTabs((values) => [...values, { id, cwd: lastCwd.current }])
+    setTabs((values) => [
+      ...values,
+      { id, cwd: lastCwd.current, shell: shell?.path, shellName: shell?.name },
+    ])
     setActive(id)
     setOpen(true)
+    setShellMenu(false)
   }
   const close = (id: string) => {
     setTabs((values) => {
@@ -71,6 +126,7 @@ export function TerminalPanel() {
 
   return (
     <section
+      ref={panel}
       className={`terminal-panel ${open ? '' : 'closed'}`}
       style={{ height: open ? height : undefined }}
       aria-label="内置终端"
@@ -103,10 +159,33 @@ export function TerminalPanel() {
             </div>
           ))}
         </div>
-        <div className="terminal-panel-actions">
-          <button type="button" title="新建终端" aria-label="新建终端" onClick={add}>
-            <Plus size={14} />
-          </button>
+        <div className="terminal-panel-actions" ref={shellMenuRef}>
+          <div className="terminal-shell-picker">
+            <button
+              type="button"
+              title="新建终端"
+              aria-label="新建终端"
+              aria-expanded={shellMenu}
+              onClick={() => setShellMenu((value) => !value)}
+            >
+              <Plus size={14} />
+            </button>
+            {shellMenu && (
+              <div className="terminal-shell-menu" role="menu">
+                {shells.length ? (
+                  shells.map((shell) => (
+                    <button key={shell.id} type="button" role="menuitem" onClick={() => add(shell)}>
+                      {shell.name}
+                    </button>
+                  ))
+                ) : (
+                  <button type="button" role="menuitem" onClick={() => add()}>
+                    默认 Shell
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             title="收起终端"
@@ -120,7 +199,11 @@ export function TerminalPanel() {
       <div className="terminal-panel-body">
         {tabs.map((tab, index) => (
           <div className="terminal-panel-pane" key={tab.id} hidden={tab.id !== active || !open}>
-            <TerminalView cwd={tab.cwd} name={`终端 ${index + 1}`} />
+            <TerminalView
+              cwd={tab.cwd}
+              shell={tab.shell}
+              name={`终端 ${index + 1}${tab.shellName ? ` · ${tab.shellName}` : ''}`}
+            />
           </div>
         ))}
       </div>

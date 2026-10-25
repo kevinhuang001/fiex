@@ -81,6 +81,12 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
           usbfs: false,
         },
       ]
+    case 'detect_shells':
+      return [
+        { id: '/bin/zsh', name: 'zsh', path: '/bin/zsh' },
+        { id: '/bin/bash', name: 'bash', path: '/bin/bash' },
+        { id: '/bin/sh', name: 'sh', path: '/bin/sh' },
+      ]
     case 'detect_terminals':
       return [
         { id: 'default', name: '系统默认终端' },

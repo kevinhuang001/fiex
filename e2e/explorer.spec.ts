@@ -239,6 +239,7 @@ test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
   await expect(page.locator('.terminal-panel-tab')).toHaveCount(1)
   await expect(page.locator('.terminal-panel')).toContainText('Fiex 终端')
   await page.getByRole('button', { name: '新建终端' }).click()
+  await page.getByRole('menuitem', { name: 'bash' }).click()
   await expect(page.locator('.terminal-panel-tab')).toHaveCount(2)
   await page.getByRole('button', { name: '收起终端' }).click()
   await expect(page.locator('.terminal-panel')).toBeHidden()

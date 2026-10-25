@@ -1,4 +1,4 @@
-import { FolderOpen, Trash2, X } from 'lucide-react'
+import { FolderOpen, TerminalSquare, Trash2, X } from 'lucide-react'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
 
@@ -9,6 +9,7 @@ export function WorkspaceBar({
   onRemove,
   onClear,
   onClose,
+  onTerminal,
 }: {
   items: Entry[]
   open: boolean
@@ -16,11 +17,20 @@ export function WorkspaceBar({
   onRemove: (path: string) => void
   onClear: () => void
   onClose: () => void
+  onTerminal: () => void
 }) {
   if (!open) return null
   return (
     <section className="workspace-bar" data-workspace-drop="true" aria-label="工作区">
       <header className="workspace-header">
+        <button
+          className="workspace-terminal"
+          title="打开终端"
+          aria-label="打开终端"
+          onClick={onTerminal}
+        >
+          <TerminalSquare size={14} />
+        </button>
         <FolderOpen size={15} />
         <strong>工作区</strong>
         <span>{items.length}</span>

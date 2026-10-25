@@ -15,6 +15,60 @@ use std::{
 };
 use tauri::ipc::Channel;
 
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellChoice {
+    id: String,
+    name: String,
+    path: String,
+}
+
+fn shell_choices() -> Vec<ShellChoice> {
+    let mut paths = Vec::new();
+    #[cfg(unix)]
+    if let Ok(contents) = std::fs::read_to_string("/etc/shells") {
+        for line in contents.lines() {
+            let path = line.trim();
+            if path.starts_with('/') && Path::new(path).is_file() {
+                paths.push(path.to_string());
+            }
+        }
+    }
+    if let Ok(shell) = std::env::var("SHELL") {
+        if Path::new(&shell).is_file() {
+            paths.push(shell);
+        }
+    }
+    #[cfg(windows)]
+    paths.extend(["powershell.exe".into(), "pwsh.exe".into(), "cmd.exe".into()]);
+    paths.push(if cfg!(windows) {
+        "powershell.exe".into()
+    } else {
+        "/bin/sh".into()
+    });
+    let mut seen = std::collections::HashSet::new();
+    paths
+        .into_iter()
+        .filter(|path| seen.insert(path.clone()))
+        .map(|path| {
+            let name = Path::new(&path)
+                .file_name()
+                .map(|value| value.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.clone());
+            ShellChoice {
+                id: path.clone(),
+                name,
+                path,
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub(crate) fn detect_shells() -> Vec<ShellChoice> {
+    shell_choices()
+}
+
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SshEvent {
@@ -193,16 +247,21 @@ pub(crate) async fn ssh_open(
 #[tauri::command]
 pub(crate) async fn local_terminal_open(
     cwd: Option<String>,
+    shell: Option<String>,
     cols: u16,
     rows: u16,
     on_event: Channel<SshEvent>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let shell = if cfg!(windows) {
-            "powershell.exe".to_string()
-        } else {
-            std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into())
-        };
+        let shell = shell
+            .filter(|value| !value.is_empty() && !value.contains(['\0', '\n', '\r']))
+            .unwrap_or_else(|| {
+                if cfg!(windows) {
+                    "powershell.exe".to_string()
+                } else {
+                    std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into())
+                }
+            });
         let mut command = CommandBuilder::new(shell);
         if cfg!(windows) {
             command.arg("-NoLogo");

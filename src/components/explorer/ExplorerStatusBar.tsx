@@ -1,7 +1,7 @@
 import type { AppController } from '@/hooks/useAppController'
 import type { Entry } from '@/lib/types'
 import { size } from '@/lib/files'
-import { ChevronDown, ChevronUp, ListChecks, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, ListChecks, TerminalSquare, X } from 'lucide-react'
 export function ExplorerStatusBar({
   x,
   chosenAll,
@@ -32,6 +32,19 @@ export function ExplorerStatusBar({
               {clipboard.moving ? '剪切' : '复制'} {clipboard.paths.length} 项 <X size={11} />
             </button>
           )}
+          <button
+            className="statusbar-terminal"
+            title="打开终端"
+            aria-label="打开终端"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent('fiex:show-terminal-panel', { detail: { cwd: x.path } }),
+              )
+            }
+          >
+            <TerminalSquare size={13} />
+            终端
+          </button>
           <button
             className="workspace-toggle"
             aria-expanded={workspace.open}

@@ -227,6 +227,13 @@ export default function App() {
             onRemove={app.workspace.remove}
             onClear={app.workspace.clear}
             onClose={() => app.workspace.setOpen(false)}
+            onTerminal={() =>
+              window.dispatchEvent(
+                new CustomEvent('fiex:show-terminal-panel', {
+                  detail: { cwd: app.left.path },
+                }),
+              )
+            }
           />
         )}
         {!fullView && <ExplorerStatusBar {...app} />}

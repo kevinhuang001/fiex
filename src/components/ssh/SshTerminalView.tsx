@@ -117,10 +117,12 @@ function attachDemoShell(terminal: { write: (value: string) => void }, cwd?: str
 export function TerminalView({
   connectionId,
   cwd,
+  shell,
   name,
 }: {
   connectionId?: string
   cwd?: string
+  shell?: string
   name: string
 }) {
   const host = useRef<HTMLDivElement>(null)
@@ -231,6 +233,7 @@ export function TerminalView({
         })
       : call<string>('local_terminal_open', {
           cwd: cwd || null,
+          shell: shell || null,
           cols: terminal.cols,
           rows: terminal.rows,
           onEvent: channel,
@@ -256,7 +259,7 @@ export function TerminalView({
       if (sessionId) void call('ssh_close', { sessionId }).catch(() => {})
       terminal.dispose()
     }
-  }, [connectionId, cwd, attempt])
+  }, [connectionId, cwd, shell, attempt])
 
   return (
     <div className="ssh-terminal-view" data-connection={connectionId}>
