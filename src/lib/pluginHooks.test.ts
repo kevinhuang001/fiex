@@ -30,7 +30,7 @@ const plugin = (id: string, priority: number, hooks = true): PluginInfo => ({
   allowedNetworkAll: false,
   allowedNetworkDomains: [],
   extensions: {
-    hooks: [{ event: 'beforeOpen', priority }],
+    hooks: { event: 'beforeOpen', priority },
   },
 })
 
@@ -52,9 +52,9 @@ describe('beforeOpenHooks', () => {
 
   it('filters by extension', () => {
     const zipOnly = plugin('zip', 100)
-    zipOnly.extensions!.hooks![0].extensions = ['zip']
+    zipOnly.extensions!.hooks!.extensions = ['zip']
     expect(beforeOpenHooks([zipOnly], entry)).toHaveLength(0)
-    zipOnly.extensions!.hooks![0].extensions = ['7z']
+    zipOnly.extensions!.hooks!.extensions = ['7z']
     expect(beforeOpenHooks([zipOnly], entry)).toHaveLength(1)
   })
 })

@@ -171,20 +171,12 @@ impl PluginHost {
             .find(|(m, _)| m.id == plugin_id)
             .ok_or("plugin not installed")?;
         if method.starts_with("vfs.") {
-            let contribution = params["contributionId"]
-                .as_str()
-                .ok_or("missing VFS contribution")?;
-            if !manifest
+            if manifest
                 .extensions
                 .get("vfs")
-                .and_then(Value::as_array)
-                .is_some_and(|items| {
-                    items
-                        .iter()
-                        .any(|item| item["id"].as_str() == Some(contribution))
-                })
+                .is_none_or(|v| !v.is_object())
             {
-                return Err("PermissionDenied: explicit VFS contribution required".into());
+                return Err("PermissionDenied: VFS provider declaration required".into());
             }
             if task_root.is_none() {
                 return Err("VFS requests require a Core-bound view scope".into());
@@ -194,8 +186,7 @@ impl PluginHost {
             && manifest
                 .extensions
                 .get("connections")
-                .and_then(Value::as_array)
-                .is_none_or(|v| v.is_empty())
+                .is_none_or(|v| !v.is_object())
         {
             return Err("PermissionDenied: connection factory declaration required".into());
         }
@@ -203,8 +194,7 @@ impl PluginHost {
             && manifest
                 .extensions
                 .get("vfs")
-                .and_then(Value::as_array)
-                .is_none_or(|providers| providers.is_empty())
+                .is_none_or(|v| !v.is_object())
         {
             return Err("PermissionDenied: VFS provider declaration required".into());
         }

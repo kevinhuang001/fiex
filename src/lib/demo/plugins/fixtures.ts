@@ -15,23 +15,15 @@ const fixturePlugin: DemoPlugin = {
   allowedNetworkDomains: [],
   author: { name: 'Fiex Fixtures' },
   extensions: {
-    toolbar: [
-      {
-        id: 'fixture.tool',
-        title: '测试工具',
-        icon: 'puzzle-piece',
-        panel: { entry: 'ui/index.html', title: '测试工具' },
-      },
-    ],
-    search: [
-      {
-        id: 'fixture.search',
-        title: 'Fixture Index',
-        icon: 'magnifying-glass',
-        scope: 'global',
-        command: 'search.query',
-      },
-    ],
+    toolbar: {
+      title: '测试工具',
+      icon: 'puzzle-piece',
+      panel: { entry: 'ui/index.html', title: '测试工具' },
+    },
+    search: {
+      icon: 'magnifying-glass',
+      scope: 'global',
+    },
     contextMenus: true,
   },
 }
@@ -73,15 +65,12 @@ export const fixturePlugins: DemoPlugin[] = [
     allowedCommands: ['git'],
     author: { name: 'Fiex Contributors' },
     extensions: {
-      vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
-      toolbar: [
-        {
-          id: 'git.main',
-          title: '源代码管理',
-          icon: 'git-branch',
-          command: 'git.status',
-        },
-      ],
+      vfs: { title: 'Git 历史', readOnly: true },
+      toolbar: {
+        title: '源代码管理',
+        icon: 'git-branch',
+        command: 'git.status',
+      },
       settings: [
         { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
       ],

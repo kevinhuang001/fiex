@@ -649,46 +649,16 @@ fn resolve_builtin(
 
 fn resolve_plugin(
     plugin: &crate::plugin_host::PluginInfo,
-    contribution: &serde_json::Value,
+    _contribution: &serde_json::Value,
     context: &InfoContext,
     local: &Path,
 ) -> Vec<InfoSection> {
-    let command = contribution
-        .get("command")
-        .and_then(serde_json::Value::as_str);
-    let name = local
-        .file_name()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let extension = context
-        .resource
-        .metadata
-        .as_ref()
-        .and_then(|value| value.extension.clone())
-        .unwrap_or_else(|| extension(local));
-    let legacy = serde_json::json!({
-        "path": name,
-        "name": name,
-        "isDir": local.is_dir(),
-        "resource": {
-            "name": name,
-            "extension": extension,
-            "mime": context.resource.metadata.as_ref().and_then(|value| value.mime.clone()),
-            "kind": if local.is_dir() { "directory" } else { "file" },
-        },
-    });
-    let (method, params) = match command {
-        Some(command) => (command, legacy),
-        None => (
-            "info.resolve",
-            serde_json::to_value(context).unwrap_or(serde_json::Value::Null),
-        ),
-    };
+    let params = serde_json::to_value(context).unwrap_or(serde_json::Value::Null);
     let directory = local.parent().unwrap_or(Path::new("."));
     let selected = [local.to_path_buf()];
     match crate::plugin_host::global().invoke_selected(
         &plugin.id,
-        method,
+        "info.resolve",
         params,
         &directory.to_string_lossy(),
         &selected,

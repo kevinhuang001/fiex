@@ -22,12 +22,16 @@ fn panel_document(html: &str) -> String {
 /// Only static toolbar and preview registrations advertise panel ids.
 /// Dynamic context menu panels are vetted as package assets at action time.
 fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Value> {
-    ["toolbar", "preview"]
-        .iter()
-        .filter_map(|key| manifest.extensions.get(key).and_then(Value::as_array))
-        .flat_map(|items| items.iter())
-        .find(|item| item.get("id").and_then(Value::as_str) == Some(panel_id))
-        .and_then(|item| item.get("panel"))
+    if panel_id != manifest.id {
+        return None;
+    }
+    ["toolbar", "preview"].iter().find_map(|key| {
+        manifest
+            .extensions
+            .get(key)
+            .and_then(Value::as_object)
+            .and_then(|item| item.get("panel"))
+    })
 }
 /// Host-approved precompiled, self-contained iframe HTML. Plugins cannot
 /// supply absolute paths or read unrelated files through this API.
@@ -114,10 +118,10 @@ mod tests {
     #[test]
     fn resolves_toolbar_panels_and_rejects_unknown_ids() {
         let manifest = manifest(json!({
-            "toolbar": [{ "id": "git.main", "title": "Git", "panel": { "entry": "ui/git.html" } }]
+            "toolbar": { "title": "Git", "panel": { "entry": "ui/git.html" } }
         }));
         assert_eq!(
-            find_panel(&manifest, "git.main").unwrap()["entry"],
+            find_panel(&manifest, "test.panels").unwrap()["entry"],
             "ui/git.html"
         );
         assert!(find_panel(&manifest, "missing").is_none());
@@ -140,22 +144,20 @@ mod tests {
             "runtime": { "protocolVersion": "3.0", "entrypoints": {} },
             "permissions": {},
             "extensions": {
-                "preview": [{
-                    "id": "docx",
-                    "title": "Word",
+                "preview": {
                     "extensions": ["docx"],
                     "priority": 100,
                     "panel": { "entry": "ui/index.html" }
-                }]
+                }
             }
         }))
         .unwrap();
-        let panel = find_panel(&manifest, "docx").expect("preview panel");
+        let panel = find_panel(&manifest, "org.test.preview").expect("preview panel");
         assert_eq!(
             panel.get("entry").and_then(Value::as_str),
             Some("ui/index.html")
         );
-        assert!(manifest.extensions["preview"].is_array());
+        assert!(manifest.extensions["preview"].is_object());
     }
 
     #[test]

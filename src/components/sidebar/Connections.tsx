@@ -11,6 +11,8 @@ type Destination =
   | { kind: 'terminal'; connectionId: string }
 
 /** Remote connections and saved SSH sessions, with add/session menus. */
+const isSshConnection = (connection: { kind: string; pluginId: string }) =>
+  connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh'
 export function Connections({
   x,
   onAddConnection,
@@ -117,7 +119,7 @@ export function Connections({
                     key={connection.id}
                     onClick={() => open(connection)}
                   >
-                    {connection.kind === 'ssh' ? (
+                    {isSshConnection(connection) ? (
                       <TerminalSquare size={14} />
                     ) : (
                       <Server size={14} />
@@ -162,10 +164,10 @@ export function Connections({
               className={`nav-item connection-nav ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
               onClick={() => open(connection)}
             >
-              {connection.kind === 'ssh' ? <TerminalSquare /> : <Server />}
+              {isSshConnection(connection) ? <TerminalSquare /> : <Server />}
               <span>
                 <span>{connection.name}</span>
-                <small>{connection.kind}</small>
+                <small>{connection.pluginId}</small>
               </span>
               {connection.autostart && (
                 <span className="connection-autostart" title="开机自启动" aria-label="自启动">

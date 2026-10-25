@@ -164,18 +164,15 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
         if !rules.matches(&ext, mime, is_dir) {
             continue;
         }
-        let Some(contribution_id) = contribution.get("id").and_then(Value::as_str) else {
-            continue;
-        };
         values.push(Provider {
-            id: format!("plugin:{}:{}", plugin.id, contribution_id),
+            id: format!("plugin:{}", plugin.id),
             provider: plugin.name.clone(),
             priority: contribution
                 .get("priority")
                 .and_then(Value::as_u64)
                 .unwrap_or(50) as i64,
             builtin: None,
-            plugin: Some((plugin.id.clone(), contribution_id.into())),
+            plugin: Some((plugin.id.clone(), plugin.id.clone())),
         });
     }
     values.sort_by_key(|provider| std::cmp::Reverse(provider.priority));
@@ -366,7 +363,7 @@ fn open_plugin(
         .ok_or("plugin does not register a preview provider")?;
     let local_path = Path::new(local);
     let ext = extension(local_path);
-    if contribution.get("id").and_then(Value::as_str) != Some(contribution_id) {
+    if contribution_id != plugin_id {
         return Err("unknown preview provider".into());
     }
     let rules = crate::plugin_match::MatchRules::from_contribution(contribution);

@@ -16,14 +16,11 @@ export interface PluginPanel {
   defaultSize?: { width: number; height: number }
 }
 export interface PluginContribution {
-  id: string
   title: string
   icon?: string
-  command?: string
   panel?: PluginPanel
 }
 export interface PluginInfoContribution {
-  command?: string
   extensions?: string[]
   priority?: number
 }
@@ -66,25 +63,23 @@ export interface PluginInfo {
   extensions?: PluginExtensions
 }
 export interface PluginExtensions {
-  connections?: Array<{ id: string; title: string; fields: PluginField[] }>
-  toolbar?: PluginContribution[]
+  connections?: { title: string; fields: PluginField[] }
+  toolbar?: PluginContribution
   contextMenus?: boolean
-  search?: Array<{ icon?: string; scope?: string }>
+  search?: { icon?: string; scope?: string }
   settings?: PluginField[]
-  hooks?: Array<{
+  hooks?: {
     event: 'beforeOpen'
     priority?: number
     extensions?: string[]
-  }>
-  preview?: Array<{
-    id: string
-    title?: string
+  }
+  preview?: {
     extensions: string[]
     priority?: number
     maxBytes?: number
     panel: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
-  }>
-  info?: PluginInfoContribution[]
+  }
+  info?: PluginInfoContribution
 }
 export const PLUGIN_CATEGORIES = [
   { id: 'info', label: '简介' },
@@ -101,7 +96,7 @@ export function pluginCategories(extensions?: PluginExtensions, commands: string
   const present = PLUGIN_CATEGORIES.filter(({ id }) => {
     if (id === 'commands') return false
     const value = extensions?.[id as keyof PluginExtensions]
-    return (Array.isArray(value) && value.length > 0) || value === true
+    return Boolean(value) && (Array.isArray(value) ? value.length > 0 : true)
   }).map(({ id }) => id)
   if (!present.length && commands.length) present.push('commands')
   return present

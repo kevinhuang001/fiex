@@ -53,17 +53,14 @@ export const marketplace = [
     repository: 'kevinhuang001/fiex-official-plugins',
 
     extensions: {
-      connections: [
-        {
-          id: 'webdav',
-          title: 'WebDAV',
-          fields: [
-            { id: 'url', label: '服务器地址', type: 'url', required: true },
-            { id: 'username', label: '用户名', type: 'text' },
-            { id: 'password', label: '密码', type: 'secret' },
-          ],
-        },
-      ],
+      connections: {
+        title: 'WebDAV',
+        fields: [
+          { id: 'url', label: '服务器地址', type: 'url', required: true },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'password', label: '密码', type: 'secret' },
+        ],
+      },
     },
   },
   {
@@ -87,18 +84,15 @@ export const marketplace = [
     repository: 'kevinhuang001/fiex-official-plugins',
 
     extensions: {
-      connections: [
-        {
-          id: 'smb',
-          title: 'SMB 网络共享',
-          fields: [
-            { id: 'host', label: '主机', type: 'text', required: true },
-            { id: 'share', label: '共享名', type: 'text', required: true },
-            { id: 'username', label: '用户名', type: 'text' },
-            { id: 'password', label: '密码', type: 'secret' },
-          ],
-        },
-      ],
+      connections: {
+        title: 'SMB 网络共享',
+        fields: [
+          { id: 'host', label: '主机', type: 'text', required: true },
+          { id: 'share', label: '共享名', type: 'text', required: true },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'password', label: '密码', type: 'secret' },
+        ],
+      },
     },
   },
   {

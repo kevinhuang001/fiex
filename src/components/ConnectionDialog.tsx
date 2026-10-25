@@ -20,7 +20,6 @@ export function ConnectionDialog({
     const builtin = {
       plugin: { id: '__builtin__', name: 'Fiex 内置', version: '' },
       factory: {
-        id: 'ssh',
         title: 'SSH 终端',
         fields: [
           {
@@ -43,13 +42,8 @@ export function ConnectionDialog({
       },
     }
     const remote = plugins.flatMap((plugin) => {
-      const ok = plugin.enabled && Boolean(plugin.extensions?.connections?.length)
-      return ok
-        ? (plugin.extensions?.connections || []).map((factory) => ({
-            plugin,
-            factory,
-          }))
-        : []
+      const factory = plugin.extensions?.connections
+      return plugin.enabled && factory ? [{ plugin, factory }] : []
     })
     return demo ? [builtin, ...remote] : remote
   }, [plugins])
@@ -58,7 +52,8 @@ export function ConnectionDialog({
   const [values, setValues] = useState<Record<string, string | boolean>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const current = choices.find(({ plugin, factory }) => plugin.id + ':' + factory.id === selected)
+  const choiceKey = (pluginId: string) => pluginId
+  const current = choices.find(({ plugin }) => choiceKey(plugin.id) === selected)
 
   useEffect(() => {
     if (!open) return
@@ -103,7 +98,7 @@ export function ConnectionDialog({
         input: {
           name,
           pluginId: current.plugin.id,
-          kind: current.factory.id,
+          kind: current.plugin.id === '__builtin__' ? 'ssh' : current.plugin.id,
           settings,
         },
       })
@@ -141,16 +136,16 @@ export function ConnectionDialog({
           <div className="connection-plugin-picker">
             {choices.map(({ plugin, factory }) => (
               <button
-                key={plugin.id + ':' + factory.id}
+                key={plugin.id}
                 type="button"
                 className="connection-plugin-choice"
-                onClick={() => choose(plugin.id + ':' + factory.id, factory.fields)}
+                onClick={() => choose(choiceKey(plugin.id), factory.fields)}
               >
-                {factory.id === 'ssh' ? (
+                {plugin.id === '__builtin__' || plugin.id.endsWith('.ssh') ? (
                   <TerminalSquare size={20} />
-                ) : factory.id === 'webdav' ? (
+                ) : plugin.id.endsWith('.webdav') ? (
                   <Cloud size={20} />
-                ) : factory.id === 'smb' ? (
+                ) : plugin.id.endsWith('.smb') ? (
                   <HardDrive size={20} />
                 ) : (
                   <Plug size={20} />

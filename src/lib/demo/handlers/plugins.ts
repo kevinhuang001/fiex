@@ -765,25 +765,18 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         values.push({ id: 'builtin:fallback', provider: 'Fiex', priority: 0 })
       for (const plugin of demoPlugins) {
         if (!plugin.enabled) continue
-        const previews = Array.isArray(plugin.extensions?.preview)
-          ? (plugin.extensions.preview as Array<{
-              id: string
-              title?: string
-              extensions?: string[]
-              priority?: number
-            }>)
+        const contribution = plugin.extensions?.preview as
+          { extensions?: string[]; priority?: number } | undefined
+        if (!contribution) continue
+        const extensions = Array.isArray(contribution.extensions)
+          ? contribution.extensions.map((value: string) => value.toLowerCase())
           : []
-        for (const contribution of previews) {
-          const extensions = Array.isArray(contribution.extensions)
-            ? contribution.extensions.map((value: string) => value.toLowerCase())
-            : []
-          if (!extensions.includes(extension)) continue
-          values.push({
-            id: `plugin:${plugin.id}:${contribution.id}`,
-            provider: plugin.name,
-            priority: contribution.priority ?? 50,
-          })
-        }
+        if (!extensions.includes(extension)) continue
+        values.push({
+          id: `plugin:${plugin.id}`,
+          provider: plugin.name,
+          priority: contribution.priority ?? 50,
+        })
       }
       return values.sort((left, right) => right.priority - left.priority)
     }
@@ -800,7 +793,8 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const provider = candidates.find((value) => value.id === providerId) || candidates[0]
       if (!provider) throw new Error('没有可用的预览方式')
       if (provider.id.startsWith('plugin:')) {
-        const [, pluginId, contributionId] = provider.id.split(':')
+        const pluginId = provider.id.slice('plugin:'.length)
+        const contributionId = pluginId
         const slug = pluginId.split('.').pop() || ''
         const entry = pluginId === 'org.fiex.archive' ? 'preview.html' : 'index.html'
         const response = await fetch(`/__fiex_official_plugin/${slug}/${entry}`)

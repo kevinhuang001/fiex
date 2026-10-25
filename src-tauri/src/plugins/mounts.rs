@@ -142,7 +142,7 @@ fn registry() -> &'static Mutex<Registry> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(Registry::default()))
 }
-pub fn owner(plugin_id: &str, contribution: &str) -> Result<(), String> {
+pub fn owner(plugin_id: &str, _contribution: &str) -> Result<(), String> {
     let plugin = crate::plugin_host::catalog()
         .into_iter()
         .find(|p| p.id == plugin_id && p.enabled && p.approved && p.backend_available)
@@ -150,10 +150,9 @@ pub fn owner(plugin_id: &str, contribution: &str) -> Result<(), String> {
     if !plugin
         .extensions
         .get("vfs")
-        .and_then(Value::as_array)
-        .is_some_and(|items| items.iter().any(|v| v["id"].as_str() == Some(contribution)))
+        .is_some_and(serde_json::Value::is_object)
     {
-        return Err("PermissionDenied: explicit VFS contribution required".into());
+        return Err("PermissionDenied: VFS provider declaration required".into());
     }
     Ok(())
 }
@@ -179,7 +178,7 @@ pub fn open_view(plugin_id: &str, params: &Value, scope: &Scope) -> Result<Value
     }
     let descriptor = Descriptor {
         plugin_id: plugin_id.into(),
-        contribution_id: contribution.into(),
+        contribution_id: plugin_id.into(),
         view_context: context,
         resource_root: canonical.to_string_lossy().into_owned(),
     };

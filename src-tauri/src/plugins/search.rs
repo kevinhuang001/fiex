@@ -24,53 +24,51 @@ pub fn query(request: &PluginSearchInput) -> Vec<Entry> {
         if !plugin.enabled || !plugin.backend_available {
             continue;
         }
-        let Some(searches) = plugin
+        if !plugin
             .extensions
             .get("search")
+            .is_some_and(serde_json::Value::is_object)
+        {
+            continue;
+        }
+        let response = match crate::plugin_host::global().invoke(
+            &plugin.id,
+            "search.query",
+            serde_json::json!({
+                "query": request.query,
+                "root": request.root,
+                "hidden": request.hidden,
+                "ignores": request.ignores,
+                "limit": limit
+            }),
+        ) {
+            Ok(response) => response,
+            // One broken provider must not suppress local or other
+            // providers' results.
+            Err(error) => {
+                eprintln!("plugin search {} failed: {error}", plugin.id);
+                continue;
+            }
+        };
+        let Some(items) = response
+            .get("entries")
             .and_then(serde_json::Value::as_array)
         else {
             continue;
         };
-        for _search in searches {
-            let response = match crate::plugin_host::global().invoke(
-                &plugin.id,
-                "search.query",
-                serde_json::json!({
-                    "query": request.query,
-                    "root": request.root,
-                    "hidden": request.hidden,
-                    "ignores": request.ignores,
-                    "limit": limit
-                }),
-            ) {
-                Ok(response) => response,
-                // One broken provider must not suppress local or other
-                // providers' results.
+        for item in items.iter().take(limit) {
+            let entry = match crate::plugin_vfs::entry_from(item.clone()) {
+                Ok(entry) => entry,
                 Err(error) => {
-                    eprintln!("plugin search {} failed: {error}", plugin.id);
+                    eprintln!(
+                        "plugin search {} returned an invalid entry: {error}",
+                        plugin.id
+                    );
                     continue;
                 }
             };
-            let Some(items) = response
-                .get("entries")
-                .and_then(serde_json::Value::as_array)
-            else {
-                continue;
-            };
-            for item in items.iter().take(limit) {
-                let entry = match crate::plugin_vfs::entry_from(item.clone()) {
-                    Ok(entry) => entry,
-                    Err(error) => {
-                        eprintln!(
-                            "plugin search {} returned an invalid entry: {error}",
-                            plugin.id
-                        );
-                        continue;
-                    }
-                };
-                if seen.insert(entry.path.clone()) {
-                    entries.push(entry);
-                }
+            if seen.insert(entry.path.clone()) {
+                entries.push(entry);
             }
         }
     }

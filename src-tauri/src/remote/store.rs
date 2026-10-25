@@ -169,11 +169,8 @@ fn save_stored(items: &[StoredConnection]) -> Result<(), String> {
 }
 
 fn terminal_connection(conn: &StoredConnection) -> bool {
-    conn.kind == "ssh"
-        && matches!(
-            connection_plugin_id(conn).as_str(),
-            super::config::BUILTIN_PLUGIN_ID | "org.fiex.ssh"
-        )
+    let plugin = connection_plugin_id(conn);
+    (conn.kind == "ssh" && plugin == super::config::BUILTIN_PLUGIN_ID) || plugin == "org.fiex.ssh"
 }
 
 fn public(conn: &StoredConnection) -> ConnectionInfo {
@@ -457,8 +454,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                 .into_iter()
                 .find(|plugin| plugin.id == plugin_id)
                 .and_then(|plugin| plugin.extensions.get("vfs").cloned())
-                .and_then(|vfs| vfs.as_array().map(|items| !items.is_empty()))
-                .unwrap_or(false);
+                .is_some_and(|vfs| vfs.is_object());
             if !registered {
                 return Err("PermissionDenied: VFS extension not registered".into());
             }

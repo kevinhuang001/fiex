@@ -319,85 +319,73 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         if key == "info" && object.contains_key("id") {
             return Err("extensions.info.id is not used; remove it".into());
         }
+        if key == "info" && object.contains_key("command") {
+            return Err("extensions.info.command is removed; info.resolve is fixed".into());
+        }
         validate_match(object.get("match"), false, false)?;
     }
     for key in ["search", "hooks"] {
-        let Some(items) = value.get(key) else {
+        let Some(item) = value.get(key) else {
             continue;
         };
-        let items = items
-            .as_array()
-            .ok_or_else(|| format!("extensions.{key} must be an array"))?;
-        for item in items {
-            let object = item
-                .as_object()
-                .ok_or_else(|| format!("extensions.{key} entries must be objects"))?;
-            if key == "search" && (object.contains_key("title") || object.contains_key("command")) {
-                return Err(
-                    "extensions.search.title/command are removed; search.query is fixed".into(),
-                );
-            }
-            if key == "hooks" && object.contains_key("method") {
-                return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());
-            }
+        let object = item
+            .as_object()
+            .ok_or_else(|| format!("extensions.{key} must be an object"))?;
+        if object.contains_key("id") {
+            return Err(format!(
+                "extensions.{key}.id is not used; the plugin id is the contribution id"
+            ));
+        }
+        if key == "search" && (object.contains_key("title") || object.contains_key("command")) {
+            return Err(
+                "extensions.search.title/command are removed; search.query is fixed".into(),
+            );
+        }
+        if key == "hooks" && object.contains_key("method") {
+            return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());
         }
     }
     for key in ["vfs", "connections", "toolbar"] {
-        let Some(items) = value.get(key) else {
+        let Some(item) = value.get(key) else {
             continue;
         };
-        let items = items
-            .as_array()
-            .ok_or_else(|| format!("extensions.{key} must be an array"))?;
-        let mut ids = BTreeSet::new();
-        for (index, item) in items.iter().enumerate() {
-            let field = format!("extensions.{key}[{index}]");
-            let object = item
-                .as_object()
-                .ok_or_else(|| format!("{field} must be an object"))?;
-            for forbidden in [
-                "scheme",
-                "schemes",
-                "uriPrefix",
-                "mountId",
-                "mountPath",
-                "capabilities",
-            ] {
-                if object.contains_key(forbidden) {
-                    return Err(format!(
-                        "{field}.{forbidden} is forbidden; Core owns VFS addresses"
-                    ));
-                }
+        let object = item
+            .as_object()
+            .ok_or_else(|| format!("extensions.{key} must be an object"))?;
+        if object.contains_key("id") {
+            return Err(format!(
+                "extensions.{key}.id is not used; the plugin id is the contribution id"
+            ));
+        }
+        for forbidden in [
+            "scheme",
+            "schemes",
+            "uriPrefix",
+            "mountId",
+            "mountPath",
+            "capabilities",
+        ] {
+            if object.contains_key(forbidden) {
+                return Err(format!(
+                    "extensions.{key}.{forbidden} is forbidden; Core owns VFS addresses"
+                ));
             }
-            if key == "toolbar" {
-                continue;
-            }
-            let id = item
-                .get("id")
-                .and_then(Value::as_str)
-                .ok_or_else(|| format!("{field}.id is required"))?;
-            if id.is_empty()
-                || id.len() > 80
-                || !id
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
-                || !ids.insert(id)
-            {
-                return Err(format!("{field}.id is invalid or duplicated"));
-            }
-            if item
-                .get("title")
-                .and_then(Value::as_str)
-                .is_none_or(|s| s.trim().is_empty() || s.len() > 256)
-            {
-                return Err(format!("{field}.title is required"));
-            }
-            if key == "connections" && !item.get("fields").is_some_and(Value::is_array) {
-                return Err(format!("{field}.fields must be an array"));
-            }
-            if item.get("readOnly").is_some_and(|v| !v.is_boolean()) {
-                return Err(format!("{field}.readOnly must be a boolean"));
-            }
+        }
+        if object
+            .get("title")
+            .and_then(Value::as_str)
+            .is_none_or(|s| s.trim().is_empty() || s.len() > 256)
+        {
+            return Err(format!("extensions.{key}.title is required"));
+        }
+        if key == "toolbar" && object.contains_key("command") {
+            return Err("extensions.toolbar.command is removed; toolbar.invoke is fixed".into());
+        }
+        if key == "connections" && !object.get("fields").is_some_and(Value::is_array) {
+            return Err("extensions.connections.fields must be an array".into());
+        }
+        if object.get("readOnly").is_some_and(|v| !v.is_boolean()) {
+            return Err(format!("extensions.{key}.readOnly must be a boolean"));
         }
     }
     Ok(())
@@ -422,21 +410,29 @@ mod contribution_tests {
     fn provider_declarations_are_explicit_and_unambiguous() {
         for value in [
             json!({}),
-            json!({"vfs": []}),
-            json!({"vfs":[{"id":"history","title":"History"}]}),
-            json!({"connections":[{"id":"drive","title":"Drive","fields":[]}]}),
+            json!({"vfs": {"title": "History"}}),
+            json!({"connections": {"title": "Drive", "fields": []}}),
+            json!({"toolbar": {"title": "Git"}}),
+            json!({"search": {"icon": "magnifying-glass"}}),
+            json!({"hooks": {"event": "beforeOpen"}}),
         ] {
-            assert!(validate_extensions(&value).is_ok());
+            assert!(validate_extensions(&value).is_ok(), "{value}");
         }
         for value in [
-            json!({"vfs":{}}),
-            json!({"vfs":[{"id":"../x","title":"Bad"}]}),
-            json!({"vfs":[{"id":"a","title":"A"},{"id":"a","title":"B"}]}),
-            json!({"toolbar":[{"schemes":["history"]}]}),
-            json!({"connections":[{"id":"x","title":"X","fields":[],"capabilities":{"sync":true}}]}),
-            json!({"connections":[{"id":"a","title":"A","fields":[],"scheme":"drive"}]}),
+            json!({"vfs": []}),
+            json!({"vfs": {}}),
+            json!({"vfs": {"id": "history", "title": "History"}}),
+            json!({"vfs": [{"title": "History"}]}),
+            json!({"connections": {"id": "drive", "title": "Drive", "fields": []}}),
+            json!({"connections": [{"title": "Drive", "fields": []}]}),
+            json!({"toolbar": {"id": "git.main", "title": "Git"}}),
+            json!({"toolbar": {"schemes": ["history"], "title": "Git"}}),
+            json!({"search": []}),
+            json!({"search": {"id": "search"}}),
+            json!({"hooks": []}),
+            json!({"hooks": {"id": "beforeOpen", "event": "beforeOpen"}}),
         ] {
-            assert!(validate_extensions(&value).is_err());
+            assert!(validate_extensions(&value).is_err(), "{value}");
         }
     }
     #[test]

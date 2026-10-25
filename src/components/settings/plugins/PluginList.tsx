@@ -60,7 +60,7 @@ export function PluginList({
                 <span>{plugin.author?.name || '未知开发者'}</span>
                 <span aria-hidden>·</span>
                 <span>{declared.length ? `${declared.length} 项权限` : '无需宿主权限'}</span>
-                {plugin.extensions?.connections?.length ? (
+                {plugin.extensions?.connections ? (
                   <>
                     <span aria-hidden>·</span>
                     <span>连接提供者</span>

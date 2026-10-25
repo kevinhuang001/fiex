@@ -30,8 +30,8 @@
     }
   },
   "extensions": {
-    "connections": [{ "id": "cloud", "title": "Example Cloud", "icon": "cloud" }],
-    "vfs": [{ "id": "remote", "title": "Cloud Files" }],
+    "connections": { "title": "Example Cloud", "fields": [] },
+    "vfs": { "title": "Cloud Files" },
     "info": {
       "match": { "mimeTypes": ["image/*"], "kinds": ["file"] }
     },
@@ -47,21 +47,21 @@
 
 ## 2. 扩展点
 
-| 字段                      | 类型                         | 触发与返回                                                                         |
-| ------------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
-| `extensions.contextMenus` | `true` 或 `{match}`          | 用户右键 → `contextMenu.resolve` 返回扁平 items；点 action → `contextMenu.execute` |
-| `extensions.decorations`  | `{match?,priority?}`         | 每次切换目录 → 标准可见成员 Context → `decorations.resolve`（仅动态）              |
-| `extensions.info`         | `{id,match?,priority?}`      | 用户打开简介 → 标准 InfoContext → InfoResponse                                     |
-| `extensions.preview`      | 同上                         | 用户打开预览 → 标准 PreviewContext → PreviewView                                   |
-| `extensions.connections`  | `[{id,title,icon?}]`         | 添加连接 + 或侧栏点击 → `connection.create/open` → NavigationTarget                |
-| `extensions.vfs`          | `[{id,title}]`               | VFS Broker 的 mount/list/stat/read/write 处理器                                    |
-| `extensions.search`       | `[{icon?,scope?}]`           | 当前限定 root 的固定 `search.query`                                                |
-| `extensions.toolbar`      | `[{id,title,icon?,command}]` | 点击工具栏按钮时执行命令                                                           |
-| `extensions.themes`       | `[{id,title,entry}]`         | 加载经过审核的主题资产                                                             |
-| `extensions.settings`     | `[{id,title,command?}]`      | 插件设置入口                                                                       |
-| `extensions.hooks`        | `[{event,priority?,match?}]` | 文件操作生命周期中的特定钩子；固定 `hooks.invoke`                                  |
+| 字段                      | 类型                       | 触发与返回                                                                         |
+| ------------------------- | -------------------------- | ---------------------------------------------------------------------------------- |
+| `extensions.contextMenus` | `true` 或 `{match}`        | 用户右键 → `contextMenu.resolve` 返回扁平 items；点 action → `contextMenu.execute` |
+| `extensions.decorations`  | `{match?,priority?}`       | 每次切换目录 → 标准可见成员 Context → `decorations.resolve`（仅动态）              |
+| `extensions.info`         | `{match?,priority?}`       | 用户打开简介 → 标准 InfoContext → InfoResponse                                     |
+| `extensions.preview`      | 同上                       | 用户打开预览 → 标准 PreviewContext → PreviewView                                   |
+| `extensions.connections`  | `{title,fields}`           | 添加连接 + 或侧栏点击 → `connection.create/open` → NavigationTarget                |
+| `extensions.vfs`          | `{title}`                  | VFS Broker 的 mount/list/stat/read/write 处理器                                    |
+| `extensions.search`       | `{icon?,scope?}`           | 当前限定 root 的固定 `search.query`                                                |
+| `extensions.toolbar`      | `{title,icon?,panel?}`     | 点击工具栏按钮 → `toolbar.invoke`；有 panel 时打开插件面板                         |
+| `extensions.themes`       | `[{id,title,entry}]`       | 加载经过审核的主题资产                                                             |
+| `extensions.settings`     | `[{id,label,type,...}]`    | 插件设置字段                                                                       |
+| `extensions.hooks`        | `{event,priority?,match?}` | 文件操作生命周期中的特定钩子；固定 `hooks.invoke`                                  |
 
-注册不等于权限。每个插件最多注册一个 Info 和一个 Preview；VFS、搜索、工具栏等仍可注册多个来源，其 ID 在该插件内唯一。Manifest 不声明每个具体 iframe 页面，也不需要标记某个扩展点是 UI 还是服务。
+注册不等于权限。每个扩展点每插件最多一个贡献，贡献身份就是插件 id；只有 `settings` 是字段数组。Manifest 不声明每个具体 iframe 页面，也不需要标记某个扩展点是 UI 还是服务。
 
 ## 3. `match`：满足条件才调用插件
 

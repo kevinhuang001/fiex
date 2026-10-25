@@ -22,10 +22,12 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
   const lastPointer = useRef({ x: window.innerWidth - 18, y: 96 })
   const pinnedKeys = prefs.pinnedPluginTools || []
   const availableTools: PluginToolEntry[] = plugins.flatMap((plugin) =>
-    plugin.enabled ? (plugin.extensions?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
+    plugin.enabled && plugin.extensions?.toolbar
+      ? [{ plugin, tool: plugin.extensions.toolbar }]
+      : [],
   )
   const pinnedTools = pinnedKeys.flatMap((key) => {
-    const found = availableTools.find(({ plugin, tool }) => pluginKey(plugin.id, tool.id) === key)
+    const found = availableTools.find(({ plugin }) => pluginKey(plugin.id) === key)
     return found ? [found] : []
   })
   const pinTool = (key: string) => {
@@ -41,7 +43,7 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
     if (new URLSearchParams(location.search).has('pluginFixture')) return
     const defaults = availableTools
       .filter(({ plugin, tool }) => plugin.id.startsWith('org.fiex.') && tool.panel)
-      .map(({ plugin, tool }) => pluginKey(plugin.id, tool.id))
+      .map(({ plugin }) => pluginKey(plugin.id))
     if (!defaults.length) return
     autoPinned.current = true
     const missing = defaults.filter((key) => !pinnedKeys.includes(key))
@@ -68,7 +70,7 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
         new CustomEvent(OPEN_PLUGIN_PANEL, {
           detail: {
             pluginId: plugin.id,
-            panelId: tool.id,
+            panelId: plugin.id,
             title: tool.title,
             icon: tool.icon,
             selection: x.selected,
@@ -80,17 +82,17 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
       )
       return
     }
-    if (tool.command && plugin.backendAvailable) {
+    if (plugin.backendAvailable) {
       void call('plugin_invoke', {
         pluginId: plugin.id,
-        method: tool.command,
-        params: { root: x.path },
+        method: 'toolbar.invoke',
+        params: { root: x.path, selection: x.selected },
         directory: x.path,
-        selectedPaths: [x.path],
+        selectedPaths: x.selected.length ? x.selected : [x.path],
       }).catch((error) => x.setError(String(error)))
       return
     }
-    x.setError('插件尚未提供可用的工具面板')
+    x.setError('插件后端不可用')
   }
   const { pinStrip, pinDrag, pinDragged, beginPinDrag, pinShift } = usePinnedDrag({
     pinnedKeys: prefs.pinnedPluginTools,
@@ -104,7 +106,7 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
       <div className="plugin-toolbar-group" aria-label="插件工具">
         <div className="plugin-pinned-strip" ref={pinStrip}>
           {pinnedTools.map(({ plugin, tool }, index) => {
-            const key = pluginKey(plugin.id, tool.id)
+            const key = pluginKey(plugin.id)
             return (
               <Button
                 key={key}
