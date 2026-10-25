@@ -42,7 +42,7 @@ export function WorkspaceBar({
       document.removeEventListener('mousemove', move)
       document.removeEventListener('mouseup', up)
     }
-  }, [])
+  }, [open])
 
   if (!open) return null
   return (

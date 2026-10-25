@@ -170,11 +170,12 @@
 {
   "kind": "pluginView",
   "view": { "source": "package", "entry": "ui/account.html" },
-  "state": { "connectionId": "account-1" }
+  "state": { "connectionId": "account-1" },
+  "tabTitle": "账号"
 }
 ```
 
-`kind` 枚举**只有** `vfs` 与 `pluginView`。后者由 Core ContentHost 用插件 iframe **完全替换右侧主内容区**（包含原目录面包屑/工具栏/列表），保留左侧导航和全局标签页。插件不能借 Connection 导航打开部分宽度 Panel、对话框或任意外部 URL。用户点击连接加号同样由 `connection.create` 选择此二选一结果；登录配置界面可以是 `pluginView`。
+`pluginView` 可带可选的 `tabTitle`（最多 80 个字符，不能含控制字符），作为标签页标题；没有时使用连接名称。`kind` 枚举**只有** `vfs` 与 `pluginView`。后者由 Core ContentHost 用插件 iframe **完全替换右侧主内容区**（包含原目录面包屑/工具栏/列表），保留左侧导航和全局标签页。插件不能借 Connection 导航打开部分宽度 Panel、对话框或任意外部 URL。用户点击连接加号同样由 `connection.create` 选择此二选一结果；登录配置界面可以是 `pluginView`。
 
 Core 校验目标 mount 的插件/连接归属、iframe 资源所属包、当前交互身份和会话有效期，执行导航并记录标签页历史。单独的通用 `host.ui.open` 可用于**其他**明确用户触发的 UI 操作，但不属于 Connection 导航返回类型。
 

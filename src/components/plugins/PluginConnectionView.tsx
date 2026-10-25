@@ -14,15 +14,18 @@ type Destination =
       connectionId: string
       assetPath: string
       state: JsonValue
+      tabTitle?: string
     }
 
 /** PluginView replaces the entire right content area, excluding TabHost. */
 export function PluginConnectionView({
   connectionId,
   onNavigate,
+  onTitle,
 }: {
   connectionId: string
   onNavigate: (path: string) => void
+  onTitle?: (title: string) => void
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const navigate = useRef(onNavigate)
@@ -41,6 +44,7 @@ export function PluginConnectionView({
           navigate.current(result.path)
         } else {
           setView(result)
+          if (result.tabTitle) onTitle?.(result.tabTitle)
         }
       })
       .catch((cause) => {

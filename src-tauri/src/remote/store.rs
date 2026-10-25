@@ -481,6 +481,16 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                 .get("entry")
                 .and_then(serde_json::Value::as_str)
                 .ok_or("pluginView missing package entry")?;
+            let tab_title = target
+                .get("tabTitle")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| {
+                    !value.is_empty()
+                        && value.chars().count() <= 80
+                        && !value.chars().any(char::is_control)
+                })
+                .map(str::to_owned);
             let state = target
                 .get("state")
                 .cloned()
@@ -499,6 +509,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                 "connectionId": id,
                 "assetPath": asset_path,
                 "state": state,
+                "tabTitle": tab_title,
             }))
         }
         _ => Err("Connection must return vfs or pluginView navigation".into()),

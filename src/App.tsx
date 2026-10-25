@@ -18,7 +18,7 @@ import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { asset, call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
@@ -35,6 +35,8 @@ export default function App() {
     return terminal || plugin ? [{ path, index, terminal, plugin }] : []
   })
   const autostarted = useRef(false)
+  const [viewTitles, setViewTitles] = useState<Record<string, string>>({})
+  const tabName = (path: string) => viewTitles[path] || app.displayName(path)
   const backgroundPath = app.prefs.backgroundImage
   const backgroundUrl = backgroundPath
     ? native && !backgroundPath.includes('://')
@@ -116,7 +118,7 @@ export default function App() {
         className={`main ${app.split ? 'split' : ''}`}
         style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
       >
-        <ExplorerTabs {...app} />
+        <ExplorerTabs {...app} displayName={tabName} />
         {!fullView && (
           <ExplorerToolbar
             {...app}
@@ -165,7 +167,11 @@ export default function App() {
                 }
               />
             ) : view.plugin ? (
-              <PluginConnectionView connectionId={view.plugin} onNavigate={app.left.navigate} />
+              <PluginConnectionView
+                connectionId={view.plugin}
+                onNavigate={app.left.navigate}
+                onTitle={(title) => setViewTitles((values) => ({ ...values, [view.path]: title }))}
+              />
             ) : null}
           </div>
         ))}
