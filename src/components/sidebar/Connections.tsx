@@ -84,7 +84,7 @@ export function Connections({
 
   return (
     <Fragment>
-      <div className="sidebar-section-title">
+      <div className="sidebar-section-title connection-section-title">
         <span className="sidebar-label">连接</span>
         <div className="connection-add" ref={plus}>
           <button
