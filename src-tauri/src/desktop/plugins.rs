@@ -506,6 +506,9 @@ struct ContextMenuSession {
     plugin_id: String,
     directory: String,
     selection: Vec<String>,
+    target_ref: String,
+    selection_refs: Vec<String>,
+    directory_ref: String,
     actions: std::collections::HashSet<String>,
     created: std::time::Instant,
 }
@@ -595,14 +598,54 @@ fn menu_response_valid(
     }
     Ok(actions)
 }
+fn context_menu_metadata_allowed(plugin_id: &str) -> bool {
+    let Some(plugin) = crate::plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.approved)
+    else {
+        return false;
+    };
+    let declared = plugin
+        .declared_permissions
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    crate::plugin_permissions::allowed(plugin_id, &declared, "metadata").unwrap_or(false)
+}
+
+fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
+    use std::path::Path;
+    let name = path.rsplit(['/', '\\\\']).next().unwrap_or(path);
+    let metadata = if crate::mounts::handles(path) {
+        None
+    } else {
+        std::fs::symlink_metadata(path).ok()
+    };
+    let is_directory = metadata.as_ref().is_some_and(|value| value.is_dir());
+    let modified = metadata
+        .as_ref()
+        .and_then(|value| value.modified().ok())
+        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|value| value.as_secs());
+    serde_json::json!({
+        "name": name,
+        "kind": if is_directory { "directory" } else { "file" },
+        "isDirectory": is_directory,
+        "extension": Path::new(name).extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase(),
+        "size": metadata.as_ref().map(|value| value.len()),
+        "modified": modified,
+        "readOnly": metadata.as_ref().map(|value| value.permissions().readonly()),
+        "remote": crate::mounts::handles(path),
+    })
+}
+
 #[tauri::command]
 pub(crate) async fn plugin_context_menu_resolve(
     plugin_id: String,
     directory: String,
     paths: Vec<String>,
-    is_directory: bool,
-    read_only: bool,
-    is_remote: bool,
+    _is_directory: bool,
+    _read_only: bool,
+    _is_remote: bool,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         if !menu_allowed(&plugin_id)
@@ -613,21 +656,32 @@ pub(crate) async fn plugin_context_menu_resolve(
             return Err("menu plugin or selection not allowed".into());
         }
         let session_id = crate::mounts::new_id()?;
-        let names: Vec<_> = paths
+        let selection_refs = paths
             .iter()
-            .map(|path| path.rsplit(['/', '\\']).next().unwrap_or("").to_owned())
-            .collect();
-        let result = crate::plugin_host::global().invoke(
+            .map(|_| crate::mounts::new_id().map(|id| format!("fiex-resource:{id}")))
+            .collect::<Result<Vec<_>, _>>()?;
+        let target_ref = selection_refs.first().cloned().ok_or("selection is empty")?;
+        let directory_ref = format!("fiex-resource:{}", crate::mounts::new_id()?);
+        let mut request = serde_json::json!({
+            "menuSessionId": session_id,
+            "interactionId": crate::mounts::new_id()?,
+            "targetRef": target_ref,
+            "selectionRefs": selection_refs,
+            "directoryRef": directory_ref,
+        });
+        if context_menu_metadata_allowed(&plugin_id) {
+            request["selectionMetadata"] = serde_json::json!(
+                paths.iter().map(|path| context_menu_resource_metadata(path)).collect::<Vec<_>>()
+            );
+        }
+        let selected: Vec<std::path::PathBuf> =
+            paths.iter().map(std::path::PathBuf::from).collect();
+        let result = crate::plugin_host::global().invoke_selected(
             &plugin_id,
             "contextMenu.resolve",
-            serde_json::json!({
-                "menuSessionId": session_id,
-                "selectionCount": paths.len(),
-                "selectionNames": names,
-                "isDirectory": is_directory,
-                "readOnly": read_only,
-                "isRemote": is_remote,
-            }),
+            request,
+            &directory,
+            &selected,
         )?;
         let actions = menu_response_valid(&result)?;
         let mut guard = context_menu_sessions()
@@ -643,6 +697,9 @@ pub(crate) async fn plugin_context_menu_resolve(
                 plugin_id,
                 directory,
                 selection: paths,
+                target_ref,
+                selection_refs,
+                directory_ref,
                 actions,
                 created: std::time::Instant::now(),
             },
@@ -687,6 +744,9 @@ pub(crate) async fn plugin_context_menu_execute(
             "menuSessionId": menu_session_id,
             "itemId": item_id,
             "interactionId": crate::mounts::new_id()?,
+            "targetRef": session.target_ref,
+            "selectionRefs": session.selection_refs,
+            "directoryRef": session.directory_ref,
             "paths": paths,
             "path": paths[0],
             "root": directory
