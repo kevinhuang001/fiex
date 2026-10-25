@@ -44,6 +44,26 @@ export function PluginSettings() {
     [plugins, category],
   )
   const [storeOpen, setStoreOpen] = useState(false)
+  const [storeCategory, setStoreCategory] = useState('all')
+  useEffect(() => {
+    const openStore = (event: Event) => {
+      const detail = (event as CustomEvent<{ category?: string }>).detail
+      const next = detail?.category || 'connections'
+      sessionStorage.removeItem('fiex:open-plugin-store')
+      setCategory(next)
+      setStoreCategory(next)
+      setStoreOpen(true)
+    }
+    const pending = sessionStorage.getItem('fiex:open-plugin-store')
+    if (pending) {
+      sessionStorage.removeItem('fiex:open-plugin-store')
+      setCategory(pending)
+      setStoreCategory(pending)
+      setStoreOpen(true)
+    }
+    window.addEventListener('fiex:open-plugin-store', openStore)
+    return () => window.removeEventListener('fiex:open-plugin-store', openStore)
+  }, [])
   const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
@@ -323,6 +343,7 @@ export function PluginSettings() {
       <PluginStore
         open={storeOpen}
         installed={plugins}
+        initialCategory={storeCategory}
         onClose={() => setStoreOpen(false)}
         onInstalled={() => {
           refreshPluginCatalog()

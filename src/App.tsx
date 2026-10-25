@@ -40,6 +40,12 @@ export default function App() {
   }, [app.left])
 
   useEffect(() => {
+    const openStore = () => app.setSettings(true)
+    window.addEventListener('fiex:open-plugin-store', openStore)
+    return () => window.removeEventListener('fiex:open-plugin-store', openStore)
+  }, [app.setSettings])
+
+  useEffect(() => {
     if (!native || autostarted.current || !app.left.hasListing) return
     autostarted.current = true
     const sessions = app.left.connections.filter(

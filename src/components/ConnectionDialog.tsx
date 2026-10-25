@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Cloud, HardDrive, Plug, Server, TerminalSquare } from 'lucide-react'
+import { ArrowLeft, Cloud, HardDrive, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call } from '@/lib/api'
@@ -119,10 +119,25 @@ export function ConnectionDialog({
       open={open}
       onClose={onClose}
       title={current ? '配置 ' + current.plugin.name : '添加连接'}
+      actions={
+        current ? undefined : (
+          <button
+            type="button"
+            className="connection-more"
+            onClick={() => {
+              sessionStorage.setItem('fiex:open-plugin-store', 'connections')
+              window.dispatchEvent(new CustomEvent('fiex:open-plugin-store'))
+              onClose()
+            }}
+          >
+            <Puzzle size={14} />
+            获取更多连接插件
+          </button>
+        )
+      }
     >
       {!current ? (
         <div className="connection-form">
-          <p className="sidebar-hint">选择连接类型</p>
           <div className="connection-plugin-picker">
             {choices.map(({ plugin, factory }) => (
               <button
@@ -151,9 +166,6 @@ export function ConnectionDialog({
                 <Server size={14} />
               </button>
             ))}
-            {choices.length === 1 && (
-              <p className="sidebar-hint">其他远程连接需要先在设置 → 插件中安装并启用连接插件。</p>
-            )}
           </div>
           <footer>
             <Button type="button" onClick={onClose}>

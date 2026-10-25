@@ -1,4 +1,4 @@
-import { Plus, Server, TerminalSquare } from 'lucide-react'
+import { Pin, Plus, Server, TerminalSquare } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { useMenuPosition } from '@/lib/menuPosition'
@@ -159,17 +159,19 @@ export function Connections({
             }}
           >
             <button
-              className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
+              className={`nav-item connection-nav ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
               onClick={() => open(connection)}
             >
               {connection.kind === 'ssh' ? <TerminalSquare /> : <Server />}
               <span>
-                <span>
-                  {connection.name}
-                  {connection.autostart && <small className="connection-autostart">自启动</small>}
-                </span>
+                <span>{connection.name}</span>
                 <small>{connection.kind}</small>
               </span>
+              {connection.autostart && (
+                <span className="connection-autostart" title="开机自启动" aria-label="自启动">
+                  <Pin size={10} />
+                </span>
+              )}
             </button>
           </div>
         ))

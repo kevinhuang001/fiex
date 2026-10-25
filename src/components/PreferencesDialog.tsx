@@ -158,7 +158,9 @@ export function PreferencesDialog({
     if (!open) {
       setQuery('')
       setSection('appearance')
+      return
     }
+    if (sessionStorage.getItem('fiex:open-plugin-store')) setSection('plugins')
   }, [open])
 
   const results = useMemo(() => {

@@ -1,5 +1,5 @@
 import { Check, Download, LoaderCircle, Puzzle, RefreshCw, Search } from 'lucide-react'
-import { useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   PLUGIN_CATEGORIES,
   pluginCategories,
@@ -25,6 +25,7 @@ export function MarketplaceList({
   entries,
   busyId,
   onPrepare,
+  initialCategory,
 }: {
   open: boolean
   installed: PluginInfo[]
@@ -37,8 +38,12 @@ export function MarketplaceList({
   entries: MarketplacePlugin[]
   busyId: string
   onPrepare: (entry: MarketplacePlugin) => void
+  initialCategory?: string
 }) {
-  const [category, setCategory] = useState('all')
+  const [category, setCategory] = useState(initialCategory || 'all')
+  useEffect(() => {
+    if (open) setCategory(initialCategory || 'all')
+  }, [open, initialCategory])
   const categories = (() => {
     const counts = new Map<string, number>()
     for (const entry of entries) {

@@ -113,7 +113,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-right: 8px;
+  padding-right: 36px;
   margin-top: 27px;
 }
 .sidebar-section-title .tag-nav {
@@ -1188,11 +1188,19 @@ body.dragging-toolbar {
   border-radius: 0 0 7px 7px;
   padding-top: 8px;
 }
-.connection-autostart {
-  margin-left: 5px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--selected);
+.device-row > .nav-item.connection-nav {
+  padding-right: 36px;
+}
+.nav-item > .connection-autostart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  margin-left: auto;
+  flex: 0 0 auto;
+  overflow: visible;
+  background: transparent;
   color: var(--accent);
-  font-size: 8px;
+  opacity: 0.85;
 }

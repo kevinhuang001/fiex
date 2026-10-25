@@ -37,11 +37,13 @@ export function PluginStore({
   installed,
   onClose,
   onInstalled,
+  initialCategory,
 }: {
   open: boolean
   installed: PluginInfo[]
   onClose: () => void
   onInstalled: () => void
+  initialCategory?: string
 }) {
   return (
     <PluginInstaller
@@ -49,6 +51,7 @@ export function PluginStore({
       installed={installed}
       onClose={onClose}
       onInstalled={onInstalled}
+      initialCategory={initialCategory}
     />
   )
 }
