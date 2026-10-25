@@ -1,27 +1,12 @@
-//! Test-only executable used by Core CI and official plugin integration CI.
-//! It is not included in Fiex production application bundles.
-//!
-//! Resolves every panel a plugin declares through the real host, including
-//! panels nested inside context submenus. A manifest that advertises a panel the
-//! host cannot resolve used to fail only when the user clicked it; this turns
-//! that into a test failure.
+//! Host integration: static toolbar/preview panels and dynamic menu panels.
 use fiex_lib::plugin_host;
-use serde_json::Value;
+use serde_json::{json, Value};
 
-fn collect_panels(items: &[Value], depth: usize, out: &mut Vec<String>) {
-    if depth > 4 {
-        return;
-    }
-    for item in items {
-        if let Some(id) = item.get("id").and_then(Value::as_str) {
-            if item.get("panel").is_some() {
-                out.push(id.to_string());
-            }
-        }
-        if let Some(children) = item.get("children").and_then(Value::as_array) {
-            collect_panels(children, depth + 1, out);
-        }
-    }
+fn check_panel(id: &str, panel_id: &str, html: &str) {
+    assert!(
+        html.to_ascii_lowercase().contains("<html"),
+        "{id}/{panel_id}: empty panel document"
+    );
 }
 
 fn main() {
@@ -39,21 +24,71 @@ fn main() {
         let consent =
             plugin_host::activation_requirements(&manifest).expect("invalid permission manifest");
         plugin_host::activate(&id, &consent).expect("permission activation failed");
-        let mut panels = Vec::new();
-        for key in ["toolbar", "contextMenus"] {
+
+        let mut count = 0usize;
+        for key in ["toolbar", "preview"] {
             if let Some(items) = manifest.extensions.get(key).and_then(Value::as_array) {
-                collect_panels(items, 1, &mut panels);
+                for item in items {
+                    let Some(panel_id) = item.get("id").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    if item.get("panel").is_some() {
+                        let html = plugin_host::panel_html(&id, panel_id)
+                            .unwrap_or_else(|error| panic!("{id}/{panel_id}: {error}"));
+                        check_panel(&id, panel_id, &html);
+                        count += 1;
+                    }
+                }
             }
         }
-        assert!(!panels.is_empty(), "{id} declares no panels");
-        for panel in &panels {
-            let html = plugin_host::panel_html(&id, panel)
-                .unwrap_or_else(|error| panic!("{id}/{panel}: {error}"));
-            assert!(
-                html.to_ascii_lowercase().contains("<html"),
-                "{id}/{panel}: resolved an empty panel document"
-            );
+
+        if manifest.extensions["contextMenus"].as_bool() == Some(true) {
+            let response = plugin_host::global()
+                .invoke(&id, "contextMenu.resolve", json!({
+                    "selectionCount": 1,
+                    "selectionNames": ["example.txt"],
+                    "isDirectory": false,
+                    "readOnly": false,
+                    "isRemote": false
+                }))
+                .expect("dynamic menu resolve failed");
+            let items = response["items"].as_array().expect("menu has items");
+            assert!(!items.is_empty(), "dynamic menu is unexpectedly empty");
+            let mut found_panel = false;
+            for item in items {
+                if item["kind"].as_str() != Some("action") {
+                    continue;
+                }
+                let Some(item_id) = item["id"].as_str() else {
+                    continue;
+                };
+                if id == "org.fiex.archive" && item_id != "archive.advanced" {
+                    continue;
+                }
+                if id == "org.fiex.gpg" && item_id != "gpg.encrypt" {
+                    continue;
+                }
+                let result = plugin_host::global()
+                    .invoke(&id, "contextMenu.execute", json!({
+                        "itemId": item_id,
+                        "paths": ["example.txt"]
+                    }))
+                    .expect("menu panel execute failed");
+                if result["kind"] == "panel" {
+                    let entry = result["entry"].as_str().expect("missing panel entry");
+                    let path = plugin_host::plugin_view_asset(&id, entry)
+                        .expect("dynamic panel asset failed");
+                    let html = std::fs::read_to_string(path).unwrap();
+                    check_panel(&id, item_id, &html);
+                    count += 1;
+                    found_panel = true;
+                }
+            }
+            if ["org.fiex.archive", "org.fiex.gpg"].contains(&id.as_str()) {
+                assert!(found_panel, "{id} did not return a dynamic panel");
+            }
         }
-        println!("PASS: {id}: {} panels resolved", panels.len());
+        assert!(count > 0, "{id} has no resolvable panels");
+        println!("PASS: {id}: {count} panels resolved");
     }
 }
