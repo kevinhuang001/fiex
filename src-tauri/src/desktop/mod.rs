@@ -98,6 +98,7 @@ pub fn run() {
             plugin_error_clear,
             plugin_panel_html,
             plugin_panel_asset,
+            plugin_dynamic_panel_asset,
             plugin_permission_allowed,
             plugin_network_domains,
             plugin_themes,

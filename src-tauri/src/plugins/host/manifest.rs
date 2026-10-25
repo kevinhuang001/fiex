@@ -236,6 +236,11 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
     if !value.is_null() && !value.is_object() {
         return Err("extensions must be an object".into());
     }
+    if let Some(enabled) = value.get("contextMenus") {
+        if !enabled.is_boolean() {
+            return Err("extensions.contextMenus must be a boolean".into());
+        }
+    }
     for key in ["vfs", "connections", "toolbar"] {
         let Some(items) = value.get(key) else {
             continue;
@@ -331,6 +336,18 @@ mod contribution_tests {
             json!({"connections":[{"id":"a","title":"A","fields":[],"scheme":"drive"}]}),
         ] {
             assert!(validate_extensions(&value).is_err());
+        }
+    }
+    #[test]
+    fn menu_registration_rejects_static_items_and_nested_syntax() {
+        assert!(validate_extensions(&serde_json::json!({"contextMenus": true})).is_ok());
+        assert!(validate_extensions(&serde_json::json!({"contextMenus": false})).is_ok());
+        for invalid in [
+            serde_json::json!({"contextMenus": []}),
+            serde_json::json!({"contextMenus": [{"when":"context.selection.count > 0"}]}),
+            serde_json::json!({"contextMenus": [{"children":[]}]}),
+        ] {
+            assert!(validate_extensions(&invalid).is_err());
         }
     }
     #[test]
