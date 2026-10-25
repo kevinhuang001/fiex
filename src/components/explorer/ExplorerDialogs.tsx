@@ -207,7 +207,7 @@ export function ExplorerDialogs({
         </div>
       </Modal>
 
-      <FileInfoDialog info={info} onClose={() => setInfo(null)} onError={x.setError} />
+      <FileInfoDialog info={info} onClose={() => setInfo(null)} />
 
       <TagDialog
         open={tagOpen}

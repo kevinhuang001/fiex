@@ -67,6 +67,9 @@ pub struct InfoContext {
 pub struct InfoRow {
     pub label: String,
     pub value: String,
+    /// Whether Core's Info renderer should offer a copy control for this value.
+    #[serde(default)]
+    pub copyable: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,7 +184,7 @@ mod tests {
     #[test]
     fn info_response_has_stable_section_ids() {
         let response: InfoResponse = serde_json::from_value(json!({
-            "sections":[{"id":"core.metadata","title":"文件","rows":[{"label":"大小","value":"1 KiB"}]}]
+            "sections":[{"id":"core.metadata","title":"文件","rows":[{"label":"大小","value":"1 KiB","copyable":true}]}]
         }))
         .unwrap();
         assert_eq!(response.sections[0].id, "core.metadata");

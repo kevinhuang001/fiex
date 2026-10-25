@@ -95,16 +95,18 @@ Plugins return:
       "title": "音频",
       "rows": [
         { "label": "时长", "value": "03:25" },
-        { "label": "编码", "value": "MP3" }
+        { "label": "编码", "value": "MP3" },
+        { "label": "SHA-256", "value": "ba7816…", "copyable": true }
       ]
     }
   ]
 }
 ```
 
-Section ids are namespaced by Core as `<pluginId>.<sectionId>`; built-in
-sections use `core.metadata`, `core.audio`, `core.video.mp4` and
-`core.video.matroska`.
+A row may set `copyable: true`; Core renders a copy control beside the value.
+Checksum providers mark every hash row copyable. Section ids are namespaced by
+Core as `<pluginId>.<sectionId>`; built-in sections use `core.metadata`,
+`core.audio`, `core.video.mp4` and `core.video.matroska`.
 
 InfoRenderer 只接收统一 `InfoResponse`，根据 sections 的稳定 ID、排序和展示规则渲染。基本文件属性是独立的 Core Info Provider；音频标签、视频编码、EXIF 等若需要读取文件字节，必须具有 `files.read` 和当前资源 Scope，不能仅靠 `metadata` 权限。
 

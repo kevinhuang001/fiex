@@ -67,7 +67,12 @@ export function Preview({
       )
       .sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id))
   }, [entry, plugins])
-  const builtins = useMemo(() => (entry ? builtinCandidates(entry) : []), [entry])
+  const builtins = useMemo(() => {
+    const values = entry ? builtinCandidates(entry) : []
+    const specific = values.filter((candidate) => candidate.builtin !== 'fallback')
+    // The generic fallback is only a choice when no real built-in renderer fits.
+    return specific.length > 0 ? specific : values
+  }, [entry])
   const candidates = useMemo(() => [...pluginCandidates, ...builtins], [pluginCandidates, builtins])
   const previewer = useMemo(() => {
     if (!entry) return null

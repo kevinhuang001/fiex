@@ -21,6 +21,9 @@ use std::{
 pub struct InfoRow {
     pub label: String,
     pub value: String,
+    /// Render a copy control next to this value in the Info dialog.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub copyable: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -41,6 +44,7 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     InfoRow {
         label: label.into(),
         value: value.into(),
+        copyable: false,
     }
 }
 
@@ -574,6 +578,7 @@ fn plugin_sections(display: &str, local: &Path) -> Vec<InfoSection> {
                                 .map(|row| InfoRow {
                                     label: row.label,
                                     value: row.value,
+                                    copyable: row.copyable,
                                 })
                                 .collect::<Vec<_>>();
                             if !rows.is_empty() {
