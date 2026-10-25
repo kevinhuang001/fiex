@@ -1,59 +1,48 @@
 # 05 · VFS、Connection 与可靠双向同步设计
 
-## 1. Core 所有的 VFS：路径与身份
+## 1. Core 管理的 VFS：独立于 Connection UI
 
-`fiex://mount/<mountId>/<encoded-relative-path>` 是应用内唯一虚拟导航 URI。Core 随机分配 `mountId`，编码每个路径段并拒绝 `..`、斜杠注入、NUL、危险双重编码；`NodeId` 仅在 Provider 上下文内有意义。Connection 的持久 mountId 与只读 View 的动态 mountId 使用相同解析器；提供者不得声明 Scheme/URI 前缀或访问宿主上层目录。
-
-```mermaid
-flowchart TD
-  URI["fiex://mount/id/path"] --> Parse["Validate URI"]
-  Parse --> Registry{"Mount Registry"}
-  Registry -->|Connection| Conn["Persisted connection instance"]
-  Registry -->|VFS View| View["Owner + context + resource scope"]
-  Conn --> Remote["fs.list/stat/openRead/writeFile"]
-  View --> ReadOnly["vfs.list/stat/readSmall/search"]
-  Remote --> NodeMap["Core Node Index / Entry.path"]
-  ReadOnly --> NodeMap
-  NodeMap --> UI["Explorer / Preview / Tabs"]
-```
-
-独立 View 的 `viewContext` 小于等于 16 KiB，包含不可变的业务版本信息（如 Git 完整 commit SHA），不能存文件树、登录令牌或可执行字符串。View 生命周期按窗口引用计数，持久收藏/恢复需重验授权；旧 URI 不得意外映射到当前 Git HEAD。目标文件超过 readSmall 限制时必须引入可授权的 `vfs.openRead/readStream/closeRead` 或统一 Core 导出 API（见实施 M3），不能悄悄截断。
-
-## 2. Connection Factory 与实例
-
-**Manifest 的 `connections[]` 只定义 Factory，不创建账户连接。** 用户通过 Core 自动表单填写配置，Core 检查字段 schema、用户批准的网络目标与 Provider 激活状态；密钥放系统 Keyring，其他字段存 Core 的连接 Registry。每个用户保存的连接均绑定 `pluginId + factoryId + connectionId + mountId`，两个相同 Provider 的账户彼此独立。Connection 一旦存在，Core 自动提供 VFS 能力；无需 `providers.vfs`。
+`fiex://mount/<mountId>/<encoded-relative-path>` 是 Fiex 的受控虚拟导航 URI，由 Core VFS Router 校验每个路径段、对象身份及 mount 的 Provider 归属，防止 `..`、越权、符号链接或节点替换。**注册一个 Connection 不会创建 mount**；只有插件独立声明 `providers.vfs[]` 且用户操作确实申请并通过 VFS Broker 校验时，Core 才建立 mount。相同的 Core MountRegistry 可处理长期云盘文件树和临时 Git 历史树，但生命周期由独立 VFS 创建请求决定。
 
 ```mermaid
-sequenceDiagram
-  participant U as 用户
-  participant FE as 连接表单
-  participant C as Core ConnectionRegistry
-  participant K as Keyring
-  participant P as Provider
-  U->>FE: 新建 WebDAV/SMB/Drive 连接
-  FE->>C: saveConnection(factoryId,settings)
-  C->>C: 校验字段、权限和网络主机
-  C->>P: connection.validate(connection)
-  P-->>C: valid true
-  C->>K: 仅 secret 字段安全保存
-  C->>C: 持久 connectionId & mountId
-  C-->>FE: fiex://mount/<id>/
-  FE->>C: listDirectory(uri)
-  C->>P: fs.list(connection,directoryId,cursor)
-  P-->>C: entries,nodeId,revision,nextCursor
-  C-->>FE: 映射后的 Entry 与同步标记
+flowchart LR
+  Click["User clicks Connection entry"] --> Host["Connection UI Host"]
+  Host --> Handler["Plugin connection.open"]
+  Handler --> Decide{"Plugin chooses navigation"}
+  Decide --> Panel["Runtime Panel / login / settings"]
+  Decide --> Nav["Navigate VFS mount"]
+  Nav --> VFS["Core VFS Router validates ownership"]
+  VFS --> Cloud["Provider VFS fs-like methods"]
+  VFS --> Git["Readonly Git history view"]
 ```
 
-配置 `connection` 仅发给所属 Provider 的特定授权进程。重启连接只恢复 provider 配置，不重建 mountId；删除连接需让用户决定缓存和离线副本如何保留，不能隐式抹掉本地未同步文件。
+`providers.vfs[]` 只声明该插件可作为虚拟文件树来源，并不在 Manifest 中写 `scheme`、`mountId`、`sync`、`writeMode` 或 `readOnly`；只读/可写由对应调用方法与 Provider 响应实际能力决定，写回由 Core 的受控资源操作和授权校验保证。对于 Git 历史，通常只实现读操作；对于网盘，必须按实际需要实现读流、写回及可靠缓存/双向同步。View context 应有大小限制，不能内嵌整个树或明文密钥。
 
-### Connection 的 `fs.stat` 与普通插件的 `host.fs.stat` 不同
+## 2. Connection 只贡献两个 UI 入口：添加按钮与侧边栏条目
 
-Connection Provider 接收的 `fs.stat({connection,nodeId})` 是 Core 为用户已经建立、已获批准的连接发起的内部 Provider 请求，主要用于版本和同步基线。它不赋予 Provider 访问任意宿主本地文件的权限；也不受普通插件查询 `host.fs.stat` 的操作作用域控制。相反，普通插件主动调用 `ctx.files().metadata(path)` / `host.fs.stat` 必须同时具有 `files.metadata.enabled` 或 `folders.metadata.enabled` 和已确认的 OperationScope。Core 在 Explorer 事件中把已经持有的元数据推送给插件（Push）也只有获批后才允许，且不生成普通文件的读内容授权。
+Manifest `surfaces.connections[]` 只注册连接提供者的 ID、名称、图标以及在“添加连接 +”选择列表和侧边栏“连接”区的展示。它**不负责文件访问、不承诺固定跳转、不要求 Core 固定填写表单、不自动调用 `fs.*`、不生成 VFS**。
 
+- 用户点“+”选择插件，Core 通过 `connection.create({factoryId,interactionId})` 通知插件；插件可以在该交互中调用 `host.ui.open` 打开登录/授权/配置 Panel，或返回 `NavigationIntent`。
+- 用户点侧边栏已登记的某项连接，Core 调用 `connection.open({factoryId,connectionId,interactionId})`。插件决定去哪里，返回 `NavigationIntent`：例如跳转它自己的已建立 VFS mount、打开插件设置 Panel、显示登录失效页面。**不是 Core 看到 Connection 就自动 `fiex://mount/...` 导航。**
+- Core 仍管理连接项目的稳定标识 `connectionId`、所有者与基本展示状态，并通过 Keyring/Secret Broker 保管凭据；插件的实际登录、配置和导航语义不由 Core 硬编码。是否创建以及何时持久化连接，由用户/插件交互经 Core connection registry 明确提交。
+- `NavigationIntent` 是命令结果（如 `{"kind":"vfs","mountId":"..."}`，或 `{"kind":"panel","view":{...}}`），并非任意外部 URL/命令：Core 必须校验插件 ID、连接实例所有权、目标类型、mount 是否存在、会话与允许的导航范围，然后真正执行界面跳转。Panel 的来源和隔离沿用统一运行时 PanelHost。
 
-### Connection 用户操作也能请求运行时 Panel
+```json
+{
+  "surfaces":{"connections":[{"id":"cloud","title":"Cloud Drive","icon":"cloud"}]},
+  "providers":{"vfs":[{"id":"remote-tree","title":"Cloud files"}]}
+}
+```
 
-`surfaces.connections[]` 在添加/管理连接的宿主 UI 有固定位置。Core 标准表单仍由 `fields[]` 定义，插件在用户点击授权登录、高级设置或编辑连接时，可通过当前 InteractionSession 的 `host.ui.open` 动态选择自己的 OAuth/配置 Panel；Manifest 无须注册 `panels[]`。Panel 创建不自动扩大连接实例的网络目标、文件读写或凭据访问权限。
+这两个声明相互独立：仅有 Connection 可以提供非文件树的账户管理项；仅有 VFS 可以提供不绑定 Connection 的 Git 历史树。**网盘同时声明二者**。每个连接可按插件明确请求创建、绑定自己的 mount，Core 分配 `mountId` 并保证不同账户与 Provider 隔离。删除某个连接前，Core 必须处理该实例显式关联的 VFS、缓存和未同步脏数据，绝不能误删其他连接的数据。
+
+### 2.1 VFS 数据调用与 SDK 的区别
+
+`vfs.list/stat/openRead/readStream/writeFile` 等为 **Core → VFS Provider** 的数据操作接口（实际方法列表需在 Schema/IPC 目录补全）。Core 不因为用户点“连接”就隐式调用它们；只有导航到了真正存在且已批准的 VFS mount 后，才由 VFS Broker 按需调用。远端 `vfs.stat` 为 Provider 对自身虚拟节点的响应，不等于插件主动访问宿主本地磁盘的 `host.fs.stat`。后者仍必须满足独立 `PermissionPolicy` 对 `permissions.metadata.enabled` + OperationScope 的审查；同一个 `metadata` 权限覆盖普通文件与目录。
+
+### 2.2 Connection 也使用通用运行时 Panel
+
+用户明确点击添加连接或某个连接项目时，插件可在当前 InteractionSession 使用 `host.ui.open` 动态选择登录、账号设置等 Panel，无需 Manifest `panels[]` 或静态 UI 位置路径。纯后台连接状态刷新不能弹窗；Panel 打开也不扩大本地文件、网络或远端连接授权。
 
 ## 3. Node/目录分页/身份策略
 
@@ -116,7 +105,7 @@ Provider 应对每块绑定原始 revision 或使用强条件 Range；Core 在�
 ## 6. 上传写回与冲突保证
 
 统一使用：
-`fs.writeFile({connection,nodeId,source,size,ifRevision}) -> {revision}`。Core 在提交前从本地内容创建不可变快照，并建立**精确文件**读取授权给 Provider；Provider 可用 SDK `ctx.files().open_read(source)`，对于 HTTP 使用 `ctx.http().put(url).body_reader(reader)`，对于 SMB 使用分块 Read 后服务器端 staging + replace，对于 Drive 使用 resumable 会话与 Range 确认。Provider 不得得到临时快照所在目录的权限。
+`vfs.writeFile({mountId,nodeId,source,size,ifRevision}) -> {revision}`。Core 在提交前从本地内容创建不可变快照，并建立**精确文件**读取授权给 Provider；Provider 可用 SDK `ctx.files().open_read(source)`，对于 HTTP 使用 `ctx.http().put(url).body_reader(reader)`，对于 SMB 使用分块 Read 后服务器端 staging + replace，对于 Drive 使用 resumable 会话与 Range 确认。Provider 不得得到临时快照所在目录的权限。VFS 数据接口必须独立声明并经过 Core VFS Broker，不因 Connection Surface 注册而启用。
 
 ```mermaid
 sequenceDiagram
@@ -147,7 +136,7 @@ sequenceDiagram
 
 ## 7. 本地脏文件检测与恢复
 
-不能只靠 `mtime/size` 决定“无本地编辑”并允许云端覆盖。在远端 revision 改变、清理缓存、解决冲突、更新 baseline 等**破坏性动作之前强制计算实际内容 hash**。mtime/size 只允许用于减少非破坏性扫描工作。并发下载与后台同步同一 Connection 需串行元数据事务；实际重 CPU/大磁盘读写放到 blocking pool，避免阻塞 Tokio reactor。元数据提交采取 atomic temp + fsync + rename 并保证断电恢复读到最近完整版本。
+不能只靠 `mtime/size` 决定“无本地编辑”并允许云端覆盖。在远端 revision 改变、清理缓存、解决冲突、更新 baseline 等**破坏性动作之前强制计算实际内容 hash**。mtime/size 只允许用于减少非破坏性扫描工作。并发下载与后台同步同一 VFS 连接实例 需串行元数据事务；实际重 CPU/大磁盘读写放到 blocking pool，避免阻塞 Tokio reactor。元数据提交采取 atomic temp + fsync + rename 并保证断电恢复读到最近完整版本。
 
 必须测试：同大小同 mtime 的内容改写、传输中远端替换、下载过程中网络掉线、目录 10 万项分页、中断后继续、冲突双方保留、离线 Pin/排除、跨两个账号同时同步、进程重启后 URI 不变。
 

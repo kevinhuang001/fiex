@@ -32,14 +32,14 @@ flowchart LR
 
 ## Manifest 分类与 Core 来源拆分原则
 
-`surfaces` 放拥有固定 UI 集成位置的 Connection、Toolbar、ContextMenus、Search、Preview、Info、Decorations、Settings。Connection 在添加连接对话框和侧边栏有固定位置，并不属于无 UI Provider；它创建的持久实例仍由 Core 自动挂载。`providers` 放显式 VFS View 和文件生命周期 Hooks。(no static Panel registry) 放已验证的 Panels、Themes。
+`surfaces` 放拥有固定 UI 集成位置的 Connection、Toolbar、ContextMenus、Search、Preview、Info、Decorations、Settings。Connection 只出现在添加连接 + 和侧边栏，插件负责点击后的导航；**不自动挂载**，网盘必须另行声明 `providers.vfs[]`。`providers` 放显式 VFS View 和文件生命周期 Hooks。Panel 在运行时通过 IPC 创建；Themes 在 `surfaces.themes[]` 注册。
 
 **不能仅改 Registry/接口名字**。物理拆分 `src-tauri/src/plugins/info.rs`：`info/mod.rs` 只调度；`metadata.rs`（`core.info.metadata`）、`audio.rs`（`core.info.audio`）、`video.rs`（`core.info.video`）各自实现；`Preview.tsx` 只负责容器，独立的 `TextPreview`、`ImagePreview`、`AudioPreview`、`VideoPreview`、`PdfPreview` 和 `FallbackPreview` 分别注册到同一 PreviewRegistry。
 
 ## R0 · 合同先行（P0）
 
 - [ ] R0-01：为 Manifest、Native IPC、UI Bridge、`PreviewProvider`、`InfoProvider` 和跨进程 `ResourceRef` 建立可机检 JSON Schema。
-- [ ] R0-02：SDK 根据同一 Schema 生成 Rust/TypeScript 类型；Core 与 SDK 不再分别维护不一致的 API 结构。
+- [ ] R0-02：Core 的 IPC Schema 是传输协议单一事实来源；Core 内置 Provider 和从插件 IPC 解码的数据使用相同业务类型，UI 只生成需要的传输类型，SDK 不强制公开 Preview/Info 专有对象。
 - [ ] R0-03：在 Core 建立内置适配器、Mock Plugin 适配器、假 ResourceBroker 的一致性测试夹具。
 - [ ] R0-04：Manifest 顶层仅保留 `surfaces`（Connection/Toolbar/ContextMenus/Search/Preview/Info/Decorations/Settings/Themes）与 `providers`（VFS/Hooks）等声明；**禁止静态 panels[]、panelId**，旧 contributions/capabilities 等字段拒绝解析。
 - [ ] R0-05：整理所有 RPC、UI Bridge、Manifest Contribution 的方法清单，增删接口强制更新文档与测试。
@@ -48,15 +48,18 @@ flowchart LR
 
 ## R1 · 权限与资源访问（P0）
 
-- [ ] R1-01：所有 `permissions.files.*` 和 `permissions.folders.*` 采用带 `enabled` 的对象，不再接受布尔旧字段。
-- [ ] R1-02：文件权限独立支持 `metadata/read/write/create/delete/rename`；目录独立支持 `metadata/read/create/delete/rename`；区分创建文件与创建文件夹、删除文件与删除目录。
-- [ ] R1-03：Core 主动为用户触发的菜单/预览/信息事件 Push **本次选中资源**的元数据，前提是对应 `metadata.enabled` 经用户批准；未获批准则只暴露不透明 ref。
+- [ ] R1-01：单独 `permissions.metadata.enabled` 统一控制文件与目录元数据；其余 `permissions.files.*`、`permissions.folders.*` 分别控制对象操作，权限均为带 enabled 的对象。
+- [ ] R1-02：文件权限支持 `read/write/create/delete/rename`；目录独立支持 `read/create/delete/rename`；文件和目录元数据统一使用唯一 `permissions.metadata.enabled`；区分创建文件与创建文件夹、删除文件与删除目录。
+- [ ] R1-03：Core 为 Menu/Preview/Info/Decoration 创建候选 IPC 输出，**独立 PermissionPolicy** 审核统一 `permissions.metadata` 与事件 Scope 后才允许 Push metadata；未获批准仅保留最小事件信息。
 - [ ] R1-04：插件主动调用 `host.fs.stat` / `Files::metadata` 时，除对应的 metadata permission 外必须有已确认的精确 OperationScope/TaskScope，不能因接收事件推送而得到任意 stat 能力。
 - [ ] R1-05：文件、网络、共享缓冲、任务、进程执行操作统一经过独立 Broker，按用户最终确认行为发放作用域；句柄绑定操作/进程身份并能取消/撤销。
 - [ ] R1-06：为 Preview/Info 提供 Core 管理的安全限额只读流和受控资源 URL；大文件不一次性加载、base64 或复制给 iframe。
 - [ ] R1-07：为本地/Connection/VFS 提供不可伪造 `ResourceRef` 与会话生命周期；验证符号链接、TOCTOU、资源身份变更和路径逃逸。
 
 **验收**：可以 Push 已批准的选中元数据但不能读内容；第三方不能对未经选中的对象主动 stat；视频/PDF 大文件可流式读且关闭预览会回收句柄。
+
+- [ ] R1-08：新增独立 PermissionPolicy/AuthorizationGateway（推荐单独 Rust workspace crate）实现 `audit_output` 与 `authorize_call`，Core 不散写每个 Surface 的字段审核；嵌套 entries/selection 必须经过 Scope+权限审查。
+- [ ] R1-09：`surfaces.decorations:true` 只订阅每次目录切换；`decorations.resolve` 无 metadata 仍通知，但不可交付目录成员属性或生成逐文件 Decoration；批准统一 metadata 后才放行属性。
 
 ## R2 · 内置与插件统一 Preview / Info（P0，重点）
 
@@ -90,7 +93,7 @@ flowchart LR
 
 ### R2-C · SDK、隔离与验收
 
-- [ ] R2-19：SDK 导出 `PreviewContext`、`PreviewDescriptor`、`PreviewView`、`InfoContext`、`InfoDescriptor`、`InfoSection`、`InfoResponse` 类型；Core/Native/UI 同源。
+- [ ] R2-19：Preview/Info 业务类型以 Core 公共协议模块为唯一来源；内置 Provider 直接构造统一 Rust 对象，插件通过通用 IPC 返回 JSON，Core 反序列化为**同一对象类型**；Rust SDK 不要求导出这些专用类型。
 - [ ] R2-20：Core 只为相应已授权 Provider Push 当前资源 metadata；媒体解析属于文件内容读取，不得用 `metadata.enabled` 绕过 `files.read.enabled`。
 - [ ] R2-21：用内置图片、文本高亮、音频、视频、PDF、基础文件 Info、音频 Info、视频 Info、第三方 Preview/Info 的相同 mock contract fixtures 做测试。
 - [ ] R2-22：覆盖无扩展名、伪 MIME、错误编码、大于 5 GiB 文件、缺少权限、切换文件时取消、插件崩溃、资源临时不可用、视频音频停止播放。
@@ -114,8 +117,12 @@ flowchart LR
 
 ## R4 · VFS 与 Connection（P1）
 
-- [ ] R4-01：统一 Core MountRegistry，Connection 自动分配 `fiex://mount/<id>/`，无需同时声明 VFS Contribution。
-- [ ] R4-02：Git 等显式只读 VFS 使用同一个 Core mount 命名和 ResourceRef 模型。
+- [ ] R4-00：点击 Connection 加号和侧栏条目分别触发 `connection.create/open`，插件决定导航目标，Core 校验该 NavigationIntent；不因注册或保存 Connection 自动创建 VFS。
+- [ ] R4-00A：网盘同时注册 `surfaces.connections[]` 和 `providers.vfs[]`，VFS Broker 能按操作暴露读/写流及挂载，Git 历史可仅声明只读 VFS。
+
+
+- [ ] R4-01：统一 Core MountRegistry，Connection 不创建挂载；独立声明 `providers.vfs[]` 并经 VFS IPC 请求，Core 才分配 `fiex://mount/<id>/`。网盘同时注册 Connection UI 与 VFS 文件树。
+- [ ] R4-02：Git 只读 VFS、网盘可写 VFS 使用同一个 Core mount 命名和 ResourceRef 模型，不通过 Connection 规则推导文件树能力。
 - [ ] R4-03：文件 stat、列表分页、只读流、NodeId、版本快照及挂载生命周期同一 Broker。
 - [ ] R4-04：实现每连接实例的独立凭据、断连/禁用/卸载时资源撤销；不在插件 Manifest 声明缓存和冲突策略。
 

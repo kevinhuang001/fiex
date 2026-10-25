@@ -7,7 +7,7 @@
 1. **内置功能也是 Provider**。代码高亮文本、图片、音频、视频、PDF、未知类型 fallback 由 Core 注册为独立的 `PreviewProvider`；基础文件与文件夹元数据、音频属性、视频属性由 Core 注册为独立的 `InfoProvider`。内置每个来源都必须有独立实现模块和测试，不能只是同一个文件中数个分支。外部插件按相同 Surface Provider Descriptor 注册，参与同一 Registry、过滤、排序、调用生命周期、取消和错误降级。
 2. **只统一逻辑接口，不强迫统一隔离层**。内置 Provider 可作为进程内适配器调用，并使用宿主内置 React 视图；第三方 Native 使用 IPC、第三方 UI 使用已验证的沙箱 iframe。两者均接受 `ProviderContext`，返回同一类 `PreviewView` 或 `InfoResponse`；宿主 Host Adapter 负责传输差异。不可要求内置 PDF 也启动插件进程，不可允许第三方绕过 UI Bridge。
 3. **Preview 与 Info 是两个独立扩展点**。Preview 输出可交互的*展示视图*，Info 输出结构化*属性区块*；音频/视频文件可以同时命中媒体预览和媒体 Info。普通文件信息在 Info Registry 内注册为基础 Provider，不在 `FileInfoDialog` 中硬编码拼行。
-4. **不会把数据读取伪装成 metadata 权限**。普通 stat 属性是 `metadata`；解析 ID3/FLAC、MP4、MKV、媒体编码、图片 EXIF 等可能需要读取文件内容。第三方主动解析需要已批准的 `files.read.enabled` + 用户当前查看操作的精确 Scope；只有 `files.metadata.enabled` 不允许读取文件内容。内置 Core 解析器使用内部受控 FileBroker 访问，不能借此为插件扩权。
+4. **不会把数据读取伪装成 metadata 权限**。普通 stat 属性是 `metadata`；解析 ID3/FLAC、MP4、MKV、媒体编码、图片 EXIF 等可能需要读取文件内容。第三方主动解析需要已批准的 `files.read.enabled` + 用户当前查看操作的精确 Scope；只有统一 `permissions.metadata.enabled` 不允许读取文件内容。内置 Core 解析器使用内部受控 FileBroker 访问，不能借此为插件扩权。
 5. **所有数据访问都由 Core Broker 控制**。Preview/Info 接收 `ref` 及已批准的 `metadata?`，不默认接收裸绝对路径；**具体 UI 面板不预先声明在 Manifest 中**，由插件随本次用户交互通过 IPC 提供视图描述。大文件从限额可取消的只读资源流/资源代理获取，禁止整文件 base64、任意 materialize 到插件可见路径、跨 Provider 传递原始文件句柄。
 6. **任何 Provider 失败都不应让用户失去默认体验**。Preview 按用户顺序与优先级选择，一个失败换下一个可用 Provider，最终进入始终可用的基础 fallback；Info 同时聚合多个区块，单个 Provider 失败不影响其他区块。
 
@@ -102,6 +102,10 @@ flowchart LR
   P --> H
 ```
 
+## 2.2 Core 输出与插件响应的审核边界
+
+无论是内置 `info::metadata/audio/video` 还是外部插件 Info，Core Host 均使用统一 `InfoResponse` 对象；不同来源不需要第二套类型。Core 收到插件的 IPC JSON 后先 Schema 解析和来源验证，变为同一 Rust 对象。**向插件交付**资源上下文的部分则必须经独立 PermissionPolicy 审核：Core 先创建候选的 `PreviewContext/InfoContext`，PermissionPolicy 比较统一的 `permissions.metadata.enabled`、审批和当前事件 Scope，然后产生安全的 IPC 投影。它不等于授予文件读取。Core 内置 Provider 可直接使用内部资源上下文，但不能把该上下文原样返回给第三方。
+
 ## 3. 通用事件上下文：Push ≠ Pull
 
 `ProviderContext` 是 Core 对当前用户操作建立的不可变快照：
@@ -121,7 +125,7 @@ flowchart LR
 }
 ```
 
-插件收到 `metadata` 的先决条件是对应 `permissions.files.metadata.enabled` 或 `permissions.folders.metadata.enabled` 已经获批；否则整个 `metadata` 属性应被省略。不透明 `ref` 本身既不代表读取授权，也不允许查询任意路径。Core 内置适配器获得的内部 Entry 不得通过序列化泄露给插件。
+插件收到 `metadata` 的先决条件是统一 `permissions.metadata.enabled` 已获批，且独立 PermissionPolicy 将本次候选资源/字段审核通过；否则整个 `metadata` 属性应被省略。不透明 `ref` 本身既不代表读取授权，也不允许查询任意路径。Core 内置适配器获得的内部 Entry 不得通过序列化泄露给插件。
 
 `PreviewProvider.open` / `InfoProvider.resolve` 属于**Core 发起 Push**；只有用户实际触发预览或显示简介后，Core 才建立可取消、限资源的会话。插件希望主动获取文件/目录的 stat 时走 `ctx.files().metadata` → `host.fs.stat`，仍须已批准的 metadata 权限 + 当前已确认的 OperationScope，不能利用扩展点默认提升作用域。
 

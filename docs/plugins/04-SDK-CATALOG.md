@@ -30,7 +30,7 @@ fn main() {
 | `ctx.http()` | `host.net.http.*` | 返回 `HttpClient` |
 | `ctx.tcp()` | `host.net.tcp.*` | 返回 `TcpClient` |
 | `ctx.invoke(method,params)` | 指定 `host.*` | 高级能力未封装时的受限低层入口 |
-| `ctx.open_vfs_view(id,root,context)` | `host.vfs.openView` | 请求 Core 创建只读 VFS View |
+| `ctx.open_vfs_view(id,root,context)` | `host.vfs.openView` | 请求独立 VFS Provider 创建受控 mount，可对应只读 Git View 或云盘文件树，不因 Connection 注册自动生成 |
 | `ctx.report_error(code,message,detail)` | `host.error.report` | 限流、非敏感诊断 |
 | `ctx.process_run(command,args,stdin)` | `host.process.run` | 启动批准的外部命令（危险） |
 | `ctx.storage_get(scope,key)` | `host.storage.get` | 返回 JSON/Null |
@@ -51,7 +51,7 @@ fn main() {
 
 | 方法 | 目标 SDK 类型 | IPC 输入 → 输出 | 权限 |
 |---|---|---|---|
-| `ctx.method()=="contextMenu.resolve"` | `sdk::context_menu::ResolveRequest` → `MenuResponse` | `target + selection + directory + menuSessionId` → `{items}` | Core 主动附带本次选择的 `metadata?`（仅 files/folders.metadata 已获批时）；不可主动 stat/读内容/遍历 |
+| `ctx.method()=="contextMenu.resolve"` | `sdk::context_menu::ResolveRequest` → `MenuResponse` | `target + selection + directory + menuSessionId` → `{items}` | Core 主动附带本次选择的 `metadata?`（仅统一 permissions.metadata 经独立审核模块批准时）；不可主动 stat/读内容/遍历 |
 | `ctx.method()=="contextMenu.execute"` | `sdk::context_menu::ExecuteRequest` → JSON | `menuSessionId + itemId + selection` → JSON | 用户实际点击之后的精确 OperationScope |
 | `sdk::context_menu::MenuItem` | `{id,type,title?,icon?,parentId?,enabled?,group?,order?}` | 由 `resolve` 序列化至 Core | 只用于显示，不意味着可执行系统调用 |
 
@@ -90,7 +90,7 @@ fn handle(ctx: sdk::RequestContext) -> Result<Value, RpcError> {
 }
 ```
 
-注意：`contextMenu.resolve` 的 `ctx.files()` 方法即使存在，也**不会拥有主动查询 metadata、读取文件内容或目录遍历的授权**。Core 仅在用户批准 `permissions.files.metadata.enabled` / `permissions.folders.metadata.enabled` 时，随请求的 `target.metadata` / `selection[].metadata` 主动推送对应对象的元数据；未批准则字段不存在。SDK `ExecuteRequest` 的 `menuSessionId` 是宿主 Session 关联值，不能直接当作文件授权令牌；实际权限与资源版本均由 Core 再验证。
+注意：`contextMenu.resolve` 的 `ctx.files()` 方法即使存在，也**不会拥有主动查询 metadata、读取文件内容或目录遍历的授权**。Core 仅在用户批准 `permissions.metadata.enabled` 时，随请求的 `target.metadata` / `selection[].metadata` 主动推送对应对象的元数据；未批准则字段不存在。SDK `ExecuteRequest` 的 `menuSessionId` 是宿主 Session 关联值，不能直接当作文件授权令牌；实际权限与资源版本均由 Core 再验证。
 
 ```mermaid
 flowchart TD
@@ -106,6 +106,16 @@ flowchart TD
   Execute --> End
   Panel --> End
 ```
+
+## 2.2 Connection 与 VFS 的 SDK 职责互不隐含
+
+- `surfaces.connections[]` 仅在 Core UI 注册添加连接 + 和侧边栏条目；点击加号选择插件 → 固定 `connection.create`，点击已有连接 → `connection.open`。插件处理器经 IPC 返回 `NavigationIntent` 或调用 `ctx.ui().open_panel(...)`，由 Core 验证导航/交互身份并真正跳转。
+- `providers.vfs[]` 独立注册文件树；云盘插件须同时声明 Connection 和 VFS，Git 历史等可只声明 VFS。SDK 中的 VFS 访问/挂载封装只在相应 Provider 已注册且用户操作允许时才向 Core 提交，不能从 Connection 类型推导文件树能力。
+- 远端的 VFS 接口由对应协议处理 `list/stat/openRead/writeFile`；普通宿主 `host.fs.stat` 由独立 PermissionPolicy 校验一项 `permissions.metadata.enabled` + OperationScope，不能混淆。
+
+## 2.3 Decoration 订阅与审核模块
+
+`surfaces.decorations:true` 只使 Core 每次切换目录时发送一次 `decorations.resolve`；即使未批准 metadata 也会发事件。独立权限审核模块在 Core 候选数据发出前，比较 `permissions.metadata.enabled` 和本次可见目录 Scope，仅批准后把目录与成员 Metadata 发送给插件。SDK 无法通过这个事件额外获取目录读取能力；没有 metadata 则无法返回逐文件有效角标。
 
 ## 3. Files、Reader、Writer：完整映射
 
@@ -126,7 +136,7 @@ flowchart TD
 | `Files::write(path,bytes)` | beginWrite/write/commit | `files.write.enabled`：只修改已存在文件，不隐含新建 |
 | `Files::create(path,bytes)` | beginWrite(create:true)/commit | `files.create.enabled`：只创建不存在的文件并写入初始内容；不需要 `folders.create`，不隐含 `files.write` |
 | `Files::list(path)` | `host.fs.list` | 仅许可目录内 |
-| `Files::metadata(path)` | `host.fs.stat` | **插件主动查询**：按目标类型要求 `files.metadata.enabled` 或 `folders.metadata.enabled` + 本次 OperationScope/TaskScope；与 Core 主动推送不同 |
+| `Files::metadata(path)` | `host.fs.stat` | **插件主动查询**：统一要求 `permissions.metadata.enabled` + 本次 OperationScope/TaskScope；与 Core 主动推送不同 |
 | `Files::create_dir_all(path)` | `host.fs.mkdir` | `folders.create.enabled`：创建目录，不等于创建新文件 |
 | `Files::remove(path)` | `host.fs.remove` | 按目标类型要求 `files.delete.enabled` 或 `folders.delete.enabled`，检查本次所选范围 |
 | `Files::rename(from,to)` | `host.fs.rename` | 按目标类型要求 `files.rename.enabled` 或 `folders.rename.enabled`，检查双路径 Scope |
@@ -269,7 +279,7 @@ UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两
 
 | 触发方式 | Rust SDK / RPC | 授权条件 |
 |---|---|---|
-| 当前文件被右键、预览或显示简介 | `ctx.params()["target"]["metadata"]`（或 selection[].metadata） | 对应的 `files.metadata.enabled` / `folders.metadata.enabled` 已批准；由 Core 主动提供，不需要调用 stat |
+| 当前文件被右键、预览或显示简介 | `ctx.params()["target"]["metadata"]`（或 selection[].metadata） | 对应的 `permissions.metadata.enabled` 已批准；由 Core 主动提供，不需要调用 stat |
 | 插件需要在执行阶段查询其他已选文件的 stat | `ctx.files().metadata(path)` → `host.fs.stat` | 对应 metadata 权限已批准，且该路径在明确授权的 OperationScope/TaskScope 内 |
 | 插件主动读取文件内容 | `ctx.files().open_read(path)` → `host.fs.openRead` | `files.read.enabled` + 精确文件 Scope；metadata 权限不能代替 |
 
@@ -277,7 +287,7 @@ UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两
 
 不同 UI/Native 会话绝不共享隐式“当前目录”权限。面板关闭不会自动取消已经显式启动、仍被 Core 持有的后台任务，但必须解除 UI panel-local 任务；用户能从活动中心取消后台任务。
 
-## 7.1 PreviewProvider 与 InfoProvider 统一 SDK 类型（目标新增）
+## 7.1 Preview/Info 通用 IPC 契约（业务类型归 Core）
 
 内置文本高亮/图片/音视频/PDF 与第三方 Preview 注册**同一个** `PreviewDescriptor`，内置基础/音频/视频与第三方 Info 注册**同一个** `InfoDescriptor`。Core Adapter 和 Native Plugin Adapter 必须接受相同逻辑上下文、返回相同结果；传输层实现不同，但不能在 FileInfoDialog/Preview 里写出两套契约。
 
@@ -292,10 +302,12 @@ UI Bridge 不提供 `contextMenu.resolve/execute` 的任意调用方法；这两
 | `resources::PreviewResourceRef` | Core Scoped Resource Broker | 只读、限量、可取消、支持视频/PDF Range/Seek；插件无法拿到裸本地文件路径 |
 | `preview::PreviewSession` / `info::InfoSession` | Core session owner | 文件切换、对话框关闭/插件禁用、取消时释放资源，后到结果丢弃 |
 
-`preview.open` 对 Core 内置 Provider 是进程内 Adapter 调用，对插件是 Host 统一管理的 Panel/UI Bridge 加载过程，**不是要求插件每次额外跑一遍 Native IPC**。插件仅注册 `surfaces.preview[]`；打开预览时通过 IPC/Bridge 动态指定本次包内页面或受限 HTML，Core 验证内容与来源。Info Native handler 可以使用 `info.resolve` 或声明的 `command`，但必须返回同形 `InfoResponse`；SDK 应生成可直接实现的 `InfoHandler` 类型。
+`preview.open` 对 Core 内置 Provider 是进程内 Adapter 调用，对插件是 Host 统一管理的 Panel/UI Bridge 加载过程，**不是要求插件每次额外跑一遍 Native IPC**。插件仅注册 `surfaces.preview[]`；打开预览时通过 IPC/Bridge 动态指定本次包内页面或受限 HTML，Core 验证内容与来源。Info Native handler 可以使用 `info.resolve` 或声明的 `command`，但必须返回同形 `InfoResponse`；Core 负责定义 Info Handler 数据契约，SDK 使用通用 IPC 即可，无需单独公开 InfoResponse 类型。
 
-**权限**：Core 只主动 Push 已获批的本次所选资源 `metadata?`；媒体探测/图片/视频/PDF 内容解析需要相应文件的 `files.read.enabled` + 精确 Scope。内置 Provider 的内部读取不向外部插件暴露特权；所有第三方流由 Broker 代理。完整规范见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
+**权限**：独立 PermissionPolicy 只允许 Core Push 已获批的本次所选资源 `metadata?`；媒体探测/图片/视频/PDF 内容解析需要相应文件的 `files.read.enabled` + 精确 Scope。内置 Provider 的内部读取不向外部插件暴露特权；所有第三方流由 Broker 代理。完整规范见 [08 统一 Preview/Info](08-UNIFIED-PREVIEW-INFO.md)。
 
+
+**职责限定**：上表描述协议和 Core 业务对象，并非要求 Rust SDK 导出全部 Preview/Info 专有 Struct。插件可以返回遵循协议的 JSON；Core 反序列化成与内置 Provider 构造完全相同的类型，InfoHost/PreviewHost 不区分对象来源。SDK 只需通用 IPC、资源 Broker 和通用运行时 UI 封装。
 ## 7.2 通用运行时 UI SDK：`ctx.ui().open_panel`
 
 `ctx.ui().open_panel(view,presentation)` 由 Native SDK 在上下文内带上 Core 下发的 `interactionId`（插件开发者不手工创建/复用），通过 `host.ui.open` 创建 **PanelSession**；Toolbar、ContextMenu、Preview、Info、Search、Connection 等用户主动触发的 UI Surface 均可使用，无需 Manifest `panels`、`panelId` 或单独 Panel permission。

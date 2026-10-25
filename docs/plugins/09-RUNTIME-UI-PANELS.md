@@ -5,7 +5,7 @@
 ## 1. 设计结论
 
 - Manifest **没有** `panels`、`panelId`、`defaultSize` 等静态 Panel 注册项。插件需要哪个页面、内容、标题、默认尺寸和展示方式，均在**运行时 IPC**里选择；不要求开发者提前列出面板。
-- Toolbar、ContextMenus、Preview、Info、Search、Connections、Decorations、Settings 和 Themes 都是 Core 定义的 UI Surface。其中并非每种自动刷新事件都可以直接打开 Panel：必须有用户交互来源（如点击工具栏按钮、右键具体菜单项、打开预览、点击搜索结果/Info 操作、连接管理里的按钮、设置页上的操作）。**注册 Surface 隐含其实际交互流程中的 UI 请求能力**，无需额外的 `panel` 权限。
+- Toolbar、ContextMenus、Preview、Info、Search、Connections、Decorations、Settings 和 Themes 都是 Core 定义的 UI Surface。其中并非每种自动刷新事件都可以直接打开 Panel：必须有用户交互来源（如点击工具栏按钮、右键具体菜单项、打开预览、点击搜索结果/Info 操作、连接 + /侧栏项目、设置页上的操作）。**注册 Surface 隐含其实际交互流程中的 UI 请求能力**，无需额外的 `panel` 权限。
 - Core 对全部 UI Surface 使用同一个 PanelHost / PanelSession / UI Bridge，控制标题栏、尺寸限制、焦点、生命周期和沙箱。一个界面可由多个 PanelSession 打开，打开哪些内容由插件选择。不同 Surface 只是给 PanelSession 提供不同的授权上下文与展示目标。
 - 仅提供功能的 `providers.vfs[]/hooks[]` 没有独立“后台弹窗权限”；如果某个功能由用户在 UI 中实际触发，才通过这次 UI 会话请求展示 Panel。定时 Hook / 后台同步 / 菜单 resolve / Decoration 刷新不得自动弹窗。
 - Panel 的创建**不等于**文件访问授权。插件使用文件、网络、进程、秘密时仍需对应 manifest permission、用户批准和精确 OperationScope。
@@ -73,7 +73,7 @@ Core 提供 `host.ui.open`（目标 Native SDK 高层接口：`ctx.ui().open_pan
 | Preview 打开 | Core 匹配 PreviewProvider，插件在 `preview.open` 中返回 PreviewView/发起带视图的 PanelSession | 目标插槽由 Core 固定为当前 Preview Host；不弹另一个任意窗口 |
 | Info 展示 | `info.resolve` 只返回 `sections[]`，宿主直接渲染 | 只有用户再点击该 Provider 的显式操作时，才允许调用 `host.ui.open` |
 | Search 查询 | `search.query` 只返回目录内结果 | 只有用户点击搜索结果或明确的搜索扩展操作时才能请求 Panel |
-| Connection 管理 | 添加连接/管理连接时 Core 显示标准表单；插件可在关联的交互回调中请求 OAuth/高级配置 Panel | Panel 从当前连接/账号交互派生，不扩到其他连接 |
+| Connection 管理 | Connection 仅注册 + 与侧边栏项；点击调用 `connection.create/open`，插件通过本次响应决定导航到登录 Panel、设置或自有 VFS mount | Panel 从当前连接/账号交互派生，不扩到其他连接 |
 | Decorations / Settings / Themes | 自动刷新/纯计算返回数据，不得弹窗；用户明确点选其配置或操作按钮后才能请求 Panel | 不能把每次渲染、主题切换通知当作无限弹窗许可 |
 
 面板关闭、窗口导航、插件被禁用或卸载时，Core 撤销 PanelSession 与其子级 UI 操作权限。任务若需跨 UI 关闭继续，必须显式转移到独立 TaskScope。

@@ -11,7 +11,7 @@ flowchart TB
   end
   subgraph Core["Fiex Core（唯一可信资源 Broker）"]
     Registry["Manifest Registry / Installer / Signer"]
-    Permission["Consent + OperationScope + TaskScope"]
+    Permission["Independent PermissionPolicy: audit + grants + scopes"]
     Router["VFS Router / MountRegistry / NodeIndex"]
     Engine["Cache / Transfer / Sync / Conflict"]
     FS["OS File Broker / Clipboard / Preview"]
@@ -37,7 +37,7 @@ flowchart TB
   Runtime --> Storage
 ```
 
-关键原则：Core 不编译、链接或动态加载插件业务 crate。一个 Native 插件进程可服务多个并发请求与多个 Connection；每次请求有独立鉴权上下文，不能从“同一个常驻进程”推导全局文件访问权限。
+关键原则：Core 不编译、链接或动态加载插件业务 crate。权限审核另设受信独立 crate/模块 `permission_policy`，业务模块只产生待审核输出，不得绕开策略直接给插件发资源字段。一个 Native 插件进程可服务多个并发请求与多个 Connection；每次请求有独立鉴权上下文，不能从“同一个常驻进程”推导全局文件访问权限。
 
 ## 2. 四种通道
 
@@ -90,14 +90,15 @@ flowchart LR
 
 ## 2.2 事件元数据 Push 与主动资源访问 Pull
 
-Core 持有 Explorer / 连接树展示所需的资源元数据。插件注册贡献点并不因此拥有全局查询文件系统的能力。元数据是单独用户授权：文件 `files.metadata.enabled`、目录 `folders.metadata.enabled`。用户触发实际事件（如右键、预览）时，Core **直接在事件 params 中附带已获批类型的当前选中对象 metadata**；如未批准则仅发送不透明 ref。插件无需也不得因这次事件主动调用 `host.fs.stat` 探测其他资源。
+Core 持有 Explorer / 连接树展示所需的资源元数据。插件订阅 Surface 只登记事件，独立审核模块决定数据交付，不因注册而拥有全局查询文件系统的能力。元数据是**独立的一项** `permissions.metadata.enabled`，**文件和文件夹共用**。用户触发实际事件（如右键、预览）时，Core 先把事件候选载荷送进**独立 PermissionPolicy** 审核，只有获批的一项 `permissions.metadata` 才允许在 IPC params 中附带当前资源 Metadata；如未批准则仅发送不透明 ref。插件无需也不得因这次事件主动调用 `host.fs.stat` 探测其他资源。
 
-后续用户执行动作后，插件才在 OperationScope/TaskScope 中使用 `ctx.files().metadata(path)` → `host.fs.stat` 主动查询，仍需同类 metadata 权限；`files.read` 与 `folders.read` 分别控制文件字节与目录枚举，不能替代 metadata 授权。File/Folder 所有子权限统一 `{enabled}`，文件创建、删除、改名与文件夹的同名操作分离。
+后续用户执行动作后，插件才在 OperationScope/TaskScope 中使用 `ctx.files().metadata(path)` → `host.fs.stat` 主动查询，仍需同类 metadata 权限；`files.read` 与 `folders.read` 分别控制文件字节与目录枚举，不能替代 metadata 授权。文件/文件夹操作子权限与独立 metadata 权限统一 `{enabled}`，文件创建、删除、改名与文件夹的同名操作分离。
 
 ```mermaid
 flowchart TD
   Explorer["用户触发扩展点"] --> Core["Core 持有所选资源 Entry"]
-  Core --> Check{"对应 metadata.enabled 获批?"}
+  Core --> Audit["Independent PermissionPolicy.audit_output"]
+  Audit --> Check{"permissions.metadata.enabled approved?"}
   Check -->|yes| Push["Core 推送本次选择的 metadata"]
   Check -->|no| Minimal["仅 opaque ref"]
   Push --> Plugin["Plugin 处理事件"]
@@ -130,7 +131,7 @@ flowchart LR
 
 ## 2.5 Surface 插槽与 Core 多来源实现的边界
 
-UI Surface 是 Core 预设的接入位置，`surfaces.connections[]`（添加连接和侧边栏）、`surfaces.preview[]`、`surfaces.info[]`、`surfaces.contextMenus`、`surfaces.search[]`、`surfaces.toolbar[]`、`surfaces.decorations[]`、`surfaces.settings[]` 都有明确 UI 入口。和它们不同，`providers.vfs[]` 与 `providers.hooks[]` 不绑定一个固定 UI 插槽；`surfaces.themes[]` 对应主题选择器；Panel 不出现在 Manifest，只在用户实际交互时由 IPC 创建。
+UI Surface 是 Core 预设的接入位置，`surfaces.connections[]`（只提供添加连接 + 和侧边栏入口）、`surfaces.preview[]`、`surfaces.info[]`、`surfaces.contextMenus`、`surfaces.search[]`、`surfaces.toolbar[]`、`surfaces.decorations:true`、`surfaces.settings[]` 都有明确 UI 入口。和它们不同，`providers.vfs[]` 与 `providers.hooks[]` 不绑定一个固定 UI 插槽；`surfaces.themes[]` 对应主题选择器；Panel 不出现在 Manifest，只在用户实际交互时由 IPC 创建。
 
 对 Info：`core.info.metadata`、`core.info.audio`、`core.info.video` 是三个**独立源代码模块**，各自有匹配逻辑、解析、结果和单测，聚合时并发执行、彼此失败隔离。对 Preview：`core.preview.text/image/audio/video/pdf/fallback` 也是各自独立的 Renderer/Provider 模块。内置采用进程内 Adapter，第三方经过 IPC/隔离 UI；两者由同一 Registry 调度、同一宿主展示。
 
@@ -161,6 +162,25 @@ flowchart LR
 ```
 
 详见 [09-RUNTIME-UI-PANELS.md](09-RUNTIME-UI-PANELS.md)。
+
+## 2.7 独立的 PermissionPolicy / Decoration 订阅 / Connection-VFS 分离
+
+```mermaid
+flowchart LR
+  E["Core Surface events / candidate output"] --> G["Independent PermissionPolicy"]
+  A["Manifest request + approved grants + event scope"] --> G
+  G --> M["IPC: approved payload only"]
+  M --> P["Plugin"]
+  P --> H["host.* requests"]
+  H --> G
+  G --> B["Scoped Core Broker"]
+```
+
+`PermissionPolicy` 是独立可测试的权限审核模块（建议 workspace crate，而不是插件进程）：比较 Core 准备交付的数据字段、当前插件获批权限和事件/操作 Scope，决定哪些字段可交付。Core 不在各 Surface Host 内散写授权分支。`permissions.metadata.enabled` **一项覆盖文件和文件夹**；文件与文件夹的读/写/创建/删除等操作权限保持区分。
+
+`surfaces.decorations:true` 只声明**每次目录切换通知插件**。无论有无 Metadata 许可，都触发 `decorations.resolve`；独立审核模块在获批 `permissions.metadata` 后才释放该目录和成员的属性。没有这项许可，事件有通知但无法生成逐文件的有效 Decoration。
+
+`surfaces.connections[]` 仅在添加连接 + 和侧边栏“连接”区注册入口，点击交给插件 `connection.create/open` 决定导航意图。**网盘需要额外声明 `providers.vfs[]`，连接本身不创建 mount**；VFS 文件树独立于 Connection UI，可用于云盘的可写文件树和 Git 的只读历史。
 
 ## 3. 所有权矩阵
 
@@ -194,7 +214,7 @@ flowchart LR
   UiBridge --> VFSRouter
 ```
 
-建议独立出（至少文件/目录模块，不强求立即拆 crate）：`plugin_host/{manifest,catalog,installer,process,rpc,scope}`、`plugin_broker/{fs,net,process,storage,buffer}`、`vfs/{uri,mounts,views,index}`、`remote/{connection,listing,materialize,cache,reconcile,conflict}`、`desktop/{commands,ui_bridge,theme}`。SDK 的 `rust/src/{context,files,http,tcp,tasks,protocol}` 与 `ui/src/{bridge,client,types}` 独立。任何分层拆包不得导致 Core 对特定 Provider 增加业务 match。
+建议独立出（至少文件/目录模块，不强求立即拆 crate）：`plugin_host/{manifest,catalog,installer,process,rpc,scope}`、独立 `permission_policy/{grants,decision,output_filter,scope,tests}`、`plugin_broker/{fs,net,process,storage,buffer}`、`vfs/{uri,mounts,views,index}`、`remote/{connection,listing,materialize,cache,reconcile,conflict}`、`desktop/{commands,ui_bridge,theme}`。SDK 的 `rust/src/{context,files,http,tcp,tasks,protocol}` 与 `ui/src/{bridge,client,types}` 独立。任何分层拆包不得导致 Core 对特定 Provider 增加业务 match。
 
 ## 5. 线协议与安全不变量
 

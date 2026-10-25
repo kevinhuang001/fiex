@@ -7,10 +7,10 @@
 
 1. **插件类型不分特权等级**。一个插件有一个身份 `pluginId`，通过 `surfaces` 声明固定 UI 插槽、`providers` 声明无固定 UI 插槽的功能；通过 `permissions` 申请资源操作。Panel 由 Core 在实际用户交互时按需创建，Manifest 无须注册。官方插件与第三方完全一致；不使用 `capabilities`、`scheme`、`writeMode`、`conflictControl` 或 `sync` Manifest 选择开关。
 2. **Core 掌握资源与状态**：统一路由、挂载 ID、权限、文件句柄、网络代理、缓存、任务、同步、冲突与持久化。Provider 只提供远端文件语义；UI 只进行显示和操作请求。禁止在 Core 写 WebDAV/Git/SMB/OpenList 等插件 ID 特判。
-3. **VFS 是应用内部的资源命名空间**，形式为 `fiex://mount/<Core-id>/...`；Connection 声明自动生成挂载实例，显式 `vfs` 贡献通过批准范围内的 `open_vfs_view` 生成临时/可恢复 View。当前阶段不提供 OS 级 FUSE/WinFsp 挂载。
+3. **VFS 是应用内部的资源命名空间**，形式为 `fiex://mount/<Core-id>/...`；Connection 不自动产生挂载；独立 VFS Provider 经 IPC 请求挂载，VFS Provider 经独立 IPC 请求创建云盘持久 mount 或 Git 历史临时 View。当前阶段不提供 OS 级 FUSE/WinFsp 挂载。
 4. **一次操作、一份最小授权**：选择文件/目录不自动赋权，后续明确调用才创建 operation scope；后台任务继承并独立持有这一 scope，任务结束立即释放。连接 Provider 的云端文件 ID 不等于宿主磁盘访问授权。
 5. **统一流式资源 I/O**：插件开发者优先使用 Rust `Read/Write/Seek`，SDK 负责共享内存与短消息的自动选择；上传可直接传递 *精确文件句柄*。所有传输长度为 u64，有上限、取消与错误传播。
-6. **连接的核心闭环**：list/stat/read/open + Core 增量缓存、离线固定、恢复、冲突保留、显式解决；连接写入使用单一 `fs.writeFile`，Provider 可在内部采用单 PUT、分段、服务器临时文件或原生协议。
+6. **网盘 VFS 的核心闭环**：list/stat/read/open + Core 增量缓存、离线固定、恢复、冲突保留、显式解决；由独立 VFS Provider 提供的网盘写入使用单一 `vfs.writeFile`，Provider 可在内部采用单 PUT、分段、服务器临时文件或原生协议。
 7. **协议目录单一事实来源**：通过 schema + 生成器产出 IPC 方法表、Rust SDK 类型、TypeScript UI 类型、Manifest JSON Schema 与契约测试；禁止“文档和代码各自手写一套语义”。
 8. **面向实现，而非阶段报告**：每章定义目标接口、必须满足的不变量、模块位置、测试要求；实施顺序见第 07 篇。
 
@@ -49,7 +49,7 @@ flowchart LR
 
 ## Manifest 三层分类和内置来源拆分
 
-`surfaces`：固定宿主 UI 插槽（Connections 添加/管理、Toolbar、ContextMenus、Search、Preview、Info、Decorations、Settings、Themes）。`providers`：无固定 UI 插槽的显式 VFS View、Hooks。**Panel 是运行时 UI 服务，不存在静态 Panel 注册表**。旧顶层 `contributions` 无需兼容、直接拒绝。Connection 和 Preview 一样具有固定位置，但 Connection 实例可由 Core 自动创建 VFS mount，不额外声明 VFS。
+`surfaces`：固定宿主 UI 插槽（Connections 添加/管理、Toolbar、ContextMenus、Search、Preview、Info、Decorations、Settings、Themes）。`providers`：无固定 UI 插槽的独立 VFS 文件树（可写云盘/只读 Git 历史）与 Hooks。**Panel 是运行时 UI 服务，不存在静态 Panel 注册表**。旧顶层 `contributions` 无需兼容、直接拒绝。Connection 和 Preview 一样具有固定位置，但 Connection 不自动产生 VFS；网盘必须另行声明 `providers.vfs[]`，点击连接后的导航由插件决定。
 
 一个 Info Surface 下**分别注册** `core.info.metadata`、`core.info.audio`、`core.info.video` 和任意第三方 Info Provider；一个 Preview Surface 下分别注册内置 Text、Image、Audio、Video、PDF、Fallback 和插件 Provider。Core 各来源必须拆到真正独立源代码文件，由各自模块提供匹配、解析与测试，不允许在 `info.rs` / `Preview.tsx` 中继续集中实现。参见 [02](02-MANIFEST-EXTENSIONS.md)、[08](08-UNIFIED-PREVIEW-INFO.md) 和 [Roadmap](../../ROADMAP.md)。
 
@@ -57,9 +57,17 @@ flowchart LR
 
 `surfaces.connections/toolbar/contextMenus/search/preview/info/settings` 等有 UI 集成位置的插件，在用户实际点击或打开相应界面后，均能通过统一的 `host.ui.open` 请求 Core 创建 Panel。Manifest **不包含** Panel 注册表、`panelId` 或额外的 Panel permission。插件通过 IPC 在当次请求内指定包内 HTML 页面或有界动态 HTML、标题及尺寸。Core 统一管理 PanelSession、iframe 沙箱、交互绑定与权限；普通后台任务/菜单查询/自动 Info/Search 查询不允许主动弹窗。详见 [09 运行时 UI Panel](09-RUNTIME-UI-PANELS.md)。
 
+## 权限、Decoration、Connection 的三个解耦点
+
+`permissions.metadata.enabled` **只有一项**，覆盖文件/文件夹 metadata。独立的受信 `PermissionPolicy` 审核 Core→Plugin 所有候选输出、逐项比较插件已批准权限与 EventScope，处理嵌套资源字段；插件主动 Core 资源操作也在此模块校验，权限判断不能散落在 Core 各业务组件。
+
+`surfaces.decorations:true` 只是订阅**每次目录切换**，不是取得文件信息的权限。Core 必发切换事件；独立审核模块在批准 metadata 后才放行目录和成员 Metadata，没有这个权限无法产生按文件属性判断的有效 Decoration。
+
+`surfaces.connections[]` 仅注册添加连接的“+”入口和侧栏连接项；点击后插件通过 `connection.create/open` 决定具体导航/面板。网盘还须独立注册 `providers.vfs[]`，Core 不自动挂载 Connection。参见 [02 Manifest](02-MANIFEST-EXTENSIONS.md)、[03 IPC](03-IPC-CATALOG.md)、[05 VFS](05-VFS-CONNECTION-SYNC.md)。
+
 ## 权限与搜索的目标约定
 
-所有 `permissions.files.*` 与 `permissions.folders.*` 均为 `{enabled: boolean, ...}` 结构。文件独立声明 `metadata/read/write/create/delete/rename`；文件夹独立声明 `metadata/read/create/delete/rename`。元数据权限与文件内容读取/目录遍历相互独立。
+所有 `permissions.files.*` 与 `permissions.folders.*` 均为 `{enabled: boolean, ...}` 结构。文件独立声明 `read/write/create/delete/rename`；文件夹独立声明 `read/create/delete/rename`；**文件和文件夹共用唯一的 `permissions.metadata.enabled`**。元数据权限与文件内容读取/目录遍历相互独立。
 
 当用户触发右键、预览、信息等扩展点，Core 在 **metadata 权限已批准** 时直接随 IPC 发出本次选择对象的 `metadata`，不要求插件另行调用 `stat`；插件主动 `host.fs.stat` 仍须经过 metadata permission 和具体的 OperationScope/TaskScope。未获批准则事件只包含不透明 ref，不提供详细元数据。
 
