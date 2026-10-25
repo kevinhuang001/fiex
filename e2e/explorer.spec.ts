@@ -623,7 +623,7 @@ test('activation asks for one permission at a time and cancellation grants nothi
   await row.getByRole('switch', { name: '激活 Git' }).click()
   let prompt = page.getByRole('dialog', { name: '权限请求' })
   await expect(prompt).toContainText('允许「Git」读取文件夹？')
-  await expect(prompt).toContainText('列出当前目录及子目录')
+  await expect(prompt).toContainText('列出本次授权范围内的文件夹')
   await prompt.getByRole('button', { name: '不允许', exact: true }).click()
   await expect(prompt).toHaveCount(0)
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'false')

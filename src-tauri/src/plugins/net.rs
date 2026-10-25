@@ -266,7 +266,10 @@ pub fn tcp_shutdown(owner: &str, params: &Value) -> Result<(), String> {
         "both" => Shutdown::Both,
         _ => return Err("invalid TCP shutdown direction".into()),
     };
-    stream.control.shutdown(how).map_err(|error| error.to_string())
+    stream
+        .control
+        .shutdown(how)
+        .map_err(|error| error.to_string())
 }
 
 pub fn tcp_close(owner: &str, params: &Value) -> Result<(), String> {
@@ -593,12 +596,17 @@ mod tcp_tests {
         });
         ready_rx.recv_timeout(Duration::from_secs(3)).unwrap();
         duplex.writer.lock().unwrap().write_all(b"ping").unwrap();
-        server.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
         let mut received = [0; 4];
         server.read_exact(&mut received).unwrap();
         assert_eq!(&received, b"ping");
         server.write_all(b"pong").unwrap();
-        assert_eq!(result_rx.recv_timeout(Duration::from_secs(3)).unwrap(), *b"pong");
+        assert_eq!(
+            result_rx.recv_timeout(Duration::from_secs(3)).unwrap(),
+            *b"pong"
+        );
         read_task.join().unwrap();
     }
 }
