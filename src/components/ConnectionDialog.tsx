@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Cloud, HardDrive, Plug, Server } from 'lucide-react'
+import { ArrowLeft, Cloud, HardDrive, Plug, Server, TerminalSquare } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call } from '@/lib/api'
@@ -16,19 +16,43 @@ export function ConnectionDialog({
   onSaved: (connection: RemoteConnection) => void
 }) {
   const plugins = usePluginCatalog()
-  const choices = useMemo(
-    () =>
-      plugins.flatMap((plugin) => {
-        const ok = plugin.enabled && Boolean(plugin.extensions?.connections?.length)
-        return ok
-          ? (plugin.extensions?.connections || []).map((factory) => ({
-              plugin,
-              factory,
-            }))
-          : []
-      }),
-    [plugins],
-  )
+  const choices = useMemo(() => {
+    const builtin = {
+      plugin: { id: '__builtin__', name: 'Fiex 内置', version: '' },
+      factory: {
+        id: 'ssh',
+        title: 'SSH 终端',
+        fields: [
+          {
+            id: 'host',
+            label: '主机',
+            type: 'text',
+            required: true,
+            placeholder: 'server.example.com',
+          },
+          { id: 'port', label: '端口', type: 'number', defaultValue: 22 },
+          { id: 'username', label: '用户名', type: 'text', placeholder: 'root' },
+          {
+            id: 'identityFile',
+            label: '私钥文件（可选）',
+            type: 'text',
+            placeholder: '~/.ssh/id_ed25519',
+          },
+          { id: 'terminalType', label: '终端类型', type: 'text', defaultValue: 'xterm-256color' },
+        ] as PluginField[],
+      },
+    }
+    const remote = plugins.flatMap((plugin) => {
+      const ok = plugin.enabled && Boolean(plugin.extensions?.connections?.length)
+      return ok
+        ? (plugin.extensions?.connections || []).map((factory) => ({
+            plugin,
+            factory,
+          }))
+        : []
+    })
+    return [builtin, ...remote]
+  }, [plugins])
   const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [values, setValues] = useState<Record<string, string | boolean>>({})
@@ -98,7 +122,7 @@ export function ConnectionDialog({
     >
       {!current ? (
         <div className="connection-form">
-          <p className="sidebar-hint">选择已安装的连接插件</p>
+          <p className="sidebar-hint">选择连接类型</p>
           <div className="connection-plugin-picker">
             {choices.map(({ plugin, factory }) => (
               <button
@@ -107,7 +131,9 @@ export function ConnectionDialog({
                 className="connection-plugin-choice"
                 onClick={() => choose(plugin.id + ':' + factory.id, factory.fields)}
               >
-                {factory.id === 'webdav' ? (
+                {factory.id === 'ssh' ? (
+                  <TerminalSquare size={20} />
+                ) : factory.id === 'webdav' ? (
                   <Cloud size={20} />
                 ) : factory.id === 'smb' ? (
                   <HardDrive size={20} />
@@ -117,16 +143,16 @@ export function ConnectionDialog({
                 <span>
                   <strong>{factory.title || plugin.name}</strong>
                   <small>
-                    {plugin.name} · {plugin.version}
+                    {plugin.id === '__builtin__'
+                      ? '内置 · 使用系统 OpenSSH'
+                      : `${plugin.name} · ${plugin.version}`}
                   </small>
                 </span>
                 <Server size={14} />
               </button>
             ))}
-            {!choices.length && (
-              <p className="sidebar-hint">
-                没有已安装的连接插件。请先在设置 → 插件中安装或启用插件。
-              </p>
+            {choices.length === 1 && (
+              <p className="sidebar-hint">其他远程连接需要先在设置 → 插件中安装并启用连接插件。</p>
             )}
           </div>
           <footer>
@@ -145,9 +171,12 @@ export function ConnectionDialog({
               setError('')
             }}
           >
-            <ArrowLeft size={15} /> 选择其他插件
+            <ArrowLeft size={15} /> 选择其他类型
           </button>
-          <p className="sidebar-hint">{current.factory.title}</p>
+          <p className="sidebar-hint">
+            {current.factory.title}
+            {current.plugin.id === '__builtin__' && ' · 密码/私钥口令会在终端中提示输入'}
+          </p>
           <label>
             <span>连接名称</span>
             <input

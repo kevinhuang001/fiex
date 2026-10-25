@@ -226,6 +226,13 @@ test('Applications entry and search control', async ({ page }) => {
   await expect(page.getByText('Fiex.app', { exact: true })).toBeVisible()
   await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeVisible()
 })
+test('built-in SSH opens a full-height terminal', async ({ page }) => {
+  await page.getByText('生产服务器', { exact: true }).click()
+  await expect(page.locator('.ssh-terminal-view')).toBeVisible()
+  await expect(page.locator('.ssh-terminal-view')).toContainText('Fiex SSH')
+  await expect(page.locator('.explorer-toolbar')).toHaveCount(0)
+})
+
 test('opens the Trash inside Fiex', async ({ page }) => {
   await page.getByRole('button', { name: '废纸篓', exact: true }).click()
   await expect(page.getByText('Old draft.txt', { exact: true })).toBeVisible()

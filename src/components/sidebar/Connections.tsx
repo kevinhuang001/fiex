@@ -30,13 +30,18 @@ export function Connections({
             <button
               className={`nav-item ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
               onClick={() => {
-                void call<{ kind: 'vfs'; path: string } | { kind: 'pluginView' }>(
-                  'connection_open',
-                  { id: connection.id },
-                )
+                void call<
+                  | { kind: 'vfs'; path: string }
+                  | { kind: 'pluginView' }
+                  | { kind: 'terminal'; connectionId: string }
+                >('connection_open', { id: connection.id })
                   .then((target) =>
                     x.navigate(
-                      target.kind === 'vfs' ? target.path : 'fiex-plugin-view://' + connection.id,
+                      target.kind === 'vfs'
+                        ? target.path
+                        : target.kind === 'pluginView'
+                          ? 'fiex-plugin-view://' + connection.id
+                          : 'fiex-terminal://' + target.connectionId,
                     ),
                   )
                   .catch((error) => x.setError(String(error)))

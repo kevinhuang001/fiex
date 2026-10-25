@@ -11,6 +11,7 @@ import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
+import { SshTerminalView } from '@/components/ssh/SshTerminalView'
 import { useAppController } from '@/hooks/useAppController'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { call, native } from '@/lib/api'
@@ -22,6 +23,10 @@ export default function App() {
   const app = useAppController()
   usePluginTasks()
   const pluginViewId = /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(app.left.path)?.[1]
+  const terminalId = /^fiex-terminal:\/\/([A-Za-z0-9-]{1,128})$/.exec(app.left.path)?.[1]
+  const fullView = Boolean(pluginViewId || terminalId)
+  const terminalName =
+    app.left.connections.find((connection) => connection.id === terminalId)?.name || 'SSH'
 
   useEffect(() => {
     const navigate = (event: Event) => {
@@ -67,15 +72,15 @@ export default function App() {
         style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
       >
         <ExplorerTabs {...app} />
-        {!pluginViewId && (
+        {!fullView && (
           <ExplorerToolbar
             {...app}
             split={app.split}
             onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
           />
         )}
-        {!pluginViewId && <ExplorerPathBar {...app} x={app.left} />}
-        {!pluginViewId && app.x.error && (
+        {!fullView && <ExplorerPathBar {...app} x={app.left} />}
+        {!fullView && app.x.error && (
           <div className="error-banner" role="alert">
             <Info size={16} />
             <span>{app.x.error}</span>
@@ -94,13 +99,15 @@ export default function App() {
             </button>
           </div>
         )}
-        {!pluginViewId && app.x.warnings.length > 0 && (
+        {!fullView && app.x.warnings.length > 0 && (
           <details className="warnings">
             <summary>{app.x.warnings.length} 个项目无法读取</summary>
             {app.x.warnings.join('\n')}
           </details>
         )}
-        {pluginViewId ? (
+        {terminalId ? (
+          <SshTerminalView connectionId={terminalId} name={terminalName} />
+        ) : pluginViewId ? (
           <PluginConnectionView connectionId={pluginViewId} onNavigate={app.left.navigate} />
         ) : app.left.loading && !app.left.hasListing ? (
           <div className="loading">
@@ -133,7 +140,7 @@ export default function App() {
             />
           </div>
         )}
-        {!pluginViewId && app.split && (
+        {!fullView && app.split && (
           <SecondaryPane
             explorer={app.right}
             prefs={app.prefs}
@@ -150,7 +157,7 @@ export default function App() {
             onWidthChange={app.setPaneWidth}
           />
         )}
-        {!pluginViewId && (
+        {!fullView && (
           <WorkspaceBar
             items={app.workspace.items}
             open={app.workspace.open}
@@ -160,7 +167,7 @@ export default function App() {
             onClose={() => app.workspace.setOpen(false)}
           />
         )}
-        {!pluginViewId && <ExplorerStatusBar {...app} />}
+        {!fullView && <ExplorerStatusBar {...app} />}
         <ActivityCenter />
       </main>
       {app.dragging && (

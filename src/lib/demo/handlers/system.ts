@@ -89,6 +89,13 @@ export function handleSystem(command: string): unknown {
           pluginId: 'org.example.webdav',
           mountPath: 'fiex://mount/demo-webdav/',
         },
+        {
+          id: 'demo-ssh',
+          name: '生产服务器',
+          kind: 'ssh',
+          pluginId: '__builtin__',
+          mountPath: 'fiex-terminal://demo-ssh',
+        },
       ]
 
     default:

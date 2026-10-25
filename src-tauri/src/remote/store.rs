@@ -157,14 +157,21 @@ fn save_stored(items: &[StoredConnection]) -> Result<(), String> {
 }
 
 fn public(conn: &StoredConnection) -> ConnectionInfo {
-    let mount = mount_path(conn);
-    let _ = fs::create_dir_all(&mount);
+    let builtin = connection_plugin_id(conn) == super::config::BUILTIN_PLUGIN_ID;
+    if !builtin {
+        let mount = mount_path(conn);
+        let _ = fs::create_dir_all(&mount);
+    }
     ConnectionInfo {
         id: conn.id.clone(),
         name: conn.name.clone(),
         kind: conn.kind.clone(),
         plugin_id: connection_plugin_id(conn),
-        mount_path: super::config::navigation_path(conn, "").unwrap_or_default(),
+        mount_path: if builtin {
+            format!("fiex-terminal://{}", conn.id)
+        } else {
+            super::config::navigation_path(conn, "").unwrap_or_default()
+        },
     }
 }
 
@@ -185,8 +192,12 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .plugin_id
         .clone()
         .ok_or("connection plugin ID is required")?;
-    if !crate::plugin_host::valid_id(&plugin_id) {
+    let builtin = plugin_id == super::config::BUILTIN_PLUGIN_ID;
+    if !builtin && !crate::plugin_host::valid_id(&plugin_id) {
         return Err("连接插件 ID 无效".into());
+    }
+    if builtin && kind != super::config::BUILTIN_SSH {
+        return Err("内置连接类型不支持".into());
     }
     let declared_fields = declared_connection_fields(&plugin_id, kind)?;
     for (key, value) in &input.settings {
@@ -202,6 +213,53 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         };
         if !valid {
             return Err(format!("连接字段数据类型无效：{key}"));
+        }
+    }
+    if builtin {
+        let host = input
+            .settings
+            .get("host")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or("请输入 SSH 主机")?;
+        if host.starts_with('-')
+            || host
+                .chars()
+                .any(|ch| ch.is_whitespace() || ch == '\0' || ch == '@')
+        {
+            return Err("SSH 主机格式无效".into());
+        }
+        if let Some(username) = input
+            .settings
+            .get("username")
+            .and_then(serde_json::Value::as_str)
+        {
+            if !username.is_empty()
+                && (username.starts_with('-')
+                    || !username
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-')))
+            {
+                return Err("SSH 用户名格式无效".into());
+            }
+        }
+        let port = input
+            .settings
+            .get("port")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(22);
+        if !(1..=65535).contains(&port) {
+            return Err("SSH 端口无效".into());
+        }
+        if let Some(path) = input
+            .settings
+            .get("identityFile")
+            .and_then(serde_json::Value::as_str)
+        {
+            if path.contains('\0') {
+                return Err("SSH 私钥路径无效".into());
+            }
         }
     }
     let secret_keys = declared_fields
@@ -251,17 +309,19 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         settings,
         secret_keys,
     };
-    ensure_provider_access(&record)?;
-    // Saving a connection is explicit user intent to reach this host. The
-    // exact hostname is added to the plugin's own allowlist before validation.
-    if let Some(domain) = connection_domain(&record.settings) {
-        crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
+    if !builtin {
+        ensure_provider_access(&record)?;
+        // Saving a connection is explicit user intent to reach this host. The
+        // exact hostname is added to the plugin's own allowlist before validation.
+        if let Some(domain) = connection_domain(&record.settings) {
+            crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
+        }
+        crate::plugin_host::global().invoke(
+            &plugin_id,
+            "connection.validate",
+            serde_json::json!({"connection": provider_config(&record)}),
+        )?;
     }
-    crate::plugin_host::global().invoke(
-        &plugin_id,
-        "connection.validate",
-        serde_json::json!({"connection": provider_config(&record)}),
-    )?;
     let scope = format!("connection-{id}");
     for field in &record.secret_keys {
         if let Some(value) = record
@@ -277,7 +337,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     for field in &record.secret_keys {
         record.settings.remove(field);
     }
-    fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
+    if !builtin {
+        fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
+    }
     if let Some(index) = existing {
         items[index] = record.clone();
     } else {
@@ -310,6 +372,15 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
         .into_iter()
         .find(|connection| connection.id == id)
         .ok_or("connection not found")?;
+    if connection_plugin_id(&connection) == super::config::BUILTIN_PLUGIN_ID {
+        if connection.kind == super::config::BUILTIN_SSH {
+            return Ok(serde_json::json!({
+                "kind": "terminal",
+                "connectionId": connection.id,
+            }));
+        }
+        return Err("内置连接类型不支持".into());
+    }
     let plugin_id = ensure_provider_access(&connection)?;
     let target = crate::plugin_host::global().invoke(
         &plugin_id,

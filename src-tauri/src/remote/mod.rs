@@ -14,6 +14,7 @@ pub use files::{
     stat, ProgressFn, TransferOptions,
 };
 pub use reconcile::{reconcile, reconcile_connection, resolve};
+pub(crate) use store::load_stored;
 pub use store::{
     list_connections, open_navigation, remove_connection, save_connection, ConnectionInfo,
     ConnectionInput, StoredConnection,

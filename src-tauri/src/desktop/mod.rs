@@ -13,6 +13,7 @@
 mod files;
 #[macro_use]
 mod plugins;
+mod ssh;
 #[macro_use]
 mod remote;
 #[macro_use]
@@ -101,6 +102,10 @@ pub fn run() {
             plugin_panel_html,
             preview_open,
             preview_candidates,
+            ssh::ssh_open,
+            ssh::ssh_write,
+            ssh::ssh_resize,
+            ssh::ssh_close,
             plugin_panel_asset,
             plugin_permission_allowed,
             plugin_network_domains,
@@ -155,6 +160,7 @@ pub fn run() {
             detect_ides,
             open_in_ide,
             open_terminal,
+            open_external_url,
             open_path,
             remote_connections,
             save_remote_connection,
