@@ -21,7 +21,7 @@ export interface PluginContribution {
   icon?: string
   command?: string
   panel?: PluginPanel
- }
+}
 export interface PluginInfoContribution {
   id: string
   title: string

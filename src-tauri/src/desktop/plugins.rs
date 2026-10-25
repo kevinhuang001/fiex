@@ -294,7 +294,10 @@ pub(crate) fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<S
     })
 }
 #[tauri::command]
-pub(crate) fn plugin_dynamic_panel_asset(plugin_id: String, entry: String) -> Result<String, String> {
+pub(crate) fn plugin_dynamic_panel_asset(
+    plugin_id: String,
+    entry: String,
+) -> Result<String, String> {
     crate::plugin_host::plugin_view_asset(&plugin_id, &entry)
 }
 #[tauri::command]

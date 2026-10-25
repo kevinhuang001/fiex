@@ -87,7 +87,10 @@ function MenuNode({
     return (
       <div
         className="context-submenu-wrap"
-        onMouseEnter={() => { cancel(); setExpanded(true) }}
+        onMouseEnter={() => {
+          cancel()
+          setExpanded(true)
+        }}
         onMouseLeave={() => {
           cancel()
           timer.current = window.setTimeout(() => setExpanded(false), 180)
@@ -148,8 +151,8 @@ export function PluginContextActions({
   useEffect(() => {
     let active = true
     const enabled = plugins.filter((p) => p.enabled && p.extensions?.contextMenus === true)
-    const selectionNames = JSON.parse(selectionKey).map((value: string) =>
-      value.split(/[\\/]/).pop() || '',
+    const selectionNames = JSON.parse(selectionKey).map(
+      (value: string) => value.split(/[\\/]/).pop() || '',
     ) as string[]
     void Promise.all(
       enabled.map(async (plugin) => {
@@ -165,9 +168,7 @@ export function PluginContextActions({
               isRemote,
             },
           })
-          return validMenu(response.items)
-            ? { pluginId: plugin.id, items: response.items }
-            : null
+          return validMenu(response.items) ? { pluginId: plugin.id, items: response.items } : null
         } catch {
           return null
         }
@@ -180,11 +181,7 @@ export function PluginContextActions({
     }
   }, [plugins, selectionKey, isDirectory, readOnly, isRemote])
 
-  const invoke = async (
-    pluginId: string,
-    item: MenuItem,
-    anchor?: { x: number; y: number },
-  ) => {
+  const invoke = async (pluginId: string, item: MenuItem, anchor?: { x: number; y: number }) => {
     onClose()
     const plugin = plugins.find((entry) => entry.id === pluginId)
     let activityId = ''
@@ -198,8 +195,14 @@ export function PluginContextActions({
         directory: path,
         selectedPaths: paths,
       })
-      if (response && typeof response === 'object' && 'kind' in response &&
-        response.kind === 'panel' && 'entry' in response && typeof response.entry === 'string') {
+      if (
+        response &&
+        typeof response === 'object' &&
+        'kind' in response &&
+        response.kind === 'panel' &&
+        'entry' in response &&
+        typeof response.entry === 'string'
+      ) {
         const entry = response as {
           entry: string
           panelId?: string

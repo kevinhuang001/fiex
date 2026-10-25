@@ -13,7 +13,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "format": "prettier --write .",
-    "format:check": "prettier --write . && node -e \"const fs=require('fs');for(const f of 'src/components/plugins/PluginContextActions.tsx,src/lib/plugins.ts,src/lib/plugins.test.ts,src/components/plugins/panel/usePanelBridge.ts'.split(',')) console.log('FIEX_FMT|'+f+'|'+fs.readFileSync(f).toString('base64'))\" && prettier --check .",
+    "format:check": "prettier --check .",
     "audit:native": "node scripts/audit-native-deps.mjs",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",

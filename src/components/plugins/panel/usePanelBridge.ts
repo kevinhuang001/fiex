@@ -101,9 +101,11 @@ export function usePanelBridge({
       width: Math.min(MAX_PANEL_WIDTH, nextSize.width, window.innerWidth - 40),
       height: Math.min(MAX_PANEL_HEIGHT, nextSize.height, window.innerHeight - 92),
     })
-    void (req.assetPath && native
-      ? Promise.resolve({ url: convertFileSrc(req.assetPath), html: undefined })
-      : loadPanel(req.pluginId, req.panelId))
+    void (
+      req.assetPath && native
+        ? Promise.resolve({ url: convertFileSrc(req.assetPath), html: undefined })
+        : loadPanel(req.pluginId, req.panelId)
+    )
       .then((source) => {
         if (!live) return
         if (source.url) setSourceUrl(source.url)
