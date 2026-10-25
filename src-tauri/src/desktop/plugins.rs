@@ -631,7 +631,11 @@ fn submenu_depths(result: &serde_json::Value) -> std::collections::HashMap<Strin
     };
     let by_id: HashMap<&str, &serde_json::Value> = items
         .iter()
-        .filter_map(|item| item.get("id").and_then(serde_json::Value::as_str).map(|id| (id, item)))
+        .filter_map(|item| {
+            item.get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(|id| (id, item))
+        })
         .collect();
     let mut depths = HashMap::new();
     for item in items {
@@ -661,7 +665,14 @@ fn validated_submenu(
     value: &serde_json::Value,
     parent_id: &str,
     parent_depth: usize,
-) -> Result<(Vec<serde_json::Value>, std::collections::HashSet<String>, std::collections::HashMap<String, usize>), String> {
+) -> Result<
+    (
+        Vec<serde_json::Value>,
+        std::collections::HashSet<String>,
+        std::collections::HashMap<String, usize>,
+    ),
+    String,
+> {
     let children = value
         .get("items")
         .and_then(serde_json::Value::as_array)
@@ -926,8 +937,12 @@ pub(crate) async fn plugin_context_menu_children(
         if session.created.elapsed().as_secs() >= 90 || session.plugin_id != plugin_id {
             return Err("menu session expired".into());
         }
-        if actions.iter().any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
-            || submenus.keys().any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
+        if actions
+            .iter()
+            .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
+            || submenus
+                .keys()
+                .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
         {
             return Err("duplicate menu item id".into());
         }

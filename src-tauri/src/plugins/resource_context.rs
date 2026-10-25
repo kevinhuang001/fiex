@@ -4,7 +4,10 @@
 use crate::plugin_contracts::{
     EventContext, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
 };
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub struct ResourceSnapshot {
     pub local: PathBuf,
@@ -47,17 +50,31 @@ impl ResourceSnapshot {
             extension: (!ext.is_empty()).then(|| ext.clone()),
             mime: (!ext.is_empty()).then(|| mime.clone()),
             size: (!is_dir).then_some(stat.len()),
-            modified: stat.modified().ok()
+            modified: stat
+                .modified()
+                .ok()
                 .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|elapsed| elapsed.as_secs() as i64),
         });
-        Self { local: local.to_path_buf(), reference, stat, is_dir, ext, mime, name, metadata }
+        Self {
+            local: local.to_path_buf(),
+            reference,
+            stat,
+            is_dir,
+            ext,
+            mime,
+            name,
+            metadata,
+        }
     }
 
     fn local_ref() -> ResourceRef {
         ResourceRef {
             mount_id: "local".into(),
-            node_id: format!("fiex-resource:{}", crate::mounts::new_id().unwrap_or_default()),
+            node_id: format!(
+                "fiex-resource:{}",
+                crate::mounts::new_id().unwrap_or_default()
+            ),
         }
     }
 
@@ -69,7 +86,11 @@ impl ResourceSnapshot {
                 reference: self.reference.clone(),
                 metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
                 read: (read_allowed && !self.is_dir).then(|| ScopedRead {
-                    resource_id: crate::plugin_scoped_reads::register(owner, &session_id, &self.name),
+                    resource_id: crate::plugin_scoped_reads::register(
+                        owner,
+                        &session_id,
+                        &self.name,
+                    ),
                 }),
             }],
         }
@@ -87,10 +108,16 @@ mod tests {
         let snapshot = ResourceSnapshot::new(file.to_str().unwrap(), &file);
         let without_grant = snapshot.context("org.example", false, false);
         let with_meta = snapshot.context("org.example", true, false);
-        assert_eq!(without_grant.targets[0].reference, with_meta.targets[0].reference);
+        assert_eq!(
+            without_grant.targets[0].reference,
+            with_meta.targets[0].reference
+        );
         assert!(without_grant.targets[0].metadata.is_none());
         assert!(without_grant.targets[0].read.is_none());
-        assert_eq!(with_meta.targets[0].metadata.as_ref().unwrap().size, Some(3));
+        assert_eq!(
+            with_meta.targets[0].metadata.as_ref().unwrap().size,
+            Some(3)
+        );
         assert!(with_meta.targets[0].read.is_none());
     }
 }

@@ -7,11 +7,7 @@
 use crate::plugin_contracts::{EventContext, InfoResponse, ResourceMetadata};
 use crate::plugin_resource_context::ResourceSnapshot;
 use serde::Serialize;
-use std::{
-    fs,
-    path::Path,
-    time::Duration,
-};
+use std::{fs, path::Path, time::Duration};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -566,7 +562,13 @@ pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
         match &candidate {
             Candidate::Metadata | Candidate::Media => {
                 let context = resource.context("__core__", true, !resource.is_dir);
-                let mut resolved = resolve_builtin(&candidate, &context, local_path, display, resource.stat.as_ref());
+                let mut resolved = resolve_builtin(
+                    &candidate,
+                    &context,
+                    local_path,
+                    display,
+                    resource.stat.as_ref(),
+                );
                 if let Candidate::Metadata = candidate {
                     // Use the display path Core originally received.
                     if let Some(section) = resolved.first_mut() {

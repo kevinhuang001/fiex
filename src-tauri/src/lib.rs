@@ -41,10 +41,10 @@ pub mod plugin_permission_policy;
 pub mod plugin_permissions;
 #[path = "plugins/preview.rs"]
 pub mod plugin_preview;
-#[path = "plugins/resources.rs"]
-pub mod plugin_resources;
 #[path = "plugins/resource_context.rs"]
 pub mod plugin_resource_context;
+#[path = "plugins/resources.rs"]
+pub mod plugin_resources;
 #[path = "plugins/signing.rs"]
 pub mod plugin_signing;
 pub use fiex_plugin_sdk as plugin_sdk;
