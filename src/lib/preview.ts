@@ -19,10 +19,10 @@ const ORDER_KEY = 'fiex.preview.order'
 const DISABLED_KEY = 'fiex.preview.disabled'
 
 export const BUILTIN_PREVIEWERS: Previewer[] = [
-  { id: 'builtin:text', title: '文本', extensions: [], priority: 10, builtin: 'text' },
-  { id: 'builtin:image', title: '图片', extensions: [], priority: 20, builtin: 'image' },
-  { id: 'builtin:media', title: '音视频', extensions: [], priority: 30, builtin: 'media' },
-  { id: 'builtin:pdf', title: 'PDF', extensions: ['pdf'], priority: 40, builtin: 'pdf' },
+  { id: 'builtin:text', title: '文本预览', extensions: [], priority: 10, builtin: 'text' },
+  { id: 'builtin:image', title: '图片预览', extensions: [], priority: 20, builtin: 'image' },
+  { id: 'builtin:media', title: '音视频预览', extensions: [], priority: 30, builtin: 'media' },
+  { id: 'builtin:pdf', title: 'PDF 预览', extensions: ['pdf'], priority: 40, builtin: 'pdf' },
   { id: 'builtin:fallback', title: '文件信息', extensions: [], priority: 0, builtin: 'fallback' },
 ]
 
