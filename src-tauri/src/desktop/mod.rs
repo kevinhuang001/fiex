@@ -75,6 +75,15 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // A second launch focuses the existing window instead of starting
+            // another Core process and a second set of plugin children.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_drag::init())
         .manage(Operations::default())
         .manage(OperationCancel::default())
@@ -272,6 +281,9 @@ pub fn run() {
                 crate::macos_material::configure(&window);
             }
             setup_tray(app.handle())?;
+            std::thread::spawn(|| {
+                crate::plugin_host::global().start_enabled();
+            });
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 use std::ffi::c_void;
@@ -298,6 +310,7 @@ pub fn run() {
         .expect("Cannot start Fiex")
         .run(|_, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                crate::plugin_host::global().shutdown();
                 crate::plugin_vfs::cleanup_exports();
             }
         });

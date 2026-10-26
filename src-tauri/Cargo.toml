@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.6.0"
+version = "0.7.2"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -26,10 +26,12 @@ desktop = [
     "dep:file_icon_provider",
     "dep:image",
     "dep:tauri-plugin-drag",
+    "dep:tauri-plugin-single-instance",
     "dep:rfd",
 ]
 ci-driver = ["desktop", "usbfs"]
 usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]
+tauri-plugin-single-instance = ["dep:tauri-plugin-single-instance"]
 
 [build-dependencies]
 tauri-build = { version = "2", optional = true , features = [] }
@@ -75,6 +77,7 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 lofty = "0.25"
 mp4 = "0.14"
 matroska = "0.30"
+tauri-plugin-single-instance = { version = "2", default-features = false, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
