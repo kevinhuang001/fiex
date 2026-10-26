@@ -352,14 +352,6 @@
   }
 }
 
-/* Plugin settings toolbar: actions only, no descriptive copy. */
-.plugin-toolbar-actions-only {
-  justify-content: flex-end;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-}
 .plugin-permission-card .plugin-switch,
 .plugin-domain-row .plugin-switch {
   margin-left: auto;
@@ -481,11 +473,6 @@
   .plugin-store-modal .plugin-store-grid {
     grid-template-columns: 1fr;
   }
-}
-.plugin-toolbar-actions-only > div.plugin-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 /* Compact store sheet: narrower dialog, same centered column. */
 .plugin-store-modal {

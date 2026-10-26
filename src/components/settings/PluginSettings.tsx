@@ -87,7 +87,6 @@ export function PluginSettings() {
   const [activationFor, setActivationFor] = useState<PluginInfo | null>(null)
   const [commandToApprove, setCommandToApprove] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<PluginInfo | null>(null)
-
   const chooseLocalPlugin = async () => {
     setBusy(true)
     setMessage('')
@@ -327,8 +326,9 @@ export function PluginSettings() {
         <PluginStoreToolbar
           onImport={() => void chooseLocalPlugin()}
           onOpenStore={() => setStoreOpen(true)}
-        />
-        <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
+        >
+          <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
+        </PluginStoreToolbar>
         <PluginList
           plugins={shown}
           busy={busy}
