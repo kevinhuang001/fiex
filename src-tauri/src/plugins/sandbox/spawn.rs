@@ -216,7 +216,6 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
 
 #[cfg(windows)]
 pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
-    use std::process::{Command, Stdio};
     let scratch = tempfile::Builder::new()
         .prefix("fiex-plugin-scratch-")
         .tempdir()
@@ -227,14 +226,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     let mut launch = LaunchPolicy::from(&policy);
     launch.scratch = scratch.path().to_string_lossy().into_owned();
     let payload = serde_json::to_string(&launch).map_err(|e| e.to_string())?;
-    let mut child = Command::new(executable)
-        .arg("--fiex-plugin-sandbox")
-        .arg(payload)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|e| format!("plugin sandbox launcher failed: {e}"))?;
+    let mut child = super::windows_stdio::spawn(&executable, &payload)?;
     let stdin = child.stdin.take().ok_or("plugin stdin unavailable")?;
     let stdout = child.stdout.take().ok_or("plugin stdout unavailable")?;
     Ok(SandboxChild {

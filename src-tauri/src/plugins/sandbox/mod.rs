@@ -11,6 +11,8 @@
 //! the confined child, including the re-executed wrapper path.
 mod rules;
 mod spawn;
+#[cfg(windows)]
+mod windows_stdio;
 
 pub use rules::Policy;
 pub use spawn::{run_wrapper_if_requested, spawn, KillHandle, SandboxChild};
