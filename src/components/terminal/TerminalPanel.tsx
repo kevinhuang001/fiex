@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, Plus, X } from 'lucide-react'
+import { ChevronDown, Plus, SquareTerminal, X } from 'lucide-react'
 import { TerminalView } from '@/components/ssh/SshTerminalView'
 import { call } from '@/lib/api'
 
@@ -28,6 +28,7 @@ export function TerminalPanel() {
   const lastCwd = useRef('')
   const panel = useRef<HTMLElement>(null)
   const shellMenuRef = useRef<HTMLDivElement>(null)
+  const dragTab = useRef<number | null>(null)
 
   useEffect(() => {
     void call<ShellChoice[]>('detect_shells')
@@ -79,32 +80,32 @@ export function TerminalPanel() {
     return () => window.removeEventListener('fiex:show-terminal-panel', show)
   }, [tabs, active, shells])
 
-  useEffect(() => {
-    if (!tabs.length) return
-    let bottom = 0
-    const move = (event: MouseEvent) => {
-      const next = bottom - event.clientY
+  if (!tabs.length) return null
+  const resizeStart = (event: React.MouseEvent) => {
+    event.preventDefault()
+    const bottom = panel.current?.getBoundingClientRect().bottom ?? window.innerHeight
+    const move = (moveEvent: MouseEvent) => {
+      const next = bottom - moveEvent.clientY
       setHeight(Math.min(Math.max(140, window.innerHeight * 0.72), Math.max(120, next)))
     }
-    const up = () => {
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', up)
+    const stop = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', stop)
     }
-    const start = () => {
-      bottom = panel.current?.getBoundingClientRect().bottom ?? window.innerHeight
-      document.addEventListener('mousemove', move)
-      document.addEventListener('mouseup', up)
-    }
-    const handle = document.querySelector('.terminal-panel-resizer')
-    handle?.addEventListener('mousedown', start)
-    return () => {
-      handle?.removeEventListener('mousedown', start)
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', up)
-    }
-  }, [tabs.length])
-
-  if (!tabs.length) return null
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', stop)
+  }
+  const moveTab = (to: number) => {
+    const from = dragTab.current
+    dragTab.current = null
+    if (from === null || from === to) return
+    setTabs((values) => {
+      const next = [...values]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
   const add = (shell?: ShellChoice) => {
     const id = crypto.randomUUID()
     setTabs((values) => [
@@ -131,11 +132,29 @@ export function TerminalPanel() {
       style={{ height: open ? height : undefined }}
       aria-label="内置终端"
     >
-      <div className="terminal-panel-resizer" title="调整终端高度" />
+      <div
+        className="terminal-panel-resizer"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="调整终端高度"
+        onMouseDown={resizeStart}
+      />
       <header className="terminal-panel-bar">
         <div className="terminal-panel-tabs" role="tablist" aria-label="终端标签">
           {tabs.map((tab, index) => (
-            <div className={`terminal-panel-tab ${tab.id === active ? 'active' : ''}`} key={tab.id}>
+            <div
+              className={`terminal-panel-tab ${tab.id === active ? 'active' : ''}`}
+              key={tab.id}
+              draggable
+              onDragStart={() => {
+                dragTab.current = index
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => moveTab(index)}
+              onDragEnd={() => {
+                dragTab.current = null
+              }}
+            >
               <button
                 type="button"
                 role="tab"
@@ -145,7 +164,8 @@ export function TerminalPanel() {
                   setOpen(true)
                 }}
               >
-                终端 {index + 1}
+                <SquareTerminal size={12} />
+                {tab.shellName || '终端'} {index + 1}
               </button>
               <button
                 type="button"

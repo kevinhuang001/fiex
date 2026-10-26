@@ -5,6 +5,7 @@
 //! keyboard-interactive/MFA, algorithms and known_hosts behavior in the same
 //! trusted implementation the user already uses. The WebView only receives the
 //! byte stream; it never receives credentials.
+use super::shell_profile::login_arg;
 use base64::Engine;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
@@ -429,18 +430,6 @@ pub(crate) async fn ssh_open(
     .map_err(|error| error.to_string())?
 }
 
-fn login_arg(shell: &str) -> Option<&'static str> {
-    match Path::new(shell)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-    {
-        "zsh" | "bash" | "fish" | "sh" | "dash" | "ksh" | "tcsh" | "csh" => Some("-l"),
-        "nu" => Some("--login"),
-        _ => None,
-    }
-}
-
 /// Local integrated terminal. Reuses the same PTY/session/event pipeline as SSH.
 #[tauri::command]
 pub(crate) async fn local_terminal_open(
@@ -464,8 +453,6 @@ pub(crate) async fn local_terminal_open(
         if cfg!(windows) {
             command.arg("-NoLogo");
         } else if let Some(login) = login_arg(&shell) {
-            // Let the shell read its profile before the first prompt so a GUI
-            // app's minimal PATH does not hide brew, oh-my-posh or fzf.
             command.arg(login);
         }
         let directory = cwd
@@ -534,16 +521,4 @@ pub(crate) fn ssh_close(session_id: String) -> Result<(), String> {
         }
     }
     Ok(())
-}
-#[cfg(test)]
-mod login_shell_tests {
-    use super::login_arg;
-
-    #[test]
-    fn profiles_are_loaded_for_supported_shells() {
-        assert_eq!(login_arg("/bin/zsh"), Some("-l"));
-        assert_eq!(login_arg("/opt/homebrew/bin/fish"), Some("-l"));
-        assert_eq!(login_arg("/opt/homebrew/bin/nu"), Some("--login"));
-        assert_eq!(login_arg("powershell.exe"), None);
-    }
 }
