@@ -188,7 +188,16 @@ export function usePanelBridge({
           dispatch: async (method, params): Promise<JsonValue> => {
             if (
               !activeRef.current &&
-              !['theme.get', 'context.get', 'tasks.update', 'tasks.finish'].includes(method)
+              ![
+                'theme.get',
+                'context.get',
+                'tasks.update',
+                'tasks.finish',
+                // Cached panels may finish a measurement after being hidden;
+                // resizing an inactive iframe is harmless and avoids a noisy
+                // FiexBridgeError during close/reopen transitions.
+                'panel.resize',
+              ].includes(method)
             )
               throw new Error('Panel is hidden')
             if (method === 'context.get')

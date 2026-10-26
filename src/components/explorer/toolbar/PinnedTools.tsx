@@ -72,7 +72,7 @@ export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsPr
           detail: {
             pluginId: plugin.id,
             panelId: plugin.id,
-            title: tool.title,
+            title: tool.panel?.title || tool.title,
             icon: tool.icon,
             selection: x.selected,
             directory: x.path,

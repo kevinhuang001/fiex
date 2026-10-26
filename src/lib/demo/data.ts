@@ -156,6 +156,7 @@ export const demoGpgKeys = [
     name: 'Ada Lovelace <ada@example.org>',
     email: 'ada@example.org',
     expires: '',
+    hasSecret: true,
   },
   {
     fingerprint: 'AAAABBBBCCCCDDDDEEEEFFFF00001111222233334444',
@@ -163,5 +164,6 @@ export const demoGpgKeys = [
     name: 'Fiex Release Signing <release@fiex.app>',
     email: 'release@fiex.app',
     expires: '',
+    hasSecret: false,
   },
 ]

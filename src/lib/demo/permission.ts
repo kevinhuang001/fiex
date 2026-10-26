@@ -4,6 +4,8 @@
  * mirrors that contract so a plugin action can wait for the same Core-owned
  * prompt, which keeps the UI fixture honest.
  */
+import type { DemoPlugin } from './plugins/types'
+
 export interface DemoPermissionRequest {
   pluginId: string
   pluginName: string
@@ -49,4 +51,22 @@ export function resolveDemoPermission(
   pending.delete(id)
   entry.resolve(allow)
   return entry.request
+}
+
+/** Apply an allow decision to the demo catalog. Denials only resolve the
+ *  pending action; they do not grant anything. */
+export function applyDemoPermissionResponse(id: string, allow: boolean, plugins: DemoPlugin[]) {
+  const request = resolveDemoPermission(id, allow)
+  if (!request || !allow) return
+  const plugin = plugins.find((entry) => entry.id === request.pluginId)
+  if (!plugin) return
+  plugin.grantedPermissions = [...new Set([...plugin.grantedPermissions, request.permission])]
+  if (request.kind === 'network' && request.target) {
+    plugin.allowedNetworkDomains = [
+      ...new Set([...(plugin.allowedNetworkDomains || []), request.target]),
+    ]
+  }
+  if (request.kind === 'command' && request.target) {
+    plugin.allowedCommands = [...new Set([...(plugin.allowedCommands || []), request.target])]
+  }
 }

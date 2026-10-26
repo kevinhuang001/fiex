@@ -1,7 +1,8 @@
 import { demoGitEntries, demoGpgKeys, demoHistory } from '../data'
 import { demoPlugins, marketplace, officialMode, query } from '../plugins'
 import { notHandled } from './shared'
-import { requestDemoPermission, resolveDemoPermission } from '../permission'
+import { applyDemoPermissionResponse, requestDemoPermission } from '../permission'
+import { createDemoGpgKey, deleteDemoGpgKey } from '../gpgKeys'
 
 const pluginSettings = new Map<string, unknown>()
 const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
@@ -586,6 +587,14 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           return { head: 'bbbbbbbb', current: 'main', branches: ['main'], tags: [] }
         if (method === 'git.history') return demoHistory
         if (method === 'gpg.info') return { version: 'gpg (GnuPG) 2.4.5' }
+        if (method === 'gpg.deleteKey') {
+          const fingerprint = String(params.fingerprint || '')
+          const index = demoGpgKeys.findIndex((key) => key.fingerprint === fingerprint)
+          if (index >= 0) demoGpgKeys.splice(index, 1)
+          return { ok: true }
+        }
+        if (method === 'gpg.createKey') return createDemoGpgKey(params)
+        if (method === 'gpg.deleteKey') return deleteDemoGpgKey(params)
         if (method === 'gpg.keys') return demoGpgKeys
         if (method === 'gpg.verify')
           return {
@@ -789,28 +798,9 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       }
       return null
     }
-    case 'plugin_permission_respond': {
-      const request = resolveDemoPermission(String(a.requestId || ''), Boolean(a.allow))
-      if (request && a.allow) {
-        const plugin = demoPlugins.find((entry) => entry.id === request.pluginId)
-        if (plugin) {
-          plugin.grantedPermissions = [
-            ...new Set([...plugin.grantedPermissions, request.permission]),
-          ]
-          if (request.kind === 'network' && request.target) {
-            plugin.allowedNetworkDomains = [
-              ...new Set([...(plugin.allowedNetworkDomains || []), request.target]),
-            ]
-          }
-          if (request.kind === 'command' && request.target) {
-            plugin.allowedCommands = [
-              ...new Set([...(plugin.allowedCommands || []), request.target]),
-            ]
-          }
-        }
-      }
+    case 'plugin_permission_respond':
+      applyDemoPermissionResponse(String(a.requestId || ''), Boolean(a.allow), demoPlugins)
       return null
-    }
     case 'plugin_set_command': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {

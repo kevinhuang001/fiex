@@ -241,12 +241,12 @@ export const officialPlugins: DemoPlugin[] = officialMode
         author: { name: 'Fiex Contributors' },
         extensions: {
           toolbar: {
-            title: '公钥管理',
+            title: '钥匙串',
             icon: 'key-round',
             panel: {
               entry: 'ui/dist/index.html',
-              title: 'GPG 公钥管理',
-              defaultSize: { width: 420, height: 460 },
+              title: 'GPG 钥匙串',
+              defaultSize: { width: 620, height: 520 },
             },
           },
           contextMenus: true,
