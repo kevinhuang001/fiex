@@ -13,6 +13,13 @@ fn main() {
         .into_iter()
         .find(|(manifest, _)| manifest.id == id)
         .expect("mock plugin must be installed in FIEX_PLUGIN_DIR");
+    if !plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == id)
+        .is_some_and(|plugin| plugin.approved)
+    {
+        plugin_host::approve_install(id).expect("install approval failed");
+    }
     plugin_host::activate(
         id,
         &plugin_host::activation_requirements(&manifest).unwrap(),

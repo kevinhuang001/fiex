@@ -30,6 +30,13 @@ fn main() {
             .unwrap_or_else(|| panic!("expected plugin fixture in FIEX_PLUGIN_DIR: {id}"));
         let consent =
             plugin_host::activation_requirements(&manifest).expect("invalid permission manifest");
+        if !plugin_host::catalog()
+            .into_iter()
+            .find(|plugin| plugin.id == id)
+            .is_some_and(|plugin| plugin.approved)
+        {
+            plugin_host::approve_install(&id).expect("install approval failed");
+        }
         plugin_host::activate(&id, &consent).expect("permission activation failed");
 
         let mut count = 0usize;
