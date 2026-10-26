@@ -623,11 +623,9 @@
   padding: 13px;
   gap: 10px;
 }
-.plugin-store-modal .plugin-store-card > .button {
-  align-self: flex-start;
-}
+.plugin-store-modal .plugin-store-card > .button,
 .plugin-store-modal .plugin-store-card > .button[data-variant='outline'] {
-  align-self: center;
+  align-self: stretch;
 }
 @media (max-width: 900px) {
   .plugin-store-modal .plugin-store-grid {
