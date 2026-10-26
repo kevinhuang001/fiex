@@ -19,7 +19,7 @@ pub use reconcile::{reconcile, reconcile_connection, resolve};
 #[cfg(feature = "desktop")]
 pub(crate) use store::load_stored;
 pub use store::{
-    list_connections, open_navigation, remove_connection, save_connection,
+    connection_config, list_connections, open_navigation, remove_connection, save_connection,
     update_connection_session, ConnectionInfo, ConnectionInput, StoredConnection,
 };
 pub use sync::{sync, sync_one, unsync};

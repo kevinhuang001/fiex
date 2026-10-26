@@ -1,6 +1,6 @@
 import type { Explorer } from '@/hooks/useExplorer'
 import type { useMenuPosition } from '@/lib/menuPosition'
-import type { Preferences } from '@/lib/types'
+import type { Preferences, RemoteConnection } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 
 export interface SidebarProps {
@@ -11,6 +11,7 @@ export interface SidebarProps {
   onEmptyTrash: () => void
   onApplications: () => void
   onAddConnection: () => void
+  onEditConnection: (connection: RemoteConnection) => void
   onRemoveConnection: (id: string) => void
   notify: (message: string) => void
   onEject: (path: string) => void

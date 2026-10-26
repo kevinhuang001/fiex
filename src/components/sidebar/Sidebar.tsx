@@ -15,6 +15,7 @@ export function Sidebar({
   onEmptyTrash,
   onApplications,
   onAddConnection,
+  onEditConnection,
   onRemoveConnection,
   notify,
   onEject,
@@ -54,6 +55,7 @@ export function Sidebar({
                 key="connections"
                 x={x}
                 onAddConnection={onAddConnection}
+                onEditConnection={onEditConnection}
                 onRemoveConnection={onRemoveConnection}
                 notify={notify}
               />

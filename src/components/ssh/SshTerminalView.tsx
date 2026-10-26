@@ -10,12 +10,7 @@ import { LoaderCircle, RotateCw } from 'lucide-react'
 import { call, native } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
 
-interface SshEvent {
-  type: 'data' | 'exit' | 'error'
-  data?: number[]
-  code?: number | null
-  message?: string
-}
+import { terminalEvents, type SshEvent, type SessionStatus } from './sessionEvents'
 
 function terminalTheme() {
   const { mode, tokens } = themeSnapshot()
@@ -135,9 +130,7 @@ export function TerminalView({
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [attempt, setAttempt] = useState(0)
-  const [status, setStatus] = useState<'connecting' | 'open' | 'closed' | 'error' | 'demo'>(
-    'connecting',
-  )
+  const [status, setStatus] = useState<SessionStatus>('connecting')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -194,7 +187,15 @@ export function TerminalView({
     let channel: Channel<SshEvent> | null = null
     terminal.onData((data) => {
       if (sessionId)
-        void call('ssh_write', { sessionId, data: Array.from(new TextEncoder().encode(data)) })
+        void call('ssh_write', {
+          sessionId,
+          data: Array.from(new TextEncoder().encode(data)),
+        }).catch((cause) => {
+          if (!disposed) {
+            setError(String(cause))
+            setStatus('error')
+          }
+        })
     })
     const resize = () => {
       fit.fit()
@@ -236,16 +237,13 @@ export function TerminalView({
       }
     }
     channel = new Channel<SshEvent>()
+    const events = terminalEvents(
+      (data) => terminal.write(data),
+      setStatus,
+      (message) => setError(message || t('SSH 会话失败')),
+    )
     channel.onmessage = (event) => {
-      if (disposed) return
-      if (event.type === 'data' && event.data) {
-        terminal.write(new Uint8Array(event.data))
-      } else if (event.type === 'error') {
-        setError(event.message || t('SSH 会话失败'))
-        setStatus('error')
-      } else if (event.type === 'exit') {
-        setStatus('closed')
-      }
+      if (!disposed) events.receive(event)
     }
     const opening = connectionId
       ? call<string>('ssh_open', {
@@ -268,10 +266,12 @@ export function TerminalView({
           return
         }
         sessionId = id
-        setStatus('open')
+        // The ID only acknowledges startup. SSH becomes ready after the
+        // server accepts authentication and starts its shell.
         resize()
       })
       .catch((cause) => {
+        if (disposed || events.ended()) return
         setError(String(cause))
         setStatus('error')
       })

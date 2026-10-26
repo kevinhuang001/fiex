@@ -49,6 +49,7 @@ export function ExplorerDialogs({
   setTagOpen,
   applyTags,
   connectionOpen,
+  connectionToEdit,
   setConnectionOpen,
   notify,
   settings,
@@ -91,6 +92,7 @@ export function ExplorerDialogs({
   | 'setTagOpen'
   | 'applyTags'
   | 'connectionOpen'
+  | 'connectionToEdit'
   | 'setConnectionOpen'
   | 'notify'
   | 'settings'
@@ -229,10 +231,15 @@ export function ExplorerDialogs({
 
       <ConnectionDialog
         open={connectionOpen}
+        connection={connectionToEdit}
         onClose={() => setConnectionOpen(false)}
         onSaved={(connection) => {
           setConnectionOpen(false)
           void x.refreshConnections()
+          if (connectionToEdit) {
+            notify(t('连接已保存，更改将在下次连接时生效'))
+            return
+          }
           // A connection may open a pluginView instead of a VFS mount. Resolve
           // the destination first; the stored mountPath is not a VFS URI for
           // pluginView connections such as Email.

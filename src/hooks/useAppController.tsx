@@ -109,6 +109,8 @@ export function useAppController() {
     setTagOpen,
     connectionOpen,
     setConnectionOpen,
+    connectionToEdit,
+    setConnectionToEdit,
     tagPaths,
     setTagPaths,
     tagInitial,
@@ -313,6 +315,10 @@ export function useAppController() {
     openTrash,
     openApplications,
     setConnectionOpen,
+    openConnectionDialog: (connection: import('@/lib/types').RemoteConnection | null = null) => {
+      setConnectionToEdit(connection)
+      setConnectionOpen(true)
+    },
     removeConnection,
     refreshAll,
     ejectDevice,
@@ -391,6 +397,7 @@ export function useAppController() {
     setTagOpen,
     applyTags,
     connectionOpen,
+    connectionToEdit,
     settings,
     pluginManager,
     setPluginManager,

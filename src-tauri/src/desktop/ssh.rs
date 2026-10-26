@@ -77,6 +77,7 @@ pub(crate) fn detect_shells() -> Vec<ShellChoice> {
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SshEvent {
+    Ready,
     Data { data: Vec<u8> },
     Exit { code: Option<i32> },
     Error { message: String },
@@ -122,6 +123,17 @@ fn plugin_session(owner: &str, id: &str) -> Result<PluginParts, String> {
         closed: session.closed.clone(),
         channel: session.channel.clone(),
     })
+}
+
+pub(crate) fn plugin_terminal_ready(owner: &str, params: &serde_json::Value) -> Result<(), String> {
+    let id = params
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("missing sessionId")?;
+    plugin_session(owner, id)?
+        .channel
+        .send(SshEvent::Ready)
+        .map_err(|error| error.to_string())
 }
 
 pub(crate) fn plugin_terminal_output(
@@ -208,10 +220,10 @@ pub(crate) fn plugin_terminal_end(owner: &str, params: &serde_json::Value) -> Re
     let mut values = plugin_sessions()
         .lock()
         .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
-    let session = values
-        .remove(id)
-        .filter(|session| session.owner == owner)
-        .ok_or(crate::i18n::t("终端会话不存在"))?;
+    if !values.get(id).is_some_and(|session| session.owner == owner) {
+        return Err(crate::i18n::t("终端会话不存在"));
+    }
+    let session = values.remove(id).ok_or("终端会话不存在")?;
     session.closed.store(true, Ordering::Release);
     if let Some(message) = params.get("error").and_then(serde_json::Value::as_str) {
         let _ = session.channel.send(SshEvent::Error {
@@ -261,7 +273,8 @@ async fn plugin_ssh_open(
         )
     })
     .await
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| error.to_string())
+    .and_then(|result| result);
     if let Err(error) = result {
         plugin_sessions()
             .lock()

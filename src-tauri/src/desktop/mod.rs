@@ -168,6 +168,7 @@ pub fn run() {
             open_external_url,
             open_path,
             remote_connections,
+            remote_connection_config,
             save_remote_connection,
             update_connection_session,
             remove_remote_connection,

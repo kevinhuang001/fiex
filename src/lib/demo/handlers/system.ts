@@ -1,7 +1,8 @@
+import type { RemoteConnection } from '@/lib/types'
 import { root } from '../data'
 import { notHandled } from './shared'
 
-const demoConnections = [
+const demoConnections: RemoteConnection[] = [
   {
     id: 'demo-webdav',
     name: '团队 WebDAV',
@@ -21,6 +22,16 @@ const demoConnections = [
     autostart: false,
   },
 ]
+
+const demoConnectionSettings: Record<string, Record<string, string | number | boolean>> = {
+  'demo-ssh': {
+    host: 'server.example.com',
+    port: 22,
+    username: 'root',
+    terminalType: 'xterm-256color',
+  },
+  'demo-webdav': { url: 'https://example.com' },
+}
 
 export function handleSystem(command: string, a: Record<string, unknown> = {}): unknown {
   switch (command) {
@@ -109,6 +120,37 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       ]
     case 'plugin_file_dialog':
       return '/demo/background.svg'
+    case 'remote_connection_config': {
+      const connection = demoConnections.find((item) => item.id === a.id)
+      if (!connection) throw new Error('connection not found')
+      return { ...connection, settings: { ...demoConnectionSettings[connection.id] } }
+    }
+    case 'save_remote_connection': {
+      const input = a.input as RemoteConnection & {
+        settings: Record<string, string | number | boolean>
+      }
+      const existing = demoConnections.find((item) => item.id === input.id)
+      if (input.id && !existing) throw new Error('connection not found')
+      const connection: RemoteConnection = existing || {
+        ...input,
+        id: crypto.randomUUID(),
+        mountPath: '',
+        saved: true,
+        autostart: false,
+      }
+      connection.name = input.name
+      connection.mountPath ||= 'fiex-terminal://' + connection.id
+      demoConnectionSettings[connection.id] = { ...input.settings }
+      if (!existing) demoConnections.push(connection)
+      return connection
+    }
+    case 'connection_open': {
+      const connection = demoConnections.find((item) => item.id === a.id)
+      if (!connection) throw new Error('connection not found')
+      return connection.kind === 'ssh'
+        ? { kind: 'terminal', connectionId: connection.id }
+        : { kind: 'vfs', path: connection.mountPath }
+    }
     case 'remote_connections':
       return demoConnections
     case 'update_connection_session': {

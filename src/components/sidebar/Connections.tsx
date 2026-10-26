@@ -17,9 +17,13 @@ const isSshConnection = (connection: { kind: string; pluginId: string }) =>
 export function Connections({
   x,
   onAddConnection,
+  onEditConnection,
   onRemoveConnection,
   notify,
-}: Pick<SidebarProps, 'x' | 'onAddConnection' | 'onRemoveConnection' | 'notify'>) {
+}: Pick<
+  SidebarProps,
+  'x' | 'onAddConnection' | 'onEditConnection' | 'onRemoveConnection' | 'notify'
+>) {
   const [plusOpen, setPlusOpen] = useState(false)
   const [plusAnchor, setPlusAnchor] = useState({ x: 8, y: 0 })
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null)
@@ -190,6 +194,16 @@ export function Connections({
           role="menu"
           style={contextPosition}
         >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenu(null)
+              onEditConnection(current)
+            }}
+          >
+            {t('编辑连接…')}
+          </button>
           <button type="button" role="menuitem" onClick={() => void save(current)}>
             {t('保存 Session')}
           </button>

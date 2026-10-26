@@ -1,6 +1,6 @@
 import type { Explorer } from '@/hooks/useExplorer'
 import type { DialogState } from '@/lib/dialogs'
-import type { Entry, Tag } from '@/lib/types'
+import type { Entry, Tag, RemoteConnection } from '@/lib/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 /** Dialog and overlay state: the modal dialog with its draft value/error/busy
@@ -20,6 +20,7 @@ export function useDialogs(x: Explorer) {
   const [trashIssue, setTrashIssue] = useState(false)
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
+  const [connectionToEdit, setConnectionToEdit] = useState<RemoteConnection | null>(null)
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
@@ -77,6 +78,8 @@ export function useDialogs(x: Explorer) {
     setTagOpen,
     connectionOpen,
     setConnectionOpen,
+    connectionToEdit,
+    setConnectionToEdit,
     tagPaths,
     setTagPaths,
     tagInitial,

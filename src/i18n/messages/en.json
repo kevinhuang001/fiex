@@ -1342,5 +1342,13 @@
   "“{0}”已存在。替换会覆盖原文件，此操作不可撤销。": "“{0}” already exists. Replacing it overwrites the original and cannot be undone.",
   "确定删除标签“{0}”吗？": "Delete tag “{0}”?",
   "确定卸载“{0}”吗？将停止插件进程并删除程序文件，插件数据和用户同步目录会保留。": "Uninstall “{0}”? This stops the plugin and removes its program files. Plugin data and user sync folders are kept.",
-  "允许“{0}”访问的精确主机；本机和局域网地址也需要授权。": "Exact hosts “{0}” may access; localhost and LAN addresses also require authorization."
+  "允许“{0}”访问的精确主机；本机和局域网地址也需要授权。": "Exact hosts “{0}” may access; localhost and LAN addresses also require authorization.",
+  "编辑连接…": "Edit connection…",
+  "编辑连接": "Edit connection",
+  "连接已保存，更改将在下次连接时生效": "Connection saved. Changes take effect the next time you connect.",
+  "连接插件不可用，请先启用对应插件": "The connection plugin is unavailable. Enable it first.",
+  "留空保留已保存的凭据": "Leave blank to keep saved credentials",
+  "保存连接": "Save connection",
+  "保存中…": "Saving…",
+  "加载中…": "Loading…"
 }

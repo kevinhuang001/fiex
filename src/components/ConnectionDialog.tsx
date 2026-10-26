@@ -9,10 +9,12 @@ import type { RemoteConnection } from '@/lib/types'
 
 export function ConnectionDialog({
   open,
+  connection,
   onClose,
   onSaved,
 }: {
   open: boolean
+  connection?: RemoteConnection | null
   onClose: () => void
   onSaved: (connection: RemoteConnection) => void
 }) {
@@ -51,11 +53,12 @@ export function ConnectionDialog({
       const factory = plugin.extensions?.connections
       return plugin.enabled && factory ? [{ plugin, factory }] : []
     })
-    return demo ? [builtin, ...remote] : remote
-  }, [plugins, getLocale()])
+    return demo || connection?.pluginId === '__builtin__' ? [builtin, ...remote] : remote
+  }, [plugins, connection?.pluginId, getLocale()])
   const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [values, setValues] = useState<Record<string, string | boolean>>({})
+  const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const choiceKey = (pluginId: string) => pluginId
@@ -63,12 +66,38 @@ export function ConnectionDialog({
 
   useEffect(() => {
     if (!open) return
-    setSelected(null)
-    setName('')
+    setSelected(connection?.pluginId ?? null)
+    setName(connection?.name ?? '')
     setValues({})
     setBusy(false)
     setError('')
-  }, [open])
+    setLoading(Boolean(connection))
+    if (!connection) return
+    let active = true
+    void call<{ settings: Record<string, string | number | boolean> }>('remote_connection_config', {
+      id: connection.id,
+    })
+      .then((config) => {
+        if (active)
+          setValues(
+            Object.fromEntries(
+              Object.entries(config.settings).map(([key, value]) => [
+                key,
+                typeof value === 'number' ? String(value) : value,
+              ]),
+            ),
+          )
+      })
+      .catch((cause) => {
+        if (active) setError(String(cause))
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [open, connection])
 
   const choose = (key: string, fields: PluginField[]) => {
     setSelected(key)
@@ -86,7 +115,7 @@ export function ConnectionDialog({
   }
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!current || busy) return
+    if (!current || busy || loading) return
     setBusy(true)
     setError('')
     try {
@@ -100,15 +129,17 @@ export function ConnectionDialog({
               : String(values[field.id] ?? ''),
         ]),
       )
-      const connection = await call<RemoteConnection>('save_remote_connection', {
+      const savedConnection = await call<RemoteConnection>('save_remote_connection', {
         input: {
+          id: connection?.id,
           name,
           pluginId: current.plugin.id,
-          kind: current.plugin.id === '__builtin__' ? 'ssh' : current.plugin.id,
+          kind:
+            connection?.kind ?? (current.plugin.id === '__builtin__' ? 'ssh' : current.plugin.id),
           settings,
         },
       })
-      onSaved(connection)
+      onSaved(savedConnection)
     } catch (cause) {
       setError(String(cause))
     } finally {
@@ -119,7 +150,9 @@ export function ConnectionDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title={current ? t('配置 ') + current.plugin.name : t('添加连接')}
+      title={
+        connection ? t('编辑连接') : current ? t('配置 ') + current.plugin.name : t('添加连接')
+      }
       actions={
         current ? undefined : (
           <button
@@ -137,7 +170,11 @@ export function ConnectionDialog({
         )
       }
     >
-      {!current ? (
+      {connection && !current ? (
+        <p className="connection-error" role="alert">
+          {t('连接插件不可用，请先启用对应插件')}
+        </p>
+      ) : !current ? (
         <div className="connection-form">
           <div className="connection-plugin-picker">
             {choices.map(({ plugin, factory }) => (
@@ -176,16 +213,18 @@ export function ConnectionDialog({
         </div>
       ) : (
         <form className="connection-form" onSubmit={save}>
-          <button
-            type="button"
-            className="connection-back"
-            onClick={() => {
-              setSelected(null)
-              setError('')
-            }}
-          >
-            <ArrowLeft size={15} /> {t('选择其他类型')}
-          </button>
+          {!connection && (
+            <button
+              type="button"
+              className="connection-back"
+              onClick={() => {
+                setSelected(null)
+                setError('')
+              }}
+            >
+              <ArrowLeft size={15} /> {t('选择其他类型')}
+            </button>
+          )}
           <p className="sidebar-hint">
             {current.factory.title}
             {current.plugin.id === '__builtin__' && t(' · 密码/私钥口令会在终端中提示输入')}
@@ -206,11 +245,16 @@ export function ConnectionDialog({
             >
               {field.type !== 'checkbox' && <span>{field.label}</span>}
               <input
+                disabled={loading || busy}
                 type={field.type === 'secret' ? 'password' : field.type}
                 checked={field.type === 'checkbox' ? Boolean(values[field.id]) : undefined}
                 value={field.type === 'checkbox' ? undefined : String(values[field.id] ?? '')}
-                required={field.required}
-                placeholder={field.placeholder}
+                required={field.required && !(connection && field.type === 'secret')}
+                placeholder={
+                  connection && field.type === 'secret'
+                    ? t('留空保留已保存的凭据')
+                    : field.placeholder
+                }
                 min={field.type === 'number' ? 1 : undefined}
                 max={field.type === 'number' ? 65535 : undefined}
                 onChange={(event) =>
@@ -233,8 +277,19 @@ export function ConnectionDialog({
             <Button type="button" onClick={onClose}>
               {t('取消')}
             </Button>
-            <Button type="submit" disabled={busy || !name.trim()}>
-              {busy ? t('连接中…') : t('添加连接')}
+            <Button
+              type="submit"
+              disabled={
+                busy || loading || !name.trim() || Boolean(error && !Object.keys(values).length)
+              }
+            >
+              {loading
+                ? t('加载中…')
+                : busy
+                  ? t('保存中…')
+                  : connection
+                    ? t('保存连接')
+                    : t('添加连接')}
             </Button>
           </footer>
         </form>

@@ -38,7 +38,7 @@ fn saved_default() -> bool {
     true
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionInput {
     pub id: Option<String>,
@@ -198,6 +198,27 @@ pub fn list_connections() -> Vec<ConnectionInfo> {
     load_stored().iter().map(public).collect()
 }
 
+fn editable_config(mut connection: StoredConnection) -> ConnectionInput {
+    for key in &connection.secret_keys {
+        connection.settings.remove(key);
+    }
+    ConnectionInput {
+        id: Some(connection.id),
+        name: connection.name,
+        kind: connection.kind,
+        plugin_id: Some(connection.plugin_id),
+        settings: connection.settings,
+    }
+}
+
+pub fn connection_config(id: &str) -> Result<ConnectionInput, String> {
+    load_stored()
+        .into_iter()
+        .find(|connection| connection.id == id)
+        .map(editable_config)
+        .ok_or_else(|| "connection not found".into())
+}
+
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
     let name = input.name.trim();
     if name.is_empty() {
@@ -291,6 +312,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .id
         .as_deref()
         .and_then(|id| items.iter().position(|conn| conn.id == id));
+    if input.id.is_some() && existing.is_none() {
+        return Err("connection not found".into());
+    }
     let previous = existing.map(|index| items[index].clone());
     if previous
         .as_ref()
@@ -515,5 +539,23 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             }))
         }
         _ => Err("Connection must return vfs or pluginView navigation".into()),
+    }
+}
+
+#[cfg(test)]
+mod edit_tests {
+    use super::*;
+    #[test]
+    fn editing_exposes_configuration_but_never_credentials() {
+        let connection: StoredConnection = serde_json::from_value(serde_json::json!({
+            "id":"saved-ssh", "mountId":"stable", "name":"SSH", "kind":"org.fiex.ssh", "pluginId":"org.fiex.ssh",
+            "settings":{"host":"example.com", "port":2222, "password":"private-value"},
+            "secretKeys":["password"], "saved":true, "autostart":true
+        })).unwrap();
+        let config = serde_json::to_value(editable_config(connection)).unwrap();
+        assert_eq!(config["id"], "saved-ssh");
+        assert_eq!(config["settings"]["port"], 2222);
+        assert!(config["settings"].get("password").is_none());
+        assert!(!config.to_string().contains("private-value"));
     }
 }

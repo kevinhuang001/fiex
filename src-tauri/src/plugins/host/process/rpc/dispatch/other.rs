@@ -15,23 +15,31 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             crate::mounts::open_view(&plugin_id, ctx.params, &scope)
         }
         #[cfg(feature = "desktop")]
-        "host.terminal.output" => {
-            crate::desktop::ssh::plugin_terminal_output(&owner, ctx.params)?;
+        "host.terminal.ready" => {
+            crate::desktop::ssh::plugin_terminal_ready(&plugin_id, ctx.params)?;
             Ok(Value::Null)
         }
         #[cfg(feature = "desktop")]
-        "host.terminal.input" => crate::desktop::ssh::plugin_terminal_input(&owner, ctx.params),
+        "host.terminal.output" => {
+            crate::desktop::ssh::plugin_terminal_output(&plugin_id, ctx.params)?;
+            Ok(Value::Null)
+        }
         #[cfg(feature = "desktop")]
-        "host.terminal.size" => crate::desktop::ssh::plugin_terminal_size(&owner, ctx.params),
+        "host.terminal.input" => crate::desktop::ssh::plugin_terminal_input(&plugin_id, ctx.params),
         #[cfg(feature = "desktop")]
-        "host.terminal.closed" => crate::desktop::ssh::plugin_terminal_closed(&owner, ctx.params),
+        "host.terminal.size" => crate::desktop::ssh::plugin_terminal_size(&plugin_id, ctx.params),
+        #[cfg(feature = "desktop")]
+        "host.terminal.closed" => {
+            crate::desktop::ssh::plugin_terminal_closed(&plugin_id, ctx.params)
+        }
         #[cfg(feature = "desktop")]
         "host.terminal.end" => {
-            crate::desktop::ssh::plugin_terminal_end(&owner, ctx.params)?;
+            crate::desktop::ssh::plugin_terminal_end(&plugin_id, ctx.params)?;
             Ok(Value::Null)
         }
         #[cfg(not(feature = "desktop"))]
-        "host.terminal.output"
+        "host.terminal.ready"
+        | "host.terminal.output"
         | "host.terminal.input"
         | "host.terminal.size"
         | "host.terminal.closed"

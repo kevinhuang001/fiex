@@ -23,6 +23,10 @@ pub(crate) async fn connection_open(id: String) -> Result<serde_json::Value, Str
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
+pub(crate) fn remote_connection_config(id: String) -> Result<remote::ConnectionInput, String> {
+    remote::connection_config(&id)
+}
+#[tauri::command]
 pub(crate) fn save_remote_connection(
     input: remote::ConnectionInput,
 ) -> Result<remote::ConnectionInfo, String> {

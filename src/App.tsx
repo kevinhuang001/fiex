@@ -110,7 +110,8 @@ export default function App() {
         onTrash={app.openTrash}
         onEmptyTrash={app.emptyTrash}
         onApplications={app.openApplications}
-        onAddConnection={() => app.setConnectionOpen(true)}
+        onAddConnection={() => app.openConnectionDialog()}
+        onEditConnection={(connection) => app.openConnectionDialog(connection)}
         onRemoveConnection={app.removeConnection}
         notify={app.notify}
         onEject={app.ejectDevice}
