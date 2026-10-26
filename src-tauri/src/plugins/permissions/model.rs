@@ -27,10 +27,8 @@ pub struct PluginGrant {
     pub granted: BTreeSet<String>,
     /// The declaration snapshot approved with the installed package. Runtime
     /// grants can never exceed this set, even if the manifest on disk changes.
-    /// `None` is a legacy record: it is migrated from the current declaration
-    /// once, because installation approval always covered the whole manifest.
     #[serde(default)]
-    pub approved_declared: Option<BTreeSet<String>>,
+    pub approved_declared: BTreeSet<String>,
     /// Exact outbound hostnames approved by the user. No wildcards.
     #[serde(default)]
     pub network_domains: BTreeSet<String>,
@@ -42,11 +40,7 @@ pub struct PluginGrant {
 }
 
 pub fn declaration_approved(grant: &PluginGrant, permission: &str) -> bool {
-    grant.approved
-        && grant
-            .approved_declared
-            .as_ref()
-            .is_some_and(|approved| approved.contains(permission))
+    grant.approved && grant.approved_declared.contains(permission)
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]

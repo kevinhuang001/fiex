@@ -12,7 +12,7 @@ fn granted(values: &[&str]) -> PluginGrant {
         approved: true,
         enabled: true,
         granted: declared(values),
-        approved_declared: Some(declared(values)),
+        approved_declared: declared(values),
         ..Default::default()
     }
 }

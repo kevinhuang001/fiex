@@ -25,9 +25,7 @@ interface PluginLoadingPage {
   entry: string
 }
 interface PluginPreviewContribution {
-  /** New match object; the flat legacy `extensions` key is still accepted. */
   match?: { extensions?: string[]; mimeTypes?: string[]; kinds?: string[] }
-  extensions?: string[]
   priority?: number
   maxBytes?: number
   panel?: PluginPanel
@@ -35,7 +33,7 @@ interface PluginPreviewContribution {
   loading?: PluginLoadingPage
 }
 interface PluginInfoContribution {
-  extensions?: string[]
+  match?: { extensions?: string[]; mimeTypes?: string[]; kinds?: string[] }
   priority?: number
 }
 export interface MarketplacePlugin {

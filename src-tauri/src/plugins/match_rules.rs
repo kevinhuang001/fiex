@@ -2,7 +2,7 @@
 //!
 //! `match` is an inclusion predicate: Core only invokes the provider when the
 //! resource (or directory/selection) satisfies it. Missing or empty rules match
-//! everything. Legacy `extensions: [...]` is accepted for third-party manifests.
+//! everything.
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -30,26 +30,13 @@ impl MatchRules {
         serde_json::from_value(value.clone()).unwrap_or_default()
     }
 
-    /// Read `match` first, then the legacy `extensions` array.
+    /// Read the `match` object. The old flat `extensions` array is not a
+    /// manifest contract and is intentionally ignored.
     pub fn from_contribution(contribution: &Value) -> Self {
-        if let Some(value) = contribution.get("match") {
-            return Self::from_value(value);
-        }
-        let extensions = contribution
-            .get("extensions")
-            .and_then(Value::as_array)
-            .map(|values| {
-                values
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default();
-        Self {
-            extensions,
-            ..Self::default()
-        }
+        contribution
+            .get("match")
+            .map(Self::from_value)
+            .unwrap_or_default()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -204,8 +191,8 @@ mod tests {
     }
 
     #[test]
-    fn legacy_extensions_and_wildcards_work() {
-        let rules = MatchRules::from_contribution(&json!({"extensions":["*.ZIP","rar"]}));
+    fn match_object_and_wildcards_work() {
+        let rules = MatchRules::from_contribution(&json!({"match":{"extensions":["*.ZIP","rar"]}}));
         assert!(rules.matches("zip", "", false));
         assert!(rules.matches("rar", "", false));
         assert!(!rules.matches("7z", "", false));

@@ -65,12 +65,11 @@ pub(super) fn effective(record: Option<&PluginGrant>, declared: &BTreeSet<String
             approved: true,
             enabled: r.enabled,
             granted: r.granted.intersection(declared).cloned().collect(),
-            approved_declared: Some(
-                r.approved_declared
-                    .as_ref()
-                    .map(|approved| approved.intersection(declared).cloned().collect())
-                    .unwrap_or_else(|| declared.clone()),
-            ),
+            approved_declared: r
+                .approved_declared
+                .intersection(declared)
+                .cloned()
+                .collect(),
             network_domains: if declared.contains("network") {
                 r.network_domains
                     .iter()

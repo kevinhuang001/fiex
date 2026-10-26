@@ -31,7 +31,7 @@ pub fn approve_install_with_domains(
         // Installation approves this exact declaration snapshot. Every
         // capability still starts denied and must be granted explicitly from
         // plugin settings or an operation-time request.
-        current.approved_declared = Some(declared.clone());
+        current.approved_declared = declared.clone();
         current.granted.clear();
         current.network_domains.clear();
         current.commands.clear();
@@ -100,10 +100,7 @@ pub fn activate(
         if !current.approved {
             return Err("install or upgrade approval required before activation".into());
         }
-        let covered = current
-            .approved_declared
-            .as_ref()
-            .is_some_and(|approved| required.permissions.is_subset(approved));
+        let covered = required.permissions.is_subset(&current.approved_declared);
         if !covered {
             return Err("install or upgrade approval required before activation".into());
         }

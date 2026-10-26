@@ -154,7 +154,7 @@ fn declaration_snapshot_bounds_runtime_grants() {
         approved: true,
         enabled: true,
         granted: declared.clone(),
-        approved_declared: Some(declared.clone()),
+        approved_declared: declared.clone(),
         ..Default::default()
     };
     assert!(declaration_approved(&approved, "files.read"));
@@ -167,21 +167,6 @@ fn declaration_snapshot_bounds_runtime_grants() {
     let state = effective(Some(&approved), &widened);
     assert!(state.granted.contains("files.read"));
     assert!(!declaration_approved(&state, "files.write"));
-
-    // Legacy records without a snapshot are migrated from their manifest.
-    let legacy = PluginGrant {
-        approved: true,
-        enabled: true,
-        granted: declared.clone(),
-        approved_declared: None,
-        ..Default::default()
-    };
-    let migrated = effective(Some(&legacy), &declared);
-    assert!(migrated
-        .approved_declared
-        .as_ref()
-        .unwrap()
-        .contains("files.read"));
 }
 
 #[test]
