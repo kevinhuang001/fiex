@@ -531,8 +531,8 @@ fn context_menu_sessions() -> &'static std::sync::Mutex<ContextMenuRegistry> {
         std::sync::OnceLock::new();
     SESSIONS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
-fn menu_allowed(plugin_id: &str) -> bool {
-    crate::plugin_events::EventRouter::providers("contextMenu.resolve",&[],"",Vec::new()).iter().any(|p|matches!(&p.handler,crate::plugin_events::Handler::Plugin(plugin) if plugin.id==plugin_id))
+fn menu_allowed(session: &ContextMenuSession) -> bool {
+    crate::plugin_events::menu_allowed(&session.plugin_id, &session.resources, &session.directory)
 }
 fn menu_response_valid(
     result: &serde_json::Value,
@@ -864,7 +864,7 @@ pub(crate) async fn plugin_context_menu_children(
             .lock()
             .map_err(|_| "menu registry unavailable")?;
         let session = guard.get(&menu_session_id).ok_or("menu session expired")?;
-        if session.created.elapsed().as_secs() >= 90 || !menu_allowed(&session.plugin_id) {
+        if session.created.elapsed().as_secs() >= 90 || !menu_allowed(session) {
             return Err("menu session expired".into());
         }
         let depth = *session.submenus.get(&parent_id).ok_or("unknown submenu")?;
@@ -920,7 +920,7 @@ pub(crate) async fn plugin_context_menu_execute(
         .ok_or("menu session invalid or already used")?;
     if session.created.elapsed().as_secs() >= 90
         || !session.actions.contains(&item_id)
-        || !menu_allowed(&session.plugin_id)
+        || !menu_allowed(&session)
     {
         return Err("menu session expired or item was not offered".into());
     }

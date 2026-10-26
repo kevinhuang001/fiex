@@ -130,8 +130,14 @@ pub(crate) fn executable(manifest: &PluginManifest, dir: &Path) -> Result<PathBu
     Err("plugin native backend is not installed inside its package".into())
 }
 pub fn catalog() -> Vec<PluginInfo> {
+    catalog_matching(|_| true)
+}
+
+/// Apply event match predicates before permission, executable and PATH probes.
+pub(crate) fn catalog_matching(predicate: impl Fn(&PluginManifest) -> bool) -> Vec<PluginInfo> {
     discover()
         .into_iter()
+        .filter(|(manifest, _)| predicate(manifest))
         .map(|(manifest, folder)| {
             let backend =
                 crate::plugin_themes::is_theme(&manifest) || executable(&manifest, &folder).is_ok();

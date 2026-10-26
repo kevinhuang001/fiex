@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 #[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MatchRules {
     #[serde(default)]
     pub extensions: Vec<String>,
@@ -26,17 +26,39 @@ pub struct MatchRules {
 }
 
 impl MatchRules {
-    pub fn from_value(value: &Value) -> Self {
-        serde_json::from_value(value.clone()).unwrap_or_default()
-    }
-
-    /// Read the `match` object. The old flat `extensions` array is not a
-    /// manifest contract and is intentionally ignored.
-    pub fn from_contribution(contribution: &Value) -> Self {
+    /// Invalid predicates never degrade into an unrestricted provider.
+    pub fn from_contribution(contribution: &Value) -> Result<Self, serde_json::Error> {
         contribution
             .get("match")
-            .map(Self::from_value)
-            .unwrap_or_default()
+            .map(|value| serde_json::from_value(value.clone()))
+            .unwrap_or_else(|| Ok(Self::default()))
+    }
+
+    pub fn matches_event(&self, metadata: &[Value], directory: &str) -> bool {
+        if !self.matches_selection(metadata.len()) {
+            return false;
+        }
+        let unrestricted =
+            self.extensions.is_empty() && self.mime_types.is_empty() && self.kinds.is_empty();
+        let targets_match = unrestricted
+            || metadata.iter().any(|m| {
+                let kind = match m["kind"].as_str() {
+                    Some("directory") => Some(true),
+                    Some("file") => Some(false),
+                    _ => m["isDir"].as_bool(),
+                };
+                m.is_object()
+                    && (self.extensions.is_empty() || m["extension"].is_string())
+                    && (self.mime_types.is_empty() || m["mime"].is_string())
+                    && (self.kinds.is_empty() || kind.is_some())
+                    && self.matches(
+                        m["extension"].as_str().unwrap_or(""),
+                        m["mime"].as_str().unwrap_or(""),
+                        kind.unwrap_or(false),
+                    )
+            });
+        // Cheap metadata predicates precede ancestor filesystem probes.
+        targets_match && self.matches_contains(directory)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -87,6 +109,10 @@ impl MatchRules {
         if self.contains.is_empty() {
             return true;
         }
+        // Never probe the host working directory for absent/virtual context.
+        if !std::path::Path::new(directory).is_absolute() {
+            return false;
+        }
         self.contains.iter().any(|marker| {
             let marker = marker.trim();
             if marker.is_empty() || marker.contains(['/', '\\']) {
@@ -114,6 +140,44 @@ impl MatchRules {
             _ => false,
         }
     }
+}
+
+pub fn validate(
+    value: Option<&Value>,
+    allow_contains: bool,
+    allow_selection: bool,
+) -> Result<(), String> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let object = value.as_object().ok_or("match must be an object")?;
+    if !allow_contains && object.contains_key("contains") {
+        return Err("match.contains is only valid for decorations".into());
+    }
+    if !allow_selection && object.contains_key("selection") {
+        return Err("match.selection is only valid for contextMenus".into());
+    }
+    for key in ["extensions", "mimeTypes", "kinds", "contains"] {
+        let Some(items) = object.get(key) else {
+            continue;
+        };
+        let items = items
+            .as_array()
+            .ok_or_else(|| format!("match.{key} must be an array"))?;
+        if items.iter().any(|item| !item.is_string()) {
+            return Err(format!("match.{key} entries must be strings"));
+        }
+    }
+    if let Some(selection) = object.get("selection") {
+        let selection = selection
+            .as_str()
+            .ok_or("match.selection must be any, single or multi")?;
+        if !matches!(selection, "any" | "single" | "multi") {
+            return Err("match.selection must be any, single or multi".into());
+        }
+    }
+    serde_json::from_value::<MatchRules>(value.clone()).map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 /// Small extension → MIME map for resources whose directory entry has no MIME.
@@ -161,42 +225,5 @@ pub fn mime_for(ext: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn match_is_an_include_predicate() {
-        let rules = MatchRules::from_contribution(&json!({
-            "match": {"extensions":["md"],"mimeTypes":["text/*"],"kinds":["file"],"selection":"single"}
-        }));
-        assert!(rules.matches("md", "text/markdown", false));
-        assert!(!rules.matches("png", "image/png", false));
-        assert!(!rules.matches("md", "text/markdown", true));
-    }
-
-    #[test]
-    fn contains_and_selection_are_scoped_predicates() {
-        let decorations = MatchRules::from_contribution(&json!({
-            "match": {"contains": [".git"], "extensions": ["ts"]}
-        }));
-        assert!(decorations.matches("ts", "text/plain", false));
-        assert!(!decorations.matches("md", "text/markdown", false));
-        let menu = MatchRules::from_contribution(&json!({
-            "match": {"selection": "single", "extensions": ["zip"]}
-        }));
-        assert!(menu.matches_selection(1));
-        assert!(!menu.matches_selection(2));
-        assert!(menu.matches("zip", "application/zip", false));
-    }
-
-    #[test]
-    fn match_object_and_wildcards_work() {
-        let rules = MatchRules::from_contribution(&json!({"match":{"extensions":["*.ZIP","rar"]}}));
-        assert!(rules.matches("zip", "", false));
-        assert!(rules.matches("rar", "", false));
-        assert!(!rules.matches("7z", "", false));
-        let all = MatchRules::from_contribution(&json!({"match":{"mimeTypes":["text/*"]}}));
-        assert!(all.matches("anything", "text/plain", false));
-    }
-}
+#[path = "match_rules/tests.rs"]
+mod tests;

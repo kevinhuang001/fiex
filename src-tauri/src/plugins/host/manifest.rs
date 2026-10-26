@@ -307,43 +307,6 @@ pub(crate) fn preview_loading_entry(extensions: &Value) -> Option<&str> {
 }
 
 /// Extensions declare provider eligibility, never resource permissions.
-fn validate_match(
-    value: Option<&Value>,
-    allow_contains: bool,
-    allow_selection: bool,
-) -> Result<(), String> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    let object = value.as_object().ok_or("match must be an object")?;
-    if !allow_contains && object.contains_key("contains") {
-        return Err("match.contains is only valid for decorations".into());
-    }
-    if !allow_selection && object.contains_key("selection") {
-        return Err("match.selection is only valid for contextMenus".into());
-    }
-    for key in ["extensions", "mimeTypes", "kinds", "contains"] {
-        let Some(items) = object.get(key) else {
-            continue;
-        };
-        let items = items
-            .as_array()
-            .ok_or_else(|| format!("match.{key} must be an array"))?;
-        if items.iter().any(|item| !item.is_string()) {
-            return Err(format!("match.{key} entries must be strings"));
-        }
-    }
-    if let Some(selection) = object.get("selection") {
-        let selection = selection
-            .as_str()
-            .ok_or("match.selection must be any, single or multi")?;
-        if !matches!(selection, "any" | "single" | "multi") {
-            return Err("match.selection must be any, single or multi".into());
-        }
-    }
-    Ok(())
-}
-
 pub fn validate_extensions(value: &Value) -> Result<(), String> {
     if !value.is_null() && !value.is_object() {
         return Err("extensions must be an object".into());
@@ -351,7 +314,9 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
     if let Some(enabled) = value.get("contextMenus") {
         match enabled {
             Value::Bool(_) => {}
-            Value::Object(object) => validate_match(object.get("match"), false, true)?,
+            Value::Object(object) => {
+                crate::plugin_match::validate(object.get("match"), false, true)?
+            }
             _ => return Err("extensions.contextMenus must be true or {match}".into()),
         }
     }
@@ -366,7 +331,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                         ));
                     }
                 }
-                validate_match(object.get("match"), true, false)?;
+                crate::plugin_match::validate(object.get("match"), true, false)?;
             }
             _ => return Err("extensions.decorations must be true or {match,priority}".into()),
         }
@@ -389,7 +354,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         if key == "info" && object.contains_key("command") {
             return Err("extensions.info.command is removed; info.resolve is fixed".into());
         }
-        validate_match(object.get("match"), false, false)?;
+        crate::plugin_match::validate(object.get("match"), false, false)?;
         if key == "preview" {
             if let Some(loading) = object.get("loading") {
                 let loading = loading
@@ -431,6 +396,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                 "extensions.search.title/command are removed; search.query is fixed".into(),
             );
         }
+        crate::plugin_match::validate(object.get("match"), false, false)?;
         if key == "hooks" && object.contains_key("method") {
             return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());
         }
@@ -656,6 +622,23 @@ mod contribution_tests {
             json!({"preview": {"loading": {"entry": "ui/loading.html", "url": "https://example.com"}}}),
         ] {
             assert!(validate_extensions(&invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn hooks_and_search_validate_match_instead_of_ignoring_bad_rules() {
+        for feature in ["hooks", "search"] {
+            assert!(
+                validate_extensions(&json!({feature:{"match":{"extensions":["zip"]}}})).is_ok()
+            );
+            for predicate in [
+                json!({"extensions":"zip"}),
+                json!({"selection":"single"}),
+                json!({"contains":[".git"]}),
+                json!({"extension":["zip"]}),
+            ] {
+                assert!(validate_extensions(&json!({feature:{"match":predicate}})).is_err());
+            }
         }
     }
 
