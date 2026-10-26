@@ -20,13 +20,35 @@ pub fn activate(
     id: &str,
     consent: &crate::plugin_permissions::ActivationConsent,
 ) -> Result<(), String> {
-    let (manifest, _) = discover()
+    let (manifest, directory) = discover()
         .into_iter()
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::activate(id, &activation_requirements(&manifest)?, consent)?;
     global().stop(id);
+    start_backend(&manifest, &directory);
     Ok(())
+}
+
+/// Activation starts the native backend immediately instead of waiting for the
+/// first invoke. Declarative plugins (themes) and packages without an
+/// entrypoint for this platform have nothing to start. A launch failure is
+/// recorded in the plugin error log: activation itself already succeeded and
+/// is never rolled back, and the next invoke will retry.
+fn start_backend(manifest: &super::manifest::PluginManifest, directory: &std::path::Path) {
+    if crate::plugin_themes::is_theme(manifest)
+        || super::catalog::executable(manifest, directory).is_err()
+    {
+        return;
+    }
+    if let Err(error) = global().start(&manifest.id) {
+        let _ = crate::plugin_errors::report(
+            &manifest.id,
+            "host",
+            &format!("plugin backend failed to start: {error}"),
+            None,
+        );
+    }
 }
 
 pub fn declared_permissions_for(id: &str) -> Result<BTreeSet<String>, String> {

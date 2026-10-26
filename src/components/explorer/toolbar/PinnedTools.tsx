@@ -78,6 +78,10 @@ export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsPr
             directory: x.path,
             anchor: anchor ?? lastPointer.current,
             source: 'toolbar',
+            timeoutMs: plugin.uiTimeoutMs,
+            allowCreate: (plugin.declaredPermissions || []).some(
+              (permission) => permission === 'files.create' || permission === 'folders.create',
+            ),
           },
         }),
       )

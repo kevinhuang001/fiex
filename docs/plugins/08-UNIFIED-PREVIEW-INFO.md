@@ -57,6 +57,8 @@ JSON-RPC 的 method 标识事件。唯一资源集合是 `targets`，不再同�
 
 Provider 执行具有异常隔离与 4 MiB 结果上限。PluginHost 继续负责 RPC 超时、进程、任务取消和句柄清理。Info/菜单/搜索/预览分别拥有自己的字段和大小规则；不会将所有功能强行转换成同一个响应 DTO。
 
+`extensions.preview.loading` 是纯展示层声明：Core 在 `preview.open` 前解析包内加载页并交给预览 UI，不参与 Provider 匹配、优先级、Scope 或结果校验。加载页解析失败或未声明时，预览继续走原有流程。
+
 ## 代码入口
 
 - `plugins/events.rs`：Registry、EventRouter、公共验证入口、独占调用、Scope/targets 准备。

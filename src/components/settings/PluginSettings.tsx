@@ -359,7 +359,7 @@ export function PluginSettings() {
         onClose={() => setStoreOpen(false)}
         onInstalled={() => {
           refreshPluginCatalog()
-          setMessage('插件已安装，尚未激活。点击激活后逐项审核权限。')
+          setMessage('插件已安装，尚未激活。点击激活后可逐项选择权限。')
         }}
       />
 

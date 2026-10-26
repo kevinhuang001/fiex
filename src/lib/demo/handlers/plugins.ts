@@ -767,17 +767,35 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
     }
     case 'plugin_activate': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
-      const consent = a.consent as { permissions: string[]; domains: string[]; commands: string[] }
+      const consent = a.consent as {
+        permissions?: string[]
+        networkAll?: boolean
+        domains?: string[]
+        commands?: string[]
+      }
       if (plugin) {
-        if (
-          !(plugin.declaredPermissions || []).every((value) => consent.permissions.includes(value))
-        )
-          throw new Error('请逐项同意全部权限')
+        const permissions = consent.permissions || []
+        const domains = consent.domains || []
+        const commands = consent.commands || []
+        const declared = new Set(plugin.declaredPermissions || [])
+        const requestedDomains = new Set(plugin.requestedNetworkDomains || [])
+        const requestedCommands = new Set(plugin.requestedCommands || [])
+        const invalid =
+          permissions.some((value) => !declared.has(value)) ||
+          (Boolean(consent.networkAll) && !plugin.requestedNetworkAll) ||
+          domains.some((value) => !requestedDomains.has(value)) ||
+          commands.some((value) => !requestedCommands.has(value)) ||
+          ((Boolean(consent.networkAll) || domains.length > 0) &&
+            !permissions.includes('network')) ||
+          (commands.length > 0 && !permissions.includes('commands'))
+        if (invalid) throw new Error('权限选择与插件声明不一致，请重新审核')
         plugin.approved = true
         plugin.enabled = true
-        plugin.grantedPermissions = [...consent.permissions]
-        plugin.allowedNetworkDomains = [...consent.domains]
-        plugin.allowedCommands = [...consent.commands]
+        // Activation is partial: keep only what the user selected.
+        plugin.grantedPermissions = [...permissions]
+        plugin.allowedNetworkAll = Boolean(consent.networkAll)
+        plugin.allowedNetworkDomains = [...domains]
+        plugin.allowedCommands = [...commands]
       }
       return null
     }

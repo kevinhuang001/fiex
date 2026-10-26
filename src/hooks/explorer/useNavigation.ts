@@ -41,7 +41,12 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setHistory([start])
     setCursor(0)
     setTabs([start])
+    setTab(0)
     tabHistory.current = [{ paths: [start], cursor: 0 }]
+    setQuery('')
+    setSelected([])
+    setRenaming(null)
+    setError('')
   }
   const back = () => {
     if (cursor > 0) {
@@ -87,8 +92,14 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setSelected([])
     setRenaming(null)
   }
-  const closeTab = (i: number) => {
-    if (tabs.length === 1) return
+  const closeTab = (i: number, startPath = 'recent://') => {
+    if (!tabs[i]) return
+    // The last folder tab closes onto the configured start page in the same
+    // render, so the workspace never flashes an empty tab strip.
+    if (tabs.length === 1) {
+      startAt(startPath)
+      return
+    }
     tabHistory.current[tab] = { paths: history, cursor }
     tabHistory.current.splice(i, 1)
     const next = tabs.filter((_, n) => n !== i)

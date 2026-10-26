@@ -933,6 +933,34 @@ mod tests {
         assert!(stat_batch(&scope, &vec![json!("chosen"); 257]).is_err());
     }
     #[test]
+    fn an_action_folder_grant_allows_results_next_to_the_selection() {
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("chosen.zip");
+        std::fs::write(&selected, b"content").unwrap();
+        // What an explicit open/context action adds for a plugin that declares
+        // create capability: the selected file plus its containing folder.
+        let scope =
+            Scope::selected(root.path(), &[selected.clone(), root.path().to_path_buf()]).unwrap();
+        create(&scope, "chosen-output.zip").unwrap();
+        mkdir(&scope, ".staging").unwrap();
+        mkdir(&scope, ".staging/nested").unwrap();
+        let handle = begin_write("owner", &scope, ".staging/nested/file", true).unwrap();
+        write_chunk("owner", &handle, &STANDARD.encode(b"data")).unwrap();
+        commit("owner", &handle).unwrap();
+        rename(&scope, ".staging/nested/file", "moved.txt").unwrap();
+        assert!(read_chunk(&scope, "chosen.zip", 0, 100).is_ok());
+        assert_eq!(
+            std::fs::read(root.path().join("moved.txt")).unwrap(),
+            b"data"
+        );
+        // The grant is not a blanket escape from the operation root.
+        let outside = tempfile::tempdir().unwrap();
+        let outside_file = outside.path().join("secret");
+        std::fs::write(&outside_file, b"secret").unwrap();
+        assert!(read_chunk(&scope, outside_file.to_str().unwrap(), 0, 100).is_err());
+    }
+
+    #[test]
     fn selected_directory_allows_descendants_only() {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir(root.path().join("chosen")).unwrap();

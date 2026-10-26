@@ -13,6 +13,11 @@ export interface PluginPanelRequest {
   size?: { width: number; height: number }
   /** A package asset resolved and checked by Core after a dynamic menu action. */
   assetPath?: string
+  /** Manifest-negotiated bridge/request budget from `extensions.ui.timeoutMs`. */
+  timeoutMs?: number
+  /** The plugin declares a create capability, so naming the current folder in
+   * an invocation may grant that folder as the operation's output root. */
+  allowCreate?: boolean
   /** Set when this panel renders a file preview for a plugin previewer. */
   preview?: { path: string; name: string; extension: string }
 }

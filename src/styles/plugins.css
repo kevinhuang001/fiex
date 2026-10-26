@@ -96,6 +96,22 @@
   top: auto !important;
   bottom: 0 !important;
 }
+/* Every plugin action lives in one top-level submenu. It opens next to the
+   row and flips up only when the file menu sits near the bottom edge. */
+.context-submenu.plugin-context-menu {
+  top: -6px;
+  bottom: auto;
+  width: 200px;
+}
+.context-submenu.plugin-context-menu.plugin-context-menu-up {
+  top: auto;
+  bottom: -6px;
+}
+.context-submenu.plugin-context-menu .context-submenu-empty {
+  padding: 6px 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .decoration-badge {
   display: inline-flex;
   align-items: center;
@@ -247,7 +263,9 @@
   color: var(--accent);
 }
 .plugin-activation-modal {
-  width: min(620px, calc(100vw - 32px));
+  width: min(620px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 24px 26px 0;
 }
 .plugin-activation-intro {
   display: flex;
@@ -428,6 +446,153 @@
   min-height: 36px;
   justify-content: center;
   border-radius: 10px;
+}
+
+/* Grouped activation consent: one sheet for every declared capability. */
+.plugin-activation-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.plugin-activation-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.plugin-activation-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+}
+.plugin-activation-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.plugin-activation-head-copy strong {
+  font-size: 15px;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+.plugin-activation-head-copy p {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.plugin-activation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+.plugin-activation-section-head h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plugin-activation-section-head p {
+  margin: 0;
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.plugin-activation-rows {
+  display: flex;
+  flex-direction: column;
+}
+.plugin-activation-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 2px;
+  cursor: pointer;
+}
+.plugin-activation-row + .plugin-activation-row {
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+.plugin-activation-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.plugin-activation-row-copy strong {
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.plugin-activation-row-copy small {
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.plugin-activation-row-copy small.plugin-activation-warning,
+.plugin-activation-warning {
+  color: var(--danger);
+}
+.plugin-activation-row.danger {
+  margin: 4px -6px 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+.plugin-activation-row.danger + .plugin-activation-row {
+  border-top: 0;
+}
+.plugin-activation-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+.plugin-activation-row input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+.plugin-activation-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: var(--radius-panel);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+  text-align: center;
+}
+.plugin-activation-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.plugin-activation-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0 20px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  background: var(--surface);
+}
+.plugin-activation-actions .button {
+  min-width: 84px;
+  justify-content: center;
 }
 
 /* Store: independent, centered sheet; cards keep a comfortable width. */

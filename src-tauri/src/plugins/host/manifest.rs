@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::{Component, Path};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +150,39 @@ pub struct PluginAuthor {
     pub url: Option<String>,
 }
 
+/// Default budget for one plugin UI request and its bridge handshake.
+pub const DEFAULT_UI_TIMEOUT_MS: u64 = 15_000;
+/// Plugin process requests keep the historical budget unless a manifest asks
+/// for more. `extensions.ui.timeoutMs` can only extend this, never shrink it.
+pub const DEFAULT_REQUEST_TIMEOUT_MS: u64 = 120_000;
+/// A plugin can ask for a longer budget for slow providers (for example an
+/// archive directory listing), but never an unbounded one.
+pub const MAX_UI_TIMEOUT_MS: u64 = 900_000;
+const MIN_UI_TIMEOUT_MS: u64 = 1_000;
+
+fn declared_ui_timeout(extensions: &Value) -> Option<u64> {
+    extensions
+        .get("ui")
+        .and_then(|ui| ui.get("timeoutMs"))
+        .and_then(Value::as_u64)
+        .filter(|value| (MIN_UI_TIMEOUT_MS..=MAX_UI_TIMEOUT_MS).contains(value))
+}
+
+/// Explicit `extensions.ui.timeoutMs` contract. Core applies it to the panel
+/// bridge handshake and projects it into the UI context so the plugin's own
+/// request timer can match it.
+pub fn ui_timeout_ms(extensions: &Value) -> u64 {
+    declared_ui_timeout(extensions).unwrap_or(DEFAULT_UI_TIMEOUT_MS)
+}
+
+/// Request deadline for one plugin RPC. A manifest may raise the default for
+/// slow providers, but an absent or tiny value keeps the standard budget.
+pub fn request_timeout_ms(extensions: &Value) -> u64 {
+    declared_ui_timeout(extensions).map_or(DEFAULT_REQUEST_TIMEOUT_MS, |value| {
+        value.max(DEFAULT_REQUEST_TIMEOUT_MS)
+    })
+}
+
 pub fn declared_permissions(manifest: &PluginManifest) -> Result<BTreeSet<String>, String> {
     validate_extensions(&manifest.extensions)?;
     let mut declared = BTreeSet::new();
@@ -239,6 +273,39 @@ pub fn valid_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
 
+/// A declared package entry must be a relative slash-separated path inside the
+/// plugin package. URLs, absolute paths, drive letters, parent segments and
+/// backslashes are never resolved by Core; reads also re-check canonical
+/// containment so a symlink cannot escape the package.
+pub(crate) fn valid_package_entry(entry: &str) -> bool {
+    if entry.is_empty()
+        || entry.len() > 1024
+        || entry.contains("://")
+        || entry.contains(':')
+        || entry.contains('\\')
+        || entry.contains('\0')
+    {
+        return false;
+    }
+    let path = Path::new(entry);
+    path.is_relative()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
+/// Optional `extensions.preview.loading.entry`, already validated by
+/// [`validate_extensions`] when the manifest is discovered.
+pub(crate) fn preview_loading_entry(extensions: &Value) -> Option<&str> {
+    extensions
+        .get("preview")
+        .and_then(Value::as_object)
+        .and_then(|preview| preview.get("loading"))
+        .and_then(Value::as_object)
+        .and_then(|loading| loading.get("entry"))
+        .and_then(Value::as_str)
+}
+
 /// Extensions declare provider eligibility, never resource permissions.
 fn validate_match(
     value: Option<&Value>,
@@ -323,6 +390,29 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             return Err("extensions.info.command is removed; info.resolve is fixed".into());
         }
         validate_match(object.get("match"), false, false)?;
+        if key == "preview" {
+            if let Some(loading) = object.get("loading") {
+                let loading = loading
+                    .as_object()
+                    .ok_or("extensions.preview.loading must be an object")?;
+                for field in loading.keys() {
+                    if field != "entry" {
+                        return Err(format!(
+                            "extensions.preview.loading.{field} is not supported"
+                        ));
+                    }
+                }
+                let entry = loading
+                    .get("entry")
+                    .and_then(Value::as_str)
+                    .ok_or("extensions.preview.loading.entry is required")?;
+                if !valid_package_entry(entry) {
+                    return Err(
+                        "extensions.preview.loading.entry must be a package-relative path".into(),
+                    );
+                }
+            }
+        }
     }
     for key in ["search", "hooks"] {
         let Some(item) = value.get(key) else {
@@ -360,6 +450,24 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             .is_none_or(str::is_empty)
         {
             return Err("extensions.themes.path is required".into());
+        }
+    }
+    if let Some(ui) = value.get("ui") {
+        let object = ui.as_object().ok_or("extensions.ui must be an object")?;
+        for key in object.keys() {
+            if key != "timeoutMs" {
+                return Err(format!("extensions.ui.{key} is not supported"));
+            }
+        }
+        if let Some(timeout) = object.get("timeoutMs") {
+            let timeout = timeout
+                .as_u64()
+                .ok_or("extensions.ui.timeoutMs must be a positive integer")?;
+            if !(MIN_UI_TIMEOUT_MS..=MAX_UI_TIMEOUT_MS).contains(&timeout) {
+                return Err(format!(
+                    "extensions.ui.timeoutMs must be between {MIN_UI_TIMEOUT_MS} and {MAX_UI_TIMEOUT_MS}"
+                ));
+            }
         }
     }
     for key in ["vfs", "connections", "toolbar"] {
@@ -453,6 +561,36 @@ mod contribution_tests {
         }
     }
     #[test]
+    fn ui_timeout_is_an_explicit_bounded_contract() {
+        assert_eq!(ui_timeout_ms(&json!({})), DEFAULT_UI_TIMEOUT_MS);
+        assert_eq!(
+            ui_timeout_ms(&json!({"ui": {"timeoutMs": 300_000}})),
+            300_000
+        );
+        // The process request budget keeps its historical default and can only
+        // be extended by the manifest contract.
+        assert_eq!(request_timeout_ms(&json!({})), DEFAULT_REQUEST_TIMEOUT_MS);
+        assert_eq!(
+            request_timeout_ms(&json!({"ui": {"timeoutMs": 1_000}})),
+            DEFAULT_REQUEST_TIMEOUT_MS
+        );
+        assert_eq!(
+            request_timeout_ms(&json!({"ui": {"timeoutMs": 300_000}})),
+            300_000
+        );
+        for invalid in [
+            json!({"ui": []}),
+            json!({"ui": {"timeoutMs": "long"}}),
+            json!({"ui": {"timeoutMs": 0}}),
+            json!({"ui": {"timeoutMs": MAX_UI_TIMEOUT_MS + 1}}),
+            json!({"ui": {"timeoutMs": 30_000, "extra": true}}),
+        ] {
+            assert!(validate_extensions(&invalid).is_err(), "{invalid}");
+        }
+        assert!(validate_extensions(&json!({"ui": {"timeoutMs": 300_000}})).is_ok());
+    }
+
+    #[test]
     fn menu_registration_rejects_static_items_and_nested_syntax() {
         assert!(validate_extensions(&serde_json::json!({"contextMenus": true})).is_ok());
         assert!(validate_extensions(&serde_json::json!({"contextMenus": false})).is_ok());
@@ -486,6 +624,36 @@ mod contribution_tests {
             serde_json::json!({"info": {"title": "X"}}),
             serde_json::json!({"info": {"id": "x"}}),
             serde_json::json!({"contextMenus": {"match": {"selection": "many"}}}),
+        ] {
+            assert!(validate_extensions(&invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn preview_loading_pages_are_optional_and_package_local() {
+        for valid in [
+            json!({"preview": {}}),
+            json!({"preview": {"panel": {"entry": "ui/preview.html"}}}),
+            json!({"preview": {"loading": {"entry": "ui/loading.html"}}}),
+            json!({"preview": {
+                "panel": {"entry": "ui/preview.html"},
+                "loading": {"entry": "ui/loading.html"}
+            }}),
+        ] {
+            assert!(validate_extensions(&valid).is_ok(), "{valid}");
+        }
+        for invalid in [
+            json!({"preview": {"loading": {}}}),
+            json!({"preview": {"loading": true}}),
+            json!({"preview": {"loading": []}}),
+            json!({"preview": {"loading": {"entry": ""}}}),
+            json!({"preview": {"loading": {"entry": "../loading.html"}}}),
+            json!({"preview": {"loading": {"entry": "./loading.html"}}}),
+            json!({"preview": {"loading": {"entry": "/tmp/loading.html"}}}),
+            json!({"preview": {"loading": {"entry": "C:/loading.html"}}}),
+            json!({"preview": {"loading": {"entry": "https://example.com/loading.html"}}}),
+            json!({"preview": {"loading": {"entry": "ui\\loading.html"}}}),
+            json!({"preview": {"loading": {"entry": "ui/loading.html", "url": "https://example.com"}}}),
         ] {
             assert!(validate_extensions(&invalid).is_err(), "{invalid}");
         }

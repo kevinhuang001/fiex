@@ -42,7 +42,9 @@
 }
 .context-submenu {
   position: absolute;
-  left: calc(100% + 4px);
+  /* 100% ends at the parent menu's content edge; add its padding and border
+     back so sibling-level panels sit beside each other instead of overlapping. */
+  left: calc(100% + 11px);
   top: auto;
   bottom: -6px;
   z-index: 50;
@@ -158,7 +160,7 @@
 /* Flip a submenu to the left when the parent menu sits near the right edge. */
 .context-submenu.open-left {
   left: auto;
-  right: calc(100% + 4px);
+  right: calc(100% + 11px);
 }
 
 .modal-actions {

@@ -88,9 +88,11 @@ pub fn activate(
     required: &ActivationConsent,
     consent: &ActivationConsent,
 ) -> Result<(), String> {
-    if consent != required {
+    // The user may deselect declared items, but the selection can never grow
+    // beyond what the installed manifest (and its approved snapshot) declares.
+    if !consent.is_subset_of(required) {
         return Err(
-            "permission requirements changed or consent is incomplete; review every item again"
+            "permission requirements changed or consent includes undeclared items; review the list again"
                 .into(),
         );
     }
@@ -106,10 +108,12 @@ pub fn activate(
             return Err("install or upgrade approval required before activation".into());
         }
         current.approved = true;
-        current.granted = required.permissions.clone();
-        current.network_domains = required.domains.clone();
-        current.network_all = required.network_all;
-        current.commands = required.commands.clone();
+        // Store only what the user selected. Deselected capabilities stay
+        // ungranted and are requested again if an operation needs them.
+        current.granted = consent.permissions.clone();
+        current.network_domains = consent.domains.clone();
+        current.network_all = consent.network_all;
+        current.commands = consent.commands.clone();
         current.enabled = true;
         Ok(())
     })?;

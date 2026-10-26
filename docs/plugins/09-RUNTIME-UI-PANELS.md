@@ -8,7 +8,11 @@
 - Core 校验路径、大小（1 MiB）和包归属；
 - Core 提供面板外壳（标题、关闭、尺寸）；
 - 面板 HTML 通过受控 CSP 加载；
-- 面板与 Core 通过 MessagePort/UI Bridge 通信。
+- 面板与 Core 通过 MessagePort/UI Bridge 通信；
+- 需要更长的握手/请求预算时，在 Manifest 声明
+  `extensions.ui.timeoutMs`（默认 15000，范围 1000–900000）。Core 将其用于
+  面板桥接，并把单次插件 RPC 的默认截止时间（120000）延长到至少该值，同时
+  通过 `context.get.uiTimeoutMs` 暴露给插件 UI。
 
 Toolbar 固定方法：
 
@@ -17,6 +21,23 @@ toolbar.invoke
 ```
 
 有 `panel` 时点击工具栏按钮打开面板；没有 panel 时调用 `toolbar.invoke`。
+
+### Preview 加载页
+
+预览提供者可以在 `extensions.preview.loading.entry` 额外声明一个包内加载页。
+Core 启动插件预览时按以下顺序处理：
+
+1. 校验插件审批状态、包归属与 `loading.entry`（与 panel 相同的路径、canonical
+   包含和 1 MiB 限制）；
+2. 通过 `preview_loading_asset`（桌面，asset 协议 + 面板 CSP）或
+   `preview_loading`（Web/演示，srcDoc）取得加载文档；
+3. 在 Core 拥有的 `sandbox="allow-scripts"` iframe 中立即显示加载页；
+4. 调用 `preview.open`；合法结果返回后在同一个预览位置替换为最终预览。
+
+加载页不是预览 Session：它没有资源 Scope，桥只允许 `context.get`、
+`theme.get`/`theme.changed` 和 `plugin.error`。真正预览的 iframe 仍使用
+`PreviewView` 对应的 Session，因此文件、网络和命令权限不会被加载页继承。
+没有声明 `loading` 的插件保持旧的 Core 加载态行为。
 
 ### Connection PluginView
 
@@ -31,7 +52,10 @@ toolbar.invoke
 - iframe 不直接访问 Tauri API、DOM、文件系统或 Keyring；
 - 所有资源请求由 UI Bridge → native SDK → Host Broker；
 - Core 校验 Session、插件身份、资源 Scope 和消息 Schema；
-- 加载 HTML 本身不授予任何文件/网络权限。
+- 加载 HTML 本身不授予任何文件/网络权限；
+- 声明了 `files.create` 或 `folders.create` 的插件可以在 `plugin.invoke`
+  参数中显式命名当前目录（例如 `root`），Core 才会把该目录作为本次操作的
+  输出根授予；未命名时仍只授予选中项。
 
 ## 面板生命周期
 

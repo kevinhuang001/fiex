@@ -58,10 +58,37 @@ pub struct ActivationConsent {
     pub commands: BTreeSet<String>,
 }
 
-pub fn activation_complete(grant: &PluginGrant, required: &ActivationConsent) -> bool {
+impl ActivationConsent {
+    /// Activation is partial by design: the user may deselect any declared
+    /// capability or target before activating, but may never select something
+    /// the manifest did not request. `networkAll` is only selectable when the
+    /// manifest asked for it, and a target is meaningless without the
+    /// capability that reaches it.
+    pub fn is_subset_of(&self, required: &Self) -> bool {
+        if !self.permissions.is_subset(&required.permissions)
+            || (self.network_all && !required.network_all)
+            || !self.domains.is_subset(&required.domains)
+            || !self.commands.is_subset(&required.commands)
+        {
+            return false;
+        }
+        if (self.network_all || !self.domains.is_empty()) && !self.permissions.contains("network") {
+            return false;
+        }
+        if !self.commands.is_empty() && !self.permissions.contains("commands") {
+            return false;
+        }
+        true
+    }
+}
+
+/// Whether the stored grant reflects the consent the user actually gave.
+/// Declared capabilities that were deselected are not required: activation
+/// stores only the selected subset.
+pub fn activation_complete(grant: &PluginGrant, consent: &ActivationConsent) -> bool {
     grant.approved
-        && required.permissions.is_subset(&grant.granted)
-        && (!required.network_all || grant.network_all)
-        && required.domains.is_subset(&grant.network_domains)
-        && required.commands.is_subset(&grant.commands)
+        && consent.permissions.is_subset(&grant.granted)
+        && (!consent.network_all || grant.network_all)
+        && consent.domains.is_subset(&grant.network_domains)
+        && consent.commands.is_subset(&grant.commands)
 }

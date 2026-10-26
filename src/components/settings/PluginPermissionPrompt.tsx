@@ -2,13 +2,7 @@ import { Check, LoaderCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import { PluginGlyph } from '@/components/plugins/PluginGlyph'
-import type { PluginInfo } from '@/lib/plugins'
-import {
-  activationConsent,
-  commandRisk,
-  permissionHints,
-  permissionLabels,
-} from '@/lib/pluginPermissions'
+import { commandRisk, permissionHints, permissionLabels } from '@/lib/pluginPermissions'
 
 export interface PluginPermissionItem {
   id: string
@@ -18,78 +12,6 @@ export interface PluginPermissionItem {
   value?: string
   /** Shown in red, e.g. a command that is not installed on this machine. */
   warning?: string
-}
-
-const permissionOrder = [
-  'metadata',
-  'folders.read',
-  'folders.create',
-  'folders.delete',
-  'folders.rename',
-  'files.read',
-  'files.write',
-  'files.create',
-  'files.delete',
-  'files.rename',
-  'network',
-  'commands',
-  'hooks',
-]
-const rank = (value: string) => {
-  const index = permissionOrder.indexOf(value)
-  return index === -1 ? permissionOrder.length : index
-}
-
-/** Every declared capability, network host and command becomes its own
- * mobile-style request. The order is stable so the review is predictable. */
-export function activationPromptItems(plugin: PluginInfo): PluginPermissionItem[] {
-  const consent = activationConsent(plugin)
-  const items = [
-    ...[...consent.permissions]
-      .sort((a, b) => rank(a) - rank(b))
-      .map((value) => ({
-        id: `permission:${value}`,
-        kind: 'permission' as const,
-        title: permissionLabels[value] || value,
-        hint: permissionHints[value],
-      })),
-    ...(consent.networkAll
-      ? [
-          {
-            id: 'network:all',
-            kind: 'networkAll' as const,
-            title: '访问全部网络',
-            warning:
-              '危险：插件将可以连接任意主机，而不只是清单中列出的域名。只在你完全信任该插件时选择。',
-          },
-        ]
-      : []),
-    ...consent.domains.map((value) => ({
-      id: `domain:${value}`,
-      kind: 'network' as const,
-      title: '网络域名',
-      value,
-    })),
-    ...consent.commands.map((value) => ({
-      id: `command:${value}`,
-      kind: 'command' as const,
-      title: '外部命令',
-      value,
-      warning: plugin.missingCommands?.includes(value)
-        ? '本地未找到该命令，允许后插件也可能无法工作。'
-        : undefined,
-    })),
-  ]
-  return items.length
-    ? items
-    : [
-        {
-          id: 'activate',
-          kind: 'activate' as const,
-          title: '运行',
-          hint: '此插件未申请受控资源。',
-        },
-      ]
 }
 
 /** Request order for a single permission that was switched on again. */

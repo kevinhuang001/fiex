@@ -32,19 +32,20 @@
 
 所有扩展点都在 `extensions` 下注册，**每插件最多一个贡献**。
 
-| 扩展点         | 形态                                    | Core 固定调用                                        |
-| -------------- | --------------------------------------- | ---------------------------------------------------- |
-| `contextMenus` | `true` 或 `{match}`                     | `contextMenu.resolve` / `contextMenu.execute`        |
-| `decorations`  | `{match?, priority?}`                   | `decorations.resolve`                                |
-| `info`         | `{match?, priority?}`                   | `info.resolve`                                       |
-| `preview`      | `{match?, priority?, maxBytes?, panel}` | `preview.open`                                       |
-| `connections`  | `{title, fields}`                       | `connection.validate/open/create`                    |
-| `vfs`          | `{title, readOnly?}`                    | `vfs.list/stat/read…`                                |
-| `search`       | `{icon?, scope?}`                       | `search.query`                                       |
-| `toolbar`      | `{title, icon?, panel?}`                | `toolbar.invoke`，有 panel 时打开面板                |
-| `themes`       | `{path}`                                | 主题资产加载                                         |
-| `settings`     | `[{id,label,type,…}]`                   | 设置字段；字段 id 是存储 key                         |
-| `hooks`        | `{event, priority?, match?}`            | `hooks.invoke`（合同已固定，生命周期接线未全部完成） |
+| 扩展点         | 形态                                               | Core 固定调用                                 |
+| -------------- | -------------------------------------------------- | --------------------------------------------- |
+| `contextMenus` | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute` |
+| `decorations`  | `{match?, priority?}`                              | `decorations.resolve`                         |
+| `info`         | `{match?, priority?}`                              | `info.resolve`                                |
+| `preview`      | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                |
+| `connections`  | `{title, fields}`                                  | `connection.validate/open/create`             |
+| `vfs`          | `{title, readOnly?}`                               | `vfs.list/stat/read…`                         |
+| `search`       | `{icon?, scope?}`                                  | `search.query`                                |
+| `toolbar`      | `{title, icon?, panel?}`                           | `toolbar.invoke`，有 panel 时打开面板         |
+| `themes`       | `{path}`                                           | 主题资产加载                                  |
+| `settings`     | `[{id,label,type,…}]`                              | 设置字段；字段 id 是存储 key                  |
+| `hooks`        | `{event, priority?, match?}`                       | `hooks.invoke`（`beforeOpen` 可消费打开）     |
+| `ui`           | `{timeoutMs?}`                                     | 面板桥接与单次插件请求的超时预算              |
 
 不再接受：
 
@@ -70,9 +71,17 @@
   "priority": 60,
   "maxBytes": 1048576,
   "match": { "extensions": ["txt"], "kinds": ["file"] },
-  "panel": { "entry": "ui/preview.html", "title": "Text" }
+  "panel": { "entry": "ui/preview.html", "title": "Text" },
+  "loading": { "entry": "ui/loading.html" }
 }
 ```
+
+`loading` 是可选的**加载页**，与 `panel`（预览面板入口）相互独立：
+
+- 声明后，Core 在调用 `preview.open` 前先解析该文档，并直接在 Core 拥有的沙箱 iframe 中打开，而不是先显示 Core 自己的加载/空白预览；`preview.open` 返回合法结果后再切换为最终预览。
+- `loading.entry` 只能是插件包内的相对路径（仅普通路径段，不能是 URL、绝对路径、盘符、`..` 或反斜杠），读取时还会做 canonical 包含检查；文档上限 1 MiB。
+- 加载页是自包含 HTML，不携带预览 Session，不能调用 `plugin.invoke`、文件、网络或命令；只能通过面板桥读取 `context.get`（文件展示名/扩展名）、`theme.get`/`theme.changed` 以及 `plugin.error`。
+- 没有 `loading` 的旧声明保持原行为：Core 显示内置加载态，直到 `preview.open` 返回。
 
 ### Connections
 
@@ -118,6 +127,18 @@
   "match": { "extensions": ["zip"], "kinds": ["file"] }
 }
 ```
+
+### UI timeout
+
+```json
+"ui": { "timeoutMs": 300000 }
+```
+
+`timeoutMs` 表示一次插件 UI 请求（面板握手、`plugin.invoke`、预览列举）允许的
+最长时间，取值 1000–900000，默认 15000。Core 用它设置面板桥接超时，并把该插件
+单次 RPC 的默认截止时间（120000）提高到至少该值（只延长、不缩短），同时通过
+`context.get` 的 `uiTimeoutMs` 字段告诉插件 UI，使插件自己的请求计时器与 Core
+一致。只有确实需要长时间列举/预览的插件（例如压缩包目录）才应调大该值。
 
 ### Themes
 

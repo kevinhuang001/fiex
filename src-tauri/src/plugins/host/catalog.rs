@@ -17,6 +17,9 @@ pub struct PluginInfo {
     pub description: String,
     pub icon: Option<String>,
     pub extensions: Value,
+    /// Explicit `extensions.ui.timeoutMs` budget (already bounded), used by the
+    /// panel bridge and projected to the plugin UI for its own timers.
+    pub ui_timeout_ms: u64,
     pub backend_available: bool,
     pub enabled: bool,
     pub author: Option<PluginAuthor>,
@@ -141,6 +144,7 @@ pub fn catalog() -> Vec<PluginInfo> {
             let active = state.approved && state.enabled;
             let requested = activation_requirements(&manifest).unwrap_or_default();
             let missing_commands = missing_commands(&requested.commands);
+            let ui_timeout_ms = super::manifest::ui_timeout_ms(&manifest.extensions);
             PluginInfo {
                 schema_version: manifest.schema_version,
                 id: manifest.id,
@@ -149,6 +153,7 @@ pub fn catalog() -> Vec<PluginInfo> {
                 description: manifest.description,
                 icon: manifest.icon,
                 extensions: manifest.extensions,
+                ui_timeout_ms,
                 backend_available: backend,
                 enabled: active,
                 author: manifest.author,

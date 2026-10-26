@@ -9,13 +9,14 @@ use std::{
         atomic::{AtomicBool, AtomicU64},
         mpsc, Mutex,
     },
+    time::Duration,
 };
 
 mod actor;
 mod dispatch;
 mod permissions;
 mod tasks;
-mod transport;
+pub(super) mod transport;
 
 pub use tasks::PluginTaskInfo;
 
@@ -67,6 +68,9 @@ pub(super) struct Running {
     initialized: AtomicBool,
     init_lock: Mutex<()>,
     closed: AtomicBool,
+    /// Per-plugin budget from `extensions.ui.timeoutMs`; slow providers such
+    /// as archive listing can exceed the default without a global timeout.
+    request_timeout: Duration,
 }
 
 impl Running {

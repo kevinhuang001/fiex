@@ -20,6 +20,20 @@ export interface PluginContribution {
   icon?: string
   panel?: PluginPanel
 }
+export interface PluginLoadingPage {
+  /** Package-relative entry validated by Core like a panel document. */
+  entry: string
+}
+export interface PluginPreviewContribution {
+  /** New match object; the flat legacy `extensions` key is still accepted. */
+  match?: { extensions?: string[]; mimeTypes?: string[]; kinds?: string[] }
+  extensions?: string[]
+  priority?: number
+  maxBytes?: number
+  panel?: PluginPanel
+  /** Optional document shown while `preview.open` is still running. */
+  loading?: PluginLoadingPage
+}
 export interface PluginInfoContribution {
   extensions?: string[]
   priority?: number
@@ -60,9 +74,13 @@ export interface PluginInfo {
   /** Requested commands that Core cannot resolve on PATH right now. */
   missingCommands: string[]
   backendAvailable: boolean
+  /** Bounded `extensions.ui.timeoutMs` budget negotiated by Core. */
+  uiTimeoutMs: number
   extensions?: PluginExtensions
 }
 export interface PluginExtensions {
+  /** Explicit UI/backend request budget for slow providers. */
+  ui?: { timeoutMs?: number }
   connections?: { title: string; fields: PluginField[] }
   toolbar?: PluginContribution
   contextMenus?: boolean
@@ -73,12 +91,7 @@ export interface PluginExtensions {
     priority?: number
     extensions?: string[]
   }
-  preview?: {
-    extensions: string[]
-    priority?: number
-    maxBytes?: number
-    panel: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
-  }
+  preview?: PluginPreviewContribution
   info?: PluginInfoContribution
 }
 export const PLUGIN_CATEGORIES = [

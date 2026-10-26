@@ -351,6 +351,38 @@ pub fn invoke_prepared(
     Ok(value)
 }
 
+/// A user-initiated open hook or context-menu action may need to create its
+/// result next to the selection ("extract here", "compress here"). Only those
+/// explicit events get the containing folder, and only when the manifest
+/// declares a create capability; every write still passes the capability
+/// check in host dispatch, so a read-only plugin gains nothing.
+fn action_folders(
+    method: &str,
+    directory: Option<&str>,
+    paths: &[PathBuf],
+    declared: &std::collections::BTreeSet<String>,
+) -> Result<Vec<PathBuf>, String> {
+    if !matches!(method, "hooks.invoke" | "contextMenu.execute")
+        || !["files.create", "folders.create"]
+            .iter()
+            .any(|name| declared.contains(*name))
+    {
+        return Ok(Vec::new());
+    }
+    let mut folders = Vec::new();
+    if let Some(folder) = directory.filter(|value| !crate::mounts::handles(value)) {
+        folders.push(crate::plugin_fs_access::canonical_selection(Path::new(
+            folder,
+        ))?);
+    }
+    folders.extend(
+        paths
+            .iter()
+            .filter_map(|path| path.parent().map(Path::to_path_buf)),
+    );
+    Ok(folders)
+}
+
 /// Resources are resolved before provider matching and reused by all calls.
 /// Only a provider with approved content IO can cause remote materialization.
 pub fn resource_scope(
@@ -378,11 +410,32 @@ pub fn resource_scope(
             false
         ))
         .collect::<Vec<_>>());
-    let paths = resources
+    // A lifecycle hook (beforeOpen) receives the operation event, not the
+    // menu-shaped paths payload. Give it the selected file so it can act on the
+    // resource after Core matched it; the value comes from the same snapshot
+    // whose access the scope already grants.
+    if method == "hooks.invoke" && params.get("path").is_none() {
+        if let Some(resource) = resources
+            .first()
+            .filter(|resource| !crate::mounts::handles(&resource.display))
+        {
+            params["path"] = json!(
+                crate::plugin_fs_access::canonical_selection(&resource.local)?
+                    .to_string_lossy()
+                    .into_owned()
+            );
+        }
+    }
+    let mut paths = resources
         .iter()
         .filter(|r| !crate::mounts::handles(&r.display))
         .map(|r| crate::plugin_fs_access::canonical_selection(&r.local))
         .collect::<Result<Vec<_>, _>>()?;
+    for folder in action_folders(method, directory, &paths, policy.declared())? {
+        if !paths.contains(&folder) {
+            paths.push(folder);
+        }
+    }
     if policy.allowed(crate::plugin_permission_policy::Capability::Metadata) {
         for (target, resource) in params["targets"]
             .as_array_mut()
@@ -516,6 +569,45 @@ mod tests {
             assert!(operation.clone().authorize_method(method).is_err());
         }
         assert!(operation.authorize_method("host.fs.stat").is_ok());
+    }
+
+    #[test]
+    fn explicit_open_actions_may_create_results_next_to_the_selection() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("selected.zip");
+        std::fs::write(&file, b"x").unwrap();
+        let file = crate::plugin_fs_access::canonical_selection(&file).unwrap();
+        let folder = crate::plugin_fs_access::canonical_selection(dir.path()).unwrap();
+        let declared = std::collections::BTreeSet::from([
+            "files.create".to_string(),
+            "folders.create".to_string(),
+        ]);
+        assert_eq!(
+            action_folders("hooks.invoke", None, std::slice::from_ref(&file), &declared).unwrap(),
+            vec![folder.clone()]
+        );
+        let menu = action_folders(
+            "contextMenu.execute",
+            Some(dir.path().to_str().unwrap()),
+            std::slice::from_ref(&file),
+            &declared,
+        )
+        .unwrap();
+        assert!(menu.contains(&folder));
+        for (method, declared) in [
+            (
+                "hooks.invoke",
+                std::collections::BTreeSet::from(["files.read".to_string()]),
+            ),
+            ("preview.open", declared.clone()),
+            ("contextMenu.resolve", declared.clone()),
+        ] {
+            assert!(
+                action_folders(method, None, std::slice::from_ref(&file), &declared)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

@@ -12,18 +12,29 @@ use std::{
     time::Duration,
 };
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+/// Identity and budgets captured when a resident plugin process starts.
+pub(in crate::plugin_host::process) struct RunningInit {
+    pub(in crate::plugin_host::process) plugin_id: String,
+    pub(in crate::plugin_host::process) base_owner: String,
+    pub(in crate::plugin_host::process) declared: BTreeSet<String>,
+    pub(in crate::plugin_host::process) commands: BTreeSet<String>,
+    pub(in crate::plugin_host::process) request_timeout: Duration,
+}
 
 impl Running {
     pub(in crate::plugin_host::process) fn start(
-        plugin_id: String,
-        base_owner: String,
-        declared: BTreeSet<String>,
-        commands: BTreeSet<String>,
+        init: RunningInit,
         child: crate::plugin_sandbox::SandboxChild,
         stdin: Box<dyn Write + Send>,
         stdout: BufReader<Box<dyn Read + Send>>,
     ) -> Arc<Self> {
+        let RunningInit {
+            plugin_id,
+            base_owner,
+            declared,
+            commands,
+            request_timeout,
+        } = init;
         let running = Arc::new(Self {
             plugin_id,
             base_owner,
@@ -39,6 +50,7 @@ impl Running {
             initialized: AtomicBool::new(false),
             init_lock: Mutex::new(()),
             closed: AtomicBool::new(false),
+            request_timeout,
         });
         let reader_running = Arc::clone(&running);
         thread::Builder::new()
@@ -203,7 +215,7 @@ impl Running {
         let result = match receiver.recv_timeout(if method == "fs.writeFile" {
             Duration::from_secs(86_520)
         } else {
-            REQUEST_TIMEOUT
+            self.request_timeout
         }) {
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => {

@@ -2,8 +2,83 @@ use super::store::effective;
 use super::*;
 use std::collections::BTreeSet;
 #[test]
-fn activation_requires_every_capability_and_target() {
+fn activation_consent_can_only_narrow_the_declaration() {
     let required = ActivationConsent {
+        permissions: [
+            "files.read".into(),
+            "files.write".into(),
+            "commands".into(),
+            "network".into(),
+        ]
+        .into(),
+        network_all: false,
+        commands: ["git".into(), "make".into()].into(),
+        domains: ["example.com".into(), "api.example.com".into()].into(),
+    };
+    // Consent for everything and consent for a subset (including nothing) are
+    // both valid: activation is partial.
+    assert!(required.is_subset_of(&required));
+    let partial = ActivationConsent {
+        permissions: ["files.read".into(), "network".into()].into(),
+        network_all: false,
+        domains: ["api.example.com".into()].into(),
+        commands: BTreeSet::new(),
+    };
+    assert!(partial.is_subset_of(&required));
+    assert!(ActivationConsent::default().is_subset_of(&required));
+
+    let mut extra = partial.clone();
+    extra.permissions.insert("files.delete".into());
+    assert!(!extra.is_subset_of(&required));
+    let mut extra = partial.clone();
+    extra.domains.insert("evil.example.com".into());
+    assert!(!extra.is_subset_of(&required));
+    let mut extra = partial.clone();
+    extra.commands.insert("curl".into());
+    assert!(!extra.is_subset_of(&required));
+
+    // Targets cannot be separated from the capability that reaches them.
+    let mut orphan_domain = partial.clone();
+    orphan_domain.permissions = ["files.read".to_string()].into();
+    assert!(!orphan_domain.is_subset_of(&required));
+    let mut orphan_command = partial.clone();
+    orphan_command.commands = ["git".to_string()].into();
+    assert!(!orphan_command.is_subset_of(&required));
+
+    // `networkAll` is only selectable when the manifest requested it.
+    let mut network_all = partial.clone();
+    network_all.network_all = true;
+    assert!(!network_all.is_subset_of(&required));
+    let requested_all = ActivationConsent {
+        permissions: ["network".into()].into(),
+        network_all: true,
+        ..Default::default()
+    };
+    let mut selected_all = ActivationConsent {
+        permissions: ["network".into()].into(),
+        network_all: true,
+        ..Default::default()
+    };
+    assert!(selected_all.is_subset_of(&requested_all));
+    selected_all.network_all = false;
+    assert!(selected_all.is_subset_of(&requested_all));
+}
+
+#[test]
+fn activation_complete_tracks_the_selected_subset() {
+    let required = ActivationConsent {
+        permissions: [
+            "files.read".into(),
+            "files.write".into(),
+            "commands".into(),
+            "network".into(),
+        ]
+        .into(),
+        network_all: false,
+        commands: ["tool".into()].into(),
+        domains: ["example.com".into()].into(),
+    };
+    let consent = ActivationConsent {
         permissions: ["files.read".into(), "commands".into(), "network".into()].into(),
         network_all: false,
         commands: ["tool".into()].into(),
@@ -11,15 +86,20 @@ fn activation_requires_every_capability_and_target() {
     };
     let mut grant = PluginGrant {
         approved: true,
-        granted: required.permissions.clone(),
+        granted: ["files.read".to_string()].into(),
         ..Default::default()
     };
+    // Only the selected items matter; `files.write` was deselected and is not
+    // required for activation to be complete.
+    assert!(!activation_complete(&grant, &consent));
+    grant.granted = consent.permissions.clone();
+    assert!(!activation_complete(&grant, &consent));
+    grant.commands = consent.commands.clone();
+    grant.network_domains = consent.domains.clone();
+    assert!(activation_complete(&grant, &consent));
     assert!(!activation_complete(&grant, &required));
-    grant.commands = required.commands.clone();
-    grant.network_domains = required.domains.clone();
-    assert!(activation_complete(&grant, &required));
     grant.granted.remove("files.read");
-    assert!(!activation_complete(&grant, &required));
+    assert!(!activation_complete(&grant, &consent));
 }
 
 fn declared(values: &[&str]) -> BTreeSet<String> {

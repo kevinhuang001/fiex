@@ -158,7 +158,9 @@
   position: relative;
 }
 .context-menu .context-submenu-wrap > .context-submenu .context-submenu {
-  left: 100%;
+  /* The parent submenu's 5px padding and 1px border sit between its content
+     edge and outer edge; clear them before adding the 4px panel gap. */
+  left: calc(100% + 10px);
   top: 0;
   bottom: auto;
   z-index: 100;

@@ -106,6 +106,8 @@ pub fn run() {
             plugin_panel_html,
             preview_open,
             preview_candidates,
+            preview_loading,
+            preview_loading_asset,
             ssh::ssh_open,
             ssh::local_terminal_open,
             ssh::detect_shells,

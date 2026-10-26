@@ -212,6 +212,7 @@ export function usePanelBridge({
                 selectionPaths: current.selection,
                 panelId: current.panelId,
                 panelTitle: current.title,
+                uiTimeoutMs: current.timeoutMs ?? 15000,
                 ...(current.source ? { source: current.source } : {}),
                 ...(current.preview ? { preview: current.preview } : {}),
               }
@@ -365,10 +366,17 @@ export function usePanelBridge({
                 method: p.method,
                 params: baseParams,
                 directory: current.directory,
+                // The current folder is a candidate permission, not a grant:
+                // operationPaths only returns paths the plugin names in this
+                // call. Only a create-capable plugin can turn it into an output
+                // root, and it must name it explicitly.
                 selectedPaths: operationPaths(baseParams, [
                   ...current.selection,
                   ...chosenPaths,
-                  ...(current.selection.length || chosenPaths.size ? [] : [current.directory]),
+                  ...((current.selection.length === 0 && chosenPaths.size === 0) ||
+                  current.allowCreate
+                    ? [current.directory]
+                    : []),
                 ]),
               })
             }

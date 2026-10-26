@@ -55,6 +55,79 @@ impl PluginHost {
             .find(|(m, _)| m.id == id)
             .is_some_and(|(m, d)| executable(&m, &d).is_ok())
     }
+    fn spawn_instance(
+        plugin_id: &str,
+        manifest: &crate::plugin_host::PluginManifest,
+        directory: &std::path::Path,
+        declared: std::collections::BTreeSet<String>,
+    ) -> Result<Arc<Instance>, String> {
+        let state = crate::plugin_permissions::status(plugin_id, &declared)?;
+        if !state.approved || !state.enabled {
+            return Err("plugin is disabled or installation consent is pending".into());
+        }
+        crate::plugin_signing::verify_installed(manifest, directory)?;
+        let path = executable(manifest, directory)?;
+        let policy = crate::plugin_sandbox::Policy::new(&path, directory, &state, &declared);
+        let mut sandbox = crate::plugin_sandbox::spawn(&policy)?;
+        let stdin = std::mem::replace(
+            &mut sandbox.stdin,
+            Box::new(std::io::sink()) as Box<dyn Write + Send>,
+        );
+        let stdout = std::mem::replace(
+            &mut sandbox.stdout,
+            BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
+        );
+        let kill = sandbox.kill_handle();
+        let commands = manifest
+            .permissions
+            .commands
+            .allow
+            .iter()
+            .map(|command| command.to_ascii_lowercase())
+            .collect();
+        let running = Running::start(
+            super::rpc::transport::RunningInit {
+                plugin_id: plugin_id.to_string(),
+                base_owner: format!(
+                    "{plugin_id}:{}:{}",
+                    std::process::id(),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_err(|e| e.to_string())?
+                        .as_nanos()
+                ),
+                declared,
+                commands,
+                request_timeout: std::time::Duration::from_millis(
+                    crate::plugin_host::request_timeout_ms(&manifest.extensions),
+                ),
+            },
+            sandbox,
+            stdin,
+            stdout,
+        );
+        Ok(Arc::new(Instance { running, kill }))
+    }
+    /// Start the resident backend without waiting for the first request.
+    /// Declarative plugins (themes) and packages without a native entrypoint
+    /// never reach this path; callers skip them.
+    pub fn start(&self, plugin_id: &str) -> Result<(), String> {
+        let mut children = self
+            .children
+            .lock()
+            .map_err(|_| "plugin host lock poisoned")?;
+        if children.contains_key(plugin_id) {
+            return Ok(());
+        }
+        let (manifest, directory) = discover()
+            .into_iter()
+            .find(|(manifest, _)| manifest.id == plugin_id)
+            .ok_or("plugin not installed")?;
+        let declared = declared(&manifest)?;
+        let instance = Self::spawn_instance(plugin_id, &manifest, &directory, declared)?;
+        children.insert(plugin_id.to_string(), instance);
+        Ok(())
+    }
     pub fn invoke(&self, plugin_id: &str, method: &str, params: Value) -> Result<Value, String> {
         self.invoke_scoped(plugin_id, method, params, None)
     }
@@ -216,47 +289,7 @@ impl PluginHost {
         let instance = if let Some(instance) = guard.get(plugin_id) {
             instance.clone()
         } else {
-            crate::plugin_signing::verify_installed(&manifest, &dir)?;
-            let state = crate::plugin_permissions::status(plugin_id, &declared)?;
-            if !state.approved || !state.enabled {
-                return Err("plugin is disabled or installation consent is pending".into());
-            }
-            let path = executable(&manifest, &dir)?;
-            let policy = crate::plugin_sandbox::Policy::new(&path, &dir, &state, &declared);
-            let mut sandbox = crate::plugin_sandbox::spawn(&policy)?;
-            let stdin = std::mem::replace(
-                &mut sandbox.stdin,
-                Box::new(std::io::sink()) as Box<dyn Write + Send>,
-            );
-            let stdout = std::mem::replace(
-                &mut sandbox.stdout,
-                BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
-            );
-            let kill = sandbox.kill_handle();
-            let commands = manifest
-                .permissions
-                .commands
-                .allow
-                .iter()
-                .map(|command| command.to_ascii_lowercase())
-                .collect();
-            let running = Running::start(
-                plugin_id.to_string(),
-                format!(
-                    "{plugin_id}:{}:{}",
-                    std::process::id(),
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_err(|e| e.to_string())?
-                        .as_nanos()
-                ),
-                declared,
-                commands,
-                sandbox,
-                stdin,
-                stdout,
-            );
-            let instance = Arc::new(Instance { running, kill });
+            let instance = Self::spawn_instance(plugin_id, &manifest, &dir, declared)?;
             guard.insert(plugin_id.to_string(), instance.clone());
             instance
         };

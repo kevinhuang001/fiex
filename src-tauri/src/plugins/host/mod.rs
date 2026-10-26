@@ -7,12 +7,16 @@ mod permissions;
 mod process;
 
 pub use catalog::{catalog, exists, installed_manifests, themes, PluginInfo};
+pub(crate) use manifest::preview_loading_entry;
 pub use manifest::{
-    activation_requirements, declared_permissions, valid_id, CommandsPermission, FilePermission,
-    FolderPermission, FolderReadPermission, HooksPermission, NetworkPermission, PluginAuthor,
-    PluginManifest, PluginPermissions, PluginPublisher, PluginRuntime,
+    activation_requirements, declared_permissions, request_timeout_ms, ui_timeout_ms, valid_id,
+    CommandsPermission, FilePermission, FolderPermission, FolderReadPermission, HooksPermission,
+    NetworkPermission, PluginAuthor, PluginManifest, PluginPermissions, PluginPublisher,
+    PluginRuntime,
 };
-pub use panel::{panel_asset, panel_html, plugin_view_asset};
+pub use panel::{
+    panel_asset, panel_html, plugin_view_asset, preview_loading, preview_loading_asset,
+};
 pub use permissions::{
     activate, approve_install, declared_permissions_for, network_domains, permission_allowed,
     set_command, set_enabled, set_network_all, set_network_domain, set_permission,
