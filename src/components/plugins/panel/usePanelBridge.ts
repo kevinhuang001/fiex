@@ -1,3 +1,5 @@
+import { t } from '@/i18n'
+import { getLocale, subscribeLocale } from '@/i18n'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
@@ -120,7 +122,7 @@ export function usePanelBridge({
     return () => {
       live = false
       dispose.current?.()
-      for (const id of taskIds.current) finishActivity(id, '插件面板已释放')
+      for (const id of taskIds.current) finishActivity(id, t('插件面板已释放'))
     }
   }, [])
   useEffect(() => {
@@ -141,6 +143,8 @@ export function usePanelBridge({
     const connect = () => {
       try {
         dispose.current = attachFiexPanel({
+          getLocale,
+          subscribeLocale,
           pluginId: current.pluginId,
           sessionId: crypto.randomUUID(),
           origin: 'null',
@@ -209,6 +213,7 @@ export function usePanelBridge({
                         path: current.directory,
                       })
                     : current.directory,
+                locale: getLocale(),
                 selectionPaths: current.selection,
                 panelId: current.panelId,
                 panelTitle: current.title,

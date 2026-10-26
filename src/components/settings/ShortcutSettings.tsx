@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import {
   SHORTCUT_ACTIONS,
   SHORTCUT_GROUPS,
@@ -42,7 +43,11 @@ export function ShortcutSettings({
     update({ shortcuts: next })
     setNote(
       conflict
-        ? `已从「${SHORTCUT_LABELS[conflict]}」移除 ${formatShortcut(combo, prefs.shortcutStyle)}。`
+        ? t(
+            '已从「{0}」移除 {1}。',
+            SHORTCUT_LABELS[conflict],
+            formatShortcut(combo, prefs.shortcutStyle),
+          )
         : '',
     )
   }
@@ -103,7 +108,7 @@ export function ShortcutSettings({
             <span className="settings-row-icon" style={{ background: '#8b5cf6' }}>
               <Keyboard size={15} />
             </span>
-            快捷键风格
+            {t('快捷键风格')}
           </div>
           <div className="settings-row-control">
             <div className="segmented">
@@ -144,21 +149,21 @@ export function ShortcutSettings({
                         key={index}
                       >
                         <button
-                          aria-label={`设置 ${SHORTCUT_LABELS[action]} 快捷键`}
+                          aria-label={t('设置 {0} 快捷键', SHORTCUT_LABELS[action])}
                           onClick={() => {
                             setRecording({ action, index })
                             setNote('')
                           }}
                         >
                           {activeRecording
-                            ? '按下快捷键…'
+                            ? t('按下快捷键…')
                             : combo
                               ? formatShortcut(combo, prefs.shortcutStyle)
-                              : '未设置'}
+                              : t('未设置')}
                         </button>
                         <button
                           className="shortcut-remove"
-                          aria-label={`移除 ${SHORTCUT_LABELS[action]} 快捷键`}
+                          aria-label={t('移除 {0} 快捷键', SHORTCUT_LABELS[action])}
                           onClick={() => remove(action, index)}
                         >
                           <X size={10} />
@@ -168,13 +173,13 @@ export function ShortcutSettings({
                   })}
                   {adding && (
                     <span className="shortcut-pill recording">
-                      <button>按下快捷键…</button>
+                      <button>{t('按下快捷键…')}</button>
                     </span>
                   )}
                   <button
                     className="shortcut-add"
-                    title="添加快捷键"
-                    aria-label={`添加 ${SHORTCUT_LABELS[action]} 快捷键`}
+                    title={t('添加快捷键')}
+                    aria-label={t('添加 {0} 快捷键', SHORTCUT_LABELS[action])}
                     onClick={() => {
                       setRecording({ action, index: bindings.length })
                       setNote('')
@@ -196,7 +201,8 @@ export function ShortcutSettings({
             setNote('')
           }}
         >
-          <RotateCcw size={11} /> 恢复 {styleName} 预设
+          <RotateCcw size={11} /> {t('恢复')}
+          {styleName} {t('预设')}
         </button>
       </div>
     </>

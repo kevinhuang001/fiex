@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Explorer } from '@/hooks/useExplorer'
 import { call } from '@/lib/api'
 import { basename } from '@/lib/files'
@@ -73,18 +74,18 @@ export function useWorkspaceActions({
     }
     if (additions.length) {
       update({ favorites: [...prefs.favorites, ...additions] })
-      notify(`已收藏 ${additions.length} 个文件夹`)
+      notify(t('已收藏 {0} 个文件夹', additions.length))
     } else if (files) {
-      notify('只能把文件夹加入收藏')
+      notify(t('只能把文件夹加入收藏'))
     } else {
-      notify('这些文件夹已在收藏中')
+      notify(t('这些文件夹已在收藏中'))
     }
   }
   const favorite = () => {
     const path = first?.isDir ? first.path : x.path
     if (prefs.favorites.some((l) => l.path === path)) {
       update({ favorites: prefs.favorites.filter((l) => l.path !== path) })
-      notify('已移除收藏')
+      notify(t('已移除收藏'))
     } else {
       update({
         favorites: [
@@ -103,7 +104,7 @@ export function useWorkspaceActions({
           },
         ],
       })
-      notify('已添加到收藏')
+      notify(t('已添加到收藏'))
     }
   }
   return {

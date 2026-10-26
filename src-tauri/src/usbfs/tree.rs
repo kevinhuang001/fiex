@@ -159,7 +159,7 @@ fn apple_list(device: &str, path: &str, kind: FsKind) -> Result<Vec<UsbEntry>, S
                 })
                 .collect())
         }
-        _ => Err("不是 Apple 文件系统".into()),
+        _ => Err(crate::i18n::t("不是 Apple 文件系统").into()),
     }
 }
 
@@ -176,13 +176,13 @@ fn apple_read(device: &str, path: &str, kind: FsKind) -> Result<Vec<u8>, String>
             .map_err(|error| error.to_string())?
             .read_file(&path)
             .map_err(|error| error.to_string()),
-        _ => Err("不是 Apple 文件系统".into()),
+        _ => Err(crate::i18n::t("不是 Apple 文件系统").into()),
     }
 }
 
 pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, String> {
     if !Path::new(device).exists() {
-        return Err("设备不存在".into());
+        return Err(crate::i18n::t("设备不存在").into());
     }
     match kind {
         FsKind::Ntfs => ntfs_list(device, path),
@@ -336,7 +336,7 @@ fn copy_route(source: &Route, target: &Path) -> Result<(), String> {
         }
         Ok(())
     } else {
-        Err("文件不存在".into())
+        Err(crate::i18n::t("文件不存在").into())
     }
 }
 
@@ -353,14 +353,14 @@ pub fn copy_to_local(
         .map(|(_, name)| name)
         .unwrap_or(source.rel.as_str());
     if name.is_empty() {
-        return Err("不能复制整个虚拟卷根目录".into());
+        return Err(crate::i18n::t("不能复制整个虚拟卷根目录").into());
     }
     let target = if keep_both {
         local_unique(&destination.join(name))
     } else {
         let target = destination.join(name);
         if target.exists() {
-            return Err("目标位置已有同名项目".into());
+            return Err(crate::i18n::t("目标位置已有同名项目").into());
         }
         target
     };

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Copy, Minus, Square, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -41,20 +42,20 @@ export function WindowControls({
   }, [])
   return (
     <div className="window-controls" data-tauri-drag-region="false">
-      <button title="最小化" aria-label="最小化窗口" onClick={() => control('minimize')}>
+      <button title={t('最小化')} aria-label={t('最小化窗口')} onClick={() => control('minimize')}>
         <Minus size={15} strokeWidth={1.6} />
       </button>
       <button
-        title={maximized ? '向下还原' : '最大化'}
-        aria-label={maximized ? '还原窗口' : '最大化窗口'}
+        title={maximized ? t('向下还原') : t('最大化')}
+        aria-label={maximized ? t('还原窗口') : t('最大化窗口')}
         onClick={() => control('toggleMaximize')}
       >
         {maximized ? <Copy size={13} strokeWidth={1.6} /> : <Square size={12} strokeWidth={1.6} />}
       </button>
       <button
         className="window-close"
-        title="关闭窗口"
-        aria-label="关闭窗口"
+        title={t('关闭窗口')}
+        aria-label={t('关闭窗口')}
         onClick={() => control('close')}
       >
         <X size={16} strokeWidth={1.6} />

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Channel } from '@tauri-apps/api/core'
 import { Terminal } from '@xterm/xterm'
@@ -50,8 +51,10 @@ function attachDemoShell(terminal: { write: (value: string) => void }, cwd?: str
   const prompt = '\x1b[32muser@fiex\x1b[0m:\x1b[34m~\x1b[0m$ '
   const write = (value: string) => terminal.write(value)
   write(
-    '\x1b[1;36mFiex 终端\x1b[0m\r\n' +
-      '\x1b[90mWeb demo shell — 桌面版会在这里启动真实本地 shell。输入 help 查看命令。\x1b[0m\r\n\r\n' +
+    t('\u001b[1;36mFiex 终端\u001b[0m\r\n') +
+      t(
+        '\u001b[90mWeb demo shell — 桌面版会在这里启动真实本地 shell。输入 help 查看命令。\u001b[0m\r\n\r\n',
+      ) +
       prompt,
   )
   const run = (command: string) => {
@@ -61,7 +64,7 @@ function attachDemoShell(terminal: { write: (value: string) => void }, cwd?: str
       case '':
         break
       case 'help':
-        write('\r\n可用命令：ls  pwd  echo  whoami  date  clear  help\r\n')
+        write(t('\r\n可用命令：ls  pwd  echo  whoami  date  clear  help\r\n'))
         break
       case 'ls':
         write('\r\nDocuments  Downloads  Music  Pictures  README.md  package.json\r\n')
@@ -82,7 +85,7 @@ function attachDemoShell(terminal: { write: (value: string) => void }, cwd?: str
         write('\x1b[2J\x1b[H')
         return
       default:
-        write(`\r\ncommand not found: ${name}（这是 Web 演示终端）\r\n`)
+        write(t('\r\ncommand not found: {0}（这是 Web 演示终端）\r\n', name))
     }
   }
   const disposable = (
@@ -238,7 +241,7 @@ export function TerminalView({
       if (event.type === 'data' && event.data) {
         terminal.write(new Uint8Array(event.data))
       } else if (event.type === 'error') {
-        setError(event.message || 'SSH 会话失败')
+        setError(event.message || t('SSH 会话失败'))
         setStatus('error')
       } else if (event.type === 'exit') {
         setStatus('closed')
@@ -289,13 +292,16 @@ export function TerminalView({
           {status === 'connecting' ? (
             <>
               <LoaderCircle size={14} className="spin" />
-              <span>正在连接 {name}…</span>
+              <span>
+                {t('正在连接')}
+                {name}…
+              </span>
             </>
           ) : (
             <>
-              <span>{status === 'error' ? error : 'SSH 会话已结束'}</span>
+              <span>{status === 'error' ? error : t('SSH 会话已结束')}</span>
               <button type="button" onClick={() => setAttempt((value) => value + 1)}>
-                <RotateCw size={13} /> 重新连接
+                <RotateCw size={13} /> {t('重新连接')}
               </button>
             </>
           )}

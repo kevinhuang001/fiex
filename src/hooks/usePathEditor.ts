@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { pathCrumbs } from '@/lib/files'
 import type { Preferences } from '@/lib/types'
@@ -46,7 +47,7 @@ export function usePathEditor({
   try {
     crumbs = pathCrumbs(x.path, displayName)
   } catch {
-    crumbs = [{ name: '无效地址', path: x.path }]
+    crumbs = [{ name: t('无效地址'), path: x.path }]
   }
   return {
     editingPath,

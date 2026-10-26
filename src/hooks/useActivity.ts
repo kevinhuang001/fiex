@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Channel } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
 import { demo, native } from '@/lib/api'
@@ -54,7 +55,7 @@ function load(): ActivityItem[] {
         status: item.status === 'running' ? 'error' : (item.status as ActivityStatus),
         startedAt: Number(item.startedAt) || Date.now(),
         finishedAt: item.finishedAt ? Number(item.finishedAt) : undefined,
-        detail: item.status === 'running' ? '应用已关闭' : item.detail,
+        detail: item.status === 'running' ? t('应用已关闭') : item.detail,
         indeterminate: Boolean(item.indeterminate),
       }))
   } catch {
@@ -159,7 +160,9 @@ export function cancelActivity(id: string) {
   cancellers.get(id)?.()
   cancellers.delete(id)
   items = items.map((item) =>
-    item.id === id ? { ...item, status: 'error', finishedAt: Date.now(), detail: '已取消' } : item,
+    item.id === id
+      ? { ...item, status: 'error', finishedAt: Date.now(), detail: t('已取消') }
+      : item,
   )
   persist()
   emit()
@@ -173,7 +176,7 @@ export function finishActivity(id: string, error?: string, detail?: string) {
   cancellers.delete(id)
   items = items.map((item) =>
     item.id === id
-      ? item.status === 'error' && item.detail === '已取消'
+      ? item.status === 'error' && item.detail === t('已取消')
         ? item
         : {
             ...item,

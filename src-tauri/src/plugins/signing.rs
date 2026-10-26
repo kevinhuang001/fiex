@@ -263,6 +263,7 @@ mod tests {
             hash_file(&temp.path().join("payload.bin")).unwrap(),
         )]);
         let manifest = PluginManifest {
+            locales: Default::default(),
             schema_version: 2,
             id: "com.example.test".into(),
             name: "Test".into(),

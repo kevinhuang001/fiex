@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { fileVisual } from '@/lib/fileIcons'
 import type { SidebarProps, SetSidebarMenu } from './types'
 
@@ -28,7 +29,7 @@ export function Favorites({
   return (
     <div className="favorites-section" data-bookmark-drop="true">
       <div className="sidebar-section-title">
-        <span className="sidebar-label">收藏</span>
+        <span className="sidebar-label">{t('收藏')}</span>
       </div>
       {prefs.favorites.length ? (
         prefs.favorites.map((location) => (
@@ -52,7 +53,7 @@ export function Favorites({
           </div>
         ))
       ) : (
-        <p className="sidebar-hint">将文件夹拖到这里收藏</p>
+        <p className="sidebar-hint">{t('将文件夹拖到这里收藏')}</p>
       )}
     </div>
   )

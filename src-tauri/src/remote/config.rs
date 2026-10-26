@@ -20,7 +20,7 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
         if conn.kind == BUILTIN_SSH {
             return Ok(plugin_id);
         }
-        return Err("内置连接类型不支持".into());
+        return Err(crate::i18n::t("内置连接类型不支持").into());
     }
     let plugin = crate::plugin_host::catalog()
         .into_iter()
@@ -32,7 +32,7 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
     let declared = plugin.declared_permissions.iter().cloned().collect();
     crate::plugin_permission_policy::PermissionPolicy::new(&plugin_id, &declared)
         .require_all()
-        .map_err(|_| "插件权限未授权".to_string())?;
+        .map_err(|_| crate::i18n::t("插件权限未授权").to_string())?;
     Ok(plugin_id)
 }
 
@@ -64,7 +64,8 @@ pub(crate) fn declared_connection_fields(
     kind: &str,
 ) -> Result<Vec<(String, String)>, String> {
     if plugin_id == BUILTIN_PLUGIN_ID {
-        return builtin_connection_fields(kind).ok_or_else(|| "内置连接类型不支持".to_string());
+        return builtin_connection_fields(kind)
+            .ok_or_else(|| crate::i18n::t("内置连接类型不支持").to_string());
     }
     let plugin = crate::plugin_host::catalog()
         .into_iter()
@@ -93,10 +94,10 @@ pub(crate) fn declared_connection_fields(
             .and_then(serde_json::Value::as_str)
             .ok_or("连接字段缺少类型")?;
         if key.is_empty() || key.len() > 80 || fields.iter().any(|(id, _)| id == key) {
-            return Err("连接字段 ID 无效或重复".into());
+            return Err(crate::i18n::t("连接字段 ID 无效或重复").into());
         }
         if !matches!(ty, "text" | "url" | "number" | "checkbox" | "secret") {
-            return Err("连接字段类型不支持".into());
+            return Err(crate::i18n::t("连接字段类型不支持").into());
         }
         fields.push((key.to_string(), ty.to_string()));
     }

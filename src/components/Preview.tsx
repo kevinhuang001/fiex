@@ -1,3 +1,5 @@
+import type { ResolvedPreview, PluginLoadingPage } from './preview/types'
+import { t, getLocale } from '@/i18n'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
@@ -24,36 +26,6 @@ import {
 import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { Entry } from '@/lib/types'
 const PdfPreview = lazy(() => import('./PdfPreview'))
-
-interface ResolvedPreview {
-  providerId: string
-  provider: string
-  priority: number
-  view: {
-    kind: 'html' | 'text' | 'image' | 'media' | 'pdf' | 'fallback'
-    html?: string
-    text?: string
-    truncated?: boolean
-    path?: string
-    name?: string
-    mime?: string
-    media?: 'video' | 'audio'
-    message?: string
-    sessionId?: string
-    pluginId?: string
-    contributionId?: string
-    timeoutMs?: number
-    context?: unknown
-  }
-}
-
-interface PluginLoadingPage {
-  pluginId: string
-  /** Bridge-only session for the loading document; Core has no preview session yet. */
-  sessionId: string
-  html?: string
-  src?: string
-}
 
 export function Preview({
   entry,
@@ -105,7 +77,7 @@ export function Preview({
         )
         setCandidates(allowed)
         setProviderId(allowed[0]?.id ?? null)
-        if (!allowed.length) setError('没有可用的预览方式')
+        if (!allowed.length) setError(t('没有可用的预览方式'))
         setReadyToShow(true)
       })
       .catch((cause) => {
@@ -209,7 +181,7 @@ export function Preview({
       entry && view?.kind === 'text'
         ? highlightCode(view.text || '', entry.extension, entry.name)
         : null,
-    [entry, view?.kind, view?.text],
+    [entry, view?.kind, view?.text, getLocale()],
   )
   const fit = useMemo(() => {
     if (!media || !media.width || !media.height) return null
@@ -220,13 +192,13 @@ export function Preview({
       width: Math.max(320, Math.round(media.width * scale)),
       height: Math.round(media.height * scale),
     }
-  }, [media])
+  }, [media, getLocale()])
   const current = candidates.find(
     (candidate) => candidate.id === (resolved?.providerId || providerId),
   )
   const provider = resolved?.provider || current?.provider || 'Fiex'
   const fromPlugin = pluginPreviewId(resolved?.providerId || providerId) !== null
-  const providerLabel = fromPlugin ? provider : 'Fiex 内置'
+  const providerLabel = fromPlugin ? provider : t('Fiex 内置')
   const activePluginId = pluginPreviewId(providerId)
   const declaresLoading = Boolean(
     activePluginId &&
@@ -247,7 +219,7 @@ export function Preview({
     <Modal
       open={!!entry && readyToShow}
       onClose={onClose}
-      title={entry?.name || '快速查看'}
+      title={entry?.name || t('快速查看')}
       wide
       className={`preview-modal ${
         pluginSheet
@@ -287,7 +259,7 @@ export function Preview({
               />
             ) : loading && !resolved ? (
               declaresLoading ? null : (
-                <p>正在读取…</p>
+                <p>{t('正在读取…')}</p>
               )
             ) : view?.kind === 'html' && view.html ? (
               <>
@@ -324,9 +296,9 @@ export function Preview({
                 {highlighted ? (
                   <code className="hljs" dangerouslySetInnerHTML={{ __html: highlighted }} />
                 ) : (
-                  view.text || '（空文件）'
+                  view.text || t('（空文件）')
                 )}
-                {view.truncated && '\n\n…仅预览前 256 KiB'}
+                {view.truncated && t('\n\n…仅预览前 256 KiB')}
               </pre>
             ) : view?.kind === 'image' ? (
               <img
@@ -338,7 +310,7 @@ export function Preview({
                     height: event.currentTarget.naturalHeight,
                   })
                 }
-                onError={() => setError('此图片格式无法预览，可用默认应用打开。')}
+                onError={() => setError(t('此图片格式无法预览，可用默认应用打开。'))}
               />
             ) : view?.kind === 'media' && view.media === 'video' ? (
               <video
@@ -351,7 +323,7 @@ export function Preview({
                     height: event.currentTarget.videoHeight,
                   })
                 }
-                onError={() => setError('系统不支持此视频编码，可用默认应用打开。')}
+                onError={() => setError(t('系统不支持此视频编码，可用默认应用打开。'))}
               />
             ) : view?.kind === 'media' ? (
               <div className="preview-fallback">
@@ -360,11 +332,11 @@ export function Preview({
                   controls
                   autoPlay
                   src={fileSource}
-                  onError={() => setError('系统不支持此音频编码，可用默认应用打开。')}
+                  onError={() => setError(t('系统不支持此音频编码，可用默认应用打开。'))}
                 />
               </div>
             ) : view?.kind === 'pdf' && fileSource ? (
-              <Suspense fallback={<p>正在加载 PDF…</p>}>
+              <Suspense fallback={<p>{t('正在加载 PDF…')}</p>}>
                 <PdfPreview url={fileSource} />
               </Suspense>
             ) : (
@@ -376,14 +348,14 @@ export function Preview({
             )}
           </div>
           <footer className="preview-footer">
-            <Button variant="ghost" size="icon" title="上一个" onClick={() => onNavigate(-1)}>
+            <Button variant="ghost" size="icon" title={t('上一个')} onClick={() => onNavigate(-1)}>
               <ChevronLeft />
             </Button>
-            <Button variant="ghost" size="icon" title="下一个" onClick={() => onNavigate(1)}>
+            <Button variant="ghost" size="icon" title={t('下一个')} onClick={() => onNavigate(1)}>
               <ChevronRight />
             </Button>
             <span>
-              {entry.isDir ? '文件夹' : size(entry.size)} · {date(entry.modified)}
+              {entry.isDir ? t('文件夹') : size(entry.size)} · {date(entry.modified)}
             </span>
             {candidates.length > 0 && (
               <div className="preview-source" ref={sourceRef}>
@@ -392,7 +364,7 @@ export function Preview({
                   className="preview-source-button"
                   aria-haspopup="listbox"
                   aria-expanded={menuOpen}
-                  title="切换预览方式"
+                  title={t('切换预览方式')}
                   onClick={() => setMenuOpen((value) => !value)}
                 >
                   {fromPlugin ? <Puzzle size={13} /> : <Monitor size={13} />}
@@ -403,7 +375,7 @@ export function Preview({
                   />
                 </button>
                 {menuOpen && (
-                  <div className="preview-source-menu" role="listbox" aria-label="预览方式">
+                  <div className="preview-source-menu" role="listbox" aria-label={t('预览方式')}>
                     {candidates.map((candidate) => (
                       <button
                         type="button"
@@ -426,7 +398,9 @@ export function Preview({
                         )}
                         <span className="preview-source-copy">
                           <span className="preview-source-title">
-                            {candidate.id.startsWith('plugin:') ? candidate.provider : 'Fiex 内置'}
+                            {candidate.id.startsWith('plugin:')
+                              ? candidate.provider
+                              : t('Fiex 内置')}
                           </span>
                         </span>
                         {providerId === candidate.id && <Check size={14} />}
@@ -437,7 +411,7 @@ export function Preview({
               </div>
             )}
             <Button variant="secondary" onClick={() => onOpen(entry)}>
-              打开
+              {t('打开')}
               <ExternalLink />
             </Button>
           </footer>

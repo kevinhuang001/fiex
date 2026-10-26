@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Explorer } from '@/hooks/useExplorer'
 import { call } from '@/lib/api'
 import type { DialogState } from '@/lib/dialogs'
@@ -33,8 +34,8 @@ export function useConnectionActions({
   }
   const ejectDevice = (path: string) =>
     setDialog({
-      title: '弹出设备',
-      submit: '弹出',
+      title: t('弹出设备'),
+      submit: t('弹出'),
       danger: true,
       action: async () => {
         await call('eject_device', { path })
@@ -43,17 +44,17 @@ export function useConnectionActions({
       },
     })
   const mountDevice = (device: string) => {
-    void run('正在请求挂载…', async () => {
+    void run(t('正在请求挂载…'), async () => {
       const path = await call<string>('mount_device', { device })
       await left.refreshLocations(true)
       x.navigate(path)
-      notify('设备已挂载')
+      notify(t('设备已挂载'))
     })
   }
   const ejectUsb = (device: string) =>
     setDialog({
-      title: '弹出 U 盘',
-      submit: '弹出',
+      title: t('弹出 U 盘'),
+      submit: t('弹出'),
       danger: true,
       action: async () => {
         const volume = left.locations.find(
@@ -68,8 +69,8 @@ export function useConnectionActions({
     const connection = x.connections.find((item) => item.id === id)
     if (!connection) return
     setDialog({
-      title: `关闭“${connection.name}”？`,
-      submit: '关闭连接',
+      title: t('关闭“{0}”？', connection.name),
+      submit: t('关闭连接'),
       danger: true,
       action: async () => {
         await call('remove_remote_connection', { id })
@@ -92,8 +93,8 @@ export function useConnectionActions({
     )
   const isRemotePath = (path: string) => Boolean(remoteConnection(path))
   const displayName = (path: string) => {
-    if (path === 'recent://') return '最近使用'
-    if (trashPath && path === trashPath) return '废纸篓'
+    if (path === 'recent://') return t('最近使用')
+    if (trashPath && path === trashPath) return t('废纸篓')
     const volume = left.locations.find((location) => location.usbfs && location.path === path)
     if (volume) return volume.name
     const connection = remoteConnection(path)

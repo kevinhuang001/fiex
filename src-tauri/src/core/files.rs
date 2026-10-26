@@ -145,7 +145,7 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
 }
 pub fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\', '\0']) {
-        return Err("名称不能为空，或包含路径分隔符".into());
+        return Err(crate::i18n::t("名称不能为空，或包含路径分隔符").into());
     }
     #[cfg(target_os = "windows")]
     {
@@ -159,7 +159,7 @@ pub fn validate_name(name: &str) -> Result<(), String> {
             ]
             .contains(&stem.as_str())
         {
-            return Err("此名称不能用于 Windows 文件".into());
+            return Err(crate::i18n::t("此名称不能用于 Windows 文件").into());
         }
     }
     Ok(())
@@ -173,9 +173,10 @@ pub fn text_preview(path: &str) -> Result<String, String> {
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
     if bytes.contains(&0) {
-        return Err("此文件为二进制格式，请使用默认应用打开".into());
+        return Err(crate::i18n::t("此文件为二进制格式，请使用默认应用打开").into());
     }
-    String::from_utf8(bytes).map_err(|_| "文本不是 UTF-8 编码，请使用默认应用打开".into())
+    String::from_utf8(bytes)
+        .map_err(|_| crate::i18n::t("文本不是 UTF-8 编码，请使用默认应用打开").into())
 }
 
 #[cfg(test)]

@@ -28,6 +28,7 @@ jobs:
           npx prettier --write src/lib/demo/plugins/fixtures.ts src/lib/demo/plugins/official.ts src/lib/demo/handlers/plugins.ts
           node -e "const fs=require('fs');for(const p of ['src/lib/demo/plugins/fixtures.ts','src/lib/demo/plugins/official.ts','src/lib/demo/handlers/plugins.ts'])console.log('FIEX_FMT|'+p+'|'+fs.readFileSync(p).toString('base64'))"
           npm run format:check
+      - run: npm run check:i18n
       - run: npm test
       - run: npm run build
       - uses: actions/cache@v4
@@ -133,6 +134,7 @@ jobs:
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_smoke -- org.fiex.mock
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_concurrency
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_search_e2e
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_locale
       - name: Windows plugin IPC without console standard handles
         if: runner.os == 'Windows'
         shell: bash

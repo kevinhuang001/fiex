@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
@@ -92,13 +93,13 @@ function PluginResult() {
   return (
     <Modal
       open={Boolean(result)}
-      title={result?.title || '插件结果'}
+      title={result?.title || t('插件结果')}
       onClose={() => setResult(null)}
       wide
     >
       <pre className="plugin-command-result">{result && JSON.stringify(result.value, null, 2)}</pre>
       <footer className="plugin-consent-actions">
-        <Button onClick={() => setResult(null)}>关闭</Button>
+        <Button onClick={() => setResult(null)}>{t('关闭')}</Button>
       </footer>
     </Modal>
   )

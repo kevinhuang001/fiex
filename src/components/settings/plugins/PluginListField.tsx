@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
@@ -52,8 +53,10 @@ export function PluginListField({
   return (
     <>
       <button type="button" className="plugin-list-trigger" onClick={show}>
-        <span>编辑条目</span>
-        <small>{values.length} 项</small>
+        <span>{t('编辑条目')}</span>
+        <small>
+          {values.length} {t('项')}
+        </small>
       </button>
       <Modal
         open={open}
@@ -76,7 +79,7 @@ export function PluginListField({
                 {value}
               </button>
             ))}
-            {!draft.length && <p className="plugin-list-empty">还没有条目。</p>}
+            {!draft.length && <p className="plugin-list-empty">{t('还没有条目。')}</p>}
           </div>
           <div className="plugin-list-editor-actions">
             <Button
@@ -85,7 +88,7 @@ export function PluginListField({
               size="sm"
               onClick={() => setEdit({ index: null, value: '' })}
             >
-              新建
+              {t('新建')}
             </Button>
             <Button
               type="button"
@@ -96,7 +99,7 @@ export function PluginListField({
                 selected !== null && setEdit({ index: selected, value: draft[selected] })
               }
             >
-              编辑
+              {t('编辑')}
             </Button>
             <Button
               type="button"
@@ -109,21 +112,21 @@ export function PluginListField({
                 setSelected(null)
               }}
             >
-              删除
+              {t('删除')}
             </Button>
           </div>
         </div>
         <footer className="plugin-list-footer">
           <Button variant="outline" onClick={() => setOpen(false)}>
-            取消
+            {t('取消')}
           </Button>
-          <Button onClick={commit}>确定</Button>
+          <Button onClick={commit}>{t('确定')}</Button>
         </footer>
       </Modal>
       <Modal
         open={Boolean(edit)}
         onClose={() => setEdit(null)}
-        title={edit?.index === null ? '新建条目' : '编辑条目'}
+        title={edit?.index === null ? t('新建条目') : t('编辑条目')}
         className="plugin-list-confirm"
       >
         {edit && (
@@ -145,9 +148,9 @@ export function PluginListField({
             </label>
             <footer className="plugin-list-footer">
               <Button variant="outline" onClick={() => setEdit(null)}>
-                取消
+                {t('取消')}
               </Button>
-              <Button onClick={saveEdit}>{edit.index === null ? '添加' : '确定'}</Button>
+              <Button onClick={saveEdit}>{edit.index === null ? t('添加') : t('确定')}</Button>
             </footer>
           </>
         )}

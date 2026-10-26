@@ -116,14 +116,14 @@ impl Operations {
 
     pub fn undo(&self) -> Result<(), String> {
         let mut stack = self.undo.lock().unwrap();
-        let mut actions = stack.pop().ok_or("没有可撤销的操作")?;
+        let mut actions = stack.pop().ok_or(crate::i18n::t("没有可撤销的操作"))?;
         while let Some(action) = actions.pop() {
             let result = match &action {
                 Undo::Rename(src, dest) => {
                     if exists(dest) {
-                        Err("原位置已有同名项目，无法撤销".into())
+                        Err(crate::i18n::t("原位置已有同名项目，无法撤销").into())
                     } else {
-                        fs::create_dir_all(dest.parent().ok_or("原路径无效")?)
+                        fs::create_dir_all(dest.parent().ok_or(crate::i18n::t("原路径无效"))?)
                             .map_err(|e| e.to_string())?;
                         crate::transfers::move_tree(src, dest, &crate::transfers::NEVER_CANCELLED)
                             .map(|_| ())
@@ -132,7 +132,7 @@ impl Operations {
                 // Put copies/new files in Trash on undo, preserving any intervening edits.
                 Undo::Replaced(path, backup) => {
                     if exists(path) {
-                        Err("目标已改变，无法恢复被替换文件".into())
+                        Err(crate::i18n::t("目标已改变，无法恢复被替换文件").into())
                     } else {
                         fs::rename(backup.path().join("original"), path).map_err(|e| e.to_string())
                     }

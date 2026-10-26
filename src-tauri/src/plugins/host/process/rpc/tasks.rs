@@ -39,7 +39,7 @@ impl Running {
         for task in tasks {
             let mut info = task.info;
             info.status = "cancelled".into();
-            info.error = Some("插件进程已停止".into());
+            info.error = Some(crate::i18n::t("插件进程已停止").into());
             self.emit_task(&info);
             crate::plugin_fs_access::cleanup(&task.owner);
             crate::plugin_ipc::cleanup(&task.owner);
@@ -99,7 +99,7 @@ impl Running {
                 .and_then(|mut tasks| tasks.remove(id))
             {
                 entry.info.status = "failed".into();
-                entry.info.error = Some("插件进程已断开".into());
+                entry.info.error = Some(crate::i18n::t("插件进程已断开").into());
                 crate::plugin_fs_access::cleanup(&entry.owner);
                 crate::plugin_ipc::cleanup(&entry.owner);
                 crate::plugin_net::cleanup(&entry.owner);

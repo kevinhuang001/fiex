@@ -121,12 +121,12 @@ pub fn ensure_access(route: &Route) -> Result<(), String> {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = route;
-        Err("当前系统需要通过管理员权限访问原始设备".into())
+        Err(crate::i18n::t("当前系统需要通过管理员权限访问原始设备").into())
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         if !can_open(&route.driver_device) {
-            return Err("无法获得设备读写权限".into());
+            return Err(crate::i18n::t("无法获得设备读写权限").into());
         }
         authorized().lock().unwrap().insert(route.device.clone());
         Ok(())
@@ -162,11 +162,11 @@ pub fn eject(device: &str) -> Result<(), String> {
         if output.status.success() {
             return Ok(());
         }
-        Err("无法弹出设备".into())
+        Err(crate::i18n::t("无法弹出设备").into())
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = device;
-        Err("当前系统请通过系统托盘弹出设备".into())
+        Err(crate::i18n::t("当前系统请通过系统托盘弹出设备").into())
     }
 }

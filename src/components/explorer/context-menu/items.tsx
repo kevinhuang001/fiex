@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { progressChannel } from '@/hooks/useActivity'
 import {
@@ -42,7 +43,7 @@ export function contextItems({
   const multiple = x.selected.length > 1
   return [
     {
-      label: '打开',
+      label: t('打开'),
       icon: <ExternalLink />,
       hint: hint('open'),
       action: () => open(menu.entry),
@@ -51,13 +52,13 @@ export function contextItems({
       ? []
       : [
           {
-            label: '快速查看',
+            label: t('快速查看'),
             icon: <Eye />,
             hint: hint('quickLook'),
             action: () => previewEntry(menu.entry),
           },
           {
-            label: '显示简介',
+            label: t('显示简介'),
             icon: <Info />,
             hint: hint('info'),
             action: () => setInfo(menu.entry),
@@ -66,7 +67,7 @@ export function contextItems({
     ...(platform === 'macos'
       ? [
           {
-            label: '标签…',
+            label: t('标签…'),
             disabled: x.directoryReadOnly,
             icon: <Tags />,
             hint: '',
@@ -78,19 +79,19 @@ export function contextItems({
     ...(isRemotePath(menu.entry.path)
       ? [
           {
-            label: '始终保留在本地',
+            label: t('始终保留在本地'),
             icon: <CloudDownload />,
             hint: '',
             action: () => {
               const paths = x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]
               let onProgress: ReturnType<typeof progressChannel> | undefined
               void run(
-                '正在保存离线副本…',
+                t('正在保存离线副本…'),
                 async () => {
                   await call('remote_sync', { paths, onProgress })
                   x.reload()
                 },
-                `${paths.length} 个项目`,
+                t('{0} 个项目', paths.length),
                 false,
                 'sync',
                 (id) => {
@@ -100,18 +101,18 @@ export function contextItems({
             },
           },
           {
-            label: '释放本地空间',
+            label: t('释放本地空间'),
             icon: <CloudCheck />,
             hint: '',
             action: () => {
               const paths = x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]
               void run(
-                '正在释放本地空间…',
+                t('正在释放本地空间…'),
                 async () => {
                   await call('remote_unsync', { paths })
                   x.reload()
                 },
-                `${paths.length} 个项目`,
+                t('{0} 个项目', paths.length),
                 false,
                 'sync',
               )
@@ -120,12 +121,12 @@ export function contextItems({
           ...(menu.entry.sync === 'conflict'
             ? [
                 ...[true, false].map((keepLocal) => ({
-                  label: keepLocal ? '用本地版本覆盖云端' : '保留本地备份并采用云端版本',
+                  label: keepLocal ? t('用本地版本覆盖云端') : t('保留本地备份并采用云端版本'),
                   icon: <CloudCheck />,
                   hint: '',
                   action: () => {
                     void run(
-                      '正在处理同步冲突…',
+                      t('正在处理同步冲突…'),
                       async () => {
                         await call('remote_resolve', { path: menu.entry.path, keepLocal })
                         x.reload()
@@ -144,7 +145,7 @@ export function contextItems({
       ? []
       : [
           {
-            label: '重新命名',
+            label: t('重新命名'),
             icon: <Pencil />,
             hint: hint('rename'),
             disabled: x.directoryReadOnly,
@@ -154,7 +155,7 @@ export function contextItems({
     ...(x.selected.length > 1
       ? [
           {
-            label: '批量重命名…',
+            label: t('批量重命名…'),
             icon: <Pencil />,
             hint: '',
             disabled: x.directoryReadOnly,
@@ -162,16 +163,16 @@ export function contextItems({
           },
         ]
       : []),
-    { label: '复制', icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
+    { label: t('复制'), icon: <Copy />, hint: hint('copy'), action: () => copy(false) },
     {
-      label: '剪切',
+      label: t('剪切'),
       icon: <Scissors />,
       hint: hint('cut'),
       disabled: x.directoryReadOnly,
       action: () => copy(true),
     },
     {
-      label: '创建副本',
+      label: t('创建副本'),
       icon: <Copy />,
       hint: hint('duplicate'),
       disabled: x.directoryReadOnly,
@@ -185,25 +186,25 @@ export function contextItems({
       action: () => terminal(),
     },
     {
-      label: '复制路径',
+      label: t('复制路径'),
       icon: <Copy />,
       hint: '',
       action: () =>
         void navigator.clipboard
           .writeText(menu.entry.path)
-          .then(() => notify('路径已复制'))
+          .then(() => notify(t('路径已复制')))
           .catch((e) => x.setError(String(e))),
     },
     inTrash
       ? {
-          label: '放回原处',
+          label: t('放回原处'),
           icon: <RotateCcw />,
           hint: '',
           action: () =>
             restoreFromTrash(x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]),
         }
       : {
-          label: '移到废纸篓',
+          label: t('移到废纸篓'),
           icon: <Trash2 />,
           hint: hint('trash'),
           disabled: x.directoryReadOnly,
@@ -213,7 +214,7 @@ export function contextItems({
     ...(inTrash
       ? [
           {
-            label: '彻底删除',
+            label: t('彻底删除'),
             icon: <Trash2 />,
             hint: '',
             danger: true,

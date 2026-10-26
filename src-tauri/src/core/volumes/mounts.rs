@@ -376,7 +376,7 @@ pub fn mount_device(device: &str) -> Result<String, String> {
             .chars()
             .all(|character| character.is_ascii_alphanumeric())
     {
-        return Err("无效设备".into());
+        return Err(crate::i18n::t("无效设备").into());
     }
     let output = std::process::Command::new("diskutil")
         .args(["mount", "readOnly", id])
@@ -394,16 +394,16 @@ pub fn mount_device(device: &str) -> Result<String, String> {
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
             return Err(if error.trim().is_empty() {
-                "无法挂载该设备，系统可能不支持此文件系统".into()
+                crate::i18n::t("无法挂载该设备，系统可能不支持此文件系统").into()
             } else {
                 error.trim().into()
             });
         }
     }
-    let info = disk_info(id).ok_or("无法读取挂载信息")?;
+    let info = disk_info(id).ok_or(crate::i18n::t("无法读取挂载信息"))?;
     let mount = string_field(&info, "MountPoint");
     if mount.is_empty() {
-        return Err("设备未挂载，系统可能不支持此文件系统".into());
+        return Err(crate::i18n::t("设备未挂载，系统可能不支持此文件系统").into());
     }
     Ok(mount)
 }
@@ -411,7 +411,7 @@ pub fn mount_device(device: &str) -> Result<String, String> {
 #[cfg(target_os = "linux")]
 pub fn mount_device(device: &str) -> Result<String, String> {
     if !device.starts_with("/dev/") {
-        return Err("无效设备".into());
+        return Err(crate::i18n::t("无效设备").into());
     }
     let parse = |bytes: &[u8]| -> Option<String> {
         let text = String::from_utf8_lossy(bytes);
@@ -457,12 +457,12 @@ pub fn mount_device(device: &str) -> Result<String, String> {
             return Ok(path);
         }
     }
-    Err("无法挂载该设备，请确认系统支持此文件系统".into())
+    Err(crate::i18n::t("无法挂载该设备，请确认系统支持此文件系统").into())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn mount_device(_device: &str) -> Result<String, String> {
-    Err("当前系统请通过磁盘管理挂载该设备".into())
+    Err(crate::i18n::t("当前系统请通过磁盘管理挂载该设备").into())
 }
 
 #[cfg(test)]

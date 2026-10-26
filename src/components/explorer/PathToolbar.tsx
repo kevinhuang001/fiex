@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import type { Explorer } from '@/hooks/useExplorer'
 import { ArrowUp, ChevronRight, LoaderCircle, Search, X } from 'lucide-react'
@@ -43,7 +44,13 @@ export function PathToolbar({
   const dropFolder = /^[a-z][a-z0-9+.-]*:\/\//i.test(x.path) ? undefined : x.path
   return (
     <div className="path-toolbar" data-drop-folder={dropFolder}>
-      <Button variant="ghost" size="icon" title="上一级" aria-label="上一级" onClick={x.up}>
+      <Button
+        variant="ghost"
+        size="icon"
+        title={t('上一级')}
+        aria-label={t('上一级')}
+        onClick={x.up}
+      >
         <ArrowUp />
       </Button>
       <nav
@@ -86,8 +93,8 @@ export function PathToolbar({
                 <span key={crumb.path}>
                   {index > 0 && <ChevronRight size={11} />}
                   <button
-                    title={crumb.ellipsis ? '更上层' : crumb.path}
-                    aria-label={crumb.ellipsis ? '更上层' : undefined}
+                    title={crumb.ellipsis ? t('更上层') : crumb.path}
+                    aria-label={crumb.ellipsis ? t('更上层') : undefined}
                     onClick={() =>
                       crumb.ellipsis || index === visible.length - 1
                         ? crumb.ellipsis
@@ -108,8 +115,8 @@ export function PathToolbar({
         {showGlobalSearch && (
           <button
             className="search-scope"
-            title={x.globalSearch ? '切换为当前文件夹搜索' : '搜索所有可访问的文件'}
-            aria-label="全局搜索"
+            title={x.globalSearch ? t('切换为当前文件夹搜索') : t('搜索所有可访问的文件')}
+            aria-label={t('全局搜索')}
             aria-pressed={x.globalSearch}
             onClick={() => x.setGlobalSearch(!x.globalSearch)}
           >
@@ -119,7 +126,7 @@ export function PathToolbar({
         <input
           ref={searchInput}
           aria-label={searchLabel}
-          placeholder={x.globalSearch ? '搜索所有可访问位置' : '搜索此文件夹'}
+          placeholder={x.globalSearch ? t('搜索所有可访问位置') : t('搜索此文件夹')}
           value={x.query}
           onChange={(event) => x.setQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -132,7 +139,7 @@ export function PathToolbar({
         {x.searching ? (
           <LoaderCircle className="spin" size={14} />
         ) : x.query ? (
-          <button className="icon-button" aria-label="清除搜索" onClick={() => x.setQuery('')}>
+          <button className="icon-button" aria-label={t('清除搜索')} onClick={() => x.setQuery('')}>
             <X size={13} />
           </button>
         ) : (

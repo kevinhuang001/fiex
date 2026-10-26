@@ -35,7 +35,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         | "host.terminal.input"
         | "host.terminal.size"
         | "host.terminal.closed"
-        | "host.terminal.end" => Err("终端仅在桌面版可用".into()),
+        | "host.terminal.end" => Err(crate::i18n::t("终端仅在桌面版可用").into()),
         "host.preview.create" => {
             use base64::Engine;
             let name = ctx.arg("name")?;

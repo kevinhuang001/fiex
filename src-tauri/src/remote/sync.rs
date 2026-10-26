@@ -174,7 +174,7 @@ pub async fn unsync(paths: &[String]) -> Result<(), String> {
         for key in &keys {
             let file = &meta.files[key];
             if file.conflict || dirty(&conn, key, file) {
-                return Err("存在未同步的修改或冲突，不能释放本地空间".into());
+                return Err(crate::i18n::t("存在未同步的修改或冲突，不能释放本地空间").into());
             }
         }
         for key in keys {

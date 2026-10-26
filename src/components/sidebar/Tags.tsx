@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { tagHex } from '@/lib/tags'
 import { Fragment } from 'react'
 import type { SidebarProps } from './types'
@@ -8,7 +9,7 @@ export function Tags({ x, prefs }: Pick<SidebarProps, 'x' | 'prefs'>) {
   return (
     <Fragment>
       <div className="sidebar-section-title">
-        <span className="sidebar-label">标签</span>
+        <span className="sidebar-label">{t('标签')}</span>
       </div>
       {allTags.map((tag) => (
         <button

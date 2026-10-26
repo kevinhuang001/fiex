@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, Plus } from 'lucide-react'
 import { TerminalView } from '@/components/ssh/SshTerminalView'
@@ -146,13 +147,13 @@ export function TerminalPanel({
       ref={panel}
       className={`terminal-panel ${open ? '' : 'closed'}`}
       style={{ height: open ? height : undefined }}
-      aria-label="内置终端"
+      aria-label={t('内置终端')}
     >
       <div
         className="terminal-panel-resizer"
         role="separator"
         aria-orientation="horizontal"
-        aria-label="调整终端高度"
+        aria-label={t('调整终端高度')}
         onMouseDown={resizeStart}
       />
       <header className="terminal-panel-bar">
@@ -170,8 +171,8 @@ export function TerminalPanel({
           <div className="terminal-shell-picker">
             <button
               type="button"
-              title="新建终端"
-              aria-label="新建终端"
+              title={t('新建终端')}
+              aria-label={t('新建终端')}
               aria-expanded={shellMenu}
               onClick={() => setShellMenu((value) => !value)}
             >
@@ -187,7 +188,7 @@ export function TerminalPanel({
                   ))
                 ) : (
                   <button type="button" role="menuitem" onClick={() => add()}>
-                    默认 Shell
+                    {t('默认 Shell')}
                   </button>
                 )}
               </div>
@@ -195,8 +196,8 @@ export function TerminalPanel({
           </div>
           <button
             type="button"
-            title="收起终端"
-            aria-label="收起终端"
+            title={t('收起终端')}
+            aria-label={t('收起终端')}
             onClick={() => setOpen(false)}
           >
             <ChevronDown size={14} />
@@ -211,7 +212,7 @@ export function TerminalPanel({
               shell={tab.shell}
               terminalFont={terminalFont}
               terminalFontSize={terminalFontSize}
-              name={`终端 ${tab.number}${tab.shellName ? ` · ${tab.shellName}` : ''}`}
+              name={t('终端 {0}{1}', tab.number, tab.shellName ? ` · ${tab.shellName}` : '')}
             />
           </div>
         ))}

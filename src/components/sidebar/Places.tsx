@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { cacheLocations, readCachedLocations } from '@/lib/locationCache'
 import { commonPlaces } from '@/lib/places'
 import {
@@ -17,25 +18,25 @@ import { Fragment, useEffect } from 'react'
 import type { SidebarProps, SetSidebarMenu } from './types'
 
 function iconFor(name: string) {
-  return name === '废纸篓' ? (
+  return name === t('废纸篓') ? (
     <Trash2 />
-  ) : name === '最近使用' ? (
+  ) : name === t('最近使用') ? (
     <Clock />
-  ) : name === '个人文件夹' ? (
+  ) : name === t('个人文件夹') ? (
     <Home />
-  ) : name === '桌面' ? (
+  ) : name === t('桌面') ? (
     <Monitor />
-  ) : name === '下载' ? (
+  ) : name === t('下载') ? (
     <Download />
-  ) : name === '图片' ? (
+  ) : name === t('图片') ? (
     <Image />
-  ) : name === '音乐' ? (
+  ) : name === t('音乐') ? (
     <Music />
-  ) : name === '视频' ? (
+  ) : name === t('视频') ? (
     <Film />
-  ) : name === '文稿' ? (
+  ) : name === t('文稿') ? (
     <FileText />
-  ) : name === '应用程序' ? (
+  ) : name === t('应用程序') ? (
     <AppWindow />
   ) : (
     <Folder />
@@ -67,7 +68,7 @@ export function Places({
   if (!places.length) return null
   return (
     <Fragment>
-      <div className="sidebar-label">常用位置</div>
+      <div className="sidebar-label">{t('常用位置')}</div>
       {places.map((location) => (
         <button
           className={`nav-item ${(location.kind === 'trash' ? trashPath && x.path === trashPath : location.path && x.path === location.path) ? 'active' : ''}`}

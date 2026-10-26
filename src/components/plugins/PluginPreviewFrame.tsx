@@ -1,3 +1,4 @@
+import { getLocale, subscribeLocale } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
@@ -53,6 +54,8 @@ export function PluginPreviewFrame({
       if (attached) return
       attached = true
       dispose.current = attachFiexPanel({
+        getLocale,
+        subscribeLocale,
         pluginId,
         sessionId,
         origin: 'null',
@@ -92,6 +95,7 @@ export function PluginPreviewFrame({
               ...(loading ? {} : ((context || {}) as Record<string, JsonValue>)),
               // Compatibility alias for panel code that only needs the name.
               preview: { name, extension },
+              locale: getLocale(),
               uiTimeoutMs: timeoutMs ?? 15000,
             } as JsonValue
           }

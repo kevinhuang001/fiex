@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Check, LoaderCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Modal } from '@/components/ui/Modal'
@@ -40,9 +41,9 @@ export function PluginPermissionPrompt({
   busy,
   error,
   note,
-  allowLabel = '允许',
-  denyLabel = '不允许',
-  stepUnit = '项',
+  allowLabel = t('允许'),
+  denyLabel = t('不允许'),
+  stepUnit = t('项'),
   children,
   onAllow,
   onDeny,
@@ -68,26 +69,26 @@ export function PluginPermissionPrompt({
 }) {
   const question =
     item.kind === 'networkAll'
-      ? `允许「${pluginName}」访问全部网络？`
+      ? t('允许「{0}」访问全部网络？', pluginName)
       : item.kind === 'network'
-        ? `允许「${pluginName}」访问 ${item.value}？`
+        ? t('允许「{0}」访问 {1}？', pluginName, item.value)
         : item.kind === 'command'
-          ? `允许「${pluginName}」执行 ${item.value}？`
+          ? t('允许「{0}」执行 {1}？', pluginName, item.value)
           : item.kind === 'activate'
-            ? `允许「${pluginName}」运行？`
-            : `允许「${pluginName}」${item.title}？`
+            ? t('允许「{0}」运行？', pluginName)
+            : t('允许「{0}」{1}？', pluginName, item.title)
   const hint =
     item.kind === 'networkAll'
-      ? '这不是精确域名授权：插件可以访问任意 HTTP/TCP 目标。建议先改用白名单。'
+      ? t('这不是精确域名授权：插件可以访问任意 HTTP/TCP 目标。建议先改用白名单。')
       : item.kind === 'network'
-        ? '仅授权此精确主机，不包含其他子域名；插件本身不能直接联网。'
+        ? t('仅授权此精确主机，不包含其他子域名；插件本身不能直接联网。')
         : item.kind === 'command'
-          ? commandRisk
+          ? t(commandRisk)
           : item.hint
   return (
     <Modal
       open={open}
-      title="权限请求"
+      title={t('权限请求')}
       onClose={onDeny}
       className="plugin-permission-prompt-modal"
       bare
@@ -103,7 +104,10 @@ export function PluginPermissionPrompt({
         <span className="plugin-permission-prompt-app-name">{pluginName}</span>
         {total > 1 && (
           <span className="plugin-permission-prompt-step">
-            第 {step} {stepUnit}，共 {total} {stepUnit}
+            {t('第')}
+            {step} {stepUnit}
+            {t('，共')}
+            {total} {stepUnit}
           </span>
         )}
         <h3>{question}</h3>
@@ -126,7 +130,7 @@ export function PluginPermissionPrompt({
           </Button>
           <Button type="button" disabled={busy} onClick={onAllow}>
             {busy ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}
-            {busy ? '正在激活…' : allowLabel}
+            {busy ? t('正在激活…') : allowLabel}
           </Button>
         </div>
       </div>

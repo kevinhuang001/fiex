@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
@@ -61,18 +62,33 @@ export function AppearanceSettings({
     <>
       <div className="settings-card">
         <div className="settings-row">
+          <div className="settings-row-label">{t('语言 / Language')}</div>
+          <div className="settings-row-control">
+            <SelectField
+              label={t('语言 / Language')}
+              value={prefs.locale}
+              options={[
+                { value: 'zh-CN', label: t('简体中文') },
+                { value: 'zh-TW', label: t('繁體中文') },
+                { value: 'en', label: 'English' },
+              ]}
+              onChange={(locale) => update({ locale: locale as Preferences['locale'] })}
+            />
+          </div>
+        </div>
+        <div className="settings-row">
           <div className="settings-row-label">
             <span className="settings-row-icon" style={{ background: '#8b5cf6' }}>
               <Palette size={15} />
             </span>
-            主题
+            {t('主题')}
           </div>
           <div className="settings-row-control">
             <SelectField
-              label="主题"
+              label={t('主题')}
               value={prefs.themeId || ''}
               options={[
-                { value: '', label: 'Fiex 默认' },
+                { value: '', label: t('Fiex 默认') },
                 ...themes.map((theme) => ({ value: theme.id, label: theme.name })),
               ]}
               onChange={(themeId) => update({ themeId })}
@@ -84,7 +100,7 @@ export function AppearanceSettings({
             <span className="settings-row-icon" style={{ background: '#3b82f6' }}>
               <Sun size={15} />
             </span>
-            外观
+            {t('外观')}
           </div>
           <div className="settings-row-control">
             <div className="segmented">
@@ -94,7 +110,7 @@ export function AppearanceSettings({
                   aria-pressed={prefs.theme === theme}
                   onClick={() => update({ theme })}
                 >
-                  {['跟随系统', '浅色', '深色'][index]}
+                  {[t('跟随系统'), t('浅色'), t('深色')][index]}
                 </button>
               ))}
             </div>
@@ -105,7 +121,7 @@ export function AppearanceSettings({
             <span className="settings-row-icon" style={{ background: '#ec4899' }}>
               <ImageIcon size={15} />
             </span>
-            背景图片
+            {t('背景图片')}
           </div>
           <div className="settings-row-control">
             <div className="settings-inline-actions">
@@ -114,7 +130,7 @@ export function AppearanceSettings({
                 className="settings-pill-button"
                 onClick={() => void pickBackground()}
               >
-                {prefs.backgroundImage ? '更换图片…' : '选择图片…'}
+                {prefs.backgroundImage ? t('更换图片…') : t('选择图片…')}
               </button>
               {demo && (
                 <button
@@ -125,7 +141,7 @@ export function AppearanceSettings({
                     update({ backgroundImage: '/demo/dog.svg', backgroundOpacity: 0.6 })
                   }}
                 >
-                  示例小狗
+                  {t('示例小狗')}
                 </button>
               )}
               {prefs.backgroundImage && (
@@ -137,7 +153,7 @@ export function AppearanceSettings({
                     update({ backgroundImage: '' })
                   }}
                 >
-                  移除
+                  {t('移除')}
                 </button>
               )}
             </div>
@@ -149,11 +165,11 @@ export function AppearanceSettings({
               <span className="settings-row-icon" style={{ background: '#f59e0b' }}>
                 <SlidersHorizontal size={15} />
               </span>
-              背景不透明度
+              {t('背景不透明度')}
             </div>
             <div className="settings-row-control settings-slider">
               <input
-                aria-label="背景不透明度"
+                aria-label={t('背景不透明度')}
                 type="range"
                 min="5"
                 max="100"
@@ -173,11 +189,11 @@ export function AppearanceSettings({
             <span className="settings-row-icon" style={{ background: '#6366f1' }}>
               <SlidersHorizontal size={15} />
             </span>
-            字体大小
+            {t('字体大小')}
           </div>
           <div className="settings-row-control settings-slider">
             <input
-              aria-label="字体大小"
+              aria-label={t('字体大小')}
               type="range"
               min="8"
               max="18"
@@ -195,14 +211,14 @@ export function AppearanceSettings({
             <span className="settings-row-icon" style={{ background: '#0ea5e9' }}>
               <SlidersHorizontal size={15} />
             </span>
-            终端字体
+            {t('终端字体')}
           </div>
           <div className="settings-row-control">
             <SelectField
-              label="终端字体"
+              label={t('终端字体')}
               value={prefs.terminalFont}
               options={[
-                { value: '', label: 'Fiex 默认（含 Nerd Font 回退）' },
+                { value: '', label: t('Fiex 默认（含 Nerd Font 回退）') },
                 ...fonts.map((font) => ({ value: font, label: font })),
               ]}
               onChange={(terminalFont) => update({ terminalFont })}
@@ -214,11 +230,11 @@ export function AppearanceSettings({
             <span className="settings-row-icon" style={{ background: '#0ea5e9' }}>
               <SlidersHorizontal size={15} />
             </span>
-            终端字号
+            {t('终端字号')}
           </div>
           <div className="settings-row-control settings-slider">
             <input
-              aria-label="终端字号"
+              aria-label={t('终端字号')}
               type="range"
               min="9"
               max="24"

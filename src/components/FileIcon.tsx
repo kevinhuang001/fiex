@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Link2 } from 'lucide-react'
 import { call } from '@/lib/api'
@@ -55,7 +56,7 @@ function whenVisible(element: Element, callback: () => void) {
  * Fiex matches Finder where it matters.
  */
 export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number }) {
-  const isApplication = kind(e) === '应用程序'
+  const isApplication = kind(e) === t('应用程序')
   const [native, setNative] = useState<string | null>(null)
   const decorationIcon = useDecorationIcon(e.path)
   const ref = useRef<HTMLSpanElement>(null)

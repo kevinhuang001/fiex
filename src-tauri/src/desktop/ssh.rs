@@ -109,7 +109,9 @@ struct PluginParts {
 }
 
 fn plugin_session(owner: &str, id: &str) -> Result<PluginParts, String> {
-    let values = plugin_sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let values = plugin_sessions()
+        .lock()
+        .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
     let session = values
         .get(id)
         .filter(|session| session.owner == owner)
@@ -158,7 +160,10 @@ pub(crate) fn plugin_terminal_input(
         .unwrap_or(8192)
         .clamp(1, 1024 * 1024) as usize;
     let session = plugin_session(owner, id)?;
-    let mut queue = session.input.lock().map_err(|_| "终端输入不可用")?;
+    let mut queue = session
+        .input
+        .lock()
+        .map_err(|_| crate::i18n::t("终端输入不可用"))?;
     let size = queue.len().min(max);
     let bytes = queue.drain(..size).collect::<Vec<_>>();
     Ok(serde_json::json!({
@@ -176,7 +181,10 @@ pub(crate) fn plugin_terminal_size(
         .and_then(serde_json::Value::as_str)
         .ok_or("missing sessionId")?;
     let session = plugin_session(owner, id)?;
-    let (cols, rows) = *session.size.lock().map_err(|_| "终端尺寸不可用")?;
+    let (cols, rows) = *session
+        .size
+        .lock()
+        .map_err(|_| crate::i18n::t("终端尺寸不可用"))?;
     Ok(serde_json::json!({"cols": cols, "rows": rows}))
 }
 
@@ -197,11 +205,13 @@ pub(crate) fn plugin_terminal_end(owner: &str, params: &serde_json::Value) -> Re
         .get("sessionId")
         .and_then(serde_json::Value::as_str)
         .ok_or("missing sessionId")?;
-    let mut values = plugin_sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let mut values = plugin_sessions()
+        .lock()
+        .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
     let session = values
         .remove(id)
         .filter(|session| session.owner == owner)
-        .ok_or("终端会话不存在")?;
+        .ok_or(crate::i18n::t("终端会话不存在"))?;
     session.closed.store(true, Ordering::Release);
     if let Some(message) = params.get("error").and_then(serde_json::Value::as_str) {
         let _ = session.channel.send(SshEvent::Error {
@@ -224,7 +234,7 @@ async fn plugin_ssh_open(
     let closed = Arc::new(AtomicBool::new(false));
     plugin_sessions()
         .lock()
-        .map_err(|_| "终端会话表不可用")?
+        .map_err(|_| crate::i18n::t("终端会话表不可用"))?
         .insert(
             id.clone(),
             PluginSession {
@@ -255,7 +265,7 @@ async fn plugin_ssh_open(
     if let Err(error) = result {
         plugin_sessions()
             .lock()
-            .map_err(|_| "终端会话表不可用")?
+            .map_err(|_| crate::i18n::t("终端会话表不可用"))?
             .remove(&id);
         return Err(error);
     }
@@ -322,14 +332,17 @@ fn start_session(
         .take_writer()
         .map_err(|error| error.to_string())?;
     let session_id = crate::mounts::new_id()?;
-    sessions().lock().map_err(|_| "终端会话表不可用")?.insert(
-        session_id.clone(),
-        Session {
-            writer,
-            master: pair.master,
-            child,
-        },
-    );
+    sessions()
+        .lock()
+        .map_err(|_| crate::i18n::t("终端会话表不可用"))?
+        .insert(
+            session_id.clone(),
+            Session {
+                writer,
+                master: pair.master,
+                child,
+            },
+        );
     let id = session_id.clone();
     std::thread::spawn(move || {
         let mut buffer = [0u8; 16 * 1024];
@@ -380,7 +393,7 @@ pub(crate) async fn ssh_open(
         "__builtin__" | "org.fiex.ssh"
     ) || (connection.plugin_id == "__builtin__" && connection.kind != "ssh")
     {
-        return Err("不是 SSH 连接".into());
+        return Err(crate::i18n::t("不是 SSH 连接").into());
     }
     if connection.plugin_id == "org.fiex.ssh" {
         crate::remote::ensure_provider_access(&connection)?;
@@ -388,7 +401,7 @@ pub(crate) async fn ssh_open(
     }
     let host = string_setting(&connection.settings, "host");
     if host.is_empty() {
-        return Err("SSH 主机为空".into());
+        return Err(crate::i18n::t("SSH 主机为空").into());
     }
     let username = string_setting(&connection.settings, "username");
     let port = connection
@@ -474,12 +487,14 @@ pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String>
             session
                 .input
                 .lock()
-                .map_err(|_| "终端输入不可用")?
+                .map_err(|_| crate::i18n::t("终端输入不可用"))?
                 .extend(data);
             return Ok(());
         }
     }
-    let mut values = sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let mut values = sessions()
+        .lock()
+        .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
     let session = values.get_mut(&session_id).ok_or("终端会话已结束")?;
     session.writer.write_all(&data).map_err(|e| e.to_string())?;
     session.writer.flush().map_err(|e| e.to_string())
@@ -489,11 +504,16 @@ pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String>
 pub(crate) fn ssh_resize(session_id: String, cols: u16, rows: u16) -> Result<(), String> {
     if let Ok(plugin) = plugin_sessions().lock() {
         if let Some(session) = plugin.get(&session_id) {
-            *session.size.lock().map_err(|_| "终端尺寸不可用")? = (cols.max(20), rows.max(4));
+            *session
+                .size
+                .lock()
+                .map_err(|_| crate::i18n::t("终端尺寸不可用"))? = (cols.max(20), rows.max(4));
             return Ok(());
         }
     }
-    let values = sessions().lock().map_err(|_| "终端会话表不可用")?;
+    let values = sessions()
+        .lock()
+        .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
     let session = values.get(&session_id).ok_or("终端会话已结束")?;
     session
         .master

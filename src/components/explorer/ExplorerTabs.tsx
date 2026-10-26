@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { AppController } from '@/hooks/useAppController'
@@ -70,7 +71,8 @@ export function ExplorerTabs({
     </>
   )
   const beginDrag = (event: PointerEvent, from: number) => {
-    if (event.button !== 0 || (event.target as Element).closest('[aria-label="关闭标签页"]')) return
+    if (event.button !== 0 || (event.target as Element).closest(t('[aria-label="关闭标签页"]')))
+      return
     if (drag || !strip.current) return
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
     const rects = Array.from(strip.current.querySelectorAll<HTMLElement>('.tab')).map((element) => {
@@ -172,7 +174,7 @@ export function ExplorerTabs({
       <div
         className={`tabs-scroll ${drag ? 'tabs-dragging' : ''}`}
         role="tablist"
-        aria-label="标签页"
+        aria-label={t('标签页')}
         ref={strip}
       >
         {left.tabs.map((path, i) => (
@@ -194,7 +196,7 @@ export function ExplorerTabs({
             >
               {tabBody(path, i)}
             </button>
-            <button aria-label="关闭标签页" onClick={() => closeWorkspaceTab(i)}>
+            <button aria-label={t('关闭标签页')} onClick={() => closeWorkspaceTab(i)}>
               <X size={12} />
             </button>
           </div>
@@ -202,8 +204,8 @@ export function ExplorerTabs({
       </div>
       <button
         className="icon-button tabs-new"
-        title="新建标签页"
-        aria-label="新建标签页"
+        title={t('新建标签页')}
+        aria-label={t('新建标签页')}
         onClick={newWorkspaceTab}
       >
         <Plus size={18} />

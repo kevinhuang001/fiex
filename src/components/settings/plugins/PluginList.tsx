@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Download, Puzzle, Settings2, ShieldCheck, Trash2 } from 'lucide-react'
 import { PLUGIN_CATEGORIES, pluginCategories, type PluginInfo } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
@@ -44,26 +45,28 @@ export function PluginList({
                 <span className="plugin-pill">v{plugin.version}</span>
                 <span className={`plugin-state ${enabled ? 'active' : ''}`}>
                   <span />
-                  {enabled ? '运行中' : '未激活'}
+                  {enabled ? t('运行中') : t('未激活')}
                 </span>
                 {!plugin.backendAvailable && (
-                  <span className="plugin-pill warn">当前平台无后端</span>
+                  <span className="plugin-pill warn">{t('当前平台无后端')}</span>
                 )}
               </div>
-              <p>{plugin.description || '第三方插件'}</p>
+              <p>{plugin.description || t('第三方插件')}</p>
               <div className="plugin-row-meta">
                 {categories.slice(0, 3).map((category) => (
                   <span className="plugin-category-pill" key={category}>
                     {PLUGIN_CATEGORIES.find((entry) => entry.id === category)?.label || category}
                   </span>
                 ))}
-                <span>{plugin.author?.name || '未知开发者'}</span>
+                <span>{plugin.author?.name || t('未知开发者')}</span>
                 <span aria-hidden>·</span>
-                <span>{declared.length ? `${declared.length} 项权限` : '无需宿主权限'}</span>
+                <span>
+                  {declared.length ? t('{0} 项权限', declared.length) : t('无需宿主权限')}
+                </span>
                 {plugin.extensions?.connections ? (
                   <>
                     <span aria-hidden>·</span>
-                    <span>连接提供者</span>
+                    <span>{t('连接提供者')}</span>
                   </>
                 ) : null}
               </div>
@@ -75,8 +78,8 @@ export function PluginList({
                     type="button"
                     size="icon-sm"
                     variant="ghost"
-                    aria-label={`设置 ${plugin.name}`}
-                    title="插件设置"
+                    aria-label={t('设置 {0}', plugin.name)}
+                    title={t('插件设置')}
                     onClick={() => onOpenSettings(plugin)}
                   >
                     <Settings2 size={15} />
@@ -86,8 +89,8 @@ export function PluginList({
                   type="button"
                   size="icon-sm"
                   variant="ghost"
-                  aria-label="插件详情"
-                  title="插件详情"
+                  aria-label={t('插件详情')}
+                  title={t('插件详情')}
                   onClick={() => onOpenDetails(plugin)}
                 >
                   <ShieldCheck size={14} />
@@ -97,8 +100,8 @@ export function PluginList({
                   size="icon-sm"
                   variant="ghost"
                   className="plugin-row-remove"
-                  aria-label={`卸载 ${plugin.name}`}
-                  title="卸载插件"
+                  aria-label={t('卸载 {0}', plugin.name)}
+                  title={t('卸载插件')}
                   disabled={busy}
                   onClick={() => onRemove(plugin)}
                 >
@@ -109,7 +112,7 @@ export function PluginList({
                 type="button"
                 role="switch"
                 aria-checked={enabled}
-                aria-label={`${enabled ? '停用' : '激活'} ${plugin.name}`}
+                aria-label={`${enabled ? t('停用') : t('激活')} ${plugin.name}`}
                 className={`plugin-switch ${enabled ? 'on' : ''}`}
                 disabled={busy || !plugin.backendAvailable}
                 onClick={() => void onToggleActivation(plugin, !enabled)}
@@ -131,11 +134,11 @@ function PluginEmptyState({ onBrowseStore }: { onBrowseStore: () => void }) {
       <div className="plugin-empty-icon">
         <Puzzle size={26} />
       </div>
-      <strong>用插件扩展 Fiex</strong>
-      <p>按需添加连接、文件工具和工作流，所有插件都需要你的授权。</p>
+      <strong>{t('用插件扩展 Fiex')}</strong>
+      <p>{t('按需添加连接、文件工具和工作流，所有插件都需要你的授权。')}</p>
       <Button type="button" onClick={onBrowseStore}>
         <Download size={15} />
-        浏览官方插件
+        {t('浏览官方插件')}
       </Button>
     </div>
   )

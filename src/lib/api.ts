@@ -1,3 +1,5 @@
+import { translateMessage } from '@/i18n'
+import { t } from '@/i18n'
 import { invoke, isTauri, convertFileSrc, Channel } from '@tauri-apps/api/core'
 import type { Batch } from './types'
 export const native = isTauri()
@@ -9,12 +11,15 @@ export const demo =
     ))
 export const asset = (path: string) => (native && !path.includes('://') ? convertFileSrc(path) : '')
 export async function call<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  if (native) return invoke<T>(command, args)
+  if (native)
+    return invoke<T>(command, args).catch((error: unknown) =>
+      Promise.reject(translateMessage(String(error))),
+    )
   if (demo) {
     const { mock } = await import('./demo')
     return mock(command, args) as Promise<T>
   }
-  throw new Error('请在 Fiex 桌面应用中浏览本地文件。')
+  throw new Error(t('请在 Fiex 桌面应用中浏览本地文件。'))
 }
 export function search(
   pane: string,

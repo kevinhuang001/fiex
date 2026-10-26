@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 
@@ -142,7 +143,7 @@ export function PluginMenuNode({
                 />
               ))
             ) : (
-              <div className="context-submenu-empty">暂无可用操作</div>
+              <div className="context-submenu-empty">{t('暂无可用操作')}</div>
             )}
           </div>
         )}

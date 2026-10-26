@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
 import { usePluginCatalog, type PluginContribution, type PluginInfo } from '@/lib/plugins'
@@ -95,7 +96,7 @@ export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsPr
       }).catch((error) => x.setError(String(error)))
       return
     }
-    x.setError('插件后端不可用')
+    x.setError(t('插件后端不可用'))
   }
   const { pinStrip, pinDrag, pinDragged, beginPinDrag, pinShift } = usePinnedDrag({
     pinnedKeys: prefs.pinnedPluginTools,
@@ -105,7 +106,7 @@ export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsPr
   return (
     <>
       <div className="toolbar-divider" />
-      <div className="plugin-toolbar-group" aria-label="插件工具">
+      <div className="plugin-toolbar-group" aria-label={t('插件工具')}>
         <div className="plugin-pinned-strip" ref={pinStrip}>
           {pinnedTools.map(({ plugin, tool }, index) => {
             const key = pluginKey(plugin.id)
@@ -116,7 +117,7 @@ export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsPr
                 size="icon"
                 className={`plugin-tool-button ${pinDrag?.from === index ? 'dragging' : ''}`}
                 style={{ transform: pinShift(index) }}
-                title={`${plugin.name} · ${tool.title}（拖动排序，右键取消固定）`}
+                title={t('{0} · {1}（拖动排序，右键取消固定）', plugin.name, tool.title)}
                 aria-label={`${plugin.name} ${tool.title}`}
                 onPointerDown={(event) => beginPinDrag(event, index)}
                 onContextMenu={(event) => {

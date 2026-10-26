@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Globe2, ShieldCheck, Terminal } from 'lucide-react'
 import type { PluginInfo } from '@/lib/plugins'
 import { permissionHints, permissionLabels } from '@/lib/pluginPermissions'
@@ -28,7 +29,9 @@ export function PermissionList({
             <small>{permissionHints[permission] || permission}</small>
             {permission === 'commands' && Boolean(plugin.missingCommands?.length) && (
               <small className="plugin-command-missing">
-                本地未找到：{(plugin.missingCommands || []).join('、')}，插件可能无法正常工作
+                {t('本地未找到：')}
+                {(plugin.missingCommands || []).join('、')}
+                {t('，插件可能无法正常工作')}
               </small>
             )}
           </span>
@@ -36,8 +39,8 @@ export function PermissionList({
             <button
               type="button"
               className="plugin-inline-config"
-              aria-label={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
-              title={permission === 'network' ? '配置网络域名' : '配置允许的命令'}
+              aria-label={permission === 'network' ? t('配置网络域名') : t('配置允许的命令')}
+              title={permission === 'network' ? t('配置网络域名') : t('配置允许的命令')}
               disabled={busy || !plugin.approved || !granted.includes(permission)}
               onClick={() => onConfigure(permission)}
             >
@@ -48,7 +51,7 @@ export function PermissionList({
             type="button"
             role="switch"
             aria-checked={granted.includes(permission)}
-            aria-label={`授权 ${permissionLabels[permission] || permission}`}
+            aria-label={t('授权 {0}', permissionLabels[permission] || permission)}
             className={`plugin-switch ${granted.includes(permission) ? 'on' : ''}`}
             disabled={busy || !plugin.approved}
             onClick={() => onToggle(permission, !granted.includes(permission))}
@@ -57,7 +60,7 @@ export function PermissionList({
           </button>
         </div>
       ))}
-      {!declared.length && <p className="sidebar-hint">此插件未声明受控宿主权限。</p>}
+      {!declared.length && <p className="sidebar-hint">{t('此插件未声明受控宿主权限。')}</p>}
     </>
   )
 }

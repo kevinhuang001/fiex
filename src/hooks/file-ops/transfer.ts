@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import type { ConflictResolution, OperationResult } from '@/lib/types'
 import { progressChannel } from '@/hooks/useActivity'
@@ -22,11 +23,11 @@ export function transferActions({
   ) => {
     const shown = paths.slice(0, 5)
     const source = `${shown.join('\n')}${
-      paths.length > shown.length ? `\n… 另有 ${paths.length - shown.length} 项` : ''
+      paths.length > shown.length ? t('\n… 另有 {0} 项', paths.length - shown.length) : ''
     }`
     let onProgress: ReturnType<typeof progressChannel> | undefined
     const result = await run(
-      moving ? '正在移动…' : '正在复制…',
+      moving ? t('正在移动…') : t('正在复制…'),
       () =>
         call<OperationResult>('transfer', {
           paths,
@@ -38,7 +39,7 @@ export function transferActions({
           resolutions,
           onProgress,
         }),
-      `${moving ? '移动' : '复制'}来源：\n${source}\n\n目标：\n${destination}`,
+      t('{0}来源：\n{1}\n\n目标：\n{2}', moving ? t('移动') : t('复制'), source, destination),
       true,
       'transfer',
       (id) => {
@@ -70,14 +71,14 @@ export function transferActions({
     if (moving && !writable()) return
     if (x.selected.length) {
       setClipboard({ paths: [...x.selected], moving })
-      notify(moving ? '已剪切' : '已复制')
+      notify(moving ? t('已剪切') : t('已复制'))
     }
   }
   const duplicate = () => {
     if (!writable()) return
     let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
-      '正在创建副本…',
+      t('正在创建副本…'),
       async () => {
         handleResult(
           await call<OperationResult>('transfer', {

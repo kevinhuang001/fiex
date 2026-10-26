@@ -127,6 +127,9 @@ pub struct PluginManifest {
     pub version: String,
     #[serde(default)]
     pub description: String,
+    /// Source-message catalogs for declarative display fields only.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub locales: BTreeMap<String, BTreeMap<String, String>>,
     #[serde(default)]
     pub icon: Option<String>,
     #[serde(default)]

@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Cloud, HardDrive, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
 import { Modal } from './ui/Modal'
@@ -18,26 +19,31 @@ export function ConnectionDialog({
   const plugins = usePluginCatalog()
   const choices = useMemo(() => {
     const builtin = {
-      plugin: { id: '__builtin__', name: 'Fiex 内置', version: '' },
+      plugin: { id: '__builtin__', name: t('Fiex 内置'), version: '' },
       factory: {
-        title: 'SSH 终端',
+        title: t('SSH 终端'),
         fields: [
           {
             id: 'host',
-            label: '主机',
+            label: t('主机'),
             type: 'text',
             required: true,
             placeholder: 'server.example.com',
           },
-          { id: 'port', label: '端口', type: 'number', defaultValue: 22 },
-          { id: 'username', label: '用户名', type: 'text', placeholder: 'root' },
+          { id: 'port', label: t('端口'), type: 'number', defaultValue: 22 },
+          { id: 'username', label: t('用户名'), type: 'text', placeholder: 'root' },
           {
             id: 'identityFile',
-            label: '私钥文件（可选）',
+            label: t('私钥文件（可选）'),
             type: 'text',
             placeholder: '~/.ssh/id_ed25519',
           },
-          { id: 'terminalType', label: '终端类型', type: 'text', defaultValue: 'xterm-256color' },
+          {
+            id: 'terminalType',
+            label: t('终端类型'),
+            type: 'text',
+            defaultValue: 'xterm-256color',
+          },
         ] as PluginField[],
       },
     }
@@ -46,7 +52,7 @@ export function ConnectionDialog({
       return plugin.enabled && factory ? [{ plugin, factory }] : []
     })
     return demo ? [builtin, ...remote] : remote
-  }, [plugins])
+  }, [plugins, getLocale()])
   const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [values, setValues] = useState<Record<string, string | boolean>>({})
@@ -113,7 +119,7 @@ export function ConnectionDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title={current ? '配置 ' + current.plugin.name : '添加连接'}
+      title={current ? t('配置 ') + current.plugin.name : t('添加连接')}
       actions={
         current ? undefined : (
           <button
@@ -126,7 +132,7 @@ export function ConnectionDialog({
             }}
           >
             <Puzzle size={14} />
-            获取更多连接插件
+            {t('获取更多连接插件')}
           </button>
         )
       }
@@ -154,7 +160,7 @@ export function ConnectionDialog({
                   <strong>{factory.title || plugin.name}</strong>
                   <small>
                     {plugin.id === '__builtin__'
-                      ? '内置 · 使用系统 OpenSSH'
+                      ? t('内置 · 使用系统 OpenSSH')
                       : `${plugin.name} · ${plugin.version}`}
                   </small>
                 </span>
@@ -164,7 +170,7 @@ export function ConnectionDialog({
           </div>
           <footer>
             <Button type="button" onClick={onClose}>
-              取消
+              {t('取消')}
             </Button>
           </footer>
         </div>
@@ -178,14 +184,14 @@ export function ConnectionDialog({
               setError('')
             }}
           >
-            <ArrowLeft size={15} /> 选择其他类型
+            <ArrowLeft size={15} /> {t('选择其他类型')}
           </button>
           <p className="sidebar-hint">
             {current.factory.title}
-            {current.plugin.id === '__builtin__' && ' · 密码/私钥口令会在终端中提示输入'}
+            {current.plugin.id === '__builtin__' && t(' · 密码/私钥口令会在终端中提示输入')}
           </p>
           <label>
-            <span>连接名称</span>
+            <span>{t('连接名称')}</span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -225,10 +231,10 @@ export function ConnectionDialog({
           )}
           <footer>
             <Button type="button" onClick={onClose}>
-              取消
+              {t('取消')}
             </Button>
             <Button type="submit" disabled={busy || !name.trim()}>
-              {busy ? '连接中…' : '添加连接'}
+              {busy ? t('连接中…') : t('添加连接')}
             </Button>
           </footer>
         </form>

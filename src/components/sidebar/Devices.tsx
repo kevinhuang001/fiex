@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { HardDrive, Unplug, Usb } from 'lucide-react'
 import { Fragment } from 'react'
 import { size } from '@/lib/files'
@@ -15,7 +16,7 @@ export function Devices({
   return (
     <Fragment>
       <div className="sidebar-section-title devices-title">
-        <span className="sidebar-label">设备</span>
+        <span className="sidebar-label">{t('设备')}</span>
       </div>
       {x.locations
         .filter((location) => location.kind === 'disk')
@@ -32,14 +33,14 @@ export function Devices({
                 onClick={() =>
                   location.path ? x.navigate(location.path) : onMount(location.device)
                 }
-                title={location.path ? location.path : '未挂载，点击授权挂载'}
+                title={location.path ? location.path : t('未挂载，点击授权挂载')}
               >
                 {location.removable ? <Usb color={color} /> : <HardDrive color={color} />}
                 <span>
                   <span>{location.name || location.path}</span>
                   <small
                     className="disk-capacity"
-                    title={`可用 ${size(location.available)} / 总计 ${size(location.total)}`}
+                    title={t('可用 {0} / 总计 {1}', size(location.available), size(location.total))}
                   >
                     {!location.mounted
                       ? size(location.total)
@@ -53,10 +54,10 @@ export function Devices({
                           ? ['APFS', 'HFS', 'HFS+', 'HFSX', 'BTRFS'].includes(
                               location.filesystem.toUpperCase(),
                             )
-                            ? ' · 只读'
-                            : ' · 内置'
+                            ? t(' · 只读')
+                            : t(' · 内置')
                           : !location.mounted
-                            ? ' · 挂载'
+                            ? t(' · 挂载')
                             : ''}
                       </span>
                     )}
@@ -65,7 +66,11 @@ export function Devices({
                     <span
                       className="disk-meter"
                       role="progressbar"
-                      aria-label={`${location.name || location.path} 已用 ${Math.round(used)}%`}
+                      aria-label={t(
+                        '{0} 已用 {1}%',
+                        location.name || location.path,
+                        Math.round(used),
+                      )}
                       aria-valuenow={Math.round(used)}
                       aria-valuemin={0}
                       aria-valuemax={100}
@@ -78,7 +83,7 @@ export function Devices({
               {location.usbfs ? (
                 <button
                   className="device-eject icon-button"
-                  title="弹出 U 盘"
+                  title={t('弹出 U 盘')}
                   onClick={() => onEjectDevice(location.device)}
                 >
                   <Unplug size={13} />
@@ -89,7 +94,7 @@ export function Devices({
                 !/^[A-Za-z]:[\\/]?$/.test(location.path) && (
                   <button
                     className="device-eject icon-button"
-                    title="弹出设备"
+                    title={t('弹出设备')}
                     onClick={() => onEject(location.path)}
                   >
                     <Unplug size={13} />

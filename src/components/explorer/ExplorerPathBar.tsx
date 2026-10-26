@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { AppController } from '@/hooks/useAppController'
 import { PathToolbar } from './PathToolbar'
 export function ExplorerPathBar({
@@ -43,14 +44,14 @@ export function ExplorerPathBar({
       pathInput={pathInput}
       searchInput={searchInput}
       searchHint={hint('search')}
-      ariaLabel="当前位置"
-      pathLabel="文件夹路径"
-      searchLabel="搜索文件"
+      ariaLabel={t('当前位置')}
+      pathLabel={t('文件夹路径')}
+      searchLabel={t('搜索文件')}
       close={
         split
           ? {
-              label: '关闭左侧面板',
-              title: '关闭此面板',
+              label: t('关闭左侧面板'),
+              title: t('关闭此面板'),
               className: 'pane-close-main',
               onClose: () => closePane('left'),
             }

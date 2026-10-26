@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { FileIcon } from '@/components/FileIcon'
 import { date, size } from '@/lib/files'
@@ -28,11 +29,11 @@ export function PickerEntries({
     <div
       className={`file-picker-entries ${view}`}
       role="listbox"
-      aria-label="文件"
+      aria-label={t('文件')}
       onContextMenu={(event) => onContextMenu(event)}
     >
       {error && <p className="file-picker-hint error">{error}</p>}
-      {!error && !visible.length && <p className="file-picker-hint">此文件夹为空。</p>}
+      {!error && !visible.length && <p className="file-picker-hint">{t('此文件夹为空。')}</p>}
       {view === 'list'
         ? grouped.map((section) => (
             <div key={section.label || 'all'}>

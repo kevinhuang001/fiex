@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Pin, Plus, Server, TerminalSquare } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
@@ -64,7 +65,7 @@ export function Connections({
     try {
       await call('update_connection_session', { id: connection.id, saved: true })
       await x.refreshConnections()
-      notify(`已保存 Session：${connection.name}`)
+      notify(t('已保存 Session：{0}', connection.name))
     } catch (error) {
       x.setError(String(error))
     }
@@ -77,7 +78,7 @@ export function Connections({
         autostart: !connection.autostart,
       })
       await x.refreshConnections()
-      notify(connection.autostart ? '已取消自启动' : '已设置为自启动')
+      notify(connection.autostart ? t('已取消自启动') : t('已设置为自启动'))
     } catch (error) {
       x.setError(String(error))
     }
@@ -87,12 +88,12 @@ export function Connections({
   return (
     <Fragment>
       <div className="sidebar-section-title connection-section-title">
-        <span className="sidebar-label">连接</span>
+        <span className="sidebar-label">{t('连接')}</span>
         <div className="connection-add" ref={plus}>
           <button
             className="icon-button"
-            title="添加连接或打开 Session"
-            aria-label="添加连接"
+            title={t('添加连接或打开 Session')}
+            aria-label={t('添加连接')}
             aria-expanded={plusOpen}
             onClick={() => {
               if (!plusOpen && plus.current) {
@@ -130,7 +131,7 @@ export function Connections({
                   </button>
                 ))
               ) : (
-                <p className="sidebar-hint">还没有保存的 Session</p>
+                <p className="sidebar-hint">{t('还没有保存的 Session')}</p>
               )}
               <button
                 type="button"
@@ -142,14 +143,14 @@ export function Connections({
                 }}
               >
                 <Plus size={14} />
-                <span>新建连接…</span>
+                <span>{t('新建连接…')}</span>
               </button>
             </div>
           )}
         </div>
       </div>
       {x.connections.length === 0 ? (
-        <p className="sidebar-hint">点击 + 添加连接</p>
+        <p className="sidebar-hint">{t('点击 + 添加连接')}</p>
       ) : (
         x.connections.map((connection) => (
           <div
@@ -170,7 +171,11 @@ export function Connections({
                 <small>{connection.pluginId}</small>
               </span>
               {connection.autostart && (
-                <span className="connection-autostart" title="开机自启动" aria-label="自启动">
+                <span
+                  className="connection-autostart"
+                  title={t('开机自启动')}
+                  aria-label={t('自启动')}
+                >
                   <Pin size={10} />
                 </span>
               )}
@@ -186,10 +191,10 @@ export function Connections({
           style={contextPosition}
         >
           <button type="button" role="menuitem" onClick={() => void save(current)}>
-            保存 Session
+            {t('保存 Session')}
           </button>
           <button type="button" role="menuitem" onClick={() => void toggleAutostart(current)}>
-            {current.autostart ? '取消自启动' : '设置为自启动'}
+            {current.autostart ? t('取消自启动') : t('设置为自启动')}
           </button>
           <button
             type="button"
@@ -200,7 +205,7 @@ export function Connections({
               onRemoveConnection(current.id)
             }}
           >
-            关闭连接
+            {t('关闭连接')}
           </button>
         </div>
       )}

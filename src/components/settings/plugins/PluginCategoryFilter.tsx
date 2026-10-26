@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import {
   Eye,
   FolderOpen,
@@ -41,7 +42,7 @@ export function PluginCategoryFilter({
   )
   if (!visible.length) return null
   return (
-    <div className="plugin-category-filter" role="tablist" aria-label="插件分类">
+    <div className="plugin-category-filter" role="tablist" aria-label={t('插件分类')}>
       <button
         type="button"
         role="tab"
@@ -50,7 +51,7 @@ export function PluginCategoryFilter({
         onClick={() => onChange('all')}
       >
         <LayoutGrid size={15} strokeWidth={1.8} />
-        <span>全部</span>
+        <span>{t('全部')}</span>
       </button>
       {visible.map(({ id }) => {
         const count = categories.find((category) => category.id === id)?.count || 0

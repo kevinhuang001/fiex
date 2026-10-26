@@ -1,3 +1,4 @@
+import { t, useLocale } from '@/i18n'
 import { FileViews } from '@/components/browser/FileViews'
 import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
@@ -22,6 +23,8 @@ import { Download, Info, LoaderCircle, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
+  useLocale()
+
   const app = useAppController()
   usePluginTasks()
   const pluginViewOf = (path: string) =>
@@ -139,17 +142,23 @@ export default function App() {
                   void call('relaunch_elevated').catch((error) => app.x.setError(String(error)))
                 }
               >
-                以管理员身份重启
+                {t('以管理员身份重启')}
               </button>
             )}
-            <button className="icon-button" title="关闭提示" onClick={() => app.x.setError('')}>
+            <button
+              className="icon-button"
+              title={t('关闭提示')}
+              onClick={() => app.x.setError('')}
+            >
               <X size={15} />
             </button>
           </div>
         )}
         {!fullView && app.x.warnings.length > 0 && (
           <details className="warnings">
-            <summary>{app.x.warnings.length} 个项目无法读取</summary>
+            <summary>
+              {app.x.warnings.length} {t('个项目无法读取')}
+            </summary>
             {app.x.warnings.join('\n')}
           </details>
         )}
@@ -182,7 +191,7 @@ export default function App() {
           (app.left.loading && !app.left.hasListing ? (
             <div className="loading">
               <LoaderCircle className="spin" />
-              正在读取文件夹…
+              {t('正在读取文件夹…')}
             </div>
           ) : (
             <div
@@ -205,7 +214,7 @@ export default function App() {
                 onWorkspace={app.addWorkspace}
                 dragPaths={app.selectedAll}
                 onExternalDrag={(result) =>
-                  app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
+                  app.notify(result === 'Dropped' ? t('已交给目标应用处理') : t('已取消拖拽'))
                 }
               />
             </div>
@@ -254,7 +263,10 @@ export default function App() {
       {app.dragging && (
         <div className="drop-overlay">
           <Download />
-          <strong>复制到 {app.displayName(app.x.path)}</strong>
+          <strong>
+            {t('复制到')}
+            {app.displayName(app.x.path)}
+          </strong>
         </div>
       )}
       <FileContextMenu {...app} />

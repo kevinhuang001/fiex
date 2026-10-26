@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Modal } from '@/components/ui/Modal'
 import { PluginSettings } from './PluginSettings'
 
@@ -8,7 +9,7 @@ import { PluginSettings } from './PluginSettings'
  */
 export function PluginManagerDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
-    <Modal open={open} onClose={onClose} title="插件" className="plugin-manager-modal">
+    <Modal open={open} onClose={onClose} title={t('插件')} className="plugin-manager-modal">
       <div className="plugin-manager-page">
         <PluginSettings />
       </div>

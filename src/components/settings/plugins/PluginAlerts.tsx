@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Puzzle, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
@@ -44,17 +45,19 @@ export function PluginUninstallDialog({
   onConfirm: () => void
 }) {
   return (
-    <Modal open={Boolean(plugin)} title="卸载插件" onClose={onClose}>
+    <Modal open={Boolean(plugin)} title={t('卸载插件')} onClose={onClose}>
       <p>
-        确定卸载「{plugin?.name}
-        」吗？将停止插件进程并删除程序文件，插件数据和用户同步目录会保留。
+        {t(
+          '确定卸载“{0}”吗？将停止插件进程并删除程序文件，插件数据和用户同步目录会保留。',
+          plugin?.name,
+        )}
       </p>
       <footer className="plugin-consent-actions">
         <Button variant="outline" onClick={onClose}>
-          取消
+          {t('取消')}
         </Button>
         <Button variant="destructive" disabled={busy} onClick={() => void onConfirm()}>
-          卸载
+          {t('卸载')}
         </Button>
       </footer>
     </Modal>
@@ -78,7 +81,7 @@ export function PluginImportDialog({
   return (
     <Modal
       open={Boolean(preview)}
-      title="导入插件"
+      title={t('导入插件')}
       onClose={onClose}
       className="plugin-import-modal"
     >
@@ -90,35 +93,38 @@ export function PluginImportDialog({
             </span>
             <span className="plugin-import-copy">
               <strong>{preview.name}</strong>
-              <small>{preview.author?.name || '未知开发者'}</small>
+              <small>{preview.author?.name || t('未知开发者')}</small>
             </span>
           </div>
           <div className={`plugin-import-signature ${preview.signed ? 'verified' : 'warning'}`}>
             {preview.signed ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
             <span>
-              <strong>{preview.signed ? '插件包已签名' : '插件包未签名'}</strong>
+              <strong>{preview.signed ? t('插件包已签名') : t('插件包未签名')}</strong>
               {preview.signed && (
                 <>
-                  签名者：
-                  {preview.publisherName || preview.publisher || '未知签名者'}
+                  {t('签名者：')}
+                  {preview.publisherName || preview.publisher || t('未知签名者')}
                   {(preview.fingerprint || preview.keyId) && (
                     <>
                       <br />
-                      密钥指纹：<code>{preview.fingerprint || preview.keyId}</code>
+                      {t('密钥指纹：')}
+                      <code>{preview.fingerprint || preview.keyId}</code>
                     </>
                   )}
                   <br />
                 </>
               )}
-              <em>Core 内置 Ed25519 校验 · 请只导入你信任来源的插件，并确认它将获得的权限。</em>
+              <em>
+                {t('Core 内置 Ed25519 校验 · 请只导入你信任来源的插件，并确认它将获得的权限。')}
+              </em>
             </span>
           </div>
           <footer className="plugin-consent-actions">
             <Button variant="outline" disabled={busy} onClick={onCancel}>
-              取消
+              {t('取消')}
             </Button>
             <Button disabled={busy} onClick={() => void onConfirm()}>
-              导入插件
+              {t('导入插件')}
             </Button>
           </footer>
         </div>

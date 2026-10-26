@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 import { call } from '@/lib/api'
@@ -174,13 +175,13 @@ export function PluginContextActions({
         return
       }
       activityId = beginActivity(
-        (plugin?.name || '插件') + ' · ' + item.title,
-        paths.length + ' 个项目',
+        (plugin?.name || t('插件')) + ' · ' + item.title,
+        paths.length + t(' 个项目'),
         undefined,
         'plugin',
       )
       updateActivity(activityId, { indeterminate: true })
-      finishActivity(activityId, undefined, '已提交')
+      finishActivity(activityId, undefined, t('已提交'))
       // Background tasks return a taskId; the Status Center owns their
       // progress, so never open a raw JSON result dialog for them.
       const silent =
@@ -234,14 +235,14 @@ export function PluginContextActions({
         }}
       >
         <Puzzle size={15} />
-        插件
+        {t('插件')}
         <ChevronRight size={13} className="submenu-arrow" />
       </button>
       {open && (
         <div
           ref={submenu}
           role="menu"
-          aria-label="插件操作"
+          aria-label={t('插件操作')}
           className={`context-submenu plugin-context-menu${flip.left ? ' open-left' : ''}${flip.up ? ' plugin-context-menu-up' : ''}`}
           onMouseEnter={cancelClose}
           onMouseLeave={scheduleClose}
@@ -275,7 +276,7 @@ export function PluginContextActions({
             )
           ) : (
             <p className="context-submenu-empty">
-              没有可用的插件操作，请确认插件已激活且是新版安装包。
+              {t('没有可用的插件操作，请确认插件已激活且是新版安装包。')}
             </p>
           )}
         </div>

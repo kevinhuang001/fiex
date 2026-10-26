@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { commonPlaces as getCommonPlaces } from '@/lib/places'
 import type { Location, Preferences, SidebarSection } from '@/lib/types'
 import {
@@ -18,25 +19,35 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 function placeIcon(name: string) {
-  if (name === '最近使用') return <Clock size={14} />
-  if (name === '废纸篓') return <Trash2 size={14} />
-  if (name === '个人文件夹') return <Home size={14} />
-  if (name === '桌面') return <Monitor size={14} />
-  if (name === '下载') return <Download size={14} />
-  if (name === '图片') return <Image size={14} />
-  if (name === '音乐') return <Music size={14} />
-  if (name === '视频') return <Film size={14} />
-  if (name === '文稿') return <FileText size={14} />
-  if (name === '应用程序') return <AppWindow size={14} />
+  if (name === t('最近使用')) return <Clock size={14} />
+  if (name === t('废纸篓')) return <Trash2 size={14} />
+  if (name === t('个人文件夹')) return <Home size={14} />
+  if (name === t('桌面')) return <Monitor size={14} />
+  if (name === t('下载')) return <Download size={14} />
+  if (name === t('图片')) return <Image size={14} />
+  if (name === t('音乐')) return <Music size={14} />
+  if (name === t('视频')) return <Film size={14} />
+  if (name === t('文稿')) return <FileText size={14} />
+  if (name === t('应用程序')) return <AppWindow size={14} />
   return <Folder size={14} />
 }
 
 const SIDEBAR_LABELS: Record<SidebarSection, string> = {
-  places: '常用位置',
-  favorites: '收藏',
-  tags: '标签',
-  devices: '设备',
-  connections: '连接',
+  get places() {
+    return t('常用位置')
+  },
+  get favorites() {
+    return t('收藏')
+  },
+  get tags() {
+    return t('标签')
+  },
+  get devices() {
+    return t('设备')
+  },
+  get connections() {
+    return t('连接')
+  },
 }
 
 type ReorderKind = 'section' | 'place'
@@ -180,7 +191,7 @@ export function SidebarSettings({
       <span>{SIDEBAR_LABELS[id]}</span>
       <input
         type="checkbox"
-        aria-label={`显示${SIDEBAR_LABELS[id]}`}
+        aria-label={t('显示{0}', SIDEBAR_LABELS[id])}
         checked={!prefs.hiddenSections.includes(id)}
         onChange={() =>
           update({
@@ -204,7 +215,7 @@ export function SidebarSettings({
         <input
           type="checkbox"
           checked={!hidden}
-          aria-label={ghost ? undefined : `显示${location.name}`}
+          aria-label={ghost ? undefined : t('显示{0}', location.name)}
           readOnly={ghost}
           tabIndex={ghost ? -1 : undefined}
           onChange={
@@ -243,7 +254,7 @@ export function SidebarSettings({
     <>
       <div className="settings-card">
         <div className="settings-card-header">
-          <span>区域顺序</span>
+          <span>{t('区域顺序')}</span>
           <button
             className="settings-reset"
             onClick={() =>
@@ -256,7 +267,7 @@ export function SidebarSettings({
             }
           >
             <RotateCcw size={11} />
-            恢复预设
+            {t('恢复预设')}
           </button>
         </div>
         <div className={`sidebar-order ${drag?.kind === 'section' ? 'reordering' : ''}`}>
@@ -276,7 +287,7 @@ export function SidebarSettings({
       </div>
       <div className="settings-card">
         <div className="settings-card-header">
-          <span>常用位置</span>
+          <span>{t('常用位置')}</span>
         </div>
         <div className={`place-order ${drag?.kind === 'place' ? 'reordering' : ''}`}>
           {orderedPlaces.map((location, index) => (

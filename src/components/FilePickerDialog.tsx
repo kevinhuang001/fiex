@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { Modal } from '@/components/ui/Modal'
@@ -30,12 +31,12 @@ function Picker({ request }: { request: FilePickerRequest }) {
       onClose={picker.cancel}
       title={
         request.mode === 'saveFile'
-          ? '保存文件'
+          ? t('保存文件')
           : request.mode === 'openDirectory'
-            ? '选择文件夹'
+            ? t('选择文件夹')
             : request.mode === 'openFiles'
-              ? '选择文件'
-              : '打开文件'
+              ? t('选择文件')
+              : t('打开文件')
       }
       wide
       className="file-picker"

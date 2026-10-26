@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Location } from './types'
 
 export function commonPlaces(locations: Location[]): Location[] {
@@ -22,5 +23,5 @@ export function commonPlaces(locations: Location[]): Location[] {
         usbfs: false,
       })
   }
-  return result
+  return result.map((place) => ({ ...place, name: t(place.name) }))
 }

@@ -32,7 +32,7 @@ fn count_files(path: &Path, ignore: &IgnoreSet, relative: &Path) -> Result<u64, 
     }
     let meta = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
     if meta.file_type().is_symlink() {
-        return Err("暂不支持复制或移动符号链接及特殊文件".into());
+        return Err(crate::i18n::t("暂不支持复制或移动符号链接及特殊文件").into());
     }
     if meta.is_file() {
         return Ok(1);
@@ -70,7 +70,7 @@ impl Plan<'_> {
         }
         let meta = fs::symlink_metadata(&src).map_err(|e| e.to_string())?;
         if meta.file_type().is_symlink() || !(meta.is_file() || meta.is_dir()) {
-            return Err("暂不支持复制或移动符号链接及特殊文件".into());
+            return Err(crate::i18n::t("暂不支持复制或移动符号链接及特殊文件").into());
         }
         if exists(&dest) {
             let same = dunce::canonicalize(&src).ok() == dunce::canonicalize(&dest).ok();
@@ -106,7 +106,7 @@ impl Plan<'_> {
                 Decision::KeepBoth => dest = unique(&dest),
                 Decision::Replace => {
                     if same {
-                        return Err("不能用文件替换其自身，请选择保留两者".into());
+                        return Err(crate::i18n::t("不能用文件替换其自身，请选择保留两者").into());
                     }
                     self.reserve(&dest)?;
                     let files = count_files(&src, &self.ignore, &relative)?;
@@ -134,7 +134,7 @@ impl Plan<'_> {
 
     fn reserve(&mut self, path: &Path) -> Result<(), String> {
         if !self.reserved.insert(path.into()) {
-            return Err("所选项目有重复文件名，请分别操作".into());
+            return Err(crate::i18n::t("所选项目有重复文件名，请分别操作").into());
         }
         Ok(())
     }
@@ -159,7 +159,7 @@ fn install_copy(
     check_cancelled(cancel)?;
     let staging = tempfile::Builder::new()
         .prefix(".fiex-copy-")
-        .tempdir_in(dest.parent().ok_or("目标路径无效")?)
+        .tempdir_in(dest.parent().ok_or(crate::i18n::t("目标路径无效"))?)
         .map_err(|e| e.to_string())?;
     let staged = staging.path().join("incoming");
     let report = |path: &Path| {
@@ -177,14 +177,14 @@ fn install_copy(
     )?;
     if staged.is_dir() {
         if exists(dest) {
-            return Err("目标已改变，请重试".into());
+            return Err(crate::i18n::t("目标已改变，请重试").into());
         }
         fs::rename(&staged, dest).map_err(|e| e.to_string())?;
     } else {
         match fs::hard_link(&staged, dest) {
             Ok(()) => (),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err("目标已改变，请重试".into())
+                return Err(crate::i18n::t("目标已改变，请重试").into())
             }
             Err(_) => {
                 let mut output = fs::OpenOptions::new()
@@ -211,7 +211,7 @@ fn install_copy(
 pub(crate) fn move_tree(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<usize, String> {
     check_cancelled(cancel)?;
     if exists(dest) {
-        return Err("目标已改变，请重试".into());
+        return Err(crate::i18n::t("目标已改变，请重试").into());
     }
     if src.is_file() {
         match fs::hard_link(src, dest) {
@@ -223,7 +223,7 @@ pub(crate) fn move_tree(src: &Path, dest: &Path, cancel: &AtomicBool) -> Result<
                 return Ok(0);
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                return Err("目标已改变，请重试".into())
+                return Err(crate::i18n::t("目标已改变，请重试").into())
             }
             Err(_) => (),
         }
@@ -253,7 +253,7 @@ pub(crate) fn execute(
     check_cancelled(cancel)?;
     let dest_dir = dunce::canonicalize(destination).map_err(|e| e.to_string())?;
     if !dest_dir.is_dir() {
-        return Err("目标不是文件夹".into());
+        return Err(crate::i18n::t("目标不是文件夹").into());
     }
     let mut plan = Plan {
         tasks: vec![],
@@ -272,9 +272,12 @@ pub(crate) fn execute(
         let src = PathBuf::from(source);
         let real = dunce::canonicalize(&src).map_err(|e| e.to_string())?;
         if dest_dir.starts_with(&real) {
-            return Err("不能把文件夹复制或移动到其自身内部".into());
+            return Err(crate::i18n::t("不能把文件夹复制或移动到其自身内部").into());
         }
-        let name = src.file_name().ok_or("不能操作根目录")?.to_os_string();
+        let name = src
+            .file_name()
+            .ok_or(crate::i18n::t("不能操作根目录"))?
+            .to_os_string();
         plan.walk(src, dest_dir.join(&name), PathBuf::from(name))?;
     }
     let mut result = OperationResult {
@@ -307,7 +310,7 @@ pub(crate) fn execute(
                     let result = if cancel.load(Ordering::Relaxed) {
                         Err(CANCELLED.into())
                     } else if exists(&task.dest) {
-                        Err("目标已改变，请重试".into())
+                        Err(crate::i18n::t("目标已改变，请重试").into())
                     } else {
                         install_copy(&task.src, &task.dest, ignore, cancel, Some(&progress))
                     };
@@ -359,7 +362,7 @@ pub(crate) fn execute(
         let backup = if replace {
             let storage = tempfile::Builder::new()
                 .prefix(".fiex-undo-")
-                .tempdir_in(dest.parent().ok_or("目标路径无效")?)
+                .tempdir_in(dest.parent().ok_or(crate::i18n::t("目标路径无效"))?)
                 .map_err(|e| e.to_string())?;
             if let Err(e) = fs::rename(&dest, storage.path().join("original")) {
                 result.errors.push(e.to_string());

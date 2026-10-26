@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Action, Label, Menu } from '@/components/Menus'
 import * as D from '@/components/ui/dropdown-menu'
 import { useMenuPosition } from '@/lib/menuPosition'
@@ -63,13 +64,13 @@ export function ToolbarPickerMenu({
   terminals,
 }: ToolbarPickerMenuProps) {
   const items =
-    picker.kind === 'ide' ? ides : [{ id: 'builtin', name: 'Fiex 内置终端' }, ...terminals]
+    picker.kind === 'ide' ? ides : [{ id: 'builtin', name: t('Fiex 内置终端') }, ...terminals]
   return (
     <div
       ref={pickerRef}
       className="context-menu toolbar-picker"
       role="menu"
-      aria-label={picker.kind === 'ide' ? '选择 IDE' : '选择终端'}
+      aria-label={picker.kind === 'ide' ? t('选择 IDE') : t('选择终端')}
       style={pickerPosition}
     >
       {items.map((item) => (
@@ -89,7 +90,7 @@ export function ToolbarPickerMenu({
       ))}
       {items.length === 0 && (
         <button role="menuitem" disabled>
-          未检测到可用应用
+          {t('未检测到可用应用')}
         </button>
       )}
     </div>
@@ -114,13 +115,13 @@ export function PluginMenu({
   onManage,
 }: PluginMenuProps) {
   return (
-    <Menu label="插件" icon={<Puzzle weight="regular" size={20} />} align="center">
+    <Menu label={t('插件')} icon={<Puzzle weight="regular" size={20} />} align="center">
       <div className="plugin-menu-header">
-        <Label>插件工具</Label>
+        <Label>{t('插件工具')}</Label>
         <D.DropdownMenuItem
           className="plugin-menu-settings"
-          aria-label="插件设置"
-          title="插件设置"
+          aria-label={t('插件设置')}
+          title={t('插件设置')}
           onSelect={onManage}
         >
           <Settings2 size={14} />
@@ -137,8 +138,8 @@ export function PluginMenu({
               <button
                 type="button"
                 className={`plugin-pin ${pinned ? 'active' : ''}`}
-                aria-label={`${pinned ? '取消固定' : '固定'} ${plugin.name} ${tool.title}`}
-                title={pinned ? '取消固定' : '固定到工具栏'}
+                aria-label={`${pinned ? t('取消固定') : t('固定')} ${plugin.name} ${tool.title}`}
+                title={pinned ? t('取消固定') : t('固定到工具栏')}
                 onClick={() => (pinned ? unpinTool(key) : pinTool(key))}
               >
                 <Pin size={13} fill={pinned ? 'currentColor' : 'none'} />
@@ -154,7 +155,7 @@ export function PluginMenu({
           </Action>
         )
       })}
-      {!availableTools.length && <Label>暂无可用的插件工具</Label>}
+      {!availableTools.length && <Label>{t('暂无可用的插件工具')}</Label>}
     </Menu>
   )
 }

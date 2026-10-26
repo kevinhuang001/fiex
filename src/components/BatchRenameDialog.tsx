@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Hash, CaseSensitive, Replace, RotateCcw, Wand2 } from 'lucide-react'
 import { Modal } from './ui/Modal'
@@ -42,12 +43,12 @@ export function BatchRenameDialog({
     try {
       return { names: buildRenames(entries, options), error: '' }
     } catch (cause) {
-      return { names: [] as string[], error: `正则表达式无效：${String(cause)}` }
+      return { names: [] as string[], error: t('正则表达式无效：{0}', String(cause)) }
     }
-  }, [entries, options])
+  }, [entries, options, getLocale()])
   const validation = useMemo(
     () => (entries ? validateRenames(entries, built.names) : new Map<string, string>()),
-    [entries, built.names],
+    [entries, built.names, getLocale()],
   )
   const changed = (entries || [])
     .map((entry, index) => ({ path: entry.path, name: built.names[index] ?? '' }))
@@ -70,7 +71,7 @@ export function BatchRenameDialog({
     <Modal
       open={Boolean(entries)}
       onClose={onClose}
-      title={`批量重命名${entries ? ` · ${entries.length} 项` : ''}`}
+      title={t('批量重命名{0}', entries ? ` · ${entries.length} 项` : '')}
       wide
       className="batch-rename-modal"
     >
@@ -78,13 +79,13 @@ export function BatchRenameDialog({
         <div className="batch-rename-side">
           <section className="batch-rename-section">
             <header>
-              <Wand2 size={14} /> 文件名格式
+              <Wand2 size={14} /> {t('文件名格式')}
             </header>
             <input
               className="text-field batch-rename-template-input"
               value={options.template}
               spellCheck={false}
-              aria-label="文件名格式"
+              aria-label={t('文件名格式')}
               onChange={(event) => update({ template: event.target.value })}
             />
             <div className="batch-rename-presets">
@@ -114,21 +115,21 @@ export function BatchRenameDialog({
 
           <section className="batch-rename-section">
             <header>
-              <Replace size={14} /> 查找与替换
+              <Replace size={14} /> {t('查找与替换')}
             </header>
             <div className="batch-rename-pair">
               <input
                 className="text-field"
                 value={options.find}
-                placeholder="查找"
-                aria-label="查找"
+                placeholder={t('查找')}
+                aria-label={t('查找')}
                 onChange={(event) => update({ find: event.target.value })}
               />
               <input
                 className="text-field"
                 value={options.replace}
-                placeholder="替换为"
-                aria-label="替换为"
+                placeholder={t('替换为')}
+                aria-label={t('替换为')}
                 onChange={(event) => update({ replace: event.target.value })}
               />
             </div>
@@ -139,7 +140,7 @@ export function BatchRenameDialog({
                   checked={options.regex}
                   onChange={(event) => update({ regex: event.target.checked })}
                 />
-                正则表达式
+                {t('正则表达式')}
               </label>
               <label>
                 <input
@@ -147,7 +148,7 @@ export function BatchRenameDialog({
                   checked={options.applyToExtension}
                   onChange={(event) => update({ applyToExtension: event.target.checked })}
                 />
-                包含扩展名
+                {t('包含扩展名')}
               </label>
             </div>
             {built.error && (
@@ -159,15 +160,15 @@ export function BatchRenameDialog({
 
           <section className="batch-rename-section">
             <header>
-              <CaseSensitive size={14} /> 大小写与扩展名
+              <CaseSensitive size={14} /> {t('大小写与扩展名')}
             </header>
-            <div className="batch-rename-segmented" role="group" aria-label="大小写">
+            <div className="batch-rename-segmented" role="group" aria-label={t('大小写')}>
               {(
                 [
-                  ['keep', '保持'],
-                  ['lower', '小写'],
-                  ['upper', '大写'],
-                  ['title', '首字母'],
+                  ['keep', t('保持')],
+                  ['lower', t('小写')],
+                  ['upper', t('大写')],
+                  ['title', t('首字母')],
                 ] as Array<[RenameCase, string]>
               ).map(([value, label]) => (
                 <button
@@ -181,29 +182,29 @@ export function BatchRenameDialog({
               ))}
             </div>
             <label className="batch-rename-select">
-              <span>扩展名</span>
+              <span>{t('扩展名')}</span>
               <select
                 value={options.extensionMode}
-                aria-label="扩展名处理"
+                aria-label={t('扩展名处理')}
                 onChange={(event) =>
                   update({ extensionMode: event.target.value as RenameExtension })
                 }
               >
-                <option value="keep">保留原样</option>
-                <option value="lower">转为小写</option>
-                <option value="upper">转为大写</option>
-                <option value="remove">移除</option>
+                <option value="keep">{t('保留原样')}</option>
+                <option value="lower">{t('转为小写')}</option>
+                <option value="upper">{t('转为大写')}</option>
+                <option value="remove">{t('移除')}</option>
               </select>
             </label>
           </section>
 
           <section className="batch-rename-section">
             <header>
-              <Hash size={14} /> 序号
+              <Hash size={14} /> {t('序号')}
             </header>
             <div className="batch-rename-numbers">
               <label>
-                <span>起始</span>
+                <span>{t('起始')}</span>
                 <input
                   type="number"
                   min={0}
@@ -212,7 +213,7 @@ export function BatchRenameDialog({
                 />
               </label>
               <label>
-                <span>步长</span>
+                <span>{t('步长')}</span>
                 <input
                   type="number"
                   min={1}
@@ -223,7 +224,7 @@ export function BatchRenameDialog({
                 />
               </label>
               <label>
-                <span>位数</span>
+                <span>{t('位数')}</span>
                 <input
                   type="number"
                   min={1}
@@ -236,7 +237,9 @@ export function BatchRenameDialog({
               </label>
             </div>
             <p className="batch-rename-hint">
-              模板里用 {'{n}'} 使用位数；也可以用 {'{n2}'} / {'{n3}'} 强制宽度。
+              {t('模板里用')}
+              {'{n}'} {t('使用位数；也可以用')}
+              {'{n2}'} / {'{n3}'} {t('强制宽度。')}
             </p>
           </section>
         </div>
@@ -244,19 +247,21 @@ export function BatchRenameDialog({
         <div className="batch-rename-preview">
           <header>
             <span>
-              预览 · {entries?.length || 0} 项{changed.length > 0 && ` · ${changed.length} 个改动`}
+              {t('预览 ·')}
+              {entries?.length || 0} {t('项')}
+              {changed.length > 0 && t(' · {0} 个改动', changed.length)}
             </span>
             <button
               type="button"
               onClick={() => setOptions(DEFAULT_RENAME_OPTIONS)}
-              title="重置规则"
+              title={t('重置规则')}
             >
-              <RotateCcw size={13} /> 重置
+              <RotateCcw size={13} /> {t('重置')}
             </button>
           </header>
           <div className="batch-rename-list">
             {(entries || []).map((entry, index) => {
-              const name = built.names[index] || '（空）'
+              const name = built.names[index] || t('（空）')
               const problem = validation.get(entry.path)
               const changedRow = name !== entry.name
               return (
@@ -280,16 +285,16 @@ export function BatchRenameDialog({
           <footer className="batch-rename-footer">
             <span>
               {validation.size > 0
-                ? `${validation.size} 个名称需要处理`
+                ? t('{0} 个名称需要处理', validation.size)
                 : changed.length > 0
-                  ? `将重命名 ${changed.length} 项`
-                  : '还没有改动'}
+                  ? t('将重命名 {0} 项', changed.length)
+                  : t('还没有改动')}
             </span>
             <Button variant="outline" onClick={onClose} disabled={busy}>
-              取消
+              {t('取消')}
             </Button>
             <Button onClick={() => void submit()} disabled={!canApply}>
-              {busy ? '正在重命名…' : '开始重命名'}
+              {busy ? t('正在重命名…') : t('开始重命名')}
             </Button>
           </footer>
         </div>

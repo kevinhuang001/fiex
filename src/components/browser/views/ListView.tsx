@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { FileIcon } from '../../FileIcon'
 import { TagDots } from '../../TagDots'
 import { DecoratedValue, NameCell, rowVars, SyncBadge } from './shared'
@@ -31,10 +32,10 @@ export function ListView({
   return (
     <>
       <div className="list-header">
-        <span>名称</span>
-        <span>修改时间</span>
-        <span>大小</span>
-        <span>种类</span>
+        <span>{t('名称')}</span>
+        <span>{t('修改时间')}</span>
+        <span>{t('大小')}</span>
+        <span>{t('种类')}</span>
       </div>
       <div style={{ height: totalSize, position: 'relative' }}>
         {rows.map((row) => {
@@ -66,7 +67,7 @@ export function ListView({
                     <TagDots tags={item.entry.tags} />
                     <SyncBadge sync={item.entry.sync} />
                     {item.entry.readonly && explorer.renaming !== item.entry.path && (
-                      <small>只读</small>
+                      <small>{t('只读')}</small>
                     )}
                   </span>
                   <DecoratedValue decoration={decoration} target="modified">

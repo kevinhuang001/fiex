@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { CloudCheck, CloudDownload } from 'lucide-react'
 import { FileIcon } from '../../FileIcon'
@@ -49,11 +50,11 @@ export type SharedRow = (entry: Entry) => RowBindings
 export function SyncBadge({ sync }: { sync: Entry['sync'] }) {
   if (!sync) return null
   const labels = {
-    synced: '已缓存',
-    cloud: '仅云端',
-    pinned: '始终保留在本地',
-    pending: '等待上传',
-    conflict: '同步冲突',
+    synced: t('已缓存'),
+    cloud: t('仅云端'),
+    pinned: t('始终保留在本地'),
+    pending: t('等待上传'),
+    conflict: t('同步冲突'),
   }
   const label = labels[sync]
   return (

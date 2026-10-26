@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import { beginActivity, finishActivity } from '@/hooks/useActivity'
 import type { Explorer } from '@/hooks/useExplorer'
@@ -45,7 +46,7 @@ export function useRunner({
       return result
     } catch (e) {
       const message = String(e)
-      if (message.includes('已取消')) {
+      if (message.includes(t('已取消'))) {
         // Cancelling is the user's choice; the activity centre already says so.
         // Refresh because a stopped transfer may still have moved some files.
         x.reload()

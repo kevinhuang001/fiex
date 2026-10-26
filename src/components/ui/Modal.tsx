@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
@@ -37,7 +38,7 @@ export function Modal({
           {bare ? (
             <>
               <Dialog.Title className="visually-hidden">{title}</Dialog.Title>
-              <Dialog.Close className="icon-button modal-close" aria-label="关闭">
+              <Dialog.Close className="icon-button modal-close" aria-label={t('关闭')}>
                 <X size={16} />
               </Dialog.Close>
             </>
@@ -45,7 +46,7 @@ export function Modal({
             <header>
               <Dialog.Title>{title}</Dialog.Title>
               {actions && <div className="modal-actions">{actions}</div>}
-              <Dialog.Close className="icon-button" aria-label="关闭">
+              <Dialog.Close className="icon-button" aria-label={t('关闭')}>
                 <X size={17} />
               </Dialog.Close>
             </header>

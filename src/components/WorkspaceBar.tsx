@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
@@ -67,17 +68,17 @@ export function WorkspaceBar({
       ref={panel}
       className="workspace-bar"
       data-workspace-drop="true"
-      aria-label="工作区"
+      aria-label={t('工作区')}
       style={{ height }}
     >
-      <div className="workspace-resizer" title="调整工作区高度" />
+      <div className="workspace-resizer" title={t('调整工作区高度')} />
       <div className="workspace-items" ref={itemsRef}>
         {items.length ? (
           items.map((entry) => (
             <div className="workspace-chip" key={entry.path}>
               <button
                 className="workspace-open"
-                title={`打开 ${entry.name}`}
+                title={t('打开 {0}', entry.name)}
                 onClick={() => onOpen(entry)}
               >
                 <FileIcon entry={entry} size={27} />
@@ -85,7 +86,7 @@ export function WorkspaceBar({
               </button>
               <button
                 className="workspace-remove"
-                aria-label={`移出工作区 ${entry.name}`}
+                aria-label={t('移出工作区 {0}', entry.name)}
                 onClick={() => onRemove(entry.path)}
               >
                 x
@@ -93,7 +94,7 @@ export function WorkspaceBar({
             </div>
           ))
         ) : (
-          <div className="workspace-empty">工作区为空</div>
+          <div className="workspace-empty">{t('工作区为空')}</div>
         )}
       </div>
     </section>

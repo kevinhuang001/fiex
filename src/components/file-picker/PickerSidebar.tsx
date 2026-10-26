@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Folder, HardDrive, Server } from 'lucide-react'
 import type { Location, RemoteConnection } from '@/lib/types'
 
@@ -18,7 +19,7 @@ export function PickerSidebar({
 }) {
   return (
     <aside className="file-picker-sidebar">
-      {places.length > 0 && <p className="file-picker-section">常用位置</p>}
+      {places.length > 0 && <p className="file-picker-section">{t('常用位置')}</p>}
       {places.map((item) => (
         <button
           key={`place:${item.kind}:${item.path || item.name}`}
@@ -30,8 +31,8 @@ export function PickerSidebar({
           <span>{item.name}</span>
         </button>
       ))}
-      <p className="file-picker-section">收藏</p>
-      {!favorites.length && <p className="file-picker-empty">还没有收藏</p>}
+      <p className="file-picker-section">{t('收藏')}</p>
+      {!favorites.length && <p className="file-picker-empty">{t('还没有收藏')}</p>}
       {favorites.map((item) => (
         <button
           key={`favorite:${item.path}`}
@@ -43,8 +44,8 @@ export function PickerSidebar({
           <span>{item.name}</span>
         </button>
       ))}
-      <p className="file-picker-section">连接</p>
-      {!connections.length && <p className="file-picker-empty">没有连接</p>}
+      <p className="file-picker-section">{t('连接')}</p>
+      {!connections.length && <p className="file-picker-empty">{t('没有连接')}</p>}
       {connections.map((item) => (
         <button
           key={`connection:${item.id}`}
@@ -56,8 +57,8 @@ export function PickerSidebar({
           <span>{item.name}</span>
         </button>
       ))}
-      <p className="file-picker-section">设备</p>
-      {!disks.length && <p className="file-picker-empty">没有设备</p>}
+      <p className="file-picker-section">{t('设备')}</p>
+      {!disks.length && <p className="file-picker-empty">{t('没有设备')}</p>}
       {disks.map((item) => (
         <button
           key={`disk:${item.path || item.device}`}

@@ -1,3 +1,5 @@
+import { getLocale, normalizeLocale, setLocale } from '@/i18n'
+import { call } from '@/lib/api'
 import { applyTheme, installedThemes } from '@/lib/themes'
 import { demo } from '@/lib/api'
 import { defaultDisplayIgnore } from '@/lib/ignores'
@@ -14,6 +16,7 @@ import { useEffect, useState } from 'react'
 
 function defaultsFor(style: ShortcutStyle): Preferences {
   return {
+    locale: getLocale(),
     view: 'list',
     group: 'none',
     sort: 'name',
@@ -99,6 +102,7 @@ function load(): Preferences {
     return {
       ...fallback,
       ...Object.fromEntries(Object.entries(stored).filter(([key]) => key in fallback)),
+      locale: normalizeLocale(stored.locale),
       tags,
       startPage,
       fontSize,
@@ -159,6 +163,12 @@ function load(): Preferences {
 
 export function usePreferences() {
   const [prefs, setPrefs] = useState<Preferences>(load)
+  useEffect(() => {
+    setLocale(prefs.locale)
+    void call('locale_set', { locale: prefs.locale })
+      .catch(() => {})
+      .then(() => window.dispatchEvent(new Event('fiex:plugins-changed')))
+  }, [prefs.locale])
   useEffect(() => {
     localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
   }, [prefs])

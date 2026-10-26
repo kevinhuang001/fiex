@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 import { call, native } from '@/lib/api'
@@ -38,7 +39,7 @@ export function usePluginTasks() {
         let activity = activities.get(payload.taskId)
         if (!activity) {
           activity = beginActivity(
-            payload.label || '插件后台任务',
+            payload.label || t('插件后台任务'),
             undefined,
             () => {
               void call('plugin_cancel_task', {
@@ -61,11 +62,11 @@ export function usePluginTasks() {
       const activity = activities.get(payload.taskId)
       if (!activity) return
       if (payload.status === 'cancelling') {
-        updateActivity(activity, { detail: '正在取消…', indeterminate: true })
+        updateActivity(activity, { detail: t('正在取消…'), indeterminate: true })
         return
       }
       activities.delete(payload.taskId)
-      const error = payload.status === 'cancelled' ? '已取消' : (payload.error ?? undefined)
+      const error = payload.status === 'cancelled' ? t('已取消') : (payload.error ?? undefined)
       finishActivity(activity, error, detailOf(payload.result))
     })
     return () => {

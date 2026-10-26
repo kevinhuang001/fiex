@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Explorer } from '@/hooks/useExplorer'
 import { call } from '@/lib/api'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
@@ -47,7 +48,7 @@ export function useOpenActions({
       pane.navigate(e.path)
       return
     }
-    void run('正在打开…', async () => {
+    void run(t('正在打开…'), async () => {
       const outcome = await runBeforeOpenHooks(e)
       if (outcome.preview) {
         setPreview(e)
@@ -65,7 +66,7 @@ export function useOpenActions({
       setPreview(entry)
       return
     }
-    void run('正在下载…', async () => {
+    void run(t('正在下载…'), async () => {
       await call('remote_download', { path: entry.path })
       setPreview(entry)
       pane.reload()
@@ -73,7 +74,7 @@ export function useOpenActions({
   }
   const openTrash = async () => {
     if (!trashPath) {
-      void run('正在打开废纸篓…', () => call('open_trash'))
+      void run(t('正在打开废纸篓…'), () => call('open_trash'))
       return
     }
     try {
@@ -90,7 +91,7 @@ export function useOpenActions({
       else x.setError(message)
     }
   }
-  const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
+  const openApplications = () => void run(t('正在打开应用程序…'), () => call('open_applications'))
   const terminal = (id = prefs.terminal) => {
     if (id === 'builtin') {
       const cwd = first?.isDir ? first.path : x.path
@@ -102,7 +103,7 @@ export function useOpenActions({
       return
     }
     if (!writable()) return
-    void run('正在打开终端…', () =>
+    void run(t('正在打开终端…'), () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),
     )
   }
@@ -111,10 +112,10 @@ export function useOpenActions({
     if (!path) return
     const ide = ides.find((item) => item.id === prefs.ide) || ides[0]
     if (!ide) {
-      x.setError('没有检测到可用的 IDE')
+      x.setError(t('没有检测到可用的 IDE'))
       return
     }
-    void run(`正在用 ${ide.name} 打开…`, () => call('open_in_ide', { path, id: ide.id }))
+    void run(t('正在用 {0} 打开…', ide.name), () => call('open_in_ide', { path, id: ide.id }))
   }
   const openTags = (paths: string[]) => {
     if (!writable()) return
@@ -134,7 +135,7 @@ export function useOpenActions({
       await call('set_tags', { paths: tagPaths, tags })
       setTagOpen(false)
       x.reload()
-      notify('标签已更新')
+      notify(t('标签已更新'))
     } catch (error) {
       x.setError(String(error))
     }

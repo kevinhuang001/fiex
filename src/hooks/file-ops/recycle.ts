@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { call } from '@/lib/api'
 import type { OperationResult } from '@/lib/types'
 import { progressChannel } from '@/hooks/useActivity'
@@ -29,13 +30,13 @@ export function recycleActions({
     }
     const shown = paths.slice(0, 5)
     const source = `${shown.join('\n')}${
-      paths.length > shown.length ? `\n… 另有 ${paths.length - shown.length} 项` : ''
+      paths.length > shown.length ? t('\n… 另有 {0} 项', paths.length - shown.length) : ''
     }`
     let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
-      '正在移到废纸篓…',
+      t('正在移到废纸篓…'),
       () => moveToTrash(paths, onProgress),
-      `删除来源：\n${source}\n\n目标：\n废纸篓`,
+      t('删除来源：\n{0}\n\n目标：\n废纸篓', source),
       true,
       'delete',
       (id) => {
@@ -46,18 +47,18 @@ export function recycleActions({
   const deletePermanently = (paths: string[]) => {
     if (!paths.length) return
     setDialog({
-      title: `彻底删除 ${paths.length} 个项目？`,
-      submit: '彻底删除',
+      title: t('彻底删除 {0} 个项目？', paths.length),
+      submit: t('彻底删除'),
       danger: true,
       action: async () => {
         const shown = paths.slice(0, 5)
         const source = `${shown.join('\n')}${
-          paths.length > shown.length ? `\n… 另有 ${paths.length - shown.length} 项` : ''
+          paths.length > shown.length ? t('\n… 另有 {0} 项', paths.length - shown.length) : ''
         }`
         await run(
-          '正在彻底删除…',
+          t('正在彻底删除…'),
           () => call<number>('delete_permanently', { paths }),
-          `删除：\n${source}`,
+          t('删除：\n{0}', source),
           true,
           'delete',
         )
@@ -67,20 +68,20 @@ export function recycleActions({
   }
   const emptyTrash = () => {
     setDialog({
-      title: '清空废纸篓？',
-      submit: '清空废纸篓',
+      title: t('清空废纸篓？'),
+      submit: t('清空废纸篓'),
       danger: true,
       action: async () => {
         const removed = await run(
-          '正在清空废纸篓…',
+          t('正在清空废纸篓…'),
           () => call<number>('empty_trash'),
-          '删除：废纸篓中的所有项目',
+          t('删除：废纸篓中的所有项目'),
           true,
           'delete',
         )
         if (removed === undefined) return
         x.setSelected([])
-        notify(removed > 0 ? `已清空 ${removed} 个项目` : '废纸篓已经是空的')
+        notify(removed > 0 ? t('已清空 {0} 个项目', removed) : t('废纸篓已经是空的'))
       },
     })
   }

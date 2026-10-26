@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { call } from '@/lib/api'
@@ -39,9 +40,11 @@ export function PluginErrorsSection({ pluginId }: { pluginId: string }) {
     <section className="plugin-permission-section">
       <div className="plugin-section-title">
         <strong>
-          <AlertTriangle size={15} /> 最近错误
+          <AlertTriangle size={15} /> {t('最近错误')}
         </strong>
-        <small>{loading ? '读取中…' : errors.length ? `${errors.length} 条` : '没有记录'}</small>
+        <small>
+          {loading ? t('读取中…') : errors.length ? t('{0} 条', errors.length) : t('没有记录')}
+        </small>
       </div>
       {errors.length ? (
         <>
@@ -52,17 +55,17 @@ export function PluginErrorsSection({ pluginId }: { pluginId: string }) {
                 <div>
                   <p>{entry.message}</p>
                   {entry.detail && <pre>{entry.detail}</pre>}
-                  <time>{new Date(entry.at).toLocaleString()}</time>
+                  <time>{new Date(entry.at).toLocaleString(getLocale())}</time>
                 </div>
               </li>
             ))}
           </ul>
           <Button type="button" size="sm" variant="outline" onClick={clear}>
-            清空记录
+            {t('清空记录')}
           </Button>
         </>
       ) : (
-        <p className="sidebar-hint">命令缺失、进程退出、面板或 RPC 失败都会记录在这里。</p>
+        <p className="sidebar-hint">{t('命令缺失、进程退出、面板或 RPC 失败都会记录在这里。')}</p>
       )}
     </section>
   )

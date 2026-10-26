@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Files, FolderOpen, LoaderCircle, SearchX } from 'lucide-react'
@@ -27,9 +28,9 @@ export function FileViews(props: Props) {
   const inTrash = Boolean(props.trashPath && x.path === props.trashPath)
   const entries = useMemo(
     () => sortEntries(x.entries, prefs.sort, prefs.descending),
-    [x.entries, prefs.sort, prefs.descending],
+    [x.entries, prefs.sort, prefs.descending, getLocale()],
   )
-  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
+  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected, getLocale()])
   // The window is zoomed from the font-size preference, so the tile geometry
   // stays at the reference size and scales with the rest of the interface.
   const iconSize = 64
@@ -92,7 +93,7 @@ export function FileViews(props: Props) {
         ...(heading ? [{ heading, entry: null }] : []),
         ...files.map((entry) => ({ heading: '', entry })),
       ]),
-    [entries, prefs.group],
+    [entries, prefs.group, getLocale()],
   )
   const virtual = useVirtualizer({
     count: flat.length,
@@ -156,7 +157,7 @@ export function FileViews(props: Props) {
       className="file-area"
       ref={container}
       role="grid"
-      aria-label="文件"
+      aria-label={t('文件')}
       tabIndex={0}
       onKeyDown={onKeyDown}
       onPointerDown={band.startBand}
@@ -181,19 +182,19 @@ export function FileViews(props: Props) {
           {x.searching ? (
             <>
               <LoaderCircle className="spin" />
-              <h3>正在搜索…</h3>
+              <h3>{t('正在搜索…')}</h3>
             </>
           ) : (
             <>
               {x.query ? <SearchX /> : <FolderOpen />}
               <h3>
                 {x.query
-                  ? '没有找到匹配的文件'
+                  ? t('没有找到匹配的文件')
                   : x.path === 'recent://'
-                    ? '还没有最近打开的文件'
+                    ? t('还没有最近打开的文件')
                     : inTrash
-                      ? '废纸篓是空的'
-                      : '文件夹是空的'}
+                      ? t('废纸篓是空的')
+                      : t('文件夹是空的')}
               </h3>
             </>
           )}
@@ -223,7 +224,7 @@ export function FileViews(props: Props) {
       {drag.ghost && (
         <div className="drag-ghost" style={{ left: drag.ghost.x + 14, top: drag.ghost.y + 14 }}>
           <Files size={14} />
-          {drag.ghost.paths.length} 个项目
+          {drag.ghost.paths.length} {t('个项目')}
         </div>
       )}
     </div>

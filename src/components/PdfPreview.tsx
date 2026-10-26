@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import {
   getDocument,
@@ -29,7 +30,7 @@ export default function PdfPreview({ url }: { url: string }) {
       })
       .catch((e) => {
         if (active) {
-          setError(`无法预览 PDF：${String(e)}`)
+          setError(t('无法预览 PDF：{0}', String(e)))
           setLoading(false)
         }
       })
@@ -87,7 +88,7 @@ export default function PdfPreview({ url }: { url: string }) {
         <Button
           variant="ghost"
           size="icon"
-          title="上一页"
+          title={t('上一页')}
           disabled={page <= 1}
           onClick={() => setPage((p) => p - 1)}
         >
@@ -99,7 +100,7 @@ export default function PdfPreview({ url }: { url: string }) {
         <Button
           variant="ghost"
           size="icon"
-          title="下一页"
+          title={t('下一页')}
           disabled={!document || page >= document.numPages}
           onClick={() => setPage((p) => p + 1)}
         >
@@ -111,7 +112,7 @@ export default function PdfPreview({ url }: { url: string }) {
         <p className="error">
           {error}
           <br />
-          可点击下方“打开”使用系统默认应用查看。
+          {t('可点击下方“打开”使用系统默认应用查看。')}
         </p>
       ) : (
         <canvas ref={canvas} />

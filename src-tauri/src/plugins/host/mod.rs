@@ -1,6 +1,7 @@
 //! Manifest-driven installed-plugin discovery. Every plugin must be approved
 //! by the user; no ID, publisher name or package location grants privileges.
 mod catalog;
+mod localize;
 mod manifest;
 mod panel;
 mod permissions;

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { useRef, useState } from 'react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
@@ -54,7 +55,7 @@ export function FileContextMenu({
         inTrash,
       })
     : []
-  const tailLabels = new Set(['移到废纸篓', '彻底删除', '放回原处'])
+  const tailLabels = new Set([t('移到废纸篓'), t('彻底删除'), t('放回原处')])
   const items = allItems.filter((item) => !tailLabels.has(item.label))
   const tail = allItems.filter((item) => tailLabels.has(item.label))
   return (
@@ -63,7 +64,7 @@ export function FileContextMenu({
         <div
           ref={menuRef}
           role="menu"
-          aria-label="文件操作"
+          aria-label={t('文件操作')}
           className="context-menu"
           style={menuPosition}
         >

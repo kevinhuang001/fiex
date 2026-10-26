@@ -45,7 +45,7 @@ pub(crate) async fn register_drag(
             if let Some(route) = crate::usbfs::route(path) {
                 let entry = crate::usbfs::entry(&route)?;
                 if entry.is_dir {
-                    return Err("虚拟卷文件夹请使用复制和粘贴".into());
+                    return Err(crate::i18n::t("虚拟卷文件夹请使用复制和粘贴").into());
                 }
                 moving &= !entry.readonly;
                 exported.push(crate::usbfs::open_cached(&route)?);
@@ -92,7 +92,7 @@ pub(crate) async fn drag_files(
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (window, paths, on_event);
-        Err("此命令仅用于 GTK 文件拖动".into())
+        Err(crate::i18n::t("此命令仅用于 GTK 文件拖动").into())
     }
 }
 #[tauri::command]

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useState } from 'react'
 import { call } from '@/lib/api'
 import type { PluginInfo } from '@/lib/plugins'
@@ -95,8 +96,8 @@ export function PluginActivationDialog({
     : {
         id: 'activate',
         kind: 'activate' as const,
-        title: '运行插件',
-        hint: '此插件未申请受控资源，激活后即可运行。',
+        title: t('运行插件'),
+        hint: t('此插件未申请受控资源，激活后即可运行。'),
       }
 
   return (
@@ -107,11 +108,11 @@ export function PluginActivationDialog({
       item={item}
       step={index + 1}
       total={Math.max(1, groups.length)}
-      stepUnit="组"
+      stepUnit={t('组')}
       busy={busy}
       error={error}
-      allowLabel={last ? '激活' : '继续'}
-      denyLabel="取消"
+      allowLabel={last ? t('激活') : t('继续')}
+      denyLabel={t('取消')}
       onAllow={next}
       onDeny={() => {
         if (!busy) onClose()
@@ -168,12 +169,12 @@ function GroupToggles({
       {group.networkAll && (
         <label className="plugin-permission-prompt-toggle danger">
           <span>
-            <strong>访问全部网络</strong>
-            <small role="alert">危险：允许连接任意主机，而不只是清单中的域名。</small>
+            <strong>{t('访问全部网络')}</strong>
+            <small role="alert">{t('危险：允许连接任意主机，而不只是清单中的域名。')}</small>
           </span>
           <input
             type="checkbox"
-            aria-label="访问全部网络"
+            aria-label={t('访问全部网络')}
             checked={selected.networkAll}
             disabled={busy}
             onChange={(event) => onNetworkAll(event.target.checked)}
@@ -184,7 +185,7 @@ function GroupToggles({
         <label className="plugin-permission-prompt-toggle" key={`domain:${domain}`}>
           <span>
             <strong>{domain}</strong>
-            <small>仅授权此精确主机，不包含其他子域名。</small>
+            <small>{t('仅授权此精确主机，不包含其他子域名。')}</small>
           </span>
           <input
             type="checkbox"
@@ -203,8 +204,8 @@ function GroupToggles({
             </strong>
             <small className={command.missing ? 'plugin-permission-prompt-warning' : undefined}>
               {command.missing
-                ? '本地未找到该命令，允许后插件也可能无法工作。'
-                : '仅允许此精确命令名。'}
+                ? t('本地未找到该命令，允许后插件也可能无法工作。')
+                : t('仅允许此精确命令名。')}
             </small>
           </span>
           <input

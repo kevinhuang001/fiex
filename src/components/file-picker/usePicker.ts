@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { call } from '@/lib/api'
 import { useMenuPosition } from '@/lib/menuPosition'
@@ -139,22 +140,22 @@ export function usePicker(request: FilePickerRequest) {
 
   const groupOf = (entry: Entry): { label: string; rank: number } => {
     if (group === 'kind')
-      return entry.isDir ? { label: '文件夹', rank: 0 } : { label: kind(entry), rank: 1 }
+      return entry.isDir ? { label: t('文件夹'), rank: 0 } : { label: kind(entry), rank: 1 }
     if (group === 'size') {
-      if (entry.isDir) return { label: '文件夹', rank: 0 }
-      if (entry.size === 0) return { label: '空', rank: 1 }
-      if (entry.size < 1024 * 1024) return { label: '小于 1 MB', rank: 2 }
-      if (entry.size < 100 * 1024 * 1024) return { label: '小于 100 MB', rank: 3 }
-      return { label: '大于 100 MB', rank: 4 }
+      if (entry.isDir) return { label: t('文件夹'), rank: 0 }
+      if (entry.size === 0) return { label: t('空'), rank: 1 }
+      if (entry.size < 1024 * 1024) return { label: t('小于 1 MB'), rank: 2 }
+      if (entry.size < 100 * 1024 * 1024) return { label: t('小于 100 MB'), rank: 3 }
+      return { label: t('大于 100 MB'), rank: 4 }
     }
     if (group === 'modified') {
       const value = entry.modified * 1000
       const now = Date.now()
-      if (now - value < 24 * 60 * 60 * 1000) return { label: '今天', rank: 0 }
-      if (now - value < 48 * 60 * 60 * 1000) return { label: '昨天', rank: 1 }
-      if (now - value < 7 * 24 * 60 * 60 * 1000) return { label: '过去 7 天', rank: 2 }
-      if (now - value < 30 * 24 * 60 * 60 * 1000) return { label: '过去 30 天', rank: 3 }
-      return { label: '更早', rank: 4 }
+      if (now - value < 24 * 60 * 60 * 1000) return { label: t('今天'), rank: 0 }
+      if (now - value < 48 * 60 * 60 * 1000) return { label: t('昨天'), rank: 1 }
+      if (now - value < 7 * 24 * 60 * 60 * 1000) return { label: t('过去 7 天'), rank: 2 }
+      if (now - value < 30 * 24 * 60 * 60 * 1000) return { label: t('过去 30 天'), rank: 3 }
+      return { label: t('更早'), rank: 4 }
     }
     return { label: '', rank: 0 }
   }
@@ -185,7 +186,7 @@ export function usePicker(request: FilePickerRequest) {
       return result * direction
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, filter, sort, group])
+  }, [entries, filter, sort, group, getLocale()])
 
   const grouped = useMemo(() => {
     if (group === 'none') return [{ label: null as string | null, entries: visible }]
@@ -198,7 +199,7 @@ export function usePicker(request: FilePickerRequest) {
     }
     return sections
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, group])
+  }, [visible, group, getLocale()])
 
   const selectedEntries = visible.filter((entry) => selected.includes(entry.path))
   const canConfirm =
@@ -335,7 +336,7 @@ export function usePicker(request: FilePickerRequest) {
   const closeMenu = () => setMenu(null)
   const requestRename = (entry: Entry) => setDialog({ kind: 'rename', entry, value: entry.name })
   const requestTrash = (entry: Entry) => setDialog({ kind: 'trash', entry })
-  const requestNewFolder = () => setDialog({ kind: 'folder', value: '未命名文件夹' })
+  const requestNewFolder = () => setDialog({ kind: 'folder', value: t('未命名文件夹') })
   const closeDialog = () => setDialog(null)
   const setDialogValue = (value: string) =>
     setDialog((old) => (old && old.kind !== 'trash' ? { ...old, value } : old))

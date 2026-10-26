@@ -109,7 +109,13 @@ impl Running {
             return;
         };
         let result = if let Some(error) = message.get("error") {
-            Err(RpcFailure::business(format!("plugin error: {error}")))
+            Err(RpcFailure::business(
+                error
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .map(crate::i18n::text)
+                    .unwrap_or_else(|| format!("plugin error: {error}")),
+            ))
         } else {
             message
                 .get("result")
@@ -176,6 +182,7 @@ impl Running {
         params: Value,
         scope: Option<crate::plugin_fs_access::Scope>,
     ) -> Result<Value, RpcFailure> {
+        let locale = crate::i18n::locale();
         if self.closed.load(Ordering::Acquire) {
             return Err(RpcFailure::fatal("plugin process is not running"));
         }
@@ -204,6 +211,7 @@ impl Running {
             "id": id,
             "method": method,
             "params": params,
+            "locale": locale,
         }));
         if let Err(error) = sent {
             if let Ok(mut pending) = self.pending.lock() {

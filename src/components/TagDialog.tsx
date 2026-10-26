@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { Modal } from './ui/Modal'
@@ -30,7 +31,7 @@ export function TagDialog({ open, initial, available = [], onClose, onApply }: P
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="标签">
+    <Modal open={open} onClose={onClose} title={t('标签')}>
       <div className="tag-dialog">
         <div className="tag-presets">
           {Array.from(
@@ -61,7 +62,7 @@ export function TagDialog({ open, initial, available = [], onClose, onApply }: P
               <span className="tag-chip" key={`${tag.name}:${tag.color}`}>
                 <i style={{ background: tagHex(tag) }} />
                 {tag.name}
-                <button aria-label={`移除标签 ${tag.name}`} onClick={() => toggle(tag)}>
+                <button aria-label={t('移除标签 {0}', tag.name)} onClick={() => toggle(tag)}>
                   <X size={10} />
                 </button>
               </span>
@@ -71,9 +72,9 @@ export function TagDialog({ open, initial, available = [], onClose, onApply }: P
 
         <div className="dialog-actions">
           <Button variant="ghost" onClick={onClose}>
-            取消
+            {t('取消')}
           </Button>
-          <Button onClick={() => onApply(tags)}>应用标签</Button>
+          <Button onClick={() => onApply(tags)}>{t('应用标签')}</Button>
         </div>
       </div>
     </Modal>

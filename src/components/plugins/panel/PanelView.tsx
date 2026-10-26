@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { RefObject } from 'react'
 import { X } from 'lucide-react'
 import { PluginGlyph } from '../PluginGlyph'
@@ -49,7 +50,7 @@ export function PanelView({
       }${revealed ? ' revealed' : ''}${leaving ? ' leaving' : ''}`}
       hidden={!active && !leaving}
       role="dialog"
-      aria-label={request.title || '插件'}
+      aria-label={request.title || t('插件')}
       aria-busy={!ready}
       style={
         request.source === 'toolbar'
@@ -80,10 +81,10 @@ export function PanelView({
         <span className="plugin-panel-icon">
           <PluginGlyph icon={request.icon} />
         </span>
-        <strong>{request.title || '插件'}</strong>
+        <strong>{request.title || t('插件')}</strong>
         <button
           className="icon-button plugin-panel-close"
-          aria-label="关闭插件面板"
+          aria-label={t('关闭插件面板')}
           onClick={onClose}
         >
           <X size={17} />
@@ -92,7 +93,7 @@ export function PanelView({
       <div className="plugin-panel-content">
         {!ready && !error && (
           <div role="status" className="plugin-panel-loading">
-            正在加载插件…
+            {t('正在加载插件…')}
           </div>
         )}
         {error ? (
@@ -103,7 +104,7 @@ export function PanelView({
           <iframe
             key="asset"
             ref={frameRef}
-            title={request.title || '插件界面'}
+            title={request.title || t('插件界面')}
             sandbox="allow-scripts"
             referrerPolicy="no-referrer"
             style={{ height: '100%', width: '100%', border: 0 }}
@@ -114,7 +115,7 @@ export function PanelView({
           <iframe
             key="srcdoc"
             ref={frameRef}
-            title={request.title || '插件界面'}
+            title={request.title || t('插件界面')}
             sandbox="allow-scripts"
             referrerPolicy="no-referrer"
             style={{ height: '100%', width: '100%', border: 0 }}

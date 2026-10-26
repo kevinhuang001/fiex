@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { PluginInfo } from '@/lib/plugins'
@@ -45,32 +46,32 @@ export function DomainDialog({
   }
   const all = plugin.allowedNetworkAll
   return (
-    <Modal open onClose={onClose} title="网络域名" className="plugin-domain-modal">
+    <Modal open onClose={onClose} title={t('网络域名')} className="plugin-domain-modal">
       <div className="plugin-domain-page">
         <p className="plugin-domain-hint">
-          允许「{plugin.name}」访问的精确主机；本机和局域网地址也需要授权。
+          {t('允许“{0}”访问的精确主机；本机和局域网地址也需要授权。', plugin.name)}
         </p>
         <label className="plugin-network-mode">
-          <span>网络范围</span>
+          <span>{t('网络范围')}</span>
           <select
-            aria-label="网络访问范围"
+            aria-label={t('网络访问范围')}
             value={all ? 'all' : 'whitelist'}
             onChange={(event) => onToggleAll(event.target.value === 'all')}
           >
-            <option value="whitelist">白名单</option>
-            <option value="all">全部域名</option>
+            <option value="whitelist">{t('白名单')}</option>
+            <option value="all">{t('全部域名')}</option>
           </select>
         </label>
         {all ? (
           <p className="plugin-network-danger" role="alert">
-            危险：插件当前可以访问任意主机。切换为白名单后只添加需要的域名。
+            {t('危险：插件当前可以访问任意主机。切换为白名单后只添加需要的域名。')}
           </p>
         ) : (
           ''
         )}
         {!all && plugin.requestedNetworkAll && (
           <p className="plugin-network-request" role="status">
-            插件申请了全部网络访问；你仍可以使用白名单限制它。
+            {t('插件申请了全部网络访问；你仍可以使用白名单限制它。')}
           </p>
         )}
         {!all && (
@@ -83,15 +84,15 @@ export function DomainDialog({
                   <div className="plugin-domain-row" key={domain}>
                     <span>
                       {domain}
-                      {requested && <small>插件申请</small>}
-                      {!allowed && <small className="muted">未授权</small>}
+                      {requested && <small>{t('插件申请')}</small>}
+                      {!allowed && <small className="muted">{t('未授权')}</small>}
                     </span>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={allowed}
-                      aria-label={allowed ? `移除域名 ${domain}` : `授权域名 ${domain}`}
-                      title={allowed ? '移除域名' : '授权域名'}
+                      aria-label={allowed ? t('移除域名 {0}', domain) : t('授权域名 {0}', domain)}
+                      title={allowed ? t('移除域名') : t('授权域名')}
                       className={`plugin-switch ${allowed ? 'on' : ''}`}
                       disabled={busy || !granted}
                       onClick={() => onToggle(domain, !allowed)}
@@ -101,12 +102,12 @@ export function DomainDialog({
                   </div>
                 )
               })}
-              {!domains.length && <p className="sidebar-hint">尚未允许任何域名。</p>}
+              {!domains.length && <p className="sidebar-hint">{t('尚未允许任何域名。')}</p>}
             </div>
             <div className="plugin-domain-add">
               <input
-                aria-label="添加允许的域名"
-                placeholder="域名、IP 或 gitea.example.com"
+                aria-label={t('添加允许的域名')}
+                placeholder={t('域名、IP 或 gitea.example.com')}
                 value={draft}
                 disabled={busy || !granted}
                 onChange={(event) => onDraftChange(event.target.value)}
@@ -121,7 +122,7 @@ export function DomainDialog({
                 disabled={busy || !draft.trim() || !granted}
                 onClick={add}
               >
-                添加域名
+                {t('添加域名')}
               </Button>
             </div>
           </section>
@@ -157,10 +158,10 @@ export function CommandDialog({
     if (command) onAdd(command)
   }
   return (
-    <Modal open onClose={onClose} title="外部命令" className="plugin-domain-modal">
+    <Modal open onClose={onClose} title={t('外部命令')} className="plugin-domain-modal">
       <div className="plugin-domain-page">
         <p className="plugin-domain-hint">
-          外部命令由宿主从 PATH 解析执行，可能访问授权目录以外的资源。
+          {t('外部命令由宿主从 PATH 解析执行，可能访问授权目录以外的资源。')}
         </p>
         <section className="plugin-permission-section plugin-domain-section">
           <div className="plugin-domain-list">
@@ -175,16 +176,16 @@ export function CommandDialog({
                 >
                   <span>
                     <code>{command}</code>
-                    {requested && <small>插件申请</small>}
-                    {!allowed && <small className="muted">未授权</small>}
-                    {missing && <small className="plugin-command-missing">本地未找到</small>}
+                    {requested && <small>{t('插件申请')}</small>}
+                    {!allowed && <small className="muted">{t('未授权')}</small>}
+                    {missing && <small className="plugin-command-missing">{t('本地未找到')}</small>}
                   </span>
                   <button
                     type="button"
                     role="switch"
                     aria-checked={allowed}
-                    aria-label={allowed ? `移除命令 ${command}` : `授权命令 ${command}`}
-                    title={allowed ? '移除命令' : '授权命令'}
+                    aria-label={allowed ? t('移除命令 {0}', command) : t('授权命令 {0}', command)}
+                    title={allowed ? t('移除命令') : t('授权命令')}
                     className={`plugin-switch ${allowed ? 'on' : ''}`}
                     disabled={busy || !granted}
                     onClick={() => onToggle(command, !allowed)}
@@ -194,12 +195,12 @@ export function CommandDialog({
                 </div>
               )
             })}
-            {!commands.length && <p className="sidebar-hint">尚未允许任何命令。</p>}
+            {!commands.length && <p className="sidebar-hint">{t('尚未允许任何命令。')}</p>}
           </div>
           <div className="plugin-domain-add">
             <input
-              aria-label="添加允许的命令"
-              placeholder="输入可执行文件名称"
+              aria-label={t('添加允许的命令')}
+              placeholder={t('输入可执行文件名称')}
               value={draft}
               disabled={busy || !granted}
               onChange={(event) => onDraftChange(event.target.value)}
@@ -214,7 +215,7 @@ export function CommandDialog({
               disabled={busy || !draft.trim() || !granted}
               onClick={add}
             >
-              添加命令
+              {t('添加命令')}
             </Button>
           </div>
         </section>

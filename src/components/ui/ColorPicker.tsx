@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 
 type Hsv = { h: number; s: number; v: number }
@@ -66,7 +67,7 @@ function hsvToHex({ h, s, v }: Hsv): string {
 export function ColorPicker({
   value,
   onChange,
-  label = '颜色',
+  label = t('颜色'),
 }: {
   value: string
   onChange: (hex: string) => void
@@ -117,7 +118,7 @@ export function ColorPicker({
         ref={map}
         className="color-picker-map"
         role="group"
-        aria-label={`${label}饱和度和明度`}
+        aria-label={t('{0}饱和度和明度', label)}
         style={{
           background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`,
         }}
@@ -138,7 +139,7 @@ export function ColorPicker({
         ref={hue}
         className="color-picker-hue"
         role="group"
-        aria-label={`${label}色相`}
+        aria-label={t('{0}色相', label)}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId)
           pickHue(event)
@@ -153,7 +154,7 @@ export function ColorPicker({
         <span className="color-picker-preview" style={{ background: current }} />
         <span className="color-picker-hash">#</span>
         <input
-          aria-label={`${label}十六进制值`}
+          aria-label={t('{0}十六进制值', label)}
           value={draft}
           maxLength={6}
           spellCheck={false}

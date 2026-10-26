@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
 import { FilePickerDialog } from '@/components/FilePickerDialog'
 import { ConflictDialog } from '@/components/ConflictDialog'
@@ -168,7 +169,7 @@ export function ExplorerDialogs({
               disabled={dialogBusy}
               onClick={() => setDialog(null)}
             >
-              取消
+              {t('取消')}
             </Button>
             <Button
               type="submit"
@@ -176,16 +177,16 @@ export function ExplorerDialogs({
               disabled={dialogBusy || (!!dialog?.label && !dialogValue.trim())}
             >
               {dialogBusy && <LoaderCircle className="spin" />}
-              {dialogBusy ? '正在处理…' : dialog?.submit}
+              {dialogBusy ? t('正在处理…') : dialog?.submit}
             </Button>
           </div>
         </form>
       </Modal>
 
-      <Modal open={trashIssue} onClose={() => setTrashIssue(false)} title="无法浏览废纸篓">
+      <Modal open={trashIssue} onClose={() => setTrashIssue(false)} title={t('无法浏览废纸篓')}>
         <div className="dialog-actions">
           <Button variant="ghost" onClick={() => setTrashIssue(false)}>
-            取消
+            {t('取消')}
           </Button>
           <Button
             variant="secondary"
@@ -194,7 +195,7 @@ export function ExplorerDialogs({
               void call('open_trash').catch((error) => x.setError(String(error)))
             }}
           >
-            在 Finder 中打开
+            {t('在 Finder 中打开')}
           </Button>
           <Button
             variant="secondary"
@@ -203,7 +204,7 @@ export function ExplorerDialogs({
               setTimeout(() => void openTrash(), 300)
             }}
           >
-            重试
+            {t('重试')}
           </Button>
           <Button
             onClick={() => {
@@ -211,7 +212,7 @@ export function ExplorerDialogs({
               void call('open_full_disk_access').catch((error) => x.setError(String(error)))
             }}
           >
-            打开权限设置
+            {t('打开权限设置')}
           </Button>
         </div>
       </Modal>
@@ -250,7 +251,7 @@ export function ExplorerDialogs({
               )
             })
             .catch((error) => x.setError(String(error)))
-          notify(`已连接 ${connection.name}`)
+          notify(t('已连接 {0}', connection.name))
         }}
       />
 
@@ -277,7 +278,7 @@ export function ExplorerDialogs({
         <div className="toast" role="status">
           <CheckCircle2 size={16} />
           {toast}
-          <button title="关闭通知" onClick={() => setToast('')}>
+          <button title={t('关闭通知')} onClick={() => setToast('')}>
             <X size={13} />
           </button>
         </div>

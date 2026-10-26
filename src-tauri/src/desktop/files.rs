@@ -184,7 +184,7 @@ pub(crate) async fn transfer(
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
     if remote::is_remote(&destination) {
-        return Err("远程连接只读".into());
+        return Err(crate::i18n::t("远程连接只读").into());
     }
     let transfer_options = remote::TransferOptions {
         cancel: Some(cancel.flag()),
@@ -194,7 +194,7 @@ pub(crate) async fn transfer(
     for source in &paths {
         if remote::is_remote(source) {
             if moving {
-                return Err("远程连接只读，请复制文件".into());
+                return Err(crate::i18n::t("远程连接只读，请复制文件").into());
             }
             if remote::stat(source)?.is_dir {
                 remote::download_dir(source, &transfer_options).await?;

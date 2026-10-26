@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { TagDots } from '../../TagDots'
 import { NameCell, rowVars, SyncBadge, Thumbnail } from './shared'
 import { VirtualFileGrid } from '../VirtualFileGrid'
@@ -41,9 +42,9 @@ export function GridView({
                 <Thumbnail entry={e} size={140} />
                 <NameCell explorer={explorer} entry={e} className="gallery-name" />
                 <span>
-                  {kind(e)} · {e.isDir ? '文件夹' : size(e.size)}
+                  {kind(e)} · {e.isDir ? t('文件夹') : size(e.size)}
                 </span>
-                <button onClick={() => onPreview(e)}>空格快速查看</button>
+                <button onClick={() => onPreview(e)}>{t('空格快速查看')}</button>
               </>
             ) : null
           })()}

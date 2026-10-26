@@ -201,11 +201,11 @@ pub fn list_connections() -> Vec<ConnectionInfo> {
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
     let name = input.name.trim();
     if name.is_empty() {
-        return Err("请输入连接名称".into());
+        return Err(crate::i18n::t("请输入连接名称").into());
     }
     let kind = input.kind.trim();
     if kind.is_empty() || kind.len() > 80 || kind.contains(['/', '\\', '\0']) {
-        return Err("连接类型无效".into());
+        return Err(crate::i18n::t("连接类型无效").into());
     }
     let plugin_id = input
         .plugin_id
@@ -213,10 +213,10 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .ok_or("connection plugin ID is required")?;
     let builtin = plugin_id == super::config::BUILTIN_PLUGIN_ID;
     if !builtin && !crate::plugin_host::valid_id(&plugin_id) {
-        return Err("连接插件 ID 无效".into());
+        return Err(crate::i18n::t("连接插件 ID 无效").into());
     }
     if builtin && kind != super::config::BUILTIN_SSH {
-        return Err("内置连接类型不支持".into());
+        return Err(crate::i18n::t("内置连接类型不支持").into());
     }
     let declared_fields = declared_connection_fields(&plugin_id, kind)?;
     for (key, value) in &input.settings {
@@ -247,7 +247,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
                 .chars()
                 .any(|ch| ch.is_whitespace() || ch == '\0' || ch == '@')
         {
-            return Err("SSH 主机格式无效".into());
+            return Err(crate::i18n::t("SSH 主机格式无效").into());
         }
         if let Some(username) = input
             .settings
@@ -260,7 +260,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
                         .chars()
                         .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-')))
             {
-                return Err("SSH 用户名格式无效".into());
+                return Err(crate::i18n::t("SSH 用户名格式无效").into());
             }
         }
         let port = input
@@ -269,7 +269,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .and_then(serde_json::Value::as_u64)
             .unwrap_or(22);
         if !(1..=65535).contains(&port) {
-            return Err("SSH 端口无效".into());
+            return Err(crate::i18n::t("SSH 端口无效").into());
         }
         if let Some(path) = input
             .settings
@@ -277,7 +277,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .and_then(serde_json::Value::as_str)
         {
             if path.contains('\0') {
-                return Err("SSH 私钥路径无效".into());
+                return Err(crate::i18n::t("SSH 私钥路径无效").into());
             }
         }
     }
@@ -296,7 +296,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .as_ref()
         .is_some_and(|conn| connection_plugin_id(conn) != plugin_id || conn.kind != kind)
     {
-        return Err("更新连接时不得改变所属插件和连接类型".into());
+        return Err(crate::i18n::t("更新连接时不得改变所属插件和连接类型").into());
     }
     let id = match previous.as_ref() {
         Some(conn) => conn.id.clone(),
@@ -421,7 +421,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                 "connectionId": connection.id,
             }));
         }
-        return Err("内置连接类型不支持".into());
+        return Err(crate::i18n::t("内置连接类型不支持").into());
     }
     let plugin_id = ensure_provider_access(&connection)?;
     if terminal_connection(&connection) {

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Check, Download, LoaderCircle, Puzzle, RefreshCw, Search } from 'lucide-react'
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import {
@@ -66,14 +67,14 @@ export function MarketplaceList({
     return matchesSearch && matchesCategory
   })
   return (
-    <Modal open={open} onClose={onClose} title="获取插件" className="plugin-store-modal">
+    <Modal open={open} onClose={onClose} title={t('获取插件')} className="plugin-store-modal">
       <div className="plugin-store">
         <div className="plugin-store-tools">
           <label className="plugin-store-search">
             <Search size={15} />
             <input
-              aria-label="搜索插件"
-              placeholder="搜索插件"
+              aria-label={t('搜索插件')}
+              placeholder={t('搜索插件')}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -92,7 +93,7 @@ export function MarketplaceList({
         )}
         {loading && !entries.length ? (
           <div className="plugin-store-empty">
-            <LoaderCircle className="spin" size={20} /> 正在读取插件目录…
+            <LoaderCircle className="spin" size={20} /> {t('正在读取插件目录…')}
           </div>
         ) : (
           <div className="plugin-store-grid">
@@ -112,14 +113,17 @@ export function MarketplaceList({
                         <span className="plugin-pill">v{entry.version}</span>
                         {isInstalled && !isUpdate && (
                           <span className="plugin-pill success">
-                            <Check size={11} /> 已安装
+                            <Check size={11} /> {t('已安装')}
                           </span>
                         )}
                         {isUpdate && (
-                          <span className="plugin-pill warn">可更新至 v{entry.version}</span>
+                          <span className="plugin-pill warn">
+                            {t('可更新至 v')}
+                            {entry.version}
+                          </span>
                         )}
                       </div>
-                      <p>{entry.description || '没有提供说明。'}</p>
+                      <p>{entry.description || t('没有提供说明。')}</p>
                       <div className="plugin-card-categories">
                         {pluginCategories(entry.extensions, entry.commands)
                           .slice(0, 4)
@@ -145,12 +149,12 @@ export function MarketplaceList({
                       <Download size={14} />
                     )}
                     {isUpdate
-                      ? '更新'
+                      ? t('更新')
                       : isInstalled
-                        ? '已安装'
+                        ? t('已安装')
                         : busyId === entry.id
-                          ? '获取中…'
-                          : '获取'}
+                          ? t('获取中…')
+                          : t('获取')}
                   </Button>
                 </article>
               )
@@ -158,7 +162,7 @@ export function MarketplaceList({
             {!filtered.length && !loading && (
               <div className="plugin-store-empty">
                 <Puzzle size={22} />
-                <span>{entries.length ? '没有匹配的插件' : '暂时没有可安装的插件'}</span>
+                <span>{entries.length ? t('没有匹配的插件') : t('暂时没有可安装的插件')}</span>
               </div>
             )}
           </div>

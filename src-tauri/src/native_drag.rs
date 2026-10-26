@@ -13,14 +13,14 @@ pub async fn start(
     on_event: Channel<String>,
 ) -> Result<(), String> {
     if paths.is_empty() {
-        return Err("请选择要拖动的文件".into());
+        return Err(crate::i18n::t("请选择要拖动的文件").into());
     }
     let uris = paths
         .iter()
         .map(|path| {
             reqwest::Url::from_file_path(path)
                 .map(|uri| uri.to_string())
-                .map_err(|_| "拖动文件必须使用绝对路径".to_string())
+                .map_err(|_| crate::i18n::t("拖动文件必须使用绝对路径").to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
     let (send, receive) = std::sync::mpsc::sync_channel(1);
@@ -43,7 +43,7 @@ fn begin(window: &Window, uris: Vec<String>, on_event: Channel<String>) -> Resul
     window.drag_source_add_uri_targets();
     let targets = window
         .drag_source_get_target_list()
-        .ok_or("无法创建拖动目标")?;
+        .ok_or(crate::i18n::t("无法创建拖动目标"))?;
     let handlers: Rc<RefCell<Vec<glib::SignalHandlerId>>> = Rc::default();
     let provided = Rc::new(Cell::new(false));
     let failed = Rc::new(Cell::new(false));
@@ -111,6 +111,6 @@ fn begin(window: &Window, uris: Vec<String>, on_event: Channel<String>) -> Resul
             window.disconnect(handler);
         }
         window.drag_source_unset();
-        Err("无法开始文件拖动".into())
+        Err(crate::i18n::t("无法开始文件拖动").into())
     }
 }

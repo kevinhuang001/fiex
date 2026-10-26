@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Choice, Label, Menu } from '@/components/Menus'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
@@ -11,10 +12,34 @@ import { RowsIcon as List } from '@phosphor-icons/react/dist/csr/Rows'
 import type { ReactNode } from 'react'
 
 const views: { id: View; name: string; icon: ReactNode }[] = [
-  { id: 'icons', name: '图标', icon: <Grid2X2 weight="regular" size={20} /> },
-  { id: 'list', name: '列表', icon: <List weight="regular" size={20} /> },
-  { id: 'columns', name: '分栏', icon: <Columns3 weight="regular" size={20} /> },
-  { id: 'gallery', name: '画廊', icon: <Image weight="regular" size={20} /> },
+  {
+    id: 'icons',
+    get name() {
+      return t('图标')
+    },
+    icon: <Grid2X2 weight="regular" size={20} />,
+  },
+  {
+    id: 'list',
+    get name() {
+      return t('列表')
+    },
+    icon: <List weight="regular" size={20} />,
+  },
+  {
+    id: 'columns',
+    get name() {
+      return t('分栏')
+    },
+    icon: <Columns3 weight="regular" size={20} />,
+  },
+  {
+    id: 'gallery',
+    get name() {
+      return t('画廊')
+    },
+    icon: <Image weight="regular" size={20} />,
+  },
 ]
 
 const groupOptions: [Group, string][] = [
@@ -46,7 +71,7 @@ export function ViewSwitch({ prefs, update }: ViewControlsProps) {
           variant="ghost"
           size="icon"
           title={v.name}
-          aria-label={`${v.name}视图`}
+          aria-label={t('{0}视图', v.name)}
           aria-pressed={prefs.view === v.id}
           onClick={() => update({ view: v.id })}
         >
@@ -59,11 +84,11 @@ export function ViewSwitch({ prefs, update }: ViewControlsProps) {
 
 export function GroupControl({ prefs, update }: ViewControlsProps) {
   return (
-    <Menu label="分组方式" icon={<CardsThree weight="regular" size={20} />}>
-      <Label>分组方式</Label>
+    <Menu label={t('分组方式')} icon={<CardsThree weight="regular" size={20} />}>
+      <Label>{t('分组方式')}</Label>
       {groupOptions.map(([id, name]) => (
         <Choice key={id} checked={prefs.group === id} onClick={() => update({ group: id })}>
-          {name}
+          {t(name)}
         </Choice>
       ))}
     </Menu>
@@ -72,15 +97,15 @@ export function GroupControl({ prefs, update }: ViewControlsProps) {
 
 export function SortControl({ prefs, update }: ViewControlsProps) {
   return (
-    <Menu label="排序方式" icon={<ArrowsDownUp weight="regular" size={20} />}>
-      <Label>排序方式</Label>
+    <Menu label={t('排序方式')} icon={<ArrowsDownUp weight="regular" size={20} />}>
+      <Label>{t('排序方式')}</Label>
       {sortOptions.map(([id, name]) => (
         <Choice key={id} checked={prefs.sort === id} onClick={() => update({ sort: id })}>
-          {name}
+          {t(name)}
         </Choice>
       ))}
       <Choice checked={prefs.descending} onClick={() => update({ descending: !prefs.descending })}>
-        降序
+        {t('降序')}
       </Choice>
     </Menu>
   )

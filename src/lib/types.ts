@@ -114,6 +114,7 @@ export type Sort = 'name' | 'modified' | 'size' | 'kind'
 type StartPage = 'recent' | 'home' | 'documents' | 'last'
 
 export interface Preferences {
+  locale: import('@/i18n').Locale
   tags: Tag[]
   view: View
   group: Group

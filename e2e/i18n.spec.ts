@@ -1,0 +1,21 @@
+import { test, expect } from '@playwright/test'
+
+test('language changes apply on confirmation and persist after reload', async ({ page }) => {
+  await page.goto('/?demo&pluginFixture')
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
+  await page.getByRole('button', { name: '语言 / Language', exact: true }).click()
+  await page.getByRole('menuitemradio', { name: 'English', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  await page.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('textbox', { name: 'Search files', exact: true })).toBeVisible()
+  await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await page.getByRole('button', { name: 'Settings', exact: true }).last().click()
+  await page.getByRole('button', { name: 'Language', exact: true }).click()
+  await page.getByRole('menuitemradio', { name: '繁體中文', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW')
+  await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
+})

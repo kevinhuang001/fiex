@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { SquareTerminal, X } from 'lucide-react'
@@ -148,7 +149,7 @@ export function TerminalTabs({
       <div
         className={`terminal-panel-tabs ${drag ? 'is-dragging' : ''}`}
         role="tablist"
-        aria-label="终端标签"
+        aria-label={t('终端标签')}
         ref={strip}
       >
         {tabs.map((tab, index) => (
@@ -167,13 +168,13 @@ export function TerminalTabs({
               }}
             >
               <SquareTerminal size={12} />
-              {tab.shellName || '终端'} {tab.number}
+              {tab.shellName || t('终端')} {tab.number}
             </button>
             <button
               type="button"
               className="terminal-panel-close"
-              title="关闭终端"
-              aria-label={`关闭终端 ${tab.number}`}
+              title={t('关闭终端')}
+              aria-label={t('关闭终端 {0}', tab.number)}
               onClick={() => onClose(tab.id)}
             >
               <X size={12} />
@@ -194,7 +195,7 @@ export function TerminalTabs({
             >
               <button type="button" tabIndex={-1}>
                 <SquareTerminal size={12} />
-                {lifted.shellName || '终端'} {lifted.number}
+                {lifted.shellName || t('终端')} {lifted.number}
               </button>
               <button type="button" tabIndex={-1}>
                 <X size={12} />

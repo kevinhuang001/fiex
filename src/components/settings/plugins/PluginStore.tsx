@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PluginInstaller } from '../PluginInstaller'
@@ -20,11 +21,11 @@ export function PluginStoreToolbar({
       <div className="plugin-toolbar-actions">
         <Button type="button" size="sm" variant="outline" onClick={onImport}>
           <Upload size={15} />
-          导入插件
+          {t('导入插件')}
         </Button>
         <Button type="button" size="sm" onClick={onOpenStore}>
           <Download size={15} />
-          获取插件
+          {t('获取插件')}
         </Button>
       </div>
     </div>

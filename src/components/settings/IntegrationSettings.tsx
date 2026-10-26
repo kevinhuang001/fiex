@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Ide, Preferences, Terminal } from '@/lib/types'
 import { Check, Code2, HelpCircle, TerminalSquare } from 'lucide-react'
 
@@ -18,15 +19,15 @@ export function IntegrationSettings({
     <>
       <div className="settings-card">
         <div className="settings-card-header">
-          <span>默认 IDE</span>
+          <span>{t('默认 IDE')}</span>
           <button
             className="settings-reset"
-            title="查看支持的 IDE 和终端"
-            aria-label="查看支持的 IDE 和终端"
+            title={t('查看支持的 IDE 和终端')}
+            aria-label={t('查看支持的 IDE 和终端')}
             onClick={onHelp}
           >
             <HelpCircle size={12} />
-            支持列表
+            {t('支持列表')}
           </button>
         </div>
         {ides.length ? (
@@ -46,15 +47,15 @@ export function IntegrationSettings({
           ))
         ) : (
           <div className="settings-row">
-            <div className="settings-row-label">没有检测到可用的 IDE</div>
+            <div className="settings-row-label">{t('没有检测到可用的 IDE')}</div>
           </div>
         )}
       </div>
       <div className="settings-card">
         <div className="settings-card-header">
-          <span>默认终端</span>
+          <span>{t('默认终端')}</span>
         </div>
-        {[{ id: 'builtin', name: 'Fiex 内置终端' }, ...terminals].map((terminal) => (
+        {[{ id: 'builtin', name: t('Fiex 内置终端') }, ...terminals].map((terminal) => (
           <button
             key={terminal.id}
             className={`settings-choice ${prefs.terminal === terminal.id ? 'selected' : ''}`}

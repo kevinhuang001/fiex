@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { RefObject } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
@@ -37,13 +38,13 @@ export function PickerDialogs({
       <Modal
         open={Boolean(editable)}
         onClose={actions.closeDialog}
-        title={dialog?.kind === 'rename' ? '重命名' : '新建文件夹'}
+        title={dialog?.kind === 'rename' ? t('重命名') : t('新建文件夹')}
         className="file-picker-confirm"
       >
         {editable && (
           <>
             <label className="file-picker-dialog-field">
-              <span>{dialog?.kind === 'rename' ? '新名称' : '文件夹名称'}</span>
+              <span>{dialog?.kind === 'rename' ? t('新名称') : t('文件夹名称')}</span>
               <input
                 ref={inputRef}
                 value={editable.value}
@@ -58,7 +59,7 @@ export function PickerDialogs({
             </label>
             <footer className="file-picker-confirm-actions">
               <Button variant="outline" onClick={actions.closeDialog}>
-                取消
+                {t('取消')}
               </Button>
               <Button
                 disabled={busy || !editable.value.trim()}
@@ -67,7 +68,7 @@ export function PickerDialogs({
                   else actions.createFolder(editable.value)
                 }}
               >
-                {editable.kind === 'rename' ? '重命名' : '新建'}
+                {editable.kind === 'rename' ? t('重命名') : t('新建')}
               </Button>
             </footer>
           </>
@@ -76,19 +77,19 @@ export function PickerDialogs({
       <Modal
         open={dialog?.kind === 'trash'}
         onClose={actions.closeDialog}
-        title="移到废纸篓？"
+        title={t('移到废纸篓？')}
         className="file-picker-confirm"
       >
         {dialog?.kind === 'trash' && (
           <>
             <p className="file-picker-confirm-text">
-              「{dialog.entry.name}」将移到废纸篓，可以再恢复。
+              {t('将“{0}”移到废纸篓，可以再恢复。', dialog.entry.name)}
             </p>
             <footer className="file-picker-confirm-actions">
               <Button variant="outline" onClick={actions.closeDialog}>
-                取消
+                {t('取消')}
               </Button>
-              <Button onClick={() => actions.trash(dialog.entry)}>移到废纸篓</Button>
+              <Button onClick={() => actions.trash(dialog.entry)}>{t('移到废纸篓')}</Button>
             </footer>
           </>
         )}
@@ -96,17 +97,17 @@ export function PickerDialogs({
       <Modal
         open={replace}
         onClose={actions.cancelReplace}
-        title="替换文件？"
+        title={t('替换文件？')}
         className="file-picker-confirm"
       >
         <p className="file-picker-confirm-text">
-          「{saveName.trim()}」已存在。替换会覆盖原文件，此操作不可撤销。
+          {t('“{0}”已存在。替换会覆盖原文件，此操作不可撤销。', saveName.trim())}
         </p>
         <footer className="file-picker-confirm-actions">
           <Button variant="outline" onClick={actions.cancelReplace}>
-            取消
+            {t('取消')}
           </Button>
-          <Button onClick={actions.confirmReplace}>替换</Button>
+          <Button onClick={actions.confirmReplace}>{t('替换')}</Button>
         </footer>
       </Modal>
     </>

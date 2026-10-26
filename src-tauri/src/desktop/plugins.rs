@@ -432,7 +432,7 @@ pub(crate) fn plugin_file_dialog(
         }
         if !exts.is_empty() {
             let refs = exts.iter().map(String::as_str).collect::<Vec<_>>();
-            dialog = dialog.add_filter("文件类型", &refs);
+            dialog = dialog.add_filter(crate::i18n::t("文件类型"), &refs);
         }
     }
     let selection = match mode.as_str() {
@@ -462,7 +462,7 @@ pub(crate) fn plugin_files_dialog(
         }
         if !exts.is_empty() {
             let refs = exts.iter().map(String::as_str).collect::<Vec<_>>();
-            dialog = dialog.add_filter("文件类型", &refs);
+            dialog = dialog.add_filter(crate::i18n::t("文件类型"), &refs);
         }
     }
     Ok(dialog.pick_files().map(|paths| {

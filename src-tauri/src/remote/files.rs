@@ -409,7 +409,7 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
         return Ok(local.to_string_lossy().into_owned());
     }
     if local.is_file() {
-        return Err("本地已有未登记的文件，已保留；请先备份或处理同步冲突".into());
+        return Err(crate::i18n::t("本地已有未登记的文件，已保留；请先备份或处理同步冲突").into());
     }
     if !meta.files.contains_key(&rel) {
         let parent = rel.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
@@ -427,7 +427,7 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
     }
     let entry = meta.files.get(&rel).ok_or("远程文件不存在")?.clone();
     if entry.is_dir {
-        return Err("不能作为文件打开文件夹".into());
+        return Err(crate::i18n::t("不能作为文件打开文件夹").into());
     }
     let node = if entry.node_id.is_empty() {
         &rel
@@ -553,7 +553,7 @@ pub fn eject(path: &str) -> Result<(), String> {
         if status.success() {
             return Ok(());
         }
-        return Err("无法弹出该设备".into());
+        return Err(crate::i18n::t("无法弹出该设备").into());
     }
     #[cfg(target_os = "linux")]
     {
@@ -571,11 +571,11 @@ pub fn eject(path: &str) -> Result<(), String> {
         if status.success() {
             return Ok(());
         }
-        return Err("无法卸载该设备".into());
+        return Err(crate::i18n::t("无法卸载该设备").into());
     }
     #[cfg(target_os = "windows")]
     {
-        let drive = path.chars().next().ok_or("无效设备")?;
+        let drive = path.chars().next().ok_or(crate::i18n::t("无效设备"))?;
         let script = format!(
             "$d=(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{drive}:');$d.InvokeVerb('Eject')"
         );
@@ -587,10 +587,10 @@ pub fn eject(path: &str) -> Result<(), String> {
         if status.success() {
             return Ok(());
         }
-        return Err("无法弹出该设备".into());
+        return Err(crate::i18n::t("无法弹出该设备").into());
     }
     #[allow(unreachable_code)]
-    Err("当前平台不支持弹出设备".into())
+    Err(crate::i18n::t("当前平台不支持弹出设备").into())
 }
 
 /// Metadata remains usable before a file has ever been downloaded.

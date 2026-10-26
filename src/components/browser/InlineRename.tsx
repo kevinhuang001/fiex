@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '@/lib/types'
 
@@ -55,7 +56,7 @@ export function InlineRename({ entry, className, onCommit, onCancel }: Props) {
       className={`inline-rename ${className || ''}`}
       value={value}
       disabled={busy}
-      aria-label={`重命名 ${entry.name}`}
+      aria-label={t('重命名 {0}', entry.name)}
       spellCheck={false}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}

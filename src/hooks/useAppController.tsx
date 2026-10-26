@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useExplorer } from '@/hooks/useExplorer'
 import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
@@ -151,7 +152,7 @@ export function useAppController() {
       setBatchRename(null)
       x.setSelected([])
       x.reload()
-      notify(`已重命名 ${final.length} 个项目`)
+      notify(t('已重命名 {0} 个项目', final.length))
     } catch (error) {
       // Park finalized targets back under temporary names first, so swaps
       // (a↔b) do not collide when restoring.
@@ -172,7 +173,7 @@ export function useAppController() {
   }, [x.directoryReadOnly, x.setReadOnly])
   const writable = () => {
     if (!x.directoryReadOnly) return true
-    x.setError('此文件系统只读')
+    x.setError(t('此文件系统只读'))
     return false
   }
 

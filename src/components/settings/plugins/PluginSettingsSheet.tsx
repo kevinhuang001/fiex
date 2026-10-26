@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Check, Database, KeyRound, LoaderCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
@@ -35,7 +36,7 @@ export function PluginSettingsSheet({
     <Modal
       open={Boolean(plugin)}
       onClose={onDismiss}
-      title={plugin ? `${plugin.name} · 设置` : '插件设置'}
+      title={plugin ? t('{0} · 设置', plugin.name) : t('插件设置')}
     >
       <div className="plugin-settings-fields">
         {fields.map((field: PluginField) => {
@@ -70,7 +71,7 @@ export function PluginSettingsSheet({
                   type={field.type === 'secret' ? 'password' : field.type}
                   value={String(draft[field.id] ?? '')}
                   placeholder={
-                    field.type === 'secret' ? '保留原有凭据（留空不修改）' : field.placeholder
+                    field.type === 'secret' ? t('保留原有凭据（留空不修改）') : field.placeholder
                   }
                   onChange={(event) => onDraftChange(field.id, event.target.value)}
                 />
@@ -78,15 +79,15 @@ export function PluginSettingsSheet({
             </label>
           )
         })}
-        {!fields.length && <p className="sidebar-hint">此插件没有需要配置的设置。</p>}
+        {!fields.length && <p className="sidebar-hint">{t('此插件没有需要配置的设置。')}</p>}
         {message && <p role="status">{message}</p>}
         <footer className="plugin-consent-actions">
           <Button variant="outline" onClick={onClose}>
-            关闭
+            {t('关闭')}
           </Button>
           <Button disabled={busy || !fields.length} onClick={onSave}>
             {busy ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}
-            保存插件设置
+            {t('保存插件设置')}
           </Button>
         </footer>
       </div>

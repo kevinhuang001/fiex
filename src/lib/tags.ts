@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Tag } from './types'
 
 export interface TagPreset extends Tag {
@@ -5,13 +6,55 @@ export interface TagPreset extends Tag {
 }
 
 export const TAG_PRESETS: TagPreset[] = [
-  { name: '灰色', color: 1, hex: '#8e8e93' },
-  { name: '绿色', color: 2, hex: '#34c759' },
-  { name: '紫色', color: 3, hex: '#af52de' },
-  { name: '蓝色', color: 4, hex: '#007aff' },
-  { name: '黄色', color: 5, hex: '#ffcc00' },
-  { name: '红色', color: 6, hex: '#ff3b30' },
-  { name: '橙色', color: 7, hex: '#ff9500' },
+  {
+    get name() {
+      return t('灰色')
+    },
+    color: 1,
+    hex: '#8e8e93',
+  },
+  {
+    get name() {
+      return t('绿色')
+    },
+    color: 2,
+    hex: '#34c759',
+  },
+  {
+    get name() {
+      return t('紫色')
+    },
+    color: 3,
+    hex: '#af52de',
+  },
+  {
+    get name() {
+      return t('蓝色')
+    },
+    color: 4,
+    hex: '#007aff',
+  },
+  {
+    get name() {
+      return t('黄色')
+    },
+    color: 5,
+    hex: '#ffcc00',
+  },
+  {
+    get name() {
+      return t('红色')
+    },
+    color: 6,
+    hex: '#ff3b30',
+  },
+  {
+    get name() {
+      return t('橙色')
+    },
+    color: 7,
+    hex: '#ff9500',
+  },
 ]
 
 const COLORS = [

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
@@ -32,7 +33,7 @@ export function PluginPermissionsSheet({
     <Modal
       open={Boolean(plugin)}
       onClose={onClose}
-      title="插件详情"
+      title={t('插件详情')}
       className="plugin-permissions-modal"
     >
       {plugin && (
@@ -46,36 +47,36 @@ export function PluginPermissionsSheet({
                 <strong>{plugin.name}</strong>
                 <span className={`plugin-state ${plugin.enabled ? 'active' : ''}`}>
                   <span />
-                  {plugin.enabled ? '运行中' : '未激活'}
+                  {plugin.enabled ? t('运行中') : t('未激活')}
                 </span>
-                {!plugin.approved && <span className="plugin-pill warn">待授权</span>}
+                {!plugin.approved && <span className="plugin-pill warn">{t('待授权')}</span>}
               </div>
               <small>
                 {plugin.id} · v{plugin.version}
               </small>
-              <p>{plugin.description || '没有提供说明。'}</p>
+              <p>{plugin.description || t('没有提供说明。')}</p>
             </div>
           </div>
           {!plugin.approved && (
             <div className="plugin-consent-banner">
               <ShieldCheck size={18} />
               <div>
-                <strong>此插件尚未授权</strong>
-                <p>激活时可以逐项选择权限，未选择的能力不会授权。</p>
+                <strong>{t('此插件尚未授权')}</strong>
+                <p>{t('激活时可以逐项选择权限，未选择的能力不会授权。')}</p>
               </div>
               <Button type="button" size="sm" onClick={() => onActivate(plugin)}>
-                审核并激活
+                {t('审核并激活')}
               </Button>
             </div>
           )}
           <section className="plugin-permission-section">
             <div className="plugin-section-title">
               <strong>
-                <ShieldCheck size={15} /> 权限
+                <ShieldCheck size={15} /> {t('权限')}
               </strong>
               <small>
                 {(plugin.grantedPermissions || []).length} /{' '}
-                {(plugin.declaredPermissions || []).length} 已授权
+                {(plugin.declaredPermissions || []).length} {t('已授权')}
               </small>
             </div>
             <div className="plugin-permission-list">

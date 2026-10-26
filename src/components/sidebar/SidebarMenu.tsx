@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Folder, Trash, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { MenuPosition, SidebarMenuState, SidebarProps, SetSidebarMenu } from './types'
@@ -24,7 +25,7 @@ export function SidebarMenu({
       ref={menuRef}
       className="context-menu sidebar-menu"
       role="menu"
-      aria-label={menu.kind === 'trash' ? '废纸篓' : '收藏'}
+      aria-label={menu.kind === 'trash' ? t('废纸篓') : t('收藏')}
       style={menuPosition}
     >
       {menu.kind === 'trash' ? (
@@ -37,7 +38,7 @@ export function SidebarMenu({
             }}
           >
             <Folder size={14} />
-            打开废纸篓
+            {t('打开废纸篓')}
           </button>
           <button
             role="menuitem"
@@ -47,7 +48,7 @@ export function SidebarMenu({
             }}
           >
             <Trash size={14} />
-            清空废纸篓
+            {t('清空废纸篓')}
           </button>
         </>
       ) : (
@@ -61,7 +62,7 @@ export function SidebarMenu({
           }}
         >
           <X size={14} />
-          从侧栏移除
+          {t('从侧栏移除')}
         </button>
       )}
     </div>

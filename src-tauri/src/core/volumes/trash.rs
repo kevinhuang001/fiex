@@ -125,7 +125,7 @@ fn free_destination(destination: PathBuf) -> PathBuf {
     let stem = destination
         .file_stem()
         .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "恢复的项目".into());
+        .unwrap_or_else(|| crate::i18n::t("恢复的项目").into());
     let extension = destination
         .extension()
         .map(|value| format!(".{}", value.to_string_lossy()))
@@ -188,7 +188,7 @@ pub fn restore_from_trash(
             })
             .ok_or_else(|| format!("{path}: 请选择恢复位置"))?;
         if !destination.is_absolute() {
-            return Err("恢复位置必须为绝对路径".into());
+            return Err(crate::i18n::t("恢复位置必须为绝对路径").into());
         }
         if let Some(parent) = destination.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -260,7 +260,7 @@ pub fn empty_trash(cancel: &AtomicBool) -> Result<usize, String> {
     }
     #[cfg(target_os = "linux")]
     {
-        let data = dirs::data_dir().ok_or("无法定位废纸篓")?;
+        let data = dirs::data_dir().ok_or(crate::i18n::t("无法定位废纸篓"))?;
         let files = data.join("Trash/files");
         let info = data.join("Trash/info");
         let mut removed = 0;
@@ -296,11 +296,11 @@ pub fn empty_trash(cancel: &AtomicBool) -> Result<usize, String> {
         if status.success() {
             Ok(0)
         } else {
-            Err("无法清空回收站".into())
+            Err(crate::i18n::t("无法清空回收站").into())
         }
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
-        Err("当前系统请使用系统废纸篓清空".into())
+        Err(crate::i18n::t("当前系统请使用系统废纸篓清空").into())
     }
 }

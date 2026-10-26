@@ -8,7 +8,7 @@ pub struct Terminal {
 pub fn detect() -> Vec<Terminal> {
     let mut out = vec![Terminal {
         id: "default".into(),
-        name: "系统默认终端".into(),
+        name: crate::i18n::t("系统默认终端").into(),
     }];
     #[cfg(target_os = "macos")]
     for (id, name) in [
@@ -48,7 +48,7 @@ pub fn detect() -> Vec<Terminal> {
     }
     #[cfg(target_os = "linux")]
     for (id, name) in [
-        ("x-terminal-emulator", "系统终端"),
+        ("x-terminal-emulator", crate::i18n::t("系统终端")),
         ("kgx", "Console"),
         ("gnome-terminal", "GNOME Terminal"),
         ("konsole", "Konsole"),
@@ -79,10 +79,10 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
     let dir: PathBuf = if path.is_dir() {
         path
     } else {
-        path.parent().ok_or("没有父目录")?.into()
+        path.parent().ok_or(crate::i18n::t("没有父目录"))?.into()
     };
     if !detect().iter().any(|t| t.id == id) {
-        return Err("所选终端未安装".into());
+        return Err(crate::i18n::t("所选终端未安装").into());
     }
     #[cfg(target_os = "macos")]
     {
@@ -242,8 +242,12 @@ pub fn reveal(path: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "linux")]
     {
-        open::that_detached(std::path::Path::new(path).parent().ok_or("没有父目录")?)
-            .map_err(|e| e.to_string())?;
+        open::that_detached(
+            std::path::Path::new(path)
+                .parent()
+                .ok_or(crate::i18n::t("没有父目录"))?,
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -309,11 +313,11 @@ pub fn open_full_disk_access() -> Result<(), String> {
                 return Ok(());
             }
         }
-        Err("无法打开“完全磁盘访问权限”设置，请手动打开系统设置".into())
+        Err(crate::i18n::t("无法打开“完全磁盘访问权限”设置，请手动打开系统设置").into())
     }
     #[cfg(not(target_os = "macos"))]
     {
-        Err("完全磁盘访问权限设置仅在 macOS 上提供".into())
+        Err(crate::i18n::t("完全磁盘访问权限设置仅在 macOS 上提供").into())
     }
 }
 
@@ -321,7 +325,11 @@ pub fn open_trash() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         Command::new("open")
-            .arg(dirs::home_dir().ok_or("无法获取个人文件夹")?.join(".Trash"))
+            .arg(
+                dirs::home_dir()
+                    .ok_or(crate::i18n::t("无法获取个人文件夹"))?
+                    .join(".Trash"),
+            )
             .spawn()
             .map_err(|e| e.to_string())?;
     }

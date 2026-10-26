@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { BrowserColumn } from '../BrowserColumn'
@@ -22,7 +23,7 @@ export function ColumnsView({
   shared: SharedRow
   onKeyDown: (e: KeyboardEvent) => void
 }) {
-  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected])
+  const selectedPaths = useMemo(() => new Set(x.selected), [x.selected, getLocale()])
   const [left, setLeft] = useState<Entry[]>([])
   const [right, setRight] = useState<Entry[]>([])
   const [error, setError] = useState('')
@@ -94,7 +95,13 @@ export function ColumnsView({
     />
   )
   return (
-    <div className="columns-view" role="grid" aria-label="文件" tabIndex={0} onKeyDown={onKeyDown}>
+    <div
+      className="columns-view"
+      role="grid"
+      aria-label={t('文件')}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+    >
       {column(left, false)}
       {column(x.entries, true)}
       {selected?.isDir ? (
@@ -109,7 +116,7 @@ export function ColumnsView({
           <span>
             {kind(selected)} · {size(selected.size)}
           </span>
-          <button onClick={() => onPreview(selected)}>快速查看</button>
+          <button onClick={() => onPreview(selected)}>{t('快速查看')}</button>
         </div>
       ) : (
         <div className="column-detail muted" />

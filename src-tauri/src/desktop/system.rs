@@ -120,9 +120,9 @@ pub(crate) async fn open_in_ide(path: String, id: String) -> Result<(), String> 
 }
 #[tauri::command]
 pub(crate) fn open_external_url(url: String) -> Result<(), String> {
-    let parsed = reqwest::Url::parse(&url).map_err(|_| "无效的链接")?;
+    let parsed = reqwest::Url::parse(&url).map_err(|_| crate::i18n::t("无效的链接"))?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err("只允许打开 http/https 链接".into());
+        return Err(crate::i18n::t("只允许打开 http/https 链接").into());
     }
     open::that(url).map_err(|error| error.to_string())
 }
@@ -151,7 +151,7 @@ pub(crate) async fn open_path(
         return tauri::async_runtime::spawn_blocking(move || {
             let bytes = crate::usbfs::read_path(&route)?;
             let cache = dirs::home_dir()
-                .ok_or("无法创建缓存目录")?
+                .ok_or(crate::i18n::t("无法创建缓存目录"))?
                 .join(".fiex")
                 .join("usbfs-cache")
                 .join(
@@ -215,7 +215,7 @@ pub(crate) fn relaunch_elevated(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(not(windows))]
     {
         let _ = app;
-        Err("当前系统不需要管理员重启".into())
+        Err(crate::i18n::t("当前系统不需要管理员重启").into())
     }
 }
 // Synchronous Tauri commands execute on the main thread, as required by GTK's icon provider.
@@ -226,8 +226,8 @@ pub(crate) fn native_icon(path: String, size: Option<u16>) -> Result<String, Str
     // the display pixel ratio so application logos stay sharp in icon view.
     let pixels = size.unwrap_or(128).clamp(16, 512);
     let icon = file_icon_provider::get_file_icon(path, pixels).map_err(|e| e.to_string())?;
-    let image =
-        image::RgbaImage::from_raw(icon.width, icon.height, icon.pixels).ok_or("无效图标")?;
+    let image = image::RgbaImage::from_raw(icon.width, icon.height, icon.pixels)
+        .ok_or(crate::i18n::t("无效图标"))?;
     let mut out = std::io::Cursor::new(Vec::new());
     image::DynamicImage::ImageRgba8(image)
         .write_to(&mut out, image::ImageFormat::Png)

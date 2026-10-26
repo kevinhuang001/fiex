@@ -192,3 +192,24 @@ Manifest 申请 ∩ 安装时批准的声明快照 ∩ 用户 Grant
 ## 校验规则
 
 Manifest 在安装、加载和插件进程启动前都会校验；未知/旧字段不会被静默接受，类型错误、路径逃逸、重复/保留 id 和不合法域名会直接拒绝。
+
+## 界面语言
+
+Core 支持 `zh-CN`（简体中文，默认）、`zh-TW`（繁体中文）和 `en`。在外观设置里选择语言，点击确认后立即应用并保存；不会重启或重新安装插件。
+
+清单可在顶层声明 `locales`，以源文案为键。Core 只翻译插件名称、说明及贡献中的 `title`、`label`、`description`、`placeholder` 展示字段；`id`、`match`、路径、默认值及用户输入保持不变。缺失条目回退到原文案。翻译不影响权限声明。
+
+```json
+"locales": {
+  "en": { "校验和": "Checksums" },
+  "zh-TW": { "校验和": "校驗和" }
+}
+```
+
+插件 UI 的桥接初始化携带当前 `locale`，每种 `context.get` 也返回 `locale`。所有沙箱面板、预览页、加载页及连接页都能调用只读 `locale.get`，并收到同一 MessagePort 上的 `locale.changed` 事件。插件不能修改 Core 语言。
+
+UI SDK 提供 `client.i18n.getLocale()`、`subscribe()` 和 `bind()`；`createI18n()` 提供文案目录、插值、缺失回退和变更订阅。React 应在应用根组件用 `useSyncExternalStore` 订阅运行时；切换语言仅重新渲染，不清空表单或重启任务。
+
+原生 RPC 在 JSON-RPC **请求信封**携带 `locale`，不占用或修改业务 `params`。Rust 使用 `ctx.locale()` 读取；数组、空值及业务自定义的 `params.locale` 均保留原义。SDK 将语言绑定到请求执行线程，后台任务继承创建请求的语言；同一进程中的并发请求不会互相修改语言。未知或缺失语言回退 `zh-CN`。
+
+翻译仅用于界面文案。插值中的文件名、路径、邮件、提交说明及预览文档内容不得二次翻译。

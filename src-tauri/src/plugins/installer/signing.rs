@@ -52,6 +52,7 @@ mod tests {
 
     fn manifest() -> PluginManifest {
         PluginManifest {
+            locales: Default::default(),
             schema_version: 2,
             id: "org.fiex.test".into(),
             name: "Test".into(),

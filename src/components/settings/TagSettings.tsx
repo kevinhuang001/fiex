@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { CreateTagDialog } from '@/components/CreateTagDialog'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
@@ -21,12 +22,12 @@ export function TagSettings({
       <div className="settings-card">
         <div className="settings-card-header">
           <span>
-            标签
+            {t('标签')}
             <small className="settings-count">{tags.length}</small>
           </span>
           <button className="settings-reset" onClick={() => setEditing('new')}>
             <Plus size={11} />
-            添加标签
+            {t('添加标签')}
           </button>
         </div>
         {tags.map((tag) => (
@@ -38,16 +39,16 @@ export function TagSettings({
             <div className="settings-row-control">
               <button
                 className="icon-button tag-settings-action"
-                title="编辑标签"
-                aria-label={`编辑标签 ${tag.name}`}
+                title={t('编辑标签')}
+                aria-label={t('编辑标签 {0}', tag.name)}
                 onClick={() => setEditing(tag)}
               >
                 <Pencil size={13} />
               </button>
               <button
                 className="icon-button tag-settings-action tag-settings-delete"
-                title="删除标签"
-                aria-label={`删除标签 ${tag.name}`}
+                title={t('删除标签')}
+                aria-label={t('删除标签 {0}', tag.name)}
                 onClick={() => setDeleting(tag)}
               >
                 <Trash2 size={13} />
@@ -58,11 +59,11 @@ export function TagSettings({
       </div>
 
       {deleting && (
-        <Modal open onClose={() => setDeleting(null)} title="删除标签">
-          <p className="tag-delete-confirm">确定删除标签「{deleting.name}」吗？</p>
+        <Modal open onClose={() => setDeleting(null)} title={t('删除标签')}>
+          <p className="tag-delete-confirm">{t('确定删除标签“{0}”吗？', deleting.name)}</p>
           <div className="dialog-actions">
             <Button variant="ghost" onClick={() => setDeleting(null)}>
-              取消
+              {t('取消')}
             </Button>
             <Button
               variant="destructive"
@@ -71,7 +72,7 @@ export function TagSettings({
                 setDeleting(null)
               }}
             >
-              删除
+              {t('删除')}
             </Button>
           </div>
         </Modal>

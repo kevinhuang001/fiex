@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
@@ -44,7 +45,7 @@ export function useListing(
   useEffect(() => {
     syncDecorationIcons(decorations)
   }, [decorations])
-  const reload = useCallback(() => setRefresh((v) => v + 1), [])
+  const reload = useCallback(() => setRefresh((v) => v + 1), [getLocale()])
   useEffect(() => {
     if (!native || !enabled) return
     const stop = listen('remote-sync', () => {
@@ -62,25 +63,28 @@ export function useListing(
   }, [enabled, connections, path, reload])
   const locationsKey = useRef('')
   const locationsPending = useRef<Promise<Location[]> | null>(null)
-  const refreshLocations = useCallback((force = false): Promise<Location[]> => {
-    if (locationsPending.current && !force) return locationsPending.current
-    const request = ++locationsRequest.current
-    const pending = call<Location[]>('locations')
-      .then((next) => {
-        if (request !== locationsRequest.current) return next
-        const key = JSON.stringify(next)
-        if (key !== locationsKey.current) {
-          locationsKey.current = key
-          setLocations(next)
-        }
-        return next
-      })
-      .finally(() => {
-        if (request === locationsRequest.current) locationsPending.current = null
-      })
-    locationsPending.current = pending
-    return pending
-  }, [])
+  const refreshLocations = useCallback(
+    (force = false): Promise<Location[]> => {
+      if (locationsPending.current && !force) return locationsPending.current
+      const request = ++locationsRequest.current
+      const pending = call<Location[]>('locations')
+        .then((next) => {
+          if (request !== locationsRequest.current) return next
+          const key = JSON.stringify(next)
+          if (key !== locationsKey.current) {
+            locationsKey.current = key
+            setLocations(next)
+          }
+          return next
+        })
+        .finally(() => {
+          if (request === locationsRequest.current) locationsPending.current = null
+        })
+      locationsPending.current = pending
+      return pending
+    },
+    [getLocale()],
+  )
   useEffect(() => {
     if (!enabled || pane !== 'left') return
     const check = () => {
@@ -187,7 +191,7 @@ export function useListing(
     let active = true
     let timer: ReturnType<typeof setTimeout>
     void call('watch_directory', { path, pane }).catch((e) =>
-      setWarnings([`无法监视文件变更：${e}`]),
+      setWarnings([t('无法监视文件变更：{0}', e)]),
     )
     void listen('directory-changed', () => {
       clearTimeout(timer)
@@ -230,7 +234,7 @@ export function useListing(
           if (b.done) {
             setSearching(false)
             setSearchStats(
-              `${b.elapsedMs} ms${b.truncated ? ' · 已达到 500 项上限，请缩小范围' : ''}${b.skipped ? ` · ${b.skipped} 个位置无法访问` : ''}`,
+              `${b.elapsedMs} ms${b.truncated ? t(' · 已达到 500 项上限，请缩小范围') : ''}${b.skipped ? t(' · {0} 个位置无法访问', b.skipped) : ''}`,
             )
           }
         },
@@ -256,13 +260,13 @@ export function useListing(
       setSelected([target])
       setRenaming(target)
     },
-    [readOnly],
+    [readOnly, getLocale()],
   )
-  const cancelRename = useCallback(() => setRenaming(null), [])
+  const cancelRename = useCallback(() => setRenaming(null), [getLocale()])
   const renameTo = useCallback(
     async (target: string, name: string) => {
       if (readOnly) {
-        setError('当前是只读分支或版本，不能修改文件')
+        setError(t('当前是只读分支或版本，不能修改文件'))
         return false
       }
       setError('')
@@ -277,7 +281,7 @@ export function useListing(
         return false
       }
     },
-    [readOnly],
+    [readOnly, getLocale()],
   )
   const visibleEntries = tagFilter
     ? entries.filter((entry) => entry.tags.some((tag) => tag.name === tagFilter))
@@ -293,7 +297,7 @@ export function useListing(
     } catch {
       setConnections([])
     }
-  }, [])
+  }, [getLocale()])
   useEffect(() => {
     if (!enabled) return
     void refreshConnections()

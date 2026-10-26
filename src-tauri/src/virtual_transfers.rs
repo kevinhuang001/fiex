@@ -37,7 +37,7 @@ fn info(path: &str) -> Result<Entry, String> {
 fn parent(path: &str) -> Result<&str, String> {
     path.rsplit_once(['/', '\\'])
         .map(|(p, _)| p)
-        .ok_or_else(|| "无效路径".into())
+        .ok_or_else(|| crate::i18n::t("无效路径").into())
 }
 fn read(path: &str) -> Result<Vec<u8>, String> {
     if let Some(r) = usbfs::route(path) {
@@ -53,7 +53,7 @@ fn writable(path: &str) -> Result<(), String> {
             usbfs::FsKind::Apfs | usbfs::FsKind::Hfs | usbfs::FsKind::Btrfs
         )
     }) {
-        return Err("此文件系统只读".into());
+        return Err(crate::i18n::t("此文件系统只读").into());
     }
     Ok(())
 }
@@ -63,7 +63,7 @@ fn create(path: &str, folder: bool) -> Result<(), String> {
             &r,
             Path::new(path)
                 .file_name()
-                .ok_or("无效名称")?
+                .ok_or(crate::i18n::t("无效名称"))?
                 .to_string_lossy()
                 .as_ref(),
             folder,
@@ -148,7 +148,7 @@ impl Plan<'_> {
             return Ok(());
         }
         if source.is_symlink {
-            return Err("暂不支持复制符号链接".into());
+            return Err(crate::i18n::t("暂不支持复制符号链接").into());
         }
         if self.moving {
             writable(&source.path)?;
@@ -197,7 +197,7 @@ impl Plan<'_> {
                 }
                 Some(Action::Replace) => {
                     if source.path == target {
-                        return Err("不能替换自身，请选择保留两者".into());
+                        return Err(crate::i18n::t("不能替换自身，请选择保留两者").into());
                     }
                     replace = true;
                 }
@@ -259,7 +259,7 @@ fn copy_node(source: &Entry, target: &str, cancel: &AtomicBool) -> Result<(), St
         create(target, false)?;
         write(target, &data)?;
         if read(target)? != data {
-            return Err("写入后内容校验失败，源文件已保留".into());
+            return Err(crate::i18n::t("写入后内容校验失败，源文件已保留").into());
         }
     }
     Ok(())
@@ -294,7 +294,7 @@ pub fn transfer(
             || destination.starts_with(&format!("{path}/"))
             || destination.starts_with(&format!("{path}\\"))
         {
-            return Err("不能移动到自身内部".into());
+            return Err(crate::i18n::t("不能移动到自身内部").into());
         }
         let source = info(path)?;
         let existing = children.iter().find(|e| e.name == source.name).cloned();

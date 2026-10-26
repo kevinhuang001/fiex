@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { listen } from '@tauri-apps/api/event'
 import { useEffect, useState } from 'react'
 import { call, demo, native } from '@/lib/api'
@@ -25,7 +26,7 @@ function itemFor(request: RuntimePermissionRequest): PluginPermissionItem {
     return {
       id: `network:${request.target}`,
       kind: 'network',
-      title: '网络域名',
+      title: t('网络域名'),
       value: request.target || '',
     }
   }
@@ -33,7 +34,7 @@ function itemFor(request: RuntimePermissionRequest): PluginPermissionItem {
     return {
       id: `command:${request.target}`,
       kind: 'command',
-      title: '外部命令',
+      title: t('外部命令'),
       value: request.target || '',
     }
   }
@@ -108,13 +109,13 @@ export function PluginPermissionHost() {
       error={error}
       note={
         current.kind === 'network'
-          ? '允许后此精确主机会加入允许列表，直到你在插件设置中移除。拒绝只影响本次操作。'
+          ? t('允许后此精确主机会加入允许列表，直到你在插件设置中移除。拒绝只影响本次操作。')
           : current.kind === 'command'
-            ? '允许后此命令会加入允许列表，直到你在插件设置中移除。拒绝只影响本次操作。'
-            : '允许后此权限会保持开启，直到你在插件设置中关闭。拒绝只影响本次操作。'
+            ? t('允许后此命令会加入允许列表，直到你在插件设置中移除。拒绝只影响本次操作。')
+            : t('允许后此权限会保持开启，直到你在插件设置中关闭。拒绝只影响本次操作。')
       }
-      allowLabel="允许"
-      denyLabel="不允许"
+      allowLabel={t('允许')}
+      denyLabel={t('不允许')}
       onAllow={() => void respond(true)}
       onDeny={() => void respond(false)}
     />

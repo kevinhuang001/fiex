@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { basename, parent } from './files'
 import type { Entry } from './types'
 
@@ -31,23 +32,93 @@ export const DEFAULT_RENAME_OPTIONS: RenameOptions = {
 }
 
 export const RENAME_PRESETS = [
-  { label: '原文件名', template: '{original}' },
-  { label: '序号 - 名称', template: '{n} - {name}' },
-  { label: '名称_序号', template: '{name}_{n}' },
-  { label: '日期_名称', template: '{date}_{name}' },
+  {
+    get label() {
+      return t('原文件名')
+    },
+    template: '{original}',
+  },
+  {
+    get label() {
+      return t('序号 - 名称')
+    },
+    template: '{n} - {name}',
+  },
+  {
+    get label() {
+      return t('名称_序号')
+    },
+    template: '{name}_{n}',
+  },
+  {
+    get label() {
+      return t('日期_名称')
+    },
+    template: '{date}_{name}',
+  },
 ]
 
 export const RENAME_TOKENS = [
-  { token: '{original}', label: '原名称（不含扩展名）' },
-  { token: '{ext}', label: '扩展名（含点）' },
-  { token: '{n}', label: '序号，按位数补零' },
-  { token: '{n2}', label: '两位序号' },
-  { token: '{n3}', label: '三位序号' },
-  { token: '{date}', label: '修改日期 YYYY-MM-DD' },
-  { token: '{year}', label: '年' },
-  { token: '{month}', label: '月' },
-  { token: '{day}', label: '日' },
-  { token: '{folder}', label: '所在文件夹名' },
+  {
+    token: '{original}',
+    get label() {
+      return t('原名称（不含扩展名）')
+    },
+  },
+  {
+    token: '{ext}',
+    get label() {
+      return t('扩展名（含点）')
+    },
+  },
+  {
+    token: '{n}',
+    get label() {
+      return t('序号，按位数补零')
+    },
+  },
+  {
+    token: '{n2}',
+    get label() {
+      return t('两位序号')
+    },
+  },
+  {
+    token: '{n3}',
+    get label() {
+      return t('三位序号')
+    },
+  },
+  {
+    token: '{date}',
+    get label() {
+      return t('修改日期 YYYY-MM-DD')
+    },
+  },
+  {
+    token: '{year}',
+    get label() {
+      return t('年')
+    },
+  },
+  {
+    token: '{month}',
+    get label() {
+      return t('月')
+    },
+  },
+  {
+    token: '{day}',
+    get label() {
+      return t('日')
+    },
+  },
+  {
+    token: '{folder}',
+    get label() {
+      return t('所在文件夹名')
+    },
+  },
 ]
 
 export function splitExtension(name: string, isDir: boolean) {
@@ -154,27 +225,27 @@ export function validateRenames(entries: Entry[], names: string[]): Map<string, 
   for (const [index, entry] of entries.entries()) {
     const name = names[index] ?? ''
     if (!name) {
-      problems.set(entry.path, '名称不能为空')
+      problems.set(entry.path, t('名称不能为空'))
       continue
     }
     if (name === '.' || name === '..' || /[\\/\0]/.test(name)) {
-      problems.set(entry.path, '名称包含无效字符')
+      problems.set(entry.path, t('名称包含无效字符'))
       continue
     }
     if (/[<>:"|?*]/.test(name) || /[. ]$/.test(name)) {
-      problems.set(entry.path, '名称包含 Windows 不允许的字符')
+      problems.set(entry.path, t('名称包含 Windows 不允许的字符'))
       continue
     }
     const stem = entry.isDir ? name : splitExtension(name, false).stem
     if (RESERVED.has(stem.toLocaleLowerCase())) {
-      problems.set(entry.path, '这是 Windows 保留名称')
+      problems.set(entry.path, t('这是 Windows 保留名称'))
       continue
     }
     const key = name.toLocaleLowerCase()
     const previous = seen.get(key)
     if (previous) {
-      problems.set(entry.path, '与本次批量名称重复')
-      if (previous !== entry.path) problems.set(previous, '与本次批量名称重复')
+      problems.set(entry.path, t('与本次批量名称重复'))
+      if (previous !== entry.path) problems.set(previous, t('与本次批量名称重复'))
       continue
     }
     seen.set(key, entry.path)

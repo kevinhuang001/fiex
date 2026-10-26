@@ -87,5 +87,5 @@ pub fn set_tags(paths: &[String], tags: &[Tag]) -> Result<(), String> {
 
 #[cfg(not(target_os = "macos"))]
 pub fn set_tags(_paths: &[String], _tags: &[Tag]) -> Result<(), String> {
-    Err("Finder 标签仅在 macOS 上可用".into())
+    Err(crate::i18n::t("Finder 标签仅在 macOS 上可用").into())
 }

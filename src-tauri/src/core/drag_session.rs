@@ -38,7 +38,7 @@ impl DragSessions {
         moving: bool,
     ) -> Result<(), String> {
         if paths.is_empty() {
-            return Err("请选择文件".into());
+            return Err(crate::i18n::t("请选择文件").into());
         }
         *self.0.lock().unwrap() = Some(Session {
             window: window.into(),

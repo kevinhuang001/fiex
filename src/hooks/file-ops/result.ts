@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { OperationResult } from '@/lib/types'
 import type { HandleResult } from './types'
 
@@ -6,11 +7,11 @@ import type { HandleResult } from './types'
 export function createResultHandler(notify: (message: string) => void): HandleResult {
   return (result: OperationResult) => {
     if (result.errors.length)
-      throw new Error(`${result.paths.length} 项已完成。${result.errors.join('\n')}`)
+      throw new Error(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
     notify(
       result.skipped
-        ? `${result.paths.length} 项操作完成，已跳过 ${result.skipped} 项`
-        : `${result.paths.length} 项操作完成`,
+        ? t('{0} 项操作完成，已跳过 {1} 项', result.paths.length, result.skipped)
+        : t('{0} 项操作完成', result.paths.length),
     )
   }
 }

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { defaultDisplayIgnore } from '@/lib/ignores'
 import type { Preferences } from '@/lib/types'
 import { Plus, RotateCcw, X } from 'lucide-react'
@@ -29,7 +30,7 @@ function IgnoreEditor({
         </span>
         <button className="settings-reset" onClick={onReset}>
           <RotateCcw size={11} />
-          恢复预设
+          {t('恢复预设')}
         </button>
       </div>
       <div className="ignore-chips">
@@ -37,7 +38,7 @@ function IgnoreEditor({
           <span className="ignore-chip" key={pattern}>
             <code>{pattern}</code>
             <button
-              aria-label={`删除 ${pattern}`}
+              aria-label={t('删除 {0}', pattern)}
               onClick={() => onChange(patterns.filter((item) => item !== pattern))}
             >
               <X size={10} />
@@ -48,8 +49,8 @@ function IgnoreEditor({
       <div className="ignore-add">
         <input
           value={draft}
-          placeholder="添加规则，例如 node_modules 或 build/*"
-          aria-label={`添加${title}规则`}
+          placeholder={t('添加规则，例如 node_modules 或 build/*')}
+          aria-label={t('添加{0}规则', title)}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -58,7 +59,7 @@ function IgnoreEditor({
             }
           }}
         />
-        <button aria-label={`添加${title}规则`} disabled={!draft.trim()} onClick={add}>
+        <button aria-label={t('添加{0}规则', title)} disabled={!draft.trim()} onClick={add}>
           <Plus size={14} />
         </button>
       </div>
@@ -79,7 +80,7 @@ export function IgnoreSettings({
         [
           {
             key: 'displayIgnore',
-            title: '显示忽略',
+            title: t('显示忽略'),
             reset: defaultDisplayIgnore,
           },
         ] as const

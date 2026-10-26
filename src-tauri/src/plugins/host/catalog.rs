@@ -139,6 +139,7 @@ pub(crate) fn catalog_matching(predicate: impl Fn(&PluginManifest) -> bool) -> V
         .into_iter()
         .filter(|(manifest, _)| predicate(manifest))
         .map(|(manifest, folder)| {
+            let manifest = super::localize::manifest(manifest);
             let backend =
                 crate::plugin_themes::is_theme(&manifest) || executable(&manifest, &folder).is_ok();
             let declared = declared(&manifest).unwrap_or_default();

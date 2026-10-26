@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { call, demo, native } from '@/lib/api'
 
@@ -93,15 +94,60 @@ export interface PluginExtensions {
   info?: PluginInfoContribution
 }
 export const PLUGIN_CATEGORIES = [
-  { id: 'info', label: '简介' },
-  { id: 'preview', label: '预览' },
-  { id: 'contextMenus', label: '右键菜单' },
-  { id: 'toolbar', label: '工具栏' },
-  { id: 'search', label: '搜索' },
-  { id: 'connections', label: '连接' },
-  { id: 'hooks', label: '打开方式' },
-  { id: 'themes', label: '主题' },
-  { id: 'commands', label: '命令' },
+  {
+    id: 'info',
+    get label() {
+      return t('简介')
+    },
+  },
+  {
+    id: 'preview',
+    get label() {
+      return t('预览')
+    },
+  },
+  {
+    id: 'contextMenus',
+    get label() {
+      return t('右键菜单')
+    },
+  },
+  {
+    id: 'toolbar',
+    get label() {
+      return t('工具栏')
+    },
+  },
+  {
+    id: 'search',
+    get label() {
+      return t('搜索')
+    },
+  },
+  {
+    id: 'connections',
+    get label() {
+      return t('连接')
+    },
+  },
+  {
+    id: 'hooks',
+    get label() {
+      return t('打开方式')
+    },
+  },
+  {
+    id: 'themes',
+    get label() {
+      return t('主题')
+    },
+  },
+  {
+    id: 'commands',
+    get label() {
+      return t('命令')
+    },
+  },
 ] as const
 export function pluginCategories(extensions?: PluginExtensions, commands: string[] = []): string[] {
   const present = PLUGIN_CATEGORIES.filter(({ id }) => {

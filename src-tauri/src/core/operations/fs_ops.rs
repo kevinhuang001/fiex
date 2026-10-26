@@ -37,7 +37,7 @@ pub(super) fn rename_entry(source: &str, name: &str) -> Result<Option<PathBuf>, 
         return Ok(None);
     }
     if exists(&dest) {
-        return Err("同名项目已存在，请更换名称".into());
+        return Err(crate::i18n::t("同名项目已存在，请更换名称").into());
     }
     fs::rename(src, &dest).map_err(|e| e.to_string())?;
     Ok(Some(dest))
@@ -90,7 +90,7 @@ fn collect_copy(
     }
     let meta = fs::symlink_metadata(src).map_err(|e| e.to_string())?;
     if meta.file_type().is_symlink() {
-        return Err("为避免复制到意外位置，请单独处理符号链接".into());
+        return Err(crate::i18n::t("为避免复制到意外位置，请单独处理符号链接").into());
     }
     if meta.is_dir() {
         plan.dirs.push((src.into(), dest.into()));
@@ -111,7 +111,7 @@ fn collect_copy(
             permissions: meta.permissions(),
         });
     } else {
-        return Err("不能复制设备或特殊文件".into());
+        return Err(crate::i18n::t("不能复制设备或特殊文件").into());
     }
     Ok(())
 }

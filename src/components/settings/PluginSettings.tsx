@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { call } from '@/lib/api'
 import { asList } from './plugins/listValue'
@@ -33,7 +34,7 @@ export function PluginSettings() {
       }
     }
     return [...counts].map(([id, count]) => ({ id, count }))
-  }, [plugins])
+  }, [plugins, getLocale()])
   const shown = useMemo(
     () =>
       category === 'all'
@@ -41,7 +42,7 @@ export function PluginSettings() {
         : plugins.filter((plugin) =>
             pluginCategories(plugin.extensions, plugin.requestedCommands).includes(category),
           ),
-    [plugins, category],
+    [plugins, category, getLocale()],
   )
   const [storeOpen, setStoreOpen] = useState(false)
   const [storeCategory, setStoreCategory] = useState('all')
@@ -114,7 +115,7 @@ export function PluginSettings() {
       })
       setLocalPreview(null)
       refreshPluginCatalog()
-      setMessage(`已导入 ${localPreview.name} ${localPreview.version}`)
+      setMessage(t('已导入 {0} {1}', localPreview.name, localPreview.version))
     } catch (error) {
       setMessage(String(error))
     } finally {
@@ -303,7 +304,7 @@ export function PluginSettings() {
           })
         }
       }
-      setMessage('插件设置已保存')
+      setMessage(t('插件设置已保存'))
       setDraft((old) =>
         Object.fromEntries(
           Object.entries(old).map(([key, value]) =>
@@ -359,7 +360,7 @@ export function PluginSettings() {
         onClose={() => setStoreOpen(false)}
         onInstalled={() => {
           refreshPluginCatalog()
-          setMessage('插件已安装，尚未激活。点击激活后可逐项选择权限。')
+          setMessage(t('插件已安装，尚未激活。点击激活后可逐项选择权限。'))
         }}
       />
 
@@ -435,7 +436,7 @@ export function PluginSettings() {
           item={{
             id: `domain:${domainToApprove}`,
             kind: 'network',
-            title: '网络域名',
+            title: t('网络域名'),
             value: domainToApprove,
           }}
           step={1}
@@ -480,7 +481,7 @@ export function PluginSettings() {
           onActivated={() => {
             setActivationFor(null)
             refreshPluginCatalog()
-            setMessage('插件已激活，可随时在插件详情中撤销授权。')
+            setMessage(t('插件已激活，可随时在插件详情中撤销授权。'))
           }}
         />
       )}
@@ -492,7 +493,7 @@ export function PluginSettings() {
           item={{
             id: `command:${commandToApprove}`,
             kind: 'command',
-            title: '外部命令',
+            title: t('外部命令'),
             value: commandToApprove,
           }}
           step={1}

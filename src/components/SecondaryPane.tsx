@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { FileViews } from './browser/FileViews'
 import { PathToolbar } from './explorer/PathToolbar'
@@ -61,7 +62,7 @@ export function SecondaryPane({
       <div
         className="pane-resizer"
         role="separator"
-        aria-label="调整面板宽度"
+        aria-label={t('调整面板宽度')}
         style={{ right: `${width}%`, ...(top === null ? {} : { top }) }}
         onPointerDown={(event) => {
           const main = document.querySelector('.main')
@@ -82,7 +83,7 @@ export function SecondaryPane({
       />
       <aside
         className={`secondary-pane ${active ? 'pane-active' : ''}`}
-        aria-label="第二个面板"
+        aria-label={t('第二个面板')}
         onPointerDownCapture={onFocus}
         style={{ width: `${width}%`, ...(top === null ? {} : { top }) }}
         data-drop-folder={x.path === 'recent://' ? undefined : x.path}
@@ -107,12 +108,12 @@ export function SecondaryPane({
           pathInput={input}
           searchInput={search}
           searchHint={searchHint}
-          ariaLabel="第二个面板的路径"
-          pathLabel="文件夹路径"
-          searchLabel="搜索第二个面板"
+          ariaLabel={t('第二个面板的路径')}
+          pathLabel={t('文件夹路径')}
+          searchLabel={t('搜索第二个面板')}
           close={{
-            label: '关闭面板',
-            title: '关闭面板',
+            label: t('关闭面板'),
+            title: t('关闭面板'),
             className: 'pane-close-secondary',
             onClose,
           }}

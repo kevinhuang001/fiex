@@ -30,10 +30,10 @@ fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<S
     )
     .map_err(|e| e.to_string())?;
     if fingerprint(snapshot.path())? != before || fingerprint(&local)? != before {
-        return Err("文件仍在保存，稍后重试".into());
+        return Err(crate::i18n::t("文件仍在保存，稍后重试").into());
     }
     if file.revision.is_empty() {
-        return Err("提供者不支持版本条件写入，修改已保留在本地".into());
+        return Err(crate::i18n::t("提供者不支持版本条件写入，修改已保留在本地").into());
     }
     let size = snapshot
         .as_file()
@@ -94,7 +94,7 @@ fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
         if changed {
             meta.files.get_mut(rel).unwrap().conflict = true;
             save_meta(conn, &meta)?;
-            return Err("本地与云端均有修改，请处理同步冲突".into());
+            return Err(crate::i18n::t("本地与云端均有修改，请处理同步冲突").into());
         }
         // Download to a separate sibling and recheck local contents before
         // replacement, so an editor save during network I/O is preserved.
@@ -108,11 +108,11 @@ fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
             &TransferOptions::default(),
         )?;
         if fingerprint(&local)? != file.baseline {
-            return Err("本地文件在下载期间改变，稍后重试".into());
+            return Err(crate::i18n::t("本地文件在下载期间改变，稍后重试").into());
         }
         let after = stat(conn, rel, &file)?;
         if after["revision"].as_str() != Some(revision) {
-            return Err("云端文件正在变化，稍后重试".into());
+            return Err(crate::i18n::t("云端文件正在变化，稍后重试").into());
         }
         staged.persist(&local).map_err(|e| e.error.to_string())?;
         let entry = meta.files.get_mut(rel).unwrap();

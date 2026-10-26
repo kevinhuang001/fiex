@@ -1,3 +1,5 @@
+import { t } from '@/i18n'
+import { getLocale, subscribeLocale } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { LoaderCircle } from 'lucide-react'
@@ -64,6 +66,8 @@ export function PluginConnectionView({
       if (attached) return
       attached = true
       dispose = attachFiexPanel({
+        getLocale,
+        subscribeLocale,
         pluginId: view.pluginId,
         sessionId: crypto.randomUUID(),
         origin: 'null',
@@ -77,7 +81,7 @@ export function PluginConnectionView({
         ]),
         dispatch: async (method, params): Promise<JsonValue> => {
           if (method === 'context.get')
-            return { source: 'connection', connectionId, state: view.state }
+            return { locale: getLocale(), source: 'connection', connectionId, state: view.state }
           if (method === 'theme.get') return themeSnapshot()
           if (method === 'plugin.invoke') {
             const input = params as { method?: unknown; params?: unknown } | null
@@ -135,14 +139,14 @@ export function PluginConnectionView({
   if (!view)
     return (
       <div className="plugin-connection-message" role="status">
-        <LoaderCircle className="spin" size={18} /> 正在打开连接…
+        <LoaderCircle className="spin" size={18} /> {t('正在打开连接…')}
       </div>
     )
   return (
     <iframe
       key={view.assetPath}
       ref={frame}
-      title="连接界面"
+      title={t('连接界面')}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       className="plugin-connection-frame"

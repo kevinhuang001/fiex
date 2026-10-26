@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { call } from '@/lib/api'
 import { ExternalLink, Info, Scale } from 'lucide-react'
@@ -25,7 +26,7 @@ export function AboutSettings({ onError }: { onError: (s: string) => void }) {
             <span className="settings-row-icon" style={{ background: '#64748b' }}>
               <Info size={15} />
             </span>
-            版本
+            {t('版本')}
           </div>
           <span className="settings-value">0.3.0</span>
         </div>
@@ -37,7 +38,7 @@ export function AboutSettings({ onError }: { onError: (s: string) => void }) {
             <span className="settings-row-icon" style={{ background: '#10b981' }}>
               <Scale size={15} />
             </span>
-            开源许可
+            {t('开源许可')}
           </div>
           <ExternalLink size={14} />
         </button>

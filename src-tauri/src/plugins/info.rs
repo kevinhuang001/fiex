@@ -51,36 +51,63 @@ fn audio_section(path: &Path) -> Option<InfoSection> {
     let mut rows = Vec::new();
     if let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) {
         for (label, value) in [
-            ("标题", tag.title().map(|value| value.to_string())),
-            ("艺术家", tag.artist().map(|value| value.to_string())),
-            ("专辑", tag.album().map(|value| value.to_string())),
-            ("流派", tag.genre().map(|value| value.to_string())),
-            ("年份", tag.date().map(|date| date.year.to_string())),
-            ("音轨", tag.track().map(|track| track.to_string())),
-            ("碟片", tag.disk().map(|disk| disk.to_string())),
+            (
+                crate::i18n::t("标题"),
+                tag.title().map(|value| value.to_string()),
+            ),
+            (
+                crate::i18n::t("艺术家"),
+                tag.artist().map(|value| value.to_string()),
+            ),
+            (
+                crate::i18n::t("专辑"),
+                tag.album().map(|value| value.to_string()),
+            ),
+            (
+                crate::i18n::t("流派"),
+                tag.genre().map(|value| value.to_string()),
+            ),
+            (
+                crate::i18n::t("年份"),
+                tag.date().map(|date| date.year.to_string()),
+            ),
+            (
+                crate::i18n::t("音轨"),
+                tag.track().map(|track| track.to_string()),
+            ),
+            (
+                crate::i18n::t("碟片"),
+                tag.disk().map(|disk| disk.to_string()),
+            ),
         ] {
             if let Some(value) = value.filter(|value| !value.is_empty()) {
                 rows.push(row(label, value));
             }
         }
     }
-    rows.push(row("时长", duration_text(properties.duration())));
+    rows.push(row(
+        crate::i18n::t("时长"),
+        duration_text(properties.duration()),
+    ));
     if let Some(bitrate) = properties.audio_bitrate().filter(|bitrate| *bitrate > 0) {
-        rows.push(row("码率", format!("{bitrate} kbps")));
+        rows.push(row(crate::i18n::t("码率"), format!("{bitrate} kbps")));
     }
     if let Some(sample_rate) = properties.sample_rate().filter(|rate| *rate > 0) {
-        rows.push(row("采样率", format!("{sample_rate} Hz")));
+        rows.push(row(crate::i18n::t("采样率"), format!("{sample_rate} Hz")));
     }
     if let Some(channels) = properties.channels().filter(|channels| *channels > 0) {
-        rows.push(row("声道", channels.to_string()));
+        rows.push(row(crate::i18n::t("声道"), channels.to_string()));
     }
     if !rows.is_empty() {
-        rows.insert(0, row("格式", format!("{:?}", tagged.file_type())));
+        rows.insert(
+            0,
+            row(crate::i18n::t("格式"), format!("{:?}", tagged.file_type())),
+        );
     }
     (!rows.is_empty()).then(|| InfoSection {
         id: "core.audio".into(),
         source: "core".into(),
-        title: "音频".into(),
+        title: crate::i18n::t("音频").into(),
         plugin_id: None,
         provider: "Fiex".into(),
         rows,
@@ -92,7 +119,7 @@ fn mp4_section(path: &Path) -> Option<InfoSection> {
     let file = fs::File::open(path).ok()?;
     let size = file.metadata().ok()?.len();
     let mp4 = Mp4Reader::read_header(std::io::BufReader::new(file), size).ok()?;
-    let mut rows = vec![row("时长", duration_text(mp4.duration()))];
+    let mut rows = vec![row(crate::i18n::t("时长"), duration_text(mp4.duration()))];
     let mut video = None;
     let mut audio = None;
     for track in mp4.tracks().values() {
@@ -128,16 +155,16 @@ fn mp4_section(path: &Path) -> Option<InfoSection> {
         }
     }
     if let Some(value) = video {
-        rows.push(row("视频", value));
+        rows.push(row(crate::i18n::t("视频"), value));
     }
     if let Some(value) = audio {
-        rows.push(row("音频", value));
+        rows.push(row(crate::i18n::t("音频"), value));
     }
-    rows.push(row("容器", mp4.major_brand().to_string()));
+    rows.push(row(crate::i18n::t("容器"), mp4.major_brand().to_string()));
     Some(InfoSection {
         id: "core.video.mp4".into(),
         source: "core".into(),
-        title: "视频".into(),
+        title: crate::i18n::t("视频").into(),
         plugin_id: None,
         provider: "Fiex".into(),
         rows,
@@ -149,15 +176,15 @@ fn matroska_section(path: &Path) -> Option<InfoSection> {
     let mkv = matroska::open(path).ok()?;
     let mut rows = Vec::new();
     if let Some(title) = mkv.info.title.filter(|value| !value.is_empty()) {
-        rows.push(row("标题", title));
+        rows.push(row(crate::i18n::t("标题"), title));
     }
     if let Some(duration) = mkv.info.duration {
-        rows.push(row("时长", duration_text(duration)));
+        rows.push(row(crate::i18n::t("时长"), duration_text(duration)));
     }
     for track in &mkv.tracks {
         match &track.settings {
             Settings::Video(video) => rows.push(row(
-                "视频",
+                crate::i18n::t("视频"),
                 format!(
                     "{}×{} · {}",
                     video.pixel_width,
@@ -169,7 +196,7 @@ fn matroska_section(path: &Path) -> Option<InfoSection> {
                 ),
             )),
             Settings::Audio(audio) => rows.push(row(
-                "音频",
+                crate::i18n::t("音频"),
                 format!(
                     "{} · {} Hz · {} 声道",
                     track
@@ -183,11 +210,11 @@ fn matroska_section(path: &Path) -> Option<InfoSection> {
             Settings::None => {}
         }
     }
-    rows.push(row("容器", "Matroska"));
+    rows.push(row(crate::i18n::t("容器"), "Matroska"));
     (!rows.is_empty()).then(|| InfoSection {
         id: "core.video.matroska".into(),
         source: "core".into(),
-        title: "视频".into(),
+        title: crate::i18n::t("视频").into(),
         plugin_id: None,
         provider: "Fiex".into(),
         rows,
@@ -294,16 +321,20 @@ fn metadata_section(
         });
     let mut rows = vec![
         row(
-            "种类",
+            crate::i18n::t("种类"),
             projected
                 .map(|value| match value.kind.as_str() {
-                    "directory" => "文件夹",
-                    _ => "文件",
+                    "directory" => crate::i18n::t("文件夹"),
+                    _ => crate::i18n::t("文件"),
                 })
-                .unwrap_or(if is_dir { "文件夹" } else { "文件" }),
+                .unwrap_or(if is_dir {
+                    crate::i18n::t("文件夹")
+                } else {
+                    crate::i18n::t("文件")
+                }),
         ),
         row(
-            "大小",
+            crate::i18n::t("大小"),
             if is_dir {
                 "—".to_string()
             } else {
@@ -314,10 +345,10 @@ fn metadata_section(
                     .unwrap_or_else(|| "—".into())
             },
         ),
-        row("位置", display_parent(display)),
+        row(crate::i18n::t("位置"), display_parent(display)),
     ];
     if !extension.is_empty() {
-        rows.push(row("扩展名", extension));
+        rows.push(row(crate::i18n::t("扩展名"), extension));
     }
     if let Some(mime) = projected.and_then(|value| value.mime.clone()) {
         rows.push(row("MIME", mime));
@@ -329,15 +360,15 @@ fn metadata_section(
             .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|value| value.as_secs() as i64)
     }) {
-        rows.push(row("修改时间", timestamp_text(modified)));
+        rows.push(row(crate::i18n::t("修改时间"), timestamp_text(modified)));
     }
     if let Some(permissions) = metadata.as_ref().map(|value| value.permissions()) {
         rows.push(row(
-            "权限",
+            crate::i18n::t("权限"),
             if permissions.readonly() {
-                "只读"
+                crate::i18n::t("只读")
             } else {
-                "可读写"
+                crate::i18n::t("可读写")
             },
         ));
     }
@@ -346,12 +377,12 @@ fn metadata_section(
         .filter(|value| value.file_type().is_symlink())
         .and_then(|_| std::fs::read_link(local).ok())
     {
-        rows.push(row("符号链接", link.to_string_lossy()));
+        rows.push(row(crate::i18n::t("符号链接"), link.to_string_lossy()));
     }
     InfoSection {
         id: "core.metadata".into(),
         source: "core".into(),
-        title: "文件".into(),
+        title: crate::i18n::t("文件").into(),
         plugin_id: None,
         provider: "Fiex".into(),
         rows,
@@ -436,7 +467,7 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
                             Handler::Plugin(p) => Some(p.id),
                             _ => None,
                         },
-                        rows: vec![row("错误", error)],
+                        rows: vec![row(crate::i18n::t("错误"), error)],
                     }],
                 })
                 .collect()

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
 import { ArrowsClockwiseIcon as RefreshCw } from '@phosphor-icons/react/dist/csr/ArrowsClockwise'
@@ -101,8 +102,8 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={`新建文件夹 ${hint('newFolder')}`}
-          aria-label="新建文件夹"
+          title={t('新建文件夹 {0}', hint('newFolder'))}
+          aria-label={t('新建文件夹')}
           disabled={x.directoryReadOnly}
           onClick={() => create(true)}
         >
@@ -114,8 +115,8 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={`在 ${ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE'} 中打开`}
-          aria-label="在 IDE 中打开"
+          title={t('在 {0} 中打开', ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE')}
+          aria-label={t('在 IDE 中打开')}
           disabled={x.directoryReadOnly}
           onClick={() => openIde()}
           onContextMenu={(event) => {
@@ -131,11 +132,12 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={`在 ${
+          title={t(
+            '在 {0} 中打开',
             prefs.terminal === 'builtin'
-              ? '内置终端'
-              : terminals.find((t) => t.id === prefs.terminal)?.name || '终端'
-          } 中打开`}
+              ? t('内置终端')
+              : terminals.find((t) => t.id === prefs.terminal)?.name || t('终端'),
+          )}
           aria-label="Open in Terminal"
           disabled={x.directoryReadOnly}
           onClick={() => terminal()}
@@ -156,8 +158,8 @@ export function ExplorerToolbar({
           variant="ghost"
           size="icon"
           className="toolbar-secondary focus-visible:ring-0"
-          title="刷新"
-          aria-label="刷新"
+          title={t('刷新')}
+          aria-label={t('刷新')}
           onClick={() => {
             setRefreshKey((key) => key + 1)
             refreshAll()
@@ -177,8 +179,8 @@ export function ExplorerToolbar({
           variant="ghost"
           size="icon"
           className="toolbar-secondary focus-visible:ring-0"
-          title={split ? '关闭当前面板' : '双面板'}
-          aria-label={split ? '关闭当前面板' : '双面板'}
+          title={split ? t('关闭当前面板') : t('双面板')}
+          aria-label={split ? t('关闭当前面板') : t('双面板')}
           aria-pressed={split}
           onClick={onToggleSplit}
         >
@@ -190,8 +192,8 @@ export function ExplorerToolbar({
         variant="ghost"
         size="icon"
         className="toolbar-secondary focus-visible:ring-0"
-        title="状态中心"
-        aria-label="状态中心"
+        title={t('状态中心')}
+        aria-label={t('状态中心')}
         onClick={() => activity.setOpen(!activity.open)}
       >
         <ScrollText weight="regular" size={20} />
@@ -204,8 +206,8 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="切换侧栏"
-          title="切换侧栏"
+          aria-label={t('切换侧栏')}
+          title={t('切换侧栏')}
           onClick={() => setSidebar(!sidebar)}
         >
           <PanelLeft weight="regular" size={20} />
@@ -215,8 +217,8 @@ export function ExplorerToolbar({
             variant="ghost"
             size="icon"
             disabled={!x.canBack}
-            title="后退"
-            aria-label="后退"
+            title={t('后退')}
+            aria-label={t('后退')}
             onClick={x.back}
           >
             <ChevronLeft weight="regular" size={20} />
@@ -225,22 +227,22 @@ export function ExplorerToolbar({
             variant="ghost"
             size="icon"
             disabled={!x.canForward}
-            title="前进"
-            aria-label="前进"
+            title={t('前进')}
+            aria-label={t('前进')}
             onClick={x.forward}
           >
             <ChevronRight weight="regular" size={20} />
           </Button>
         </div>
-        <h1 data-tauri-drag-region>{x.query ? '搜索' : displayName(x.path) || 'Fiex'}</h1>
+        <h1 data-tauri-drag-region>{x.query ? t('搜索') : displayName(x.path) || 'Fiex'}</h1>
         <div className="toolbar-spacer" data-tauri-drag-region />
         <ViewSwitch prefs={prefs} update={update} />
         {inTrash && (
           <Button
             variant="ghost"
             size="icon"
-            title="清空废纸篓"
-            aria-label="清空废纸篓"
+            title={t('清空废纸篓')}
+            aria-label={t('清空废纸篓')}
             onClick={emptyTrash}
           >
             <Trash2 size={20} />
@@ -290,8 +292,8 @@ export function ExplorerToolbar({
           variant="ghost"
           size="icon"
           className="toolbar-secondary focus-visible:ring-0"
-          title="设置"
-          aria-label="设置"
+          title={t('设置')}
+          aria-label={t('设置')}
           onClick={() => setSettings(true)}
         >
           <Settings2 weight="regular" size={20} />

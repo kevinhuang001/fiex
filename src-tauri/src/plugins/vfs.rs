@@ -124,7 +124,7 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
             };
             entries.push(bound_entry(item.clone(), &uri, &relative)?);
             if entries.len() > MAX_ENTRIES {
-                return Err("插件目录项超过上限".into());
+                return Err(crate::i18n::t("插件目录项超过上限").into());
             }
         }
         if let Some(values) = page.get("warnings").and_then(Value::as_array) {
@@ -139,12 +139,12 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
             break;
         }
         if next == cursor {
-            return Err("插件分页游标没有前进".into());
+            return Err(crate::i18n::t("插件分页游标没有前进").into());
         }
         cursor = next;
     }
     if cursor.is_some() {
-        return Err("插件目录分页过多".into());
+        return Err(crate::i18n::t("插件目录分页过多").into());
     }
     Ok(Listing {
         read_only: true,
@@ -175,9 +175,9 @@ pub fn read_small(path: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
         .ok_or("插件预览响应缺少数据")?;
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(encoded)
-        .map_err(|_| "插件返回了无效的 Base64 数据")?;
+        .map_err(|_| crate::i18n::t("插件返回了无效的 Base64 数据"))?;
     if bytes.len() > max_bytes {
-        return Err("插件预览数据超过请求上限".into());
+        return Err(crate::i18n::t("插件预览数据超过请求上限").into());
     }
     Ok(bytes)
 }
@@ -269,7 +269,7 @@ pub fn materialize(path: &str) -> Result<String, String> {
     }
     const MAX_EXPORT: usize = 1024 * 1024;
     if entry.size > MAX_EXPORT as u64 {
-        return Err("此 VFS 的有界读取接口不支持导出超过 1 MiB 的文件".into());
+        return Err(crate::i18n::t("此 VFS 的有界读取接口不支持导出超过 1 MiB 的文件").into());
     }
     crate::mounts::segment(&entry.name)?;
     let mut exports = exports()

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { Check, Copy } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
@@ -43,7 +44,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     setLoading(true)
     const timeout = new Promise<InfoSection[]>((_, reject) =>
       window.setTimeout(
-        () => reject(new Error('读取插件信息超时，请检查插件是否正常运行。')),
+        () => reject(new Error(t('读取插件信息超时，请检查插件是否正常运行。'))),
         15_000,
       ),
     )
@@ -75,14 +76,14 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
 
   const basicRows: InfoRow[] = info
     ? [
-        { label: '种类', value: kind(info) },
-        { label: '大小', value: info.isDir ? '文件夹' : size(info.size) },
-        { label: '位置', value: parent(info.path) },
-        { label: '创建时间', value: date(info.created) },
-        { label: '修改时间', value: date(info.modified) },
-        { label: '权限', value: info.readonly ? '只读' : '可读写' },
-        { label: '符号链接', value: info.isSymlink ? '是' : '否' },
-        ...(info.linkTarget ? [{ label: '链接到', value: info.linkTarget }] : []),
+        { label: t('种类'), value: kind(info) },
+        { label: t('大小'), value: info.isDir ? t('文件夹') : size(info.size) },
+        { label: t('位置'), value: parent(info.path) },
+        { label: t('创建时间'), value: date(info.created) },
+        { label: t('修改时间'), value: date(info.modified) },
+        { label: t('权限'), value: info.readonly ? t('只读') : t('可读写') },
+        { label: t('符号链接'), value: info.isSymlink ? t('是') : t('否') },
+        ...(info.linkTarget ? [{ label: t('链接到'), value: info.linkTarget }] : []),
       ]
     : []
   // Core's metadata provider owns the basic attributes. Only use the local
@@ -90,14 +91,14 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   const hasCoreMetadata = sections.some((section) => section.id === 'core.metadata')
   const groups: Array<{ title: string; from?: string; rows: InfoRow[] }> = info
     ? [
-        ...(hasCoreMetadata ? [] : [{ title: '文件', rows: basicRows }]),
+        ...(hasCoreMetadata ? [] : [{ title: t('文件'), rows: basicRows }]),
         ...sections
           .filter((section) => section.rows.length > 0)
           .map((section) => ({
             title: section.title,
             from:
               section.source === 'plugin' && section.provider
-                ? `来自：${section.provider}`
+                ? t('来自：{0}', section.provider)
                 : undefined,
             rows: section.rows,
           })),
@@ -105,7 +106,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     : []
 
   return (
-    <Modal open={!!info} onClose={onClose} title="显示简介" className="file-info-modal">
+    <Modal open={!!info} onClose={onClose} title={t('显示简介')} className="file-info-modal">
       {info && (
         <div className="file-info">
           <FileIcon entry={info} size={72} />
@@ -127,8 +128,8 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
                           <button
                             type="button"
                             className="info-copy"
-                            title={copied === `${groupIndex}:${rowIndex}` ? '已复制' : '复制'}
-                            aria-label="复制"
+                            title={copied === `${groupIndex}:${rowIndex}` ? t('已复制') : t('复制')}
+                            aria-label={t('复制')}
                             onClick={() => void copy(row.value, `${groupIndex}:${rowIndex}`)}
                           >
                             {copied === `${groupIndex}:${rowIndex}` ? (
@@ -144,7 +145,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
                 </Fragment>
               ))}
             </dl>
-            {loading && <p className="file-info-status">正在读取媒体与插件信息…</p>}
+            {loading && <p className="file-info-status">{t('正在读取媒体与插件信息…')}</p>}
             {!loading && error && <p className="file-info-status">{error}</p>}
             {info.tags.length > 0 && (
               <div className="file-info-tags">

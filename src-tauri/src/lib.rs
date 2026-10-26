@@ -6,6 +6,7 @@ pub(crate) mod desktop;
 pub mod drag_session;
 #[path = "core/files.rs"]
 pub mod files;
+pub mod i18n;
 #[path = "core/ignores.rs"]
 pub mod ignores;
 #[cfg(all(feature = "desktop", target_os = "macos"))]
