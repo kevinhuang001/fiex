@@ -75,6 +75,15 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            // A second launch focuses the existing window instead of starting
+            // another Core process and a second set of plugin children.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_drag::init())
         .manage(Operations::default())
         .manage(OperationCancel::default())

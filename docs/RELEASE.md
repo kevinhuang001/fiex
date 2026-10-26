@@ -1,3 +1,7 @@
+# Fiex 0.7.2
+
+- Fiex is now single-instance: launching it again focuses the existing window instead of starting a second Core and a second plugin process tree.
+
 # Fiex 0.7.1
 
 - Approved, enabled native plugins auto-start after the app opens instead of waiting for the first invocation.
