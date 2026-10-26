@@ -13,11 +13,28 @@ pub struct PluginRuntime {
     pub entrypoints: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FolderReadPermission {
-    #[serde(default)]
     pub enabled: bool,
+}
+
+impl<'de> Deserialize<'de> for FolderReadPermission {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Bool(bool),
+            Object {
+                #[serde(default)]
+                enabled: bool,
+            },
+        }
+        Ok(match Repr::deserialize(deserializer)? {
+            Repr::Bool(enabled) => Self { enabled },
+            Repr::Object { enabled } => Self { enabled },
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -33,11 +50,28 @@ pub struct FolderPermission {
     pub rename: OperationPermission,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OperationPermission {
-    #[serde(default)]
     pub enabled: bool,
+}
+
+impl<'de> Deserialize<'de> for OperationPermission {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Bool(bool),
+            Object {
+                #[serde(default)]
+                enabled: bool,
+            },
+        }
+        Ok(match Repr::deserialize(deserializer)? {
+            Repr::Bool(enabled) => Self { enabled },
+            Repr::Object { enabled } => Self { enabled },
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -657,6 +691,22 @@ mod contribution_tests {
         ] {
             assert!(validate_extensions(&invalid).is_err(), "{invalid}");
         }
+    }
+
+    #[test]
+    fn legacy_boolean_permissions_still_import() {
+        let manifest: PluginManifest = serde_json::from_value(json!({
+            "schemaVersion": 2,
+            "id": "test.legacy", "name": "Legacy", "version": "1",
+            "permissions": {
+                "folders": {"read": true},
+                "files": {"read": true, "write": false}
+            }
+        }))
+        .expect("legacy booleans must remain importable");
+        assert!(manifest.permissions.folders.read.enabled);
+        assert!(manifest.permissions.files.read.enabled);
+        assert!(!manifest.permissions.files.write.enabled);
     }
 
     #[test]
