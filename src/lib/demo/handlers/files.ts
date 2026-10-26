@@ -182,19 +182,31 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       )
       return null
     }
-    case 'search_files':
+    case 'search_files': {
+      const providers = String(a.query).toLowerCase().includes('plugin-index-hit')
+        ? [item('/Users/kevin/Documents/Indexed result.txt', false)]
+        : []
       return {
-        entries: state.entries.filter(
-          (e) =>
-            e.path.startsWith(a.root as string) &&
-            e.name.toLowerCase().includes((a.query as string).toLowerCase()) &&
-            !ignored(e.name, a.ignores),
-        ),
+        entries: [
+          ...state.entries.filter(
+            (e) =>
+              e.path.startsWith(a.root as string) &&
+              e.name.toLowerCase().includes((a.query as string).toLowerCase()) &&
+              (a.hidden || !e.name.startsWith('.')) &&
+              !ignored(e.name, a.ignores),
+          ),
+          ...providers.filter(
+            (e) =>
+              e.path.startsWith(String(a.root).replace(/\/$/, '') + '/') &&
+              !ignored(e.name, a.ignores),
+          ),
+        ],
         done: true,
         elapsedMs: 12,
         truncated: false,
         skipped: 0,
       }
+    }
     case 'create_entry': {
       const path = join(a.path as string, a.name as string)
       if (state.entries.some((e) => e.path === path)) throw new Error('同名项目已存在')

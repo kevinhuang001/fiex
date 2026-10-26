@@ -681,26 +681,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return ['github.com']
     case 'plugin_permission_allowed':
       return new URLSearchParams(location.search).has('pluginFixture')
-    case 'plugin_search':
-      if (String(a.query).toLowerCase().includes('plugin-index-hit'))
-        return [
-          {
-            path: '/Users/kevin/Documents/Indexed result.txt',
-            name: 'Indexed result.txt',
-            isDir: false,
-            isSymlink: false,
-            size: 42,
-            modified: 1770000000,
-            created: 1770000000,
-            extension: 'txt',
-            mime: 'text/plain',
-            readonly: false,
-            linkTarget: null,
-            tags: [],
-            sync: null,
-          },
-        ]
-      return []
     case 'plugin_marketplace':
       return marketplace
     case 'plugin_release_assets':

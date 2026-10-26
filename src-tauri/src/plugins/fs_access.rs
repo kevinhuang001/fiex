@@ -220,7 +220,7 @@ impl Scope {
     pub fn bind_resource(&mut self, resource: &Value, path: Option<&Path>) -> Result<(), String> {
         let key = Self::ref_key(&resource["ref"])?;
         if let Some(path) = path {
-            let path = path.to_string_lossy().into_owned();
+            let path = canonical_selection(path)?.to_string_lossy().into_owned();
             self.authorize(&path)?;
             std::sync::Arc::make_mut(&mut self.references).insert(key.clone(), path.clone());
             if let Some(name) = resource["metadata"]["name"].as_str() {
