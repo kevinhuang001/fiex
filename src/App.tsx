@@ -162,6 +162,8 @@ export default function App() {
             {view.terminal ? (
               <TerminalView
                 connectionId={view.terminal}
+                terminalFont={app.prefs.terminalFont}
+                terminalFontSize={app.prefs.terminalFontSize}
                 name={
                   app.left.connections.find((connection) => connection.id === view.terminal)
                     ?.name || 'SSH'
@@ -225,7 +227,10 @@ export default function App() {
             onWidthChange={app.setPaneWidth}
           />
         )}
-        <TerminalPanel />
+        <TerminalPanel
+          terminalFont={app.prefs.terminalFont}
+          terminalFontSize={app.prefs.terminalFontSize}
+        />
         {!fullView && (
           <WorkspaceBar
             items={app.workspace.items}

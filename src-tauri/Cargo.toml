@@ -1,6 +1,6 @@
 [package]
 name = "fiex"
-version = "0.7.2"
+version = "0.7.3"
 description = "A calm, fast file explorer"
 authors = ["Kevin Huang"]
 edition = "2021"
@@ -49,6 +49,7 @@ hfsplus = { version = "0.4", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"
+fontdb = "0.23"
 keyring = { version = "4.2", default-features = false, features = ["v1"] }
 dunce = "1"
 cap-std = "3"

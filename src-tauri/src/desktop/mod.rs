@@ -73,6 +73,21 @@ fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     builder.build(app)?;
     Ok(())
 }
+#[tauri::command]
+pub(crate) fn system_fonts() -> Vec<String> {
+    let mut db = fontdb::Database::new();
+    db.load_system_fonts();
+    let mut names = std::collections::BTreeSet::new();
+    for face in db.faces() {
+        for (family, _) in &face.families {
+            if !family.is_empty() {
+                names.insert(family.clone());
+            }
+        }
+    }
+    names.into_iter().collect()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -107,6 +122,7 @@ pub fn run() {
             plugin_task,
             plugin_cancel_task,
             plugin_status,
+            system_fonts,
             plugins_list,
             file_info_details,
             plugin_errors,

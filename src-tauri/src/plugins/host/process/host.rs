@@ -123,11 +123,12 @@ impl PluginHost {
     /// Declarative plugins (themes) and packages without a native entrypoint
     /// never reach this path; callers skip them.
     pub fn start(&self, plugin_id: &str) -> Result<(), String> {
-        let mut children = self
+        if self
             .children
             .lock()
-            .map_err(|_| "plugin host lock poisoned")?;
-        if children.contains_key(plugin_id) {
+            .map_err(|_| "plugin host lock poisoned")?
+            .contains_key(plugin_id)
+        {
             return Ok(());
         }
         let (manifest, directory) = discover()
@@ -135,7 +136,16 @@ impl PluginHost {
             .find(|(manifest, _)| manifest.id == plugin_id)
             .ok_or("plugin not installed")?;
         let declared = declared(&manifest)?;
+        // Process creation and signature verification can be slow. Do them
+        // outside the host lock so a slow plugin never blocks other providers.
         let instance = Self::spawn_instance(plugin_id, &manifest, &directory, declared)?;
+        let mut children = self
+            .children
+            .lock()
+            .map_err(|_| "plugin host lock poisoned")?;
+        if children.contains_key(plugin_id) {
+            return Ok(());
+        }
         children.insert(plugin_id.to_string(), instance);
         Ok(())
     }
@@ -318,18 +328,28 @@ impl PluginHost {
         if let Some(object) = params.as_object_mut() {
             object.insert("networkDomains".into(), json!(state.network_domains));
         }
-        let mut guard = self
+        let existing = self
             .children
             .lock()
-            .map_err(|_| "plugin host lock poisoned")?;
-        let instance = if let Some(instance) = guard.get(plugin_id) {
-            instance.clone()
-        } else {
-            let instance = Self::spawn_instance(plugin_id, &manifest, &dir, declared)?;
-            guard.insert(plugin_id.to_string(), instance.clone());
+            .map_err(|_| "plugin host lock poisoned")?
+            .get(plugin_id)
+            .cloned();
+        let instance = if let Some(instance) = existing {
             instance
+        } else {
+            // Never hold the host lock across process creation.
+            let created = Self::spawn_instance(plugin_id, &manifest, &dir, declared)?;
+            let mut guard = self
+                .children
+                .lock()
+                .map_err(|_| "plugin host lock poisoned")?;
+            if let Some(instance) = guard.get(plugin_id) {
+                instance.clone()
+            } else {
+                guard.insert(plugin_id.to_string(), created.clone());
+                created
+            }
         };
-        drop(guard);
         match instance.running.rpc(method, params, task_root) {
             Ok(value) => Ok(value),
             Err(failure) => {

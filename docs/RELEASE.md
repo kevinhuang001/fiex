@@ -1,3 +1,9 @@
+# Fiex 0.7.3
+
+- Terminal settings now choose a system font (including Nerd Font families) and font size.
+- Plugin host no longer holds its global lock while spawning a plugin process, so a slow Windows process start cannot block Info, hooks or other plugins.
+- File Info has a 15-second loading timeout instead of waiting forever on a plugin.
+
 # Fiex 0.7.2
 
 - Fiex is now single-instance: launching it again focuses the existing window instead of starting a second Core and a second plugin process tree.

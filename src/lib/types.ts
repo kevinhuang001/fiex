@@ -127,6 +127,8 @@ export interface Preferences {
   backgroundImage: string
   backgroundOpacity: number
   fontSize: number
+  terminalFont: string
+  terminalFontSize: number
   startPage: StartPage
   displayIgnore: string[]
   sidebarOrder: SidebarSection[]

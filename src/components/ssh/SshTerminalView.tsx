@@ -119,11 +119,16 @@ export function TerminalView({
   cwd,
   shell,
   name,
+  terminalFont,
+  terminalFontSize,
 }: {
   connectionId?: string
   cwd?: string
   shell?: string
   name: string
+  /** A system font family chosen in Settings; Nerd Font names are supported. */
+  terminalFont?: string
+  terminalFontSize?: number
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [attempt, setAttempt] = useState(0)
@@ -141,9 +146,23 @@ export function TerminalView({
       allowProposedApi: true,
       // A steady cursor avoids the unequal, very fast blink some WebViews show.
       cursorBlink: false,
-      fontFamily:
-        '"JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace',
-      fontSize: 13,
+      fontFamily: [
+        terminalFont,
+        'JetBrainsMono Nerd Font',
+        'MesloLGS NF',
+        'Hack Nerd Font',
+        'FiraCode Nerd Font',
+        'JetBrains Mono',
+        'SFMono-Regular',
+        'Menlo',
+        'Consolas',
+        'Liberation Mono',
+        'monospace',
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => (value === 'monospace' ? value : `"${value}"`))
+        .join(', '),
+      fontSize: terminalFontSize ?? 13,
       lineHeight: 1.15,
       scrollback: 20000,
       theme: terminalTheme(),

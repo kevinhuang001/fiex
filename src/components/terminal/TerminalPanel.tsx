@@ -20,7 +20,13 @@ interface ShellChoice {
 
 /** VS Code-style integrated terminal panel. Tabs stay mounted while the panel
  * is collapsed or another terminal is active. */
-export function TerminalPanel() {
+export function TerminalPanel({
+  terminalFont,
+  terminalFontSize,
+}: {
+  terminalFont?: string
+  terminalFontSize?: number
+}) {
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [active, setActive] = useState('')
   const [open, setOpen] = useState(false)
@@ -203,6 +209,8 @@ export function TerminalPanel() {
             <TerminalView
               cwd={tab.cwd}
               shell={tab.shell}
+              terminalFont={terminalFont}
+              terminalFontSize={terminalFontSize}
               name={`终端 ${tab.number}${tab.shellName ? ` · ${tab.shellName}` : ''}`}
             />
           </div>

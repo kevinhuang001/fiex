@@ -13,6 +13,7 @@ export function AppearanceSettings({
   update: (p: Partial<Preferences>) => void
 }) {
   const [themes, setThemes] = useState<Theme[]>([])
+  const [fonts, setFonts] = useState<string[]>([])
   const [backgroundError, setBackgroundError] = useState('')
   const pickBackground = async () => {
     setBackgroundError('')
@@ -29,6 +30,17 @@ export function AppearanceSettings({
       setBackgroundError(String(error))
     }
   }
+  useEffect(() => {
+    let alive = true
+    void call<string[]>('system_fonts')
+      .then((items) => {
+        if (alive) setFonts(Array.isArray(items) ? items : [])
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   useEffect(() => {
     let alive = true
     const refresh = () => {
@@ -174,6 +186,47 @@ export function AppearanceSettings({
               onChange={(event) => update({ fontSize: +event.target.value })}
             />
             <span>{prefs.fontSize}px</span>
+          </div>
+        </div>
+      </div>
+      <div className="settings-card">
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-icon" style={{ background: '#0ea5e9' }}>
+              <SlidersHorizontal size={15} />
+            </span>
+            终端字体
+          </div>
+          <div className="settings-row-control">
+            <SelectField
+              label="终端字体"
+              value={prefs.terminalFont}
+              options={[
+                { value: '', label: 'Fiex 默认（含 Nerd Font 回退）' },
+                ...fonts.map((font) => ({ value: font, label: font })),
+              ]}
+              onChange={(terminalFont) => update({ terminalFont })}
+            />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-label">
+            <span className="settings-row-icon" style={{ background: '#0ea5e9' }}>
+              <SlidersHorizontal size={15} />
+            </span>
+            终端字号
+          </div>
+          <div className="settings-row-control settings-slider">
+            <input
+              aria-label="终端字号"
+              type="range"
+              min="9"
+              max="24"
+              step="1"
+              value={prefs.terminalFontSize}
+              onChange={(event) => update({ terminalFontSize: +event.target.value })}
+            />
+            <span>{prefs.terminalFontSize}px</span>
           </div>
         </div>
       </div>

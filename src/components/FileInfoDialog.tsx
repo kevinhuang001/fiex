@@ -41,7 +41,13 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     setSections([])
     setError('')
     setLoading(true)
-    void call<InfoSection[]>('file_info_details', { path: info.path })
+    const timeout = new Promise<InfoSection[]>((_, reject) =>
+      window.setTimeout(
+        () => reject(new Error('读取插件信息超时，请检查插件是否正常运行。')),
+        15_000,
+      ),
+    )
+    void Promise.race([call<InfoSection[]>('file_info_details', { path: info.path }), timeout])
       .then((value) => {
         if (alive) setSections(Array.isArray(value) ? value : [])
       })
