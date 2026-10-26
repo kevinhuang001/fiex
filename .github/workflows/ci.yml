@@ -191,6 +191,21 @@ jobs:
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Verify self-contained native libraries
         run: npm run audit:native -- --target ${{ matrix.target }}
+      - name: sccache stats
+        if: always()
+        shell: bash
+        run: |
+          if command -v sccache >/dev/null 2>&1; then
+            sccache --show-stats
+            {
+              echo "### sccache"
+              echo '```'
+              sccache --show-stats
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "sccache is not installed" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.target }}
