@@ -1,3 +1,13 @@
+# Fiex 0.7.0
+
+- Plugin platform: schema 2 manifests, scoped provider events, unified preview/info providers, per-operation grants and grouped activation with per-capability toggles.
+- Plugin previews can declare a package-local loading page. Core keeps it visible until the preview calls `preview.ready` after its first data render, so there is no empty-shell flash.
+- New GPG keychain, Email, SSH and Google Drive official plugins; Archive, Office preview and Data preview gain branded loading pages.
+- Plugin panels and menus open at the final size and side, with no delay or small-to-large jump; nested menus close immediately and grow in the correct direction.
+- Integrated terminal: steady cursor, draggable tabs with the same animation as workspace tabs, stable tab numbers and a tighter tab strip.
+- Dialogs and plugin sheets adapt to the current window size.
+- Legacy manifest and grant compatibility removed; old records require reactivation.
+
 # Fiex 0.5.1
 
 0.5.1 is a structure-only release: the Rust host, desktop commands, hooks, settings and SDK are split into modules, with no behavior changes.
