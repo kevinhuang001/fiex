@@ -262,7 +262,11 @@ export function PluginContextActions({
       )
       updateActivity(activityId, { indeterminate: true })
       finishActivity(activityId, undefined, '已提交')
-      if (response && typeof response === 'object') {
+      // Background tasks return a taskId; the Status Center owns their
+      // progress, so never open a raw JSON result dialog for them.
+      const silent =
+        response && typeof response === 'object' && ('taskId' in response || 'handled' in response)
+      if (!silent && response && typeof response === 'object') {
         window.dispatchEvent(
           new CustomEvent(PLUGIN_RESULT_EVENT, { detail: { title: item.title, result: response } }),
         )

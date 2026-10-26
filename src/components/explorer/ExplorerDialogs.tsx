@@ -232,7 +232,24 @@ export function ExplorerDialogs({
         onSaved={(connection) => {
           setConnectionOpen(false)
           void x.refreshConnections()
-          x.navigate(connection.mountPath)
+          // A connection may open a pluginView instead of a VFS mount. Resolve
+          // the destination first; the stored mountPath is not a VFS URI for
+          // pluginView connections such as Email.
+          void call<{
+            kind: 'vfs' | 'pluginView' | 'terminal'
+            path?: string
+            connectionId?: string
+          }>('connection_open', { id: connection.id })
+            .then((target) => {
+              x.navigate(
+                target.kind === 'vfs'
+                  ? target.path || connection.mountPath
+                  : target.kind === 'pluginView'
+                    ? 'fiex-plugin-view://' + connection.id
+                    : 'fiex-terminal://' + (target.connectionId || connection.id),
+              )
+            })
+            .catch((error) => x.setError(String(error)))
           notify(`已连接 ${connection.name}`)
         }}
       />
