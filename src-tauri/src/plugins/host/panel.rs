@@ -99,6 +99,51 @@ pub fn panel_asset(plugin_id: &str, panel_id: &str) -> Result<String, String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Connection PluginView assets use the same CSP and canonical package checks
+/// as existing panels; the entry is supplied by the native plugin result.
+pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let (manifest, folder) = discover()
+        .into_iter()
+        .find(|(manifest, _)| manifest.id == plugin_id)
+        .ok_or("plugin is not installed")?;
+    let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
+    if !rights.enabled
+        || !crate::plugin_permissions::activation_complete(
+            &rights,
+            &activation_requirements(&manifest)?,
+        )
+    {
+        return Err("plugin disabled or not approved".into());
+    }
+    let rel = Path::new(entry);
+    if !rel
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+    {
+        return Err("invalid pluginView package path".into());
+    }
+    let file = folder.join(rel);
+    if !canonical_under(&file, &folder) {
+        return Err("pluginView resource outside plugin package".into());
+    }
+    let metadata = fs::metadata(&file).map_err(|error| error.to_string())?;
+    if !metadata.is_file() || metadata.len() > 1024 * 1024 {
+        return Err("pluginView HTML exceeds size limit".into());
+    }
+    let html = panel_document(&fs::read_to_string(&file).map_err(|error| error.to_string())?);
+    let digest = format!("{:x}", Sha256::digest(html.as_bytes()));
+    let directory = dirs::cache_dir()
+        .ok_or("cache directory unavailable")?
+        .join("fiex")
+        .join("plugin-views")
+        .join(plugin_id);
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let path = directory.join(format!("{}.html", &digest[..32]));
+    fs::write(&path, html).map_err(|error| error.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,49 +227,4 @@ mod tests {
         assert!(html.starts_with(PANEL_CSP));
         assert!(html.ends_with("<body>fragment</body>"));
     }
-}
-
-/// Connection PluginView assets use the same CSP and canonical package checks
-/// as existing panels; the entry is supplied by the native plugin result.
-pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String> {
-    use sha2::{Digest, Sha256};
-    let (manifest, folder) = discover()
-        .into_iter()
-        .find(|(manifest, _)| manifest.id == plugin_id)
-        .ok_or("plugin is not installed")?;
-    let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
-    if !rights.enabled
-        || !crate::plugin_permissions::activation_complete(
-            &rights,
-            &activation_requirements(&manifest)?,
-        )
-    {
-        return Err("plugin disabled or not approved".into());
-    }
-    let rel = Path::new(entry);
-    if !rel
-        .components()
-        .all(|component| matches!(component, Component::Normal(_)))
-    {
-        return Err("invalid pluginView package path".into());
-    }
-    let file = folder.join(rel);
-    if !canonical_under(&file, &folder) {
-        return Err("pluginView resource outside plugin package".into());
-    }
-    let metadata = fs::metadata(&file).map_err(|error| error.to_string())?;
-    if !metadata.is_file() || metadata.len() > 1024 * 1024 {
-        return Err("pluginView HTML exceeds size limit".into());
-    }
-    let html = panel_document(&fs::read_to_string(&file).map_err(|error| error.to_string())?);
-    let digest = format!("{:x}", Sha256::digest(html.as_bytes()));
-    let directory = dirs::cache_dir()
-        .ok_or("cache directory unavailable")?
-        .join("fiex")
-        .join("plugin-views")
-        .join(plugin_id);
-    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-    let path = directory.join(format!("{}.html", &digest[..32]));
-    fs::write(&path, html).map_err(|error| error.to_string())?;
-    Ok(path.to_string_lossy().into_owned())
 }

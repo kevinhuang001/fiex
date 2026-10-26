@@ -782,7 +782,10 @@ pub(crate) async fn plugin_toolbar_invoke(
                 && plugin.enabled
                 && plugin.approved
                 && plugin.backend_available
-                && plugin.extensions.get("toolbar").is_some_and(serde_json::Value::is_object)
+                && plugin
+                    .extensions
+                    .get("toolbar")
+                    .is_some_and(serde_json::Value::is_object)
         })
         .ok_or("toolbar provider not active")?;
     if paths.len() > 256 {
