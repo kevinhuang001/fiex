@@ -10,15 +10,16 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         {
           algorithm: 'SHA-256',
           value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+          copyable: true,
         },
         {
           algorithm: 'SHA-512',
           value:
             'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
         },
-        { algorithm: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d' },
-        { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
-        { algorithm: 'CRC32', value: '352441c2' },
+        { algorithm: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d', copyable: true },
+        { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72', copyable: true },
+        { algorithm: 'CRC32', value: '352441c2', copyable: true },
       ]
     case 'list_directory': {
       const view = [...demoViews].find(([uri]) => String(a.path).startsWith(uri))
@@ -98,6 +99,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       const sections = []
       if (!entry.isDir) {
         sections.push({
+          id: 'org.fiex.checksum.checksum',
           source: 'plugin',
           title: '校验和',
           pluginId: 'org.fiex.checksum',
@@ -106,19 +108,22 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
             {
               label: 'SHA-256',
               value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+              copyable: true,
             },
             {
               label: 'SHA-512',
               value: 'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a',
+              copyable: true,
             },
-            { label: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d' },
-            { label: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72' },
-            { label: 'CRC32', value: '352441c2' },
+            { label: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d', copyable: true },
+            { label: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72', copyable: true },
+            { label: 'CRC32', value: '352441c2', copyable: true },
           ],
         })
       }
       if (['zip', '7z', 'rar', 'tar', 'gz', 'tgz'].includes(ext)) {
         sections.push({
+          id: 'org.fiex.archive.archive',
           source: 'plugin',
           title: '压缩包',
           pluginId: 'org.fiex.archive',
@@ -134,6 +139,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       }
       if (['docx', 'xlsx', 'pptx'].includes(ext)) {
         sections.push({
+          id: 'org.fiex.office-preview.office',
           source: 'plugin',
           title: '文档',
           pluginId: 'org.fiex.office-preview',
@@ -148,6 +154,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       }
       if (['db', 'sqlite', 'sqlite3', 'csv', 'tsv', 'parquet', 'arrow', 'avro'].includes(ext)) {
         sections.push({
+          id: 'org.fiex.data-preview.data',
           source: 'plugin',
           title: '数据表',
           pluginId: 'org.fiex.data-preview',
@@ -175,19 +182,31 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
       )
       return null
     }
-    case 'search_files':
+    case 'search_files': {
+      const providers = String(a.query).toLowerCase().includes('plugin-index-hit')
+        ? [item('/Users/kevin/Documents/Indexed result.txt', false)]
+        : []
       return {
-        entries: state.entries.filter(
-          (e) =>
-            e.path.startsWith(a.root as string) &&
-            e.name.toLowerCase().includes((a.query as string).toLowerCase()) &&
-            !ignored(e.name, a.ignores),
-        ),
+        entries: [
+          ...state.entries.filter(
+            (e) =>
+              e.path.startsWith(a.root as string) &&
+              e.name.toLowerCase().includes((a.query as string).toLowerCase()) &&
+              (a.hidden || !e.name.startsWith('.')) &&
+              !ignored(e.name, a.ignores),
+          ),
+          ...providers.filter(
+            (e) =>
+              e.path.startsWith(String(a.root).replace(/\/$/, '') + '/') &&
+              !ignored(e.name, a.ignores),
+          ),
+        ],
         done: true,
         elapsedMs: 12,
         truncated: false,
         skipped: 0,
       }
+    }
     case 'create_entry': {
       const path = join(a.path as string, a.name as string)
       if (state.entries.some((e) => e.path === path)) throw new Error('同名项目已存在')

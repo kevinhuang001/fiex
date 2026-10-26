@@ -1,6 +1,5 @@
 import type { Explorer } from '@/hooks/useExplorer'
 import { call } from '@/lib/api'
-import { pluginCatalog } from '@/lib/plugins'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import type { Entry, Ide, Preferences, Tag } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
@@ -49,8 +48,7 @@ export function useOpenActions({
       return
     }
     void run('正在打开…', async () => {
-      const plugins = await pluginCatalog()
-      const outcome = await runBeforeOpenHooks(plugins, e)
+      const outcome = await runBeforeOpenHooks(e)
       if (outcome.preview) {
         setPreview(e)
         return
@@ -94,6 +92,15 @@ export function useOpenActions({
   }
   const openApplications = () => void run('正在打开应用程序…', () => call('open_applications'))
   const terminal = (id = prefs.terminal) => {
+    if (id === 'builtin') {
+      const cwd = first?.isDir ? first.path : x.path
+      window.dispatchEvent(
+        new CustomEvent('fiex:open-builtin-terminal', {
+          detail: { cwd: isRemotePath(cwd) ? '' : cwd },
+        }),
+      )
+      return
+    }
     if (!writable()) return
     void run('正在打开终端…', () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),

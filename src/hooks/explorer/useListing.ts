@@ -129,7 +129,7 @@ export function useListing(
     }
   }, [refreshLocations, enabled])
   useEffect(() => {
-    if (!enabled || !path || query) return
+    if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
     setLoading(true)
@@ -174,7 +174,15 @@ export function useListing(
     }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (!enabled || !path || !native || virtualVolume || path.startsWith('recent://')) return
+    if (
+      !enabled ||
+      !path ||
+      !native ||
+      virtualVolume ||
+      path.startsWith('recent://') ||
+      path.startsWith('fiex-plugin-view://')
+    )
+      return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
@@ -232,25 +240,6 @@ export function useListing(
           setSearching(false)
         }
       })
-      // Search providers are additive: a provider failure never suppresses
-      // local results or other providers.
-      void call<Entry[]>('plugin_search', {
-        query,
-        root: globalSearch ? 'everywhere://' : path,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-        limit: 200,
-      })
-        .then((extra) => {
-          if (generation !== searchRequest.current || !extra.length) return
-          startTransition(() =>
-            setEntries((current) => {
-              const seen = new Set(current.map((entry) => entry.path))
-              return [...current, ...extra.filter((entry) => !seen.has(entry.path))]
-            }),
-          )
-        })
-        .catch(() => {})
     }, 200)
     return () => {
       clearTimeout(timer)

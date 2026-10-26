@@ -10,6 +10,7 @@ export function useDialogs(x: Explorer) {
   const [sidebar, setSidebar] = useState(true)
   const [preview, setPreview] = useState<Entry | null>(null)
   const [settings, setSettings] = useState(false)
+  const [pluginManager, setPluginManager] = useState(false)
   const [info, setInfo] = useState<Entry | null>(null)
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [dialogValue, setDialogValue] = useState('')
@@ -56,6 +57,8 @@ export function useDialogs(x: Explorer) {
     setPreview,
     settings,
     setSettings,
+    pluginManager,
+    setPluginManager,
     info,
     setInfo,
     dialog,

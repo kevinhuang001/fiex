@@ -12,6 +12,7 @@ export interface SidebarProps {
   onApplications: () => void
   onAddConnection: () => void
   onRemoveConnection: (id: string) => void
+  notify: (message: string) => void
   onEject: (path: string) => void
   onEjectDevice: (device: string) => void
   onMount: (device: string) => void

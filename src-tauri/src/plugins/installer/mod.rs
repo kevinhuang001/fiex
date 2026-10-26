@@ -45,6 +45,7 @@ pub struct InstallPreview {
     pub version: String,
     pub author: Option<plugin_host::PluginAuthor>,
     pub permissions: Vec<String>,
+    pub requested_network_all: bool,
     pub requested_network_domains: Vec<String>,
     pub commands: Vec<String>,
     pub repository: String,
@@ -117,6 +118,7 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
     crate::plugin_resources::validate(&manifest, staging.path())?;
     crate::plugin_themes::load(&manifest, staging.path())?;
     let declared = plugin_host::declared_permissions(&manifest)?;
+    let requested_network_all = manifest.permissions.network.all;
     let requested_network_domains = plugin_permissions::validate_network_domains(
         &declared,
         &manifest.permissions.network.domains,
@@ -173,6 +175,7 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
         version: manifest.version.clone(),
         author: manifest.author.clone(),
         permissions,
+        requested_network_all,
         requested_network_domains,
         commands: manifest.permissions.commands.allow.clone(),
         repository: repository.into(),

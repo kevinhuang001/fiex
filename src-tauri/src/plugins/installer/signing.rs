@@ -52,7 +52,7 @@ mod tests {
 
     fn manifest() -> PluginManifest {
         PluginManifest {
-            schema_version: 1,
+            schema_version: 2,
             id: "org.fiex.test".into(),
             name: "Test".into(),
             version: "1.0.0".into(),
@@ -60,7 +60,7 @@ mod tests {
             icon: None,
             runtime: crate::plugin_host::PluginRuntime::default(),
             permissions: crate::plugin_host::PluginPermissions::default(),
-            contributions: serde_json::Value::Null,
+            extensions: serde_json::Value::Null,
             author: None,
             publisher: None,
             files: Default::default(),

@@ -10,16 +10,41 @@ import { ExplorerTabs } from '@/components/explorer/ExplorerTabs'
 import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
+import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
+import { PluginPermissionHost } from '@/components/plugins/PluginPermissionHost'
+import { SshTerminalView } from '@/components/ssh/SshTerminalView'
+import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
-import { call, native } from '@/lib/api'
+import { asset, call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   const app = useAppController()
   usePluginTasks()
+  const pluginViewOf = (path: string) =>
+    /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
+  const terminalOf = (path: string) => /^fiex-terminal:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
+  const pluginViewId = pluginViewOf(app.left.path)
+  const terminalId = terminalOf(app.left.path)
+  const fullView = Boolean(pluginViewId || terminalId)
+  const fullViews = app.left.tabs.flatMap((path, index) => {
+    const terminal = terminalOf(path)
+    const plugin = pluginViewOf(path)
+    return terminal || plugin ? [{ path, index, terminal, plugin }] : []
+  })
+  const autostarted = useRef(false)
+  const [viewTitles, setViewTitles] = useState<Record<string, string>>({})
+  const tabName = (path: string) => viewTitles[path] || app.displayName(path)
+  const backgroundPath = app.prefs.backgroundImage
+  const backgroundUrl = backgroundPath
+    ? native && !backgroundPath.includes('://')
+      ? asset(backgroundPath)
+      : backgroundPath
+    : ''
+  const backgroundImage = backgroundUrl ? `url("${backgroundUrl.replace(/"/g, '%22')}")` : undefined
 
   useEffect(() => {
     const navigate = (event: Event) => {
@@ -30,6 +55,28 @@ export default function App() {
     window.addEventListener('fiex:navigate', navigate)
     return () => window.removeEventListener('fiex:navigate', navigate)
   }, [app.left])
+
+  useEffect(() => {
+    const openStore = () => app.setPluginManager(true)
+    window.addEventListener('fiex:open-plugin-store', openStore)
+    return () => window.removeEventListener('fiex:open-plugin-store', openStore)
+  }, [app.setPluginManager])
+
+  useEffect(() => {
+    if (!native || autostarted.current || !app.left.hasListing) return
+    autostarted.current = true
+    const sessions = app.left.connections.filter(
+      (connection) =>
+        (connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh') &&
+        connection.autostart &&
+        connection.saved !== false &&
+        !app.left.tabs.includes(`fiex-terminal://${connection.id}`),
+    )
+    for (const session of sessions) {
+      app.newWorkspaceTab()
+      app.left.navigate(`fiex-terminal://${session.id}`)
+    }
+  }, [app.left.hasListing, app.left.connections, app.left.tabs])
 
   // The label size is the reference size: every window is zoomed by the same
   // ratio so the preference scales the sidebar, toolbar, dialogs and file list
@@ -42,10 +89,17 @@ export default function App() {
   }, [app.prefs.fontSize])
   return (
     <div
-      className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''}`}
+      className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''} ${backgroundUrl ? 'has-background' : ''}`}
       data-platform={app.platform}
       style={{ '--label-size': '11px' } as CSSProperties}
     >
+      {backgroundUrl && (
+        <div
+          className="app-background"
+          aria-hidden="true"
+          style={{ backgroundImage, opacity: app.prefs.backgroundOpacity }}
+        />
+      )}
       <Sidebar
         x={{ ...app.x, locations: app.left.locations, connections: app.left.connections }}
         prefs={app.prefs}
@@ -55,6 +109,7 @@ export default function App() {
         onApplications={app.openApplications}
         onAddConnection={() => app.setConnectionOpen(true)}
         onRemoveConnection={app.removeConnection}
+        notify={app.notify}
         onEject={app.ejectDevice}
         onEjectDevice={app.ejectUsb}
         onMount={app.mountDevice}
@@ -64,14 +119,16 @@ export default function App() {
         className={`main ${app.split ? 'split' : ''}`}
         style={{ '--second-pane-width': `${app.paneWidth}%` } as CSSProperties}
       >
-        <ExplorerTabs {...app} />
-        <ExplorerToolbar
-          {...app}
-          split={app.split}
-          onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
-        />
-        <ExplorerPathBar {...app} x={app.left} />
-        {app.x.error && (
+        <ExplorerTabs {...app} displayName={tabName} />
+        {!fullView && (
+          <ExplorerToolbar
+            {...app}
+            split={app.split}
+            onToggleSplit={() => (app.split ? app.closePane() : app.openPane())}
+          />
+        )}
+        {!fullView && <ExplorerPathBar {...app} x={app.left} />}
+        {!fullView && app.x.error && (
           <div className="error-banner" role="alert">
             <Info size={16} />
             <span>{app.x.error}</span>
@@ -90,44 +147,68 @@ export default function App() {
             </button>
           </div>
         )}
-        {app.x.warnings.length > 0 && (
+        {!fullView && app.x.warnings.length > 0 && (
           <details className="warnings">
             <summary>{app.x.warnings.length} 个项目无法读取</summary>
             {app.x.warnings.join('\n')}
           </details>
         )}
-        {app.left.loading && !app.left.hasListing ? (
-          <div className="loading">
-            <LoaderCircle className="spin" />
-            正在读取文件夹…
-          </div>
-        ) : (
+        {fullViews.map((view) => (
           <div
-            className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
-            onPointerDownCapture={() => app.setActive('left')}
-            data-drop-folder={
-              /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) ? undefined : app.left.path
-            }
+            className="full-view-pane"
+            key={`${view.path}:${view.index}`}
+            hidden={view.index !== app.left.tab}
           >
-            <FileViews
-              readOnly={app.left.directoryReadOnly}
-              trashPath={app.trashPath}
-              explorer={app.left}
-              prefs={app.prefs}
-              onOpen={app.openLeft}
-              onPreview={(entry) => app.previewEntry(entry, app.left)}
-              onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
-              onDrop={app.transfer}
-              onBookmark={app.bookmarkPaths}
-              onWorkspace={app.addWorkspace}
-              dragPaths={app.selectedAll}
-              onExternalDrag={(result) =>
-                app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
-              }
-            />
+            {view.terminal ? (
+              <SshTerminalView
+                connectionId={view.terminal}
+                name={
+                  app.left.connections.find((connection) => connection.id === view.terminal)
+                    ?.name || 'SSH'
+                }
+              />
+            ) : view.plugin ? (
+              <PluginConnectionView
+                connectionId={view.plugin}
+                onNavigate={app.left.navigate}
+                onTitle={(title) => setViewTitles((values) => ({ ...values, [view.path]: title }))}
+              />
+            ) : null}
           </div>
-        )}
-        {app.split && (
+        ))}
+        {!fullView &&
+          (app.left.loading && !app.left.hasListing ? (
+            <div className="loading">
+              <LoaderCircle className="spin" />
+              正在读取文件夹…
+            </div>
+          ) : (
+            <div
+              className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
+              onPointerDownCapture={() => app.setActive('left')}
+              data-drop-folder={
+                /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) ? undefined : app.left.path
+              }
+            >
+              <FileViews
+                readOnly={app.left.directoryReadOnly}
+                trashPath={app.trashPath}
+                explorer={app.left}
+                prefs={app.prefs}
+                onOpen={app.openLeft}
+                onPreview={(entry) => app.previewEntry(entry, app.left)}
+                onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+                onDrop={app.transfer}
+                onBookmark={app.bookmarkPaths}
+                onWorkspace={app.addWorkspace}
+                dragPaths={app.selectedAll}
+                onExternalDrag={(result) =>
+                  app.notify(result === 'Dropped' ? '已交给目标应用处理' : '已取消拖拽')
+                }
+              />
+            </div>
+          ))}
+        {!fullView && app.split && (
           <SecondaryPane
             explorer={app.right}
             prefs={app.prefs}
@@ -144,15 +225,25 @@ export default function App() {
             onWidthChange={app.setPaneWidth}
           />
         )}
-        <WorkspaceBar
-          items={app.workspace.items}
-          open={app.workspace.open}
-          onOpen={app.open}
-          onRemove={app.workspace.remove}
-          onClear={app.workspace.clear}
-          onClose={() => app.workspace.setOpen(false)}
-        />
-        <ExplorerStatusBar {...app} />
+        <TerminalPanel />
+        {!fullView && (
+          <WorkspaceBar
+            items={app.workspace.items}
+            open={app.workspace.open}
+            onOpen={app.open}
+            onRemove={app.workspace.remove}
+            onClear={app.workspace.clear}
+            onClose={() => app.workspace.setOpen(false)}
+            onTerminal={() =>
+              window.dispatchEvent(
+                new CustomEvent('fiex:show-terminal-panel', {
+                  detail: { cwd: app.left.path },
+                }),
+              )
+            }
+          />
+        )}
+        {!fullView && <ExplorerStatusBar {...app} />}
         <ActivityCenter />
       </main>
       {app.dragging && (
@@ -168,6 +259,7 @@ export default function App() {
         onApply={app.applyBatchRename}
       />
       <ExplorerDialogs {...app} />
+      <PluginPermissionHost />
     </div>
   )
 }

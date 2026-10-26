@@ -61,7 +61,7 @@ export function PluginUninstallDialog({
   )
 }
 
-/** Local package preview: publisher trust state before the import is confirmed. */
+/** Local package preview before the import is confirmed. */
 export function PluginImportDialog({
   preview,
   busy,
@@ -93,30 +93,25 @@ export function PluginImportDialog({
               <small>{preview.author?.name || '未知开发者'}</small>
             </span>
           </div>
-          <div
-            className={`plugin-import-signature ${
-              preview.signed && preview.trusted ? 'verified' : 'warning'
-            }`}
-          >
-            {preview.signed && preview.trusted ? (
-              <>
-                <ShieldCheck size={16} />
-                <span>
-                  <strong>签名已验证</strong>
-                  {preview.publisherName || preview.publisher || '已验证发布者'}
-                </span>
-              </>
-            ) : (
-              <>
-                <ShieldAlert size={16} />
-                <span>
-                  <strong>{preview.signed ? '未信任的发布者' : '此插件未签名'}</strong>
-                  {preview.signed
-                    ? `${preview.publisherName || preview.publisher || '未知发布者'} · 密钥指纹 ${preview.fingerprint || preview.keyId || '未知'}`
-                    : '只在你确认来源可信时继续导入。'}
-                </span>
-              </>
-            )}
+          <div className={`plugin-import-signature ${preview.signed ? 'verified' : 'warning'}`}>
+            {preview.signed ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
+            <span>
+              <strong>{preview.signed ? '插件包已签名' : '插件包未签名'}</strong>
+              {preview.signed && (
+                <>
+                  签名者：
+                  {preview.publisherName || preview.publisher || '未知签名者'}
+                  {(preview.fingerprint || preview.keyId) && (
+                    <>
+                      <br />
+                      密钥指纹：<code>{preview.fingerprint || preview.keyId}</code>
+                    </>
+                  )}
+                  <br />
+                </>
+              )}
+              <em>Core 内置 Ed25519 校验 · 请只导入你信任来源的插件，并确认它将获得的权限。</em>
+            </span>
           </div>
           <footer className="plugin-consent-actions">
             <Button variant="outline" disabled={busy} onClick={onCancel}>

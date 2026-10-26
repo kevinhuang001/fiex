@@ -13,19 +13,22 @@ type PinnedToolsProps = {
   prefs: Pick<AppController['prefs'], 'pinnedPluginTools'>
   update: AppController['update']
   x: Pick<AppController['x'], 'selected' | 'path' | 'setError'>
+  onManagePlugins: () => void
 }
 
 /** Pinned plugin tool strip plus the plugin dropdown menu. The strip owns its
  *  drag/reorder state so the toolbar root only has to place it. */
-export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
+export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsProps) {
   const plugins = usePluginCatalog()
   const lastPointer = useRef({ x: window.innerWidth - 18, y: 96 })
   const pinnedKeys = prefs.pinnedPluginTools || []
   const availableTools: PluginToolEntry[] = plugins.flatMap((plugin) =>
-    plugin.enabled ? (plugin.contributions?.toolbar || []).map((tool) => ({ plugin, tool })) : [],
+    plugin.enabled && plugin.extensions?.toolbar
+      ? [{ plugin, tool: plugin.extensions.toolbar }]
+      : [],
   )
   const pinnedTools = pinnedKeys.flatMap((key) => {
-    const found = availableTools.find(({ plugin, tool }) => pluginKey(plugin.id, tool.id) === key)
+    const found = availableTools.find(({ plugin }) => pluginKey(plugin.id) === key)
     return found ? [found] : []
   })
   const pinTool = (key: string) => {
@@ -41,7 +44,7 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
     if (new URLSearchParams(location.search).has('pluginFixture')) return
     const defaults = availableTools
       .filter(({ plugin, tool }) => plugin.id.startsWith('org.fiex.') && tool.panel)
-      .map(({ plugin, tool }) => pluginKey(plugin.id, tool.id))
+      .map(({ plugin }) => pluginKey(plugin.id))
     if (!defaults.length) return
     autoPinned.current = true
     const missing = defaults.filter((key) => !pinnedKeys.includes(key))
@@ -68,43 +71,44 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
         new CustomEvent(OPEN_PLUGIN_PANEL, {
           detail: {
             pluginId: plugin.id,
-            panelId: tool.id,
-            title: tool.title,
+            panelId: plugin.id,
+            title: tool.panel?.title || tool.title,
             icon: tool.icon,
             selection: x.selected,
             directory: x.path,
             anchor: anchor ?? lastPointer.current,
             source: 'toolbar',
+            timeoutMs: plugin.uiTimeoutMs,
+            allowCreate: (plugin.declaredPermissions || []).some(
+              (permission) => permission === 'files.create' || permission === 'folders.create',
+            ),
           },
         }),
       )
       return
     }
-    if (tool.command && plugin.backendAvailable) {
-      void call('plugin_invoke', {
+    if (plugin.backendAvailable) {
+      void call('plugin_toolbar_invoke', {
         pluginId: plugin.id,
-        method: tool.command,
-        params: { root: x.path },
         directory: x.path,
-        selectedPaths: [x.path],
+        paths: x.selected,
       }).catch((error) => x.setError(String(error)))
       return
     }
-    x.setError('插件尚未提供可用的工具面板')
+    x.setError('插件后端不可用')
   }
   const { pinStrip, pinDrag, pinDragged, beginPinDrag, pinShift } = usePinnedDrag({
     pinnedKeys: prefs.pinnedPluginTools,
     update,
   })
   const liftedPin = pinDrag && pinnedTools[pinDrag.from] ? pinDrag : null
-  if (!availableTools.length) return null
   return (
     <>
       <div className="toolbar-divider" />
       <div className="plugin-toolbar-group" aria-label="插件工具">
         <div className="plugin-pinned-strip" ref={pinStrip}>
           {pinnedTools.map(({ plugin, tool }, index) => {
-            const key = pluginKey(plugin.id, tool.id)
+            const key = pluginKey(plugin.id)
             return (
               <Button
                 key={key}
@@ -135,6 +139,7 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
           runTool={runTool}
           pinTool={pinTool}
           unpinTool={unpinTool}
+          onManage={onManagePlugins}
         />
       </div>
       <div className="toolbar-divider" />

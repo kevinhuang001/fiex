@@ -26,6 +26,16 @@ pub struct StoredConnection {
     /// Secret field identifiers whose values are persisted in the OS keyring.
     #[serde(default)]
     pub(crate) secret_keys: Vec<String>,
+    /// Saved sessions appear in the connection + menu.
+    #[serde(default = "saved_default")]
+    pub(crate) saved: bool,
+    /// Open this session automatically when Fiex starts.
+    #[serde(default)]
+    pub(crate) autostart: bool,
+}
+
+fn saved_default() -> bool {
+    true
 }
 
 #[derive(Deserialize)]
@@ -48,6 +58,8 @@ pub struct ConnectionInfo {
     pub kind: String,
     pub plugin_id: String,
     pub mount_path: String,
+    pub saved: bool,
+    pub autostart: bool,
 }
 
 pub(crate) fn fiex_dir() -> PathBuf {
@@ -156,15 +168,29 @@ fn save_stored(items: &[StoredConnection]) -> Result<(), String> {
     Ok(())
 }
 
+fn terminal_connection(conn: &StoredConnection) -> bool {
+    let plugin = connection_plugin_id(conn);
+    (conn.kind == "ssh" && plugin == super::config::BUILTIN_PLUGIN_ID) || plugin == "org.fiex.ssh"
+}
+
 fn public(conn: &StoredConnection) -> ConnectionInfo {
-    let mount = mount_path(conn);
-    let _ = fs::create_dir_all(&mount);
+    let builtin = terminal_connection(conn);
+    if !builtin {
+        let mount = mount_path(conn);
+        let _ = fs::create_dir_all(&mount);
+    }
     ConnectionInfo {
         id: conn.id.clone(),
         name: conn.name.clone(),
         kind: conn.kind.clone(),
         plugin_id: connection_plugin_id(conn),
-        mount_path: super::config::navigation_path(conn, "").unwrap_or_default(),
+        mount_path: if builtin {
+            format!("fiex-terminal://{}", conn.id)
+        } else {
+            super::config::navigation_path(conn, "").unwrap_or_default()
+        },
+        saved: conn.saved,
+        autostart: conn.autostart,
     }
 }
 
@@ -185,8 +211,12 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .plugin_id
         .clone()
         .ok_or("connection plugin ID is required")?;
-    if !crate::plugin_host::valid_id(&plugin_id) {
+    let builtin = plugin_id == super::config::BUILTIN_PLUGIN_ID;
+    if !builtin && !crate::plugin_host::valid_id(&plugin_id) {
         return Err("连接插件 ID 无效".into());
+    }
+    if builtin && kind != super::config::BUILTIN_SSH {
+        return Err("内置连接类型不支持".into());
     }
     let declared_fields = declared_connection_fields(&plugin_id, kind)?;
     for (key, value) in &input.settings {
@@ -202,6 +232,53 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         };
         if !valid {
             return Err(format!("连接字段数据类型无效：{key}"));
+        }
+    }
+    if builtin {
+        let host = input
+            .settings
+            .get("host")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or("请输入 SSH 主机")?;
+        if host.starts_with('-')
+            || host
+                .chars()
+                .any(|ch| ch.is_whitespace() || ch == '\0' || ch == '@')
+        {
+            return Err("SSH 主机格式无效".into());
+        }
+        if let Some(username) = input
+            .settings
+            .get("username")
+            .and_then(serde_json::Value::as_str)
+        {
+            if !username.is_empty()
+                && (username.starts_with('-')
+                    || !username
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-')))
+            {
+                return Err("SSH 用户名格式无效".into());
+            }
+        }
+        let port = input
+            .settings
+            .get("port")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(22);
+        if !(1..=65535).contains(&port) {
+            return Err("SSH 端口无效".into());
+        }
+        if let Some(path) = input
+            .settings
+            .get("identityFile")
+            .and_then(serde_json::Value::as_str)
+        {
+            if path.contains('\0') {
+                return Err("SSH 私钥路径无效".into());
+            }
         }
     }
     let secret_keys = declared_fields
@@ -250,18 +327,22 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         plugin_id: plugin_id.clone(),
         settings,
         secret_keys,
+        saved: previous.as_ref().map(|conn| conn.saved).unwrap_or(true),
+        autostart: previous.as_ref().is_some_and(|conn| conn.autostart),
     };
-    ensure_provider_access(&record)?;
-    // Saving a connection is explicit user intent to reach this host. The
-    // exact hostname is added to the plugin's own allowlist before validation.
-    if let Some(domain) = connection_domain(&record.settings) {
-        crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
+    if !builtin {
+        ensure_provider_access(&record)?;
+        // Saving a connection is explicit user intent to reach this host. The
+        // exact hostname is added to the plugin's own allowlist before validation.
+        if let Some(domain) = connection_domain(&record.settings) {
+            crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
+        }
+        crate::plugin_host::global().invoke(
+            &plugin_id,
+            "connection.validate",
+            serde_json::json!({"connection": provider_config(&record)}),
+        )?;
     }
-    crate::plugin_host::global().invoke(
-        &plugin_id,
-        "connection.validate",
-        serde_json::json!({"connection": provider_config(&record)}),
-    )?;
     let scope = format!("connection-{id}");
     for field in &record.secret_keys {
         if let Some(value) = record
@@ -277,7 +358,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     for field in &record.secret_keys {
         record.settings.remove(field);
     }
-    fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
+    if !terminal_connection(&record) {
+        fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
+    }
     if let Some(index) = existing {
         items[index] = record.clone();
     } else {
@@ -285,6 +368,27 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     }
     save_stored(&items)?;
     Ok(public(&record))
+}
+
+pub fn update_connection_session(
+    id: &str,
+    saved: Option<bool>,
+    autostart: Option<bool>,
+) -> Result<ConnectionInfo, String> {
+    let mut items = load_stored();
+    let connection = items
+        .iter_mut()
+        .find(|connection| connection.id == id)
+        .ok_or("connection not found")?;
+    if let Some(value) = saved {
+        connection.saved = value;
+    }
+    if let Some(value) = autostart {
+        connection.autostart = value;
+    }
+    let result = public(connection);
+    save_stored(&items)?;
+    Ok(result)
 }
 
 pub fn remove_connection(id: &str) -> Result<(), String> {
@@ -301,4 +405,115 @@ pub fn remove_connection(id: &str) -> Result<(), String> {
         let _ = crate::plugin_storage::secret_delete(&plugin_id, &scope, "password");
     }
     Ok(())
+}
+
+/// Resolve a saved Connection via its owning plugin. The returned destination
+/// can only be a registered VFS mount or vetted HTML from the plugin package.
+pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
+    let connection = load_stored()
+        .into_iter()
+        .find(|connection| connection.id == id)
+        .ok_or("connection not found")?;
+    if connection_plugin_id(&connection) == super::config::BUILTIN_PLUGIN_ID {
+        if connection.kind == super::config::BUILTIN_SSH {
+            return Ok(serde_json::json!({
+                "kind": "terminal",
+                "connectionId": connection.id,
+            }));
+        }
+        return Err("内置连接类型不支持".into());
+    }
+    let plugin_id = ensure_provider_access(&connection)?;
+    if terminal_connection(&connection) {
+        return Ok(serde_json::json!({
+            "kind": "terminal",
+            "connectionId": connection.id,
+        }));
+    }
+    let target = crate::plugin_events::invoke(
+        &plugin_id,
+        "connection.open",
+        serde_json::json!({
+            "connectionId": connection.id,
+            "mountId": connection.mount_id,
+            "interactionId": crate::mounts::new_id()?,
+            "connection": provider_config(&connection),
+        }),
+    )?;
+    match target.get("kind").and_then(serde_json::Value::as_str) {
+        Some("vfs") => {
+            let mount_id = target
+                .get("mountId")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("VFS navigation missing mountId")?;
+            if mount_id != connection.mount_id {
+                return Err("PermissionDenied: foreign connection mount".into());
+            }
+            let registered = crate::plugin_host::catalog()
+                .into_iter()
+                .find(|plugin| plugin.id == plugin_id)
+                .and_then(|plugin| plugin.extensions.get("vfs").cloned())
+                .is_some_and(|vfs| vfs.is_object());
+            if !registered {
+                return Err("PermissionDenied: VFS extension not registered".into());
+            }
+            let node_ref = target
+                .get("nodeRef")
+                .ok_or("VFS navigation missing nodeRef")?;
+            if node_ref.get("mountId").and_then(serde_json::Value::as_str)
+                != Some(connection.mount_id.as_str())
+            {
+                return Err("PermissionDenied: foreign nodeRef mount".into());
+            }
+            let node_id = node_ref
+                .get("nodeId")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("VFS navigation missing nodeId")?;
+            Ok(serde_json::json!({
+                "kind": "vfs",
+                "path": crate::mounts::uri(&connection.mount_id, node_id)?,
+            }))
+        }
+        Some("pluginView") => {
+            let view = target.get("view").ok_or("pluginView missing view")?;
+            if view.get("source").and_then(serde_json::Value::as_str) != Some("package") {
+                return Err("pluginView source must be its plugin package".into());
+            }
+            let entry = view
+                .get("entry")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("pluginView missing package entry")?;
+            let tab_title = target
+                .get("tabTitle")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| {
+                    !value.is_empty()
+                        && value.chars().count() <= 80
+                        && !value.chars().any(char::is_control)
+                })
+                .map(str::to_owned);
+            let state = target
+                .get("state")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            if serde_json::to_vec(&state)
+                .map_err(|error| error.to_string())?
+                .len()
+                > 64 * 1024
+            {
+                return Err("pluginView state exceeds size limit".into());
+            }
+            let asset_path = crate::plugin_host::plugin_view_asset(&plugin_id, entry)?;
+            Ok(serde_json::json!({
+                "kind": "pluginView",
+                "pluginId": plugin_id,
+                "connectionId": id,
+                "assetPath": asset_path,
+                "state": state,
+                "tabTitle": tab_title,
+            }))
+        }
+        _ => Err("Connection must return vfs or pluginView navigation".into()),
+    }
 }

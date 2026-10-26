@@ -1,5 +1,6 @@
 import { ArchiveIcon as Archive } from '@phosphor-icons/react/dist/csr/Archive'
 import { CloudIcon as Cloud } from '@phosphor-icons/react/dist/csr/Cloud'
+import { EnvelopeIcon as Envelope } from '@phosphor-icons/react/dist/csr/Envelope'
 import { GitBranchIcon as GitBranch } from '@phosphor-icons/react/dist/csr/GitBranch'
 import { HardDriveIcon as HardDrive } from '@phosphor-icons/react/dist/csr/HardDrive'
 import { HashIcon as Hash } from '@phosphor-icons/react/dist/csr/Hash'
@@ -12,6 +13,7 @@ const icons: Record<string, typeof Plug> = {
   archive: Archive,
   hash: Hash,
   cloud: Cloud,
+  mail: Envelope,
   'hard-drive': HardDrive,
   'key-round': Key,
   'magnifying-glass': MagnifyingGlass,

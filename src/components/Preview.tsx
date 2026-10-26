@@ -1,16 +1,60 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { ExternalLink, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertCircle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ExternalLink,
+  Monitor,
+  Puzzle,
+} from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
 import { call, asset, native } from '@/lib/api'
-import { date, isImage, isText, kind, size } from '@/lib/files'
+import { date, kind, size } from '@/lib/files'
 import { highlightCode } from '@/lib/highlight'
-import { usePluginCatalog } from '@/lib/plugins'
-import { resolvePreviewer } from '@/lib/preview'
+import {
+  orderCandidates,
+  pluginPreviewId,
+  previewDisabled,
+  type PreviewCandidate,
+} from '@/lib/preview'
 import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { Entry } from '@/lib/types'
 const PdfPreview = lazy(() => import('./PdfPreview'))
+
+interface ResolvedPreview {
+  providerId: string
+  provider: string
+  priority: number
+  view: {
+    kind: 'html' | 'text' | 'image' | 'media' | 'pdf' | 'fallback'
+    html?: string
+    text?: string
+    truncated?: boolean
+    path?: string
+    name?: string
+    mime?: string
+    media?: 'video' | 'audio'
+    message?: string
+    sessionId?: string
+    pluginId?: string
+    contributionId?: string
+    timeoutMs?: number
+    context?: unknown
+  }
+}
+
+interface PluginLoadingPage {
+  pluginId: string
+  /** Bridge-only session for the loading document; Core has no preview session yet. */
+  sessionId: string
+  html?: string
+  src?: string
+}
+
 export function Preview({
   entry,
   onClose,
@@ -22,81 +66,127 @@ export function Preview({
   onNavigate: (delta: number) => void
   onOpen: (e: Entry) => void
 }) {
-  const [text, setText] = useState('')
-  const [error, setError] = useState('')
+  const [candidates, setCandidates] = useState<PreviewCandidate[]>([])
+  const [providerId, setProviderId] = useState<string | null>(null)
+  const [providerAttempt, setProviderAttempt] = useState(0)
+  const [resolved, setResolved] = useState<ResolvedPreview | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingPage, setLoadingPage] = useState<PluginLoadingPage | null>(null)
+  const [previewReady, setPreviewReady] = useState(false)
+  const [readyToShow, setReadyToShow] = useState(false)
+  const [error, setError] = useState('')
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
-  const plugins = usePluginCatalog()
-  const previewer = useMemo(
-    () => (entry ? resolvePreviewer(plugins, entry.extension) : null),
-    [entry, plugins],
-  )
-  // A plugin previewer renders in the plugin's own sandboxed panel: it gets the
-  // file through the preview context instead of reading it in the webview.
-  const pluginPreview = previewer?.pluginId ? previewer : null
-  const [materialized, setMaterialized] = useState<{ path: string; local: string } | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const sourceRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     let active = true
-    if (
-      entry &&
-      !entry.isDir &&
-      native &&
-      /^fiex:/i.test(entry.path) &&
-      (!isText(entry) || pluginPreview)
-    ) {
-      void call<string>('materialize_file', { path: entry.path })
-        .then((local) => {
-          if (active) setMaterialized({ path: entry.path, local })
-        })
-        .catch((error) => {
-          if (active) setError(String(error))
-        })
-    }
-    return () => {
-      active = false
-    }
-  }, [entry?.path, Boolean(pluginPreview)])
-  const localPath = entry && materialized?.path === entry.path ? materialized.local : entry?.path
-  const source = localPath && !pluginPreview ? asset(localPath) : ''
-  const highlighted = useMemo(
-    () => (entry && isText(entry) ? highlightCode(text, entry.extension, entry.name) : null),
-    [entry, text],
-  )
-  // Quick Look sizing: the sheet hugs the media so a photo is not surrounded by
-  // an oversized empty canvas, while huge images still fit inside the window.
-  const fit = useMemo(() => {
-    if (!media || !media.width || !media.height) return null
-    const maxWidth = Math.round(window.innerWidth * 0.92)
-    const maxHeight = Math.round(window.innerHeight * 0.76)
-    const scale = Math.min(1, maxWidth / media.width, maxHeight / media.height)
-    return {
-      width: Math.max(320, Math.round(media.width * scale)),
-      height: Math.round(media.height * scale),
-    }
-  }, [media])
-  useEffect(() => {
-    setMedia(null)
-  }, [entry?.path])
-  useEffect(() => {
-    setText('')
+    setCandidates([])
+    setProviderId(null)
+    setResolved(null)
+    setLoadingPage(null)
+    setPreviewReady(false)
+    setReadyToShow(false)
     setError('')
-    let active = true
-    setLoading(Boolean(entry && isText(entry)))
-    if (entry && isText(entry))
-      void call<string>('read_preview', { path: entry.path })
-        .then((t) => {
-          if (active) setText(t)
-        })
-        .catch((e) => {
-          if (active) setError(String(e))
-        })
-        .finally(() => {
-          if (active) setLoading(false)
-        })
+    setMedia(null)
+    setMenuOpen(false)
+    if (!entry) return
+    setLoading(true)
+    void call<PreviewCandidate[]>('preview_candidates', {
+      extension: entry.extension,
+      mime: entry.mime,
+      isDir: entry.isDir,
+    })
+      .then((values) => {
+        if (!active) return
+        const disabled = new Set(previewDisabled())
+        const allowed = orderCandidates(
+          (Array.isArray(values) ? values : []).filter((value) => !disabled.has(value.id)),
+        )
+        setCandidates(allowed)
+        setProviderId(allowed[0]?.id ?? null)
+        if (!allowed.length) setError('没有可用的预览方式')
+        setReadyToShow(true)
+      })
+      .catch((cause) => {
+        if (active) {
+          setError(String(cause))
+          setReadyToShow(true)
+        }
+      })
     return () => {
       active = false
     }
-  }, [entry])
+  }, [entry?.path])
+
+  useEffect(() => {
+    if (!entry || !providerId) return
+    let active = true
+    const pluginId = pluginPreviewId(providerId)
+    const declaresLoading = Boolean(
+      pluginId && candidates.find((candidate) => candidate.id === providerId)?.loading,
+    )
+    setLoading(true)
+    setError('')
+    setResolved(null)
+    setMedia(null)
+    setLoadingPage(null)
+    setPreviewReady(false)
+    const open = async () => {
+      let page: PluginLoadingPage | null = null
+      // A declared loading page is resolved first so the preview opens directly
+      // into plugin-owned UI instead of flashing Core's generic spinner.
+      if (pluginId && declaresLoading) {
+        try {
+          if (native) {
+            const path = await call<string | null>('preview_loading_asset', { pluginId })
+            if (path) page = { pluginId, sessionId: crypto.randomUUID(), src: asset(path) }
+          } else {
+            const html = await call<string | null>('preview_loading', { pluginId })
+            if (html) page = { pluginId, sessionId: crypto.randomUUID(), html }
+          }
+        } catch {
+          // The loading page is cosmetic; a bad entry must not block preview.open.
+        }
+        if (!active) return
+        if (page) setLoadingPage(page)
+      }
+      const value = await call<ResolvedPreview>('preview_open', {
+        path: entry.path,
+        providerId,
+        providerOrder: candidates.map((candidate) => candidate.id),
+      })
+      if (!active) return
+      setResolved(value)
+      // Keep the plugin loading document until the preview itself reports that
+      // its data is rendered; never flash the plugin's empty shell.
+      if (!page || value.view?.kind !== 'html') setLoadingPage(null)
+      setPreviewReady(!page || value.view?.kind !== 'html')
+    }
+    void open()
+      .catch((cause) => {
+        if (active) {
+          setError(String(cause))
+          setLoadingPage(null)
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [entry?.path, providerId, providerAttempt])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (event: MouseEvent) => {
+      if (!sourceRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [menuOpen])
+
   useEffect(() => {
     if (!entry) return
     const listener = (e: KeyboardEvent) => {
@@ -111,68 +201,136 @@ export function Preview({
     document.addEventListener('keydown', listener)
     return () => document.removeEventListener('keydown', listener)
   }, [entry, onClose, onNavigate])
+
+  const view = resolved?.view
+  const fileSource = view?.path ? (native ? asset(view.path) : view.path) : ''
+  const highlighted = useMemo(
+    () =>
+      entry && view?.kind === 'text'
+        ? highlightCode(view.text || '', entry.extension, entry.name)
+        : null,
+    [entry, view?.kind, view?.text],
+  )
+  const fit = useMemo(() => {
+    if (!media || !media.width || !media.height) return null
+    const maxWidth = Math.round(window.innerWidth * 0.92)
+    const maxHeight = Math.round(window.innerHeight * 0.76)
+    const scale = Math.min(1, maxWidth / media.width, maxHeight / media.height)
+    return {
+      width: Math.max(320, Math.round(media.width * scale)),
+      height: Math.round(media.height * scale),
+    }
+  }, [media])
+  const current = candidates.find(
+    (candidate) => candidate.id === (resolved?.providerId || providerId),
+  )
+  const provider = resolved?.provider || current?.provider || 'Fiex'
+  const fromPlugin = pluginPreviewId(resolved?.providerId || providerId) !== null
+  const providerLabel = fromPlugin ? provider : 'Fiex 内置'
+  const activePluginId = pluginPreviewId(providerId)
+  const declaresLoading = Boolean(
+    activePluginId &&
+    candidates.some((candidate) => candidate.id === providerId && candidate.loading),
+  )
+  const loadingPreview = !resolved && (loadingPage !== null || (loading && declaresLoading))
+  const pluginSheet = view?.kind === 'html' || loadingPreview
+
+  useEffect(() => {
+    if (!loadingPage || !resolved || resolved.view?.kind !== 'html' || previewReady) return
+    // A third-party preview may not implement preview.ready; never trap the
+    // modal behind the loading sheet forever.
+    const timer = window.setTimeout(() => setPreviewReady(true), 30000)
+    return () => window.clearTimeout(timer)
+  }, [loadingPage, resolved, previewReady])
+
   return (
     <Modal
-      open={!!entry}
+      open={!!entry && readyToShow}
       onClose={onClose}
       title={entry?.name || '快速查看'}
       wide
-      className={`preview-modal ${pluginPreview ? 'preview-plugin' : entry && isText(entry) ? 'preview-text' : entry?.extension === 'pdf' ? 'preview-pdf' : fit ? 'preview-media' : 'preview-compact'}`}
+      className={`preview-modal ${
+        pluginSheet
+          ? 'preview-plugin'
+          : view?.kind === 'text'
+            ? 'preview-text'
+            : view?.kind === 'pdf'
+              ? 'preview-pdf'
+              : fit
+                ? 'preview-media'
+                : 'preview-compact'
+      }`}
       contentStyle={
-        pluginPreview ? { width: 'min(92vw, 980px)' } : fit ? { width: fit.width } : undefined
+        pluginSheet ? { width: 'min(92vw, 980px)' } : fit ? { width: fit.width } : undefined
       }
     >
       {entry && (
         <>
           <div className="preview-body" style={fit ? { height: fit.height } : undefined}>
-            {native &&
-            entry.path.startsWith('fiex:') &&
-            !entry.isDir &&
-            (!isText(entry) || pluginPreview) &&
-            materialized?.path !== entry.path &&
-            !error ? (
-              <p>正在读取…</p>
-            ) : pluginPreview && entry && !error ? (
-              <PluginPreviewFrame
-                key={localPath}
-                pluginId={pluginPreview.pluginId || ''}
-                panelId={pluginPreview.panelId || ''}
-                preview={{
-                  path: localPath || entry.path,
-                  name: entry.name,
-                  extension: entry.extension,
-                }}
-              />
-            ) : error ? (
+            {error ? (
               <div className="preview-fallback">
                 <AlertCircle />
                 <p>{error}</p>
                 <FileIcon entry={entry} size={90} />
               </div>
-            ) : entry.isDir ? (
-              <div className="preview-fallback">
-                <FileIcon entry={entry} size={120} />
-                <h3>{entry.name}</h3>
-                <p>文件夹 · {entry.path}</p>
-              </div>
-            ) : isText(entry) ? (
-              <pre className={highlighted ? 'preview-code' : undefined}>
-                {loading ? (
-                  '正在读取…'
-                ) : highlighted ? (
-                  <code
-                    className="hljs"
-                    // highlight.js escapes the source before adding spans.
-                    dangerouslySetInnerHTML={{ __html: highlighted }}
-                  />
-                ) : (
-                  text || '（空文件）'
+            ) : loadingPage && !resolved ? (
+              <PluginPreviewFrame
+                key={`loading:${entry.path}:${providerId}:${loadingPage.sessionId}`}
+                pluginId={loadingPage.pluginId}
+                contributionId={loadingPage.pluginId}
+                html={loadingPage.html}
+                src={loadingPage.src}
+                sessionId={loadingPage.sessionId}
+                name={entry.name}
+                extension={entry.extension}
+                loading
+              />
+            ) : loading && !resolved ? (
+              declaresLoading ? null : (
+                <p>正在读取…</p>
+              )
+            ) : view?.kind === 'html' && view.html ? (
+              <>
+                <PluginPreviewFrame
+                  key={`${entry.path}:${providerId}`}
+                  pluginId={view.pluginId || ''}
+                  contributionId={view.contributionId || ''}
+                  html={view.html}
+                  context={view.context}
+                  sessionId={view.sessionId || ''}
+                  timeoutMs={view.timeoutMs}
+                  name={entry.name}
+                  extension={entry.extension}
+                  onPreviewReady={() => setPreviewReady(true)}
+                />
+                {loadingPage && !previewReady && (
+                  <div className="preview-plugin-loading">
+                    <PluginPreviewFrame
+                      key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
+                      pluginId={loadingPage.pluginId}
+                      contributionId={loadingPage.pluginId}
+                      html={loadingPage.html}
+                      src={loadingPage.src}
+                      sessionId={loadingPage.sessionId}
+                      name={entry.name}
+                      extension={entry.extension}
+                      loading
+                    />
+                  </div>
                 )}
-                {!loading && entry.size > 256 * 1024 && '\n\n…仅预览前 256 KiB'}
+              </>
+            ) : view?.kind === 'text' ? (
+              <pre className={highlighted ? 'preview-code' : undefined}>
+                {highlighted ? (
+                  <code className="hljs" dangerouslySetInnerHTML={{ __html: highlighted }} />
+                ) : (
+                  view.text || '（空文件）'
+                )}
+                {view.truncated && '\n\n…仅预览前 256 KiB'}
               </pre>
-            ) : isImage(entry) && native ? (
+            ) : view?.kind === 'image' ? (
               <img
-                src={source}
+                src={fileSource}
                 alt={entry.name}
                 onLoad={(event) =>
                   setMedia({
@@ -182,11 +340,11 @@ export function Preview({
                 }
                 onError={() => setError('此图片格式无法预览，可用默认应用打开。')}
               />
-            ) : entry.mime.startsWith('video/') && native ? (
+            ) : view?.kind === 'media' && view.media === 'video' ? (
               <video
                 controls
                 autoPlay
-                src={source}
+                src={fileSource}
                 onLoadedMetadata={(event) =>
                   setMedia({
                     width: event.currentTarget.videoWidth,
@@ -195,25 +353,25 @@ export function Preview({
                 }
                 onError={() => setError('系统不支持此视频编码，可用默认应用打开。')}
               />
-            ) : entry.mime.startsWith('audio/') && native ? (
+            ) : view?.kind === 'media' ? (
               <div className="preview-fallback">
                 <FileIcon entry={entry} size={100} />
                 <audio
                   controls
                   autoPlay
-                  src={source}
+                  src={fileSource}
                   onError={() => setError('系统不支持此音频编码，可用默认应用打开。')}
                 />
               </div>
-            ) : entry.extension === 'pdf' && native ? (
+            ) : view?.kind === 'pdf' && fileSource ? (
               <Suspense fallback={<p>正在加载 PDF…</p>}>
-                <PdfPreview url={source} />
+                <PdfPreview url={fileSource} />
               </Suspense>
             ) : (
               <div className="preview-fallback">
                 <FileIcon entry={entry} size={120} />
-                <h3>{entry.name}</h3>
-                <p>{kind(entry)}</p>
+                <h3>{view?.name || entry.name}</h3>
+                <p>{view?.message || kind(entry)}</p>
               </div>
             )}
           </div>
@@ -227,6 +385,57 @@ export function Preview({
             <span>
               {entry.isDir ? '文件夹' : size(entry.size)} · {date(entry.modified)}
             </span>
+            {candidates.length > 0 && (
+              <div className="preview-source" ref={sourceRef}>
+                <button
+                  type="button"
+                  className="preview-source-button"
+                  aria-haspopup="listbox"
+                  aria-expanded={menuOpen}
+                  title="切换预览方式"
+                  onClick={() => setMenuOpen((value) => !value)}
+                >
+                  {fromPlugin ? <Puzzle size={13} /> : <Monitor size={13} />}
+                  <span>{providerLabel}</span>
+                  <ChevronUp
+                    size={12}
+                    style={{ transform: menuOpen ? undefined : 'rotate(180deg)' }}
+                  />
+                </button>
+                {menuOpen && (
+                  <div className="preview-source-menu" role="listbox" aria-label="预览方式">
+                    {candidates.map((candidate) => (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={providerId === candidate.id}
+                        className={
+                          'preview-source-item' + (providerId === candidate.id ? ' active' : '')
+                        }
+                        key={candidate.id}
+                        onClick={() => {
+                          setProviderId(candidate.id)
+                          setProviderAttempt((value) => value + 1)
+                          setMenuOpen(false)
+                        }}
+                      >
+                        {candidate.id.startsWith('plugin:') ? (
+                          <Puzzle size={14} />
+                        ) : (
+                          <Monitor size={14} />
+                        )}
+                        <span className="preview-source-copy">
+                          <span className="preview-source-title">
+                            {candidate.id.startsWith('plugin:') ? candidate.provider : 'Fiex 内置'}
+                          </span>
+                        </span>
+                        {providerId === candidate.id && <Check size={14} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <Button variant="secondary" onClick={() => onOpen(entry)}>
               打开
               <ExternalLink />

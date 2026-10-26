@@ -1,6 +1,30 @@
+import {
+  Eye,
+  FolderOpen,
+  Info,
+  LayoutGrid,
+  MousePointerClick,
+  Palette,
+  Plug,
+  Search,
+  Terminal,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
 import { PLUGIN_CATEGORIES } from '@/lib/plugins'
 
 const labels = new Map(PLUGIN_CATEGORIES.map(({ id, label }) => [id, label]))
+const icons = new Map<string, LucideIcon>([
+  ['info', Info],
+  ['preview', Eye],
+  ['contextMenus', MousePointerClick],
+  ['toolbar', Wrench],
+  ['search', Search],
+  ['connections', Plug],
+  ['hooks', FolderOpen],
+  ['themes', Palette],
+  ['commands', Terminal],
+])
 
 /** Horizontal contribution-category filter shared by installed and store lists. */
 export function PluginCategoryFilter({
@@ -25,10 +49,12 @@ export function PluginCategoryFilter({
         className={value === 'all' ? 'active' : ''}
         onClick={() => onChange('all')}
       >
-        全部
+        <LayoutGrid size={15} strokeWidth={1.8} />
+        <span>全部</span>
       </button>
       {visible.map(({ id }) => {
         const count = categories.find((category) => category.id === id)?.count || 0
+        const Icon = icons.get(id) || Wrench
         return (
           <button
             key={id}
@@ -38,7 +64,8 @@ export function PluginCategoryFilter({
             className={value === id ? 'active' : ''}
             onClick={() => onChange(id)}
           >
-            {labels.get(id) || id}
+            <Icon size={15} strokeWidth={1.8} />
+            <span>{labels.get(id) || id}</span>
             <small>{count}</small>
           </button>
         )

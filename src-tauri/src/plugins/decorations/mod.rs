@@ -1,13 +1,10 @@
 //! Read-only presentation decorations from plugins.
 //!
-//! A plugin must explicitly declare `contributions.decorations`; plugins that
-//! do not are never called. Declarative rules are applied by Core locally.
-//!
-//! The `types` module holds the serialized value types, `rules` evaluates
-//! declarative rules, and `dynamic` invokes plugins, sanitizes their output and
-//! merges every provider's contribution.
+//! Decorations are dynamic only. A plugin must declare
+//! `extensions.decorations` with an optional `match` filter; Core invokes the
+//! standard `decorations.resolve` method, sanitizes the response and merges
+//! providers by priority.
 mod dynamic;
-mod rules;
 mod types;
 
 pub use dynamic::query;

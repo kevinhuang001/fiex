@@ -12,9 +12,9 @@ describe('plugin catalog helpers', () => {
   it('derives every matching contribution category', () => {
     const categories = pluginCategories(
       {
-        info: [{ id: 'x', title: 'x', command: 'x.info' }],
-        contextMenus: [{ id: 'y', title: 'y' }],
-        preview: [],
+        info: { extensions: ['txt'] },
+        contextMenus: true,
+        preview: undefined,
       },
       ['git'],
     )

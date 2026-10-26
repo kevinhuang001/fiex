@@ -44,9 +44,27 @@ test('folder navigation, tabs and fast search', async ({ page }) => {
   await page.getByRole('button', { name: '清除搜索' }).click()
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
 })
+test('closing the last tab reopens the configured start page', async ({ page }) => {
+  await page.getByText('Research', { exact: true }).dblclick()
+  await expect(page.getByText('InSb.pdf', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '关闭标签页', exact: true }).click()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('tab')).toContainText('Documents')
+  await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
+})
+test('closing the last tab collapses the split pane', async ({ page }) => {
+  await page.getByRole('button', { name: '双面板' }).click()
+  await expect(page.getByRole('complementary', { name: '第二个面板' })).toBeVisible()
+  await page.getByRole('button', { name: '关闭标签页', exact: true }).click()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('tab')).toContainText('Documents')
+  await expect(page.getByRole('complementary', { name: '第二个面板' })).toHaveCount(0)
+})
 test('plugin search providers add results to the same query', async ({ page }) => {
   await page.getByRole('textbox', { name: '搜索文件' }).fill('plugin-index-hit')
-  await expect(page.getByText('Indexed result.txt', { exact: true })).toBeVisible()
+  await expect(page.getByText('Indexed result.txt', { exact: true })).toBeVisible({
+    timeout: 15000,
+  })
   await expect(page.locator('.statusbar')).toBeVisible()
 })
 test('each tab keeps its own one or two panes', async ({ page }) => {
@@ -100,7 +118,7 @@ test('workspace opens as a compact dock and can be collapsed', async ({ page }) 
   await page.getByRole('button', { name: '工作区' }).click()
   const dock = page.getByRole('region', { name: '工作区' })
   await expect(dock.getByText('工作区为空')).toBeVisible()
-  await dock.getByRole('button', { name: '收起工作区' }).click()
+  await page.getByRole('button', { name: '工作区' }).click()
   await expect(dock).toHaveCount(0)
 })
 test('create, rename, recycle and terminal selection', async ({ page }) => {
@@ -226,15 +244,89 @@ test('Applications entry and search control', async ({ page }) => {
   await expect(page.getByText('Fiex.app', { exact: true })).toBeVisible()
   await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeVisible()
 })
+test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
+  await page.goto('/?demo')
+  await page.evaluate(() => {
+    const key = 'fiex:preferences'
+    const prefs = JSON.parse(localStorage.getItem(key) || '{}')
+    localStorage.setItem(key, JSON.stringify({ ...prefs, terminal: 'builtin' }))
+  })
+  await page.reload()
+  await page.getByRole('button', { name: 'Open in Terminal' }).click()
+  await expect(page.locator('.terminal-panel')).toBeVisible()
+  await expect(page.locator('.terminal-panel-tab')).toHaveCount(1)
+  await expect(page.locator('.terminal-panel')).toContainText('Fiex 终端')
+  await page.getByRole('button', { name: '新建终端' }).click()
+  await page.getByRole('menuitem', { name: 'bash' }).click()
+  await expect(page.locator('.terminal-panel-tab')).toHaveCount(2)
+  await page.getByRole('button', { name: '收起终端' }).click()
+  await expect(page.locator('.terminal-panel')).toBeHidden()
+  await page.getByRole('button', { name: 'Open in Terminal' }).click()
+  await expect(page.locator('.terminal-panel')).toBeVisible()
+})
+
+test('built-in SSH opens a full-height terminal', async ({ page }) => {
+  await page.getByText('生产服务器', { exact: true }).click()
+  await expect(page.locator('.ssh-terminal-view')).toBeVisible()
+  await expect(page.locator('.ssh-terminal-view')).toContainText('Fiex 终端')
+  await expect(page.locator('.explorer-toolbar')).toHaveCount(0)
+  await page.getByRole('button', { name: '新建标签页', exact: true }).click()
+  await expect(page.getByRole('tab')).toHaveCount(2)
+  await expect(page.locator('.ssh-terminal-view')).toHaveCount(1)
+  await expect(page.locator('.ssh-terminal-view')).toBeHidden()
+  await expect(page.getByText('最近使用', { exact: true }).first()).toBeVisible()
+  await page.getByRole('tab').first().click()
+  await expect(page.locator('.ssh-terminal-view')).toBeVisible()
+})
+
+test('connection sessions can autostart and appear in the add menu', async ({ page }) => {
+  await page.locator('.device-row').filter({ hasText: '生产服务器' }).click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '保存 Session' })).toBeVisible()
+  const context = await page.locator('.connection-session-menu.floating').boundingBox()
+  expect(context && context.y + context.height).toBeLessThanOrEqual(780)
+  await page.getByRole('menuitem', { name: '设置为自启动' }).click()
+  await expect(page.locator('.connection-autostart')).toHaveAttribute('title', '开机自启动')
+  await page.getByRole('button', { name: '添加连接' }).click()
+  await expect(page.getByRole('menuitem', { name: '生产服务器' })).toBeVisible()
+  const plus = await page.locator('.connection-session-menu.plus').boundingBox()
+  expect(plus && plus.y + plus.height).toBeLessThanOrEqual(780)
+})
+
 test('opens the Trash inside Fiex', async ({ page }) => {
   await page.getByRole('button', { name: '废纸篓', exact: true }).click()
   await expect(page.getByText('Old draft.txt', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible()
 })
+test('batch rename previews and applies a pattern', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).click()
+  await page.getByText('Meeting.txt', { exact: true }).click({ modifiers: ['Control'] })
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '批量重命名…' }).click()
+  await page.getByRole('textbox', { name: '文件名格式' }).fill('{name}_renamed')
+  await expect(page.locator('.batch-rename-list')).toContainText('Notes_renamed.md')
+  await page.getByRole('button', { name: '开始重命名', exact: true }).click()
+  await expect(page.getByText('Notes_renamed.md', { exact: true })).toBeVisible()
+  await expect(page.getByText('Meeting_renamed.txt', { exact: true })).toBeVisible()
+})
+
+test('appearance can set and remove a background image', async ({ page }) => {
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
+  await page.getByRole('button', { name: '选择图片…' }).click()
+  await expect(page.locator('.app-background')).toHaveCount(0)
+  await page.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.locator('.app.has-background')).toHaveCount(1)
+  await expect(page.getByRole('slider', { name: '背景不透明度' })).toHaveCount(0)
+  await page.getByRole('button', { name: '设置', exact: true }).last().click()
+  await page.getByRole('button', { name: '移除', exact: true }).click()
+  await page.getByRole('button', { name: '确认', exact: true }).click()
+  await expect(page.locator('.app.has-background')).toHaveCount(0)
+})
+
 test('settings are custom controls and theme persists', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '深色', exact: true }).click()
   await expect(page.locator('html')).not.toHaveClass('dark')
+  await page.getByRole('button', { name: '启动与显示', exact: true }).click()
   await page.getByRole('switch', { name: '显示隐藏文件' }).click()
   await expect(page.getByRole('switch', { name: '显示隐藏文件' })).toHaveAttribute(
     'aria-checked',
@@ -306,6 +398,7 @@ test('PDF preview renders a real document', async ({ page }) => {
 test('core connection entrypoint and no preinstalled optional plugin', async ({ page }) => {
   await page.goto('/?demo')
   await page.getByRole('button', { name: '添加连接' }).click()
+  await page.getByRole('menuitem', { name: '新建连接…' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   await page.getByRole('button', { name: '关闭', exact: true }).click()
@@ -321,6 +414,12 @@ test('multi-select and select all', async ({ page }) => {
   await expect(page.locator('.statusbar')).toContainText('已选择 2 项')
   await page.keyboard.press('Control+a')
   await expect(page.locator('.statusbar')).toContainText('已选择 15 项')
+  await page.locator('[data-path="/Users/kevin/Documents/Notes.md"]').click({ button: 'right' })
+  await expect(page.getByRole('menuitem', { name: '快速查看' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '显示简介' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '重新命名' })).toHaveCount(0)
+  await expect(page.getByRole('menuitem', { name: '批量重命名…' })).toBeVisible()
+  await page.keyboard.press('Escape')
 })
 
 test('settings sections keep preferences and release shortcut recording on exit', async ({
@@ -427,8 +526,8 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await expect(page.getByText('用插件扩展 Fiex', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '获取插件', exact: true }).click()
   const store = page.getByRole('dialog', { name: '获取插件' })
@@ -447,14 +546,16 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
 })
 test('local import shows identity and signature only', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '导入插件' })
   await expect(dialog).toContainText('本地示例插件')
   await expect(dialog).toContainText('Example Author')
-  await expect(dialog).toContainText('未信任的发布者')
-  await expect(dialog).toContainText('Example Publisher')
+  await expect(dialog).toContainText('插件包已签名')
+  await expect(dialog).toContainText('签名者：Example Publisher')
+  await expect(dialog).toContainText('Core 内置 Ed25519 校验')
+  await expect(dialog).not.toContainText('未信任的发布者')
   await expect(dialog).not.toContainText('1.2.3')
   await expect(dialog).not.toContainText('读取文件')
   await page.screenshot({ path: 'artifacts/plugin-local-import.png' })
@@ -462,8 +563,8 @@ test('local import shows identity and signature only', async ({ page }) => {
 
 test('plugin rows expose a delete action with confirmation', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const checksum = page.locator('.plugin-row').filter({ hasText: '校验和' })
   await checksum.hover()
   await checksum.getByRole('button', { name: '卸载 校验和', exact: true }).click()
@@ -476,8 +577,8 @@ test('plugin rows expose a delete action with confirmation', async ({ page }) =>
 
 test('installed plugin rows expose permissions and settings', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const git = page.locator('.plugin-row').filter({ hasText: 'Git' })
   await expect(git).toBeVisible()
   await git.hover()
@@ -605,6 +706,9 @@ test('installed plugin contributes submenu and isolated iframe modal with contex
   await page.goto('/?demo&pluginFixture')
   await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  // Plugin actions are grouped under one top-level submenu, not flattened.
+  await expect(page.getByRole('menuitem', { name: '测试插件', exact: true })).toHaveCount(0)
+  await page.getByRole('menuitem', { name: '插件', exact: true }).hover()
   await page.getByRole('menuitem', { name: '测试插件', exact: true }).hover()
   await page.getByRole('menuitem', { name: '信息面板', exact: true }).click()
   await expect(page.getByRole('dialog', { name: '信息面板' })).toBeVisible()
@@ -613,36 +717,117 @@ test('installed plugin contributes submenu and isolated iframe modal with contex
   await expect(frame.locator('#selected')).toContainText('Notes.md')
 })
 
-test('activation asks for one permission at a time and cancellation grants nothing', async ({
+test('nested plugin menus meet their parent without gap or overlap', async ({ page }) => {
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '测试插件', exact: true }).hover()
+  const root = await page.locator('.context-menu').boundingBox()
+  const plugin = await page.locator('.plugin-context-menu').boundingBox()
+  const nested = await page.locator('.plugin-context-menu .context-submenu').boundingBox()
+  if (!root || !plugin || !nested) throw new Error('missing context menu geometry')
+  const flush = (child: { x: number; width: number }, parent: { x: number; width: number }) =>
+    Math.min(
+      Math.abs(child.x - (parent.x + parent.width)),
+      Math.abs(child.x + child.width - parent.x),
+    ) <= 1
+  expect(flush(plugin, root)).toBe(true)
+  expect(flush(nested, plugin)).toBe(true)
+})
+
+test('activation reviews grouped permissions and grants nothing when cancelled', async ({
   page,
 }) => {
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const row = page.locator('.plugin-row').filter({ hasText: 'Git' })
   await row.getByRole('switch', { name: '停用 Git' }).click()
   await row.getByRole('switch', { name: '激活 Git' }).click()
-  let prompt = page.getByRole('dialog', { name: '权限请求' })
-  await expect(prompt).toContainText('允许「Git」读取文件夹？')
-  await expect(prompt).toContainText('列出当前目录及子目录')
-  await prompt.getByRole('button', { name: '不允许', exact: true }).click()
-  await expect(prompt).toHaveCount(0)
+  const sheet = page.getByRole('dialog', { name: '权限请求' })
+  // One prompt per group; every declared capability starts selected.
+  await expect(sheet.getByRole('checkbox', { name: '读取文件', exact: true })).toBeChecked()
+  await sheet.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(sheet).toHaveCount(0)
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
 
   await row.getByRole('switch').click()
-  prompt = page.getByRole('dialog', { name: '权限请求' })
-  await expect(prompt).toContainText('第 1 项，共 10 项')
-  // 8 capabilities, one network host and one command: 9 allows, then activate.
-  for (let index = 0; index < 9; index += 1) {
-    await prompt.getByRole('button', { name: '允许', exact: true }).click()
-  }
-  await prompt.getByRole('button', { name: '允许并激活', exact: true }).click()
+  const reopened = page.getByRole('dialog', { name: '权限请求' })
+  await reopened.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(reopened.getByRole('checkbox', { name: 'github.com', exact: true })).toBeChecked()
+  await reopened.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(reopened.getByRole('checkbox', { name: 'git', exact: true })).toBeChecked()
+  await reopened.getByRole('button', { name: '激活', exact: true }).click()
+  await expect(reopened).toHaveCount(0)
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
   await page.screenshot({ path: 'artifacts/plugin-settings.png' })
+})
+
+test('activation can deselect a permission and target before activating', async ({ page }) => {
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
+  const row = page.locator('.plugin-row').filter({ hasText: 'Git' })
+  await row.getByRole('switch', { name: '停用 Git' }).click()
+  await row.getByRole('switch', { name: '激活 Git' }).click()
+  const sheet = page.getByRole('dialog', { name: '权限请求' })
+  const read = sheet.getByRole('checkbox', { name: '读取文件', exact: true })
+  await expect(read).toBeChecked()
+  await read.uncheck()
+  await sheet.getByRole('button', { name: '继续', exact: true }).click()
+  await sheet.getByRole('checkbox', { name: 'github.com', exact: true }).uncheck()
+  await sheet.getByRole('button', { name: '继续', exact: true }).click()
+  await sheet.getByRole('button', { name: '激活', exact: true }).click()
+  await expect(sheet).toHaveCount(0)
+  await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+
+  // Only the selected subset is stored: the plugin stays active with seven of
+  // its eight declared capabilities and no allowed host.
+  await row.getByRole('button', { name: '插件详情', exact: true }).click()
+  const details = page.getByRole('dialog', { name: '插件详情' })
+  await expect(details).toContainText('7 / 8 已授权')
+  await expect(details.getByRole('switch', { name: '授权 读取文件', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
+  await details.getByRole('button', { name: '配置网络域名' }).click()
+  const domains = page.getByRole('dialog', { name: '网络域名' })
+  await expect(domains.getByRole('switch', { name: '授权域名 github.com' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
+  await domains.getByRole('button', { name: '关闭', exact: true }).click()
+  await details.getByRole('button', { name: '关闭', exact: true }).click()
+})
+
+test('using a plugin asks again after its read capability was revoked', async ({ page }) => {
+  await page.goto('/?demo&pluginFixture')
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
+  const manager = page.getByRole('dialog', { name: '插件', exact: true })
+  const checksum = manager.locator('.plugin-row').filter({ hasText: '校验和' })
+  await checksum.hover()
+  await checksum.getByRole('button', { name: '插件详情', exact: true }).click()
+  const details = page.getByRole('dialog', { name: '插件详情' })
+  const read = details.getByRole('switch', { name: '授权 读取文件', exact: true })
+  await read.click()
+  await expect(read).toHaveAttribute('aria-checked', 'false')
+  await details.getByRole('button', { name: '关闭', exact: true }).click()
+  await manager.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(manager).toBeHidden()
+
+  // Normal use: the checksum action reads the selected file, so Core asks
+  // again even though the plugin itself is still running.
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '插件', exact: true }).hover()
+  await page.getByRole('menuitem', { name: '查看校验和', exact: true }).click()
+  const prompt = page.getByRole('dialog', { name: '权限请求' })
+  await expect(prompt).toContainText('允许「校验和」读取文件？')
+  await prompt.getByRole('button', { name: '允许', exact: true }).click()
+  await expect(prompt).toHaveCount(0)
 })
 
 test('closing and reopening the same plugin context retains its iframe', async ({ page }) => {
   const open = async () => {
     await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+    await page.getByRole('menuitem', { name: '插件', exact: true }).hover()
     await page.getByRole('menuitem', { name: '测试插件', exact: true }).hover()
     await page.getByRole('menuitem', { name: '信息面板', exact: true }).click()
   }

@@ -1,9 +1,173 @@
 import { demoGitEntries, demoGpgKeys, demoHistory } from '../data'
 import { demoPlugins, marketplace, officialMode, query } from '../plugins'
 import { notHandled } from './shared'
+import { applyDemoPermissionResponse, requestDemoPermission } from '../permission'
+import { createDemoGpgKey, deleteDemoGpgKey } from '../gpgKeys'
 
 const pluginSettings = new Map<string, unknown>()
 const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
+interface DemoMenuItem {
+  id: string
+  title: string
+  kind: string
+  parentId?: string
+}
+const demoMenuSessions = new Map<
+  string,
+  {
+    pluginId: string
+    actions: Set<string>
+    submenus: Set<string>
+    items: DemoMenuItem[]
+    created: number
+  }
+>()
+
+function resolveDemoMenu(a: Record<string, unknown>) {
+  const pluginId = String(a.pluginId || '')
+  const plugin = demoPlugins.find((p) => p.id === pluginId)
+  if (!plugin?.enabled || !plugin.extensions?.contextMenus) {
+    throw new Error('Context menu provider is not active')
+  }
+  const selection = Array.isArray(a.paths)
+    ? a.paths.filter((v): v is string => typeof v === 'string')
+    : []
+  if (selection.length === 0) throw new Error('No selected resources')
+  const selectionNames = selection.map((path) => path.split(/[\\/]/).pop() || '')
+  const entries = [
+    ...(pluginId === 'org.test.fixture'
+      ? [
+          { id: 'fixture.root', title: '测试插件', kind: 'submenu' },
+          { id: 'fixture.panel', title: '信息面板', kind: 'action', parentId: 'fixture.root' },
+          { id: 'fixture.action', title: '检查文件', kind: 'action', parentId: 'fixture.root' },
+        ]
+      : []),
+    ...(pluginId === 'org.example.checksum' && a.isDirectory !== true
+      ? [{ id: 'checksum.calculate', title: '查看校验和', kind: 'action' }]
+      : []),
+    ...(pluginId === 'org.fiex.archive'
+      ? selection.length === 1 &&
+        /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0])
+        ? [{ id: 'archive.extract', title: '解压缩', kind: 'action' }]
+        : [
+            { id: 'archive.compress', title: '压缩', kind: 'submenu' },
+            {
+              id: 'archive.advanced',
+              title: '高级压缩…',
+              kind: 'action',
+              parentId: 'archive.compress',
+            },
+          ]
+      : []),
+    ...(pluginId === 'org.fiex.gpg'
+      ? [
+          { id: 'gpg.menu', title: 'GPG', kind: 'submenu' },
+          { id: 'gpg.encrypt', title: '加密…', kind: 'action', parentId: 'gpg.menu' },
+          { id: 'gpg.decrypt', title: '解密…', kind: 'action', parentId: 'gpg.menu' },
+          { id: 'gpg.sign', title: '签名…', kind: 'action', parentId: 'gpg.menu' },
+          ...(selection.length === 1
+            ? [{ id: 'gpg.verify', title: '验证签名…', kind: 'action', parentId: 'gpg.menu' }]
+            : []),
+        ]
+      : []),
+  ]
+  const menuSessionId = crypto.randomUUID()
+  demoMenuSessions.set(menuSessionId, {
+    pluginId,
+    actions: new Set(
+      entries
+        .filter((entry) => entry.kind === 'action' && !('parentId' in entry))
+        .map((entry) => entry.id),
+    ),
+    submenus: new Set(
+      entries
+        .filter((entry) => entry.kind === 'submenu' && !('parentId' in entry))
+        .map((entry) => entry.id),
+    ),
+    items: entries,
+    created: Date.now(),
+  })
+  return { pluginId, menuSessionId, items: entries.filter((entry) => !('parentId' in entry)) }
+}
+
+async function resolveDemoPreview(a: Record<string, unknown>) {
+  const path = String(a.path || '')
+  const name = path.split(/[\\/]/).pop() || ''
+  const extension = name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : ''
+  const providerId = String(a.providerId || '')
+  const candidates = (await handlePlugins('preview_candidates', {
+    extension,
+    mime: '',
+    isDir: false,
+  })) as Array<{ id: string; provider: string; priority: number }>
+  const provider = candidates.find((value) => value.id === providerId) || candidates[0]
+  if (!provider) throw new Error('没有可用的预览方式')
+  if (provider.id.startsWith('plugin:')) {
+    const pluginId = provider.id.slice('plugin:'.length)
+    const contributionId = pluginId
+    const slug = pluginId.split('.').pop() || ''
+    const entry = pluginId === 'org.fiex.archive' ? 'preview.html' : 'index.html'
+    const response = await fetch(`/__fiex_official_plugin/${slug}/${entry}`)
+    if (!response.ok) throw new Error(await response.text())
+    const html = await response.text()
+    const sessionId = crypto.randomUUID()
+    // `?slowPreview` keeps the loading page visible long enough to inspect it.
+    if (new URLSearchParams(location.search).has('slowPreview')) {
+      await new Promise((resolve) => setTimeout(resolve, 900))
+    }
+    return {
+      providerId: provider.id,
+      provider: provider.provider,
+      priority: provider.priority,
+      view: {
+        kind: 'html',
+        html,
+        sessionId,
+        pluginId,
+        contributionId,
+        context: {
+          sessionId,
+          targets: [
+            {
+              ref: { mountId: 'local', nodeId: `fiex-resource:${sessionId}` },
+              metadata: { name, kind: 'file', extension },
+            },
+          ],
+        },
+      },
+    }
+  }
+  if (provider.id === 'builtin:text') {
+    const text = name.endsWith('.json')
+      ? '{\n  "name": "Fiex",\n  "preview": "demo",\n  "theme": "light"\n}'
+      : '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
+    return {
+      providerId: provider.id,
+      provider: provider.provider,
+      priority: provider.priority,
+      view: { kind: 'text', text, truncated: false },
+    }
+  }
+  if (provider.id === 'builtin:pdf') {
+    return {
+      providerId: provider.id,
+      provider: provider.provider,
+      priority: provider.priority,
+      view: { kind: 'pdf', path: '/demo/sample.pdf', name },
+    }
+  }
+  return {
+    providerId: provider.id,
+    provider: provider.provider,
+    priority: provider.priority,
+    view: {
+      kind: 'fallback',
+      name,
+      extension,
+      message: 'demo 未内置该类型的媒体样本',
+    },
+  }
+}
 
 export async function handlePlugins(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
@@ -29,13 +193,178 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type==='fiex.bridge.probe'){window.parent.postMessage({type:'fiex.bridge.listening'},'*');return;}\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selectionPaths||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
       throw new Error('No installed fixture plugin')
     }
+    case 'plugin_context_menu_resolve':
+      return demoPlugins
+        .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+        .flatMap((plugin) => {
+          try {
+            return [resolveDemoMenu({ ...a, pluginId: plugin.id })]
+          } catch {
+            return []
+          }
+        })
+    case 'plugin_context_menu_children': {
+      const session = demoMenuSessions.get(String(a.menuSessionId || ''))
+      const parentId = String(a.parentId || '')
+      if (!session || Date.now() - session.created >= 90000 || !session.submenus.has(parentId))
+        throw new Error('Invalid menu session or submenu')
+      const children = session.items.filter((item) => item.parentId === parentId)
+      for (const item of children) {
+        if (item.kind === 'action') session.actions.add(item.id)
+        if (item.kind === 'submenu') session.submenus.add(item.id)
+      }
+      return { items: children }
+    }
+    case 'plugin_context_menu_execute': {
+      const menuSessionId = String(a.menuSessionId || '')
+      const session = demoMenuSessions.get(menuSessionId)
+      demoMenuSessions.delete(menuSessionId)
+      const itemId = String(a.itemId || '')
+      if (!session || Date.now() - session.created >= 90000 || !session.actions.has(itemId)) {
+        throw new Error('Invalid or already used menu session')
+      }
+      // The checksum action reads file contents. Mirror Core: if the user
+      // revoked files.read, the action waits for the Core-owned prompt before
+      // it can continue. This is the "during plugin use" re-authorization case.
+      if (itemId === 'checksum.calculate') {
+        const plugin = demoPlugins.find((entry) => entry.id === session.pluginId)
+        if (plugin && !plugin.grantedPermissions.includes('files.read')) {
+          const allow = await requestDemoPermission({
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            permission: 'files.read',
+            kind: 'permission',
+          })
+          if (!allow) throw new Error('PermissionDenied: user denied files.read')
+        }
+      }
+      const panelId = itemId
+      if (
+        itemId === 'fixture.panel' ||
+        itemId === 'archive.advanced' ||
+        itemId.startsWith('gpg.')
+      ) {
+        const title =
+          itemId === 'fixture.panel'
+            ? '信息面板'
+            : itemId === 'archive.advanced'
+              ? '高级压缩'
+              : itemId === 'gpg.encrypt'
+                ? 'GPG 加密'
+                : itemId === 'gpg.decrypt'
+                  ? 'GPG 解密'
+                  : itemId === 'gpg.sign'
+                    ? 'GPG 签名'
+                    : '验证签名'
+        return {
+          kind: 'panel',
+          assetPath: 'demo-plugin-panel',
+          panelId,
+          title,
+          size:
+            itemId === 'fixture.panel' ? { width: 620, height: 560 } : { width: 520, height: 420 },
+        }
+      }
+      return { ok: true }
+    }
     case 'plugin_invoke': {
       const method = String(a.method || '')
       const params = (a.params || {}) as Record<string, unknown>
       if (officialMode) {
+        if (method === 'archive.list') {
+          return {
+            entries: [
+              { name: 'Documents/', isDir: true, size: 0 },
+              { name: 'Documents/设计稿.png', isDir: false, size: 524288 },
+              { name: 'Documents/spec.md', isDir: false, size: 1280 },
+              { name: 'Projects/', isDir: true, size: 0 },
+              { name: 'Projects/app.ts', isDir: false, size: 8192 },
+              { name: 'README.md', isDir: false, size: 2148 },
+              { name: '预算明细.csv', isDir: false, size: 4096 },
+              { name: '产品截图.png', isDir: false, size: 2411520 },
+            ],
+            encrypted: false,
+            supported: true,
+          }
+        }
+        if (method === 'archive.extract') {
+          return '/Users/kevin/Documents'
+        }
         if (method === 'data.open' || method === 'data.page') {
           const path = String(params.path || '')
           const name = path.split('/').pop() || '数据'
+          if (/\.(db|sqlite|sqlite3)$/i.test(name)) {
+            const tables: Record<
+              string,
+              { columns: { name: string; kind: string }[]; rows: (string | number | null)[][] }
+            > = {
+              users: {
+                columns: [
+                  { name: 'id', kind: 'number' },
+                  { name: 'name', kind: 'text' },
+                  { name: 'email', kind: 'text' },
+                  { name: 'created_at', kind: 'text' },
+                ],
+                rows: [
+                  [1, 'Ada Lovelace', 'ada@example.com', '2026-01-04 09:12:00'],
+                  [2, 'Grace Hopper', 'grace@example.com', '2026-02-11 14:05:00'],
+                  [3, 'Alan Turing', null, '2026-03-02 08:30:00'],
+                  [4, 'Katherine Johnson', 'katherine@example.com', null],
+                ],
+              },
+              orders: {
+                columns: [
+                  { name: 'id', kind: 'number' },
+                  { name: 'user_id', kind: 'number' },
+                  { name: 'total', kind: 'number' },
+                  { name: 'created_at', kind: 'text' },
+                ],
+                rows: [
+                  [1, 1, 128.5, '2026-04-01 10:00:00'],
+                  [2, 2, 64, '2026-04-02 11:30:00'],
+                  [3, 1, 512.75, '2026-04-03 16:20:00'],
+                ],
+              },
+              active_users: {
+                columns: [
+                  { name: 'id', kind: 'number' },
+                  { name: 'name', kind: 'text' },
+                ],
+                rows: [
+                  [1, 'Ada Lovelace'],
+                  [2, 'Grace Hopper'],
+                ],
+              },
+            }
+            const datasets = [
+              { id: 'users', name: 'users', kind: 'table' },
+              { id: 'orders', name: 'orders', kind: 'table' },
+              { id: 'active_users', name: 'active_users', kind: 'view' },
+            ]
+            const table = tables[String(params.dataset || 'users')] || tables.users
+            const offset = Number(params.offset || 0)
+            const limit = Number(params.limit || 100)
+            const page = {
+              columns: table.columns,
+              rows: table.rows.slice(offset, offset + limit),
+              total: table.rows.length,
+              offset,
+              limit,
+            }
+            if (method === 'data.open') {
+              return {
+                format: 'sqlite',
+                datasets,
+                page,
+                summary: {
+                  datasets: datasets.length,
+                  columns: table.columns.length,
+                  rows: table.rows.length,
+                },
+              }
+            }
+            return page
+          }
           const columns = [
             { name: '部门', kind: 'text' },
             { name: '月份', kind: 'text' },
@@ -262,6 +591,14 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           return { head: 'bbbbbbbb', current: 'main', branches: ['main'], tags: [] }
         if (method === 'git.history') return demoHistory
         if (method === 'gpg.info') return { version: 'gpg (GnuPG) 2.4.5' }
+        if (method === 'gpg.deleteKey') {
+          const fingerprint = String(params.fingerprint || '')
+          const index = demoGpgKeys.findIndex((key) => key.fingerprint === fingerprint)
+          if (index >= 0) demoGpgKeys.splice(index, 1)
+          return { ok: true }
+        }
+        if (method === 'gpg.createKey') return createDemoGpgKey(params)
+        if (method === 'gpg.deleteKey') return deleteDemoGpgKey(params)
         if (method === 'gpg.keys') return demoGpgKeys
         if (method === 'gpg.verify')
           return {
@@ -341,10 +678,15 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         return []
       })
     }
-    case 'plugin_file_dialog':
+    case 'plugin_file_dialog': {
+      const extensions = Array.isArray(a.extensions) ? a.extensions : []
+      if (a.mode === 'openFile' && extensions.includes('png')) {
+        return '/demo/dog.svg'
+      }
       if (a.mode === 'saveFile') return '/Users/kevin/Documents/Archive.zip'
       if (a.mode === 'openFile') return '/Users/kevin/Documents/Archive.zip'
       return '/Users/kevin/Documents'
+    }
     case 'plugin_prepare_local_install':
       return {
         ticket: 'demo-local-install',
@@ -368,26 +710,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return ['github.com']
     case 'plugin_permission_allowed':
       return new URLSearchParams(location.search).has('pluginFixture')
-    case 'plugin_search':
-      if (String(a.query).toLowerCase().includes('plugin-index-hit'))
-        return [
-          {
-            path: '/Users/kevin/Documents/Indexed result.txt',
-            name: 'Indexed result.txt',
-            isDir: false,
-            isSymlink: false,
-            size: 42,
-            modified: 1770000000,
-            created: 1770000000,
-            extension: 'txt',
-            mime: 'text/plain',
-            readonly: false,
-            linkTarget: null,
-            tags: [],
-            sync: null,
-          },
-        ]
-      return []
     case 'plugin_marketplace':
       return marketplace
     case 'plugin_release_assets':
@@ -434,7 +756,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           requestedNetworkDomains: entry.requestedNetworkDomains,
           allowedNetworkDomains: entry.requestedNetworkDomains,
           author: entry.author,
-          contributions: entry.contributions || {},
+          extensions: entry.extensions || {},
         })
       }
       return entry.id
@@ -449,17 +771,35 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
     }
     case 'plugin_activate': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
-      const consent = a.consent as { permissions: string[]; domains: string[]; commands: string[] }
+      const consent = a.consent as {
+        permissions?: string[]
+        networkAll?: boolean
+        domains?: string[]
+        commands?: string[]
+      }
       if (plugin) {
-        if (
-          !(plugin.declaredPermissions || []).every((value) => consent.permissions.includes(value))
-        )
-          throw new Error('请逐项同意全部权限')
+        const permissions = consent.permissions || []
+        const domains = consent.domains || []
+        const commands = consent.commands || []
+        const declared = new Set(plugin.declaredPermissions || [])
+        const requestedDomains = new Set(plugin.requestedNetworkDomains || [])
+        const requestedCommands = new Set(plugin.requestedCommands || [])
+        const invalid =
+          permissions.some((value) => !declared.has(value)) ||
+          (Boolean(consent.networkAll) && !plugin.requestedNetworkAll) ||
+          domains.some((value) => !requestedDomains.has(value)) ||
+          commands.some((value) => !requestedCommands.has(value)) ||
+          ((Boolean(consent.networkAll) || domains.length > 0) &&
+            !permissions.includes('network')) ||
+          (commands.length > 0 && !permissions.includes('commands'))
+        if (invalid) throw new Error('权限选择与插件声明不一致，请重新审核')
         plugin.approved = true
         plugin.enabled = true
-        plugin.grantedPermissions = [...consent.permissions]
-        plugin.allowedNetworkDomains = [...consent.domains]
-        plugin.allowedCommands = [...consent.commands]
+        // Activation is partial: keep only what the user selected.
+        plugin.grantedPermissions = [...permissions]
+        plugin.allowedNetworkAll = Boolean(consent.networkAll)
+        plugin.allowedNetworkDomains = [...domains]
+        plugin.allowedCommands = [...commands]
       }
       return null
     }
@@ -472,21 +812,30 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         const permission = String(a.permission)
+        // Mirrors Core: revoking one capability does not deactivate the plugin;
+        // the next operation asks again through the Core-owned prompt.
         plugin.grantedPermissions = a.granted
           ? [...new Set([...plugin.grantedPermissions, permission])]
           : plugin.grantedPermissions.filter((value) => value !== permission)
-        if (!a.granted) plugin.enabled = false
       }
       return null
     }
+    case 'plugin_permission_respond':
+      applyDemoPermissionResponse(String(a.requestId || ''), Boolean(a.allow), demoPlugins)
+      return null
     case 'plugin_set_command': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         plugin.allowedCommands = a.granted
           ? [...new Set([...(plugin.allowedCommands || []), String(a.command)])]
           : (plugin.allowedCommands || []).filter((value) => value !== a.command)
-        if (!a.granted) plugin.enabled = false
       }
+      return null
+    }
+    case 'plugin_set_network_all': {
+      const plugin = demoPlugins.find((entry) => entry.id === String(a.pluginId || ''))
+      if (!plugin) throw new Error('plugin not found')
+      plugin.allowedNetworkAll = Boolean(a.all)
       return null
     }
     case 'plugin_set_network_domain': {
@@ -522,6 +871,120 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return null
     case 'plugin_secret_available':
       return true
+    case 'preview_candidates': {
+      const extension = String(a.extension || '').toLowerCase()
+      const mime = String(a.mime || '').toLowerCase()
+      const isDir = Boolean(a.isDir)
+      const textExt = new Set([
+        'txt',
+        'md',
+        'markdown',
+        'json',
+        'csv',
+        'tsv',
+        'css',
+        'html',
+        'htm',
+        'xml',
+        'yml',
+        'yaml',
+        'rs',
+        'ts',
+        'tsx',
+        'js',
+        'jsx',
+        'py',
+        'go',
+        'java',
+        'c',
+        'cpp',
+        'h',
+        'sh',
+        'log',
+        'toml',
+        'ini',
+      ])
+      const values: Array<{ id: string; provider: string; priority: number; loading?: boolean }> =
+        []
+      if (!isDir && (mime.startsWith('text/') || textExt.has(extension)))
+        values.push({ id: 'builtin:text', provider: 'Fiex', priority: 10 })
+      if (!isDir && mime.startsWith('image/'))
+        values.push({ id: 'builtin:image', provider: 'Fiex', priority: 20 })
+      if (!isDir && (mime.startsWith('video/') || mime.startsWith('audio/')))
+        values.push({ id: 'builtin:media', provider: 'Fiex', priority: 30 })
+      if (!isDir && extension === 'pdf')
+        values.push({ id: 'builtin:pdf', provider: 'Fiex', priority: 40 })
+      if (values.length === 0)
+        values.push({ id: 'builtin:fallback', provider: 'Fiex', priority: 0 })
+      for (const plugin of demoPlugins) {
+        if (!plugin.enabled) continue
+        const contribution = plugin.extensions?.preview as
+          { extensions?: string[]; priority?: number; loading?: unknown } | undefined
+        if (!contribution) continue
+        const extensions = Array.isArray(contribution.extensions)
+          ? contribution.extensions.map((value: string) => value.toLowerCase())
+          : []
+        if (!extensions.includes(extension)) continue
+        values.push({
+          id: `plugin:${plugin.id}`,
+          provider: plugin.name,
+          priority: contribution.priority ?? 50,
+          loading: Boolean(contribution.loading),
+        })
+      }
+      return values.sort((left, right) => right.priority - left.priority)
+    }
+    case 'preview_loading': {
+      const pluginId = String(a.pluginId || '')
+      if (!pluginId.startsWith('org.fiex.')) return null
+      const slug = pluginId.split('.').pop() || ''
+      const response = await fetch(`/__fiex_official_plugin/${slug}/loading.html`)
+      return response.ok ? await response.text() : null
+    }
+    case 'preview_open': {
+      const values = (await handlePlugins('preview_candidates', {
+        extension:
+          String(a.path || '')
+            .split('.')
+            .pop() || '',
+        mime: '',
+        isDir: false,
+      })) as Array<{ id: string; provider: string; priority: number }>
+      const allowed = Array.isArray(a.providerOrder)
+        ? a.providerOrder.filter((id): id is string => typeof id === 'string')
+        : values.map((value) => value.id)
+      const order = [String(a.providerId || ''), ...allowed].filter(
+        (id, index, list) => id && list.indexOf(id) === index && allowed.includes(id),
+      )
+      for (const id of order) {
+        try {
+          return await resolveDemoPreview({ ...a, providerId: id })
+        } catch {}
+      }
+      return {
+        providerId: 'builtin:fallback',
+        provider: 'Fiex',
+        priority: 0,
+        view: {
+          kind: 'fallback',
+          name:
+            String(a.path || '')
+              .split('/')
+              .pop() || '',
+        },
+      }
+    }
+    case 'connection_open': {
+      if (String(a.id || '') === 'demo-ssh') {
+        return { kind: 'terminal', connectionId: 'demo-ssh' }
+      }
+      // The browser fixture has one WebDAV connection and it registers a VFS,
+      // so Core's two-branch navigation resolves to the remote Explorer root.
+      if (String(a.id || '') === 'demo-webdav') {
+        return { kind: 'vfs', path: 'fiex://mount/demo-webdav/' }
+      }
+      throw new Error('Unknown demo connection')
+    }
 
     default:
       return notHandled

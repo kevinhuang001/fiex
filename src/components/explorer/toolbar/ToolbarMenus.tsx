@@ -1,10 +1,11 @@
 import { Action, Label, Menu } from '@/components/Menus'
+import * as D from '@/components/ui/dropdown-menu'
 import { useMenuPosition } from '@/lib/menuPosition'
 import type { AppController } from '@/hooks/useAppController'
 import type { PluginContribution, PluginInfo } from '@/lib/plugins'
 import type { Ide, Terminal } from '@/lib/types'
 import { PuzzlePieceIcon as Puzzle } from '@phosphor-icons/react/dist/csr/PuzzlePiece'
-import { Pin } from 'lucide-react'
+import { Pin, Settings2 } from 'lucide-react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { pluginIcon, pluginKey } from './pluginTools'
 
@@ -61,7 +62,8 @@ export function ToolbarPickerMenu({
   ides,
   terminals,
 }: ToolbarPickerMenuProps) {
-  const items = picker.kind === 'ide' ? ides : terminals
+  const items =
+    picker.kind === 'ide' ? ides : [{ id: 'builtin', name: 'Fiex 内置终端' }, ...terminals]
   return (
     <div
       ref={pickerRef}
@@ -100,6 +102,7 @@ type PluginMenuProps = {
   runTool: (plugin: PluginInfo, tool: PluginContribution, anchor?: { x: number; y: number }) => void
   pinTool: (key: string) => void
   unpinTool: (key: string) => void
+  onManage: () => void
 }
 
 export function PluginMenu({
@@ -108,12 +111,23 @@ export function PluginMenu({
   runTool,
   pinTool,
   unpinTool,
+  onManage,
 }: PluginMenuProps) {
   return (
     <Menu label="插件" icon={<Puzzle weight="regular" size={20} />} align="center">
-      <Label>插件工具</Label>
+      <div className="plugin-menu-header">
+        <Label>插件工具</Label>
+        <D.DropdownMenuItem
+          className="plugin-menu-settings"
+          aria-label="插件设置"
+          title="插件设置"
+          onSelect={onManage}
+        >
+          <Settings2 size={14} />
+        </D.DropdownMenuItem>
+      </div>
       {availableTools.map(({ plugin, tool }) => {
-        const key = pluginKey(plugin.id, tool.id)
+        const key = pluginKey(plugin.id)
         const pinned = pinnedKeys.includes(key)
         return (
           <Action

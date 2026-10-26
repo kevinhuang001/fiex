@@ -4,33 +4,6 @@ export const query = new URLSearchParams(location.search)
 export const officialMode =
   query.has('officialPlugins') ||
   (import.meta.env.DEV && !query.has('demo') && !query.has('pluginFixture'))
-const archiveFormats = [
-  ['zip', 'ZIP'],
-  ['rar', 'RAR'],
-  ['7z', '7z'],
-  ['tar', 'TAR'],
-  ['tar.gz', 'TAR.GZ'],
-  ['tar.bz2', 'TAR.BZ2'],
-  ['tar.xz', 'TAR.XZ'],
-] as const
-const archiveItems = (picker: boolean) =>
-  archiveFormats.map(([format, title]) => ({
-    id: `archive.${picker ? 'to.' : ''}${format}`,
-    title,
-    command: 'archive.compress',
-    args: { format },
-    ...(picker
-      ? {
-          picker: {
-            mode: 'saveFile',
-            suggestedName: `Archive.${format}`,
-            extensions: [format.split('.').pop()],
-            param: 'destination',
-          },
-        }
-      : {}),
-  }))
-
 export const officialPlugins: DemoPlugin[] = officialMode
   ? [
       {
@@ -67,20 +40,17 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: ['github.com'],
         allowedNetworkDomains: ['github.com'],
         author: { name: 'Fiex Contributors' },
-        contributions: {
-          vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
-          toolbar: [
-            {
-              id: 'git.main',
+        extensions: {
+          vfs: { title: 'Git 历史', readOnly: true },
+          toolbar: {
+            title: '源代码管理',
+            icon: 'git-branch',
+            panel: {
+              entry: 'ui/dist/index.html',
               title: '源代码管理',
-              icon: 'git-branch',
-              panel: {
-                entry: 'ui/dist/index.html',
-                title: '源代码管理',
-                defaultSize: { width: 480, height: 300 },
-              },
+              defaultSize: { width: 480, height: 300 },
             },
-          ],
+          },
           settings: [
             { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
           ],
@@ -114,32 +84,8 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
-          contextMenus: [
-            {
-              id: 'archive.compress',
-              title: '压缩',
-              when: 'context.selection.isNotArchive',
-              children: [
-                ...archiveItems(false),
-                {
-                  id: 'archive.advanced',
-                  title: '高级压缩…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: '高级压缩',
-                    defaultSize: { width: 400, height: 420 },
-                  },
-                },
-              ],
-            },
-            {
-              id: 'archive.extract',
-              title: '解压缩',
-              when: 'context.selection.isArchive',
-              command: 'archive.extract',
-            },
-          ],
+        extensions: {
+          contextMenus: true,
           settings: [
             {
               id: 'compressIgnores',
@@ -154,15 +100,15 @@ export const officialPlugins: DemoPlugin[] = officialMode
               defaultValue: ['__MACOSX'],
             },
           ],
-          info: [
-            {
-              id: 'archive.info',
-              title: '压缩包',
-              command: 'archive.info',
-              extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
-              priority: 100,
-            },
-          ],
+          info: {
+            extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
+            priority: 100,
+          },
+          preview: {
+            extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
+            priority: 100,
+            loading: { entry: 'ui/loading.html' },
+          },
         },
       },
       {
@@ -181,29 +127,17 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
-          info: [
-            {
-              id: 'office.info',
-              title: '文档',
-              command: 'office.info',
-              extensions: ['docx', 'xlsx', 'pptx'],
-              priority: 100,
+        extensions: {
+          info: { command: 'office.info', extensions: ['docx', 'xlsx', 'pptx'], priority: 100 },
+          preview: {
+            extensions: ['docx', 'xlsx', 'pptx'],
+            priority: 100,
+            loading: { entry: 'ui/loading.html' },
+            panel: {
+              entry: 'ui/index.html',
+              defaultSize: { width: 720, height: 600 },
             },
-          ],
-          preview: [
-            {
-              id: 'office',
-              title: 'Office 预览',
-              extensions: ['docx', 'xlsx', 'pptx'],
-              priority: 100,
-              panel: {
-                entry: 'ui/index.html',
-                title: 'Office 预览',
-                defaultSize: { width: 720, height: 600 },
-              },
-            },
-          ],
+          },
         },
       },
       {
@@ -222,20 +156,15 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
-          preview: [
-            {
-              id: 'sqlite',
-              title: 'SQLite 查看器',
-              extensions: ['db', 'sqlite', 'sqlite3'],
-              priority: 100,
-              panel: {
-                entry: 'ui/index.html',
-                title: 'SQLite 查看器',
-                defaultSize: { width: 720, height: 640 },
-              },
+        extensions: {
+          preview: {
+            extensions: ['db', 'sqlite', 'sqlite3'],
+            priority: 100,
+            panel: {
+              entry: 'ui/index.html',
+              defaultSize: { width: 720, height: 640 },
             },
-          ],
+          },
         },
       },
       {
@@ -254,55 +183,47 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
-          info: [
-            {
-              id: 'data.info',
-              title: '数据表',
-              command: 'data.info',
-              extensions: [
-                'db',
-                'sqlite',
-                'sqlite3',
-                'csv',
-                'tsv',
-                'xlsx',
-                'xls',
-                'parquet',
-                'arrow',
-                'feather',
-                'ipc',
-                'avro',
-              ],
-              priority: 100,
+        extensions: {
+          info: {
+            command: 'data.info',
+            extensions: [
+              'db',
+              'sqlite',
+              'sqlite3',
+              'csv',
+              'tsv',
+              'xlsx',
+              'xls',
+              'parquet',
+              'arrow',
+              'feather',
+              'ipc',
+              'avro',
+            ],
+            priority: 100,
+          },
+          preview: {
+            extensions: [
+              'db',
+              'sqlite',
+              'sqlite3',
+              'csv',
+              'tsv',
+              'xlsx',
+              'xls',
+              'parquet',
+              'arrow',
+              'feather',
+              'ipc',
+              'avro',
+            ],
+            priority: 110,
+            loading: { entry: 'ui/loading.html' },
+            panel: {
+              entry: 'ui/index.html',
+              defaultSize: { width: 720, height: 640 },
             },
-          ],
-          preview: [
-            {
-              id: 'data',
-              title: '数据预览',
-              extensions: [
-                'db',
-                'sqlite',
-                'sqlite3',
-                'csv',
-                'tsv',
-                'xlsx',
-                'xls',
-                'parquet',
-                'arrow',
-                'feather',
-                'ipc',
-                'avro',
-              ],
-              priority: 110,
-              panel: {
-                entry: 'ui/index.html',
-                title: '数据预览',
-                defaultSize: { width: 720, height: 640 },
-              },
-            },
-          ],
+          },
         },
       },
       {
@@ -321,65 +242,17 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
-          toolbar: [
-            {
-              id: 'gpg.keys',
-              title: '公钥管理',
-              icon: 'key-round',
-              panel: {
-                entry: 'ui/dist/index.html',
-                title: 'GPG 公钥管理',
-                defaultSize: { width: 420, height: 460 },
-              },
+        extensions: {
+          toolbar: {
+            title: '钥匙串',
+            icon: 'key-round',
+            panel: {
+              entry: 'ui/dist/index.html',
+              title: 'GPG 钥匙串',
+              defaultSize: { width: 620, height: 520 },
             },
-          ],
-          contextMenus: [
-            {
-              id: 'gpg.menu',
-              title: 'GPG',
-              when: 'context.selection.count > 0',
-              children: [
-                {
-                  id: 'gpg.encrypt',
-                  title: '加密…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: 'GPG 加密',
-                    defaultSize: { width: 560, height: 520 },
-                  },
-                },
-                {
-                  id: 'gpg.decrypt',
-                  title: '解密…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: 'GPG 解密',
-                    defaultSize: { width: 520, height: 400 },
-                  },
-                },
-                {
-                  id: 'gpg.sign',
-                  title: '签名…',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: 'GPG 签名',
-                    defaultSize: { width: 540, height: 470 },
-                  },
-                },
-                {
-                  id: 'gpg.verify',
-                  title: '验证签名…',
-                  when: 'context.selection.count == 1',
-                  panel: {
-                    entry: 'ui/dist/index.html',
-                    title: '验证签名',
-                    defaultSize: { width: 520, height: 420 },
-                  },
-                },
-              ],
-            },
-          ],
+          },
+          contextMenus: true,
         },
       },
       {
@@ -396,16 +269,8 @@ export const officialPlugins: DemoPlugin[] = officialMode
         requestedNetworkDomains: [],
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
-        contributions: {
-          info: [
-            {
-              id: 'checksum.info',
-              title: '校验和',
-              command: 'checksum.info',
-              extensions: [],
-              priority: 100,
-            },
-          ],
+        extensions: {
+          info: { command: 'checksum.info', extensions: [], priority: 100 },
         },
       },
     ]

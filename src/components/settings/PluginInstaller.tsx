@@ -18,11 +18,13 @@ export function PluginInstaller({
   installed,
   onClose,
   onInstalled,
+  initialCategory,
 }: {
   open: boolean
   installed: PluginInfo[]
   onClose: () => void
   onInstalled: () => void
+  initialCategory?: string
 }) {
   const [entries, setEntries] = useState<MarketplacePlugin[]>([])
   const [loading, setLoading] = useState(false)
@@ -114,6 +116,7 @@ export function PluginInstaller({
         entries={entries}
         busyId={busyId}
         onPrepare={prepare}
+        initialCategory={initialCategory}
       />
       <ImportSheet
         preview={preview}

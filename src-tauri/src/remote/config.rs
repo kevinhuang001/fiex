@@ -16,6 +16,12 @@ pub(crate) fn mount_path(conn: &StoredConnection) -> PathBuf {
 /// Core owns caches and upload snapshots; providers receive scoped read access.
 pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, String> {
     let plugin_id = connection_plugin_id(conn);
+    if plugin_id == BUILTIN_PLUGIN_ID {
+        if conn.kind == BUILTIN_SSH {
+            return Ok(plugin_id);
+        }
+        return Err("内置连接类型不支持".into());
+    }
     let plugin = crate::plugin_host::catalog()
         .into_iter()
         .find(|plugin| {
@@ -23,12 +29,32 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
         })
         .ok_or("连接插件未安装、启用或已被撤销授权")?;
     declared_connection_fields(&plugin_id, &conn.kind)?;
-    for permission in &plugin.declared_permissions {
-        if !crate::plugin_host::permission_allowed(&plugin_id, permission)? {
-            return Err(format!("插件权限未授权：{permission}"));
-        }
-    }
+    let declared = plugin.declared_permissions.iter().cloned().collect();
+    crate::plugin_permission_policy::PermissionPolicy::new(&plugin_id, &declared)
+        .require_all()
+        .map_err(|_| "插件权限未授权".to_string())?;
     Ok(plugin_id)
+}
+
+pub(crate) const BUILTIN_PLUGIN_ID: &str = "__builtin__";
+pub(crate) const BUILTIN_SSH: &str = "ssh";
+
+pub(crate) fn builtin_connection_fields(kind: &str) -> Option<Vec<(String, String)>> {
+    if kind != BUILTIN_SSH {
+        return None;
+    }
+    Some(
+        [
+            ("host", "text"),
+            ("port", "number"),
+            ("username", "text"),
+            ("identityFile", "text"),
+            ("terminalType", "text"),
+        ]
+        .into_iter()
+        .map(|(id, ty)| (id.to_string(), ty.to_string()))
+        .collect(),
+    )
 }
 
 /// Find the user-installed and approved provider that declares this factory.
@@ -37,6 +63,9 @@ pub(crate) fn declared_connection_fields(
     plugin_id: &str,
     kind: &str,
 ) -> Result<Vec<(String, String)>, String> {
+    if plugin_id == BUILTIN_PLUGIN_ID {
+        return builtin_connection_fields(kind).ok_or_else(|| "内置连接类型不支持".to_string());
+    }
     let plugin = crate::plugin_host::catalog()
         .into_iter()
         .find(|plugin| {
@@ -44,15 +73,11 @@ pub(crate) fn declared_connection_fields(
         })
         .ok_or("连接插件尚未安装、启用或授权")?;
     let factory = plugin
-        .contributions
+        .extensions
         .get("connections")
-        .and_then(serde_json::Value::as_array)
-        .and_then(|factories| {
-            factories
-                .iter()
-                .find(|factory| factory.get("id").and_then(serde_json::Value::as_str) == Some(kind))
-        })
-        .ok_or("插件未声明请求的连接类型")?;
+        .filter(|factory| factory.is_object())
+        .ok_or("插件未声明连接类型")?;
+    let _ = kind;
     let mut fields = Vec::new();
     for field in factory
         .get("fields")

@@ -111,7 +111,7 @@ fn resolve_file(folder: &Path, path: &str) -> Option<(PathBuf, String)> {
 
 fn resources(manifest: &PluginManifest, folder: &Path) -> Vec<Resource> {
     let Some(object) = manifest
-        .contributions
+        .extensions
         .get("resources")
         .and_then(Value::as_object)
     else {
@@ -171,7 +171,7 @@ pub fn resolve(
 /// unsupported type. Called while the package is still staged.
 pub fn validate(manifest: &PluginManifest, folder: &Path) -> Result<(), String> {
     let Some(object) = manifest
-        .contributions
+        .extensions
         .get("resources")
         .and_then(Value::as_object)
     else {
@@ -238,11 +238,11 @@ mod tests {
         )
         .unwrap();
         let manifest: PluginManifest = serde_json::from_value(serde_json::json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "id": "org.test.icons",
             "name": "Test Icons",
             "version": "1.0.0",
-            "contributions": {
+            "extensions": {
                 "resources": {
                     "rust": { "path": "assets/rust.svg", "mediaType": "image/svg+xml" }
                 }

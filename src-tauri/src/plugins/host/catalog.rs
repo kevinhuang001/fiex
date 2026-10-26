@@ -16,14 +16,19 @@ pub struct PluginInfo {
     pub version: String,
     pub description: String,
     pub icon: Option<String>,
-    pub contributions: Value,
+    pub extensions: Value,
+    /// Explicit `extensions.ui.timeoutMs` budget (already bounded), used by the
+    /// panel bridge and projected to the plugin UI for its own timers.
+    pub ui_timeout_ms: u64,
     pub backend_available: bool,
     pub enabled: bool,
     pub author: Option<PluginAuthor>,
     pub approved: bool,
     pub declared_permissions: Vec<String>,
     pub granted_permissions: Vec<String>,
+    pub requested_network_all: bool,
     pub requested_network_domains: Vec<String>,
+    pub allowed_network_all: bool,
     pub allowed_network_domains: Vec<String>,
     pub requested_commands: Vec<String>,
     pub allowed_commands: Vec<String>,
@@ -67,11 +72,11 @@ pub(crate) fn discover() -> Vec<(PluginManifest, PathBuf)> {
             let Ok(manifest) = serde_json::from_slice::<PluginManifest>(&bytes) else {
                 continue;
             };
-            if let Err(error) = super::manifest::validate_contributions(&manifest.contributions) {
+            if let Err(error) = super::manifest::validate_extensions(&manifest.extensions) {
                 eprintln!("plugin {} manifest rejected: {error}", manifest.id);
                 continue;
             }
-            if manifest.schema_version != 1
+            if manifest.schema_version != 2
                 || (!crate::plugin_themes::is_theme(&manifest)
                     && manifest.runtime.protocol_version != plugin_sdk::PROTOCOL_VERSION)
                 || !valid_id(&manifest.id)
@@ -133,11 +138,13 @@ pub fn catalog() -> Vec<PluginInfo> {
             let declared = declared(&manifest).unwrap_or_default();
             let state =
                 crate::plugin_permissions::status(&manifest.id, &declared).unwrap_or_default(); // unreadable policy fails closed
-            let active = activation_requirements(&manifest).is_ok_and(|required| {
-                state.enabled && crate::plugin_permissions::activation_complete(&state, &required)
-            });
+                                                                                                // `enabled` means the package may run. Individual capabilities may
+                                                                                                // be switched off; their operations ask again instead of
+                                                                                                // deactivating the whole plugin.
+            let active = state.approved && state.enabled;
             let requested = activation_requirements(&manifest).unwrap_or_default();
             let missing_commands = missing_commands(&requested.commands);
+            let ui_timeout_ms = super::manifest::ui_timeout_ms(&manifest.extensions);
             PluginInfo {
                 schema_version: manifest.schema_version,
                 id: manifest.id,
@@ -145,14 +152,17 @@ pub fn catalog() -> Vec<PluginInfo> {
                 version: manifest.version,
                 description: manifest.description,
                 icon: manifest.icon,
-                contributions: manifest.contributions,
+                extensions: manifest.extensions,
+                ui_timeout_ms,
                 backend_available: backend,
                 enabled: active,
                 author: manifest.author,
                 approved: state.approved,
                 declared_permissions: declared.into_iter().collect(),
                 granted_permissions: state.granted.into_iter().collect(),
+                requested_network_all: requested.network_all,
                 requested_network_domains: requested.domains.into_iter().collect(),
+                allowed_network_all: state.network_all,
                 allowed_network_domains: state.network_domains.into_iter().collect(),
                 requested_commands: requested.commands.into_iter().collect(),
                 allowed_commands: state.commands.into_iter().collect(),
@@ -172,12 +182,8 @@ pub fn themes() -> Vec<crate::plugin_themes::Theme> {
         .into_iter()
         .filter(|(manifest, _)| {
             activation_requirements(manifest).is_ok_and(|required| {
-                crate::plugin_permissions::status(&manifest.id, &required.permissions).is_ok_and(
-                    |state| {
-                        state.enabled
-                            && crate::plugin_permissions::activation_complete(&state, &required)
-                    },
-                )
+                crate::plugin_permissions::status(&manifest.id, &required.permissions)
+                    .is_ok_and(|state| state.approved && state.enabled)
             })
         })
         .flat_map(|(manifest, folder)| {

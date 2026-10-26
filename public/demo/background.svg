@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b9d7ff"/>
+      <stop offset="0.45" stop-color="#dce9ff"/>
+      <stop offset="1" stop-color="#f7e7d3"/>
+    </linearGradient>
+    <linearGradient id="mountain" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7fa6d9" stop-opacity="0.75"/>
+      <stop offset="1" stop-color="#4e719e" stop-opacity="0.25"/>
+    </linearGradient>
+    <linearGradient id="mountain2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a9c4e6" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#d9e7f7" stop-opacity="0.15"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.78" cy="0.22" r="0.18">
+      <stop offset="0" stop-color="#fff8e6" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#fff8e6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#sky)"/>
+  <rect width="1600" height="1000" fill="url(#sun)"/>
+  <path d="M0 760 L260 520 L470 690 L720 420 L980 700 L1240 500 L1600 760 L1600 1000 L0 1000 Z" fill="url(#mountain)"/>
+  <path d="M0 840 L300 660 L560 820 L840 600 L1120 830 L1380 680 L1600 840 L1600 1000 L0 1000 Z" fill="url(#mountain2)"/>
+  <path d="M0 900 C260 840 480 930 760 890 C1050 850 1280 940 1600 880 L1600 1000 L0 1000 Z" fill="#f2f6fb" opacity="0.65"/>
+</svg>

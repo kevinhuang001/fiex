@@ -1,9 +1,64 @@
 .app {
+  position: relative;
+  isolation: isolate;
   display: flex;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
   user-select: none;
+}
+.app-background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.app.has-background .sidebar {
+  background: color-mix(in srgb, var(--surface) 52%, transparent);
+}
+.app.has-background .main {
+  background: color-mix(in srgb, var(--canvas) 58%, transparent);
+}
+.app.has-background .toolbar {
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+.app.has-background .tabs {
+  background: color-mix(in srgb, var(--canvas) 48%, transparent);
+  backdrop-filter: blur(14px);
+}
+.app.has-background .path-toolbar {
+  background: transparent;
+}
+.app.has-background .tab.active {
+  background: color-mix(in srgb, var(--canvas) 40%, transparent);
+}
+.app.has-background .list-header {
+  background: color-mix(in srgb, var(--canvas) 45%, transparent);
+}
+.app.has-background .statusbar {
+  background: color-mix(in srgb, var(--canvas) 48%, transparent);
+}
+html.dark .app-background {
+  filter: brightness(0.68) saturate(0.9);
+}
+html.dark .app.has-background .main {
+  background: color-mix(in srgb, var(--canvas) 70%, transparent);
+}
+html.dark .app.has-background .sidebar {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+}
+html.dark .app.has-background .toolbar {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+html.dark .app.has-background .tabs {
+  background: color-mix(in srgb, var(--canvas) 62%, transparent);
+}
+html.dark .app.has-background .list-header {
+  background: color-mix(in srgb, var(--canvas) 62%, transparent);
 }
 .sidebar {
   width: 220px;
@@ -49,7 +104,10 @@
   min-height: 0;
   overflow: auto;
   padding: 9px 12px 20px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+.sidebar-content::-webkit-scrollbar {
+  display: none;
 }
 .tag-nav {
   padding-left: 14px;
@@ -113,7 +171,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-right: 8px;
+  padding-right: 36px;
   margin-top: 27px;
 }
 .sidebar-section-title .tag-nav {
@@ -248,8 +306,8 @@
   align-items: center;
   gap: 5px;
   padding: 0 20px;
-  height: 69px;
-  min-height: 69px;
+  height: 56px;
+  min-height: 56px;
   background: var(--toolbar-background);
   box-shadow: inset 0 -1px 0 var(--toolbar-line);
 }
@@ -520,6 +578,15 @@
 .file-row.selected > span {
   color: var(--row-selected-text);
 }
+.app.has-background .file-row:nth-child(even) {
+  background: color-mix(in srgb, var(--row-alt-background) 55%, transparent);
+}
+.app.has-background .file-row:hover {
+  background: color-mix(in srgb, var(--row-hover-background) 55%, transparent);
+}
+.app.has-background .file-row.selected {
+  background: color-mix(in srgb, var(--row-selected-background) 65%, transparent);
+}
 .file-name {
   display: flex;
   align-items: center;
@@ -721,7 +788,7 @@
 /* Finder-style icon grid: fixed cells, left aligned, no stretched columns. */
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, var(--tile-size, 126px));
+  grid-template-columns: repeat(auto-fill, var(--tile-size, 102px));
   justify-content: start;
   align-content: start;
   gap: 4px;
@@ -735,13 +802,13 @@
   gap: 7px;
   width: 100%;
   min-width: 0;
-  min-height: calc(var(--icon-size, 88px) + 48px);
+  min-height: calc(var(--icon-size, 64px) + 42px);
   border-radius: 10px;
   padding: 10px 6px 8px;
   border: 1px solid transparent;
 }
 .tile-icon {
-  height: var(--icon-size, 88px);
+  height: var(--icon-size, 64px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1059,4 +1126,364 @@ body.dragging-toolbar {
 
 .view-switch button svg {
   transform: translateY(1px);
+}
+
+.plugin-connection-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+}
+.plugin-connection-message {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+/* Built-in SSH terminal: fill the right content area like a PluginView. */
+.ssh-terminal-view {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--surface);
+}
+.ssh-terminal-host {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 6px 0 10px;
+  overflow: hidden;
+}
+.ssh-terminal-host .xterm {
+  height: 100%;
+}
+.ssh-terminal-host .xterm-viewport {
+  background: transparent !important;
+}
+.ssh-terminal-status {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(80%, 620px);
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--muted);
+  font-size: 11px;
+}
+.ssh-terminal-status button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Saved-session menus in the Connections sidebar. */
+.connection-add {
+  position: relative;
+}
+.connection-session-menu {
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 172px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.connection-session-menu.plus {
+  position: fixed;
+  width: 208px;
+  max-height: 220px;
+  overflow: auto;
+}
+.connection-session-menu.floating {
+  position: fixed;
+}
+.connection-session-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.connection-session-menu button:hover {
+  background: var(--hover);
+}
+.connection-session-menu button.danger {
+  color: var(--danger);
+}
+.connection-session-menu button > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+}
+.connection-session-menu strong {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connection-session-menu .connection-session-new {
+  margin-top: 3px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 7px 7px;
+  padding-top: 8px;
+}
+.sidebar-section-title.connection-section-title {
+  padding-right: 10px;
+}
+.device-row > .nav-item.connection-nav {
+  padding-right: 28px;
+}
+.nav-item > .connection-autostart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  margin-left: auto;
+  flex: 0 0 auto;
+  overflow: visible;
+  background: transparent;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+/* Keep full-view tabs mounted so SSH/plugin sessions survive tab switches. */
+.full-view-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.full-view-pane[hidden] {
+  display: none;
+}
+
+/* Integrated terminal panel (local shell / SSH-style PTY). */
+.terminal-panel {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 120px;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.terminal-panel.closed {
+  display: none;
+}
+.terminal-panel-resizer {
+  height: 6px;
+  flex: 0 0 6px;
+  margin-top: -1px;
+  cursor: ns-resize;
+  background: transparent;
+}
+.terminal-panel-resizer:hover {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.terminal-panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 0 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+.terminal-panel-tabs {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+  height: 100%;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.terminal-panel-tabs::-webkit-scrollbar {
+  display: none;
+}
+.terminal-panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 92px;
+  max-width: 190px;
+  height: 29px;
+  padding-left: 4px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: grab;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.terminal-panel-tab:hover {
+  background: color-mix(in srgb, var(--surface) 65%, transparent);
+  color: var(--text);
+}
+.terminal-panel-tab.active {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+.terminal-panel-tab:active {
+  cursor: grabbing;
+}
+.terminal-panel-tabs.is-dragging .terminal-panel-tab {
+  transition:
+    transform 170ms cubic-bezier(0.2, 0, 0, 1),
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.terminal-panel-tabs.is-dragging .terminal-panel-tab.is-source {
+  visibility: hidden;
+}
+.terminal-tab-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  margin: 0;
+  background: var(--surface);
+  pointer-events: none;
+  will-change: transform;
+}
+.terminal-tab-ghost.settling {
+  transition: transform 170ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal-panel-tabs.is-dragging .terminal-panel-tab,
+  .terminal-tab-ghost.settling {
+    transition: none;
+  }
+}
+.terminal-panel-tab > button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.terminal-panel-tab > button:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 5px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.terminal-panel-close {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  opacity: 0.55;
+}
+.terminal-panel-close:hover {
+  opacity: 1;
+}
+.terminal-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.terminal-panel-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.terminal-panel-actions button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.terminal-panel-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+}
+.terminal-panel-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.terminal-panel-pane[hidden] {
+  display: none;
+}
+
+.terminal-shell-picker {
+  position: relative;
+}
+.terminal-shell-menu {
+  position: absolute;
+  right: 0;
+  bottom: 28px;
+  z-index: 30;
+  display: flex;
+  min-width: 118px;
+  max-width: 190px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.terminal-shell-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.terminal-shell-menu button:hover {
+  background: var(--hover);
 }

@@ -1,100 +1,70 @@
-# 08 · Info 与 Preview 的统一 Provider 合同
+# 统一 Provider 调用架构
 
-## 1. Registry 与业务类型
+所有 Core 系统事件由 `plugins/events.rs` 的 `EventRouter` 协调：统一 Registry 匹配、Builtin/Plugin 执行、逐 Provider 校验和事件结果策略。功能模块只提供内置处理函数、具体结果校验及组合规则。自定义插件 RPC 保留在原有授权桥接中，不参与系统事件广播。
 
-Info 和 Preview 都支持多个内置 Provider 和多个第三方插件 Provider。Core Registry 做统一的匹配、优先级、取消、超时、失败隔离与聚合；无任何特定官方插件 ID 的业务分支。
-
-```text
-Built-in Info/Preview Adapter ─┐
-                                ├─ InfoResponse / PreviewView → Core Renderer
-Plugin Native RPC → deserialize ┘
+```mermaid
+flowchart TD
+  UI[Core UI] --> Router[EventRouter]
+  Router --> Registry[Provider Registry]
+  Registry --> Broker[Resource Broker and Operation Scope]
+  Broker --> Builtin[Core builtin handler]
+  Broker --> Host[PluginHost]
+  Host --> SDK[RequestContext]
+  Builtin --> Policy[Event result policy]
+  SDK --> Policy
+  Policy --> UI
 ```
 
-内置 Provider 直接构造公共 Rust 领域类型，第三方返回遵循同一 Schema 的 JSON 并由 Core 解码成**相同**的类型。UI 只渲染统一领域结果，不维护内置/外部两套响应模型。
+## 统一请求
 
-Core 内置实现应分别组织在 `info/{metadata,audio,video,types}` 与 `preview/{text,image,audio,video,pdf,fallback}` 模块。Registry 只负责注册和编排；音频、视频等解析来源可独立失效、不会拖垮基本属性或其他预览类型。
-
-## 2. 标准注册事件
-
-Manifest 使用单一的 `extensions`：
+JSON-RPC 的 method 标识事件。唯一资源集合是 `targets`，不再同时使用 target 与 selection。
 
 ```json
 {
-  "permissions": {
-    "metadata": {"enabled": true},
-    "files": {"read":{"enabled":true}}
-  },
-  "extensions": {
-    "info": [{"id":"audio","title":"音频信息","extensions":["mp3","flac"]}],
-    "preview": [{"id":"audio","title":"音频预览","extensions":["mp3","flac"]}]
-  }
-}
-```
-
-插件仅注册对应扩展处理器。Core 已定义 InfoContext/PreviewContext 的输入；不要求在 Manifest 再声明 `inputs` 或单独“Context Provider”类型。
-
-## 3. 标准输入 Context
-
-```json
-{
-  "sessionId": "preview-session-opaque",
-  "resource": {
-    "ref": {"mountId":"m1","nodeId":"a18"},
-    "metadata": {
-      "name":"audio.mp3",
-      "kind":"file",
-      "extension":"mp3",
-      "size":4194304
-    },
-    "read": {"resourceId":"scoped-read-1"}
-  },
-  "intent":"preview"
-}
-```
-
-ContextBuilder 从 Explorer/VFS 候选资源中取得基础属性；**独立 PermissionPolicy** 根据 Manifest 权限、用户批准与本次查看 Scope 对每个字段和可读资源引用进行审核，之后事件一次交付给 Provider。`metadata` 可选，`read` 也可选；没有相应批准就不交付。Opaque read 引用只允许访问**这一个当前文件**、在会话中按 Range/Seek 延迟读取，关闭预览/撤权即失效，绝不在标准 Context 内预传完整音视频/PDF 字节。
-
-内置 Provider 可以由 Core 内部适配器获取同一资源，第三方通过受控文件流访问，不因为内置类型而对外扩大权限。
-
-## 4. InfoResponse
-
-```json
-{
-  "sections": [
+  "sessionId": "opaque-session",
+  "targets": [
     {
-      "id":"audio",
-      "title":"音频",
-      "rows":[
-        {"label":"时长","value":"03:25"},
-        {"label":"编码","value":"MP3"}
-      ]
+      "ref": { "mountId": "local", "nodeId": "opaque-resource" },
+      "metadata": { "name": "song.mp3", "kind": "file", "size": 4194304, "mime": "audio/mpeg" }
     }
   ]
 }
 ```
 
-InfoRenderer 只接收统一 `InfoResponse`，根据 sections 的稳定 ID、排序和展示规则渲染。基本文件属性是独立的 Core Info Provider；音频标签、视频编码、EXIF 等若需要读取文件字节，必须具有 `files.read` 和当前资源 Scope，不能仅靠 `metadata` 权限。
+各事件独有参数（查询词、菜单项 ID、连接配置等）与 targets 并列，使用 `ctx.params()` 获取；`ctx.targets()` 提供统一目标集合，`ctx.metadata(ref)` 只访问本次已投影的属性。
 
-允许多个 Provider 并发生成 sections；Core 按优先级/稳定顺序合并，超时或单个来源错误不吞掉其他来源，防止恶意 HTML 注入或异常大文本。
+读取目标使用 `ctx.files().open_ref(&target.reference)`。名称是展示信息，不是读取能力。`ScopedRead`、`read.resourceId` 和全局读取令牌注册表已删除。Core 与 SDK 共用 ResourceRef、ResourceContext、ResourceMetadata、EventContext 以及 InfoSection/InfoRow、PreviewView 的定义；没有 InfoContext、PreviewContext、InfoSectionView 或 InfoResponse 转换链。
 
-## 5. PreviewView
+## 资源与授权
 
-Preview Provider 返回 Core 标准 `PreviewView`：可以是由 Core 支持的文本、图像、媒体、PDF、受限 HTML 预览描述或需要 Core 资源代理的 View。选择预览渲染器必须先完成类型匹配、权限审核和受信任资源 URL 生成。
+`plugins/resource_context.rs` 解析本地、Connection、VFS 的元数据。本地属性只取一次，目录装饰复用传入的列表属性；远程 stat 不下载文件。内容 Provider 按需调用 materialize，同一操作内的快照共享一次内容准备结果。缓存位置只存在于 Core。
 
-对于大文件，Core 提供有界只读流和 Range/Seek 资源代理，关闭/切换标签回收句柄，不能整文件编码成 JSON，也不得把本地绝对路径直接交给插件 iframe。
-标准 Context 的受限文件资源可由 SDK 表现为同步 `FileReader: Read+Seek`，也可在可选 `tokio-io` Feature 下转换为 `AsyncFileReader: AsyncRead+AsyncSeek`；两者绑定同一只读 Scope，不授予额外内容权限。
+`EventRouter::resource_scope` 为每个 Provider 建立独立 Scope；`prepare` 在 Host 边界统一执行元数据裁剪和引用绑定。文件、网络与命令 Broker 在每次反向 IPC 时再次检查许可。其他 Provider/操作知道相同引用也不能获得访问权。
 
-## 6. 与自定义 UI 的边界
+菜单根解析和懒加载子菜单都使用 metadata-only Scope，不能读取文件、修改文件、创建本地 VFS 视图或执行命令。只有有效会话中确实出现过的 action 才能执行，并为已确认目标重新创建操作范围。菜单会话限期、一次执行、总项数与深度限制保留。预览 iframe 的后续自定义请求从预览会话恢复相同目标，并按当前批准权限重建 Scope。
 
-Info/Preview 作为**标准事件**，可以直接收到已审核的基础 Metadata 与本次可读资源引用。插件若在某个用户操作中打开专门的 HTML UI，可以通过通用 `host.ui.open` 创建受限 Panel 或使用相应 PreviewView 描述；但不能因此多读其他文件。
+## 事件结果策略
 
-Connection 点击产生的 `PluginView` 则由 ContentHost 占满右侧主内容区，属于导航类型而非 Info/Preview 弹窗类型。所有 iframe 都使用相同 sandbox 和 UI Bridge 边界。
+| 事件                       | 策略                                                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Info                       | 按优先级合并所有合法 Sections；Core 补充来源和插件命名空间；失败独立显示错误 Section                                          |
+| Decorations                | 合并可见资源的装饰、去重徽标；高优先级覆盖冲突字段；限制字段、颜色和 package 图标来源                                         |
+| ContextMenu                | Core 匹配并汇集各 Provider 的独立菜单会话；UI 只调用一次；子菜单按需向同一会话解析                                            |
+| Preview                    | 首选 Provider 在前，其余按优先级或用户允许顺序尝试；调用失败、校验失败或 unsupported 继续下一个；最终使用不读取内容的内置兜底 |
+| Search                     | Core 合并本地遍历和插件结果；逐源校验、限定搜索根目录/挂载、规范化路径去重、限量及取消；UI 不再另发插件搜索                   |
+| Toolbar / Connection / VFS | 指定 Provider 独占；不广播给其他连接或挂载；保留 Connection NavigationTarget 与 VFS 专用结果校验                              |
+| beforeOpen hooks           | 按优先级尝试到第一个合法 handled=true；失败不会阻止后续 Provider                                                              |
 
-## 7. 验收
+Provider 执行具有异常隔离与 4 MiB 结果上限。PluginHost 继续负责 RPC 超时、进程、任务取消和句柄清理。Info/菜单/搜索/预览分别拥有自己的字段和大小规则；不会将所有功能强行转换成同一个响应 DTO。
 
-- 文件/目录 Metadata 未批准时，Context 仅有 ref；已批准时基础属性能随事件到达，不要求插件再发 `host.fs.stat`。
-- 没有 `files.read` 时，不提供 read 资源；即便插件构造假 resourceId 也不能读取。
-- 内置与第三方 Info/Preview 使用相同 DTO 并由同一组件渲染。
-- 文本、图片、音频、视频、PDF、fallback 的模块独立测试；5 GiB 以上资源不会整文件载入内存。
-支持 Tokio 的 Preview Provider 在取消、切换标签、撤权后必须唤醒 Pending 读取并关闭 Core Handle，不得后台继续扫描旧文件。
-- 本地、云盘 VFS、只读 Git VFS 的文件资源身份、撤权、取消、资源替换与超时行为一致。
+`extensions.preview.loading` 是纯展示层声明：Core 在 `preview.open` 前解析包内加载页并交给预览 UI，不参与 Provider 匹配、优先级、Scope 或结果校验。加载页解析失败或未声明时，预览继续走原有流程。
+
+真实预览 iframe 在加载页下方预加载；插件完成首次数据渲染后调用 `preview.ready`，Core 才移除加载页。加载页本身没有预览 Session，只能读取展示上下文和主题。Core 另设 30 秒兜底，插件未实现 `preview.ready` 时仍会显示预览。
+
+## 代码入口
+
+- `plugins/events.rs`：Registry、EventRouter、公共验证入口、独占调用、Scope/targets 准备。
+- `plugins/resource_context.rs`：资源快照、远程 stat 与按需 materialize。
+- `plugins/info.rs`、`plugins/preview.rs`、`plugins/decorations/dynamic.rs`、`plugins/search.rs`：事件处理和结果规则。
+- `desktop/plugins.rs`：Tauri 适配、菜单会话和 UI 资源处理，不在前端遍历 Provider。
+- `core/search.rs`：已有遍历与取消逻辑，以 Builtin 搜索来源接入统一结果策略。

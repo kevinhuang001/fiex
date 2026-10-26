@@ -104,6 +104,7 @@ export let demoEntries = [
   ),
   item(root + '/Documents/示例数据库.db', false, 'application/vnd.sqlite3', 147456),
   item(root + '/Documents/预算明细.csv', false, 'text/csv', 4096),
+  item(root + '/Documents/Research/未知格式.xyz', false, 'application/octet-stream', 7340032),
   item(root + '/Documents/Projects/fiex', true),
   item(root + '/Documents/Projects/App.tsx', false, 'text/plain', 18342),
   item(root + '/Documents/Projects/main.rs', false, 'text/plain', 4210),
@@ -155,6 +156,7 @@ export const demoGpgKeys = [
     name: 'Ada Lovelace <ada@example.org>',
     email: 'ada@example.org',
     expires: '',
+    hasSecret: true,
   },
   {
     fingerprint: 'AAAABBBBCCCCDDDDEEEEFFFF00001111222233334444',
@@ -162,5 +164,6 @@ export const demoGpgKeys = [
     name: 'Fiex Release Signing <release@fiex.app>',
     email: 'release@fiex.app',
     expires: '',
+    hasSecret: false,
   },
 ]

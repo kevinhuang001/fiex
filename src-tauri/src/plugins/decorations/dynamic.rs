@@ -5,47 +5,12 @@
 //! all validated here before the renderer sees them. Merging is priority
 //! ordered so a higher-priority provider can override labels, styles and icons.
 
-use super::rules::{apply_rules, DecorationRule};
 use super::types::{
     Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle,
 };
 use crate::plugin_host::{self, PluginManifest};
-use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DecorationConfig {
-    #[serde(default)]
-    mode: String,
-    #[serde(default)]
-    method: Option<String>,
-    #[serde(default)]
-    priority: i32,
-    #[serde(default)]
-    scope: Option<DecorationScope>,
-    #[serde(default)]
-    rules: Vec<DecorationRule>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DecorationScope {
-    #[serde(default)]
-    marker: Option<String>,
-}
-
-fn config(manifest: &PluginManifest) -> DecorationConfig {
-    manifest
-        .permissions
-        .folders
-        .read
-        .decorations
-        .as_ref()
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .unwrap_or_default()
-}
 
 fn allowed_color(value: &str) -> bool {
     let value = value.trim().to_ascii_lowercase();
@@ -152,22 +117,6 @@ fn safe_fields(fields: HashMap<String, DecorationField>) -> HashMap<String, Deco
         .collect()
 }
 
-fn marker_matches(directory: &str, marker: &str) -> bool {
-    if marker.is_empty() || marker.contains(['/', '\\']) {
-        return false;
-    }
-    let mut current = std::path::Path::new(directory);
-    loop {
-        if current.join(marker).exists() {
-            return true;
-        }
-        let Some(parent) = current.parent() else {
-            return false;
-        };
-        current = parent;
-    }
-}
-
 pub(super) struct Pending {
     priority: i32,
     value: Decoration,
@@ -235,42 +184,32 @@ pub(super) fn merge(
     pending.priority = pending.priority.max(priority);
 }
 
-fn dynamic(
-    result: &mut HashMap<String, Pending>,
+fn decode(
     entries: &HashMap<String, DecorationEntry>,
     manifest: &PluginManifest,
     folder: &std::path::Path,
-    directory: &str,
-    config: &DecorationConfig,
-) {
-    let Some(method) = config.method.as_deref().filter(|value| !value.is_empty()) else {
-        return;
-    };
-    if let Some(scope) = &config.scope {
-        if let Some(marker) = &scope.marker {
-            if !marker_matches(directory, marker) {
-                return;
-            }
-        }
-    }
-    let declared = plugin_host::declared_permissions(manifest).unwrap_or_default();
-    if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read").unwrap_or(false)
-    {
-        return;
-    }
-    let payload = json!({
-        "directory": directory,
-        "entries": entries.values().collect::<Vec<_>>(),
-    });
-    let Ok(response) = plugin_host::global().invoke_at(&manifest.id, method, payload, directory)
-    else {
-        return;
-    };
-    let Some(items) = response.get("decorations").and_then(Value::as_array) else {
-        return;
-    };
+    response: Value,
+) -> Result<Vec<Decoration>, String> {
+    let items = response["decorations"]
+        .as_array()
+        .filter(|a| a.len() <= entries.len().max(1) * 8)
+        .ok_or("invalid decorations response")?;
+    let mut result = HashMap::new();
     for item in items.iter().take(entries.len().max(1)) {
-        let Ok(path) = item.get("path").and_then(Value::as_str).ok_or(()) else {
+        // Prefer the direct child name; Core resolves it against the visible
+        // directory. Legacy `path` is accepted only when it names an entry.
+        let path = match item.get("name").and_then(Value::as_str) {
+            Some(name) => entries
+                .values()
+                .find(|entry| entry.name == name)
+                .map(|entry| entry.path.clone()),
+            None => item
+                .get("path")
+                .and_then(Value::as_str)
+                .filter(|path| entries.contains_key(*path))
+                .map(str::to_owned),
+        };
+        let Some(path) = path else {
             continue;
         };
         let mut badges = Vec::new();
@@ -307,7 +246,7 @@ fn dynamic(
             .map(|(namespace, path)| (Some(namespace), Some(path)))
             .unwrap_or((None, None));
         let value = Decoration {
-            path: path.into(),
+            path: path.clone(),
             badges,
             label: item.get("label").and_then(Value::as_str).map(str::to_owned),
             description: item
@@ -320,15 +259,9 @@ fn dynamic(
             icon_path,
             providers: vec![],
         };
-        merge(
-            result,
-            entries,
-            path,
-            config.priority,
-            &manifest.name,
-            value,
-        );
+        merge(&mut result, entries, &path, 0, &manifest.name, value);
     }
+    Ok(result.into_values().map(|pending| pending.value).collect())
 }
 
 pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> {
@@ -336,37 +269,78 @@ pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> 
         .into_iter()
         .map(|entry| (entry.path.clone(), entry))
         .collect::<HashMap<_, _>>();
-    let mut result = HashMap::new();
-    for (manifest, folder) in plugin_host::installed_manifests() {
-        let config = config(&manifest);
-        if config.mode == "none" || config.mode.is_empty() {
-            continue;
-        }
-        let declared = plugin_host::declared_permissions(&manifest).unwrap_or_default();
-        if !crate::plugin_permissions::allowed(&manifest.id, &declared, "folders.read")
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        match config.mode.as_str() {
-            "declarative" => apply_rules(
-                &mut result,
-                &entries,
-                &manifest.name,
-                config.priority,
-                &config.rules,
-            ),
-            "dynamic" => dynamic(
-                &mut result,
-                &entries,
-                &manifest,
-                &folder,
-                directory,
-                &config,
-            ),
-            _ => {}
-        }
+    use crate::plugin_events::{EventRouter, Handler};
+    let mut ordered = entries.values().collect::<Vec<_>>();
+    ordered.sort_by(|a, b| a.path.cmp(&b.path));
+    let mut resources = ordered
+        .iter()
+        .map(|e| {
+            crate::plugin_resource_context::ResourceSnapshot::from_metadata(
+                &e.path,
+                crate::plugin_contracts::ResourceMetadata {
+                    name: e.name.clone(),
+                    kind: if e.is_dir { "directory" } else { "file" }.into(),
+                    extension: Some(e.extension.clone()),
+                    mime: Some(e.mime.clone()),
+                    size: None,
+                    modified: None,
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    if let Ok(root) = crate::plugin_resource_context::ResourceSnapshot::resolve(directory) {
+        resources.insert(0, root);
     }
+    let metadata = resources
+        .iter()
+        .map(|r| serde_json::to_value(r.metadata()).unwrap_or_default())
+        .collect::<Vec<_>>();
+    let providers = EventRouter::providers("decorations.resolve", &metadata, directory, Vec::new());
+    let manifests = plugin_host::installed_manifests()
+        .into_iter()
+        .map(|(m, f)| (m.id.clone(), (m, f)))
+        .collect::<HashMap<_, _>>();
+    let result = EventRouter::resolve(
+        "decorations.resolve",
+        providers,
+        |_, _| Err("no builtin decorations".into()),
+        |plugin| {
+            crate::plugin_events::invoke_resources(
+                plugin,
+                "decorations.resolve",
+                json!({"directory":directory}),
+                &resources,
+                Some(directory),
+            )
+        },
+        |provider, response| {
+            let Handler::Plugin(plugin) = &provider.handler else {
+                return Err("invalid decoration provider".into());
+            };
+            let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
+            decode(&entries, manifest, folder, response)
+        },
+        |_| true,
+        |outcomes| {
+            let mut merged = HashMap::new();
+            for (provider, result) in outcomes.into_iter().rev() {
+                if let Ok(values) = result {
+                    for value in values {
+                        let path = value.path.clone();
+                        merge(
+                            &mut merged,
+                            &entries,
+                            &path,
+                            provider.priority.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+                            &provider.name,
+                            value,
+                        );
+                    }
+                }
+            }
+            merged
+        },
+    );
     let mut values = result
         .into_values()
         .map(|pending| pending.value)

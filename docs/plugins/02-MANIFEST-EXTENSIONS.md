@@ -1,117 +1,190 @@
-# 02 · Manifest 与 extensions
+# 02 · Manifest 与扩展
 
-## 1. 结构
-
-`extensions` 是所有扩展点的唯一注册入口。每个扩展点有自己的参数 Schema 和事件协议；`permissions` 独立表达插件申请的宿主资源权限。
+## 顶层结构
 
 ```json
 {
   "schemaVersion": 2,
-  "id": "org.example.cloud",
-  "name": "Example Cloud",
+  "id": "org.example.plugin",
+  "name": "Example",
   "version": "1.0.0",
+  "description": "…",
+  "icon": "puzzle-piece",
+  "author": { "name": "Example", "url": "https://example.com" },
   "runtime": {
     "protocolVersion": "3.0",
     "entrypoints": {
-      "windows-x86_64": "bin/cloud.exe",
-      "linux-x86_64": "bin/cloud"
+      "linux-x86_64": "fiex-plugin-example",
+      "macos-aarch64": "fiex-plugin-example",
+      "windows-x86_64": "fiex-plugin-example.exe"
     }
   },
-  "permissions": {
-    "metadata": {"enabled": true},
-    "files": {
-      "read": {"enabled": true},
-      "write": {"enabled": true},
-      "create": {"enabled": true}
-    },
-    "network": {
-      "enabled": true,
-      "domains": ["cloud.example.com"]
-    }
-  },
-  "extensions": {
-    "connections": [{"id":"cloud","title":"Example Cloud","icon":"cloud"}],
-    "vfs": [{"id":"remote","title":"Cloud Files"}],
-    "info": [{"id":"cloud-info","title":"Remote Properties"}],
-    "decorations": true
-  }
+  "permissions": {},
+  "extensions": {}
 }
 ```
 
-该实例同时注册连接入口、VFS 文件树、标准 Info 以及目录装饰。单独注册 `connections` 不自动创建 VFS；只有 VFS 注册的 Provider 能处理相应文件树协议。
+- `id` 是唯一插件身份，也是所有贡献身份。
+- 有 native 后端的插件必须有 `runtime.entrypoints`；纯主题插件可以没有 runtime。
+- `schemaVersion` 当前为 `2`，IPC 协议版本为 `3.0`。
 
-## 2. 扩展点
+## 扩展点
 
-| 字段 | 类型 | 触发与返回 |
-|---|---|---|
-| `extensions.contextMenus` | `true` | 用户右键 → `contextMenu.resolve` 返回扁平 items；点 action → `contextMenu.execute` |
-| `extensions.decorations` | `true` | 每次切换目录 → 标准可见成员 Context → `decorations.resolve` |
-| `extensions.info` | `[{id,title,extensions?,mimeTypes?,priority?}]` | 用户打开简介 → 标准 InfoContext → InfoResponse |
-| `extensions.preview` | 同上 | 用户打开预览 → 标准 PreviewContext → PreviewView |
-| `extensions.connections` | `[{id,title,icon?}]` | 添加连接 + 或侧栏点击 → `connection.create/open` → NavigationTarget |
-| `extensions.vfs` | `[{id,title}]` | VFS Broker 的 mount/list/stat/read/write 处理器 |
-| `extensions.search` | `[{id,title,command?}]` | 当前限定 root 的 `search.query` |
-| `extensions.toolbar` | `[{id,title,icon?,command}]` | 点击工具栏按钮时执行命令 |
-| `extensions.themes` | `[{id,title,entry}]` | 加载经过审核的主题资产 |
-| `extensions.settings` | `[{id,title,command?}]` | 插件设置入口 |
-| `extensions.hooks` | `[{id,event,priority?}]` | 文件操作生命周期中的特定钩子 |
+所有扩展点都在 `extensions` 下注册，**每插件最多一个贡献**。
 
-注册不等于权限。插件可注册多个 Info/Preview/VFS 来源，其 ID 在该插件内唯一。Manifest 不声明每个具体 iframe 页面，也不需要标记某个扩展点是 UI 还是服务。
+| 扩展点         | 形态                                               | Core 固定调用                                 |
+| -------------- | -------------------------------------------------- | --------------------------------------------- |
+| `contextMenus` | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute` |
+| `decorations`  | `{match?, priority?}`                              | `decorations.resolve`                         |
+| `info`         | `{match?, priority?}`                              | `info.resolve`                                |
+| `preview`      | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                |
+| `connections`  | `{title, fields}`                                  | `connection.validate/open/create`             |
+| `vfs`          | `{title, readOnly?}`                               | `vfs.list/stat/read…`                         |
+| `search`       | `{icon?, scope?}`                                  | `search.query`                                |
+| `toolbar`      | `{title, icon?, panel?}`                           | `toolbar.invoke`，有 panel 时打开面板         |
+| `themes`       | `{path}`                                           | 主题资产加载                                  |
+| `settings`     | `[{id,label,type,…}]`                              | 设置字段；字段 id 是存储 key                  |
+| `hooks`        | `{event, priority?, match?}`                       | `hooks.invoke`（`beforeOpen` 可消费打开）     |
+| `ui`           | `{timeoutMs?}`                                     | 面板桥接与单次插件请求的超时预算              |
 
-## 3. 权限模型
+不再接受：
 
-| 路径 | 含义 |
-|---|---|
-| `permissions.metadata.enabled` | 文件与文件夹共用的 stat 属性读取授权 |
-| `permissions.files.read/write/create/delete/rename.enabled` | 文件内容与文件对象操作，逐项分别批准 |
-| `permissions.folders.read/create/delete/rename.enabled` | 目录遍历与目录对象操作，逐项分别批准 |
-| `permissions.network.enabled/domains` | HTTP/TCP 经 Core 网络代理访问的目标 |
-| `permissions.commands.enabled/allow` | Core 执行外部命令的高风险授权 |
-| `permissions.hooks.enabled` | 特定宿主生命周期钩子授权（如需要） |
+- `connections`/`vfs`/`toolbar`/`search`/`hooks` 的数组；
+- `info`/`preview`/`connections`/`vfs`/`toolbar`/`search`/`hooks` 的贡献 `id`；
+- `toolbar.command`、`info.command`、`hooks.method`、`search.command`、`search.title`、`info.title`、`preview.title`。
 
-每个文件/目录权限项均是带 `enabled` 的对象；其中 `files.create` 是创建不存在的文件，不表示可覆盖现有文件，`files.write` 是修改已存在文件。权限授权实际有效范围 = **Manifest 申请 ∩ 用户批准 ∩ 本次 EventScope/OperationScope ∩ PermissionPolicy 的对象和方法规则**。Metadata 不意味着可读取内容或列举任意目录。
+## 各扩展点示例
 
-## 4. 标准事件的输入
-
-`info`、`preview` 和 `decorations` 的上下文结构由 Core 的标准 Schema 预先定义，插件注册事件即可，不需要在 Manifest 另外列 `inputs`。
-
-- **Info / Preview**：ResourceRef、会话信息、获准的基础 Metadata；如已获准读取本次文件，可提供受限只读流引用。完整文件内容从来不以 JSON 内联。
-- **Decorations**：本次目录及当前可见文件/文件夹的 ResourceRef 与获准 Metadata；无 Metadata 授权时仍接到事件，但不会收到受保护的属性。
-- **ContextMenus**：默认只提供 Session、当前目标与选择集合的 opaque ResourceRef；插件使用通用 SDK 申请额外数据。右键查询期间可以申请所选对象 stat，不能借此读文件字节。
-- **Connection**：只提供连接实例引用及交互 Session；导航目标由插件选择。
-- **自定义 HTML**：不在 Manifest 预定义输入合同；UI 使用它所属操作的 ResourceRef，并通过受控 UI Bridge/SDK 按需申请资源。
-
-标准事件的候选字段先由 ContextBuilder 收集，然后由独立 PermissionPolicy 根据插件授权和具体 Scope 做字段投影，再交给 PluginRuntime 发送。相同一个目录的候选 Metadata 可以缓存复用，**插件间的批准结果不可复用**。
-
-## 5. Connection 导航的唯一两种结果
+### Info
 
 ```json
-{
-  "kind": "vfs",
-  "mountId": "m-opaque",
-  "nodeRef": {"mountId": "m-opaque", "nodeId": "root"}
+"info": {
+  "priority": 80,
+  "match": { "extensions": ["txt", "md"], "kinds": ["file"] }
+}
+```
+
+### Preview
+
+```json
+"preview": {
+  "priority": 60,
+  "maxBytes": 1048576,
+  "match": { "extensions": ["txt"], "kinds": ["file"] },
+  "panel": { "entry": "ui/preview.html", "title": "Text" },
+  "loading": { "entry": "ui/loading.html" }
+}
+```
+
+`loading` 是可选的**加载页**，与 `panel`（预览面板入口）相互独立：
+
+- 声明后，Core 在调用 `preview.open` 前先解析该文档，并直接在 Core 拥有的沙箱 iframe 中打开，而不是先显示 Core 自己的加载/空白预览；`preview.open` 返回合法结果后再切换为最终预览。
+- `loading.entry` 只能是插件包内的相对路径（仅普通路径段，不能是 URL、绝对路径、盘符、`..` 或反斜杠），读取时还会做 canonical 包含检查；文档上限 1 MiB。
+- 加载页是自包含 HTML，不携带预览 Session，不能调用 `plugin.invoke`、文件、网络或命令；只能通过面板桥读取 `context.get`（文件展示名/扩展名）、`theme.get`/`theme.changed` 以及 `plugin.error`。
+- 没有 `loading` 的旧声明保持原行为：Core 显示内置加载态，直到 `preview.open` 返回。
+- 声明了 `loading` 时，Core 会先显示加载页，再在后台加载真正的预览 iframe；插件在首次数据渲染完成后调用桥接方法 `preview.ready`，Core 才移除加载页。这样不会出现“插件自己的 spinner/空壳”阶段。
+- `preview.ready` 只能由真正的预览会话调用，加载页没有预览 Session，不能调用；30 秒未收到时 Core 会兜底显示预览，避免第三方插件不实现时永久卡住。
+
+### Connections
+
+```json
+"connections": {
+  "title": "WebDAV",
+  "fields": [
+    { "id": "url", "label": "服务器", "type": "url", "required": true },
+    { "id": "username", "label": "用户名", "type": "text" },
+    { "id": "password", "label": "密码", "type": "secret" }
+  ]
+}
+```
+
+字段类型：`text | url | number | checkbox | secret`。`secret` 只进入系统钥匙串，不写入普通 settings。
+
+### VFS
+
+```json
+"vfs": { "title": "WebDAV", "readOnly": false }
+```
+
+连接想返回文件树时必须同时注册 `connections` 和 `vfs`。
+
+### Toolbar / Search / Hooks
+
+```json
+"toolbar": {
+  "title": "Git",
+  "icon": "git-branch",
+  "panel": { "entry": "ui/git.html", "title": "Git" }
 }
 ```
 
 ```json
-{
-  "kind": "pluginView",
-  "view": {"source":"package","entry":"ui/account.html"},
-  "state": {"connectionId":"account-1"}
+"search": { "icon": "magnifying-glass", "scope": "global" }
+```
+
+```json
+"hooks": {
+  "event": "beforeOpen",
+  "priority": 100,
+  "match": { "extensions": ["zip"], "kinds": ["file"] }
 }
 ```
 
-`kind` 枚举**只有** `vfs` 与 `pluginView`。后者由 Core ContentHost 用插件 iframe **完全替换右侧主内容区**（包含原目录面包屑/工具栏/列表），保留左侧导航和全局标签页。插件不能借 Connection 导航打开部分宽度 Panel、对话框或任意外部 URL。用户点击连接加号同样由 `connection.create` 选择此二选一结果；登录配置界面可以是 `pluginView`。
+### UI timeout
 
-Core 校验目标 mount 的插件/连接归属、iframe 资源所属包、当前交互身份和会话有效期，执行导航并记录标签页历史。单独的通用 `host.ui.open` 可用于**其他**明确用户触发的 UI 操作，但不属于 Connection 导航返回类型。
+```json
+"ui": { "timeoutMs": 300000 }
+```
 
-## 6. 动态右键菜单
+`timeoutMs` 表示一次插件 UI 请求（面板握手、`plugin.invoke`、预览列举）允许的
+最长时间，取值 1000–900000，默认 15000。Core 用它设置面板桥接超时，并把该插件
+单次 RPC 的默认截止时间（120000）提高到至少该值（只延长、不缩短），同时通过
+`context.get` 的 `uiTimeoutMs` 字段告诉插件 UI，使插件自己的请求计时器与 Core
+一致。只有确实需要长时间列举/预览的插件（例如压缩包目录）才应调大该值。
 
-`extensions.contextMenus: true` 只注册事件。菜单项由插件实时返回 `{items:[...]}`，每项可为 `action/submenu/separator`；子菜单使用 `parentId`，不内嵌脚本。Core 按 owner、Session、item ID 和资源身份校验执行。菜单请求里不含完整文件内容，具体读取/写入必须在有效用户操作中经 Broker 授权。
+### Themes
 
-## 7. Schema 验收
+```json
+"themes": { "path": "theme.json" }
+```
 
-- `extensions` 是唯一扩展注册容器；`permissions` 是唯一宿主权限声明位置。
-- `Connection NavigationTarget` 仅接受两种枚举；不依赖特殊插件 ID。
-- `ContextMenu`、Info、Preview、Decoration 的输入输出 DTO 均有对应版本化 Schema 和合同测试。
-- 所有 Registry 注销、会话失效、插件禁用和权限撤销均触发视图及资源清理。
+主题包只能包含一个主题文件；主题 id、名称和 token 在 `theme.json` 内定义。
+
+## 权限模型
+
+| 路径                                            | 含义                                  |
+| ----------------------------------------------- | ------------------------------------- |
+| `metadata.enabled`                              | 文件和文件夹共用的属性读取            |
+| `files.read/write/create/delete/rename.enabled` | 文件内容/对象操作，逐项批准           |
+| `folders.read/create/delete/rename.enabled`     | 目录遍历/对象操作，逐项批准           |
+| `network.enabled/domains/all`                   | HTTP/TCP 访问目标；`all` 表示任意主机 |
+| `commands.enabled/allow`                        | Core 代理执行外部命令                 |
+| `hooks.enabled`                                 | 生命周期钩子                          |
+
+申请不等于批准，批准也不等于资源范围。实际有效范围：
+
+```text
+Manifest 申请 ∩ 安装时批准的声明快照 ∩ 用户 Grant
+  ∩ PermissionPolicy ∩ 当前 Event/Operation Scope
+```
+
+- 安装/升级批准会记录当时的声明快照；之后 Manifest 即使新增权限，运行时也不能获得，必须替换为新版本并重新走安装/升级授权。
+- 用户关闭单个权限不会停用插件；下一次真实操作用 Core 统一弹窗重新申请。
+- 未声明的权限永远不会出现弹窗，直接拒绝。
+- `commands.allow` 是命令的硬上限；`network` 的精确主机由 Operation Scope 和用户授权共同决定。
+
+### 网络白名单与全部网络
+
+```json
+"network": { "enabled": true, "domains": ["api.example.com"] }
+```
+
+```json
+"network": { "enabled": true, "all": true, "domains": [] }
+```
+
+`all: true` 在安装/激活界面标红警告；用户仍可切换为白名单。网络连接必须经 `ctx.http()` / `ctx.tcp()`，由 Core Broker 建立。
+
+## 校验规则
+
+Manifest 在安装、加载和插件进程启动前都会校验；未知/旧字段不会被静默接受，类型错误、路径逃逸、重复/保留 id 和不合法域名会直接拒绝。

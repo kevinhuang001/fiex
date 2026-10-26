@@ -131,6 +131,8 @@ export interface Preferences {
   ide: string
   theme: 'system' | 'light' | 'dark'
   themeId?: string
+  backgroundImage: string
+  backgroundOpacity: number
   fontSize: number
   startPage: StartPage
   displayIgnore: string[]
@@ -165,6 +167,8 @@ export interface RemoteConnection {
   kind: string
   pluginId: string
   mountPath: string
+  saved?: boolean
+  autostart?: boolean
 }
 
 export interface GitRefs {

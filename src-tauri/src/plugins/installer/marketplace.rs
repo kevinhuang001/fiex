@@ -20,7 +20,7 @@ pub struct MarketplacePlugin {
     pub requested_network_domains: Vec<String>,
     pub commands: Vec<String>,
     #[serde(default)]
-    pub contributions: serde_json::Value,
+    pub extensions: serde_json::Value,
     pub asset: String,
     pub repository: String,
 }
@@ -339,8 +339,8 @@ fn catalog_entries(
             permissions,
             requested_network_domains,
             commands,
-            contributions: plugin
-                .get("contributions")
+            extensions: plugin
+                .get("extensions")
                 .cloned()
                 .unwrap_or(serde_json::Value::Null),
             asset: asset.into(),
@@ -379,7 +379,7 @@ fn fallback_marketplace(
             permissions: Vec::new(),
             requested_network_domains: Vec::new(),
             commands: Vec::new(),
-            contributions: serde_json::Value::Null,
+            extensions: serde_json::Value::Null,
             asset: name.into(),
             repository: repository.into(),
         });
@@ -424,7 +424,7 @@ mod description_tests {
     #[test]
     fn parses_release_descriptions_by_plugin_id() {
         let map = parse_descriptions(
-            r#"{"schemaVersion":1,"plugins":[{"id":"org.fiex.git","description":"源代码管理"},{"id":"bad id","description":"x"}]}"#.as_bytes(),
+            r#"{"schemaVersion":2,"plugins":[{"id":"org.fiex.git","description":"源代码管理"},{"id":"bad id","description":"x"}]}"#.as_bytes(),
         );
         assert_eq!(
             map.get("org.fiex.git").map(String::as_str),

@@ -28,7 +28,7 @@ export function PluginSettings() {
   const categories = useMemo(() => {
     const counts = new Map<string, number>()
     for (const plugin of plugins) {
-      for (const id of pluginCategories(plugin.contributions, plugin.requestedCommands)) {
+      for (const id of pluginCategories(plugin.extensions, plugin.requestedCommands)) {
         counts.set(id, (counts.get(id) || 0) + 1)
       }
     }
@@ -39,11 +39,31 @@ export function PluginSettings() {
       category === 'all'
         ? plugins
         : plugins.filter((plugin) =>
-            pluginCategories(plugin.contributions, plugin.requestedCommands).includes(category),
+            pluginCategories(plugin.extensions, plugin.requestedCommands).includes(category),
           ),
     [plugins, category],
   )
   const [storeOpen, setStoreOpen] = useState(false)
+  const [storeCategory, setStoreCategory] = useState('all')
+  useEffect(() => {
+    const openStore = (event: Event) => {
+      const detail = (event as CustomEvent<{ category?: string }>).detail
+      const next = detail?.category || 'connections'
+      sessionStorage.removeItem('fiex:open-plugin-store')
+      setCategory(next)
+      setStoreCategory(next)
+      setStoreOpen(true)
+    }
+    const pending = sessionStorage.getItem('fiex:open-plugin-store')
+    if (pending) {
+      sessionStorage.removeItem('fiex:open-plugin-store')
+      setCategory(pending)
+      setStoreCategory(pending)
+      setStoreOpen(true)
+    }
+    window.addEventListener('fiex:open-plugin-store', openStore)
+    return () => window.removeEventListener('fiex:open-plugin-store', openStore)
+  }, [])
   const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
@@ -67,7 +87,6 @@ export function PluginSettings() {
   const [activationFor, setActivationFor] = useState<PluginInfo | null>(null)
   const [commandToApprove, setCommandToApprove] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<PluginInfo | null>(null)
-
   const chooseLocalPlugin = async () => {
     setBusy(true)
     setMessage('')
@@ -107,7 +126,7 @@ export function PluginSettings() {
     setLocalPreview(null)
   }
 
-  const fields = settingsFor?.contributions?.settings || []
+  const fields = settingsFor?.extensions?.settings || []
   useEffect(() => {
     if (!settingsFor) return
     let alive = true
@@ -210,6 +229,18 @@ export function PluginSettings() {
       setBusy(false)
     }
   }
+  const updateNetworkAll = async (plugin: PluginInfo, all: boolean) => {
+    setBusy(true)
+    setMessage('')
+    try {
+      await call('plugin_set_network_all', { pluginId: plugin.id, all })
+      refreshPluginCatalog()
+    } catch (error) {
+      setMessage(String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
   const updateCommand = async (plugin: PluginInfo, command: string, granted: boolean) => {
     if (granted && commandToApprove !== command) {
       setCommandToApprove(command)
@@ -295,8 +326,9 @@ export function PluginSettings() {
         <PluginStoreToolbar
           onImport={() => void chooseLocalPlugin()}
           onOpenStore={() => setStoreOpen(true)}
-        />
-        <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
+        >
+          <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
+        </PluginStoreToolbar>
         <PluginList
           plugins={shown}
           busy={busy}
@@ -323,10 +355,11 @@ export function PluginSettings() {
       <PluginStore
         open={storeOpen}
         installed={plugins}
+        initialCategory={storeCategory}
         onClose={() => setStoreOpen(false)}
         onInstalled={() => {
           refreshPluginCatalog()
-          setMessage('插件已安装，尚未激活。点击激活后逐项审核权限。')
+          setMessage('插件已安装，尚未激活。点击激活后可逐项选择权限。')
         }}
       />
 
@@ -361,6 +394,7 @@ export function PluginSettings() {
             onDraftChange={setDomainDraft}
             onToggle={(domain, granted) => void updateDomain(permissionsFor, domain, granted)}
             onAdd={(domain) => void updateDomain(permissionsFor, domain, true)}
+            onToggleAll={(all) => void updateNetworkAll(permissionsFor, all)}
             onClose={() => setDomainSettingsOpen(false)}
           />
         )}

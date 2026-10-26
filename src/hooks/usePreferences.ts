@@ -23,6 +23,8 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     ide: 'vscode',
     theme: 'system',
     themeId: '',
+    backgroundImage: '',
+    backgroundOpacity: 0.6,
     fontSize: 11,
     startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
@@ -55,6 +57,10 @@ function load(): Preferences {
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
+    const backgroundOpacity =
+      typeof stored.backgroundOpacity === 'number'
+        ? Math.min(1, Math.max(0.05, stored.backgroundOpacity))
+        : fallback.backgroundOpacity
     const shortcuts: ShortcutMap = defaultShortcuts(style)
     if (stored.shortcuts && typeof stored.shortcuts === 'object') {
       for (const action of SHORTCUT_ACTIONS) {
@@ -75,12 +81,25 @@ function load(): Preferences {
         ? stored.startPage
         : 'recent'
     const tags = normalizeTags(stored.tags) ?? fallback.tags
+    // In the plain Vite dev URL, show the built-in dog once as a demo. An
+    // explicit backgroundImage (including "") in stored preferences wins.
+    const demoDog =
+      demo &&
+      !new URLSearchParams(location.search).has('demo') &&
+      !localStorage.getItem('fiex:background-removed')
+        ? '/demo/dog.svg'
+        : ''
     return {
       ...fallback,
       ...Object.fromEntries(Object.entries(stored).filter(([key]) => key in fallback)),
       tags,
       startPage,
       fontSize,
+      backgroundImage:
+        typeof stored.backgroundImage === 'string' && stored.backgroundImage
+          ? stored.backgroundImage
+          : demoDog,
+      backgroundOpacity,
       displayIgnore: Array.isArray(stored.displayIgnore)
         ? stored.displayIgnore
         : fallback.displayIgnore,

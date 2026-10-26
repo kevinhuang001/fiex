@@ -14,43 +14,17 @@ const fixturePlugin: DemoPlugin = {
   requestedNetworkDomains: [],
   allowedNetworkDomains: [],
   author: { name: 'Fiex Fixtures' },
-  contributions: {
-    toolbar: [
-      {
-        id: 'fixture.tool',
-        title: '测试工具',
-        icon: 'puzzle-piece',
-        panel: { entry: 'ui/index.html', title: '测试工具' },
-      },
-    ],
-    search: [
-      {
-        id: 'fixture.search',
-        title: 'Fixture Index',
-        icon: 'magnifying-glass',
-        scope: 'global',
-        command: 'search.query',
-      },
-    ],
-    contextMenus: [
-      {
-        id: 'fixture.root',
-        title: '测试插件',
-        when: 'context.selection.count > 0',
-        children: [
-          {
-            id: 'fixture.panel',
-            title: '信息面板',
-            panel: {
-              entry: 'ui/index.html',
-              title: '信息面板',
-              defaultSize: { width: 620, height: 560 },
-            },
-          },
-          { id: 'fixture.action', title: '检查文件', command: 'fixture.inspect' },
-        ],
-      },
-    ],
+  extensions: {
+    toolbar: {
+      title: '测试工具',
+      icon: 'puzzle-piece',
+      panel: { entry: 'ui/index.html', title: '测试工具' },
+    },
+    search: {
+      icon: 'magnifying-glass',
+      scope: 'global',
+    },
+    contextMenus: true,
   },
 }
 
@@ -90,16 +64,13 @@ export const fixturePlugins: DemoPlugin[] = [
     requestedCommands: ['git'],
     allowedCommands: ['git'],
     author: { name: 'Fiex Contributors' },
-    contributions: {
-      vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
-      toolbar: [
-        {
-          id: 'git.main',
-          title: '源代码管理',
-          icon: 'git-branch',
-          command: 'git.status',
-        },
-      ],
+    extensions: {
+      vfs: { title: 'Git 历史', readOnly: true },
+      toolbar: {
+        title: '源代码管理',
+        icon: 'git-branch',
+        command: 'git.status',
+      },
       settings: [
         { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
       ],
@@ -119,16 +90,8 @@ export const fixturePlugins: DemoPlugin[] = [
     requestedNetworkDomains: [],
     allowedNetworkDomains: [],
     author: { name: 'Fiex Contributors' },
-    contributions: {
-      contextMenus: [
-        {
-          id: 'checksum.calculate',
-          title: '查看校验和',
-          when: 'context.selection.isFile',
-          command: 'checksum.calculate',
-          resultView: 'checksum',
-        },
-      ],
+    extensions: {
+      contextMenus: true,
     },
   },
 ]

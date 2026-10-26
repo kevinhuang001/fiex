@@ -16,17 +16,25 @@ export interface PluginPanel {
   defaultSize?: { width: number; height: number }
 }
 export interface PluginContribution {
-  id: string
   title: string
   icon?: string
-  command?: string
   panel?: PluginPanel
-  children?: PluginContribution[]
+}
+export interface PluginLoadingPage {
+  /** Package-relative entry validated by Core like a panel document. */
+  entry: string
+}
+export interface PluginPreviewContribution {
+  /** New match object; the flat legacy `extensions` key is still accepted. */
+  match?: { extensions?: string[]; mimeTypes?: string[]; kinds?: string[] }
+  extensions?: string[]
+  priority?: number
+  maxBytes?: number
+  panel?: PluginPanel
+  /** Optional document shown while `preview.open` is still running. */
+  loading?: PluginLoadingPage
 }
 export interface PluginInfoContribution {
-  id: string
-  title: string
-  command: string
   extensions?: string[]
   priority?: number
 }
@@ -40,7 +48,7 @@ export interface MarketplacePlugin {
   permissions: string[]
   requestedNetworkDomains: string[]
   commands: string[]
-  contributions?: PluginContributions
+  extensions?: PluginExtensions
   asset: string
   repository: string
 }
@@ -57,37 +65,34 @@ export interface PluginInfo {
   approved: boolean
   declaredPermissions: string[]
   grantedPermissions: string[]
+  requestedNetworkAll: boolean
   requestedNetworkDomains: string[]
+  allowedNetworkAll: boolean
   allowedNetworkDomains: string[]
   requestedCommands: string[]
   allowedCommands: string[]
   /** Requested commands that Core cannot resolve on PATH right now. */
   missingCommands: string[]
   backendAvailable: boolean
-  contributions?: PluginContributions
+  /** Bounded `extensions.ui.timeoutMs` budget negotiated by Core. */
+  uiTimeoutMs: number
+  extensions?: PluginExtensions
 }
-export interface PluginContributions {
-  connections?: Array<{ id: string; title: string; fields: PluginField[] }>
-  toolbar?: PluginContribution[]
-  contextMenus?: PluginContribution[]
-  search?: Array<{ id: string; title: string; icon?: string }>
+export interface PluginExtensions {
+  /** Explicit UI/backend request budget for slow providers. */
+  ui?: { timeoutMs?: number }
+  connections?: { title: string; fields: PluginField[] }
+  toolbar?: PluginContribution
+  contextMenus?: boolean
+  search?: { icon?: string; scope?: string }
   settings?: PluginField[]
-  hooks?: Array<{
-    id: string
+  hooks?: {
     event: 'beforeOpen'
-    method: string
     priority?: number
     extensions?: string[]
-  }>
-  preview?: Array<{
-    id: string
-    title?: string
-    extensions: string[]
-    priority?: number
-    maxBytes?: number
-    panel: { entry: string; title?: string; defaultSize?: { width: number; height: number } }
-  }>
-  info?: PluginInfoContribution[]
+  }
+  preview?: PluginPreviewContribution
+  info?: PluginInfoContribution
 }
 export const PLUGIN_CATEGORIES = [
   { id: 'info', label: '简介' },
@@ -100,14 +105,11 @@ export const PLUGIN_CATEGORIES = [
   { id: 'themes', label: '主题' },
   { id: 'commands', label: '命令' },
 ] as const
-export function pluginCategories(
-  contributions?: PluginContributions,
-  commands: string[] = [],
-): string[] {
+export function pluginCategories(extensions?: PluginExtensions, commands: string[] = []): string[] {
   const present = PLUGIN_CATEGORIES.filter(({ id }) => {
     if (id === 'commands') return false
-    const value = contributions?.[id as keyof PluginContributions]
-    return Array.isArray(value) && value.length > 0
+    const value = extensions?.[id as keyof PluginExtensions]
+    return Boolean(value) && (Array.isArray(value) ? value.length > 0 : true)
   }).map(({ id }) => id)
   if (!present.length && commands.length) present.push('commands')
   return present

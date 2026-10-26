@@ -9,10 +9,12 @@ export interface DemoPlugin {
 
   declaredPermissions: string[]
   grantedPermissions: string[]
+  requestedNetworkAll?: boolean
   requestedNetworkDomains: string[]
+  allowedNetworkAll?: boolean
   allowedNetworkDomains: string[]
   requestedCommands?: string[]
   allowedCommands?: string[]
   author?: { name: string; url?: string }
-  contributions?: Record<string, unknown>
+  extensions?: Record<string, unknown>
 }

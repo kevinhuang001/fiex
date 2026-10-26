@@ -29,6 +29,7 @@ fn main() {
         .find(|(m, _)| m.id == id)
         .unwrap();
     let consent = plugin_host::activation_requirements(&manifest).unwrap();
+    plugin_host::approve_install(&id).expect("install approval failed");
     plugin_host::activate(&id, &consent).expect("permission activation failed");
     let pong = plugin_host::global()
         .invoke(&id, "plugin.ping", json!({}))

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#bfe0ff"/>
+      <stop offset="0.5" stop-color="#e9f2ff"/>
+      <stop offset="1" stop-color="#ffe8cf"/>
+    </linearGradient>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e0a25c"/>
+      <stop offset="1" stop-color="#bd7435"/>
+    </linearGradient>
+    <linearGradient id="cream" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff3dd"/>
+      <stop offset="1" stop-color="#f4d3a4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <circle cx="1240" cy="210" r="120" fill="#fff8e7" opacity="0.8"/>
+  <path d="M0 820 C260 740 500 850 760 800 C1080 738 1320 860 1600 780 L1600 1000 L0 1000 Z" fill="#d7e8d2" opacity="0.65"/>
+
+  <!-- dog body -->
+  <ellipse cx="800" cy="770" rx="290" ry="190" fill="url(#fur)"/>
+  <ellipse cx="800" cy="805" rx="170" ry="135" fill="url(#cream)"/>
+
+  <!-- tail -->
+  <path d="M1060 760 C1180 690 1225 555 1165 500 C1110 450 1050 520 1095 585" fill="none" stroke="#c98040" stroke-width="54" stroke-linecap="round"/>
+  <path d="M1090 700 C1165 650 1190 565 1160 535" fill="none" stroke="#e8b77a" stroke-width="22" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- legs -->
+  <rect x="640" y="860" width="92" height="140" rx="46" fill="#c98040"/>
+  <rect x="860" y="860" width="92" height="140" rx="46" fill="#c98040"/>
+  <ellipse cx="686" cy="990" rx="66" ry="24" fill="#f4d3a4"/>
+  <ellipse cx="906" cy="990" rx="66" ry="24" fill="#f4d3a4"/>
+
+  <!-- ears -->
+  <path d="M565 400 C470 330 390 390 430 520 C455 600 540 610 590 555 Z" fill="#a9632d"/>
+  <path d="M1035 400 C1130 330 1210 390 1170 520 C1145 600 1060 610 1010 555 Z" fill="#a9632d"/>
+
+  <!-- head -->
+  <ellipse cx="800" cy="465" rx="250" ry="230" fill="url(#fur)"/>
+  <path d="M570 500 C560 620 650 700 800 700 C950 700 1040 620 1030 500 Z" fill="url(#cream)"/>
+  <ellipse cx="800" cy="575" rx="155" ry="120" fill="#fff7e8"/>
+
+  <!-- eyes -->
+  <ellipse cx="700" cy="455" rx="36" ry="42" fill="#2c2118"/>
+  <ellipse cx="900" cy="455" rx="36" ry="42" fill="#2c2118"/>
+  <circle cx="713" cy="441" r="11" fill="#fff"/>
+  <circle cx="913" cy="441" r="11" fill="#fff"/>
+  <circle cx="687" cy="470" r="6" fill="#fff" opacity="0.75"/>
+  <circle cx="887" cy="470" r="6" fill="#fff" opacity="0.75"/>
+
+  <!-- brows -->
+  <path d="M655 395 Q700 370 745 395" fill="none" stroke="#8b4f22" stroke-width="14" stroke-linecap="round" opacity="0.75"/>
+  <path d="M855 395 Q900 370 945 395" fill="none" stroke="#8b4f22" stroke-width="14" stroke-linecap="round" opacity="0.75"/>
+
+  <!-- nose / mouth -->
+  <ellipse cx="800" cy="555" rx="55" ry="40" fill="#2c2118"/>
+  <ellipse cx="785" cy="545" rx="14" ry="9" fill="#615349"/>
+  <path d="M800 592 L800 625 M800 625 C770 655 735 650 715 625 M800 625 C830 655 865 650 885 625" fill="none" stroke="#2c2118" stroke-width="12" stroke-linecap="round"/>
+  <path d="M770 645 C790 690 810 690 830 645 Z" fill="#ef7d86"/>
+  <path d="M788 652 C797 672 803 672 812 652 Z" fill="#d85b67" opacity="0.8"/>
+
+  <!-- cheeks -->
+  <ellipse cx="625" cy="560" rx="42" ry="22" fill="#e8837d" opacity="0.35"/>
+  <ellipse cx="975" cy="560" rx="42" ry="22" fill="#e8837d" opacity="0.35"/>
+
+  <!-- collar -->
+  <path d="M610 720 C690 770 910 770 990 720" fill="none" stroke="#2f6fed" stroke-width="36" stroke-linecap="round"/>
+  <circle cx="800" cy="765" r="42" fill="#ffd166" stroke="#e0a800" stroke-width="8"/>
+  <circle cx="800" cy="765" r="13" fill="#e0a800"/>
+
+  <!-- foreground grass -->
+  <path d="M0 940 C220 880 420 960 620 920 C880 865 1080 950 1280 910 C1410 885 1510 910 1600 890 L1600 1000 L0 1000 Z" fill="#93b98c" opacity="0.75"/>
+</svg>

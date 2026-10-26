@@ -17,7 +17,7 @@ export const marketplace = [
     requestedNetworkDomains: ['github.com'],
     asset: 'git-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    contributions: {
+    extensions: {
       vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
       toolbar: [
         {
@@ -52,18 +52,15 @@ export const marketplace = [
     asset: 'webdav-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
-      connections: [
-        {
-          id: 'webdav',
-          title: 'WebDAV',
-          fields: [
-            { id: 'url', label: '服务器地址', type: 'url', required: true },
-            { id: 'username', label: '用户名', type: 'text' },
-            { id: 'password', label: '密码', type: 'secret' },
-          ],
-        },
-      ],
+    extensions: {
+      connections: {
+        title: 'WebDAV',
+        fields: [
+          { id: 'url', label: '服务器地址', type: 'url', required: true },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'password', label: '密码', type: 'secret' },
+        ],
+      },
     },
   },
   {
@@ -86,19 +83,16 @@ export const marketplace = [
     asset: 'smb-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
-      connections: [
-        {
-          id: 'smb',
-          title: 'SMB 网络共享',
-          fields: [
-            { id: 'host', label: '主机', type: 'text', required: true },
-            { id: 'share', label: '共享名', type: 'text', required: true },
-            { id: 'username', label: '用户名', type: 'text' },
-            { id: 'password', label: '密码', type: 'secret' },
-          ],
-        },
-      ],
+    extensions: {
+      connections: {
+        title: 'SMB 网络共享',
+        fields: [
+          { id: 'host', label: '主机', type: 'text', required: true },
+          { id: 'share', label: '共享名', type: 'text', required: true },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'password', label: '密码', type: 'secret' },
+        ],
+      },
     },
   },
   {
@@ -119,7 +113,7 @@ export const marketplace = [
     asset: 'archive-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
+    extensions: {
       contextMenus: [
         {
           id: 'archive.compress',
@@ -157,7 +151,7 @@ export const marketplace = [
     asset: 'checksum-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
 
-    contributions: {
+    extensions: {
       info: [
         {
           id: 'checksum.info',

@@ -119,6 +119,15 @@ pub(crate) async fn open_in_ide(path: String, id: String) -> Result<(), String> 
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
+pub(crate) fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "无效的链接")?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("只允许打开 http/https 链接".into());
+    }
+    open::that(url).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) fn open_terminal(path: String, id: String) -> Result<(), String> {
     crate::mounts::reject_local(&path)?;
     terminals::launch(&path, &id)
