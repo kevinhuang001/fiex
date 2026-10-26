@@ -743,6 +743,22 @@
   font-family: ui-monospace, monospace;
   word-break: break-all;
 }
+.plugin-signature-note {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 11px;
+}
+.plugin-signature-note strong {
+  color: var(--text);
+}
+.plugin-signature-note span {
+  color: var(--muted);
+  line-height: 1.5;
+}
 .plugin-signature-ok {
   padding: 8px 10px;
   border-radius: 8px;
