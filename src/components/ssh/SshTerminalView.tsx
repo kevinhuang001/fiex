@@ -287,4 +287,3 @@ export function TerminalView({
 }
 
 // Backwards-compatible name for existing SSH call sites.
-export const SshTerminalView = TerminalView

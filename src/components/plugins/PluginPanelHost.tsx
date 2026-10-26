@@ -13,7 +13,6 @@ import {
 import type { PluginPanelRequest } from './panel/usePanelSession'
 
 export { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from './panel/usePanelSession'
-export type { PluginPanelRequest } from './panel/usePanelSession'
 
 /** Renders the cached plugin panels and the shared result dialog. Panels are
  * kept mounted so switching between them animates instead of reloading. */

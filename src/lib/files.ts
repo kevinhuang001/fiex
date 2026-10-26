@@ -223,6 +223,3 @@ export function isImage(e: Entry) {
     !['icns', 'ico', 'heic', 'heif', 'tif', 'tiff', 'psd', 'raw'].includes(e.extension)
   )
 }
-export function isText(e: Entry) {
-  return kind(e) === '文本与代码' || ['md', 'log', 'txt', 'csv', 'svg'].includes(e.extension)
-}

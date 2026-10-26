@@ -80,13 +80,6 @@ export interface ConflictResolution {
   key: string
   action: ConflictAction
 }
-export interface GitRemoteStatus {
-  remotes: { name: string; url: string }[]
-  branch: string
-  upstream: string
-  ahead: number
-  behind: number
-}
 export interface DecorationBadge {
   text: string
   color: string
@@ -118,7 +111,7 @@ export interface EntryDecoration {
 export type View = 'list' | 'gallery' | 'columns' | 'icons'
 export type Group = 'none' | 'kind' | 'modified' | 'extension' | 'size'
 export type Sort = 'name' | 'modified' | 'size' | 'kind'
-export type StartPage = 'recent' | 'home' | 'documents' | 'last'
+type StartPage = 'recent' | 'home' | 'documents' | 'last'
 
 export interface Preferences {
   tags: Tag[]
@@ -155,12 +148,6 @@ export interface OperationProgress {
   step?: string
 }
 
-export interface GitStatus {
-  root: string
-  branch: string
-  entries: Record<string, string>
-}
-
 export interface RemoteConnection {
   id: string
   name: string
@@ -169,20 +156,4 @@ export interface RemoteConnection {
   mountPath: string
   saved?: boolean
   autostart?: boolean
-}
-
-export interface GitRefs {
-  head: string
-  current: string
-  branches: string[]
-  tags: string[]
-}
-
-export interface GitCommit {
-  refs: string
-  id: string
-  shortId: string
-  subject: string
-  author: string
-  timestamp: number
 }

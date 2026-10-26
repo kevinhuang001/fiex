@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react'
 import { demo, native } from '@/lib/api'
 import type { OperationProgress } from '@/lib/types'
 
-export type ActivityStatus = 'running' | 'done' | 'error'
+type ActivityStatus = 'running' | 'done' | 'error'
 export type ActivityKind = 'transfer' | 'git' | 'delete' | 'sync' | 'plugin'
 
 export interface ActivityItem {
@@ -191,7 +191,7 @@ export function listActivity(): ActivityItem[] {
   return items
 }
 
-export function clearActivity() {
+function clearActivity() {
   items = items.filter((item) => item.status === 'running')
   persist()
   emit()

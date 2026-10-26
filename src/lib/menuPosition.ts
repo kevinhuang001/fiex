@@ -4,7 +4,7 @@ const MARGIN = 8
 
 /** Keeps a fixed-position menu inside the viewport: clamp on the near edges,
  * flip above/left of the pointer when the menu would overflow the far edges. */
-export function clampMenu(x: number, y: number, width: number, height: number) {
+function clampMenu(x: number, y: number, width: number, height: number) {
   const maxLeft = window.innerWidth - width - MARGIN
   const maxTop = window.innerHeight - height - MARGIN
   const left = x + width + MARGIN > window.innerWidth ? x - width : x

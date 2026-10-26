@@ -29,15 +29,7 @@ function readList(key: string): string[] {
   }
 }
 
-function writeList(key: string, values: string[]) {
-  try {
-    localStorage.setItem(key, JSON.stringify(values))
-  } catch {
-    // Storage is best effort; ordering falls back to Core priority.
-  }
-}
-
-export const previewOrder = () => readList(ORDER_KEY)
+const previewOrder = () => readList(ORDER_KEY)
 export const previewDisabled = () => readList(DISABLED_KEY)
 
 export function orderCandidates(candidates: PreviewCandidate[]): PreviewCandidate[] {
@@ -49,22 +41,4 @@ export function orderCandidates(candidates: PreviewCandidate[]): PreviewCandidat
   return [...candidates].sort(
     (a, b) => rank(a.id) - rank(b.id) || b.priority - a.priority || a.id.localeCompare(b.id),
   )
-}
-
-export function movePreviewer(id: string, delta: number, all: PreviewCandidate[]) {
-  const order = previewOrder().filter((item) => all.some((previewer) => previewer.id === item))
-  const rest = all.map((previewer) => previewer.id).filter((item) => !order.includes(item))
-  const list = [...order, ...rest]
-  const index = list.indexOf(id)
-  const target = Math.min(Math.max(index + delta, 0), list.length - 1)
-  if (index < 0 || index === target) return
-  list.splice(target, 0, ...list.splice(index, 1))
-  writeList(ORDER_KEY, list)
-}
-
-export function togglePreviewer(id: string, enabled: boolean) {
-  const disabled = new Set(previewDisabled())
-  if (enabled) disabled.delete(id)
-  else disabled.add(id)
-  writeList(DISABLED_KEY, [...disabled])
 }

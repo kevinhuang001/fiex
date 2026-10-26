@@ -60,4 +60,4 @@ function Button({
 
 // shadcn exports its variants for composition with calendar day buttons.
 // eslint-disable-next-line react-refresh/only-export-components
-export { Button, buttonVariants }
+export { Button }

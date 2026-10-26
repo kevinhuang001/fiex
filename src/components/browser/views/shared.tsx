@@ -33,7 +33,7 @@ export interface Props {
 }
 
 /** Event bindings shared by every row, tile and column item. */
-export interface RowBindings {
+interface RowBindings {
   onClick: (event: MouseEvent) => void
   onDoubleClick: () => void
   onContextMenu: (event: MouseEvent) => void

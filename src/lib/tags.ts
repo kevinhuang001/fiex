@@ -25,7 +25,7 @@ const COLORS = [
   '#ff9500',
 ]
 
-export function tagColor(color: number): string {
+function tagColor(color: number): string {
   return COLORS[color] || COLORS[0]
 }
 

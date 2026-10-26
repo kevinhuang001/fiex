@@ -125,7 +125,7 @@ export function PluginList({
 }
 
 /** Nothing installed yet: a short pitch plus the store entry point. */
-export function PluginEmptyState({ onBrowseStore }: { onBrowseStore: () => void }) {
+function PluginEmptyState({ onBrowseStore }: { onBrowseStore: () => void }) {
   return (
     <div className="plugin-empty">
       <div className="plugin-empty-icon">

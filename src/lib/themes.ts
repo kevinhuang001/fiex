@@ -45,7 +45,7 @@ export function themeSnapshot() {
   tokens['panel-bg'] = tokens.canvas
   return { mode: document.documentElement.classList.contains('dark') ? 'dark' : 'light', tokens }
 }
-export const THEME_TOKENS = [
+const THEME_TOKENS = [
   'text',
   'muted',
   'surface',

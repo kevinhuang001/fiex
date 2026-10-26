@@ -66,5 +66,4 @@ export function Action({
     </div>
   )
 }
-export const Separator = D.DropdownMenuSeparator
 export const Label = D.DropdownMenuLabel

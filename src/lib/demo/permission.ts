@@ -42,10 +42,7 @@ export function requestDemoPermission(request: DemoPermissionRequest): Promise<b
   })
 }
 
-export function resolveDemoPermission(
-  id: string,
-  allow: boolean,
-): DemoPermissionRequest | undefined {
+function resolveDemoPermission(id: string, allow: boolean): DemoPermissionRequest | undefined {
   const entry = pending.get(id)
   if (!entry) return undefined
   pending.delete(id)

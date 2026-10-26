@@ -12,7 +12,7 @@ import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
 import { PluginPermissionHost } from '@/components/plugins/PluginPermissionHost'
-import { SshTerminalView } from '@/components/ssh/SshTerminalView'
+import { TerminalView } from '@/components/ssh/SshTerminalView'
 import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
@@ -160,7 +160,7 @@ export default function App() {
             hidden={view.index !== app.left.tab}
           >
             {view.terminal ? (
-              <SshTerminalView
+              <TerminalView
                 connectionId={view.terminal}
                 name={
                   app.left.connections.find((connection) => connection.id === view.terminal)

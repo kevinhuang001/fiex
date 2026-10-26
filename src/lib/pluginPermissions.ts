@@ -75,7 +75,7 @@ const activationSections = [
   },
 ] as const
 
-export type ActivationSectionId = (typeof activationSections)[number]['id']
+type ActivationSectionId = (typeof activationSections)[number]['id']
 
 const permissionOrder = [
   'metadata',
@@ -99,7 +99,7 @@ const rank = (value: string) => {
 
 /** Files and folders share one review section; network targets stay with the
  * network capability and commands with the command capability. */
-export function permissionSection(permission: string): ActivationSectionId {
+function permissionSection(permission: string): ActivationSectionId {
   if (permission === 'network') return 'network'
   if (permission === 'commands') return 'commands'
   if (
@@ -111,13 +111,13 @@ export function permissionSection(permission: string): ActivationSectionId {
   return 'other'
 }
 
-export interface ActivationPermission {
+interface ActivationPermission {
   id: string
   label: string
   hint?: string
 }
 
-export interface ActivationCommand {
+interface ActivationCommand {
   name: string
   missing: boolean
 }

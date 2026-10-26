@@ -10,7 +10,7 @@ export interface PluginField {
   defaultValue?: string | boolean | string[]
   required?: boolean
 }
-export interface PluginPanel {
+interface PluginPanel {
   entry: string
   title?: string
   defaultSize?: { width: number; height: number }
@@ -20,11 +20,11 @@ export interface PluginContribution {
   icon?: string
   panel?: PluginPanel
 }
-export interface PluginLoadingPage {
+interface PluginLoadingPage {
   /** Package-relative entry validated by Core like a panel document. */
   entry: string
 }
-export interface PluginPreviewContribution {
+interface PluginPreviewContribution {
   /** New match object; the flat legacy `extensions` key is still accepted. */
   match?: { extensions?: string[]; mimeTypes?: string[]; kinds?: string[] }
   extensions?: string[]
@@ -34,7 +34,7 @@ export interface PluginPreviewContribution {
   /** Optional document shown while `preview.open` is still running. */
   loading?: PluginLoadingPage
 }
-export interface PluginInfoContribution {
+interface PluginInfoContribution {
   extensions?: string[]
   priority?: number
 }
@@ -124,7 +124,7 @@ export function isNewerVersion(candidate: string, installed: string): boolean {
   }
   return false
 }
-export async function pluginCatalog(): Promise<PluginInfo[]> {
+async function pluginCatalog(): Promise<PluginInfo[]> {
   if (!native && !demo) return []
   return call<PluginInfo[]>('plugins_list')
 }
