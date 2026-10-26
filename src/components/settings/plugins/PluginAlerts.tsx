@@ -97,7 +97,20 @@ export function PluginImportDialog({
             {preview.signed ? <ShieldCheck size={16} /> : <ShieldAlert size={16} />}
             <span>
               <strong>{preview.signed ? '插件包已签名' : '插件包未签名'}</strong>
-              请只导入你信任来源的插件，并确认它将获得的权限。
+              {preview.signed && (
+                <>
+                  签名者：
+                  {preview.publisherName || preview.publisher || '未知签名者'}
+                  {(preview.fingerprint || preview.keyId) && (
+                    <>
+                      <br />
+                      密钥指纹：<code>{preview.fingerprint || preview.keyId}</code>
+                    </>
+                  )}
+                  <br />
+                </>
+              )}
+              <em>Core 内置 Ed25519 校验 · 请只导入你信任来源的插件，并确认它将获得的权限。</em>
             </span>
           </div>
           <footer className="plugin-consent-actions">

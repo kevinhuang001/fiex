@@ -759,6 +759,11 @@
   color: var(--muted);
   line-height: 1.5;
 }
+.plugin-signature-note code {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 .plugin-signature-ok {
   padding: 8px 10px;
   border-radius: 8px;

@@ -723,6 +723,19 @@
   flex-shrink: 0;
   margin-top: 1px;
 }
+.plugin-import-signature code {
+  display: inline;
+  font-family: ui-monospace, monospace;
+  font-size: 9.5px;
+  overflow-wrap: anywhere;
+}
+.plugin-import-signature em {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-style: normal;
+  line-height: 1.5;
+}
 .plugin-import-signature strong {
   display: block;
   font-size: 11px;
