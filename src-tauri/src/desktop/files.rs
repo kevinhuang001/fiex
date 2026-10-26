@@ -53,6 +53,11 @@ pub(crate) async fn list_directory(
             warnings: vec![],
         });
     }
+    if remote::is_remote(&path) {
+        return remote::list_listing(&path, hidden, &ignores)
+            .await?
+            .ok_or_else(|| "MountNotFound: connection removed".into());
+    }
     if crate::plugin_vfs::handles(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
             crate::plugin_vfs::list(&path, hidden, &ignores)
@@ -86,19 +91,15 @@ pub(crate) async fn list_directory(
         .await
         .map_err(|error| error.to_string())?;
     }
-    // Plugin-backed remote directories contain virtual entries, not zero-byte
-    // mirror placeholders. Only explicit reads materialize a local file.
-    if remote::is_remote(&path) {
-        return remote::list_listing(&path, hidden, &ignores)
-            .await?
-            .ok_or_else(|| "remote connection not found".into());
-    }
     tauri::async_runtime::spawn_blocking(move || files::list(&path, hidden, &ignores))
         .await
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub(crate) fn file_info(path: String) -> Result<files::Entry, String> {
+    if remote::is_remote(&path) {
+        return remote::stat(&path);
+    }
     if crate::plugin_vfs::handles(&path) {
         return crate::plugin_vfs::stat(&path);
     }
@@ -109,6 +110,12 @@ pub(crate) fn file_info(path: String) -> Result<files::Entry, String> {
 }
 #[tauri::command]
 pub(crate) async fn read_preview(path: String) -> Result<String, String> {
+    if remote::is_remote(&path) {
+        let path = remote::ensure_downloaded(&path, &remote::TransferOptions::default()).await?;
+        return tauri::async_runtime::spawn_blocking(move || files::text_preview(&path))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     if crate::plugin_vfs::handles(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
             let bytes = crate::plugin_vfs::read_small(&path, 512 * 1024)?;
@@ -136,6 +143,7 @@ pub(crate) fn create_entry(
     folder: bool,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
+    crate::mounts::reject_local(&path)?;
     if let Some(route) = crate::usbfs::route(&path) {
         crate::usbfs::create(&route, &name, folder)?;
         return Ok(format!("{}/{}", path.trim_end_matches('/'), name));
@@ -148,6 +156,7 @@ pub(crate) fn rename_entry(
     name: String,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
+    crate::mounts::reject_local(&path)?;
     if let Some(route) = crate::usbfs::route(&path) {
         crate::usbfs::rename(&route, &name)?;
         return Ok(format!(
@@ -181,18 +190,30 @@ pub(crate) async fn transfer(
         cancel: Some(cancel.flag()),
         progress: None,
     };
+    let mut materialized = Vec::with_capacity(paths.len());
     for source in &paths {
         if remote::is_remote(source) {
             if moving {
                 return Err("远程连接只读，请复制文件".into());
             }
-            if std::path::Path::new(source).is_dir() {
+            if remote::stat(source)?.is_dir {
                 remote::download_dir(source, &transfer_options).await?;
             } else {
                 remote::ensure_downloaded(source, &transfer_options).await?;
             }
+            materialized.push(remote::cached_path(source)?);
+        } else if crate::plugin_vfs::handles(source) {
+            if moving {
+                return Err("VFS view is read-only".into());
+            }
+            materialized.push(crate::plugin_vfs::materialize(source)?);
+        } else {
+            crate::mounts::reject_local(source)?;
+            materialized.push(source.clone());
         }
     }
+    crate::mounts::reject_local(&destination)?;
+    let paths = materialized;
     if crate::usbfs::route(&destination).is_some()
         || paths.iter().any(|p| crate::usbfs::route(p).is_some())
     {
@@ -247,6 +268,9 @@ pub(crate) async fn recycle(
     on_progress: Channel<OperationProgress>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
+    for path in &paths {
+        crate::mounts::reject_local(path)?;
+    }
     let cancel = cancel.inner().clone();
     let emit = progress_emitter(on_progress);
     let total = paths.len() as u64;
@@ -324,11 +348,66 @@ pub(crate) async fn search_files(
         hidden,
         ignores,
     } = request;
+    if remote::is_remote(&root) {
+        let started = std::time::Instant::now();
+        let mut pending = vec![root.clone()];
+        let mut entries = Vec::new();
+        let mut visited = 0;
+        while let Some(path) = pending.pop() {
+            visited += 1;
+            if visited > 1000 || entries.len() >= 500 {
+                break;
+            }
+            if let Some(listing) = remote::list_listing(&path, hidden, &ignores).await? {
+                for entry in listing.entries {
+                    if entry.is_dir {
+                        pending.push(entry.path.clone());
+                    }
+                    if entry.name.to_lowercase().contains(&query.to_lowercase()) {
+                        entries.push(entry);
+                    }
+                    if entries.len() >= 500 {
+                        break;
+                    }
+                }
+            }
+        }
+        let entries = crate::plugin_search::resolve(
+            &crate::plugin_search::PluginSearchInput {
+                query: query.clone(),
+                root: root.clone(),
+                hidden,
+                ignores: ignores.clone(),
+                limit: Some(500),
+            },
+            || Ok(serde_json::json!({"entries":entries})),
+            || false,
+        );
+        let _ = on_batch.send(SearchBatch {
+            entries,
+            done: true,
+            elapsed_ms: started.elapsed().as_millis(),
+            truncated: !pending.is_empty() || visited > 1000,
+            skipped: 0,
+        });
+        return Ok(());
+    }
     if crate::plugin_vfs::handles(&root) {
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let (entries, truncated) =
                 crate::plugin_vfs::search(&root, &query, hidden, &ignores, 500)?;
+            let entries = crate::plugin_search::resolve(
+                &crate::plugin_search::PluginSearchInput {
+                    query: query.clone(),
+                    root: root.clone(),
+                    hidden,
+                    ignores: ignores.clone(),
+                    limit: Some(500),
+                },
+                || Ok(serde_json::json!({"entries":entries})),
+                || false,
+            );
             let _ = on_batch.send(SearchBatch {
                 entries,
                 done: true,
@@ -345,6 +424,17 @@ pub(crate) async fn search_files(
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let entries = crate::usbfs::search(&route, &query, 500)?;
+            let entries = crate::plugin_search::resolve(
+                &crate::plugin_search::PluginSearchInput {
+                    query: query.clone(),
+                    root: root.clone(),
+                    hidden,
+                    ignores: ignores.clone(),
+                    limit: Some(500),
+                },
+                || Ok(serde_json::json!({"entries":entries})),
+                || false,
+            );
             let _ = on_batch.send(SearchBatch {
                 entries,
                 done: true,
@@ -398,6 +488,7 @@ pub(crate) fn watch_directory(
     pane: String,
     state: tauri::State<'_, Watch>,
 ) -> Result<(), String> {
+    crate::mounts::reject_local(&path)?;
     let mut watcher =
         notify::recommended_watcher(move |event: Result<notify::Event, notify::Error>| {
             if let Ok(event) = event {
@@ -467,6 +558,12 @@ pub(crate) async fn restore_from_trash(
     fallback: Option<String>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<usize, String> {
+    for path in &paths {
+        crate::mounts::reject_local(path)?;
+    }
+    if let Some(path) = &fallback {
+        crate::mounts::reject_local(path)?;
+    }
     let flag = cancel.flag();
     tauri::async_runtime::spawn_blocking(move || {
         volumes::restore_from_trash(&paths, fallback.as_deref(), &flag)
@@ -479,6 +576,9 @@ pub(crate) async fn delete_permanently(
     paths: Vec<String>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<usize, String> {
+    for path in &paths {
+        crate::mounts::reject_local(path)?;
+    }
     let flag = cancel.flag();
     tauri::async_runtime::spawn_blocking(move || volumes::delete_permanently(&paths, &flag))
         .await

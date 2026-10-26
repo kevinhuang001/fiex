@@ -4,8 +4,8 @@ import {
   Info,
   Keyboard,
   Palette,
-  Puzzle,
   PanelLeft,
+  Rocket,
   Search,
   Tags,
   TerminalSquare,
@@ -14,13 +14,13 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { AboutSettings } from './settings/AboutSettings'
 import { AppearanceSettings } from './settings/AppearanceSettings'
+import { BehaviorSettings } from './settings/BehaviorSettings'
 import { IgnoreSettings } from './settings/IgnoreSettings'
 import { IntegrationSettings } from './settings/IntegrationSettings'
 import { ShortcutSettings } from './settings/ShortcutSettings'
 import { SidebarSettings } from './settings/SidebarSettings'
 import { TagSettings } from './settings/TagSettings'
 import { Modal } from './ui/Modal'
-import { PluginSettings } from './settings/PluginSettings'
 
 interface Props {
   open: boolean
@@ -34,7 +34,7 @@ interface Props {
 }
 
 type SectionId =
-  'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about' | 'plugins'
+  'appearance' | 'behavior' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about'
 
 interface Section {
   id: SectionId
@@ -51,6 +51,13 @@ const sections: Section[] = [
     icon: Palette,
     color: '#3b82f6',
     keywords: ['theme', 'dark', 'light', '主题', '深色', '浅色', '图标'],
+  },
+  {
+    id: 'behavior',
+    label: '启动与显示',
+    icon: Rocket,
+    color: '#14b8a6',
+    keywords: ['behavior', 'startup', '启动', '隐藏文件', '标签页', '行为'],
   },
   {
     id: 'shortcuts',
@@ -88,13 +95,6 @@ const sections: Section[] = [
     keywords: ['terminal', 'shell', 'ide', '终端', '命令行', '启动', '编辑器'],
   },
   {
-    id: 'plugins',
-    label: '插件',
-    icon: Puzzle,
-    color: '#64748b',
-    keywords: ['插件', 'plugin', '扩展', '配置', '权限', 'OAuth'],
-  },
-  {
     id: 'about',
     label: '关于',
     icon: Info,
@@ -112,10 +112,10 @@ const searchEntries: SearchEntry[] = [
     label: '外观模式',
     keywords: ['dark', 'light', '深色', '浅色', '跟随系统'],
   },
-  { section: 'appearance', label: '显示隐藏文件', keywords: ['hidden', '隐藏文件', '.ds_store'] },
-  { section: 'appearance', label: '启动页', keywords: ['start', '启动', '首页'] },
+  { section: 'behavior', label: '显示隐藏文件', keywords: ['hidden', '隐藏文件', '.ds_store'] },
+  { section: 'behavior', label: '启动页', keywords: ['start', '启动', '首页'] },
   {
-    section: 'appearance',
+    section: 'behavior',
     label: '启动时恢复标签页',
     keywords: ['tab', 'restore', '恢复', '标签页', '会话'],
   },
@@ -130,8 +130,6 @@ const searchEntries: SearchEntry[] = [
   { section: 'ignore', label: '忽略规则', keywords: ['ignore', '忽略', 'node_modules'] },
   { section: 'terminal', label: '终端', keywords: ['terminal', 'shell', '命令行'] },
   { section: 'terminal', label: 'IDE', keywords: ['editor', '编辑器', '代码'] },
-  { section: 'plugins', label: '已安装插件', keywords: ['plugin', '权限', '激活'] },
-  { section: 'plugins', label: '获取插件', keywords: ['plugin', '商店', '更新'] },
   { section: 'about', label: '版本信息', keywords: ['version', '版本', '许可', 'license'] },
 ]
 
@@ -158,6 +156,7 @@ export function PreferencesDialog({
     if (!open) {
       setQuery('')
       setSection('appearance')
+      return
     }
   }, [open])
 
@@ -263,6 +262,7 @@ export function PreferencesDialog({
 
           <section className="settings-content">
             {section === 'appearance' && <AppearanceSettings prefs={prefs} update={update} />}
+            {section === 'behavior' && <BehaviorSettings prefs={prefs} update={update} />}
 
             {section === 'shortcuts' && <ShortcutSettings prefs={prefs} update={update} />}
 
@@ -283,8 +283,6 @@ export function PreferencesDialog({
                 onHelp={() => setIntegrationsOpen(true)}
               />
             )}
-
-            {section === 'plugins' && <PluginSettings />}
 
             {section === 'about' && <AboutSettings onError={onError} />}
             <footer className="settings-actions">

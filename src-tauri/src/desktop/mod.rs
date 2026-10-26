@@ -13,6 +13,8 @@
 mod files;
 #[macro_use]
 mod plugins;
+pub(crate) mod shell_profile;
+pub(crate) mod ssh;
 #[macro_use]
 mod remote;
 #[macro_use]
@@ -84,6 +86,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             plugin_invoke,
+            plugin_before_open,
+            plugin_toolbar_invoke,
+            plugin_context_menu_resolve,
+            plugin_context_menu_children,
+            plugin_context_menu_execute,
+            connection_open,
+            vfs_retain_views,
+            materialize_file,
+            plugin_context_directory,
             plugin_task,
             plugin_cancel_task,
             plugin_status,
@@ -93,6 +104,16 @@ pub fn run() {
             plugin_error_report,
             plugin_error_clear,
             plugin_panel_html,
+            preview_open,
+            preview_candidates,
+            preview_loading,
+            preview_loading_asset,
+            ssh::ssh_open,
+            ssh::local_terminal_open,
+            ssh::detect_shells,
+            ssh::ssh_write,
+            ssh::ssh_resize,
+            ssh::ssh_close,
             plugin_panel_asset,
             plugin_permission_allowed,
             plugin_network_domains,
@@ -109,7 +130,9 @@ pub fn run() {
             plugin_set_enabled,
             plugin_activate,
             plugin_set_permission,
+            plugin_permission_respond,
             plugin_set_command,
+            plugin_set_network_all,
             plugin_set_network_domain,
             plugin_approve_install,
             plugin_storage_get,
@@ -147,14 +170,17 @@ pub fn run() {
             detect_ides,
             open_in_ide,
             open_terminal,
+            open_external_url,
             open_path,
             remote_connections,
             save_remote_connection,
+            update_connection_session,
             remove_remote_connection,
             remote_download,
             remote_download_dir,
             remote_sync,
             remote_unsync,
+            remote_resolve,
             eject_device,
             eject_usb,
             relaunch_elevated,
@@ -182,6 +208,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {
+                crate::mounts::forget_window(window.label());
                 window
                     .state::<Watch>()
                     .lock()
@@ -197,11 +224,45 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let running =
+                    std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
+                loop {
+                    for connection in crate::remote::list_connections() {
+                        let id = connection.id;
+                        if !running.lock().unwrap().insert(id.clone()) {
+                            continue;
+                        }
+                        let running = running.clone();
+                        let handle = handle.clone();
+                        std::thread::spawn(move || {
+                            tauri::async_runtime::block_on(crate::remote::reconcile_connection(
+                                &id,
+                            ));
+                            use tauri::Emitter;
+                            let _ = handle.emit("remote-sync", ());
+                            running.lock().unwrap().remove(&id);
+                        });
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+                }
+            });
             {
                 use tauri::Emitter;
                 let handle = app.handle().clone();
                 crate::plugin_task_events::set_sink(Box::new(move |event| {
                     let _ = handle.emit("plugin-task", &event);
+                }));
+                let handle = app.handle().clone();
+                crate::plugin_permission_prompt::set_sink(Box::new(move |event| match event {
+                    crate::plugin_permission_prompt::PermissionPromptEvent::Requested(request) => {
+                        let _ = handle.emit("plugin-permission-request", &request);
+                    }
+                    crate::plugin_permission_prompt::PermissionPromptEvent::Resolved { id } => {
+                        let _ = handle
+                            .emit("plugin-permission-resolved", serde_json::json!({"id": id}));
+                    }
                 }));
             }
             #[cfg(feature = "ci-driver")]
@@ -233,6 +294,11 @@ pub fn run() {
             let _ = app;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Cannot start Fiex");
+        .build(tauri::generate_context!())
+        .expect("Cannot start Fiex")
+        .run(|_, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                crate::plugin_vfs::cleanup_exports();
+            }
+        });
 }

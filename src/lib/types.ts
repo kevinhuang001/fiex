@@ -20,7 +20,7 @@ export interface Entry {
   readonly: boolean
   linkTarget: string | null
   tags: Tag[]
-  sync: 'synced' | 'cloud' | null
+  sync: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | null
 }
 export interface Listing {
   readOnly?: boolean
@@ -131,6 +131,8 @@ export interface Preferences {
   ide: string
   theme: 'system' | 'light' | 'dark'
   themeId?: string
+  backgroundImage: string
+  backgroundOpacity: number
   fontSize: number
   startPage: StartPage
   displayIgnore: string[]
@@ -165,6 +167,8 @@ export interface RemoteConnection {
   kind: string
   pluginId: string
   mountPath: string
+  saved?: boolean
+  autostart?: boolean
 }
 
 export interface GitRefs {

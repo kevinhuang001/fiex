@@ -5,22 +5,40 @@ use std::{collections::HashMap, fs, path::PathBuf};
 
 use super::{
     config::{connection_for_path, local_for, rel_string},
-    files::{download, download_dir, TransferOptions},
+    files::{download_dir_inner, download_inner, TransferOptions},
     store::{fiex_dir, StoredConnection},
 };
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RemoteMetaFile {
     pub(crate) size: u64,
     pub(crate) modified: u64,
     pub(crate) is_dir: bool,
     pub(crate) downloaded: bool,
+    #[serde(default)]
+    pub(crate) node_id: String,
+    #[serde(default)]
+    pub(crate) revision: String,
+    #[serde(default)]
+    pub(crate) baseline: String,
+    #[serde(default)]
+    pub(crate) local_stamp: String,
+    #[serde(default)]
+    pub(crate) pinned: bool,
+    #[serde(default)]
+    pub(crate) excluded: bool,
+    #[serde(default)]
+    pub(crate) conflict: bool,
 }
 
 #[derive(Default, Serialize, Deserialize)]
 pub(crate) struct RemoteMeta {
     pub(crate) files: HashMap<String, RemoteMetaFile>,
+    #[serde(default)]
+    pub(crate) listed: std::collections::HashSet<String>,
+    #[serde(default)]
+    pub(crate) errors: HashMap<String, String>,
 }
 
 fn meta_dir() -> PathBuf {
@@ -40,23 +58,94 @@ pub(crate) fn load_meta(conn: &StoredConnection) -> RemoteMeta {
 
 pub(crate) fn save_meta(conn: &StoredConnection, meta: &RemoteMeta) -> Result<(), String> {
     fs::create_dir_all(meta_dir()).map_err(|e| e.to_string())?;
-    fs::write(
-        meta_path(conn),
-        serde_json::to_vec(meta).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())
+    use std::io::Write;
+    let mut temp = tempfile::NamedTempFile::new_in(meta_dir()).map_err(|e| e.to_string())?;
+    temp.write_all(&serde_json::to_vec(meta).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    temp.as_file().sync_all().map_err(|e| e.to_string())?;
+    temp.persist(meta_path(conn))
+        .map_err(|e| e.error.to_string())?;
+    Ok(())
+}
+
+// Per-connection serialization includes metadata, materialization, eviction and
+// reconciliation. No lock is held while waiting for another connection.
+pub(crate) async fn lock(conn: &StoredConnection) -> tokio::sync::OwnedMutexGuard<()> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    static LOCKS: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    let gate = LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .entry(conn.id.clone())
+        .or_default()
+        .clone();
+    gate.lock_owned().await
+}
+
+pub(crate) fn fingerprint(path: &std::path::Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut hash = Sha256::new();
+    let mut buf = [0u8; 256 * 1024];
+    loop {
+        let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        hash.update(&buf[..n]);
+    }
+    Ok(hex::encode(hash.finalize()))
+}
+
+pub(crate) fn stamp(path: &std::path::Path) -> Result<String, String> {
+    let m = fs::metadata(path).map_err(|e| e.to_string())?;
+    let modified = m
+        .modified()
+        .map_err(|e| e.to_string())?
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    Ok(format!("{}:{modified}", m.len()))
+}
+
+pub(crate) fn dirty(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> bool {
+    file.downloaded
+        && !file.is_dir
+        && (file.local_stamp.is_empty()
+            || stamp(&local_for(conn, rel)).ok().as_deref() != Some(file.local_stamp.as_str()))
+        && (file.baseline.is_empty()
+            || fingerprint(&local_for(conn, rel))
+                .map(|hash| hash != file.baseline)
+                .unwrap_or(true))
 }
 
 pub async fn sync_one(path: &str, options: &TransferOptions) -> Result<(), String> {
     let Some((conn, rel)) = connection_for_path(path) else {
         return Ok(());
     };
+    let _guard = lock(&conn).await;
     let rel = rel_string(&rel);
-    let meta = load_meta(&conn);
-    if meta.files.get(&rel).is_some_and(|file| file.is_dir) {
-        download_dir(path, options).await
+    let mut meta = load_meta(&conn);
+    let file = meta.files.get_mut(&rel).ok_or("请先刷新远程目录")?;
+    file.pinned = true;
+    file.excluded = false;
+    let is_dir = file.is_dir;
+    if is_dir {
+        for (key, child) in &mut meta.files {
+            if in_tree(key, &rel) {
+                child.pinned = true;
+                child.excluded = false;
+            }
+        }
+    }
+    // Persist intent before starting I/O, so interrupted pins resume at startup.
+    save_meta(&conn, &meta)?;
+    if is_dir {
+        download_dir_inner(path, options)
     } else {
-        download(path, options).await.map(|_| ())
+        download_inner(path, options).map(|_| ())
     }
 }
 
@@ -67,38 +156,41 @@ pub async fn sync(paths: &[String], options: &TransferOptions) -> Result<(), Str
     Ok(())
 }
 
-pub fn unsync(paths: &[String]) -> Result<(), String> {
+pub async fn unsync(paths: &[String]) -> Result<(), String> {
     for path in paths {
         let Some((conn, rel)) = connection_for_path(path) else {
             continue;
         };
+        let _guard = lock(&conn).await;
         let rel = rel_string(&rel);
         let mut meta = load_meta(&conn);
-        let local = local_for(&conn, &rel);
-        if local.is_dir() {
-            let prefix = format!("{rel}/");
-            let keys = meta
-                .files
-                .iter()
-                .filter(|(key, _)| key.as_str() == rel || key.starts_with(&prefix))
-                .map(|(key, _)| key.clone())
-                .collect::<Vec<_>>();
-            for key in keys {
-                let child = local_for(&conn, &key);
-                if meta.files.get(&key).is_some_and(|file| !file.is_dir) {
-                    let _ = fs::remove_file(&child);
-                }
-                if let Some(file) = meta.files.get_mut(&key) {
-                    file.downloaded = false;
-                }
+        let keys: Vec<_> = meta
+            .files
+            .keys()
+            .filter(|key| in_tree(key, &rel))
+            .cloned()
+            .collect();
+        // Validate the whole subtree before removing any bytes.
+        for key in &keys {
+            let file = &meta.files[key];
+            if file.conflict || dirty(&conn, key, file) {
+                return Err("存在未同步的修改或冲突，不能释放本地空间".into());
             }
-        } else {
-            let _ = fs::remove_file(&local);
-            if let Some(file) = meta.files.get_mut(&rel) {
-                file.downloaded = false;
+        }
+        for key in keys {
+            let file = meta.files.get_mut(&key).unwrap();
+            if !file.is_dir && local_for(&conn, &key).is_file() {
+                fs::remove_file(local_for(&conn, &key)).map_err(|e| e.to_string())?;
             }
+            file.downloaded = false;
+            file.pinned = false;
+            file.excluded = true;
         }
         save_meta(&conn, &meta)?;
     }
     Ok(())
+}
+
+pub(crate) fn in_tree(key: &str, root: &str) -> bool {
+    root.is_empty() || key == root || key.starts_with(&format!("{root}/"))
 }

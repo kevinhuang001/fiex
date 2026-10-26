@@ -35,6 +35,7 @@ usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs"
 tauri-build = { version = "2", optional = true , features = [] }
 
 [dependencies]
+futures = "0.3"
 fiex-plugin-sdk = { path = "../sdk/rust" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
 tauri-plugin-drag = { version = "2.1.1", optional = true }
@@ -62,6 +63,8 @@ which = "8"
 base64 = "0.22"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 sha2 = "0.10"
+tokio = { version = "1", features = ["sync"] }
+portable-pty = "0.9"
 hex = "0.4"
 mime_guess = "2"
 zip = { version = "4", default-features = false, features = ["deflate", "bzip2", "zstd", "aes-crypto"] }
@@ -103,7 +106,6 @@ codegen-units = 1
 opt-level = 2
 
 [dev-dependencies]
-futures = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [package.metadata.cargo-machete]

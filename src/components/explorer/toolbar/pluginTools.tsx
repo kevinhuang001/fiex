@@ -20,4 +20,4 @@ export function pluginIcon(name?: string) {
   return pluginIconMap[name || ''] || <Plug weight="regular" size={20} />
 }
 
-export const pluginKey = (pluginId: string, toolId: string) => pluginId + '::' + toolId
+export const pluginKey = (pluginId: string) => pluginId

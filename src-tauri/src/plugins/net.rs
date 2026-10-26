@@ -2,11 +2,11 @@
 //!
 //! Plugins never open sockets. HTTP is a structured request/response API;
 //! TCP is a controlled byte stream sharing HTTP's approved hostname/IP list.
-use crate::{plugin_ipc, plugin_permissions};
+use crate::{plugin_ipc, plugin_permission_policy::PermissionPolicy, plugin_permissions};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -37,12 +37,7 @@ fn http_method(value: &str) -> bool {
     )
 }
 
-pub fn http(
-    owner: &str,
-    permission_id: &str,
-    declared: &std::collections::BTreeSet<String>,
-    params: &Value,
-) -> Result<Value, String> {
+pub fn http(owner: &str, policy: &PermissionPolicy<'_>, params: &Value) -> Result<Value, String> {
     let url = text_param(params, "url")?;
     let method = text_param(params, "method")?.to_ascii_uppercase();
     if !http_method(&method) {
@@ -53,7 +48,7 @@ pub fn http(
         return Err("only http and https are supported".into());
     }
     let host = parsed.host_str().ok_or("URL has no host")?;
-    if !plugin_permissions::domain_allowed(permission_id, declared, host)? {
+    if !policy.domain_allowed(host)? {
         return Err("network domain not granted".into());
     }
     let mut headers = reqwest::header::HeaderMap::new();
@@ -138,7 +133,15 @@ pub fn http(
 
 struct TcpEntry {
     owner: String,
-    stream: std::sync::Arc<Mutex<TcpStream>>,
+    stream: std::sync::Arc<TcpDuplex>,
+}
+
+/// Socket clones share a TCP connection, but readers and writers have
+/// independent locks. A blocked read must never prevent a concurrent write.
+struct TcpDuplex {
+    reader: Mutex<TcpStream>,
+    writer: Mutex<TcpStream>,
+    control: TcpStream,
 }
 
 fn streams() -> &'static Mutex<HashMap<String, TcpEntry>> {
@@ -148,8 +151,7 @@ fn streams() -> &'static Mutex<HashMap<String, TcpEntry>> {
 
 pub fn tcp_open(
     owner: &str,
-    permission_id: &str,
-    declared: &std::collections::BTreeSet<String>,
+    policy: &PermissionPolicy<'_>,
     params: &Value,
 ) -> Result<Value, String> {
     let host = text_param(params, "host")?;
@@ -159,8 +161,7 @@ pub fn tcp_open(
         .filter(|p| (1..=65535).contains(p))
         .ok_or("invalid TCP port")? as u16;
     let normalized = plugin_permissions::normalize_domain(host)?;
-    let allowed = plugin_permissions::domain_allowed(permission_id, declared, &normalized)?;
-    if !allowed {
+    if !policy.domain_allowed(&normalized)? {
         return Err("TCP target not granted".into());
     }
     let address = (normalized.as_str(), port)
@@ -193,17 +194,23 @@ pub fn tcp_open(
     {
         return Err("too many TCP connections".into());
     }
+    let reader = stream.try_clone().map_err(|error| error.to_string())?;
+    let writer = stream.try_clone().map_err(|error| error.to_string())?;
     entries.insert(
         id.clone(),
         TcpEntry {
             owner: owner.into(),
-            stream: std::sync::Arc::new(Mutex::new(stream)),
+            stream: std::sync::Arc::new(TcpDuplex {
+                reader: Mutex::new(reader),
+                writer: Mutex::new(writer),
+                control: stream,
+            }),
         },
     );
     Ok(json!({"stream": id, "peerAddress": address.to_string()}))
 }
 
-fn tcp_stream(owner: &str, id: &str) -> Result<std::sync::Arc<Mutex<TcpStream>>, String> {
+fn tcp_stream(owner: &str, id: &str) -> Result<std::sync::Arc<TcpDuplex>, String> {
     let entries = streams().lock().map_err(|_| "TCP registry unavailable")?;
     entries
         .get(id)
@@ -220,6 +227,7 @@ pub fn tcp_read(owner: &str, params: &Value) -> Result<Value, String> {
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     let mut bytes = vec![0; size];
     let read = stream
+        .reader
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .read(&mut bytes)
@@ -236,12 +244,27 @@ pub fn tcp_write(owner: &str, params: &Value) -> Result<Value, String> {
     let bytes = plugin_ipc::read(owner, text_param(params, "buffer")?)?;
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     stream
+        .writer
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .write_all(&bytes)
         .map_err(|e| e.to_string())?;
     Ok(json!({"size":bytes.len()}))
 }
+pub fn tcp_shutdown(owner: &str, params: &Value) -> Result<(), String> {
+    let stream = tcp_stream(owner, text_param(params, "stream")?)?;
+    let how = match text_param(params, "direction")? {
+        "read" => Shutdown::Read,
+        "write" => Shutdown::Write,
+        "both" => Shutdown::Both,
+        _ => return Err("invalid TCP shutdown direction".into()),
+    };
+    stream
+        .control
+        .shutdown(how)
+        .map_err(|error| error.to_string())
+}
+
 pub fn tcp_close(owner: &str, params: &Value) -> Result<(), String> {
     let id = text_param(params, "stream")?;
     let mut guard = streams().lock().map_err(|_| "TCP registry lock poisoned")?;
@@ -249,7 +272,10 @@ pub fn tcp_close(owner: &str, params: &Value) -> Result<(), String> {
     if entry.owner != owner {
         return Err("TCP stream belongs to another plugin".into());
     }
-    guard.remove(id);
+    let entry = guard.remove(id).ok_or("TCP stream not found")?;
+    drop(guard);
+    // Wake any pending read, including operations holding cloned sockets.
+    let _ = entry.stream.control.shutdown(Shutdown::Both);
     Ok(())
 }
 
@@ -258,6 +284,9 @@ pub fn cleanup(owner: &str) {
         entries.retain(|_, entry| entry.owner != owner);
     }
     if let Ok(mut entries) = streams().lock() {
+        for entry in entries.values().filter(|entry| entry.owner == owner) {
+            let _ = entry.stream.control.shutdown(Shutdown::Both);
+        }
         entries.retain(|_, entry| entry.owner != owner);
     }
 }
@@ -273,8 +302,7 @@ fn http_streams() -> &'static Mutex<HashMap<String, HttpEntry>> {
 }
 pub fn http_open(
     owner: &str,
-    permission_id: &str,
-    declared: &std::collections::BTreeSet<String>,
+    policy: &PermissionPolicy<'_>,
     params: &Value,
 ) -> Result<Value, String> {
     let mut url = reqwest::Url::parse(text_param(params, "url")?).map_err(|e| e.to_string())?;
@@ -290,7 +318,18 @@ pub fn http_open(
         .get("timeoutMs")
         .and_then(Value::as_u64)
         .unwrap_or(90000)
-        .clamp(1, 120000);
+        .clamp(
+            1,
+            if params
+                .get("bodyReadHandle")
+                .and_then(Value::as_str)
+                .is_some()
+            {
+                86_400_000
+            } else {
+                120_000
+            },
+        );
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(timeout))
         .redirect(reqwest::redirect::Policy::none())
@@ -332,6 +371,14 @@ pub fn http_open(
     if body.as_ref().is_some_and(|b| b.len() > 1024 * 1024) {
         return Err("HTTP request exceeds inline limit".into());
     }
+    let mut file_body = params
+        .get("bodyReadHandle")
+        .and_then(Value::as_str)
+        .map(|id| crate::plugin_fs_access::http_body(owner, id))
+        .transpose()?;
+    if file_body.is_some() && body.as_ref().is_some_and(|b| !b.is_empty()) {
+        return Err("ambiguous HTTP body".into());
+    }
     for redirect in 0..=10 {
         if !matches!(url.scheme(), "http" | "https")
             || !url.username().is_empty()
@@ -339,11 +386,7 @@ pub fn http_open(
         {
             return Err("invalid HTTP URL".into());
         }
-        if !plugin_permissions::domain_allowed(
-            permission_id,
-            declared,
-            url.host_str().ok_or("missing HTTP host")?,
-        )? {
+        if !policy.domain_allowed(url.host_str().ok_or("missing HTTP host")?)? {
             return Err("network target not granted".into());
         }
         let mut request = client
@@ -352,11 +395,24 @@ pub fn http_open(
                 url.clone(),
             )
             .headers(headers.clone());
-        if let Some(bytes) = &body {
+        if let Some(file) = &mut file_body {
+            use std::io::{Seek, SeekFrom};
+            file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+            let size = file.metadata().map_err(|e| e.to_string())?.len();
+            request = request.body(reqwest::blocking::Body::sized(
+                file.try_clone().map_err(|e| e.to_string())?,
+                size,
+            ));
+        } else if let Some(bytes) = &body {
             request = request.body(bytes.clone());
         }
         let response = request.send().map_err(|e| e.to_string())?;
-        if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
+        // Google resumable uploads use 308 without Location to acknowledge
+        // an incomplete upload. It is a response, not a redirect.
+        if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308)
+            && (response.status().as_u16() != 308
+                || response.headers().contains_key(reqwest::header::LOCATION))
+        {
             if redirect == 10 {
                 return Err("too many HTTP redirects".into());
             }
@@ -379,6 +435,7 @@ pub fn http_open(
             {
                 method = "GET".into();
                 body = None;
+                file_body = None;
                 headers.remove(reqwest::header::CONTENT_TYPE);
             }
             url = next;
@@ -454,7 +511,7 @@ pub fn http_close(owner: &str, params: &Value) -> Result<(), String> {
     let mut entries = http_streams()
         .lock()
         .map_err(|_| "HTTP registry unavailable")?;
-    if !entries.get(id).is_some_and(|entry| entry.owner == owner) {
+    if entries.get(id).is_none_or(|entry| entry.owner != owner) {
         return Err("HTTP response unavailable".into());
     }
     entries.remove(id);
@@ -470,6 +527,7 @@ pub fn tcp_read_bytes(owner: &str, params: &Value) -> Result<Value, String> {
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     let mut bytes = vec![0; size];
     let read = stream
+        .reader
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .read(&mut bytes)
@@ -491,9 +549,52 @@ pub fn tcp_write_bytes(owner: &str, params: &Value) -> Result<Value, String> {
         .map_err(|e| e.to_string())?;
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
     stream
+        .writer
         .lock()
         .map_err(|_| "TCP connection unavailable")?
         .write_all(&bytes)
         .map_err(|e| e.to_string())?;
     Ok(json!({"size":bytes.len()}))
+}
+
+#[cfg(test)]
+mod tcp_tests {
+    use super::*;
+    use std::{net::TcpListener, sync::mpsc, thread};
+
+    #[test]
+    fn reader_does_not_block_a_concurrent_writer() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        let duplex = std::sync::Arc::new(TcpDuplex {
+            reader: Mutex::new(client.try_clone().unwrap()),
+            writer: Mutex::new(client.try_clone().unwrap()),
+            control: client,
+        });
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
+        let reader = duplex.clone();
+        let read_task = thread::spawn(move || {
+            let mut stream = reader.reader.lock().unwrap();
+            ready_tx.send(()).unwrap();
+            let mut bytes = [0; 4];
+            stream.read_exact(&mut bytes).unwrap();
+            result_tx.send(bytes).unwrap();
+        });
+        ready_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        duplex.writer.lock().unwrap().write_all(b"ping").unwrap();
+        server
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        let mut received = [0; 4];
+        server.read_exact(&mut received).unwrap();
+        assert_eq!(&received, b"ping");
+        server.write_all(b"pong").unwrap();
+        assert_eq!(
+            result_rx.recv_timeout(Duration::from_secs(3)).unwrap(),
+            *b"pong"
+        );
+        read_task.join().unwrap();
+    }
 }

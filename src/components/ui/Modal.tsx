@@ -10,6 +10,7 @@ export function Modal({
   className,
   contentStyle,
   bare = false,
+  actions,
 }: {
   open: boolean
   onClose: () => void
@@ -19,6 +20,7 @@ export function Modal({
   className?: string
   contentStyle?: CSSProperties
   bare?: boolean
+  actions?: ReactNode
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
@@ -42,6 +44,7 @@ export function Modal({
           ) : (
             <header>
               <Dialog.Title>{title}</Dialog.Title>
+              {actions && <div className="modal-actions">{actions}</div>}
               <Dialog.Close className="icon-button" aria-label="关闭">
                 <X size={17} />
               </Dialog.Close>

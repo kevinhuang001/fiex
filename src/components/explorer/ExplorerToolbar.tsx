@@ -32,6 +32,7 @@ export function ExplorerToolbar({
   openIde,
   terminal,
   setSettings,
+  setPluginManager,
   refreshAll,
   inTrash,
   emptyTrash,
@@ -56,6 +57,7 @@ export function ExplorerToolbar({
   | 'inTrash'
   | 'emptyTrash'
   | 'setSettings'
+  | 'setPluginManager'
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
   const [refreshKey, setRefreshKey] = useState(0)
@@ -129,7 +131,11 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          title={`在 ${terminals.find((t) => t.id === prefs.terminal)?.name || '终端'} 中打开`}
+          title={`在 ${
+            prefs.terminal === 'builtin'
+              ? '内置终端'
+              : terminals.find((t) => t.id === prefs.terminal)?.name || '终端'
+          } 中打开`}
           aria-label="Open in Terminal"
           disabled={x.directoryReadOnly}
           onClick={() => terminal()}
@@ -257,7 +263,12 @@ export function ExplorerToolbar({
             </div>
           ))}
         </div>
-        <PinnedTools prefs={prefs} update={update} x={x} />
+        <PinnedTools
+          prefs={prefs}
+          update={update}
+          x={x}
+          onManagePlugins={() => setPluginManager(true)}
+        />
         <div
           className="toolbar-order"
           ref={rightOrder.container}

@@ -94,6 +94,10 @@ impl Operations {
         cancel: &AtomicBool,
         progress: &(dyn Fn(u64, u64, Option<&str>) + Sync),
     ) -> Result<OperationResult, String> {
+        crate::mounts::reject_local(destination)?;
+        for source in sources {
+            crate::mounts::reject_local(source)?;
+        }
         let (result, undo) = crate::transfers::execute(
             sources,
             destination,

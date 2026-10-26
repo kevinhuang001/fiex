@@ -25,6 +25,7 @@ export function DomainDialog({
   onDraftChange,
   onToggle,
   onAdd,
+  onToggleAll,
   onClose,
 }: {
   plugin: PluginInfo
@@ -33,6 +34,7 @@ export function DomainDialog({
   onDraftChange: (value: string) => void
   onToggle: (domain: string, granted: boolean) => void
   onAdd: (domain: string) => void
+  onToggleAll: (all: boolean) => void
   onClose: () => void
 }) {
   const granted = plugin.grantedPermissions.includes('network')
@@ -41,63 +43,89 @@ export function DomainDialog({
     const domain = draft.trim()
     if (domain) onAdd(domain)
   }
+  const all = plugin.allowedNetworkAll
   return (
     <Modal open onClose={onClose} title="网络域名" className="plugin-domain-modal">
       <div className="plugin-domain-page">
         <p className="plugin-domain-hint">
           允许「{plugin.name}」访问的精确主机；本机和局域网地址也需要授权。
         </p>
-        <section className="plugin-permission-section plugin-domain-section">
-          <div className="plugin-domain-list">
-            {domains.map((domain) => {
-              const allowed = (plugin.allowedNetworkDomains || []).includes(domain)
-              const requested = (plugin.requestedNetworkDomains || []).includes(domain)
-              return (
-                <div className="plugin-domain-row" key={domain}>
-                  <span>
-                    {domain}
-                    {requested && <small>插件申请</small>}
-                    {!allowed && <small className="muted">未授权</small>}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={allowed}
-                    aria-label={allowed ? `移除域名 ${domain}` : `授权域名 ${domain}`}
-                    title={allowed ? '移除域名' : '授权域名'}
-                    className={`plugin-switch ${allowed ? 'on' : ''}`}
-                    disabled={busy || !granted}
-                    onClick={() => onToggle(domain, !allowed)}
-                  >
-                    <span />
-                  </button>
-                </div>
-              )
-            })}
-            {!domains.length && <p className="sidebar-hint">尚未允许任何域名。</p>}
-          </div>
-          <div className="plugin-domain-add">
-            <input
-              aria-label="添加允许的域名"
-              placeholder="域名、IP 或 gitea.example.com"
-              value={draft}
-              disabled={busy || !granted}
-              onChange={(event) => onDraftChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') add()
-              }}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={busy || !draft.trim() || !granted}
-              onClick={add}
-            >
-              添加域名
-            </Button>
-          </div>
-        </section>
+        <label className="plugin-network-mode">
+          <span>网络范围</span>
+          <select
+            aria-label="网络访问范围"
+            value={all ? 'all' : 'whitelist'}
+            onChange={(event) => onToggleAll(event.target.value === 'all')}
+          >
+            <option value="whitelist">白名单</option>
+            <option value="all">全部域名</option>
+          </select>
+        </label>
+        {all ? (
+          <p className="plugin-network-danger" role="alert">
+            危险：插件当前可以访问任意主机。切换为白名单后只添加需要的域名。
+          </p>
+        ) : (
+          ''
+        )}
+        {!all && plugin.requestedNetworkAll && (
+          <p className="plugin-network-request" role="status">
+            插件申请了全部网络访问；你仍可以使用白名单限制它。
+          </p>
+        )}
+        {!all && (
+          <section className="plugin-permission-section plugin-domain-section">
+            <div className="plugin-domain-list">
+              {domains.map((domain) => {
+                const allowed = (plugin.allowedNetworkDomains || []).includes(domain)
+                const requested = (plugin.requestedNetworkDomains || []).includes(domain)
+                return (
+                  <div className="plugin-domain-row" key={domain}>
+                    <span>
+                      {domain}
+                      {requested && <small>插件申请</small>}
+                      {!allowed && <small className="muted">未授权</small>}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={allowed}
+                      aria-label={allowed ? `移除域名 ${domain}` : `授权域名 ${domain}`}
+                      title={allowed ? '移除域名' : '授权域名'}
+                      className={`plugin-switch ${allowed ? 'on' : ''}`}
+                      disabled={busy || !granted}
+                      onClick={() => onToggle(domain, !allowed)}
+                    >
+                      <span />
+                    </button>
+                  </div>
+                )
+              })}
+              {!domains.length && <p className="sidebar-hint">尚未允许任何域名。</p>}
+            </div>
+            <div className="plugin-domain-add">
+              <input
+                aria-label="添加允许的域名"
+                placeholder="域名、IP 或 gitea.example.com"
+                value={draft}
+                disabled={busy || !granted}
+                onChange={(event) => onDraftChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') add()
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy || !draft.trim() || !granted}
+                onClick={add}
+              >
+                添加域名
+              </Button>
+            </div>
+          </section>
+        )}
       </div>
     </Modal>
   )

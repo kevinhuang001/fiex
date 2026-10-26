@@ -74,7 +74,10 @@ export function useConnectionActions({
       action: async () => {
         await call('remove_remote_connection', { id })
         await x.refreshConnections()
-        if (x.path === connection.mountPath || x.path.startsWith(connection.mountPath + '/')) {
+        if (
+          x.path === connection.mountPath ||
+          x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/')
+        ) {
           const home = x.locations.find((location) => location.kind === 'favorite')?.path
           x.navigate(home || '/')
         }
@@ -83,12 +86,12 @@ export function useConnectionActions({
   }
   const remoteConnection = (path: string) =>
     x.connections.find(
-      (connection) => path === connection.mountPath || path.startsWith(connection.mountPath + '/'),
+      (connection) =>
+        path === connection.mountPath ||
+        path.startsWith(connection.mountPath.replace(/\/$/, '') + '/'),
     )
   const isRemotePath = (path: string) => Boolean(remoteConnection(path))
   const displayName = (path: string) => {
-    if (/^history:\/\/[^/]+\/[^/]+\/?$/.test(path))
-      return '历史版本 · ' + path.split('/')[3].slice(0, 8)
     if (path === 'recent://') return '最近使用'
     if (trashPath && path === trashPath) return '废纸篓'
     const volume = left.locations.find((location) => location.usbfs && location.path === path)

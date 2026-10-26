@@ -16,6 +16,7 @@ export function Sidebar({
   onApplications,
   onAddConnection,
   onRemoveConnection,
+  notify,
   onEject,
   onEjectDevice,
   onMount,
@@ -54,6 +55,7 @@ export function Sidebar({
                 x={x}
                 onAddConnection={onAddConnection}
                 onRemoveConnection={onRemoveConnection}
+                notify={notify}
               />
             )
           }

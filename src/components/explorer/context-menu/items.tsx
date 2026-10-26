@@ -39,6 +39,7 @@ export function contextItems({
   restoreFromTrash,
   inTrash,
 }: ContextItemsProps): ContextItem[] {
+  const multiple = x.selected.length > 1
   return [
     {
       label: '打开',
@@ -46,18 +47,22 @@ export function contextItems({
       hint: hint('open'),
       action: () => open(menu.entry),
     },
-    {
-      label: '快速查看',
-      icon: <Eye />,
-      hint: hint('quickLook'),
-      action: () => previewEntry(menu.entry),
-    },
-    {
-      label: '显示简介',
-      icon: <Info />,
-      hint: hint('info'),
-      action: () => setInfo(menu.entry),
-    },
+    ...(multiple
+      ? []
+      : [
+          {
+            label: '快速查看',
+            icon: <Eye />,
+            hint: hint('quickLook'),
+            action: () => previewEntry(menu.entry),
+          },
+          {
+            label: '显示简介',
+            icon: <Info />,
+            hint: hint('info'),
+            action: () => setInfo(menu.entry),
+          },
+        ]),
     ...(platform === 'macos'
       ? [
           {
@@ -73,40 +78,79 @@ export function contextItems({
     ...(isRemotePath(menu.entry.path)
       ? [
           {
-            label: menu.entry.sync === 'synced' ? '取消同步' : '同步',
-            icon: menu.entry.sync === 'synced' ? <CloudCheck /> : <CloudDownload />,
+            label: '始终保留在本地',
+            icon: <CloudDownload />,
             hint: '',
             action: () => {
               const paths = x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]
-              const synced = menu.entry.sync === 'synced'
               let onProgress: ReturnType<typeof progressChannel> | undefined
               void run(
-                synced ? '正在取消同步…' : '正在同步…',
+                '正在保存离线副本…',
                 async () => {
-                  await call(
-                    synced ? 'remote_unsync' : 'remote_sync',
-                    synced ? { paths } : { paths, onProgress },
-                  )
+                  await call('remote_sync', { paths, onProgress })
                   x.reload()
                 },
                 `${paths.length} 个项目`,
                 false,
                 'sync',
                 (id) => {
-                  if (!synced) onProgress = progressChannel(id)
+                  onProgress = progressChannel(id)
                 },
               )
             },
           },
+          {
+            label: '释放本地空间',
+            icon: <CloudCheck />,
+            hint: '',
+            action: () => {
+              const paths = x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]
+              void run(
+                '正在释放本地空间…',
+                async () => {
+                  await call('remote_unsync', { paths })
+                  x.reload()
+                },
+                `${paths.length} 个项目`,
+                false,
+                'sync',
+              )
+            },
+          },
+          ...(menu.entry.sync === 'conflict'
+            ? [
+                ...[true, false].map((keepLocal) => ({
+                  label: keepLocal ? '用本地版本覆盖云端' : '保留本地备份并采用云端版本',
+                  icon: <CloudCheck />,
+                  hint: '',
+                  action: () => {
+                    void run(
+                      '正在处理同步冲突…',
+                      async () => {
+                        await call('remote_resolve', { path: menu.entry.path, keepLocal })
+                        x.reload()
+                      },
+                      menu.entry.name,
+                      false,
+                      'sync',
+                    )
+                  },
+                })),
+              ]
+            : []),
         ]
       : []),
-    {
-      label: '重新命名',
-      icon: <Pencil />,
-      hint: hint('rename'),
-      disabled: x.directoryReadOnly,
-      action: () => x.beginRename(menu.entry.path),
-    },
+    ...(multiple
+      ? []
+      : [
+          {
+            label: '重新命名',
+            icon: <Pencil />,
+            hint: hint('rename'),
+            disabled: x.directoryReadOnly,
+            action: () => x.beginRename(menu.entry.path),
+          },
+        ]),
     ...(x.selected.length > 1
       ? [
           {

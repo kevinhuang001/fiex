@@ -29,16 +29,33 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
     restore(index)
     left.switchTab(index)
   }
+  const startPath = () => {
+    if (prefs.startPage === 'recent') return 'recent://'
+    if (prefs.startPage === 'last') return localStorage.getItem('fiex:lastPath') || 'recent://'
+    const place = left.locations.find((item) =>
+      prefs.startPage === 'home' ? item.name === '个人文件夹' : item.name === '文稿',
+    )
+    return place?.path || 'recent://'
+  }
   const newWorkspaceTab = () => {
     save()
-    left.newTab(x.path)
+    left.newTab(startPath())
     setSplit(false)
     setActive('left')
     tabs.current.push({ right: null, active: 'left' })
   }
   const closeWorkspaceTab = (index: number) => {
-    if (left.tabs.length === 1) return
+    if (!left.tabs[index]) return
     save()
+    // Closing the last workspace tab immediately opens the configured start
+    // page as a fresh single-pane tab instead of leaving an empty workspace.
+    if (left.tabs.length === 1) {
+      tabs.current = [{ right: null, active: 'left' }]
+      setSplit(false)
+      setActive('left')
+      left.closeTab(index, startPath())
+      return
+    }
     tabs.current.splice(index, 1)
     const next = index < left.tab ? left.tab - 1 : Math.min(left.tab, left.tabs.length - 2)
     restore(next)
@@ -57,6 +74,7 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
   const closePane = (side: Side = active) => {
     if (!split) return
     if (side === 'left' && right.path) left.navigate(right.path)
+    tabs.current[left.tab] = { right: null, active: 'left' }
     setSplit(false)
     setActive('left')
   }
@@ -68,6 +86,11 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
   )
   return {
     right,
+    viewReferences: [
+      ...left.referencedPaths,
+      ...(split ? right.referencedPaths : []),
+      ...tabs.current.flatMap((pane) => pane.right?.history || []),
+    ],
     x,
     split,
     setSplit,

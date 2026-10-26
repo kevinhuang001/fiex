@@ -1,7 +1,7 @@
 #[cfg(feature = "ci-driver")]
 mod ci_driver;
 #[cfg(feature = "desktop")]
-mod desktop;
+pub(crate) mod desktop;
 #[path = "core/drag_session.rs"]
 pub mod drag_session;
 #[path = "core/files.rs"]
@@ -14,10 +14,14 @@ mod macos_material;
 mod native_drag;
 #[path = "core/operations.rs"]
 pub mod operations;
+#[path = "plugins/contracts.rs"]
+pub mod plugin_contracts;
 #[path = "plugins/decorations/mod.rs"]
 pub mod plugin_decorations;
 #[path = "plugins/errors.rs"]
 pub mod plugin_errors;
+#[path = "plugins/events.rs"]
+pub mod plugin_events;
 #[path = "plugins/fs_access.rs"]
 pub mod plugin_fs_access;
 #[path = "plugins/host/mod.rs"]
@@ -28,15 +32,25 @@ pub mod plugin_info;
 pub mod plugin_installer;
 #[path = "plugins/ipc.rs"]
 pub mod plugin_ipc;
+#[path = "plugins/match_rules.rs"]
+pub mod plugin_match;
 #[path = "plugins/net.rs"]
 pub mod plugin_net;
-#[path = "plugins/permissions.rs"]
+pub mod plugin_permission_policy;
+pub mod plugin_permission_prompt;
+#[path = "plugins/permissions/mod.rs"]
 pub mod plugin_permissions;
+#[path = "plugins/preview.rs"]
+pub mod plugin_preview;
+#[path = "plugins/resource_context.rs"]
+pub mod plugin_resource_context;
 #[path = "plugins/resources.rs"]
 pub mod plugin_resources;
 #[path = "plugins/signing.rs"]
 pub mod plugin_signing;
 pub use fiex_plugin_sdk as plugin_sdk;
+#[path = "plugins/mounts.rs"]
+pub mod mounts;
 #[path = "plugins/sandbox/mod.rs"]
 pub mod plugin_sandbox;
 #[path = "plugins/search.rs"]

@@ -113,12 +113,23 @@ pub(crate) async fn detect_ides() -> Result<Vec<terminals::Ide>, String> {
 }
 #[tauri::command]
 pub(crate) async fn open_in_ide(path: String, id: String) -> Result<(), String> {
+    crate::mounts::reject_local(&path)?;
     tauri::async_runtime::spawn_blocking(move || terminals::launch_ide(&path, &id))
         .await
         .map_err(|error| error.to_string())?
 }
 #[tauri::command]
+pub(crate) fn open_external_url(url: String) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(&url).map_err(|_| "无效的链接")?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("只允许打开 http/https 链接".into());
+    }
+    open::that(url).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub(crate) fn open_terminal(path: String, id: String) -> Result<(), String> {
+    crate::mounts::reject_local(&path)?;
     terminals::launch(&path, &id)
 }
 #[tauri::command]
@@ -126,6 +137,13 @@ pub(crate) async fn open_path(
     path: String,
     recent: tauri::State<'_, recent::Recent>,
 ) -> Result<(), String> {
+    if crate::plugin_vfs::handles(&path) && !remote::is_remote(&path) {
+        let path =
+            tauri::async_runtime::spawn_blocking(move || crate::plugin_vfs::materialize(&path))
+                .await
+                .map_err(|e| e.to_string())??;
+        return terminals::open_path(&path);
+    }
     if crate::usbfs::route(&path).is_none() {
         recent::record(&recent, &path);
     }
@@ -158,6 +176,7 @@ pub(crate) async fn open_path(
 }
 #[tauri::command]
 pub(crate) fn reveal_path(path: String) -> Result<(), String> {
+    crate::mounts::reject_local(&path)?;
     terminals::reveal(&path)
 }
 #[tauri::command]
@@ -166,6 +185,9 @@ pub(crate) fn open_applications() -> Result<(), String> {
 }
 #[tauri::command]
 pub(crate) fn set_tags(paths: Vec<String>, tags: Vec<tags::Tag>) -> Result<(), String> {
+    for path in &paths {
+        crate::mounts::reject_local(path)?;
+    }
     tags::set_tags(&paths, &tags)
 }
 #[tauri::command]

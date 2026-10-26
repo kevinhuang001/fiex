@@ -17,21 +17,20 @@ export const marketplace = [
     requestedNetworkDomains: ['github.com'],
     asset: 'git-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    contributions: {
+    extensions: {
+      vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
       toolbar: [
         {
           id: 'git.main',
           title: '源代码管理',
           icon: 'git-branch',
           command: 'git.status',
-          schemes: ['history'],
         },
       ],
       settings: [
         { id: 'historyLimit', label: '历史提交显示条数', type: 'number', defaultValue: '50' },
       ],
     },
-    capabilities: ['filesystem', 'toolbar', 'commands'],
   },
   {
     id: 'org.example.webdav',
@@ -52,19 +51,16 @@ export const marketplace = [
     commands: [],
     asset: 'webdav-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    capabilities: ['filesystem', 'connection'],
-    contributions: {
-      connections: [
-        {
-          id: 'webdav',
-          title: 'WebDAV',
-          fields: [
-            { id: 'url', label: '服务器地址', type: 'url', required: true },
-            { id: 'username', label: '用户名', type: 'text' },
-            { id: 'password', label: '密码', type: 'secret' },
-          ],
-        },
-      ],
+
+    extensions: {
+      connections: {
+        title: 'WebDAV',
+        fields: [
+          { id: 'url', label: '服务器地址', type: 'url', required: true },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'password', label: '密码', type: 'secret' },
+        ],
+      },
     },
   },
   {
@@ -86,20 +82,17 @@ export const marketplace = [
     commands: [],
     asset: 'smb-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    capabilities: ['filesystem', 'connection'],
-    contributions: {
-      connections: [
-        {
-          id: 'smb',
-          title: 'SMB 网络共享',
-          fields: [
-            { id: 'host', label: '主机', type: 'text', required: true },
-            { id: 'share', label: '共享名', type: 'text', required: true },
-            { id: 'username', label: '用户名', type: 'text' },
-            { id: 'password', label: '密码', type: 'secret' },
-          ],
-        },
-      ],
+
+    extensions: {
+      connections: {
+        title: 'SMB 网络共享',
+        fields: [
+          { id: 'host', label: '主机', type: 'text', required: true },
+          { id: 'share', label: '共享名', type: 'text', required: true },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'password', label: '密码', type: 'secret' },
+        ],
+      },
     },
   },
   {
@@ -119,8 +112,8 @@ export const marketplace = [
     requestedNetworkDomains: [],
     asset: 'archive-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    capabilities: ['commands', 'toolbar', 'contextMenu'],
-    contributions: {
+
+    extensions: {
       contextMenus: [
         {
           id: 'archive.compress',
@@ -157,8 +150,8 @@ export const marketplace = [
     requestedNetworkDomains: [],
     asset: 'checksum-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
-    capabilities: ['commands', 'contextMenu'],
-    contributions: {
+
+    extensions: {
       info: [
         {
           id: 'checksum.info',

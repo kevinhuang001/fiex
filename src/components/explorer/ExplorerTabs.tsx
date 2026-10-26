@@ -194,11 +194,9 @@ export function ExplorerTabs({
             >
               {tabBody(path, i)}
             </button>
-            {left.tabs.length > 1 && (
-              <button aria-label="关闭标签页" onClick={() => closeWorkspaceTab(i)}>
-                <X size={12} />
-              </button>
-            )}
+            <button aria-label="关闭标签页" onClick={() => closeWorkspaceTab(i)}>
+              <X size={12} />
+            </button>
           </div>
         ))}
       </div>
@@ -224,11 +222,9 @@ export function ExplorerTabs({
             aria-hidden
           >
             <button tabIndex={-1}>{tabBody(left.tabs[lifted.from], lifted.from)}</button>
-            {left.tabs.length > 1 && (
-              <button tabIndex={-1}>
-                <X size={12} />
-              </button>
-            )}
+            <button tabIndex={-1}>
+              <X size={12} />
+            </button>
           </div>,
           document.body,
         )}

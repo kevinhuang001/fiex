@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parent, join, pathCrumbs, sortEntries, groupKey, uniqueName } from './files'
+import { parent, join, pathCrumbs, sortEntries, groupKey, uniqueName, corePath } from './files'
 import type { Entry } from './types'
 const e = (name: string, isDir = false): Entry => ({
   name,
@@ -55,5 +55,39 @@ describe('pathCrumbs', () => {
 
   it('keeps a virtual location as one crumb', () => {
     expect(pathCrumbs('recent://')).toEqual([{ name: 'recent://', path: 'recent://' }])
+  })
+})
+
+describe('Core mount paths', () => {
+  const root = 'fiex://mount/account-one/'
+  it('keeps roots stable and encodes each child exactly once', () => {
+    expect(parent(root)).toBe(root)
+    const nested = join(join(root, '中文 #?%'), 'report.docx')
+    expect(corePath(nested)?.parts).toEqual(['中文 #?%', 'report.docx'])
+    expect(parent(parent(nested))).toBe(root)
+    expect(pathCrumbs(nested).map((c) => c.path)).toEqual([root, parent(nested), nested])
+    expect(pathCrumbs(nested).map((c) => c.name)).toEqual([
+      '虚拟文件系统',
+      '中文 #?%',
+      'report.docx',
+    ])
+    expect(join('fiex://mount/account-two/', 'same')).not.toBe(join(root, 'same'))
+  })
+  it('rejects malformed addresses before local path manipulation', () => {
+    for (const value of [
+      'fiex://wrong/x/',
+      root + '..',
+      root + '%2e%2e',
+      root + '%252e%252e',
+      root + 'a%2fb',
+      root + 'a%5cb',
+      root + '%00',
+      root + '%zz',
+      root + 'x#fragment',
+      root + 'a//b',
+    ]) {
+      expect(() => parent(value)).toThrow()
+      expect(() => pathCrumbs(value)).toThrow()
+    }
   })
 })

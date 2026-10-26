@@ -229,6 +229,9 @@ fn remove_entry(path: &Path) -> Result<(), String> {
 /// Permanently remove items. Used inside the Trash, where "move to Trash" has
 /// no meaning and the user explicitly asks for the item to be gone.
 pub fn delete_permanently(paths: &[String], cancel: &AtomicBool) -> Result<usize, String> {
+    for path in paths {
+        crate::mounts::reject_local(path)?;
+    }
     let mut removed = 0;
     for path in paths {
         check_cancelled(cancel)?;

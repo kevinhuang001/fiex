@@ -16,16 +16,28 @@ pub(crate) async fn register_drag(
     if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
         eprintln!("drag: register {:?} copy={copy_requested}", paths);
     }
-    let mut moving = !copy_requested && !paths.iter().any(|p| remote::is_remote(p));
+    let mut moving = !copy_requested
+        && !paths
+            .iter()
+            .any(|p| remote::is_remote(p) || crate::plugin_vfs::handles(p));
+    let mut materialized = Vec::new();
     for path in &paths {
         if remote::is_remote(path) {
-            if std::path::Path::new(path).is_dir() {
+            if remote::stat(path)?.is_dir {
                 remote::download_dir(path, &remote::TransferOptions::default()).await?;
             } else {
                 remote::ensure_downloaded(path, &remote::TransferOptions::default()).await?;
             }
+            materialized.push(remote::cached_path(path)?);
+        } else if crate::plugin_vfs::handles(path) {
+            materialized.push(crate::plugin_vfs::materialize(path)?);
+        } else {
+            crate::mounts::reject_local(path)?;
+            materialized.push(path.clone());
         }
     }
+    let original_paths = paths;
+    let paths = materialized;
     let label = window.label().to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let mut exported = Vec::new();
@@ -42,7 +54,7 @@ pub(crate) async fn register_drag(
             }
         }
         app.state::<DragSessions>()
-            .begin(&label, &paths, &exported, moving)?;
+            .begin(&label, &original_paths, &exported, moving)?;
         if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
             eprintln!("drag: session for {label} moving={moving} exported={exported:?}");
         }

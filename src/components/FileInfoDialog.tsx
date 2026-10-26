@@ -1,7 +1,6 @@
-import { ExternalLink } from 'lucide-react'
-import { Fragment, useEffect, useState } from 'react'
+import { Check, Copy } from 'lucide-react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
-import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
 import { date, parent, kind, size } from '@/lib/files'
 import { tagHex } from '@/lib/tags'
@@ -11,8 +10,10 @@ import type { Entry } from '@/lib/types'
 interface InfoRow {
   label: string
   value: string
+  copyable?: boolean
 }
 interface InfoSection {
+  id: string
   source: 'core' | 'plugin'
   title: string
   pluginId?: string
@@ -20,18 +21,19 @@ interface InfoSection {
   rows: InfoRow[]
 }
 
-export function FileInfoDialog({
-  info,
-  onClose,
-  onError,
-}: {
-  info: Entry | null
-  onClose: () => void
-  onError: (s: string) => void
-}) {
+export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose: () => void }) {
   const [sections, setSections] = useState<InfoSection[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [copied, setCopied] = useState('')
+  const copiedTimer = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!info) return
@@ -54,12 +56,14 @@ export function FileInfoDialog({
     }
   }, [info])
 
-  async function reveal() {
-    if (!info) return
+  const copy = async (value: string, key: string) => {
     try {
-      await call('reveal_path', { path: info.path })
-    } catch (cause) {
-      onError(String(cause))
+      await navigator.clipboard.writeText(value)
+      setCopied(key)
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current)
+      copiedTimer.current = window.setTimeout(() => setCopied(''), 1200)
+    } catch {
+      // Clipboard access is best effort; the value stays selectable.
     }
   }
 
@@ -75,21 +79,20 @@ export function FileInfoDialog({
         ...(info.linkTarget ? [{ label: '链接到', value: info.linkTarget }] : []),
       ]
     : []
-  const groups: Array<{
-    title: string
-    provider: string
-    hideProvider: boolean
-    rows: InfoRow[]
-  }> = info
+  // Core's metadata provider owns the basic attributes. Only use the local
+  // Entry fallback for old responses or paths Core could not stat.
+  const hasCoreMetadata = sections.some((section) => section.id === 'core.metadata')
+  const groups: Array<{ title: string; from?: string; rows: InfoRow[] }> = info
     ? [
-        { title: '文件', provider: 'Fiex', hideProvider: true, rows: basicRows },
+        ...(hasCoreMetadata ? [] : [{ title: '文件', rows: basicRows }]),
         ...sections
           .filter((section) => section.rows.length > 0)
           .map((section) => ({
             title: section.title,
-            provider: section.provider || 'Fiex',
-            hideProvider:
-              section.source === 'core' || section.pluginId === 'org.fiex.office-preview',
+            from:
+              section.source === 'plugin' && section.provider
+                ? `来自：${section.provider}`
+                : undefined,
             rows: section.rows,
           })),
       ]
@@ -107,14 +110,29 @@ export function FileInfoDialog({
                 <Fragment key={`${group.title}:${groupIndex}`}>
                   <div className="file-info-group">
                     <span>{group.title}</span>
-                    {!group.hideProvider && group.provider !== group.title && (
-                      <small>{group.provider}</small>
-                    )}
+                    {group.from && <small>{group.from}</small>}
                   </div>
                   {group.rows.map((row, rowIndex) => (
                     <div className="file-info-row" key={`${row.label}:${rowIndex}`}>
                       <dt>{row.label}</dt>
-                      <dd>{row.value}</dd>
+                      <dd>
+                        <span>{row.value}</span>
+                        {row.copyable && (
+                          <button
+                            type="button"
+                            className="info-copy"
+                            title={copied === `${groupIndex}:${rowIndex}` ? '已复制' : '复制'}
+                            aria-label="复制"
+                            onClick={() => void copy(row.value, `${groupIndex}:${rowIndex}`)}
+                          >
+                            {copied === `${groupIndex}:${rowIndex}` ? (
+                              <Check size={12} />
+                            ) : (
+                              <Copy size={12} />
+                            )}
+                          </button>
+                        )}
+                      </dd>
                     </div>
                   ))}
                 </Fragment>
@@ -133,10 +151,6 @@ export function FileInfoDialog({
               </div>
             )}
           </div>
-          <Button variant="secondary" onClick={() => void reveal()}>
-            在系统文件管理器中显示
-            <ExternalLink />
-          </Button>
         </div>
       )}
     </Modal>

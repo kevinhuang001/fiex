@@ -45,6 +45,21 @@ export function useListing(
     syncDecorationIcons(decorations)
   }, [decorations])
   const reload = useCallback(() => setRefresh((v) => v + 1), [])
+  useEffect(() => {
+    if (!native || !enabled) return
+    const stop = listen('remote-sync', () => {
+      if (
+        !document.hidden &&
+        connections.some(
+          (c) => path.startsWith(c.mountPath.replace(/\/$/, '') + '/') || path === c.mountPath,
+        )
+      )
+        reload()
+    })
+    return () => {
+      void stop.then((unlisten) => unlisten())
+    }
+  }, [enabled, connections, path, reload])
   const locationsKey = useRef('')
   const locationsPending = useRef<Promise<Location[]> | null>(null)
   const refreshLocations = useCallback((force = false): Promise<Location[]> => {
@@ -114,7 +129,7 @@ export function useListing(
     }
   }, [refreshLocations, enabled])
   useEffect(() => {
-    if (!enabled || !path || query) return
+    if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
     setLoading(true)
@@ -126,6 +141,10 @@ export function useListing(
     })
       .then((l) => {
         if (active && id === request.current) {
+          if (l.path !== path) {
+            navigate(l.path)
+            return
+          }
           setDirectoryReadOnly(Boolean(l.readOnly))
           setVirtualVolume(Boolean(l.virtualVolume))
           setListedPath(path)
@@ -155,7 +174,15 @@ export function useListing(
     }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
-    if (!enabled || !path || !native || virtualVolume || path.startsWith('recent://')) return
+    if (
+      !enabled ||
+      !path ||
+      !native ||
+      virtualVolume ||
+      path.startsWith('recent://') ||
+      path.startsWith('fiex-plugin-view://')
+    )
+      return
     let cleanup: (() => void) | undefined
     let active = true
     let timer: ReturnType<typeof setTimeout>
@@ -213,25 +240,6 @@ export function useListing(
           setSearching(false)
         }
       })
-      // Search providers are additive: a provider failure never suppresses
-      // local results or other providers.
-      void call<Entry[]>('plugin_search', {
-        query,
-        root: globalSearch ? 'everywhere://' : path,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-        limit: 200,
-      })
-        .then((extra) => {
-          if (generation !== searchRequest.current || !extra.length) return
-          startTransition(() =>
-            setEntries((current) => {
-              const seen = new Set(current.map((entry) => entry.path))
-              return [...current, ...extra.filter((entry) => !seen.has(entry.path))]
-            }),
-          )
-        })
-        .catch(() => {})
     }, 200)
     return () => {
       clearTimeout(timer)

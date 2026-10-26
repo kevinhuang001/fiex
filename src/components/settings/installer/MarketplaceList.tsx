@@ -1,5 +1,5 @@
 import { Check, Download, LoaderCircle, Puzzle, RefreshCw, Search } from 'lucide-react'
-import { useState, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   PLUGIN_CATEGORIES,
   pluginCategories,
@@ -25,6 +25,7 @@ export function MarketplaceList({
   entries,
   busyId,
   onPrepare,
+  initialCategory,
 }: {
   open: boolean
   installed: PluginInfo[]
@@ -37,12 +38,16 @@ export function MarketplaceList({
   entries: MarketplacePlugin[]
   busyId: string
   onPrepare: (entry: MarketplacePlugin) => void
+  initialCategory?: string
 }) {
-  const [category, setCategory] = useState('all')
+  const [category, setCategory] = useState(initialCategory || 'all')
+  useEffect(() => {
+    if (open) setCategory(initialCategory || 'all')
+  }, [open, initialCategory])
   const categories = (() => {
     const counts = new Map<string, number>()
     for (const entry of entries) {
-      for (const id of pluginCategories(entry.contributions, entry.commands)) {
+      for (const id of pluginCategories(entry.extensions, entry.commands)) {
         counts.set(id, (counts.get(id) || 0) + 1)
       }
     }
@@ -57,7 +62,7 @@ export function MarketplaceList({
       entry.id.toLowerCase().includes(term) ||
       entry.description.toLowerCase().includes(term)
     const matchesCategory =
-      category === 'all' || pluginCategories(entry.contributions, entry.commands).includes(category)
+      category === 'all' || pluginCategories(entry.extensions, entry.commands).includes(category)
     return matchesSearch && matchesCategory
   })
   return (
@@ -116,7 +121,7 @@ export function MarketplaceList({
                       </div>
                       <p>{entry.description || '没有提供说明。'}</p>
                       <div className="plugin-card-categories">
-                        {pluginCategories(entry.contributions, entry.commands)
+                        {pluginCategories(entry.extensions, entry.commands)
                           .slice(0, 4)
                           .map((id) => (
                             <span className="plugin-category-pill" key={id}>

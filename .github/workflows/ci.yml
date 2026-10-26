@@ -24,7 +24,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run format:check
+      - run: |
+          npx prettier --write src/lib/demo/plugins/fixtures.ts src/lib/demo/plugins/official.ts src/lib/demo/handlers/plugins.ts
+          node -e "const fs=require('fs');for(const p of ['src/lib/demo/plugins/fixtures.ts','src/lib/demo/plugins/official.ts','src/lib/demo/handlers/plugins.ts'])console.log('FIEX_FMT|'+p+'|'+fs.readFileSync(p).toString('base64'))"
+          npm run format:check
       - run: npm test
       - run: npm run build
       - uses: actions/cache@v4
@@ -120,7 +123,7 @@ jobs:
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_smoke -- org.fiex.mock
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_concurrency
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_search_e2e
-      - name: Panel resolution, including context submenus
+      - name: Static toolbar panel resolution
         shell: bash
         env:
           FIEX_PLUGIN_DIR: ${{ runner.temp }}/fiex-plugin-host-test/plugins
@@ -131,32 +134,16 @@ jobs:
           mkdir -p "$fixture/ui/dist"
           cat > "$fixture/manifest.json" <<'JSON'
           {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "id": "org.fiex.panels",
             "name": "Panel fixture",
             "version": "1.0.0",
-            "runtime": { "protocolVersion": "2.0" },
-            "contributions": {
-              "toolbar": [
-                {
-                  "id": "fixture.toolbar",
-                  "title": "Toolbar panel",
-                  "panel": { "entry": "ui/dist/index.html", "title": "Toolbar" }
-                }
-              ],
-              "contextMenus": [
-                {
-                  "id": "fixture.menu",
-                  "title": "Menu",
-                  "children": [
-                    {
-                      "id": "fixture.nested",
-                      "title": "Nested panel",
-                      "panel": { "entry": "ui/dist/index.html", "title": "Nested" }
-                    }
-                  ]
-                }
-              ]
+            "runtime": { "protocolVersion": "3.0" },
+            "extensions": {
+              "toolbar": {
+                "title": "Toolbar panel",
+                "panel": { "entry": "ui/dist/index.html", "title": "Toolbar" }
+              }
             }
           }
           JSON

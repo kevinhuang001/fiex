@@ -48,15 +48,18 @@ export type SharedRow = (entry: Entry) => RowBindings
 
 export function SyncBadge({ sync }: { sync: Entry['sync'] }) {
   if (!sync) return null
-  return sync === 'synced' ? (
-    <span className="sync-badge synced" title="已同步">
-      <CloudCheck size={11} />
-      <span>已同步</span>
-    </span>
-  ) : (
-    <span className="sync-badge cloud" title="仅云端，需要连接">
-      <CloudDownload size={11} />
-      <span>仅云端</span>
+  const labels = {
+    synced: '已缓存',
+    cloud: '仅云端',
+    pinned: '始终保留在本地',
+    pending: '等待上传',
+    conflict: '同步冲突',
+  }
+  const label = labels[sync]
+  return (
+    <span className={`sync-badge ${sync}`} title={label}>
+      {sync === 'cloud' ? <CloudDownload size={11} /> : <CloudCheck size={11} />}
+      <span>{label}</span>
     </span>
   )
 }
@@ -81,8 +84,14 @@ function decorationVars(style: DecorationStyle): CSSProperties {
   } as CSSProperties
 }
 
-function styleOf(style: DecorationStyle | undefined): CSSProperties | undefined {
-  return style ? decorationVars(style) : undefined
+function fieldStyle(style: DecorationStyle | undefined): CSSProperties | undefined {
+  if (!style) return undefined
+  return {
+    ...decorationVars(style),
+    color: style.color,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+  } as CSSProperties
 }
 
 function Badges({ badges }: { badges?: DecorationBadge[] }) {
@@ -116,8 +125,13 @@ export function DecoratedValue({
   children: ReactNode
 }) {
   const field = fieldOf(decoration, target)
+  const style = field?.style
+  const painted = Boolean(style?.backgroundLight || style?.backgroundDark)
   return (
-    <span className="decorated-value" style={styleOf(field?.style)}>
+    <span
+      className={'decorated-value' + (painted ? ' decorated-value-bg' : '')}
+      style={fieldStyle(style)}
+    >
       {children}
       <Badges badges={field?.badges} />
     </span>
@@ -156,14 +170,23 @@ export function NameCell({
     )
   const decoration = explorer.decorations?.[entry.path]
   const field = fieldOf(decoration, 'name')
-  const style = styleOf(field?.style)
+  const style = fieldStyle(field?.style)
   const title = [entry.name, decoration?.description, decoration?.providers?.join(' · ')]
     .filter(Boolean)
     .join(' · ')
   const label = decoration?.label || entry.name
   return (
     <>
-      <span className={className} style={style} title={title}>
+      <span
+        className={
+          className +
+          (field?.style?.backgroundLight || field?.style?.backgroundDark
+            ? ' decoration-name-bg'
+            : '')
+        }
+        style={style}
+        title={title}
+      >
         {entry.name}
       </span>
       <Badges badges={field?.badges} />

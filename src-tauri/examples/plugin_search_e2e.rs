@@ -13,14 +13,23 @@ fn main() {
         .into_iter()
         .find(|(m, _)| m.id == id)
         .unwrap();
+    if !plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == id)
+        .is_some_and(|plugin| plugin.approved)
+    {
+        plugin_host::approve_install(id).expect("install approval failed");
+    }
     plugin_host::activate(
         id,
         &plugin_host::activation_requirements(&manifest).unwrap(),
     )
     .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("fiex-mock-search.txt"), "mock result").unwrap();
     let entries = fiex_lib::plugin_search::query(&PluginSearchInput {
         query: "mock".into(),
-        root: "everywhere://".into(),
+        root: root.path().to_string_lossy().into_owned(),
         hidden: false,
         ignores: Vec::new(),
         limit: Some(50),

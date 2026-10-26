@@ -2,17 +2,21 @@ import { Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PluginInstaller } from '../PluginInstaller'
 import type { PluginInfo } from '@/lib/plugins'
+import type { ReactNode } from 'react'
 
 /** Entry points above the installed list: local import and the official store. */
 export function PluginStoreToolbar({
   onImport,
   onOpenStore,
+  children,
 }: {
   onImport: () => void
   onOpenStore: () => void
+  children?: ReactNode
 }) {
   return (
-    <div className="plugin-toolbar plugin-toolbar-actions-only">
+    <div className="plugin-manager-toolbar">
+      {children}
       <div className="plugin-toolbar-actions">
         <Button type="button" size="sm" variant="outline" onClick={onImport}>
           <Upload size={15} />
@@ -37,11 +41,13 @@ export function PluginStore({
   installed,
   onClose,
   onInstalled,
+  initialCategory,
 }: {
   open: boolean
   installed: PluginInfo[]
   onClose: () => void
   onInstalled: () => void
+  initialCategory?: string
 }) {
   return (
     <PluginInstaller
@@ -49,6 +55,7 @@ export function PluginStore({
       installed={installed}
       onClose={onClose}
       onInstalled={onInstalled}
+      initialCategory={initialCategory}
     />
   )
 }
