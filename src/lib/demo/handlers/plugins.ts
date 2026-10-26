@@ -1,6 +1,7 @@
 import { demoGitEntries, demoGpgKeys, demoHistory } from '../data'
 import { demoPlugins, marketplace, officialMode, query } from '../plugins'
 import { notHandled } from './shared'
+import { requestDemoPermission, resolveDemoPermission } from '../permission'
 
 const pluginSettings = new Map<string, unknown>()
 const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
@@ -216,6 +217,21 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const itemId = String(a.itemId || '')
       if (!session || Date.now() - session.created >= 90000 || !session.actions.has(itemId)) {
         throw new Error('Invalid or already used menu session')
+      }
+      // The checksum action reads file contents. Mirror Core: if the user
+      // revoked files.read, the action waits for the Core-owned prompt before
+      // it can continue. This is the "during plugin use" re-authorization case.
+      if (itemId === 'checksum.calculate') {
+        const plugin = demoPlugins.find((entry) => entry.id === session.pluginId)
+        if (plugin && !plugin.grantedPermissions.includes('files.read')) {
+          const allow = await requestDemoPermission({
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            permission: 'files.read',
+            kind: 'permission',
+          })
+          if (!allow) throw new Error('PermissionDenied: user denied files.read')
+        }
       }
       const panelId = itemId
       if (
@@ -765,10 +781,33 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         const permission = String(a.permission)
+        // Mirrors Core: revoking one capability does not deactivate the plugin;
+        // the next operation asks again through the Core-owned prompt.
         plugin.grantedPermissions = a.granted
           ? [...new Set([...plugin.grantedPermissions, permission])]
           : plugin.grantedPermissions.filter((value) => value !== permission)
-        if (!a.granted) plugin.enabled = false
+      }
+      return null
+    }
+    case 'plugin_permission_respond': {
+      const request = resolveDemoPermission(String(a.requestId || ''), Boolean(a.allow))
+      if (request && a.allow) {
+        const plugin = demoPlugins.find((entry) => entry.id === request.pluginId)
+        if (plugin) {
+          plugin.grantedPermissions = [
+            ...new Set([...plugin.grantedPermissions, request.permission]),
+          ]
+          if (request.kind === 'network' && request.target) {
+            plugin.allowedNetworkDomains = [
+              ...new Set([...(plugin.allowedNetworkDomains || []), request.target]),
+            ]
+          }
+          if (request.kind === 'command' && request.target) {
+            plugin.allowedCommands = [
+              ...new Set([...(plugin.allowedCommands || []), request.target]),
+            ]
+          }
+        }
       }
       return null
     }
@@ -778,7 +817,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         plugin.allowedCommands = a.granted
           ? [...new Set([...(plugin.allowedCommands || []), String(a.command)])]
           : (plugin.allowedCommands || []).filter((value) => value !== a.command)
-        if (!a.granted) plugin.enabled = false
       }
       return null
     }

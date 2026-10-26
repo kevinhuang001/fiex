@@ -1,6 +1,6 @@
 //! Panel document lookup, CSP injection and asset serving.
 use super::catalog::{canonical_under, discover};
-use super::manifest::{activation_requirements, declared, PluginManifest};
+use super::manifest::{declared, PluginManifest};
 use serde_json::Value;
 use std::fs;
 use std::path::{Component, Path};
@@ -41,12 +41,7 @@ fn panel_source(plugin_id: &str, panel_id: &str) -> Result<String, String> {
         .find(|(m, _)| m.id == plugin_id)
         .ok_or("plugin is not installed")?;
     let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
-    if !rights.enabled
-        || !crate::plugin_permissions::activation_complete(
-            &rights,
-            &activation_requirements(&manifest)?,
-        )
-    {
+    if !rights.approved || !rights.enabled {
         return Err("plugin disabled or not approved".into());
     }
     let panel = find_panel(&manifest, panel_id).ok_or("plugin declares no such panel")?;
@@ -108,12 +103,7 @@ pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String>
         .find(|(manifest, _)| manifest.id == plugin_id)
         .ok_or("plugin is not installed")?;
     let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
-    if !rights.enabled
-        || !crate::plugin_permissions::activation_complete(
-            &rights,
-            &activation_requirements(&manifest)?,
-        )
-    {
+    if !rights.approved || !rights.enabled {
         return Err("plugin disabled or not approved".into());
     }
     let rel = Path::new(entry);

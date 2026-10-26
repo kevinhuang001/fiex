@@ -12,6 +12,8 @@ fn expected_plugin_error(message: &str) -> bool {
         "plugin disabled or not approved",
         "plugin is not enabled",
         "permission not granted",
+        "permissiondenied",
+        "permission request",
         "not authorized",
     ]
     .iter()
@@ -204,6 +206,12 @@ pub(crate) fn plugin_set_permission(
     granted: bool,
 ) -> Result<(), String> {
     crate::plugin_host::set_permission(&plugin_id, &permission, granted)
+}
+/// The UI answers a Core-owned runtime permission prompt. The plugin never
+/// participates in this path.
+#[tauri::command]
+pub(crate) fn plugin_permission_respond(request_id: String, allow: bool) -> Result<(), String> {
+    crate::plugin_permission_prompt::respond(&request_id, allow)
 }
 #[tauri::command]
 pub(crate) fn plugin_set_command(

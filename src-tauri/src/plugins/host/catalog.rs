@@ -135,9 +135,10 @@ pub fn catalog() -> Vec<PluginInfo> {
             let declared = declared(&manifest).unwrap_or_default();
             let state =
                 crate::plugin_permissions::status(&manifest.id, &declared).unwrap_or_default(); // unreadable policy fails closed
-            let active = activation_requirements(&manifest).is_ok_and(|required| {
-                state.enabled && crate::plugin_permissions::activation_complete(&state, &required)
-            });
+                                                                                                // `enabled` means the package may run. Individual capabilities may
+                                                                                                // be switched off; their operations ask again instead of
+                                                                                                // deactivating the whole plugin.
+            let active = state.approved && state.enabled;
             let requested = activation_requirements(&manifest).unwrap_or_default();
             let missing_commands = missing_commands(&requested.commands);
             PluginInfo {
@@ -176,12 +177,8 @@ pub fn themes() -> Vec<crate::plugin_themes::Theme> {
         .into_iter()
         .filter(|(manifest, _)| {
             activation_requirements(manifest).is_ok_and(|required| {
-                crate::plugin_permissions::status(&manifest.id, &required.permissions).is_ok_and(
-                    |state| {
-                        state.enabled
-                            && crate::plugin_permissions::activation_complete(&state, &required)
-                    },
-                )
+                crate::plugin_permissions::status(&manifest.id, &required.permissions)
+                    .is_ok_and(|state| state.approved && state.enabled)
             })
         })
         .flat_map(|(manifest, folder)| {

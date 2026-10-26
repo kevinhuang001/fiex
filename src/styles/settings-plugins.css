@@ -814,3 +814,28 @@
   gap: 4px;
   margin-top: 6px;
 }
+
+/* Plugin manager opened from the toolbar: the page keeps its own store and
+   permission dialogs, while the shell owns the large scrollable surface. */
+.plugin-manager-modal {
+  width: min(980px, calc(100vw - 40px));
+  height: min(820px, calc(100vh - 60px));
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.plugin-manager-modal > header {
+  flex: 0 0 auto;
+  padding: 20px 24px 0;
+  margin-bottom: 12px;
+}
+.plugin-manager-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 24px 24px;
+}
+.plugin-manager-page .plugin-page {
+  min-height: 100%;
+}

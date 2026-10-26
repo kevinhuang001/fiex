@@ -33,6 +33,7 @@ const permissionOrder = [
   'files.rename',
   'network',
   'commands',
+  'hooks',
 ]
 const rank = (value: string) => {
   const index = permissionOrder.indexOf(value)
@@ -115,6 +116,7 @@ export function PluginPermissionPrompt({
   total,
   busy,
   error,
+  note,
   allowLabel = '允许',
   denyLabel = '不允许',
   onAllow,
@@ -128,6 +130,8 @@ export function PluginPermissionPrompt({
   total: number
   busy?: boolean
   error?: string
+  /** Extra explanation for operation-time requests. */
+  note?: string
   allowLabel?: string
   denyLabel?: string
   onAllow: () => void
@@ -180,6 +184,7 @@ export function PluginPermissionPrompt({
             {item.warning}
           </p>
         )}
+        {note && <p className="plugin-permission-prompt-note">{note}</p>}
         {error && (
           <p role="alert" className="plugin-permission-prompt-error">
             {error}

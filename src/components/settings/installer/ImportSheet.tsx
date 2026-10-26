@@ -66,13 +66,13 @@ export function ImportSheet({
               ))}
             </div>
             <p className="sidebar-hint">
-              命令由宿主代理执行，插件进程不能直接启动程序；安装后可在设置里增删。
+              命令由宿主代理执行，插件进程不能直接启动程序；安装后可在插件管理中增删。
             </p>
           </>
         )}
         {preview?.requestedNetworkAll && (
           <p className="plugin-install-danger" role="alert">
-            危险：此插件申请访问全部网络，而不只是精确域名。安装后可以在权限设置里切换为白名单。
+            危险：此插件申请访问全部网络，而不只是精确域名。安装后可以在插件管理中切换为白名单。
           </p>
         )}
         {!!preview?.requestedNetworkDomains.length && (

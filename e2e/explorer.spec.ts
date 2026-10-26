@@ -508,8 +508,8 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await expect(page.getByRole('menuitem', { name: '压缩为…' })).toHaveCount(0)
   await expect(page.getByRole('menuitem', { name: '查看校验和' })).toHaveCount(0)
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await expect(page.getByText('用插件扩展 Fiex', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '获取插件', exact: true }).click()
   const store = page.getByRole('dialog', { name: '获取插件' })
@@ -528,8 +528,8 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
 })
 test('local import shows identity and signature only', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   await page.getByRole('button', { name: '导入插件', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '导入插件' })
   await expect(dialog).toContainText('本地示例插件')
@@ -543,8 +543,8 @@ test('local import shows identity and signature only', async ({ page }) => {
 
 test('plugin rows expose a delete action with confirmation', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const checksum = page.locator('.plugin-row').filter({ hasText: '校验和' })
   await checksum.hover()
   await checksum.getByRole('button', { name: '卸载 校验和', exact: true }).click()
@@ -557,8 +557,8 @@ test('plugin rows expose a delete action with confirmation', async ({ page }) =>
 
 test('installed plugin rows expose permissions and settings', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const git = page.locator('.plugin-row').filter({ hasText: 'Git' })
   await expect(git).toBeVisible()
   await git.hover()
@@ -697,8 +697,8 @@ test('installed plugin contributes submenu and isolated iframe modal with contex
 test('activation asks for one permission at a time and cancellation grants nothing', async ({
   page,
 }) => {
-  await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.locator('.settings-sidebar').getByRole('button', { name: '插件' }).click()
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
   const row = page.locator('.plugin-row').filter({ hasText: 'Git' })
   await row.getByRole('switch', { name: '停用 Git' }).click()
   await row.getByRole('switch', { name: '激活 Git' }).click()
@@ -719,6 +719,32 @@ test('activation asks for one permission at a time and cancellation grants nothi
   await prompt.getByRole('button', { name: '允许并激活', exact: true }).click()
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
   await page.screenshot({ path: 'artifacts/plugin-settings.png' })
+})
+
+test('using a plugin asks again after its read capability was revoked', async ({ page }) => {
+  await page.goto('/?demo&pluginFixture')
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
+  const manager = page.getByRole('dialog', { name: '插件', exact: true })
+  const checksum = manager.locator('.plugin-row').filter({ hasText: '校验和' })
+  await checksum.hover()
+  await checksum.getByRole('button', { name: '插件详情', exact: true }).click()
+  const details = page.getByRole('dialog', { name: '插件详情' })
+  const read = details.getByRole('switch', { name: '授权 读取文件', exact: true })
+  await read.click()
+  await expect(read).toHaveAttribute('aria-checked', 'false')
+  await details.getByRole('button', { name: '关闭', exact: true }).click()
+  await manager.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(manager).toBeHidden()
+
+  // Normal use: the checksum action reads the selected file, so Core asks
+  // again even though the plugin itself is still running.
+  await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: '查看校验和', exact: true }).click()
+  const prompt = page.getByRole('dialog', { name: '权限请求' })
+  await expect(prompt).toContainText('允许「校验和」读取文件？')
+  await prompt.getByRole('button', { name: '允许', exact: true }).click()
+  await expect(prompt).toHaveCount(0)
 })
 
 test('closing and reopening the same plugin context retains its iframe', async ({ page }) => {

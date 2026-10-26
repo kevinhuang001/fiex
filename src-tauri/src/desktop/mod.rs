@@ -127,6 +127,7 @@ pub fn run() {
             plugin_set_enabled,
             plugin_activate,
             plugin_set_permission,
+            plugin_permission_respond,
             plugin_set_command,
             plugin_set_network_all,
             plugin_set_network_domain,
@@ -249,6 +250,16 @@ pub fn run() {
                 let handle = app.handle().clone();
                 crate::plugin_task_events::set_sink(Box::new(move |event| {
                     let _ = handle.emit("plugin-task", &event);
+                }));
+                let handle = app.handle().clone();
+                crate::plugin_permission_prompt::set_sink(Box::new(move |event| match event {
+                    crate::plugin_permission_prompt::PermissionPromptEvent::Requested(request) => {
+                        let _ = handle.emit("plugin-permission-request", &request);
+                    }
+                    crate::plugin_permission_prompt::PermissionPromptEvent::Resolved { id } => {
+                        let _ = handle
+                            .emit("plugin-permission-resolved", serde_json::json!({"id": id}));
+                    }
                 }));
             }
             #[cfg(feature = "ci-driver")]

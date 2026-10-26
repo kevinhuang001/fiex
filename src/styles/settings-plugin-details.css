@@ -1141,3 +1141,30 @@
   font: inherit;
   font-size: 10px;
 }
+
+/* The plugin menu is also the only entry point for plugin management. */
+.plugin-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 4px 4px;
+}
+.plugin-menu-header [data-slot='dropdown-menu-label'] {
+  padding: 4px 6px !important;
+}
+.plugin-menu-settings {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.plugin-menu-settings:hover,
+.plugin-menu-settings[data-highlighted] {
+  color: var(--text);
+  background: var(--hover);
+}

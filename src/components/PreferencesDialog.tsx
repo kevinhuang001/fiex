@@ -4,7 +4,6 @@ import {
   Info,
   Keyboard,
   Palette,
-  Puzzle,
   PanelLeft,
   Rocket,
   Search,
@@ -22,7 +21,6 @@ import { ShortcutSettings } from './settings/ShortcutSettings'
 import { SidebarSettings } from './settings/SidebarSettings'
 import { TagSettings } from './settings/TagSettings'
 import { Modal } from './ui/Modal'
-import { PluginSettings } from './settings/PluginSettings'
 
 interface Props {
   open: boolean
@@ -36,15 +34,7 @@ interface Props {
 }
 
 type SectionId =
-  | 'appearance'
-  | 'behavior'
-  | 'shortcuts'
-  | 'ignore'
-  | 'sidebar'
-  | 'tags'
-  | 'terminal'
-  | 'about'
-  | 'plugins'
+  'appearance' | 'behavior' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about'
 
 interface Section {
   id: SectionId
@@ -105,13 +95,6 @@ const sections: Section[] = [
     keywords: ['terminal', 'shell', 'ide', '终端', '命令行', '启动', '编辑器'],
   },
   {
-    id: 'plugins',
-    label: '插件',
-    icon: Puzzle,
-    color: '#64748b',
-    keywords: ['插件', 'plugin', '扩展', '配置', '权限', 'OAuth'],
-  },
-  {
     id: 'about',
     label: '关于',
     icon: Info,
@@ -147,8 +130,6 @@ const searchEntries: SearchEntry[] = [
   { section: 'ignore', label: '忽略规则', keywords: ['ignore', '忽略', 'node_modules'] },
   { section: 'terminal', label: '终端', keywords: ['terminal', 'shell', '命令行'] },
   { section: 'terminal', label: 'IDE', keywords: ['editor', '编辑器', '代码'] },
-  { section: 'plugins', label: '已安装插件', keywords: ['plugin', '权限', '激活'] },
-  { section: 'plugins', label: '获取插件', keywords: ['plugin', '商店', '更新'] },
   { section: 'about', label: '版本信息', keywords: ['version', '版本', '许可', 'license'] },
 ]
 
@@ -177,7 +158,6 @@ export function PreferencesDialog({
       setSection('appearance')
       return
     }
-    if (sessionStorage.getItem('fiex:open-plugin-store')) setSection('plugins')
   }, [open])
 
   const results = useMemo(() => {
@@ -303,8 +283,6 @@ export function PreferencesDialog({
                 onHelp={() => setIntegrationsOpen(true)}
               />
             )}
-
-            {section === 'plugins' && <PluginSettings />}
 
             {section === 'about' && <AboutSettings onError={onError} />}
             <footer className="settings-actions">

@@ -138,11 +138,17 @@
 | `commands.enabled/allow`                        | Core 代理执行外部命令                 |
 | `hooks.enabled`                                 | 生命周期钩子                          |
 
-申请不等于批准。实际有效范围：
+申请不等于批准，批准也不等于资源范围。实际有效范围：
 
 ```text
-Manifest 申请 ∩ 用户 Grant ∩ PermissionPolicy ∩ 当前 Event/Operation Scope
+Manifest 申请 ∩ 安装时批准的声明快照 ∩ 用户 Grant
+  ∩ PermissionPolicy ∩ 当前 Event/Operation Scope
 ```
+
+- 安装/升级批准会记录当时的声明快照；之后 Manifest 即使新增权限，运行时也不能获得，必须替换为新版本并重新走安装/升级授权。
+- 用户关闭单个权限不会停用插件；下一次真实操作用 Core 统一弹窗重新申请。
+- 未声明的权限永远不会出现弹窗，直接拒绝。
+- `commands.allow` 是命令的硬上限；`network` 的精确主机由 Operation Scope 和用户授权共同决定。
 
 ### 网络白名单与全部网络
 

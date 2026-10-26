@@ -32,6 +32,7 @@ export function ExplorerToolbar({
   openIde,
   terminal,
   setSettings,
+  setPluginManager,
   refreshAll,
   inTrash,
   emptyTrash,
@@ -56,6 +57,7 @@ export function ExplorerToolbar({
   | 'inTrash'
   | 'emptyTrash'
   | 'setSettings'
+  | 'setPluginManager'
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
   const [refreshKey, setRefreshKey] = useState(0)
@@ -261,7 +263,12 @@ export function ExplorerToolbar({
             </div>
           ))}
         </div>
-        <PinnedTools prefs={prefs} update={update} x={x} />
+        <PinnedTools
+          prefs={prefs}
+          update={update}
+          x={x}
+          onManagePlugins={() => setPluginManager(true)}
+        />
         <div
           className="toolbar-order"
           ref={rightOrder.container}

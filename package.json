@@ -14,6 +14,7 @@
     "e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "check:size": "node scripts/check-file-size.mjs",
     "audit:native": "node scripts/audit-native-deps.mjs",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",

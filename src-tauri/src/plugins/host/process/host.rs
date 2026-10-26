@@ -1,6 +1,6 @@
 //! Per-plugin child pool and operation-scoped invocation entry points.
 use super::super::catalog::{discover, executable};
-use super::super::manifest::{activation_requirements, declared};
+use super::super::manifest::declared;
 use super::rpc::Running;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -198,19 +198,14 @@ impl PluginHost {
         {
             return Err("PermissionDenied: VFS provider declaration required".into());
         }
-        let required = activation_requirements(&manifest)?;
-        let state = crate::plugin_permissions::status(plugin_id, &required.permissions)?;
-        if !state.enabled || !crate::plugin_permissions::activation_complete(&state, &required) {
-            return Err("plugin activation requires complete permission consent".into());
+        let declared = declared(&manifest)?;
+        let state = crate::plugin_permissions::status(plugin_id, &declared)?;
+        if !state.approved || !state.enabled {
+            return Err("plugin is disabled or installation consent is pending".into());
         }
         let mut task_root = task_root;
-        let mut params = crate::plugin_events::prepare(
-            plugin_id,
-            method,
-            params,
-            &mut task_root,
-            &declared(&manifest)?,
-        )?;
+        let mut params =
+            crate::plugin_events::prepare(plugin_id, method, params, &mut task_root, &declared)?;
         if let Some(object) = params.as_object_mut() {
             object.insert("networkDomains".into(), json!(state.network_domains));
         }
@@ -222,14 +217,8 @@ impl PluginHost {
             instance.clone()
         } else {
             crate::plugin_signing::verify_installed(&manifest, &dir)?;
-            let declared = declared(&manifest)?;
             let state = crate::plugin_permissions::status(plugin_id, &declared)?;
-            if !state.enabled
-                || !crate::plugin_permissions::activation_complete(
-                    &state,
-                    &activation_requirements(&manifest)?,
-                )
-            {
+            if !state.approved || !state.enabled {
                 return Err("plugin is disabled or installation consent is pending".into());
             }
             let path = executable(&manifest, &dir)?;
@@ -244,6 +233,13 @@ impl PluginHost {
                 BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
             );
             let kill = sandbox.kill_handle();
+            let commands = manifest
+                .permissions
+                .commands
+                .allow
+                .iter()
+                .map(|command| command.to_ascii_lowercase())
+                .collect();
             let running = Running::start(
                 plugin_id.to_string(),
                 format!(
@@ -255,6 +251,7 @@ impl PluginHost {
                         .as_nanos()
                 ),
                 declared,
+                commands,
                 sandbox,
                 stdin,
                 stdout,

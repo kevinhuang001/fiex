@@ -23,19 +23,30 @@ Fiex Desktop / Sidebar / TabHost
 
 ## 权限边界
 
+权限由三层共同决定，任何一层不满足都不会执行：
+
 ```text
-Manifest permissions
-  → 用户 Grant（approval + enabled + per-capability）
-  → PermissionPolicy::allowed / require / domain_allowed
+Manifest 声明（这个包最多能申请什么）
+  → 用户状态（approved + enabled + per-capability grant）
+  → PermissionPolicy::check / domain_check / command_check
+  → 具体资源 Scope（本次操作能访问哪些路径 / 主机 / 命令）
   → Host RPC / Broker 执行
-  → 具体资源 Scope
 ```
 
-- `plugin_permissions` 负责**保存和读取 Grant**。
-- `plugin_permission_policy` 负责**做决定**，是 Host RPC 和网络 Broker 的共同入口。
-- 文件操作仍需要 `plugin_fs_access::Scope`；权限通过不等于路径范围通过。
+- `plugin_permissions` 负责**保存和读取 Grant**，包括安装时批准的声明快照。
+- `plugin_permission_policy` 负责**做三层决定**，返回 `Allowed`、`Prompt` 或 `Denied(reason)`。
+- 文件操作先由 `plugin_fs_access::Scope` 校验资源，再检查权限；范围外直接拒绝，不弹权限框。
+- 用户手动关闭某个权限时插件仍保持运行；下一次真实操作由 Core 统一弹窗重新申请。
+- 未声明或未包含在已批准声明快照中的权限永远只返回拒绝，运行时申请不能扩大 Manifest。
 - 连接插件在保存/打开时通过 `PermissionPolicy::require_all` 检查声明权限。
 - 终端 Session 采用 owner capability 校验：只有创建该 Session 的插件能读写它。
+
+## 模块规模
+
+- 新模块和正在重构的模块原则上不超过 300 行，按职责拆分到子模块。
+- `npm run check:size` 检查 `src` 与 `src-tauri/src`；`scripts/file-size-baseline.json` 记录尚未拆分的存量文件。
+- 存量文件只能缩小，不能继续膨胀；拆分到 300 行以内后从基线删除。
+- 权限链路已按 `policy / prompt / permissions / rpc dispatch` 拆分，每个文件保持在限制内。
 
 ## 事件合同
 
