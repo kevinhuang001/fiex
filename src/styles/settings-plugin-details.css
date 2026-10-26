@@ -559,6 +559,7 @@
 .plugin-toolbar-group {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 1px;
   min-width: 0;
 }
@@ -743,6 +744,27 @@
   font-family: ui-monospace, monospace;
   word-break: break-all;
 }
+.plugin-signature-note {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 11px;
+}
+.plugin-signature-note strong {
+  color: var(--text);
+}
+.plugin-signature-note span {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.plugin-signature-note code {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
 .plugin-signature-ok {
   padding: 8px 10px;
   border-radius: 8px;
@@ -829,8 +851,22 @@
 
 /* Plugin previewers render inside the preview sheet, not in a floating panel. */
 .preview-plugin .preview-body {
+  position: relative;
   height: min(72vh, 660px);
   padding: 0;
+}
+
+/* Keep the plugin's own loading document above the real preview until the
+   preview reports that its data has rendered. */
+.preview-plugin-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+.preview-plugin-loading .preview-plugin-frame {
+  width: 100%;
+  height: 100%;
 }
 
 .preview-plugin-frame {
@@ -1140,4 +1176,31 @@
   color: var(--text);
   font: inherit;
   font-size: 10px;
+}
+
+/* The plugin menu is also the only entry point for plugin management. */
+.plugin-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 4px 4px;
+}
+.plugin-menu-header [data-slot='dropdown-menu-label'] {
+  padding: 4px 6px !important;
+}
+.plugin-menu-settings {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.plugin-menu-settings:hover,
+.plugin-menu-settings[data-highlighted] {
+  color: var(--text);
+  background: var(--hover);
 }

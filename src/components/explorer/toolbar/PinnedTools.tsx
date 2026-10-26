@@ -13,11 +13,12 @@ type PinnedToolsProps = {
   prefs: Pick<AppController['prefs'], 'pinnedPluginTools'>
   update: AppController['update']
   x: Pick<AppController['x'], 'selected' | 'path' | 'setError'>
+  onManagePlugins: () => void
 }
 
 /** Pinned plugin tool strip plus the plugin dropdown menu. The strip owns its
  *  drag/reorder state so the toolbar root only has to place it. */
-export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
+export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsProps) {
   const plugins = usePluginCatalog()
   const lastPointer = useRef({ x: window.innerWidth - 18, y: 96 })
   const pinnedKeys = prefs.pinnedPluginTools || []
@@ -71,12 +72,16 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
           detail: {
             pluginId: plugin.id,
             panelId: plugin.id,
-            title: tool.title,
+            title: tool.panel?.title || tool.title,
             icon: tool.icon,
             selection: x.selected,
             directory: x.path,
             anchor: anchor ?? lastPointer.current,
             source: 'toolbar',
+            timeoutMs: plugin.uiTimeoutMs,
+            allowCreate: (plugin.declaredPermissions || []).some(
+              (permission) => permission === 'files.create' || permission === 'folders.create',
+            ),
           },
         }),
       )
@@ -97,7 +102,6 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
     update,
   })
   const liftedPin = pinDrag && pinnedTools[pinDrag.from] ? pinDrag : null
-  if (!availableTools.length) return null
   return (
     <>
       <div className="toolbar-divider" />
@@ -135,6 +139,7 @@ export function PinnedTools({ prefs, update, x }: PinnedToolsProps) {
           runTool={runTool}
           pinTool={pinTool}
           unpinTool={unpinTool}
+          onManage={onManagePlugins}
         />
       </div>
       <div className="toolbar-divider" />

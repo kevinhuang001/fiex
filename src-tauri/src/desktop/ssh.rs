@@ -5,6 +5,7 @@
 //! keyboard-interactive/MFA, algorithms and known_hosts behavior in the same
 //! trusted implementation the user already uses. The WebView only receives the
 //! byte stream; it never receives credentials.
+use super::shell_profile::login_arg;
 use base64::Engine;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
@@ -448,9 +449,11 @@ pub(crate) async fn local_terminal_open(
                     std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into())
                 }
             });
-        let mut command = CommandBuilder::new(shell);
+        let mut command = CommandBuilder::new(&shell);
         if cfg!(windows) {
             command.arg("-NoLogo");
+        } else if let Some(login) = login_arg(&shell) {
+            command.arg(login);
         }
         let directory = cwd
             .filter(|value| !value.contains("://") && Path::new(value).is_dir())

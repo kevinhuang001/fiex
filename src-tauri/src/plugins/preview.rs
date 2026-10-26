@@ -138,11 +138,21 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
 }
 
 /// Ordered provider list for the source switcher. User ordering and the
-/// disabled list remain presentation preferences.
+/// disabled list remain presentation preferences. A plugin that declares a
+/// loading page advertises it here so the UI can resolve the document before
+/// invoking `preview.open`.
 pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
     candidates(ext, mime, is_dir)
         .iter()
-        .map(Provider::json)
+        .map(|provider| {
+            let mut value = provider.json();
+            if let crate::plugin_events::Handler::Plugin(plugin) = &provider.handler {
+                if crate::plugin_host::preview_loading_entry(&plugin.extensions).is_some() {
+                    value["loading"] = Value::Bool(true);
+                }
+            }
+            value
+        })
         .collect()
 }
 
@@ -302,6 +312,9 @@ fn open_plugin_resource(
         "sessionId": session_id,
         "pluginId": plugin_id,
         "contributionId": plugin_id,
+        // Explicit manifest contract: the preview document may take longer to
+        // handshake or answer than a generic panel (large archive listings).
+        "timeoutMs": plugin.ui_timeout_ms,
         "context": context,
         "view": view,
     }))
@@ -374,7 +387,13 @@ fn resolve_preview(
             open_plugin_resource(&resource, plugin).map(|response| {
                 let mut view = response["view"].clone();
                 if let Some(object) = view.as_object_mut() {
-                    for key in ["sessionId", "context", "pluginId", "contributionId"] {
+                    for key in [
+                        "sessionId",
+                        "context",
+                        "pluginId",
+                        "contributionId",
+                        "timeoutMs",
+                    ] {
                         object.insert(key.into(), response[key].clone());
                     }
                 }

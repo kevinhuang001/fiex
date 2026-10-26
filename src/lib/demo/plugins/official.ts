@@ -107,6 +107,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
           preview: {
             extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
             priority: 100,
+            loading: { entry: 'ui/loading.html' },
           },
         },
       },
@@ -131,6 +132,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
           preview: {
             extensions: ['docx', 'xlsx', 'pptx'],
             priority: 100,
+            loading: { entry: 'ui/loading.html' },
             panel: {
               entry: 'ui/index.html',
               defaultSize: { width: 720, height: 600 },
@@ -216,6 +218,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
               'avro',
             ],
             priority: 110,
+            loading: { entry: 'ui/loading.html' },
             panel: {
               entry: 'ui/index.html',
               defaultSize: { width: 720, height: 640 },
@@ -241,12 +244,12 @@ export const officialPlugins: DemoPlugin[] = officialMode
         author: { name: 'Fiex Contributors' },
         extensions: {
           toolbar: {
-            title: '公钥管理',
+            title: '钥匙串',
             icon: 'key-round',
             panel: {
               entry: 'ui/dist/index.html',
-              title: 'GPG 公钥管理',
-              defaultSize: { width: 420, height: 460 },
+              title: 'GPG 钥匙串',
+              defaultSize: { width: 620, height: 520 },
             },
           },
           contextMenus: true,

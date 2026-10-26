@@ -37,7 +37,8 @@ pub mod plugin_match;
 #[path = "plugins/net.rs"]
 pub mod plugin_net;
 pub mod plugin_permission_policy;
-#[path = "plugins/permissions.rs"]
+pub mod plugin_permission_prompt;
+#[path = "plugins/permissions/mod.rs"]
 pub mod plugin_permissions;
 #[path = "plugins/preview.rs"]
 pub mod plugin_preview;

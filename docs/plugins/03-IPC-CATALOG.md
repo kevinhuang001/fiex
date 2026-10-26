@@ -87,6 +87,8 @@ Decorations 返回直接成员名：
 | `host.terminal.*`                                       | `sessionId`、base64、尺寸 | 终端 Session owner（仅 SSH 插件） |
 | `host.task.*`                                           | 任务/进度/取消            | 当前 operation/task 授权          |
 
+权限被用户关闭时，`host.*` 调用会等待 Core 统一弹出的授权请求（同一插件/权限/目标合并为一个弹窗）。允许后 Core 先持久化授权再继续；拒绝、超时或插件停止会返回 `permission_denied`，调用方不会收到部分结果。Manifest 未声明或超出已批准声明快照的权限不会触发弹窗，直接拒绝。
+
 ## Connection 导航
 
 只接受两种结果：

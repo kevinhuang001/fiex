@@ -4,151 +4,19 @@ import { call } from '@/lib/api'
 import { usePluginCatalog } from '@/lib/plugins'
 import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/PluginPanelHost'
+import {
+  PluginMenuNode,
+  validPluginMenuItems,
+  type PluginMenu,
+  type PluginMenuItem,
+} from './PluginMenuNode'
 
-interface MenuItem {
-  id: string
-  title: string
-  kind: 'action' | 'submenu' | 'separator'
-  parentId?: string
-}
-interface Menu {
-  pluginId: string
-  menuSessionId: string
-  items: MenuItem[]
-}
 interface Context {
   paths: string[]
   path: string
   isDirectory: boolean
   readOnly: boolean
   isRemote: boolean
-}
-
-function validMenu(items: unknown): items is MenuItem[] {
-  if (!Array.isArray(items) || items.length > 100) return false
-  const ids = new Set<string>()
-  for (const item of items) {
-    if (!item || typeof item !== 'object') return false
-    const node = item as Record<string, unknown>
-    if (
-      typeof node.id !== 'string' ||
-      !/^[\w.-]{1,80}$/.test(node.id) ||
-      ids.has(node.id) ||
-      typeof node.title !== 'string' ||
-      node.title.length > 128 ||
-      !['action', 'submenu', 'separator'].includes(String(node.kind)) ||
-      ('parentId' in node && typeof node.parentId !== 'string')
-    ) {
-      return false
-    }
-    ids.add(node.id)
-  }
-  const byId = new Map(items.map((item) => [item.id, item as MenuItem]))
-  for (const item of items as MenuItem[]) {
-    let depth = 1
-    let current = item
-    const seen = new Set<string>([item.id])
-    while (current.parentId) {
-      const parent = byId.get(current.parentId)
-      if (!parent || parent.kind !== 'submenu' || seen.has(parent.id) || ++depth > 4) return false
-      seen.add(parent.id)
-      current = parent
-    }
-  }
-  return true
-}
-
-function MenuNode({
-  item,
-  items,
-  onAction,
-  onExpand,
-}: {
-  item: MenuItem
-  items: MenuItem[]
-  onAction: (item: MenuItem, anchor?: { x: number; y: number }) => void
-  onExpand: (submenuId: string) => void
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const [openUp, setOpenUp] = useState(false)
-  const submenu = useRef<HTMLDivElement>(null)
-  const timer = useRef<number | null>(null)
-  const cancel = () => {
-    if (timer.current !== null) window.clearTimeout(timer.current)
-    timer.current = null
-  }
-  useEffect(() => cancel, [])
-  useLayoutEffect(() => {
-    if (expanded && submenu.current) {
-      setOpenUp(submenu.current.getBoundingClientRect().bottom > window.innerHeight - 8)
-    }
-  }, [expanded])
-  if (item.kind === 'separator') return <div role="separator" className="context-divider" />
-  if (item.kind === 'submenu') {
-    const descendants = items.filter((candidate) => candidate.parentId === item.id)
-    const expand = () => {
-      cancel()
-      setExpanded(true)
-      if (!descendants.length) onExpand(item.id)
-    }
-    return (
-      <div
-        className="context-submenu-wrap"
-        onMouseEnter={expand}
-        onMouseLeave={() => {
-          cancel()
-          timer.current = window.setTimeout(() => setExpanded(false), 180)
-        }}
-      >
-        <button
-          role="menuitem"
-          aria-haspopup="menu"
-          aria-expanded={expanded}
-          onClick={(event) => {
-            event.stopPropagation()
-            cancel()
-            if (!expanded) expand()
-            else setExpanded(false)
-          }}
-        >
-          <Puzzle size={15} />
-          {item.title}
-          <ChevronRight size={13} className="submenu-arrow" />
-        </button>
-        {expanded && (
-          <div
-            ref={submenu}
-            className={'context-submenu' + (openUp ? ' open-up' : '')}
-            role="menu"
-            onMouseEnter={cancel}
-          >
-            {descendants.length ? (
-              descendants.map((entry) => (
-                <MenuNode
-                  key={entry.id}
-                  item={entry}
-                  items={items}
-                  onAction={onAction}
-                  onExpand={onExpand}
-                />
-              ))
-            ) : (
-              <div className="context-submenu-empty">暂无可用操作</div>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-  return (
-    <button
-      role="menuitem"
-      onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
-    >
-      <Puzzle size={15} />
-      {item.title}
-    </button>
-  )
 }
 
 export function PluginContextActions({
@@ -161,14 +29,37 @@ export function PluginContextActions({
   onError,
 }: Context & { onClose: () => void; onError: (error: string) => void }) {
   const plugins = usePluginCatalog()
-  const [menus, setMenus] = useState<Menu[]>([])
+  const [menus, setMenus] = useState<PluginMenu[]>([])
+  const [open, setOpen] = useState(false)
+  const [flip, setFlip] = useState({ left: false, up: false })
   const requestedSubmenus = useRef(new Set<string>())
+  const trigger = useRef<HTMLButtonElement>(null)
+  const submenu = useRef<HTMLDivElement>(null)
+  const closeTimer = useRef<number | null>(null)
+  const focusFirst = useRef(false)
   const selectionKey = JSON.stringify(paths)
+  const cancelClose = () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
+    closeTimer.current = null
+  }
+  const scheduleClose = () => {
+    cancelClose()
+    // Leaving the plugin trigger closes the group at once; nested panels manage
+    // their own hover state and must not overlap a sibling plugin.
+    setOpen(false)
+  }
+  useEffect(() => cancelClose, [])
+  // Resolve every plugin's menu as soon as the root menu opens, so the
+  // submenu is already populated when the user hovers it. The backend resolves
+  // active providers itself; the catalog below only supplies names and icons,
+  // so loading it must not trigger a second resolve that could close the menu.
   useEffect(() => {
     let active = true
     requestedSubmenus.current.clear()
     setMenus([])
-    void call<Menu[]>('plugin_context_menu_resolve', {
+    setOpen(false)
+    setFlip({ left: false, up: false })
+    void call<PluginMenu[]>('plugin_context_menu_resolve', {
       directory: path,
       paths: JSON.parse(selectionKey) as string[],
       isDirectory,
@@ -184,9 +75,29 @@ export function PluginContextActions({
     return () => {
       active = false
     }
-  }, [plugins, path, selectionKey, isDirectory, readOnly, isRemote])
+  }, [path, selectionKey, isDirectory, readOnly, isRemote])
+  useLayoutEffect(() => {
+    if (!open || !submenu.current) return
+    if (focusFirst.current) {
+      focusFirst.current = false
+      submenu.current.querySelector<HTMLElement>('[role="menuitem"]:not([disabled])')?.focus()
+    }
+    // Measure against the trigger, not the already-flipped submenu, so a later
+    // lazy submenu update cannot flip the panel back off screen.
+    const anchor = trigger.current?.getBoundingClientRect()
+    if (!anchor) return
+    const width = submenu.current.offsetWidth
+    const height = submenu.current.offsetHeight
+    // Submenu levels are flush; measure their real edge for flipping.
+    const side = 0
+    const preferLeft = anchor.left < window.innerWidth / 2
+    const roomLeft = anchor.left - side - width >= 8
+    const left = roomLeft && (preferLeft || anchor.right + side + width > window.innerWidth - 8)
+    const up = anchor.top - 6 + height > window.innerHeight - 8 && anchor.bottom + 6 - height >= 8
+    setFlip((current) => (current.left === left && current.up === up ? current : { left, up }))
+  }, [open, menus])
 
-  const resolveSubmenu = async (menu: Menu, submenuId: string) => {
+  const resolveSubmenu = async (menu: PluginMenu, submenuId: string) => {
     const key = menu.menuSessionId + ':' + submenuId
     if (requestedSubmenus.current.has(key)) return
     requestedSubmenus.current.add(key)
@@ -201,7 +112,7 @@ export function PluginContextActions({
         previous.map((candidate) => {
           if (candidate.menuSessionId !== menu.menuSessionId) return candidate
           const updated = [...candidate.items, ...children]
-          return validMenu(updated) ? { ...candidate, items: updated } : candidate
+          return validPluginMenuItems(updated) ? { ...candidate, items: updated } : candidate
         }),
       )
     } catch (error) {
@@ -210,7 +121,11 @@ export function PluginContextActions({
     }
   }
 
-  const invoke = async (menu: Menu, item: MenuItem, anchor?: { x: number; y: number }) => {
+  const invoke = async (
+    menu: PluginMenu,
+    item: PluginMenuItem,
+    anchor?: { x: number; y: number },
+  ) => {
     onClose()
     const pluginId = menu.pluginId
     const plugin = plugins.find((entry) => entry.id === pluginId)
@@ -249,6 +164,10 @@ export function PluginContextActions({
               source: 'contextMenu',
               size: entry.size,
               assetPath: entry.assetPath,
+              timeoutMs: plugin?.uiTimeoutMs,
+              allowCreate: (plugin?.declaredPermissions || []).some(
+                (permission) => permission === 'files.create' || permission === 'folders.create',
+              ),
             },
           }),
         )
@@ -262,7 +181,11 @@ export function PluginContextActions({
       )
       updateActivity(activityId, { indeterminate: true })
       finishActivity(activityId, undefined, '已提交')
-      if (response && typeof response === 'object') {
+      // Background tasks return a taskId; the Status Center owns their
+      // progress, so never open a raw JSON result dialog for them.
+      const silent =
+        response && typeof response === 'object' && ('taskId' in response || 'handled' in response)
+      if (!silent && response && typeof response === 'object') {
         window.dispatchEvent(
           new CustomEvent(PLUGIN_RESULT_EVENT, { detail: { title: item.title, result: response } }),
         )
@@ -272,21 +195,91 @@ export function PluginContextActions({
       onError(String(error))
     }
   }
+
+  const hasItems = menus.some((menu) => menu.items.some((item) => !item.parentId))
+  // Keep the entry visible for installed-but-inactive plugins too; the panel
+  // explains why no actions resolved instead of making the whole menu vanish.
+  const hasContextPlugins = plugins.length > 0
+  if (!hasItems && !hasContextPlugins) return null
   return (
-    <>
-      {menus.flatMap((menu) =>
-        menu.items
-          .filter((item) => !item.parentId)
-          .map((item) => (
-            <MenuNode
-              key={menu.pluginId + ':' + item.id}
-              item={item}
-              items={menu.items}
-              onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
-              onExpand={(submenuId) => void resolveSubmenu(menu, submenuId)}
-            />
-          )),
+    <div
+      className="context-submenu-wrap plugin-context-actions"
+      onMouseEnter={() => {
+        cancelClose()
+        setOpen(true)
+      }}
+      onMouseLeave={scheduleClose}
+    >
+      <button
+        ref={trigger}
+        role="menuitem"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation()
+          cancelClose()
+          // Hover already opens the menu; a click must not immediately close it.
+          setOpen(true)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+            event.preventDefault()
+            event.stopPropagation()
+            focusFirst.current = true
+            setOpen(true)
+          } else if (event.key === 'Escape' && open) {
+            event.stopPropagation()
+            setOpen(false)
+          }
+        }}
+      >
+        <Puzzle size={15} />
+        插件
+        <ChevronRight size={13} className="submenu-arrow" />
+      </button>
+      {open && (
+        <div
+          ref={submenu}
+          role="menu"
+          aria-label="插件操作"
+          className={`context-submenu plugin-context-menu${flip.left ? ' open-left' : ''}${flip.up ? ' plugin-context-menu-up' : ''}`}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowLeft' || event.key === 'Escape') {
+              event.preventDefault()
+              event.stopPropagation()
+              setOpen(false)
+              trigger.current?.focus()
+            }
+          }}
+        >
+          {hasItems ? (
+            menus.flatMap((menu) =>
+              menu.items
+                .filter((item) => !item.parentId)
+                .map((item) => (
+                  <PluginMenuNode
+                    key={menu.pluginId + ':' + item.id}
+                    item={item}
+                    items={menu.items}
+                    parentLeft={flip.left}
+                    preferLeft={
+                      flip.left ||
+                      (trigger.current?.getBoundingClientRect().left ?? 0) < window.innerWidth / 2
+                    }
+                    onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
+                    onExpand={(submenuId) => void resolveSubmenu(menu, submenuId)}
+                  />
+                )),
+            )
+          ) : (
+            <p className="context-submenu-empty">
+              没有可用的插件操作，请确认插件已激活且是新版安装包。
+            </p>
+          )}
+        </div>
       )}
-    </>
+    </div>
   )
 }

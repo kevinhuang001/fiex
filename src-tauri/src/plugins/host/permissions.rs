@@ -9,16 +9,10 @@ pub fn set_enabled(id: &str, enabled: bool) -> Result<(), String> {
         .into_iter()
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
-    let required = activation_requirements(&manifest)?;
-    if enabled
-        && !crate::plugin_permissions::activation_complete(
-            &crate::plugin_permissions::status(id, &required.permissions)?,
-            &required,
-        )
-    {
-        return Err("review and approve every requested permission before activation".into());
-    }
-    crate::plugin_permissions::set_enabled(id, &required.permissions, enabled)?;
+    let declared = declared(&manifest)?;
+    // Enabling is package-level. A capability that the user switched off is
+    // requested again when an operation actually needs it.
+    crate::plugin_permissions::set_enabled(id, &declared, enabled)?;
     global().stop(id);
     Ok(())
 }
@@ -26,13 +20,35 @@ pub fn activate(
     id: &str,
     consent: &crate::plugin_permissions::ActivationConsent,
 ) -> Result<(), String> {
-    let (manifest, _) = discover()
+    let (manifest, directory) = discover()
         .into_iter()
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::activate(id, &activation_requirements(&manifest)?, consent)?;
     global().stop(id);
+    start_backend(&manifest, &directory);
     Ok(())
+}
+
+/// Activation starts the native backend immediately instead of waiting for the
+/// first invoke. Declarative plugins (themes) and packages without an
+/// entrypoint for this platform have nothing to start. A launch failure is
+/// recorded in the plugin error log: activation itself already succeeded and
+/// is never rolled back, and the next invoke will retry.
+fn start_backend(manifest: &super::manifest::PluginManifest, directory: &std::path::Path) {
+    if crate::plugin_themes::is_theme(manifest)
+        || super::catalog::executable(manifest, directory).is_err()
+    {
+        return;
+    }
+    if let Err(error) = global().start(&manifest.id) {
+        let _ = crate::plugin_errors::report(
+            &manifest.id,
+            "host",
+            &format!("plugin backend failed to start: {error}"),
+            None,
+        );
+    }
 }
 
 pub fn declared_permissions_for(id: &str) -> Result<BTreeSet<String>, String> {
@@ -71,7 +87,6 @@ pub fn set_network_all(id: &str, all: bool) -> Result<(), String> {
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::set_network_all(id, &declared(&manifest)?, all)?;
-    global().stop(id);
     Ok(())
 }
 pub fn set_network_domain(id: &str, domain: &str, grant: bool) -> Result<(), String> {
@@ -80,7 +95,9 @@ pub fn set_network_domain(id: &str, domain: &str, grant: bool) -> Result<(), Str
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::set_domain(id, &declared(&manifest)?, domain, grant)?;
-    global().stop(id);
+    if grant {
+        crate::plugin_permission_prompt::clear_rejection(id, "network");
+    }
     Ok(())
 }
 pub fn set_command(id: &str, command: &str, grant: bool) -> Result<(), String> {
@@ -89,7 +106,9 @@ pub fn set_command(id: &str, command: &str, grant: bool) -> Result<(), String> {
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::set_command(id, &declared(&manifest)?, command, grant)?;
-    global().stop(id);
+    if grant {
+        crate::plugin_permission_prompt::clear_rejection(id, "commands");
+    }
     Ok(())
 }
 pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), String> {
@@ -98,7 +117,9 @@ pub fn set_permission(id: &str, permission: &str, grant: bool) -> Result<(), Str
         .find(|(m, _)| m.id == id)
         .ok_or("plugin not installed")?;
     crate::plugin_permissions::set_granted(id, &declared(&manifest)?, permission, grant)?;
-    global().stop(id);
+    if grant {
+        crate::plugin_permission_prompt::clear_rejection(id, permission);
+    }
     Ok(())
 }
 pub fn approve_install(id: &str) -> Result<(), String> {

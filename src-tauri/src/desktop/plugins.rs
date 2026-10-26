@@ -12,6 +12,8 @@ fn expected_plugin_error(message: &str) -> bool {
         "plugin disabled or not approved",
         "plugin is not enabled",
         "permission not granted",
+        "permissiondenied",
+        "permission request",
         "not authorized",
     ]
     .iter()
@@ -186,12 +188,18 @@ pub(crate) async fn plugin_uninstall(plugin_id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-pub(crate) fn plugin_activate(
+pub(crate) async fn plugin_activate(
     plugin_id: String,
     consent: crate::plugin_permissions::ActivationConsent,
 ) -> Result<(), String> {
-    crate::plugin_host::activate(&plugin_id, &consent)
-        .inspect_err(|error| record_plugin_error(&plugin_id, "permission", error))
+    // Activation verifies the package and starts the resident backend, which
+    // may touch the filesystem. Keep that off the WebView thread.
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_host::activate(&plugin_id, &consent)
+            .inspect_err(|error| record_plugin_error(&plugin_id, "permission", error))
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 pub(crate) fn plugin_set_enabled(plugin_id: String, enabled: bool) -> Result<(), String> {
@@ -204,6 +212,12 @@ pub(crate) fn plugin_set_permission(
     granted: bool,
 ) -> Result<(), String> {
     crate::plugin_host::set_permission(&plugin_id, &permission, granted)
+}
+/// The UI answers a Core-owned runtime permission prompt. The plugin never
+/// participates in this path.
+#[tauri::command]
+pub(crate) fn plugin_permission_respond(request_id: String, allow: bool) -> Result<(), String> {
+    crate::plugin_permission_prompt::respond(&request_id, allow)
 }
 #[tauri::command]
 pub(crate) fn plugin_set_command(
@@ -770,6 +784,23 @@ pub(crate) fn preview_candidates(
     is_dir: bool,
 ) -> Vec<serde_json::Value> {
     crate::plugin_preview::candidates_json(&extension, &mime, is_dir)
+}
+
+/// Optional package-local loading document for a plugin preview. It contains
+/// no preview session and grants no resource access; the frontend renders it in
+/// the same sandboxed Core-owned iframe while `preview.open` runs.
+#[tauri::command]
+pub(crate) fn preview_loading(plugin_id: String) -> Result<Option<String>, String> {
+    crate::plugin_host::preview_loading(&plugin_id).inspect_err(|error| {
+        record_plugin_error(&plugin_id, "preview", &format!("loading: {error}"))
+    })
+}
+
+#[tauri::command]
+pub(crate) fn preview_loading_asset(plugin_id: String) -> Result<Option<String>, String> {
+    crate::plugin_host::preview_loading_asset(&plugin_id).inspect_err(|error| {
+        record_plugin_error(&plugin_id, "preview", &format!("loading asset: {error}"))
+    })
 }
 
 #[tauri::command]

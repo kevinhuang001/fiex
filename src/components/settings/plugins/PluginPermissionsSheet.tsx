@@ -61,7 +61,7 @@ export function PluginPermissionsSheet({
               <ShieldCheck size={18} />
               <div>
                 <strong>此插件尚未授权</strong>
-                <p>激活时会逐项请求权限，允许后才会运行。</p>
+                <p>激活时可以逐项选择权限，未选择的能力不会授权。</p>
               </div>
               <Button type="button" size="sm" onClick={() => onActivate(plugin)}>
                 审核并激活

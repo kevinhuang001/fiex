@@ -7,6 +7,11 @@ import { lazy, Suspense } from 'react'
 const PreferencesDialog = lazy(() =>
   import('@/components/PreferencesDialog').then((m) => ({ default: m.PreferencesDialog })),
 )
+const PluginManagerDialog = lazy(() =>
+  import('@/components/settings/PluginManagerDialog').then((m) => ({
+    default: m.PluginManagerDialog,
+  })),
+)
 import { Preview } from '@/components/Preview'
 import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/components/ui/button'
@@ -47,6 +52,8 @@ export function ExplorerDialogs({
   notify,
   settings,
   setSettings,
+  pluginManager,
+  setPluginManager,
   prefs,
   update,
   terminals,
@@ -87,6 +94,8 @@ export function ExplorerDialogs({
   | 'notify'
   | 'settings'
   | 'setSettings'
+  | 'pluginManager'
+  | 'setPluginManager'
   | 'prefs'
   | 'update'
   | 'terminals'
@@ -223,7 +232,24 @@ export function ExplorerDialogs({
         onSaved={(connection) => {
           setConnectionOpen(false)
           void x.refreshConnections()
-          x.navigate(connection.mountPath)
+          // A connection may open a pluginView instead of a VFS mount. Resolve
+          // the destination first; the stored mountPath is not a VFS URI for
+          // pluginView connections such as Email.
+          void call<{
+            kind: 'vfs' | 'pluginView' | 'terminal'
+            path?: string
+            connectionId?: string
+          }>('connection_open', { id: connection.id })
+            .then((target) => {
+              x.navigate(
+                target.kind === 'vfs'
+                  ? target.path || connection.mountPath
+                  : target.kind === 'pluginView'
+                    ? 'fiex-plugin-view://' + connection.id
+                    : 'fiex-terminal://' + (target.connectionId || connection.id),
+              )
+            })
+            .catch((error) => x.setError(String(error)))
           notify(`已连接 ${connection.name}`)
         }}
       />
@@ -240,6 +266,11 @@ export function ExplorerDialogs({
             ides={ides}
             onError={x.setError}
           />
+        </Suspense>
+      )}
+      {pluginManager && (
+        <Suspense fallback={null}>
+          <PluginManagerDialog open={pluginManager} onClose={() => setPluginManager(false)} />
         </Suspense>
       )}
       {toast && (

@@ -1,9 +1,9 @@
 //! Panel document lookup, CSP injection and asset serving.
 use super::catalog::{canonical_under, discover};
-use super::manifest::{activation_requirements, declared, PluginManifest};
+use super::manifest::{declared, preview_loading_entry, valid_package_entry, PluginManifest};
 use serde_json::Value;
 use std::fs;
-use std::path::{Component, Path};
+use std::path::{Path, PathBuf};
 
 /// The plugin document must define its own policy. It is served from the
 /// asset origin rather than injected into the app shell, so the app's stricter
@@ -19,6 +19,35 @@ fn panel_document(html: &str) -> String {
         None => format!("{PANEL_CSP}{html}"),
     }
 }
+/// Read one declared package entry as HTML. Every UI entry (panel, pluginView
+/// and preview loading page) goes through the same package-relative path and
+/// canonical-containment checks, so no declaration can read outside the
+/// plugin package.
+fn package_html(folder: &Path, entry: &str, label: &str) -> Result<String, String> {
+    if !valid_package_entry(entry) {
+        return Err(format!("invalid {label} resource path"));
+    }
+    let file = folder.join(entry);
+    if !canonical_under(&file, folder) {
+        return Err(format!("{label} resource outside plugin package"));
+    }
+    let info = fs::metadata(&file).map_err(|error| error.to_string())?;
+    if !info.is_file() || info.len() > 1024 * 1024 {
+        return Err(format!("{label} HTML exceeds size limit"));
+    }
+    fs::read_to_string(file).map_err(|error| error.to_string())
+}
+/// Optional preview loading document. It is a static package asset exactly like
+/// a panel document and is never resolved from an arbitrary URL.
+fn preview_loading_source(
+    manifest: &PluginManifest,
+    folder: &Path,
+) -> Result<Option<String>, String> {
+    let Some(entry) = preview_loading_entry(&manifest.extensions) else {
+        return Ok(None);
+    };
+    package_html(folder, entry, "preview loading").map(Some)
+}
 /// Only static toolbar and preview registrations advertise panel ids.
 /// Dynamic context menu panels are vetted as package assets at action time.
 fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Value> {
@@ -33,40 +62,29 @@ fn find_panel<'a>(manifest: &'a PluginManifest, panel_id: &str) -> Option<&'a Va
             .and_then(|item| item.get("panel"))
     })
 }
+/// Resolve an installed package whose current approval still permits UI assets.
+/// Loading a package document never grants file, network or command access.
+fn approved_package(plugin_id: &str) -> Result<(PluginManifest, PathBuf), String> {
+    let (manifest, folder) = discover()
+        .into_iter()
+        .find(|(manifest, _)| manifest.id == plugin_id)
+        .ok_or("plugin is not installed")?;
+    let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
+    if !rights.approved || !rights.enabled {
+        return Err("plugin disabled or not approved".into());
+    }
+    Ok((manifest, folder))
+}
 /// Host-approved precompiled, self-contained iframe HTML. Plugins cannot
 /// supply absolute paths or read unrelated files through this API.
 fn panel_source(plugin_id: &str, panel_id: &str) -> Result<String, String> {
-    let (manifest, folder) = discover()
-        .into_iter()
-        .find(|(m, _)| m.id == plugin_id)
-        .ok_or("plugin is not installed")?;
-    let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
-    if !rights.enabled
-        || !crate::plugin_permissions::activation_complete(
-            &rights,
-            &activation_requirements(&manifest)?,
-        )
-    {
-        return Err("plugin disabled or not approved".into());
-    }
+    let (manifest, folder) = approved_package(plugin_id)?;
     let panel = find_panel(&manifest, panel_id).ok_or("plugin declares no such panel")?;
     let asset = panel
         .get("entry")
         .and_then(Value::as_str)
         .ok_or("panel entry missing")?;
-    let rel = Path::new(asset);
-    if !rel.components().all(|c| matches!(c, Component::Normal(_))) {
-        return Err("invalid panel resource path".into());
-    }
-    let file = folder.join(rel);
-    if !canonical_under(&file, &folder) {
-        return Err("panel resource outside plugin package".into());
-    }
-    let info = fs::metadata(&file).map_err(|e| e.to_string())?;
-    if !info.is_file() || info.len() > 1024 * 1024 {
-        return Err("panel HTML exceeds size limit".into());
-    }
-    fs::read_to_string(file).map_err(|e| e.to_string())
+    package_html(&folder, asset, "panel")
 }
 pub fn panel_html(plugin_id: &str, panel_id: &str) -> Result<String, String> {
     panel_source(plugin_id, panel_id)
@@ -103,35 +121,8 @@ pub fn panel_asset(plugin_id: &str, panel_id: &str) -> Result<String, String> {
 /// as existing panels; the entry is supplied by the native plugin result.
 pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String> {
     use sha2::{Digest, Sha256};
-    let (manifest, folder) = discover()
-        .into_iter()
-        .find(|(manifest, _)| manifest.id == plugin_id)
-        .ok_or("plugin is not installed")?;
-    let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
-    if !rights.enabled
-        || !crate::plugin_permissions::activation_complete(
-            &rights,
-            &activation_requirements(&manifest)?,
-        )
-    {
-        return Err("plugin disabled or not approved".into());
-    }
-    let rel = Path::new(entry);
-    if !rel
-        .components()
-        .all(|component| matches!(component, Component::Normal(_)))
-    {
-        return Err("invalid pluginView package path".into());
-    }
-    let file = folder.join(rel);
-    if !canonical_under(&file, &folder) {
-        return Err("pluginView resource outside plugin package".into());
-    }
-    let metadata = fs::metadata(&file).map_err(|error| error.to_string())?;
-    if !metadata.is_file() || metadata.len() > 1024 * 1024 {
-        return Err("pluginView HTML exceeds size limit".into());
-    }
-    let html = panel_document(&fs::read_to_string(&file).map_err(|error| error.to_string())?);
+    let (_, folder) = approved_package(plugin_id)?;
+    let html = panel_document(&package_html(&folder, entry, "pluginView")?);
     let digest = format!("{:x}", Sha256::digest(html.as_bytes()));
     let directory = dirs::cache_dir()
         .ok_or("cache directory unavailable")?
@@ -142,6 +133,35 @@ pub fn plugin_view_asset(plugin_id: &str, entry: &str) -> Result<String, String>
     let path = directory.join(format!("{}.html", &digest[..32]));
     fs::write(&path, html).map_err(|error| error.to_string())?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// Raw loading document used when the preview host cannot serve assets (the
+/// browser demo and the non-native test path). It is still only read from the
+/// approved plugin package.
+pub fn preview_loading(plugin_id: &str) -> Result<Option<String>, String> {
+    let (manifest, folder) = approved_package(plugin_id)?;
+    preview_loading_source(&manifest, &folder)
+}
+
+/// Desktop serves the loading document from the asset protocol with the same
+/// CSP as a panel, so a self-contained loading page can run its inline bundle
+/// while remaining isolated from the app shell.
+pub fn preview_loading_asset(plugin_id: &str) -> Result<Option<String>, String> {
+    use sha2::{Digest, Sha256};
+    let Some(html) = preview_loading(plugin_id)? else {
+        return Ok(None);
+    };
+    let html = panel_document(&html);
+    let digest = format!("{:x}", Sha256::digest(html.as_bytes()));
+    let directory = dirs::cache_dir()
+        .ok_or("cache directory unavailable")?
+        .join("fiex")
+        .join("plugin-preview-loading")
+        .join(plugin_id);
+    fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let path = directory.join(format!("{}.html", &digest[..32]));
+    fs::write(&path, html).map_err(|error| error.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 #[cfg(test)]
@@ -203,6 +223,37 @@ mod tests {
             Some("ui/index.html")
         );
         assert!(manifest.extensions["preview"].is_object());
+    }
+
+    #[test]
+    fn preview_loading_is_optional_and_package_confined() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(directory.path().join("ui")).unwrap();
+        std::fs::write(
+            directory.path().join("ui/loading.html"),
+            "<html><body>loading</body></html>",
+        )
+        .unwrap();
+        let with_loading = manifest(json!({
+            "preview": {"loading": {"entry": "ui/loading.html"}}
+        }));
+        assert_eq!(
+            preview_loading_source(&with_loading, directory.path())
+                .unwrap()
+                .as_deref(),
+            Some("<html><body>loading</body></html>")
+        );
+        let without_loading = manifest(json!({
+            "preview": {"panel": {"entry": "ui/preview.html"}}
+        }));
+        assert!(preview_loading_source(&without_loading, directory.path())
+            .unwrap()
+            .is_none());
+        let escaping = manifest(json!({
+            "preview": {"loading": {"entry": "../escape.html"}}
+        }));
+        std::fs::write(directory.path().join("escape.html"), "escape").unwrap();
+        assert!(preview_loading_source(&escaping, directory.path()).is_err());
     }
 
     #[test]

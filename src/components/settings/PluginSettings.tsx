@@ -87,7 +87,6 @@ export function PluginSettings() {
   const [activationFor, setActivationFor] = useState<PluginInfo | null>(null)
   const [commandToApprove, setCommandToApprove] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<PluginInfo | null>(null)
-
   const chooseLocalPlugin = async () => {
     setBusy(true)
     setMessage('')
@@ -327,8 +326,9 @@ export function PluginSettings() {
         <PluginStoreToolbar
           onImport={() => void chooseLocalPlugin()}
           onOpenStore={() => setStoreOpen(true)}
-        />
-        <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
+        >
+          <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
+        </PluginStoreToolbar>
         <PluginList
           plugins={shown}
           busy={busy}
@@ -359,7 +359,7 @@ export function PluginSettings() {
         onClose={() => setStoreOpen(false)}
         onInstalled={() => {
           refreshPluginCatalog()
-          setMessage('插件已安装，尚未激活。点击激活后逐项审核权限。')
+          setMessage('插件已安装，尚未激活。点击激活后可逐项选择权限。')
         }}
       />
 

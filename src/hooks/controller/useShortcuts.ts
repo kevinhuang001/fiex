@@ -16,6 +16,7 @@ export function useShortcuts({
   dialog,
   conflict,
   settings,
+  pluginManager,
   preview,
   info,
   tagOpen,
@@ -47,6 +48,7 @@ export function useShortcuts({
   dialog: DialogState | null
   conflict: ConflictState
   settings: boolean
+  pluginManager: boolean
   preview: Entry | null
   info: Entry | null
   tagOpen: boolean
@@ -76,7 +78,15 @@ export function useShortcuts({
   useExplorerShortcuts({
     shortcuts: prefs.shortcuts,
     blocked: Boolean(
-      dialog || conflict || settings || preview || info || tagOpen || connectionOpen || trashIssue,
+      dialog ||
+      conflict ||
+      settings ||
+      pluginManager ||
+      preview ||
+      info ||
+      tagOpen ||
+      connectionOpen ||
+      trashIssue,
     ),
     handlers: {
       settings: () => setSettings(true),

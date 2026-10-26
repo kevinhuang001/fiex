@@ -13,15 +13,20 @@ export interface PluginPanelRequest {
   size?: { width: number; height: number }
   /** A package asset resolved and checked by Core after a dynamic menu action. */
   assetPath?: string
+  /** Manifest-negotiated bridge/request budget from `extensions.ui.timeoutMs`. */
+  timeoutMs?: number
+  /** The plugin declares a create capability, so naming the current folder in
+   * an invocation may grant that folder as the operation's output root. */
+  allowCreate?: boolean
   /** Set when this panel renders a file preview for a plugin previewer. */
   preview?: { path: string; name: string; extension: string }
 }
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
 
-const PANEL_EXIT_MS = 90
-const PANEL_REVEAL_SETTLE_MS = 120
-const PANEL_REVEAL_FALLBACK_MS = 260
+const PANEL_EXIT_MS = 0
+const PANEL_REVEAL_SETTLE_MS = 0
+const PANEL_REVEAL_FALLBACK_MS = 0
 
 export function panelKeyOf(request: PluginPanelRequest) {
   return JSON.stringify([request.pluginId, request.panelId, request.directory, request.selection])

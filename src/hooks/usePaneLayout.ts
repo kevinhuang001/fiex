@@ -45,8 +45,17 @@ export function usePaneLayout(prefs: Preferences, left: Explorer) {
     tabs.current.push({ right: null, active: 'left' })
   }
   const closeWorkspaceTab = (index: number) => {
-    if (left.tabs.length === 1) return
+    if (!left.tabs[index]) return
     save()
+    // Closing the last workspace tab immediately opens the configured start
+    // page as a fresh single-pane tab instead of leaving an empty workspace.
+    if (left.tabs.length === 1) {
+      tabs.current = [{ right: null, active: 'left' }]
+      setSplit(false)
+      setActive('left')
+      left.closeTab(index, startPath())
+      return
+    }
     tabs.current.splice(index, 1)
     const next = index < left.tab ? left.tab - 1 : Math.min(left.tab, left.tabs.length - 2)
     restore(next)

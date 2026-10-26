@@ -13,6 +13,7 @@
 mod files;
 #[macro_use]
 mod plugins;
+pub(crate) mod shell_profile;
 pub(crate) mod ssh;
 #[macro_use]
 mod remote;
@@ -105,6 +106,8 @@ pub fn run() {
             plugin_panel_html,
             preview_open,
             preview_candidates,
+            preview_loading,
+            preview_loading_asset,
             ssh::ssh_open,
             ssh::local_terminal_open,
             ssh::detect_shells,
@@ -127,6 +130,7 @@ pub fn run() {
             plugin_set_enabled,
             plugin_activate,
             plugin_set_permission,
+            plugin_permission_respond,
             plugin_set_command,
             plugin_set_network_all,
             plugin_set_network_domain,
@@ -249,6 +253,16 @@ pub fn run() {
                 let handle = app.handle().clone();
                 crate::plugin_task_events::set_sink(Box::new(move |event| {
                     let _ = handle.emit("plugin-task", &event);
+                }));
+                let handle = app.handle().clone();
+                crate::plugin_permission_prompt::set_sink(Box::new(move |event| match event {
+                    crate::plugin_permission_prompt::PermissionPromptEvent::Requested(request) => {
+                        let _ = handle.emit("plugin-permission-request", &request);
+                    }
+                    crate::plugin_permission_prompt::PermissionPromptEvent::Resolved { id } => {
+                        let _ = handle
+                            .emit("plugin-permission-resolved", serde_json::json!({"id": id}));
+                    }
                 }));
             }
             #[cfg(feature = "ci-driver")]

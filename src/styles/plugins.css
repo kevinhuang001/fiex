@@ -36,11 +36,11 @@
 .plugin-panel-popover.revealed {
   visibility: visible;
   opacity: 1;
-  animation: plugin-panel-in 150ms ease-out both;
+  animation: none;
 }
 .plugin-panel-popover.leaving {
   visibility: visible;
-  animation: plugin-panel-out 90ms ease-in both;
+  animation: none;
   pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -95,6 +95,22 @@
 .context-submenu.open-up {
   top: auto !important;
   bottom: 0 !important;
+}
+/* Every plugin action lives in one top-level submenu. It opens next to the
+   row and flips up only when the file menu sits near the bottom edge. */
+.context-submenu.plugin-context-menu {
+  top: 0;
+  bottom: auto;
+  width: 200px;
+}
+.context-submenu.plugin-context-menu.plugin-context-menu-up {
+  top: auto;
+  bottom: 0;
+}
+.context-submenu.plugin-context-menu .context-submenu-empty {
+  padding: 6px 9px;
+  color: var(--muted);
+  font-size: 11px;
 }
 .decoration-badge {
   display: inline-flex;
@@ -247,7 +263,9 @@
   color: var(--accent);
 }
 .plugin-activation-modal {
-  width: min(620px, calc(100vw - 32px));
+  width: min(620px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 24px 26px 0;
 }
 .plugin-activation-intro {
   display: flex;
@@ -352,14 +370,6 @@
   }
 }
 
-/* Plugin settings toolbar: actions only, no descriptive copy. */
-.plugin-toolbar-actions-only {
-  justify-content: flex-end;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-}
 .plugin-permission-card .plugin-switch,
 .plugin-domain-row .plugin-switch {
   margin-left: auto;
@@ -420,6 +430,10 @@
   color: var(--danger) !important;
   white-space: pre-wrap;
 }
+.plugin-permission-prompt-note {
+  color: var(--muted) !important;
+  font-size: 10px !important;
+}
 .plugin-permission-prompt-actions {
   display: flex;
   flex-direction: column;
@@ -432,6 +446,153 @@
   min-height: 36px;
   justify-content: center;
   border-radius: 10px;
+}
+
+/* Grouped activation consent: one sheet for every declared capability. */
+.plugin-activation-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.plugin-activation-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.plugin-activation-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+}
+.plugin-activation-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.plugin-activation-head-copy strong {
+  font-size: 15px;
+  letter-spacing: -0.2px;
+  overflow-wrap: anywhere;
+}
+.plugin-activation-head-copy p {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.plugin-activation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+.plugin-activation-section-head h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.plugin-activation-section-head p {
+  margin: 0;
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.plugin-activation-rows {
+  display: flex;
+  flex-direction: column;
+}
+.plugin-activation-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 2px;
+  cursor: pointer;
+}
+.plugin-activation-row + .plugin-activation-row {
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+.plugin-activation-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.plugin-activation-row-copy strong {
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.plugin-activation-row-copy small {
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.plugin-activation-row-copy small.plugin-activation-warning,
+.plugin-activation-warning {
+  color: var(--danger);
+}
+.plugin-activation-row.danger {
+  margin: 4px -6px 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+.plugin-activation-row.danger + .plugin-activation-row {
+  border-top: 0;
+}
+.plugin-activation-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+.plugin-activation-row input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+.plugin-activation-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: var(--radius-panel);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+  text-align: center;
+}
+.plugin-activation-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.plugin-activation-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 0 20px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+  background: var(--surface);
+}
+.plugin-activation-actions .button {
+  min-width: 84px;
+  justify-content: center;
 }
 
 /* Store: independent, centered sheet; cards keep a comfortable width. */
@@ -462,11 +623,9 @@
   padding: 13px;
   gap: 10px;
 }
-.plugin-store-modal .plugin-store-card > .button {
-  align-self: flex-start;
-}
+.plugin-store-modal .plugin-store-card > .button,
 .plugin-store-modal .plugin-store-card > .button[data-variant='outline'] {
-  align-self: center;
+  align-self: stretch;
 }
 @media (max-width: 900px) {
   .plugin-store-modal .plugin-store-grid {
@@ -477,11 +636,6 @@
   .plugin-store-modal .plugin-store-grid {
     grid-template-columns: 1fr;
   }
-}
-.plugin-toolbar-actions-only > div.plugin-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 /* Compact store sheet: narrower dialog, same centered column. */
 .plugin-store-modal {
@@ -731,6 +885,19 @@
 .plugin-import-signature > svg {
   flex-shrink: 0;
   margin-top: 1px;
+}
+.plugin-import-signature code {
+  display: inline;
+  font-family: ui-monospace, monospace;
+  font-size: 9.5px;
+  overflow-wrap: anywhere;
+}
+.plugin-import-signature em {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-style: normal;
+  line-height: 1.5;
 }
 .plugin-import-signature strong {
   display: block;
@@ -1102,4 +1269,119 @@
 }
 .traffic-maximize {
   background: #61c182;
+}
+
+/* Plugin manager: compact cards, several plugins per row. Changes on this
+   surface apply immediately; only the global settings dialog keeps a draft. */
+.plugin-manager-page .plugin-list {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-items: stretch;
+}
+.plugin-manager-page .plugin-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon main'
+    'actions actions';
+  align-items: start;
+  min-height: 0;
+  padding: 16px;
+  gap: 10px 12px;
+  border-radius: 14px;
+}
+.plugin-manager-page .plugin-row-icon {
+  grid-area: icon;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+}
+.plugin-manager-page .plugin-row-main {
+  grid-area: main;
+  width: 100%;
+  gap: 4px;
+}
+.plugin-manager-page .plugin-row-main > p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.plugin-manager-page .plugin-row-title {
+  gap: 5px;
+}
+.plugin-manager-page .plugin-row-title strong {
+  font-size: 13px;
+}
+.plugin-manager-page .plugin-row-meta {
+  gap: 4px;
+  font-size: 9.5px;
+}
+.plugin-manager-page .plugin-row-actions {
+  grid-area: actions;
+  justify-content: flex-end;
+  width: 100%;
+  margin-left: 0;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+/* Grouped activation: one prompt per permission group, with per-item toggles. */
+.plugin-permission-prompt-toggles {
+  display: flex;
+  flex-direction: column;
+  max-height: min(46vh, 360px);
+  margin: 10px 0 4px;
+  padding: 2px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
+}
+.plugin-permission-prompt-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: start;
+  gap: 12px;
+  padding: 9px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.plugin-permission-prompt-toggle:last-child {
+  border-bottom: 0;
+}
+.plugin-permission-prompt-toggle:hover {
+  background: var(--hover);
+}
+.plugin-permission-prompt-toggle > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  text-align: left;
+}
+.plugin-permission-prompt-toggle strong {
+  display: block;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.plugin-permission-prompt-toggle small {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+.plugin-permission-prompt-toggle.danger strong {
+  color: var(--danger);
+}
+.plugin-permission-prompt-toggle input[type='checkbox'] {
+  justify-self: end;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
 }

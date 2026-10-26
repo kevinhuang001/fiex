@@ -139,7 +139,8 @@ export function TerminalView({
     let sessionId = ''
     const terminal = new Terminal({
       allowProposedApi: true,
-      cursorBlink: true,
+      // A steady cursor avoids the unequal, very fast blink some WebViews show.
+      cursorBlink: false,
       fontFamily:
         '"JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace',
       fontSize: 13,

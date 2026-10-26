@@ -4,6 +4,15 @@ export interface PreviewCandidate {
   id: string
   provider: string
   priority: number
+  /** Set by Core when the plugin declares `extensions.preview.loading`. */
+  loading?: boolean
+}
+
+const PLUGIN_PREFIX = 'plugin:'
+
+/** Plugin id behind a `plugin:<id>` preview provider, or null for built-ins. */
+export function pluginPreviewId(providerId?: string | null): string | null {
+  return providerId?.startsWith(PLUGIN_PREFIX) ? providerId.slice(PLUGIN_PREFIX.length) : null
 }
 
 const ORDER_KEY = 'fiex.preview.order'

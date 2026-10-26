@@ -15,7 +15,12 @@ import { FileIcon } from './FileIcon'
 import { call, asset, native } from '@/lib/api'
 import { date, kind, size } from '@/lib/files'
 import { highlightCode } from '@/lib/highlight'
-import { orderCandidates, previewDisabled, type PreviewCandidate } from '@/lib/preview'
+import {
+  orderCandidates,
+  pluginPreviewId,
+  previewDisabled,
+  type PreviewCandidate,
+} from '@/lib/preview'
 import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { Entry } from '@/lib/types'
 const PdfPreview = lazy(() => import('./PdfPreview'))
@@ -37,8 +42,17 @@ interface ResolvedPreview {
     sessionId?: string
     pluginId?: string
     contributionId?: string
+    timeoutMs?: number
     context?: unknown
   }
+}
+
+interface PluginLoadingPage {
+  pluginId: string
+  /** Bridge-only session for the loading document; Core has no preview session yet. */
+  sessionId: string
+  html?: string
+  src?: string
 }
 
 export function Preview({
@@ -57,6 +71,9 @@ export function Preview({
   const [providerAttempt, setProviderAttempt] = useState(0)
   const [resolved, setResolved] = useState<ResolvedPreview | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingPage, setLoadingPage] = useState<PluginLoadingPage | null>(null)
+  const [previewReady, setPreviewReady] = useState(false)
+  const [readyToShow, setReadyToShow] = useState(false)
   const [error, setError] = useState('')
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -67,6 +84,9 @@ export function Preview({
     setCandidates([])
     setProviderId(null)
     setResolved(null)
+    setLoadingPage(null)
+    setPreviewReady(false)
+    setReadyToShow(false)
     setError('')
     setMedia(null)
     setMenuOpen(false)
@@ -86,12 +106,13 @@ export function Preview({
         setCandidates(allowed)
         setProviderId(allowed[0]?.id ?? null)
         if (!allowed.length) setError('没有可用的预览方式')
+        setReadyToShow(true)
       })
       .catch((cause) => {
-        if (active) setError(String(cause))
-      })
-      .finally(() => {
-        if (active) setLoading(false)
+        if (active) {
+          setError(String(cause))
+          setReadyToShow(true)
+        }
       })
     return () => {
       active = false
@@ -101,20 +122,53 @@ export function Preview({
   useEffect(() => {
     if (!entry || !providerId) return
     let active = true
+    const pluginId = pluginPreviewId(providerId)
+    const declaresLoading = Boolean(
+      pluginId && candidates.find((candidate) => candidate.id === providerId)?.loading,
+    )
     setLoading(true)
     setError('')
     setResolved(null)
     setMedia(null)
-    void call<ResolvedPreview>('preview_open', {
-      path: entry.path,
-      providerId,
-      providerOrder: candidates.map((candidate) => candidate.id),
-    })
-      .then((value) => {
-        if (active) setResolved(value)
+    setLoadingPage(null)
+    setPreviewReady(false)
+    const open = async () => {
+      let page: PluginLoadingPage | null = null
+      // A declared loading page is resolved first so the preview opens directly
+      // into plugin-owned UI instead of flashing Core's generic spinner.
+      if (pluginId && declaresLoading) {
+        try {
+          if (native) {
+            const path = await call<string | null>('preview_loading_asset', { pluginId })
+            if (path) page = { pluginId, sessionId: crypto.randomUUID(), src: asset(path) }
+          } else {
+            const html = await call<string | null>('preview_loading', { pluginId })
+            if (html) page = { pluginId, sessionId: crypto.randomUUID(), html }
+          }
+        } catch {
+          // The loading page is cosmetic; a bad entry must not block preview.open.
+        }
+        if (!active) return
+        if (page) setLoadingPage(page)
+      }
+      const value = await call<ResolvedPreview>('preview_open', {
+        path: entry.path,
+        providerId,
+        providerOrder: candidates.map((candidate) => candidate.id),
       })
+      if (!active) return
+      setResolved(value)
+      // Keep the plugin loading document until the preview itself reports that
+      // its data is rendered; never flash the plugin's empty shell.
+      if (!page || value.view?.kind !== 'html') setLoadingPage(null)
+      setPreviewReady(!page || value.view?.kind !== 'html')
+    }
+    void open()
       .catch((cause) => {
-        if (active) setError(String(cause))
+        if (active) {
+          setError(String(cause))
+          setLoadingPage(null)
+        }
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -171,17 +225,32 @@ export function Preview({
     (candidate) => candidate.id === (resolved?.providerId || providerId),
   )
   const provider = resolved?.provider || current?.provider || 'Fiex'
-  const fromPlugin = (resolved?.providerId || providerId)?.startsWith('plugin:')
+  const fromPlugin = pluginPreviewId(resolved?.providerId || providerId) !== null
   const providerLabel = fromPlugin ? provider : 'Fiex 内置'
+  const activePluginId = pluginPreviewId(providerId)
+  const declaresLoading = Boolean(
+    activePluginId &&
+    candidates.some((candidate) => candidate.id === providerId && candidate.loading),
+  )
+  const loadingPreview = !resolved && (loadingPage !== null || (loading && declaresLoading))
+  const pluginSheet = view?.kind === 'html' || loadingPreview
+
+  useEffect(() => {
+    if (!loadingPage || !resolved || resolved.view?.kind !== 'html' || previewReady) return
+    // A third-party preview may not implement preview.ready; never trap the
+    // modal behind the loading sheet forever.
+    const timer = window.setTimeout(() => setPreviewReady(true), 30000)
+    return () => window.clearTimeout(timer)
+  }, [loadingPage, resolved, previewReady])
 
   return (
     <Modal
-      open={!!entry}
+      open={!!entry && readyToShow}
       onClose={onClose}
       title={entry?.name || '快速查看'}
       wide
       className={`preview-modal ${
-        view?.kind === 'html'
+        pluginSheet
           ? 'preview-plugin'
           : view?.kind === 'text'
             ? 'preview-text'
@@ -192,11 +261,7 @@ export function Preview({
                 : 'preview-compact'
       }`}
       contentStyle={
-        view?.kind === 'html'
-          ? { width: 'min(92vw, 980px)' }
-          : fit
-            ? { width: fit.width }
-            : undefined
+        pluginSheet ? { width: 'min(92vw, 980px)' } : fit ? { width: fit.width } : undefined
       }
     >
       {entry && (
@@ -208,19 +273,52 @@ export function Preview({
                 <p>{error}</p>
                 <FileIcon entry={entry} size={90} />
               </div>
-            ) : loading && !resolved ? (
-              <p>正在读取…</p>
-            ) : view?.kind === 'html' && view.html ? (
+            ) : loadingPage && !resolved ? (
               <PluginPreviewFrame
-                key={`${entry.path}:${providerId}`}
-                pluginId={view.pluginId || ''}
-                contributionId={view.contributionId || ''}
-                html={view.html}
-                context={view.context}
-                sessionId={view.sessionId || ''}
+                key={`loading:${entry.path}:${providerId}:${loadingPage.sessionId}`}
+                pluginId={loadingPage.pluginId}
+                contributionId={loadingPage.pluginId}
+                html={loadingPage.html}
+                src={loadingPage.src}
+                sessionId={loadingPage.sessionId}
                 name={entry.name}
                 extension={entry.extension}
+                loading
               />
+            ) : loading && !resolved ? (
+              declaresLoading ? null : (
+                <p>正在读取…</p>
+              )
+            ) : view?.kind === 'html' && view.html ? (
+              <>
+                <PluginPreviewFrame
+                  key={`${entry.path}:${providerId}`}
+                  pluginId={view.pluginId || ''}
+                  contributionId={view.contributionId || ''}
+                  html={view.html}
+                  context={view.context}
+                  sessionId={view.sessionId || ''}
+                  timeoutMs={view.timeoutMs}
+                  name={entry.name}
+                  extension={entry.extension}
+                  onPreviewReady={() => setPreviewReady(true)}
+                />
+                {loadingPage && !previewReady && (
+                  <div className="preview-plugin-loading">
+                    <PluginPreviewFrame
+                      key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
+                      pluginId={loadingPage.pluginId}
+                      contributionId={loadingPage.pluginId}
+                      html={loadingPage.html}
+                      src={loadingPage.src}
+                      sessionId={loadingPage.sessionId}
+                      name={entry.name}
+                      extension={entry.extension}
+                      loading
+                    />
+                  </div>
+                )}
+              </>
             ) : view?.kind === 'text' ? (
               <pre className={highlighted ? 'preview-code' : undefined}>
                 {highlighted ? (

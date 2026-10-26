@@ -104,7 +104,10 @@ html.dark .app.has-background .list-header {
   min-height: 0;
   overflow: auto;
   padding: 9px 12px 20px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+.sidebar-content::-webkit-scrollbar {
+  display: none;
 }
 .tag-nav {
   padding-left: 14px;
@@ -1153,10 +1156,14 @@ body.dragging-toolbar {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 8px 6px 4px 10px;
+  padding: 8px 6px 0 10px;
+  overflow: hidden;
 }
 .ssh-terminal-host .xterm {
   height: 100%;
+}
+.ssh-terminal-host .xterm-viewport {
+  background: transparent !important;
 }
 .ssh-terminal-status {
   position: absolute;
@@ -1295,8 +1302,9 @@ body.dragging-toolbar {
   display: none;
 }
 .terminal-panel-resizer {
-  height: 5px;
-  flex: 0 0 5px;
+  height: 6px;
+  flex: 0 0 6px;
+  margin-top: -1px;
   cursor: ns-resize;
   background: transparent;
 }
@@ -1308,28 +1316,79 @@ body.dragging-toolbar {
   align-items: center;
   justify-content: space-between;
   min-height: 30px;
-  padding: 0 8px;
+  padding: 0 6px;
   border-bottom: 1px solid var(--line);
   background: var(--canvas);
 }
 .terminal-panel-tabs {
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   min-width: 0;
-  gap: 2px;
-  overflow: auto;
+  height: 100%;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.terminal-panel-tabs::-webkit-scrollbar {
+  display: none;
 }
 .terminal-panel-tab {
   display: flex;
   align-items: center;
   gap: 2px;
-  border-radius: 6px 6px 0 0;
+  min-width: 92px;
+  max-width: 190px;
+  height: 29px;
+  padding-left: 4px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
   color: var(--muted);
   font-size: 10px;
+  cursor: grab;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.terminal-panel-tab:hover {
+  background: color-mix(in srgb, var(--surface) 65%, transparent);
+  color: var(--text);
 }
 .terminal-panel-tab.active {
+  border-color: var(--line);
   background: var(--surface);
   color: var(--text);
+}
+.terminal-panel-tab:active {
+  cursor: grabbing;
+}
+.terminal-panel-tabs.is-dragging .terminal-panel-tab {
+  transition:
+    transform 170ms cubic-bezier(0.2, 0, 0, 1),
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.terminal-panel-tabs.is-dragging .terminal-panel-tab.is-source {
+  visibility: hidden;
+}
+.terminal-tab-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  margin: 0;
+  background: var(--surface);
+  pointer-events: none;
+  will-change: transform;
+}
+.terminal-tab-ghost.settling {
+  transition: transform 170ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal-panel-tabs.is-dragging .terminal-panel-tab,
+  .terminal-tab-ghost.settling {
+    transition: none;
+  }
 }
 .terminal-panel-tab > button {
   border: 0;
@@ -1339,7 +1398,14 @@ body.dragging-toolbar {
   cursor: pointer;
 }
 .terminal-panel-tab > button:first-child {
-  padding: 5px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 5px 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .terminal-panel-close {
   display: inline-flex;
@@ -1375,6 +1441,8 @@ body.dragging-toolbar {
   display: flex;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
 }
 .terminal-panel-pane {
   display: flex;
@@ -1394,10 +1462,11 @@ body.dragging-toolbar {
   bottom: 28px;
   z-index: 30;
   display: flex;
-  min-width: 150px;
+  min-width: 118px;
+  max-width: 190px;
   flex-direction: column;
   gap: 2px;
-  padding: 5px;
+  padding: 4px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--surface);

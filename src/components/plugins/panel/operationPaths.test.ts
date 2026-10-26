@@ -13,4 +13,12 @@ describe('operationPaths', () => {
   it('does not accept a sibling or prefix of the chosen file', () => {
     expect(operationPaths({ path: '/tmp/one-secret' }, ['/tmp/one'])).toEqual([])
   })
+  it('grants the output folder only when the plugin names it', () => {
+    expect(operationPaths({ path: '/tmp/dir/one' }, ['/tmp/dir/one', '/tmp/dir'])).toEqual([
+      '/tmp/dir/one',
+    ])
+    expect(
+      operationPaths({ path: '/tmp/dir/one', root: '/tmp/dir' }, ['/tmp/dir/one', '/tmp/dir']),
+    ).toEqual(['/tmp/dir/one', '/tmp/dir'])
+  })
 })

@@ -11,6 +11,7 @@ import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
+import { PluginPermissionHost } from '@/components/plugins/PluginPermissionHost'
 import { SshTerminalView } from '@/components/ssh/SshTerminalView'
 import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
@@ -56,10 +57,10 @@ export default function App() {
   }, [app.left])
 
   useEffect(() => {
-    const openStore = () => app.setSettings(true)
+    const openStore = () => app.setPluginManager(true)
     window.addEventListener('fiex:open-plugin-store', openStore)
     return () => window.removeEventListener('fiex:open-plugin-store', openStore)
-  }, [app.setSettings])
+  }, [app.setPluginManager])
 
   useEffect(() => {
     if (!native || autostarted.current || !app.left.hasListing) return
@@ -258,6 +259,7 @@ export default function App() {
         onApply={app.applyBatchRename}
       />
       <ExplorerDialogs {...app} />
+      <PluginPermissionHost />
     </div>
   )
 }

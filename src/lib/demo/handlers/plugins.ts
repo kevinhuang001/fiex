@@ -1,6 +1,8 @@
 import { demoGitEntries, demoGpgKeys, demoHistory } from '../data'
 import { demoPlugins, marketplace, officialMode, query } from '../plugins'
 import { notHandled } from './shared'
+import { applyDemoPermissionResponse, requestDemoPermission } from '../permission'
+import { createDemoGpgKey, deleteDemoGpgKey } from '../gpgKeys'
 
 const pluginSettings = new Map<string, unknown>()
 const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
@@ -109,6 +111,10 @@ async function resolveDemoPreview(a: Record<string, unknown>) {
     if (!response.ok) throw new Error(await response.text())
     const html = await response.text()
     const sessionId = crypto.randomUUID()
+    // `?slowPreview` keeps the loading page visible long enough to inspect it.
+    if (new URLSearchParams(location.search).has('slowPreview')) {
+      await new Promise((resolve) => setTimeout(resolve, 900))
+    }
     return {
       providerId: provider.id,
       provider: provider.provider,
@@ -216,6 +222,21 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const itemId = String(a.itemId || '')
       if (!session || Date.now() - session.created >= 90000 || !session.actions.has(itemId)) {
         throw new Error('Invalid or already used menu session')
+      }
+      // The checksum action reads file contents. Mirror Core: if the user
+      // revoked files.read, the action waits for the Core-owned prompt before
+      // it can continue. This is the "during plugin use" re-authorization case.
+      if (itemId === 'checksum.calculate') {
+        const plugin = demoPlugins.find((entry) => entry.id === session.pluginId)
+        if (plugin && !plugin.grantedPermissions.includes('files.read')) {
+          const allow = await requestDemoPermission({
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            permission: 'files.read',
+            kind: 'permission',
+          })
+          if (!allow) throw new Error('PermissionDenied: user denied files.read')
+        }
       }
       const panelId = itemId
       if (
@@ -570,6 +591,14 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           return { head: 'bbbbbbbb', current: 'main', branches: ['main'], tags: [] }
         if (method === 'git.history') return demoHistory
         if (method === 'gpg.info') return { version: 'gpg (GnuPG) 2.4.5' }
+        if (method === 'gpg.deleteKey') {
+          const fingerprint = String(params.fingerprint || '')
+          const index = demoGpgKeys.findIndex((key) => key.fingerprint === fingerprint)
+          if (index >= 0) demoGpgKeys.splice(index, 1)
+          return { ok: true }
+        }
+        if (method === 'gpg.createKey') return createDemoGpgKey(params)
+        if (method === 'gpg.deleteKey') return deleteDemoGpgKey(params)
         if (method === 'gpg.keys') return demoGpgKeys
         if (method === 'gpg.verify')
           return {
@@ -742,17 +771,35 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
     }
     case 'plugin_activate': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
-      const consent = a.consent as { permissions: string[]; domains: string[]; commands: string[] }
+      const consent = a.consent as {
+        permissions?: string[]
+        networkAll?: boolean
+        domains?: string[]
+        commands?: string[]
+      }
       if (plugin) {
-        if (
-          !(plugin.declaredPermissions || []).every((value) => consent.permissions.includes(value))
-        )
-          throw new Error('请逐项同意全部权限')
+        const permissions = consent.permissions || []
+        const domains = consent.domains || []
+        const commands = consent.commands || []
+        const declared = new Set(plugin.declaredPermissions || [])
+        const requestedDomains = new Set(plugin.requestedNetworkDomains || [])
+        const requestedCommands = new Set(plugin.requestedCommands || [])
+        const invalid =
+          permissions.some((value) => !declared.has(value)) ||
+          (Boolean(consent.networkAll) && !plugin.requestedNetworkAll) ||
+          domains.some((value) => !requestedDomains.has(value)) ||
+          commands.some((value) => !requestedCommands.has(value)) ||
+          ((Boolean(consent.networkAll) || domains.length > 0) &&
+            !permissions.includes('network')) ||
+          (commands.length > 0 && !permissions.includes('commands'))
+        if (invalid) throw new Error('权限选择与插件声明不一致，请重新审核')
         plugin.approved = true
         plugin.enabled = true
-        plugin.grantedPermissions = [...consent.permissions]
-        plugin.allowedNetworkDomains = [...consent.domains]
-        plugin.allowedCommands = [...consent.commands]
+        // Activation is partial: keep only what the user selected.
+        plugin.grantedPermissions = [...permissions]
+        plugin.allowedNetworkAll = Boolean(consent.networkAll)
+        plugin.allowedNetworkDomains = [...domains]
+        plugin.allowedCommands = [...commands]
       }
       return null
     }
@@ -765,20 +812,23 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         const permission = String(a.permission)
+        // Mirrors Core: revoking one capability does not deactivate the plugin;
+        // the next operation asks again through the Core-owned prompt.
         plugin.grantedPermissions = a.granted
           ? [...new Set([...plugin.grantedPermissions, permission])]
           : plugin.grantedPermissions.filter((value) => value !== permission)
-        if (!a.granted) plugin.enabled = false
       }
       return null
     }
+    case 'plugin_permission_respond':
+      applyDemoPermissionResponse(String(a.requestId || ''), Boolean(a.allow), demoPlugins)
+      return null
     case 'plugin_set_command': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)
       if (plugin) {
         plugin.allowedCommands = a.granted
           ? [...new Set([...(plugin.allowedCommands || []), String(a.command)])]
           : (plugin.allowedCommands || []).filter((value) => value !== a.command)
-        if (!a.granted) plugin.enabled = false
       }
       return null
     }
@@ -854,7 +904,8 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         'toml',
         'ini',
       ])
-      const values: Array<{ id: string; provider: string; priority: number }> = []
+      const values: Array<{ id: string; provider: string; priority: number; loading?: boolean }> =
+        []
       if (!isDir && (mime.startsWith('text/') || textExt.has(extension)))
         values.push({ id: 'builtin:text', provider: 'Fiex', priority: 10 })
       if (!isDir && mime.startsWith('image/'))
@@ -868,7 +919,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       for (const plugin of demoPlugins) {
         if (!plugin.enabled) continue
         const contribution = plugin.extensions?.preview as
-          { extensions?: string[]; priority?: number } | undefined
+          { extensions?: string[]; priority?: number; loading?: unknown } | undefined
         if (!contribution) continue
         const extensions = Array.isArray(contribution.extensions)
           ? contribution.extensions.map((value: string) => value.toLowerCase())
@@ -878,9 +929,17 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           id: `plugin:${plugin.id}`,
           provider: plugin.name,
           priority: contribution.priority ?? 50,
+          loading: Boolean(contribution.loading),
         })
       }
       return values.sort((left, right) => right.priority - left.priority)
+    }
+    case 'preview_loading': {
+      const pluginId = String(a.pluginId || '')
+      if (!pluginId.startsWith('org.fiex.')) return null
+      const slug = pluginId.split('.').pop() || ''
+      const response = await fetch(`/__fiex_official_plugin/${slug}/loading.html`)
+      return response.ok ? await response.text() : null
     }
     case 'preview_open': {
       const values = (await handlePlugins('preview_candidates', {
