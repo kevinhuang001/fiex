@@ -1,3 +1,9 @@
+# Fiex 0.7.1
+
+- Approved, enabled native plugins auto-start after the app opens instead of waiting for the first invocation.
+- Closing Fiex explicitly stops every resident plugin process, so plugin children do not outlive the window.
+- Plugin activation and disable still start/stop their backend immediately.
+
 # Fiex 0.7.0
 
 - Plugin platform: schema 2 manifests, scoped provider events, unified preview/info providers, per-operation grants and grouped activation with per-capability toggles.

@@ -26,6 +26,17 @@ impl PluginHost {
             }
         }
     }
+
+    /// Stop every resident plugin process. Called on application exit so a
+    /// closed Fiex window never leaves orphan plugin children behind.
+    pub fn shutdown(&self) {
+        if let Ok(mut processes) = self.children.lock() {
+            for (_, instance) in processes.drain() {
+                instance.running.stop();
+                instance.kill.terminate();
+            }
+        }
+    }
     pub fn task(&self, task_id: &str) -> Option<crate::plugin_host::PluginTaskInfo> {
         self.children
             .lock()
@@ -128,6 +139,31 @@ impl PluginHost {
         children.insert(plugin_id.to_string(), instance);
         Ok(())
     }
+    /// Start every approved, enabled native plugin after app startup. The
+    /// processes are started on a background thread; a broken package is
+    /// recorded and skipped instead of blocking the window.
+    pub fn start_enabled(&self) {
+        for (manifest, directory) in discover() {
+            if crate::plugin_themes::is_theme(&manifest)
+                || executable(&manifest, &directory).is_err()
+            {
+                continue;
+            }
+            let Ok(declared) = declared(&manifest) else {
+                continue;
+            };
+            let Ok(state) = crate::plugin_permissions::status(&manifest.id, &declared) else {
+                continue;
+            };
+            if !state.approved || !state.enabled {
+                continue;
+            }
+            if let Err(error) = self.start(&manifest.id) {
+                eprintln!("plugin {} failed to auto-start: {error}", manifest.id);
+            }
+        }
+    }
+
     pub fn invoke(&self, plugin_id: &str, method: &str, params: Value) -> Result<Value, String> {
         self.invoke_scoped(plugin_id, method, params, None)
     }

@@ -272,6 +272,9 @@ pub fn run() {
                 crate::macos_material::configure(&window);
             }
             setup_tray(app.handle())?;
+            std::thread::spawn(|| {
+                crate::plugin_host::global().start_enabled();
+            });
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
                 use std::ffi::c_void;
@@ -298,6 +301,7 @@ pub fn run() {
         .expect("Cannot start Fiex")
         .run(|_, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                crate::plugin_host::global().shutdown();
                 crate::plugin_vfs::cleanup_exports();
             }
         });
