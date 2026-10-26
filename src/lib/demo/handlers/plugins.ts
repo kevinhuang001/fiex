@@ -111,6 +111,10 @@ async function resolveDemoPreview(a: Record<string, unknown>) {
     if (!response.ok) throw new Error(await response.text())
     const html = await response.text()
     const sessionId = crypto.randomUUID()
+    // `?slowPreview` keeps the loading page visible long enough to inspect it.
+    if (new URLSearchParams(location.search).has('slowPreview')) {
+      await new Promise((resolve) => setTimeout(resolve, 900))
+    }
     return {
       providerId: provider.id,
       provider: provider.provider,
@@ -900,7 +904,8 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         'toml',
         'ini',
       ])
-      const values: Array<{ id: string; provider: string; priority: number }> = []
+      const values: Array<{ id: string; provider: string; priority: number; loading?: boolean }> =
+        []
       if (!isDir && (mime.startsWith('text/') || textExt.has(extension)))
         values.push({ id: 'builtin:text', provider: 'Fiex', priority: 10 })
       if (!isDir && mime.startsWith('image/'))
@@ -914,7 +919,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       for (const plugin of demoPlugins) {
         if (!plugin.enabled) continue
         const contribution = plugin.extensions?.preview as
-          { extensions?: string[]; priority?: number } | undefined
+          { extensions?: string[]; priority?: number; loading?: unknown } | undefined
         if (!contribution) continue
         const extensions = Array.isArray(contribution.extensions)
           ? contribution.extensions.map((value: string) => value.toLowerCase())
@@ -924,9 +929,17 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           id: `plugin:${plugin.id}`,
           provider: plugin.name,
           priority: contribution.priority ?? 50,
+          loading: Boolean(contribution.loading),
         })
       }
       return values.sort((left, right) => right.priority - left.priority)
+    }
+    case 'preview_loading': {
+      const pluginId = String(a.pluginId || '')
+      if (!pluginId.startsWith('org.fiex.')) return null
+      const slug = pluginId.split('.').pop() || ''
+      const response = await fetch(`/__fiex_official_plugin/${slug}/loading.html`)
+      return response.ok ? await response.text() : null
     }
     case 'preview_open': {
       const values = (await handlePlugins('preview_candidates', {

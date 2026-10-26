@@ -36,11 +36,11 @@
 .plugin-panel-popover.revealed {
   visibility: visible;
   opacity: 1;
-  animation: plugin-panel-in 150ms ease-out both;
+  animation: none;
 }
 .plugin-panel-popover.leaving {
   visibility: visible;
-  animation: plugin-panel-out 90ms ease-in both;
+  animation: none;
   pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -99,13 +99,13 @@
 /* Every plugin action lives in one top-level submenu. It opens next to the
    row and flips up only when the file menu sits near the bottom edge. */
 .context-submenu.plugin-context-menu {
-  top: -6px;
+  top: 0;
   bottom: auto;
   width: 200px;
 }
 .context-submenu.plugin-context-menu.plugin-context-menu-up {
   top: auto;
-  bottom: -6px;
+  bottom: 0;
 }
 .context-submenu.plugin-context-menu .context-submenu-empty {
   padding: 6px 9px;
@@ -1324,4 +1324,64 @@
   margin-left: 0;
   padding-top: 8px;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+/* Grouped activation: one prompt per permission group, with per-item toggles. */
+.plugin-permission-prompt-toggles {
+  display: flex;
+  flex-direction: column;
+  max-height: min(46vh, 360px);
+  margin: 10px 0 4px;
+  padding: 2px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
+}
+.plugin-permission-prompt-toggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: start;
+  gap: 12px;
+  padding: 9px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.plugin-permission-prompt-toggle:last-child {
+  border-bottom: 0;
+}
+.plugin-permission-prompt-toggle:hover {
+  background: var(--hover);
+}
+.plugin-permission-prompt-toggle > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  text-align: left;
+}
+.plugin-permission-prompt-toggle strong {
+  display: block;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.plugin-permission-prompt-toggle small {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+.plugin-permission-prompt-toggle.danger strong {
+  color: var(--danger);
+}
+.plugin-permission-prompt-toggle input[type='checkbox'] {
+  justify-self: end;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
 }

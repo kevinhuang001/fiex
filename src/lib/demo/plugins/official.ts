@@ -107,6 +107,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
           preview: {
             extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
             priority: 100,
+            loading: { entry: 'ui/loading.html' },
           },
         },
       },
@@ -131,6 +132,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
           preview: {
             extensions: ['docx', 'xlsx', 'pptx'],
             priority: 100,
+            loading: { entry: 'ui/loading.html' },
             panel: {
               entry: 'ui/index.html',
               defaultSize: { width: 720, height: 600 },
@@ -216,6 +218,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
               'avro',
             ],
             priority: 110,
+            loading: { entry: 'ui/loading.html' },
             panel: {
               entry: 'ui/index.html',
               defaultSize: { width: 720, height: 640 },

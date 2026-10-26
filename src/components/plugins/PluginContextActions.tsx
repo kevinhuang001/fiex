@@ -44,7 +44,9 @@ export function PluginContextActions({
   }
   const scheduleClose = () => {
     cancelClose()
-    closeTimer.current = window.setTimeout(() => setOpen(false), 160)
+    // Leaving the plugin trigger closes the group at once; nested panels manage
+    // their own hover state and must not overlap a sibling plugin.
+    setOpen(false)
   }
   useEffect(() => cancelClose, [])
   // Resolve every plugin's menu as soon as the root menu opens, so the
@@ -86,10 +88,11 @@ export function PluginContextActions({
     if (!anchor) return
     const width = submenu.current.offsetWidth
     const height = submenu.current.offsetHeight
-    // The submenu clears the root menu's padding/border before its 4px gap.
-    const side = 11
-    const left =
-      anchor.right + side + width > window.innerWidth - 8 && anchor.left - side - width >= 8
+    // Submenu levels are flush; measure their real edge for flipping.
+    const side = 0
+    const preferLeft = anchor.left < window.innerWidth / 2
+    const roomLeft = anchor.left - side - width >= 8
+    const left = roomLeft && (preferLeft || anchor.right + side + width > window.innerWidth - 8)
     const up = anchor.top - 6 + height > window.innerHeight - 8 && anchor.bottom + 6 - height >= 8
     setFlip((current) => (current.left === left && current.up === up ? current : { left, up }))
   }, [open, menus])
@@ -194,7 +197,10 @@ export function PluginContextActions({
   }
 
   const hasItems = menus.some((menu) => menu.items.some((item) => !item.parentId))
-  if (!hasItems) return null
+  // Keep the entry visible for installed-but-inactive plugins too; the panel
+  // explains why no actions resolved instead of making the whole menu vanish.
+  const hasContextPlugins = plugins.length > 0
+  if (!hasItems && !hasContextPlugins) return null
   return (
     <div
       className="context-submenu-wrap plugin-context-actions"
@@ -248,18 +254,29 @@ export function PluginContextActions({
             }
           }}
         >
-          {menus.flatMap((menu) =>
-            menu.items
-              .filter((item) => !item.parentId)
-              .map((item) => (
-                <PluginMenuNode
-                  key={menu.pluginId + ':' + item.id}
-                  item={item}
-                  items={menu.items}
-                  onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
-                  onExpand={(submenuId) => void resolveSubmenu(menu, submenuId)}
-                />
-              )),
+          {hasItems ? (
+            menus.flatMap((menu) =>
+              menu.items
+                .filter((item) => !item.parentId)
+                .map((item) => (
+                  <PluginMenuNode
+                    key={menu.pluginId + ':' + item.id}
+                    item={item}
+                    items={menu.items}
+                    parentLeft={flip.left}
+                    preferLeft={
+                      flip.left ||
+                      (trigger.current?.getBoundingClientRect().left ?? 0) < window.innerWidth / 2
+                    }
+                    onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
+                    onExpand={(submenuId) => void resolveSubmenu(menu, submenuId)}
+                  />
+                )),
+            )
+          ) : (
+            <p className="context-submenu-empty">
+              没有可用的插件操作，请确认插件已激活且是新版安装包。
+            </p>
           )}
         </div>
       )}

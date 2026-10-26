@@ -717,7 +717,7 @@ test('installed plugin contributes submenu and isolated iframe modal with contex
   await expect(frame.locator('#selected')).toContainText('Notes.md')
 })
 
-test('nested plugin menus leave a gap instead of overlapping their parent', async ({ page }) => {
+test('nested plugin menus meet their parent without gap or overlap', async ({ page }) => {
   await page.getByText('Notes.md', { exact: true }).first().click({ button: 'right' })
   await page.getByRole('menuitem', { name: '插件', exact: true }).click()
   await page.getByRole('menuitem', { name: '测试插件', exact: true }).hover()
@@ -725,8 +725,13 @@ test('nested plugin menus leave a gap instead of overlapping their parent', asyn
   const plugin = await page.locator('.plugin-context-menu').boundingBox()
   const nested = await page.locator('.plugin-context-menu .context-submenu').boundingBox()
   if (!root || !plugin || !nested) throw new Error('missing context menu geometry')
-  expect(plugin.x).toBeGreaterThanOrEqual(root.x + root.width + 3)
-  expect(nested.x).toBeGreaterThanOrEqual(plugin.x + plugin.width + 3)
+  const flush = (child: { x: number; width: number }, parent: { x: number; width: number }) =>
+    Math.min(
+      Math.abs(child.x - (parent.x + parent.width)),
+      Math.abs(child.x + child.width - parent.x),
+    ) <= 1
+  expect(flush(plugin, root)).toBe(true)
+  expect(flush(nested, plugin)).toBe(true)
 })
 
 test('activation reviews grouped permissions and grants nothing when cancelled', async ({
@@ -737,20 +742,19 @@ test('activation reviews grouped permissions and grants nothing when cancelled',
   const row = page.locator('.plugin-row').filter({ hasText: 'Git' })
   await row.getByRole('switch', { name: '停用 Git' }).click()
   await row.getByRole('switch', { name: '激活 Git' }).click()
-  const sheet = page.getByRole('dialog', { name: '激活插件' })
-  await expect(sheet.getByRole('heading', { name: '文件与文件夹' })).toBeVisible()
-  await expect(sheet.getByRole('heading', { name: '网络与域名' })).toBeVisible()
-  await expect(sheet.getByRole('heading', { name: '外部命令' })).toBeVisible()
-  // Every declared capability, requested host and command starts selected.
+  const sheet = page.getByRole('dialog', { name: '权限请求' })
+  // One prompt per group; every declared capability starts selected.
   await expect(sheet.getByRole('checkbox', { name: '读取文件', exact: true })).toBeChecked()
-  await expect(sheet.getByRole('checkbox', { name: 'github.com', exact: true })).toBeChecked()
-  await expect(sheet.getByRole('checkbox', { name: 'git', exact: true })).toBeChecked()
   await sheet.getByRole('button', { name: '取消', exact: true }).click()
   await expect(sheet).toHaveCount(0)
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
 
   await row.getByRole('switch').click()
-  const reopened = page.getByRole('dialog', { name: '激活插件' })
+  const reopened = page.getByRole('dialog', { name: '权限请求' })
+  await reopened.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(reopened.getByRole('checkbox', { name: 'github.com', exact: true })).toBeChecked()
+  await reopened.getByRole('button', { name: '继续', exact: true }).click()
+  await expect(reopened.getByRole('checkbox', { name: 'git', exact: true })).toBeChecked()
   await reopened.getByRole('button', { name: '激活', exact: true }).click()
   await expect(reopened).toHaveCount(0)
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
@@ -763,11 +767,13 @@ test('activation can deselect a permission and target before activating', async 
   const row = page.locator('.plugin-row').filter({ hasText: 'Git' })
   await row.getByRole('switch', { name: '停用 Git' }).click()
   await row.getByRole('switch', { name: '激活 Git' }).click()
-  const sheet = page.getByRole('dialog', { name: '激活插件' })
+  const sheet = page.getByRole('dialog', { name: '权限请求' })
   const read = sheet.getByRole('checkbox', { name: '读取文件', exact: true })
   await expect(read).toBeChecked()
   await read.uncheck()
+  await sheet.getByRole('button', { name: '继续', exact: true }).click()
   await sheet.getByRole('checkbox', { name: 'github.com', exact: true }).uncheck()
+  await sheet.getByRole('button', { name: '继续', exact: true }).click()
   await sheet.getByRole('button', { name: '激活', exact: true }).click()
   await expect(sheet).toHaveCount(0)
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true')

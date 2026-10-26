@@ -56,6 +56,15 @@ Manifest 声明
 - 用户关闭单个权限不会停用插件。插件停用、关闭窗口或进程退出会取消尚未回答的授权请求。
 - `plugin_permissions` 只负责 Grant 存储、激活、撤销和域名/命令集合，不负责业务分支。
 
+## 激活授权
+
+安装后第一次激活由 Core 统一收集 Manifest 声明，并按能力组逐步询问：文件与文件夹、网络与域名、外部命令、其他能力。每组独立弹出，组内每个权限/域名/命令都有自己的开关，默认全选；关闭开关表示不授予该项。
+
+- 用户可以只授予声明集合的子集；Core 持久化实际选中的 `permissions`、`domains`、`commands` 和 `networkAll`。
+- 任意一组取消，整次激活不写入任何授权。
+- 未授予的能力不会在运行时自动获得；插件实际调用时仍按上面的三层模型检查，必要时再单独申请。
+- 文件与文件夹组按 read/write/create/delete/rename 分开；网络组按精确域名分开；命令组按精确命令名分开。
+
 ## 运行时授权弹窗
 
 代码：`src-tauri/src/plugin_permission_prompt.rs`、`src/components/plugins/PluginPermissionHost.tsx`

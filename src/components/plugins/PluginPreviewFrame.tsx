@@ -17,6 +17,7 @@ export function PluginPreviewFrame({
   sessionId,
   timeoutMs,
   loading = false,
+  onPreviewReady,
   name,
   extension,
 }: {
@@ -31,6 +32,8 @@ export function PluginPreviewFrame({
   timeoutMs?: number
   /** Loading documents may only read context/theme and report errors. */
   loading?: boolean
+  /** Called once the plugin's preview data has rendered in the frame. */
+  onPreviewReady?: () => void
   name: string
   extension: string
 }) {
@@ -39,6 +42,8 @@ export function PluginPreviewFrame({
   const emit = useRef<((name: string, payload: JsonValue) => void) | null>(null)
   const attachRef = useRef<(() => void) | null>(null)
   const [error, setError] = useState('')
+  const previewReady = useRef(onPreviewReady)
+  previewReady.current = onPreviewReady
 
   useEffect(() => {
     const element = frame.current
@@ -60,6 +65,7 @@ export function PluginPreviewFrame({
               'plugin.invoke',
               'plugin.task',
               'plugin.error',
+              'preview.ready',
               'clipboard.writeText',
               'navigation.open',
               'panel.close',
@@ -90,6 +96,10 @@ export function PluginPreviewFrame({
             } as JsonValue
           }
           if (method === 'theme.get') return themeSnapshot()
+          if (method === 'preview.ready') {
+            previewReady.current?.()
+            return null
+          }
           if (method === 'plugin.error') {
             const p = (params || {}) as { message?: unknown; detail?: unknown }
             if (typeof p.message !== 'string' || !p.message.trim())

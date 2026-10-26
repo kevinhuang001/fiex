@@ -158,9 +158,8 @@
   position: relative;
 }
 .context-menu .context-submenu-wrap > .context-submenu .context-submenu {
-  /* The parent submenu's 5px padding and 1px border sit between its content
-     edge and outer edge; clear them before adding the 4px panel gap. */
-  left: calc(100% + 10px);
+  /* Nested panels clear the parent submenu's 5px padding + 1px border only. */
+  left: calc(100% + 6px);
   top: 0;
   bottom: auto;
   z-index: 100;

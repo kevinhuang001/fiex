@@ -59,6 +59,8 @@ Provider 执行具有异常隔离与 4 MiB 结果上限。PluginHost 继续负�
 
 `extensions.preview.loading` 是纯展示层声明：Core 在 `preview.open` 前解析包内加载页并交给预览 UI，不参与 Provider 匹配、优先级、Scope 或结果校验。加载页解析失败或未声明时，预览继续走原有流程。
 
+真实预览 iframe 在加载页下方预加载；插件完成首次数据渲染后调用 `preview.ready`，Core 才移除加载页。加载页本身没有预览 Session，只能读取展示上下文和主题。Core 另设 30 秒兜底，插件未实现 `preview.ready` 时仍会显示预览。
+
 ## 代码入口
 
 - `plugins/events.rs`：Registry、EventRouter、公共验证入口、独占调用、Scope/targets 准备。

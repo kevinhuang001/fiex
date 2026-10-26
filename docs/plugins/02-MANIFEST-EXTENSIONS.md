@@ -82,6 +82,8 @@
 - `loading.entry` 只能是插件包内的相对路径（仅普通路径段，不能是 URL、绝对路径、盘符、`..` 或反斜杠），读取时还会做 canonical 包含检查；文档上限 1 MiB。
 - 加载页是自包含 HTML，不携带预览 Session，不能调用 `plugin.invoke`、文件、网络或命令；只能通过面板桥读取 `context.get`（文件展示名/扩展名）、`theme.get`/`theme.changed` 以及 `plugin.error`。
 - 没有 `loading` 的旧声明保持原行为：Core 显示内置加载态，直到 `preview.open` 返回。
+- 声明了 `loading` 时，Core 会先显示加载页，再在后台加载真正的预览 iframe；插件在首次数据渲染完成后调用桥接方法 `preview.ready`，Core 才移除加载页。这样不会出现“插件自己的 spinner/空壳”阶段。
+- `preview.ready` 只能由真正的预览会话调用，加载页没有预览 Session，不能调用；30 秒未收到时 Core 会兜底显示预览，避免第三方插件不实现时永久卡住。
 
 ### Connections
 

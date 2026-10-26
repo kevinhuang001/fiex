@@ -1,4 +1,5 @@
 import { Check, LoaderCircle } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import { PluginGlyph } from '@/components/plugins/PluginGlyph'
@@ -41,6 +42,8 @@ export function PluginPermissionPrompt({
   note,
   allowLabel = '允许',
   denyLabel = '不允许',
+  stepUnit = '项',
+  children,
   onAllow,
   onDeny,
 }: {
@@ -56,6 +59,10 @@ export function PluginPermissionPrompt({
   note?: string
   allowLabel?: string
   denyLabel?: string
+  /** Unit for the step counter, e.g. groups during activation. */
+  stepUnit?: string
+  /** Extra controls (toggles) rendered above the actions. */
+  children?: ReactNode
   onAllow: () => void
   onDeny: () => void
 }) {
@@ -96,7 +103,7 @@ export function PluginPermissionPrompt({
         <span className="plugin-permission-prompt-app-name">{pluginName}</span>
         {total > 1 && (
           <span className="plugin-permission-prompt-step">
-            第 {step} 项，共 {total} 项
+            第 {step} {stepUnit}，共 {total} {stepUnit}
           </span>
         )}
         <h3>{question}</h3>
@@ -107,6 +114,7 @@ export function PluginPermissionPrompt({
           </p>
         )}
         {note && <p className="plugin-permission-prompt-note">{note}</p>}
+        {children}
         {error && (
           <p role="alert" className="plugin-permission-prompt-error">
             {error}

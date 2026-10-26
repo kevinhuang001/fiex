@@ -42,11 +42,11 @@
 }
 .context-submenu {
   position: absolute;
-  /* 100% ends at the parent menu's content edge; add its padding and border
-     back so sibling-level panels sit beside each other instead of overlapping. */
-  left: calc(100% + 11px);
+  /* Exactly clear the parent's 6px padding + 1px border: level borders touch
+     without a gap and without sliding under the parent panel. */
+  left: calc(100% + 7px);
   top: auto;
-  bottom: -6px;
+  bottom: 0;
   z-index: 50;
   max-height: calc(100vh - 20px);
   overflow-y: auto;
@@ -83,8 +83,8 @@
   z-index: 51;
   background: var(--surface);
   width: 420px;
-  max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 60px);
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--line) 60%, white);
   box-shadow: var(--shadow);
@@ -160,7 +160,7 @@
 /* Flip a submenu to the left when the parent menu sits near the right edge. */
 .context-submenu.open-left {
   left: auto;
-  right: calc(100% + 11px);
+  right: calc(100% + 7px);
 }
 
 .modal-actions {
@@ -190,4 +190,33 @@
   border-color: var(--accent);
   background: var(--hover);
   color: var(--accent);
+}
+
+/* Every sheet tracks the current window instead of keeping a desktop size. */
+@media (max-width: 700px) {
+  .modal {
+    padding: 16px;
+    border-radius: 14px;
+    max-width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+  .settings-modal,
+  .plugin-manager-modal,
+  .plugin-store-modal {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
+  }
+  .plugin-store-modal .plugin-store-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Once a panel opens left, every deeper plugin/menu level must grow left too;
+   otherwise the child would cover its parent or leave the window. */
+.context-menu .context-submenu.open-left .context-submenu,
+.context-menu .context-submenu.open-left .context-submenu.open-left {
+  left: auto;
+  right: calc(100% + 6px);
 }

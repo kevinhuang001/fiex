@@ -54,16 +54,23 @@ export function validPluginMenuItems(items: unknown): items is PluginMenuItem[] 
 export function PluginMenuNode({
   item,
   items,
+  parentLeft = false,
+  preferLeft = false,
   onAction,
   onExpand,
 }: {
   item: PluginMenuItem
   items: PluginMenuItem[]
+  /** The parent panel already grows left; all descendants must follow. */
+  parentLeft?: boolean
+  /** The root menu sits on the left half; prefer left when there is room. */
+  preferLeft?: boolean
   onAction: (item: PluginMenuItem, anchor?: { x: number; y: number }) => void
   onExpand: (submenuId: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [openUp, setOpenUp] = useState(false)
+  const [openLeft, setOpenLeft] = useState(parentLeft)
   const submenu = useRef<HTMLDivElement>(null)
   const timer = useRef<number | null>(null)
   const cancel = () => {
@@ -73,9 +80,12 @@ export function PluginMenuNode({
   useEffect(() => cancel, [])
   useLayoutEffect(() => {
     if (expanded && submenu.current) {
-      setOpenUp(submenu.current.getBoundingClientRect().bottom > window.innerHeight - 8)
+      const rect = submenu.current.getBoundingClientRect()
+      setOpenUp(rect.bottom > window.innerHeight - 8)
+      const roomLeft = rect.left - rect.width >= 8
+      setOpenLeft(parentLeft || (preferLeft && roomLeft) || rect.right > window.innerWidth - 8)
     }
-  }, [expanded])
+  }, [expanded, parentLeft, preferLeft])
   if (item.kind === 'separator') return <div role="separator" className="context-divider" />
   if (item.kind === 'submenu') {
     const descendants = items.filter((candidate) => candidate.parentId === item.id)
@@ -90,7 +100,8 @@ export function PluginMenuNode({
         onMouseEnter={expand}
         onMouseLeave={() => {
           cancel()
-          timer.current = window.setTimeout(() => setExpanded(false), 180)
+          // A sibling submenu takes over immediately; no lingering panel.
+          setExpanded(false)
         }}
       >
         <button
@@ -111,7 +122,9 @@ export function PluginMenuNode({
         {expanded && (
           <div
             ref={submenu}
-            className={'context-submenu' + (openUp ? ' open-up' : '')}
+            className={
+              'context-submenu' + (openUp ? ' open-up' : '') + (openLeft ? ' open-left' : '')
+            }
             role="menu"
             aria-label={item.title}
             onMouseEnter={cancel}
@@ -122,6 +135,8 @@ export function PluginMenuNode({
                   key={entry.id}
                   item={entry}
                   items={items}
+                  parentLeft={openLeft}
+                  preferLeft={preferLeft}
                   onAction={onAction}
                   onExpand={onExpand}
                 />

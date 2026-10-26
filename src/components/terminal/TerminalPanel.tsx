@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, Plus, SquareTerminal, X } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import { TerminalView } from '@/components/ssh/SshTerminalView'
+import { TerminalTabs } from './TerminalTabs'
 import { call } from '@/lib/api'
 
 interface TerminalTab {
   id: string
+  number: number
   cwd: string
   shell?: string
   shellName?: string
@@ -26,9 +28,9 @@ export function TerminalPanel() {
   const [shells, setShells] = useState<ShellChoice[]>([])
   const [shellMenu, setShellMenu] = useState(false)
   const lastCwd = useRef('')
+  const nextNumber = useRef(1)
   const panel = useRef<HTMLElement>(null)
   const shellMenuRef = useRef<HTMLDivElement>(null)
-  const dragTab = useRef<number | null>(null)
 
   useEffect(() => {
     void call<ShellChoice[]>('detect_shells')
@@ -50,9 +52,10 @@ export function TerminalPanel() {
       const cwd = detail?.cwd || lastCwd.current
       if (cwd) lastCwd.current = cwd
       const id = crypto.randomUUID()
+      const number = nextNumber.current++
       setTabs((values) => [
         ...values,
-        { id, cwd, shell: shells[0]?.path, shellName: shells[0]?.name },
+        { id, number, cwd, shell: shells[0]?.path, shellName: shells[0]?.name },
       ])
       setActive(id)
       setOpen(true)
@@ -72,7 +75,15 @@ export function TerminalPanel() {
         return
       }
       const id = crypto.randomUUID()
-      setTabs([{ id, cwd, shell: shells[0]?.path, shellName: shells[0]?.name }])
+      setTabs([
+        {
+          id,
+          number: nextNumber.current++,
+          cwd,
+          shell: shells[0]?.path,
+          shellName: shells[0]?.name,
+        },
+      ])
       setActive(id)
       setOpen(true)
     }
@@ -95,10 +106,8 @@ export function TerminalPanel() {
     window.addEventListener('mousemove', move)
     window.addEventListener('mouseup', stop)
   }
-  const moveTab = (to: number) => {
-    const from = dragTab.current
-    dragTab.current = null
-    if (from === null || from === to) return
+  const moveTab = (from: number, to: number) => {
+    if (from === to) return
     setTabs((values) => {
       const next = [...values]
       const [moved] = next.splice(from, 1)
@@ -108,9 +117,10 @@ export function TerminalPanel() {
   }
   const add = (shell?: ShellChoice) => {
     const id = crypto.randomUUID()
+    const number = nextNumber.current++
     setTabs((values) => [
       ...values,
-      { id, cwd: lastCwd.current, shell: shell?.path, shellName: shell?.name },
+      { id, number, cwd: lastCwd.current, shell: shell?.path, shellName: shell?.name },
     ])
     setActive(id)
     setOpen(true)
@@ -140,45 +150,16 @@ export function TerminalPanel() {
         onMouseDown={resizeStart}
       />
       <header className="terminal-panel-bar">
-        <div className="terminal-panel-tabs" role="tablist" aria-label="终端标签">
-          {tabs.map((tab, index) => (
-            <div
-              className={`terminal-panel-tab ${tab.id === active ? 'active' : ''}`}
-              key={tab.id}
-              draggable
-              onDragStart={() => {
-                dragTab.current = index
-              }}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => moveTab(index)}
-              onDragEnd={() => {
-                dragTab.current = null
-              }}
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab.id === active}
-                onClick={() => {
-                  setActive(tab.id)
-                  setOpen(true)
-                }}
-              >
-                <SquareTerminal size={12} />
-                {tab.shellName || '终端'} {index + 1}
-              </button>
-              <button
-                type="button"
-                className="terminal-panel-close"
-                title="关闭终端"
-                aria-label={`关闭终端 ${index + 1}`}
-                onClick={() => close(tab.id)}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
+        <TerminalTabs
+          tabs={tabs}
+          active={active}
+          onSelect={(id) => {
+            setActive(id)
+            setOpen(true)
+          }}
+          onClose={close}
+          onMove={moveTab}
+        />
         <div className="terminal-panel-actions" ref={shellMenuRef}>
           <div className="terminal-shell-picker">
             <button
@@ -217,12 +198,12 @@ export function TerminalPanel() {
         </div>
       </header>
       <div className="terminal-panel-body">
-        {tabs.map((tab, index) => (
+        {tabs.map((tab) => (
           <div className="terminal-panel-pane" key={tab.id} hidden={tab.id !== active || !open}>
             <TerminalView
               cwd={tab.cwd}
               shell={tab.shell}
-              name={`终端 ${index + 1}${tab.shellName ? ` · ${tab.shellName}` : ''}`}
+              name={`终端 ${tab.number}${tab.shellName ? ` · ${tab.shellName}` : ''}`}
             />
           </div>
         ))}

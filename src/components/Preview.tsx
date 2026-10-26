@@ -72,6 +72,8 @@ export function Preview({
   const [resolved, setResolved] = useState<ResolvedPreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingPage, setLoadingPage] = useState<PluginLoadingPage | null>(null)
+  const [previewReady, setPreviewReady] = useState(false)
+  const [readyToShow, setReadyToShow] = useState(false)
   const [error, setError] = useState('')
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -83,6 +85,8 @@ export function Preview({
     setProviderId(null)
     setResolved(null)
     setLoadingPage(null)
+    setPreviewReady(false)
+    setReadyToShow(false)
     setError('')
     setMedia(null)
     setMenuOpen(false)
@@ -102,9 +106,13 @@ export function Preview({
         setCandidates(allowed)
         setProviderId(allowed[0]?.id ?? null)
         if (!allowed.length) setError('没有可用的预览方式')
+        setReadyToShow(true)
       })
       .catch((cause) => {
-        if (active) setError(String(cause))
+        if (active) {
+          setError(String(cause))
+          setReadyToShow(true)
+        }
       })
     return () => {
       active = false
@@ -123,11 +131,12 @@ export function Preview({
     setResolved(null)
     setMedia(null)
     setLoadingPage(null)
+    setPreviewReady(false)
     const open = async () => {
+      let page: PluginLoadingPage | null = null
       // A declared loading page is resolved first so the preview opens directly
       // into plugin-owned UI instead of flashing Core's generic spinner.
       if (pluginId && declaresLoading) {
-        let page: PluginLoadingPage | null = null
         try {
           if (native) {
             const path = await call<string | null>('preview_loading_asset', { pluginId })
@@ -149,7 +158,10 @@ export function Preview({
       })
       if (!active) return
       setResolved(value)
-      setLoadingPage(null)
+      // Keep the plugin loading document until the preview itself reports that
+      // its data is rendered; never flash the plugin's empty shell.
+      if (!page || value.view?.kind !== 'html') setLoadingPage(null)
+      setPreviewReady(!page || value.view?.kind !== 'html')
     }
     void open()
       .catch((cause) => {
@@ -223,9 +235,17 @@ export function Preview({
   const loadingPreview = !resolved && (loadingPage !== null || (loading && declaresLoading))
   const pluginSheet = view?.kind === 'html' || loadingPreview
 
+  useEffect(() => {
+    if (!loadingPage || !resolved || resolved.view?.kind !== 'html' || previewReady) return
+    // A third-party preview may not implement preview.ready; never trap the
+    // modal behind the loading sheet forever.
+    const timer = window.setTimeout(() => setPreviewReady(true), 30000)
+    return () => window.clearTimeout(timer)
+  }, [loadingPage, resolved, previewReady])
+
   return (
     <Modal
-      open={!!entry}
+      open={!!entry && readyToShow}
       onClose={onClose}
       title={entry?.name || '快速查看'}
       wide
@@ -270,17 +290,35 @@ export function Preview({
                 <p>正在读取…</p>
               )
             ) : view?.kind === 'html' && view.html ? (
-              <PluginPreviewFrame
-                key={`${entry.path}:${providerId}`}
-                pluginId={view.pluginId || ''}
-                contributionId={view.contributionId || ''}
-                html={view.html}
-                context={view.context}
-                sessionId={view.sessionId || ''}
-                timeoutMs={view.timeoutMs}
-                name={entry.name}
-                extension={entry.extension}
-              />
+              <>
+                <PluginPreviewFrame
+                  key={`${entry.path}:${providerId}`}
+                  pluginId={view.pluginId || ''}
+                  contributionId={view.contributionId || ''}
+                  html={view.html}
+                  context={view.context}
+                  sessionId={view.sessionId || ''}
+                  timeoutMs={view.timeoutMs}
+                  name={entry.name}
+                  extension={entry.extension}
+                  onPreviewReady={() => setPreviewReady(true)}
+                />
+                {loadingPage && !previewReady && (
+                  <div className="preview-plugin-loading">
+                    <PluginPreviewFrame
+                      key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
+                      pluginId={loadingPage.pluginId}
+                      contributionId={loadingPage.pluginId}
+                      html={loadingPage.html}
+                      src={loadingPage.src}
+                      sessionId={loadingPage.sessionId}
+                      name={entry.name}
+                      extension={entry.extension}
+                      loading
+                    />
+                  </div>
+                )}
+              </>
             ) : view?.kind === 'text' ? (
               <pre className={highlighted ? 'preview-code' : undefined}>
                 {highlighted ? (

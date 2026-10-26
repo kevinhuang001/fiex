@@ -24,9 +24,9 @@ export interface PluginPanelRequest {
 export const OPEN_PLUGIN_PANEL = 'fiex:plugin-panel:open'
 export const PLUGIN_RESULT_EVENT = 'fiex:plugin-result'
 
-const PANEL_EXIT_MS = 90
-const PANEL_REVEAL_SETTLE_MS = 120
-const PANEL_REVEAL_FALLBACK_MS = 260
+const PANEL_EXIT_MS = 0
+const PANEL_REVEAL_SETTLE_MS = 0
+const PANEL_REVEAL_FALLBACK_MS = 0
 
 export function panelKeyOf(request: PluginPanelRequest) {
   return JSON.stringify([request.pluginId, request.panelId, request.directory, request.selection])
