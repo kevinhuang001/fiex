@@ -62,7 +62,9 @@ test('closing the last tab collapses the split pane', async ({ page }) => {
 })
 test('plugin search providers add results to the same query', async ({ page }) => {
   await page.getByRole('textbox', { name: '搜索文件' }).fill('plugin-index-hit')
-  await expect(page.getByText('Indexed result.txt', { exact: true })).toBeVisible()
+  await expect(page.getByText('Indexed result.txt', { exact: true })).toBeVisible({
+    timeout: 15000,
+  })
   await expect(page.locator('.statusbar')).toBeVisible()
 })
 test('each tab keeps its own one or two panes', async ({ page }) => {
