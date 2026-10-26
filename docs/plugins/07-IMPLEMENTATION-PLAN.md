@@ -44,10 +44,18 @@
 - Core terminal bridge + xterm.js；
 - 本地 sshd 集成测试已加入 CI。
 
-## 部分完成
+### 统一事件调用架构
+
+- Info、Preview、ContextMenu、Decorations、Search 通过共同 EventRouter 完成 Provider 匹配、执行、逐源校验和事件结果策略；
+- 统一 targets 投影及引用绑定在 Host 边界执行，作用域独立；ScopedRead 和读取令牌注册表已删除；
+- 菜单与搜索由 Core 汇集，UI 不再遍历插件或自行合并搜索来源；懒加载子菜单保持原会话；
+- Preview 对失败、非法响应、unsupported 自动回退，尊重用户允许的来源顺序；
+- 远程元数据无需下载；文件字节在实际授权 IO 时才 materialize，操作快照复用缓存；
+- 详细流程与结果策略见 [08](08-UNIFIED-PREVIEW-INFO.md)。
+
+## 其他独立工作
 
 - `hooks.invoke` 方法固定，但文件生命周期调用点尚未全部接线；
-- PermissionPolicy 目前按“能力 + Scope”判断，字段投影仍由各业务 Handler 完成；
 - OS 级插件沙箱未在所有平台强制；
 - 异步 SDK 仍以同步 Broker 流为主，README 中未列出的 async API 不存在；
 - 主题只支持单主题文件；

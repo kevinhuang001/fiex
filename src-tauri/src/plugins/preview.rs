@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::{
     collections::HashMap,
     fs,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -59,29 +59,11 @@ impl Builtin {
     }
 }
 
-#[derive(Clone)]
-struct Provider {
-    id: String,
-    provider: String,
-    priority: i64,
-    builtin: Option<Builtin>,
-    plugin: Option<(String, String)>,
-}
-
-impl Provider {
-    fn json(&self) -> Value {
-        serde_json::json!({
-            "id": self.id,
-            "provider": self.provider,
-            "priority": self.priority,
-        })
-    }
-}
+use crate::plugin_events::{EventRouter, Provider};
 
 struct Session {
     plugin_id: String,
-    directory: PathBuf,
-    path: PathBuf,
+    resource: ResourceSnapshot,
     created: Instant,
 }
 
@@ -141,28 +123,18 @@ fn builtin_candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Builtin> {
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Provider> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
-    let mut values = builtin_candidates(&ext, mime, is_dir)
+    let builtin = builtin_candidates(&ext, mime, is_dir)
         .into_iter()
-        .map(|builtin| Provider {
-            id: builtin.id().into(),
-            provider: "Fiex".into(),
-            priority: builtin.priority(),
-            builtin: Some(builtin),
-            plugin: None,
-        })
-        .collect::<Vec<_>>();
-    for registered in crate::plugin_events::matching_plugins("preview.open", &ext, mime, is_dir) {
-        let plugin = registered.plugin;
-        values.push(Provider {
-            id: format!("plugin:{}", plugin.id),
-            provider: plugin.name.clone(),
-            priority: registered.priority,
-            builtin: None,
-            plugin: Some((plugin.id.clone(), plugin.id.clone())),
-        });
-    }
-    values.sort_by_key(|provider| std::cmp::Reverse(provider.priority));
-    values
+        .map(|b| Provider::builtin(b.id(), b.priority()))
+        .collect();
+    EventRouter::providers(
+        "preview.open",
+        &[
+            serde_json::json!({"extension":ext,"mime":mime,"kind":if is_dir{"directory"}else{"file"}}),
+        ],
+        "",
+        builtin,
+    )
 }
 
 /// Ordered provider list for the source switcher. User ordering and the
@@ -180,14 +152,20 @@ fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, St
     let mime = mime_for(&ext);
     match kind {
         Builtin::Text => {
-            let bytes = fs::read(local).map_err(|error| error.to_string())?;
+            use std::io::Read;
+            let file = fs::File::open(local).map_err(|e| e.to_string())?;
+            let size = file.metadata().map_err(|e| e.to_string())?.len();
+            let mut bytes = Vec::new();
+            file.take((MAX_TEXT + 1) as u64)
+                .read_to_end(&mut bytes)
+                .map_err(|e| e.to_string())?;
             let truncated = bytes.len() > MAX_TEXT;
             let text = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_TEXT)]).into_owned();
             Ok(serde_json::json!({
                 "kind": "text",
                 "text": text,
                 "truncated": truncated,
-                "size": bytes.len(),
+                "size": size,
             }))
         }
         Builtin::Image => Ok(serde_json::json!({
@@ -278,61 +256,26 @@ fn validate(plugin_id: &str, value: Value) -> Result<Value, String> {
             }
             Ok(serde_json::json!({"kind":"text","text":text}))
         }
-        "unsupported" => Ok(serde_json::json!({
-            "kind": "fallback",
-            "message": view.message.unwrap_or_else(|| "此文件不支持插件预览".into()),
-        })),
+        "unsupported" => Err("provider does not support this resource".into()),
         other => Err(format!("unsupported PreviewView kind: {other}")),
     }
 }
 
-fn open_plugin(
-    display: &str,
-    local: &str,
-    plugin_id: &str,
-    contribution_id: &str,
+fn open_plugin_resource(
+    resource: &ResourceSnapshot,
+    plugin: &crate::plugin_host::PluginInfo,
 ) -> Result<Value, String> {
-    let plugin = crate::plugin_host::catalog()
-        .into_iter()
-        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.approved)
-        .ok_or("preview plugin is not active")?;
-    let declared = plugin
-        .declared_permissions
-        .iter()
-        .cloned()
-        .collect::<std::collections::BTreeSet<_>>();
-    let policy = crate::plugin_permission_policy::PermissionPolicy::new(plugin_id, &declared);
-    let metadata_allowed = policy.allowed(crate::plugin_permission_policy::Capability::Metadata);
-    let read_allowed = policy.allowed(crate::plugin_permission_policy::Capability::FilesRead);
-    let contribution = plugin
-        .extensions
-        .get("preview")
-        .ok_or("plugin does not register a preview provider")?;
-    let local_path = Path::new(local);
-    let ext = extension(local_path);
-    if contribution_id != plugin_id {
-        return Err("unknown preview provider".into());
-    }
-    let rules = crate::plugin_match::MatchRules::from_contribution(contribution);
-    if !rules.matches(&ext, &mime_for(&ext), local_path.is_dir()) {
-        return Err("preview provider does not match this file type".into());
-    }
-    let directory = local_path
-        .parent()
-        .ok_or("preview file has no parent")?
-        .to_path_buf();
-    let snapshot = ResourceSnapshot::new(display, local_path);
-    let context = snapshot.context(plugin_id, metadata_allowed, read_allowed);
-    let session_id = context.session_id.clone();
-    let params = serde_json::to_value(&context).map_err(|error| error.to_string())?;
-    let selected = [local_path.to_path_buf()];
-    let result = crate::plugin_events::invoke_selected(
-        plugin_id,
+    let plugin_id = &plugin.id;
+    let session_id = crate::mounts::new_id()?;
+    let (context, scope) = crate::plugin_events::resource_scope(
+        plugin,
         "preview.open",
-        params,
-        &directory.to_string_lossy(),
-        &selected,
+        serde_json::json!({"sessionId":session_id}),
+        std::slice::from_ref(resource),
+        None,
     )?;
+    let result =
+        crate::plugin_events::invoke_prepared(plugin_id, "preview.open", context.clone(), scope)?;
     let view = validate(plugin_id, result)?;
     let mut values = sessions()
         .lock()
@@ -350,16 +293,15 @@ fn open_plugin(
     values.insert(
         session_id.clone(),
         Session {
-            plugin_id: plugin_id.into(),
-            directory,
-            path: local_path.to_path_buf(),
+            plugin_id: plugin_id.clone(),
+            resource: resource.clone(),
             created: Instant::now(),
         },
     );
     Ok(serde_json::json!({
         "sessionId": session_id,
         "pluginId": plugin_id,
-        "contributionId": contribution_id,
+        "contributionId": plugin_id,
         "context": context,
         "view": view,
     }))
@@ -367,79 +309,123 @@ fn open_plugin(
 
 /// Open a provider preview using a unified provider id. `display` is the
 /// user-visible URI/path; `local` is the Core-owned file.
-pub fn open_provider(
+pub fn open_provider(display: &str, local: &str, preferred: Option<&str>) -> Result<Value, String> {
+    resolve_preview(
+        ResourceSnapshot::new(display, Path::new(local)),
+        preferred,
+        None,
+    )
+}
+pub fn open_resource(
     display: &str,
-    local: &str,
-    provider_id: Option<&str>,
+    preferred: Option<&str>,
+    order: Option<&[String]>,
 ) -> Result<Value, String> {
-    let local_path = Path::new(local);
-    let ext = extension(local_path);
-    let mime = mime_for(&ext);
-    let values = candidates(&ext, &mime, local_path.is_dir());
-    let provider = match provider_id {
-        Some(id) => values
+    resolve_preview(ResourceSnapshot::resolve(display)?, preferred, order)
+}
+fn resolve_preview(
+    resource: ResourceSnapshot,
+    preferred: Option<&str>,
+    order: Option<&[String]>,
+) -> Result<Value, String> {
+    let mut providers = candidates(&resource.ext, &resource.mime, resource.is_dir);
+    if let Some(order) = order {
+        providers.retain(|p| order.contains(&p.id));
+        providers.sort_by_key(|p| {
+            order
+                .iter()
+                .position(|id| id == &p.id)
+                .unwrap_or(usize::MAX)
+        });
+    }
+    if let Some(id) = preferred {
+        let index = providers
             .iter()
-            .find(|provider| provider.id == id)
-            .cloned()
-            .ok_or("unknown preview provider")?,
-        None => values.first().cloned().ok_or("no preview provider")?,
-    };
-    let view = if let Some(builtin) = provider.builtin {
-        builtin_view(builtin, local_path, display)?
-    } else if let Some((plugin_id, contribution_id)) = provider.plugin.as_ref() {
-        let plugin = open_plugin(display, local, plugin_id, contribution_id)?;
-        let mut view = plugin
-            .get("view")
-            .cloned()
-            .ok_or("plugin preview response missing view")?;
-        if let Some(object) = view.as_object_mut() {
-            object.insert("providerId".into(), Value::String(provider.id.clone()));
-            object.insert("provider".into(), Value::String(provider.provider.clone()));
-            if let Some(session) = plugin.get("sessionId") {
-                object.insert("sessionId".into(), session.clone());
+            .position(|p| p.id == id)
+            .ok_or("unknown preview provider")?;
+        let first = providers.remove(index);
+        providers.insert(0, first);
+    }
+    // The final fallback is a label-only renderer; it never reads/downloads content.
+    providers.retain(|p| p.id != "builtin:fallback");
+    providers.push(Provider::builtin("builtin:fallback", i64::MIN));
+    EventRouter::resolve(
+        "preview.open",
+        providers,
+        |_, id| {
+            let kind = [
+                Builtin::Text,
+                Builtin::Image,
+                Builtin::Media,
+                Builtin::Pdf,
+                Builtin::Fallback,
+            ]
+            .into_iter()
+            .find(|b| b.id() == id)
+            .ok_or("unknown preview builtin")?;
+            let path = if kind == Builtin::Fallback {
+                resource.local.clone()
+            } else {
+                resource.materialize()?
+            };
+            builtin_view(kind, &path, &resource.display)
+        },
+        |plugin| {
+            open_plugin_resource(&resource, plugin).map(|response| {
+                let mut view = response["view"].clone();
+                if let Some(object) = view.as_object_mut() {
+                    for key in ["sessionId", "context", "pluginId", "contributionId"] {
+                        object.insert(key.into(), response[key].clone());
+                    }
+                }
+                view
+            })
+        },
+        |provider, mut view| {
+            if let Some(object) = view.as_object_mut() {
+                object.insert("providerId".into(), Value::String(provider.id.clone()));
+                object.insert("provider".into(), Value::String(provider.name.clone()));
             }
-            if let Some(context) = plugin.get("context") {
-                object.insert("context".into(), context.clone());
-            }
-            if let Some(plugin_id) = plugin.get("pluginId") {
-                object.insert("pluginId".into(), plugin_id.clone());
-            }
-            if let Some(contribution_id) = plugin.get("contributionId") {
-                object.insert("contributionId".into(), contribution_id.clone());
-            }
-        }
-        view
-    } else {
-        return Err("invalid preview provider".into());
-    };
-    Ok(serde_json::json!({
-        "providerId": provider.id,
-        "provider": provider.provider,
-        "priority": provider.priority,
-        "view": view,
-    }))
+            Ok(view)
+        },
+        |_| true,
+        |outcomes| {
+            outcomes.into_iter().find_map(|(provider,result)|result.ok().map(|view|serde_json::json!({"providerId":provider.id,"provider":provider.name,"priority":provider.priority,"view":view}))).ok_or_else(||"no preview provider succeeded".into())
+        },
+    )
 }
 
-/// Compatibility wrapper for the plugin-only integration test.
+/// Open an explicitly selected plugin through the same resource broker.
 pub fn open(
     display: &str,
     local: &str,
     plugin_id: &str,
     contribution_id: &str,
 ) -> Result<Value, String> {
-    let result = open_plugin(display, local, plugin_id, contribution_id)?;
-    Ok(serde_json::json!({
-        "sessionId": result["sessionId"],
-        "pluginId": plugin_id,
-        "contributionId": contribution_id,
-        "context": result["context"],
-        "view": result["view"],
-    }))
+    if plugin_id != contribution_id {
+        return Err("unknown preview provider".into());
+    }
+    let id = format!("plugin:{plugin_id}");
+    let result = resolve_preview(
+        ResourceSnapshot::new(display, Path::new(local)),
+        Some(&id),
+        Some(std::slice::from_ref(&id)),
+    )?;
+    if result["providerId"] != id {
+        return Err("preview provider does not support this resource".into());
+    }
+    let view = &result["view"];
+    Ok(
+        serde_json::json!({"sessionId":view["sessionId"],"pluginId":plugin_id,"contributionId":contribution_id,"context":view["context"],"view":view}),
+    )
 }
 
 /// Resolve the operation scope for a plugin UI invoking its backend. The
 /// iframe only holds the opaque session id, never the selected path.
-pub fn session_scope(session_id: &str, plugin_id: &str) -> Result<(String, Vec<PathBuf>), String> {
+pub fn session_scope(
+    session_id: &str,
+    plugin_id: &str,
+) -> Result<crate::plugin_fs_access::Scope, String> {
     let mut values = sessions()
         .lock()
         .map_err(|_| "preview session registry unavailable")?;
@@ -448,10 +434,18 @@ pub fn session_scope(session_id: &str, plugin_id: &str) -> Result<(String, Vec<P
     if session.plugin_id != plugin_id {
         return Err("preview session belongs to another plugin".into());
     }
-    Ok((
-        session.directory.to_string_lossy().into_owned(),
-        vec![session.path.clone()],
-    ))
+    let plugin = crate::plugin_host::catalog()
+        .into_iter()
+        .find(|p| p.id == plugin_id && p.enabled && p.approved && p.backend_available)
+        .ok_or("preview provider unavailable")?;
+    let (_, scope) = crate::plugin_events::resource_scope(
+        &plugin,
+        "preview.open",
+        serde_json::json!({}),
+        std::slice::from_ref(&session.resource),
+        None,
+    )?;
+    Ok(scope)
 }
 
 #[cfg(test)]

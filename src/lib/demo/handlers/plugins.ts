@@ -4,7 +4,164 @@ import { notHandled } from './shared'
 
 const pluginSettings = new Map<string, unknown>()
 const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
-const demoMenuSessions = new Map<string, { pluginId: string; actions: Set<string> }>()
+interface DemoMenuItem {
+  id: string
+  title: string
+  kind: string
+  parentId?: string
+}
+const demoMenuSessions = new Map<
+  string,
+  {
+    pluginId: string
+    actions: Set<string>
+    submenus: Set<string>
+    items: DemoMenuItem[]
+    created: number
+  }
+>()
+
+function resolveDemoMenu(a: Record<string, unknown>) {
+  const pluginId = String(a.pluginId || '')
+  const plugin = demoPlugins.find((p) => p.id === pluginId)
+  if (!plugin?.enabled || !plugin.extensions?.contextMenus) {
+    throw new Error('Context menu provider is not active')
+  }
+  const selection = Array.isArray(a.paths)
+    ? a.paths.filter((v): v is string => typeof v === 'string')
+    : []
+  if (selection.length === 0) throw new Error('No selected resources')
+  const selectionNames = selection.map((path) => path.split(/[\\/]/).pop() || '')
+  const entries = [
+    ...(pluginId === 'org.test.fixture'
+      ? [
+          { id: 'fixture.root', title: '测试插件', kind: 'submenu' },
+          { id: 'fixture.panel', title: '信息面板', kind: 'action', parentId: 'fixture.root' },
+          { id: 'fixture.action', title: '检查文件', kind: 'action', parentId: 'fixture.root' },
+        ]
+      : []),
+    ...(pluginId === 'org.example.checksum' && a.isDirectory !== true
+      ? [{ id: 'checksum.calculate', title: '查看校验和', kind: 'action' }]
+      : []),
+    ...(pluginId === 'org.fiex.archive'
+      ? selection.length === 1 &&
+        /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0])
+        ? [{ id: 'archive.extract', title: '解压缩', kind: 'action' }]
+        : [
+            { id: 'archive.compress', title: '压缩', kind: 'submenu' },
+            {
+              id: 'archive.advanced',
+              title: '高级压缩…',
+              kind: 'action',
+              parentId: 'archive.compress',
+            },
+          ]
+      : []),
+    ...(pluginId === 'org.fiex.gpg'
+      ? [
+          { id: 'gpg.menu', title: 'GPG', kind: 'submenu' },
+          { id: 'gpg.encrypt', title: '加密…', kind: 'action', parentId: 'gpg.menu' },
+          { id: 'gpg.decrypt', title: '解密…', kind: 'action', parentId: 'gpg.menu' },
+          { id: 'gpg.sign', title: '签名…', kind: 'action', parentId: 'gpg.menu' },
+          ...(selection.length === 1
+            ? [{ id: 'gpg.verify', title: '验证签名…', kind: 'action', parentId: 'gpg.menu' }]
+            : []),
+        ]
+      : []),
+  ]
+  const menuSessionId = crypto.randomUUID()
+  demoMenuSessions.set(menuSessionId, {
+    pluginId,
+    actions: new Set(
+      entries
+        .filter((entry) => entry.kind === 'action' && !('parentId' in entry))
+        .map((entry) => entry.id),
+    ),
+    submenus: new Set(
+      entries
+        .filter((entry) => entry.kind === 'submenu' && !('parentId' in entry))
+        .map((entry) => entry.id),
+    ),
+    items: entries,
+    created: Date.now(),
+  })
+  return { pluginId, menuSessionId, items: entries.filter((entry) => !('parentId' in entry)) }
+}
+
+async function resolveDemoPreview(a: Record<string, unknown>) {
+  const path = String(a.path || '')
+  const name = path.split(/[\\/]/).pop() || ''
+  const extension = name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : ''
+  const providerId = String(a.providerId || '')
+  const candidates = (await handlePlugins('preview_candidates', {
+    extension,
+    mime: '',
+    isDir: false,
+  })) as Array<{ id: string; provider: string; priority: number }>
+  const provider = candidates.find((value) => value.id === providerId) || candidates[0]
+  if (!provider) throw new Error('没有可用的预览方式')
+  if (provider.id.startsWith('plugin:')) {
+    const pluginId = provider.id.slice('plugin:'.length)
+    const contributionId = pluginId
+    const slug = pluginId.split('.').pop() || ''
+    const entry = pluginId === 'org.fiex.archive' ? 'preview.html' : 'index.html'
+    const response = await fetch(`/__fiex_official_plugin/${slug}/${entry}`)
+    if (!response.ok) throw new Error(await response.text())
+    const html = await response.text()
+    const sessionId = crypto.randomUUID()
+    return {
+      providerId: provider.id,
+      provider: provider.provider,
+      priority: provider.priority,
+      view: {
+        kind: 'html',
+        html,
+        sessionId,
+        pluginId,
+        contributionId,
+        context: {
+          sessionId,
+          targets: [
+            {
+              ref: { mountId: 'local', nodeId: `fiex-resource:${sessionId}` },
+              metadata: { name, kind: 'file', extension },
+            },
+          ],
+        },
+      },
+    }
+  }
+  if (provider.id === 'builtin:text') {
+    const text = name.endsWith('.json')
+      ? '{\n  "name": "Fiex",\n  "preview": "demo",\n  "theme": "light"\n}'
+      : '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
+    return {
+      providerId: provider.id,
+      provider: provider.provider,
+      priority: provider.priority,
+      view: { kind: 'text', text, truncated: false },
+    }
+  }
+  if (provider.id === 'builtin:pdf') {
+    return {
+      providerId: provider.id,
+      provider: provider.provider,
+      priority: provider.priority,
+      view: { kind: 'pdf', path: '/demo/sample.pdf', name },
+    }
+  }
+  return {
+    providerId: provider.id,
+    provider: provider.provider,
+    priority: provider.priority,
+    view: {
+      kind: 'fallback',
+      name,
+      extension,
+      message: 'demo 未内置该类型的媒体样本',
+    },
+  }
+}
 
 export async function handlePlugins(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
@@ -30,69 +187,34 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type==='fiex.bridge.probe'){window.parent.postMessage({type:'fiex.bridge.listening'},'*');return;}\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selectionPaths||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
       throw new Error('No installed fixture plugin')
     }
-    case 'plugin_context_menu_resolve': {
-      const pluginId = String(a.pluginId || '')
-      const plugin = demoPlugins.find((p) => p.id === pluginId)
-      if (!plugin?.enabled || plugin.extensions?.contextMenus !== true) {
-        throw new Error('Context menu provider is not active')
+    case 'plugin_context_menu_resolve':
+      return demoPlugins
+        .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+        .flatMap((plugin) => {
+          try {
+            return [resolveDemoMenu({ ...a, pluginId: plugin.id })]
+          } catch {
+            return []
+          }
+        })
+    case 'plugin_context_menu_children': {
+      const session = demoMenuSessions.get(String(a.menuSessionId || ''))
+      const parentId = String(a.parentId || '')
+      if (!session || Date.now() - session.created >= 90000 || !session.submenus.has(parentId))
+        throw new Error('Invalid menu session or submenu')
+      const children = session.items.filter((item) => item.parentId === parentId)
+      for (const item of children) {
+        if (item.kind === 'action') session.actions.add(item.id)
+        if (item.kind === 'submenu') session.submenus.add(item.id)
       }
-      const selection = Array.isArray(a.paths)
-        ? a.paths.filter((v): v is string => typeof v === 'string')
-        : []
-      if (selection.length === 0) throw new Error('No selected resources')
-      const selectionNames = selection.map((path) => path.split(/[\\/]/).pop() || '')
-      const entries = [
-        ...(pluginId === 'org.test.fixture'
-          ? [
-              { id: 'fixture.root', title: '测试插件', kind: 'submenu' },
-              { id: 'fixture.panel', title: '信息面板', kind: 'action', parentId: 'fixture.root' },
-              { id: 'fixture.action', title: '检查文件', kind: 'action', parentId: 'fixture.root' },
-            ]
-          : []),
-        ...(pluginId === 'org.example.checksum' && a.isDirectory !== true
-          ? [{ id: 'checksum.calculate', title: '查看校验和', kind: 'action' }]
-          : []),
-        ...(pluginId === 'org.fiex.archive'
-          ? selection.length === 1 &&
-            /\.(zip|rar|7z|tar|gz|tgz|bz2|tbz2|xz|txz)$/i.test(selectionNames[0])
-            ? [{ id: 'archive.extract', title: '解压缩', kind: 'action' }]
-            : [
-                { id: 'archive.compress', title: '压缩', kind: 'submenu' },
-                {
-                  id: 'archive.advanced',
-                  title: '高级压缩…',
-                  kind: 'action',
-                  parentId: 'archive.compress',
-                },
-              ]
-          : []),
-        ...(pluginId === 'org.fiex.gpg'
-          ? [
-              { id: 'gpg.menu', title: 'GPG', kind: 'submenu' },
-              { id: 'gpg.encrypt', title: '加密…', kind: 'action', parentId: 'gpg.menu' },
-              { id: 'gpg.decrypt', title: '解密…', kind: 'action', parentId: 'gpg.menu' },
-              { id: 'gpg.sign', title: '签名…', kind: 'action', parentId: 'gpg.menu' },
-              ...(selection.length === 1
-                ? [{ id: 'gpg.verify', title: '验证签名…', kind: 'action', parentId: 'gpg.menu' }]
-                : []),
-            ]
-          : []),
-      ]
-      const menuSessionId = crypto.randomUUID()
-      demoMenuSessions.set(menuSessionId, {
-        pluginId,
-        actions: new Set(
-          entries.filter((entry) => entry.kind === 'action').map((entry) => entry.id),
-        ),
-      })
-      return { menuSessionId, items: entries }
+      return { items: children }
     }
     case 'plugin_context_menu_execute': {
       const menuSessionId = String(a.menuSessionId || '')
       const session = demoMenuSessions.get(menuSessionId)
       demoMenuSessions.delete(menuSessionId)
       const itemId = String(a.itemId || '')
-      if (!session || !session.actions.has(itemId)) {
+      if (!session || Date.now() - session.created >= 90000 || !session.actions.has(itemId)) {
         throw new Error('Invalid or already used menu session')
       }
       const panelId = itemId
@@ -781,77 +903,35 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return values.sort((left, right) => right.priority - left.priority)
     }
     case 'preview_open': {
-      const path = String(a.path || '')
-      const name = path.split(/[\\/]/).pop() || ''
-      const extension = name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : ''
-      const providerId = String(a.providerId || '')
-      const candidates = (await handlePlugins('preview_candidates', {
-        extension,
+      const values = (await handlePlugins('preview_candidates', {
+        extension:
+          String(a.path || '')
+            .split('.')
+            .pop() || '',
         mime: '',
         isDir: false,
       })) as Array<{ id: string; provider: string; priority: number }>
-      const provider = candidates.find((value) => value.id === providerId) || candidates[0]
-      if (!provider) throw new Error('没有可用的预览方式')
-      if (provider.id.startsWith('plugin:')) {
-        const pluginId = provider.id.slice('plugin:'.length)
-        const contributionId = pluginId
-        const slug = pluginId.split('.').pop() || ''
-        const entry = pluginId === 'org.fiex.archive' ? 'preview.html' : 'index.html'
-        const response = await fetch(`/__fiex_official_plugin/${slug}/${entry}`)
-        if (!response.ok) throw new Error(await response.text())
-        const html = await response.text()
-        const sessionId = crypto.randomUUID()
-        return {
-          providerId: provider.id,
-          provider: provider.provider,
-          priority: provider.priority,
-          view: {
-            kind: 'html',
-            html,
-            sessionId,
-            pluginId,
-            contributionId,
-            context: {
-              version: 1,
-              sessionId,
-              intent: 'preview',
-              resource: {
-                ref: { mountId: 'local', nodeId: `fiex-resource:${sessionId}` },
-                metadata: { name, kind: 'file', extension, size: null },
-                read: { resourceId: `fiex-read:${sessionId}` },
-              },
-            },
-          },
-        }
-      }
-      if (provider.id === 'builtin:text') {
-        const text = name.endsWith('.json')
-          ? '{\n  "name": "Fiex",\n  "preview": "demo",\n  "theme": "light"\n}'
-          : '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
-        return {
-          providerId: provider.id,
-          provider: provider.provider,
-          priority: provider.priority,
-          view: { kind: 'text', text, truncated: false },
-        }
-      }
-      if (provider.id === 'builtin:pdf') {
-        return {
-          providerId: provider.id,
-          provider: provider.provider,
-          priority: provider.priority,
-          view: { kind: 'pdf', path: '/demo/sample.pdf', name },
-        }
+      const allowed = Array.isArray(a.providerOrder)
+        ? a.providerOrder.filter((id): id is string => typeof id === 'string')
+        : values.map((value) => value.id)
+      const order = [String(a.providerId || ''), ...allowed].filter(
+        (id, index, list) => id && list.indexOf(id) === index && allowed.includes(id),
+      )
+      for (const id of order) {
+        try {
+          return await resolveDemoPreview({ ...a, providerId: id })
+        } catch {}
       }
       return {
-        providerId: provider.id,
-        provider: provider.provider,
-        priority: provider.priority,
+        providerId: 'builtin:fallback',
+        provider: 'Fiex',
+        priority: 0,
         view: {
           kind: 'fallback',
-          name,
-          extension,
-          message: 'demo 未内置该类型的媒体样本',
+          name:
+            String(a.path || '')
+              .split('/')
+              .pop() || '',
         },
       }
     }

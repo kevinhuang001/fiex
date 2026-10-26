@@ -11,7 +11,9 @@ Fiex Desktop / Sidebar / TabHost
     +-- Resource Broker
     |      fs_access / plugin_net / process / resources / ipc
     +-- VFS / mounts       Core 分配 mountId，处理资源身份与视图
-    +-- Info / Preview     Core 内置与插件共用 Registry 和 DTO
+    +-- EventRouter        统一匹配、执行、校验和事件结果策略
+    +-- ResourceSnapshot   targets 元数据、操作引用与按需内容
+    +-- Info / Preview     事件专用业务处理与渲染
     +-- ContentHost        Explorer、VFS 视图、PluginView iframe
     |
     +-- Native Plugin Process
@@ -38,7 +40,8 @@ Manifest permissions
 ## 事件合同
 
 - 标准事件：`info.resolve`、`preview.open`、`decorations.resolve`。
-- 自定义交互：`contextMenu.resolve/execute`。
+- 系统交互事件：`contextMenu.resolve/execute`。
+- 自定义插件业务 RPC：通过单独授权的 `plugin.invoke` 保留，不与系统事件混用。
 - 导航：`connection.open/create` 只返回 `vfs` 或 `pluginView`。
 - 固定扩展方法：`search.query`、`hooks.invoke`、`toolbar.invoke`。
 - Core 内置实现与插件实现使用同一个 DTO/Registry，不区分“官方特权路径”。

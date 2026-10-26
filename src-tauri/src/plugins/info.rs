@@ -2,36 +2,12 @@
 //!
 //! Built-in and plugin providers return the same section/row domain types.
 //! Core builds an `EventContext` after permission projection, invokes the
-//! matching provider, and merges the decoded `InfoResponse` with native
+//! matching provider, and merges validated sections with native
 //! metadata and media probes.
-use crate::plugin_contracts::{EventContext, InfoResponse, ResourceMetadata};
+use crate::plugin_contracts::ResourceMetadata;
+pub use crate::plugin_contracts::{InfoRow, InfoSection};
 use crate::plugin_resource_context::ResourceSnapshot;
-use serde::Serialize;
 use std::{fs, path::Path, time::Duration};
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoRow {
-    pub label: String,
-    pub value: String,
-    /// Render a copy control next to this value in the Info dialog.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub copyable: bool,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InfoSection {
-    /// Stable section id (`core.metadata`, `<plugin>.<section>`).
-    pub id: String,
-    /// `core` for built-in probes, `plugin` for an extension contribution.
-    pub source: String,
-    pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub plugin_id: Option<String>,
-    pub provider: String,
-    pub rows: Vec<InfoRow>,
-}
 
 fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     InfoRow {
@@ -382,200 +358,98 @@ fn metadata_section(
     }
 }
 
-fn decode_response(value: &serde_json::Value) -> Option<InfoResponse> {
-    match serde_json::from_value::<InfoResponse>(value.clone()) {
-        Ok(response) => Some(response),
-        Err(error) => {
-            eprintln!("invalid info response: {error}");
-            None
-        }
+/// Builtin and native handlers share ordering, validation and the Info merge policy.
+fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
+    use crate::plugin_events::{EventRouter, Handler, Provider};
+    let metadata = serde_json::to_value(resource.metadata()).unwrap_or_default();
+    let mut builtin = vec![Provider::builtin("core.metadata", 1000)];
+    if !resource.is_dir
+        && (resource.mime.starts_with("audio/") || resource.mime.starts_with("video/"))
+    {
+        builtin.push(Provider::builtin("core.media", 100));
     }
-}
-
-enum Candidate {
-    Metadata,
-    Media,
-    Plugin {
-        plugin: Box<crate::plugin_host::PluginInfo>,
-        contribution: serde_json::Value,
-        priority: i64,
-        metadata_allowed: bool,
-        read_allowed: bool,
-    },
-}
-
-impl Candidate {
-    fn priority(&self) -> i64 {
-        match self {
-            Self::Metadata => 1000,
-            Self::Media => 100,
-            Self::Plugin { priority, .. } => *priority,
-        }
-    }
-}
-
-fn candidates(resource: &ResourceSnapshot) -> Vec<Candidate> {
-    let mut values = vec![Candidate::Metadata];
-    if !resource.is_dir {
-        values.push(Candidate::Media);
-    }
-    for registered in crate::plugin_events::matching_plugins(
+    let providers = EventRouter::providers("info.resolve", &[metadata], "", builtin);
+    EventRouter::resolve(
         "info.resolve",
-        &resource.ext,
-        &resource.mime,
-        resource.is_dir,
-    ) {
-        let plugin = registered.plugin;
-        let declared = plugin
-            .declared_permissions
-            .iter()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>();
-        let metadata_allowed =
-            crate::plugin_permissions::allowed(&plugin.id, &declared, "metadata").unwrap_or(false);
-        let read_allowed = crate::plugin_permissions::allowed(&plugin.id, &declared, "files.read")
-            .unwrap_or(false);
-        let contribution = registered.contribution;
-        values.push(Candidate::Plugin {
-            plugin: Box::new(plugin.clone()),
-            contribution,
-            priority: registered.priority,
-            metadata_allowed,
-            read_allowed,
-        });
-    }
-    values.sort_by_key(|candidate| std::cmp::Reverse(candidate.priority()));
-    values
-}
-
-fn section_from_contract(
-    plugin: Option<&crate::plugin_host::PluginInfo>,
-    section: crate::plugin_contracts::InfoSectionView,
-) -> Option<InfoSection> {
-    let rows = section
-        .rows
-        .into_iter()
-        .map(|row| InfoRow {
-            label: row.label,
-            value: row.value,
-            copyable: row.copyable,
-        })
-        .collect::<Vec<_>>();
-    if rows.is_empty() {
-        return None;
-    }
-    Some(InfoSection {
-        id: match plugin {
-            Some(plugin) => format!("{}.{}", plugin.id, section.id),
-            None => section.id,
+        providers,
+        |_, id| {
+            let sections = match id {
+                "core.metadata" => vec![metadata_section(
+                    display,
+                    &resource.local,
+                    resource.stat.as_ref(),
+                    resource.metadata(),
+                )],
+                "core.media" => media_sections(&resource.materialize()?),
+                _ => return Err("unknown info builtin".into()),
+            };
+            Ok(serde_json::json!({"sections":sections}))
         },
-        source: if plugin.is_some() { "plugin" } else { "core" }.into(),
-        title: section.title,
-        plugin_id: plugin.map(|plugin| plugin.id.clone()),
-        provider: plugin
-            .map(|plugin| plugin.name.clone())
-            .unwrap_or_else(|| "Fiex".into()),
-        rows,
-    })
-}
-
-fn resolve_builtin(
-    candidate: &Candidate,
-    resource: &ResourceSnapshot,
-    display: &str,
-) -> Vec<InfoSection> {
-    match candidate {
-        Candidate::Metadata => vec![metadata_section(
-            display,
-            &resource.local,
-            resource.stat.as_ref(),
-            resource.metadata(),
-        )],
-        Candidate::Media => media_sections(&resource.local),
-        Candidate::Plugin { .. } => Vec::new(),
-    }
-}
-
-fn resolve_plugin(
-    plugin: &crate::plugin_host::PluginInfo,
-    _contribution: &serde_json::Value,
-    context: &EventContext,
-    local: &Path,
-) -> Vec<InfoSection> {
-    let params = serde_json::to_value(context).unwrap_or(serde_json::Value::Null);
-    let directory = local.parent().unwrap_or(Path::new("."));
-    let selected = [local.to_path_buf()];
-    match crate::plugin_events::invoke_selected(
-        &plugin.id,
-        "info.resolve",
-        params,
-        &directory.to_string_lossy(),
-        &selected,
-    ) {
-        Ok(value) => {
-            if let Some(response) = decode_response(&value) {
-                response
-                    .sections
-                    .into_iter()
-                    .filter_map(|section| section_from_contract(Some(plugin), section))
-                    .collect()
-            } else {
-                vec![InfoSection {
-                    id: format!("{}.invalid", plugin.id),
-                    source: "plugin".into(),
-                    title: plugin.name.clone(),
-                    plugin_id: Some(plugin.id.clone()),
-                    provider: plugin.name.clone(),
-                    rows: vec![row("错误", "插件返回的 InfoResponse 格式无效")],
-                }]
-            }
-        }
-        Err(error) => vec![InfoSection {
-            id: format!("{}.error", plugin.id),
-            source: "plugin".into(),
-            title: plugin.name.clone(),
-            plugin_id: Some(plugin.id.clone()),
-            provider: plugin.name.clone(),
-            rows: vec![row("错误", error)],
-        }],
-    }
-}
-
-/// Resolve info for a local path. `display` preserves the user-facing path for
-/// remote materializations; `local` is the Core-owned file used for probes.
-pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
-    let local_path = Path::new(local);
-    let resource = ResourceSnapshot::new(display, local_path);
-    let mut sections = Vec::new();
-    for candidate in candidates(&resource) {
-        match &candidate {
-            Candidate::Metadata | Candidate::Media => {
-                let mut resolved = resolve_builtin(&candidate, &resource, display);
-                if let Candidate::Metadata = candidate {
-                    // Use the display path Core originally received.
-                    if let Some(section) = resolved.first_mut() {
-                        if let Some(location) =
-                            section.rows.iter_mut().find(|row| row.label == "位置")
-                        {
-                            location.value = display_parent(display);
-                        }
+        |plugin| {
+            crate::plugin_events::invoke_resources(
+                plugin,
+                "info.resolve",
+                serde_json::json!({}),
+                std::slice::from_ref(&resource),
+                None,
+            )
+        },
+        |provider, value| {
+            let mut sections: Vec<InfoSection> =
+                serde_json::from_value(value["sections"].clone()).map_err(|e| e.to_string())?;
+            for section in &mut sections {
+                match &provider.handler {
+                    Handler::Plugin(plugin) => {
+                        section.id = format!("{}.{}", plugin.id, section.id);
+                        section.source = "plugin".into();
+                        section.plugin_id = Some(plugin.id.clone());
+                    }
+                    Handler::Builtin(_) => {
+                        section.source = "core".into();
+                        section.plugin_id = None;
                     }
                 }
-                sections.append(&mut resolved);
+                section.provider = provider.name.clone();
             }
-            Candidate::Plugin {
-                plugin,
-                contribution,
-                metadata_allowed,
-                read_allowed,
-                ..
-            } => {
-                let context = resource.context(&plugin.id, *metadata_allowed, *read_allowed);
-                sections.extend(resolve_plugin(plugin, contribution, &context, local_path));
-            }
-        }
-    }
-    sections
+            Ok(sections)
+        },
+        |_| true,
+        |outcomes| {
+            outcomes
+                .into_iter()
+                .flat_map(|(provider, result)| match result {
+                    Ok(sections) => sections,
+                    Err(error) => vec![InfoSection {
+                        id: format!(
+                            "{}.error",
+                            provider.id.strip_prefix("plugin:").unwrap_or(&provider.id)
+                        ),
+                        title: provider.name.clone(),
+                        provider: provider.name,
+                        source: if matches!(&provider.handler, Handler::Plugin(_)) {
+                            "plugin"
+                        } else {
+                            "core"
+                        }
+                        .into(),
+                        plugin_id: match provider.handler {
+                            Handler::Plugin(p) => Some(p.id),
+                            _ => None,
+                        },
+                        rows: vec![row("错误", error)],
+                    }],
+                })
+                .collect()
+        },
+    )
+}
+
+pub fn file_info_at(display: &str, local: &str) -> Vec<InfoSection> {
+    resolve_info(display, ResourceSnapshot::new(display, Path::new(local)))
+}
+/// Remote metadata is matched directly; content providers materialize lazily.
+pub fn file_info_resource(display: &str) -> Result<Vec<InfoSection>, String> {
+    Ok(resolve_info(display, ResourceSnapshot::resolve(display)?))
 }
 
 pub fn file_info(path: &str) -> Vec<InfoSection> {

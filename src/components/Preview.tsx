@@ -54,6 +54,7 @@ export function Preview({
 }) {
   const [candidates, setCandidates] = useState<PreviewCandidate[]>([])
   const [providerId, setProviderId] = useState<string | null>(null)
+  const [providerAttempt, setProviderAttempt] = useState(0)
   const [resolved, setResolved] = useState<ResolvedPreview | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -104,7 +105,11 @@ export function Preview({
     setError('')
     setResolved(null)
     setMedia(null)
-    void call<ResolvedPreview>('preview_open', { path: entry.path, providerId })
+    void call<ResolvedPreview>('preview_open', {
+      path: entry.path,
+      providerId,
+      providerOrder: candidates.map((candidate) => candidate.id),
+    })
       .then((value) => {
         if (active) setResolved(value)
       })
@@ -117,7 +122,7 @@ export function Preview({
     return () => {
       active = false
     }
-  }, [entry?.path, providerId])
+  }, [entry?.path, providerId, providerAttempt])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -162,9 +167,11 @@ export function Preview({
       height: Math.round(media.height * scale),
     }
   }, [media])
-  const current = candidates.find((candidate) => candidate.id === providerId)
+  const current = candidates.find(
+    (candidate) => candidate.id === (resolved?.providerId || providerId),
+  )
   const provider = resolved?.provider || current?.provider || 'Fiex'
-  const fromPlugin = providerId?.startsWith('plugin:')
+  const fromPlugin = (resolved?.providerId || providerId)?.startsWith('plugin:')
   const providerLabel = fromPlugin ? provider : 'Fiex 内置'
 
   return (
@@ -310,6 +317,7 @@ export function Preview({
                         key={candidate.id}
                         onClick={() => {
                           setProviderId(candidate.id)
+                          setProviderAttempt((value) => value + 1)
                           setMenuOpen(false)
                         }}
                       >

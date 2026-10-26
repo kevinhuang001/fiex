@@ -1,19 +1,21 @@
 //! Core-owned resource snapshot shared by Info and Preview providers.
 //! Metadata is retrieved once, then projected separately for each provider.
 //! The snapshot never crosses the plugin process boundary.
-use crate::plugin_contracts::{
-    EventContext, ResourceContext, ResourceMetadata, ResourceRef, ScopedRead,
-};
+use crate::plugin_contracts::{EventContext, ResourceContext, ResourceMetadata, ResourceRef};
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 
+#[derive(Clone)]
 pub struct ResourceSnapshot {
+    content: std::sync::Arc<std::sync::OnceLock<Result<PathBuf, String>>>,
+    pub display: String,
     pub local: PathBuf,
     pub reference: ResourceRef,
     pub stat: Option<fs::Metadata>,
     pub is_dir: bool,
+    pub read_only: bool,
     pub ext: String,
     pub mime: String,
     pub name: String,
@@ -24,6 +26,7 @@ impl ResourceSnapshot {
     pub fn new(display: &str, local: &Path) -> Self {
         let stat = fs::symlink_metadata(local).ok();
         let is_dir = stat.as_ref().is_some_and(fs::Metadata::is_dir);
+        let read_only = stat.as_ref().is_some_and(|s| s.permissions().readonly());
         let name = local
             .file_name()
             .map(|value| value.to_string_lossy().into_owned())
@@ -57,10 +60,13 @@ impl ResourceSnapshot {
                 .map(|elapsed| elapsed.as_secs() as i64),
         });
         Self {
+            content: Default::default(),
+            display: display.into(),
             local: local.to_path_buf(),
             reference,
             stat,
             is_dir,
+            read_only,
             ext,
             mime,
             name,
@@ -82,22 +88,90 @@ impl ResourceSnapshot {
         self.metadata.as_ref()
     }
 
+    pub fn resolve(display: &str) -> Result<Self, String> {
+        if !crate::mounts::handles(display) {
+            return Ok(Self::new(display, Path::new(display)));
+        }
+        let entry = if crate::remote::is_remote(display) {
+            crate::remote::stat(display)?
+        } else {
+            crate::plugin_vfs::stat(display)?
+        };
+        let mut resource = Self::from_metadata(display, Self::entry_metadata(&entry));
+        resource.read_only = entry.readonly;
+        Ok(resource)
+    }
+    pub fn entry_metadata(entry: &crate::files::Entry) -> ResourceMetadata {
+        ResourceMetadata {
+            name: entry.name.clone(),
+            kind: if entry.is_dir { "directory" } else { "file" }.into(),
+            extension: Some(entry.extension.clone()),
+            mime: Some(entry.mime.clone()),
+            size: (!entry.is_dir).then_some(entry.size),
+            modified: Some(entry.modified as i64),
+        }
+    }
+    pub fn from_metadata(display: &str, metadata: ResourceMetadata) -> Self {
+        let reference = ResourceRef {
+            mount_id: crate::mounts::parse(display)
+                .map(|uri| uri.mount_id)
+                .unwrap_or_else(|_| "local".into()),
+            node_id: Self::local_ref().node_id,
+        };
+        Self {
+            content: Default::default(),
+            display: display.into(),
+            local: PathBuf::from(display),
+            reference,
+            stat: None,
+            is_dir: metadata.kind == "directory",
+            read_only: false,
+            ext: metadata.extension.clone().unwrap_or_default(),
+            mime: metadata.mime.clone().unwrap_or_default(),
+            name: metadata.name.clone(),
+            metadata: Some(metadata),
+        }
+    }
+    pub fn materialize(&self) -> Result<PathBuf, String> {
+        if crate::mounts::handles(&self.display) {
+            crate::mounts::resolve(&self.display)?;
+        }
+        self.content
+            .get_or_init(|| self.materialize_uncached())
+            .clone()
+    }
+    fn materialize_uncached(&self) -> Result<PathBuf, String> {
+        if !crate::mounts::handles(&self.display) {
+            return Ok(self.local.clone());
+        }
+        if crate::remote::is_remote(&self.display) {
+            if self.is_dir {
+                futures::executor::block_on(crate::remote::download_dir(
+                    &self.display,
+                    &crate::remote::TransferOptions::default(),
+                ))?;
+                return crate::remote::cached_path(&self.display).map(PathBuf::from);
+            }
+            return futures::executor::block_on(crate::remote::ensure_downloaded(
+                &self.display,
+                &crate::remote::TransferOptions::default(),
+            ))
+            .map(PathBuf::from);
+        }
+        crate::plugin_vfs::materialize(&self.display).map(PathBuf::from)
+    }
     pub fn project(
         &self,
-        owner: &str,
-        session_id: &str,
+        _owner: &str,
+        _session: &str,
         metadata_allowed: bool,
-        read_allowed: bool,
+        _read_allowed: bool,
     ) -> ResourceContext {
         ResourceContext {
             reference: self.reference.clone(),
             metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
-            read: (read_allowed && !self.is_dir).then(|| ScopedRead {
-                resource_id: crate::plugin_scoped_reads::register(owner, session_id, &self.name),
-            }),
         }
     }
-
     pub fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext {
         let session_id = crate::mounts::new_id().unwrap_or_default();
         EventContext {
@@ -123,11 +197,9 @@ mod tests {
             with_meta.targets[0].reference
         );
         assert!(without_grant.targets[0].metadata.is_none());
-        assert!(without_grant.targets[0].read.is_none());
         assert_eq!(
             with_meta.targets[0].metadata.as_ref().unwrap().size,
             Some(3)
         );
-        assert!(with_meta.targets[0].read.is_none());
     }
 }

@@ -240,25 +240,6 @@ export function useListing(
           setSearching(false)
         }
       })
-      // Search providers are additive: a provider failure never suppresses
-      // local results or other providers.
-      void call<Entry[]>('plugin_search', {
-        query,
-        root: globalSearch ? 'everywhere://' : path,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-        limit: 200,
-      })
-        .then((extra) => {
-          if (generation !== searchRequest.current || !extra.length) return
-          startTransition(() =>
-            setEntries((current) => {
-              const seen = new Set(current.map((entry) => entry.path))
-              return [...current, ...extra.filter((entry) => !seen.has(entry.path))]
-            }),
-          )
-        })
-        .catch(() => {})
     }, 200)
     return () => {
       clearTimeout(timer)

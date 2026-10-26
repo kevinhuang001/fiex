@@ -497,12 +497,136 @@ impl Running {
         let policy =
             crate::plugin_permission_policy::PermissionPolicy::new(&self.plugin_id, &self.declared);
         let permitted = |name: &str| policy.allowed_name(name);
+        let mut actor = self.actor(p)?;
+        if let Some(scope) = &actor.scope {
+            scope.authorize_method(method)?;
+        }
+        let mut remote_params;
+        let p = if method.starts_with("host.fs.") {
+            let remote = actor
+                .scope
+                .as_ref()
+                .map(|scope| scope.remote_target(p))
+                .transpose()?
+                .flatten();
+            if let Some(resource) = remote {
+                if method == "host.fs.stat" {
+                    if !permitted("metadata") {
+                        return Err("metadata permission not granted".into());
+                    }
+                    let mut value =
+                        serde_json::to_value(resource.metadata()).map_err(|e| e.to_string())?;
+                    value["path"] = json!(resource.display);
+                    value["isDir"] = json!(resource.is_dir);
+                    value["readonly"] = json!(resource.read_only);
+                    value["symlink"] = json!(false);
+                    for key in ["size", "modified"] {
+                        if value[key].is_null() {
+                            value[key] = json!(0);
+                        }
+                    }
+                    return Ok(value);
+                }
+                let capability = match method {
+                    "host.fs.openRead" | "host.fs.read" | "host.fs.readChunk" => "files.read",
+                    "host.fs.list" => "folders.read",
+                    "host.fs.beginWrite" => "files.write",
+                    "host.fs.remove" => {
+                        if resource.is_dir {
+                            "folders.delete"
+                        } else {
+                            "files.delete"
+                        }
+                    }
+                    "host.fs.rename" => {
+                        if resource.is_dir {
+                            "folders.rename"
+                        } else {
+                            "files.rename"
+                        }
+                    }
+                    "host.fs.mkdir" => "folders.create",
+                    _ => return Err("unsupported remote resource operation".into()),
+                };
+                if !permitted(capability) {
+                    return Err(format!("permission not granted: {capability}"));
+                }
+                if method == "host.fs.list" {
+                    let entries = if crate::remote::is_remote(&resource.display) {
+                        futures::executor::block_on(crate::remote::list_listing(
+                            &resource.display,
+                            true,
+                            &[],
+                        ))?
+                        .ok_or("remote directory unavailable")?
+                        .entries
+                    } else {
+                        crate::plugin_vfs::list(&resource.display, true, &[])?.entries
+                    };
+                    let values=entries.into_iter().map(|e|json!({"path":e.path,"name":e.name,"isDir":e.is_dir,"size":e.size,"modified":e.modified,"extension":e.extension,"mime":e.mime,"readonly":e.readonly,"symlink":e.is_symlink})).collect::<Vec<_>>();
+                    return Ok(json!(values));
+                }
+                let local = resource.materialize()?;
+                let directory = local.parent().ok_or("remote target has no parent")?;
+                let mut scope = crate::plugin_fs_access::Scope::selected(
+                    directory,
+                    std::slice::from_ref(&local),
+                )?;
+                let target = json!({"ref":p.get("ref").cloned().unwrap_or_else(||json!(resource.reference)),"metadata":resource.metadata()});
+                scope.bind_resource(&target, Some(&local))?;
+                actor.scope = Some(scope);
+                remote_params = p.clone();
+                remote_params["path"] = json!(local.to_string_lossy());
+                &remote_params
+            } else {
+                p
+            }
+        } else {
+            p
+        };
+        let mut resolved;
+        let p = if let Some(reference) = p.get("ref") {
+            let scope = actor.scope.as_ref().ok_or("no operation scope")?;
+            if method == "host.fs.stat" {
+                if !permitted("metadata") {
+                    return Err("metadata permission not granted".into());
+                }
+                if let Some(metadata) = scope.metadata_reference(reference)? {
+                    return Ok(metadata.clone());
+                }
+            }
+            resolved = p.clone();
+            resolved["path"] = json!(scope.resolve_reference(reference)?);
+            &resolved
+        } else if method.starts_with("host.fs.") {
+            if let Some(path) = p
+                .get("path")
+                .and_then(Value::as_str)
+                .map(|path| {
+                    actor
+                        .scope
+                        .as_ref()
+                        .map(|scope| scope.resource_alias(path))
+                        .transpose()
+                })
+                .transpose()?
+                .flatten()
+                .flatten()
+            {
+                resolved = p.clone();
+                resolved["path"] = json!(path);
+                &resolved
+            } else {
+                p
+            }
+        } else {
+            p
+        };
         let arg = |key: &str| {
             p.get(key)
                 .and_then(Value::as_str)
                 .ok_or_else(|| format!("missing {key}"))
         };
-        let actor = self.actor(p)?;
         let owner = &actor.owner;
         let root = || {
             actor
@@ -612,14 +736,7 @@ impl Running {
                 p.get("length").and_then(Value::as_u64).unwrap_or(262144) as usize,
             ),
             "host.fs.openRead" if permitted("files.read") => {
-                if let Some(resource_id) = p.get("resourceId").and_then(|value| value.as_str()) {
-                    let session = p.get("sessionId").and_then(|value| value.as_str());
-                    let name =
-                        crate::plugin_scoped_reads::resolve(&self.plugin_id, session, resource_id)?;
-                    crate::plugin_fs_access::open_read(owner, root()?, &name)
-                } else {
-                    crate::plugin_fs_access::open_read(owner, root()?, arg("path")?)
-                }
+                crate::plugin_fs_access::open_read(owner, root()?, arg("path")?)
             }
             "host.fs.readOpen" if permitted("files.read") => crate::plugin_fs_access::read_open(
                 owner,

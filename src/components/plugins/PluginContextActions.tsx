@@ -167,40 +167,24 @@ export function PluginContextActions({
   useEffect(() => {
     let active = true
     requestedSubmenus.current.clear()
-    const enabled = plugins.filter((plugin) => {
-      if (!plugin.enabled) return false
-      const contribution = plugin.extensions?.contextMenus
-      if (contribution === true) return true
-      return contribution !== null && typeof contribution === 'object'
+    setMenus([])
+    void call<Menu[]>('plugin_context_menu_resolve', {
+      directory: path,
+      paths: JSON.parse(selectionKey) as string[],
+      isDirectory,
+      readOnly,
+      isRemote,
     })
-    void Promise.all(
-      enabled.map(async (plugin) => {
-        try {
-          const response = await call<{ menuSessionId: string; items: unknown }>(
-            'plugin_context_menu_resolve',
-            {
-              pluginId: plugin.id,
-              directory: path,
-              paths: JSON.parse(selectionKey) as string[],
-              isDirectory,
-              readOnly,
-              isRemote,
-            },
-          )
-          return validMenu(response.items)
-            ? { pluginId: plugin.id, menuSessionId: response.menuSessionId, items: response.items }
-            : null
-        } catch {
-          return null
-        }
-      }),
-    ).then((results) => {
-      if (active) setMenus(results.filter((result): result is Menu => result !== null))
-    })
+      .then((menus) => {
+        if (active) setMenus(Array.isArray(menus) ? menus : [])
+      })
+      .catch(() => {
+        if (active) setMenus([])
+      })
     return () => {
       active = false
     }
-  }, [plugins, selectionKey, isDirectory, readOnly, isRemote])
+  }, [plugins, path, selectionKey, isDirectory, readOnly, isRemote])
 
   const resolveSubmenu = async (menu: Menu, submenuId: string) => {
     const key = menu.menuSessionId + ':' + submenuId

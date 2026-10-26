@@ -140,6 +140,12 @@ pub struct Scope {
     path: PathBuf,
     dir: std::sync::Arc<Dir>,
     allowed: Option<Vec<(PathBuf, bool)>>,
+    references: std::sync::Arc<HashMap<String, String>>,
+    aliases: std::sync::Arc<HashMap<String, Option<String>>>,
+    metadata_refs: std::sync::Arc<HashMap<String, Value>>,
+    metadata_only: bool,
+    remote_resources:
+        std::sync::Arc<HashMap<String, crate::plugin_resource_context::ResourceSnapshot>>,
 }
 impl Scope {
     pub fn new(path: &Path) -> Result<Self, String> {
@@ -149,6 +155,11 @@ impl Scope {
             path,
             dir: std::sync::Arc::new(dir),
             allowed: None,
+            references: Default::default(),
+            aliases: Default::default(),
+            metadata_refs: Default::default(),
+            metadata_only: false,
+            remote_resources: Default::default(),
         })
     }
     /// Capture only paths chosen for this operation. A file grants that file;
@@ -172,6 +183,151 @@ impl Scope {
         }
         scope.allowed = Some(allowed);
         Ok(scope)
+    }
+    pub fn restrict_to_metadata(&mut self) {
+        self.metadata_only = true;
+    }
+    pub fn authorize_method(&self, method: &str) -> Result<(), String> {
+        if self.metadata_only
+            && ((method.starts_with("host.fs.")
+                && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
+                || matches!(
+                    method,
+                    "host.exec" | "host.process.run" | "host.vfs.openView"
+                ))
+        {
+            return Err("discovery scope permits metadata only".into());
+        }
+        Ok(())
+    }
+    pub fn selected_paths(&self) -> Vec<PathBuf> {
+        self.allowed
+            .as_ref()
+            .map(|paths| paths.iter().map(|(p, _)| self.path.join(p)).collect())
+            .unwrap_or_default()
+    }
+    fn ref_key(reference: &Value) -> Result<String, String> {
+        let reference: crate::plugin_contracts::ResourceRef =
+            serde_json::from_value(reference.clone()).map_err(|e| e.to_string())?;
+        serde_json::to_string(&reference).map_err(|e| e.to_string())
+    }
+    pub fn resource_bound(&self, reference: &Value) -> Result<bool, String> {
+        let key = Self::ref_key(reference)?;
+        Ok(self.references.contains_key(&key)
+            || self.metadata_refs.contains_key(&key)
+            || self.remote_resources.contains_key(&key))
+    }
+    pub fn bind_resource(&mut self, resource: &Value, path: Option<&Path>) -> Result<(), String> {
+        let key = Self::ref_key(&resource["ref"])?;
+        if let Some(path) = path {
+            let path = path.to_string_lossy().into_owned();
+            self.authorize(&path)?;
+            std::sync::Arc::make_mut(&mut self.references).insert(key.clone(), path.clone());
+            if let Some(name) = resource["metadata"]["name"].as_str() {
+                let entry = std::sync::Arc::make_mut(&mut self.aliases)
+                    .entry(name.into())
+                    .or_insert_with(|| Some(path.clone()));
+                if entry.as_ref().is_some_and(|previous| previous != &path) {
+                    *entry = None;
+                }
+            }
+        }
+        if let Some(metadata) = resource.get("metadata").filter(|v| v.is_object()) {
+            let mut metadata = metadata.clone();
+            metadata["isDir"] = json!(metadata["kind"] == "directory");
+            metadata["path"] = resource["ref"]["nodeId"].clone();
+            for (key, value) in [
+                ("size", json!(0)),
+                ("modified", json!(0)),
+                ("extension", json!("")),
+                ("mime", json!("")),
+                ("readonly", json!(false)),
+                ("symlink", json!(false)),
+            ] {
+                if metadata.get(key).is_none_or(Value::is_null) {
+                    metadata[key] = value;
+                }
+            }
+            std::sync::Arc::make_mut(&mut self.metadata_refs).insert(key, metadata);
+        }
+        Ok(())
+    }
+    pub fn bind_remote(
+        &mut self,
+        resource: &Value,
+        snapshot: &crate::plugin_resource_context::ResourceSnapshot,
+    ) -> Result<(), String> {
+        std::sync::Arc::make_mut(&mut self.remote_resources)
+            .insert(Self::ref_key(&resource["ref"])?, snapshot.clone());
+        Ok(())
+    }
+    pub fn remote_target(
+        &self,
+        p: &Value,
+    ) -> Result<Option<crate::plugin_resource_context::ResourceSnapshot>, String> {
+        if let Some(reference) = p.get("ref") {
+            return Ok(self
+                .remote_resources
+                .get(&Self::ref_key(reference)?)
+                .cloned());
+        }
+        let Some(input) = p.get("path").and_then(Value::as_str) else {
+            return Ok(None);
+        };
+        let mut matches = self
+            .remote_resources
+            .values()
+            .filter(|r| r.name == input || r.display == input);
+        let exact = matches.next().cloned();
+        if matches.next().is_some() {
+            return Err("ambiguous target name; use ResourceRef".into());
+        }
+        if exact.is_some() {
+            return Ok(exact);
+        }
+        for root in self.remote_resources.values().filter(|r| r.is_dir) {
+            let root_uri = crate::mounts::parse(&root.display)?;
+            let target = if crate::mounts::handles(input) {
+                let target = crate::mounts::parse(input)?;
+                if root_uri.mount_id != target.mount_id
+                    || !Path::new(&target.relative).starts_with(&root_uri.relative)
+                {
+                    continue;
+                }
+                input.to_string()
+            } else {
+                let relative = Path::new(input);
+                if relative
+                    .components()
+                    .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir))
+                {
+                    return Err("path outside selected resource".into());
+                }
+                let joined = Path::new(&root_uri.relative).join(relative);
+                crate::mounts::uri(
+                    &root_uri.mount_id,
+                    &joined.to_string_lossy().replace('\\', "/"),
+                )?
+            };
+            return crate::plugin_resource_context::ResourceSnapshot::resolve(&target).map(Some);
+        }
+        Ok(None)
+    }
+    pub fn resource_alias(&self, input: &str) -> Result<Option<&str>, String> {
+        match self.aliases.get(input) {
+            Some(Some(path)) => Ok(Some(path)),
+            Some(None) => Err("ambiguous target name; use its ResourceRef".into()),
+            None => Ok(None),
+        }
+    }
+    pub fn metadata_reference(&self, reference: &Value) -> Result<Option<&Value>, String> {
+        Ok(self.metadata_refs.get(&Self::ref_key(reference)?))
+    }
+    pub fn resolve_reference(&self, reference: &Value) -> Result<&str, String> {
+        self.references
+            .get(&Self::ref_key(reference)?)
+            .map(String::as_str)
+            .ok_or_else(|| "resource not authorized in this operation".into())
     }
     pub fn authorize(&self, path: &str) -> Result<(), String> {
         relative(self, path).map(|_| ())

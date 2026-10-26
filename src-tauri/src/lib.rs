@@ -52,8 +52,6 @@ pub use fiex_plugin_sdk as plugin_sdk;
 pub mod mounts;
 #[path = "plugins/sandbox/mod.rs"]
 pub mod plugin_sandbox;
-#[path = "plugins/scoped_reads.rs"]
-pub mod plugin_scoped_reads;
 #[path = "plugins/search.rs"]
 pub mod plugin_search;
 #[path = "plugins/storage.rs"]

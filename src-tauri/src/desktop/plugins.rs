@@ -85,39 +85,42 @@ pub(crate) async fn plugin_invoke(
             replace(&mut params, &replacements);
         }
     }
-    if let Some(session_id) = preview_session_id {
-        let (scoped_directory, scoped_paths) =
-            crate::plugin_preview::session_scope(&session_id, &plugin_id)?;
-        directory = Some(scoped_directory);
-        selected_paths = Some(
-            scoped_paths
-                .into_iter()
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect(),
-        );
-    }
+    let preview_scope = preview_session_id
+        .as_deref()
+        .map(|id| crate::plugin_preview::session_scope(id, &plugin_id))
+        .transpose()?;
     let id = plugin_id.clone();
     let call = method.clone();
-    tauri::async_runtime::spawn_blocking(move || match (directory, selected_paths) {
-        (Some(directory), Some(paths)) => crate::plugin_host::global().invoke_selected(
-            &plugin_id,
-            &method,
-            params,
-            &directory,
-            &paths
-                .into_iter()
-                .map(std::path::PathBuf::from)
-                .collect::<Vec<_>>(),
-        ),
-        (Some(directory), None) => crate::plugin_host::global().invoke_selected(
-            &plugin_id,
-            &method,
-            params,
-            &directory,
-            &[],
-        ),
-        (None, Some(_)) => Err("selected paths require an operation directory".into()),
-        (None, None) => crate::plugin_host::global().invoke(&plugin_id, &method, params),
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(scope) = preview_scope {
+            return crate::plugin_host::global().invoke_scoped(
+                &plugin_id,
+                &method,
+                params,
+                Some(scope),
+            );
+        }
+        match (directory, selected_paths) {
+            (Some(directory), Some(paths)) => crate::plugin_host::global().invoke_selected(
+                &plugin_id,
+                &method,
+                params,
+                &directory,
+                &paths
+                    .into_iter()
+                    .map(std::path::PathBuf::from)
+                    .collect::<Vec<_>>(),
+            ),
+            (Some(directory), None) => crate::plugin_host::global().invoke_selected(
+                &plugin_id,
+                &method,
+                params,
+                &directory,
+                &[],
+            ),
+            (None, Some(_)) => Err("selected paths require an operation directory".into()),
+            (None, None) => crate::plugin_host::global().invoke(&plugin_id, &method, params),
+        }
     })
     .await
     .map_err(|e| e.to_string())?
@@ -228,23 +231,11 @@ pub(crate) fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
 }
 #[tauri::command]
 pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::InfoSection> {
-    let display = path.clone();
-    let local = if crate::mounts::handles(&path) {
-        if crate::remote::is_remote(&path)
-            && crate::remote::stat(&path).is_ok_and(|entry| entry.is_dir)
-        {
-            return Vec::new();
-        }
-        match materialize_file(path).await {
-            Ok(path) => path,
-            Err(_) => return Vec::new(),
-        }
-    } else {
-        path
-    };
-    tauri::async_runtime::spawn_blocking(move || crate::plugin_info::file_info_at(&display, &local))
-        .await
-        .unwrap_or_default()
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_info::file_info_resource(&path).unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
 }
 #[tauri::command]
 pub(crate) fn plugin_task(
@@ -516,9 +507,7 @@ type ContextMenuRegistry = std::collections::HashMap<String, ContextMenuSession>
 struct ContextMenuSession {
     plugin_id: String,
     directory: String,
-    selection: Vec<String>,
-    selection_refs: Vec<String>,
-    directory_ref: String,
+    resources: Vec<crate::plugin_resource_context::ResourceSnapshot>,
     actions: std::collections::HashSet<String>,
     submenus: std::collections::HashMap<String, usize>,
     created: std::time::Instant,
@@ -528,26 +517,8 @@ fn context_menu_sessions() -> &'static std::sync::Mutex<ContextMenuRegistry> {
         std::sync::OnceLock::new();
     SESSIONS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
-fn menu_rules(plugin_id: &str) -> Option<crate::plugin_match::MatchRules> {
-    crate::plugin_host::catalog().iter().find_map(|plugin| {
-        if plugin.id != plugin_id || !plugin.enabled {
-            return None;
-        }
-        match plugin.extensions.get("contextMenus") {
-            Some(serde_json::Value::Bool(true)) => Some(Default::default()),
-            Some(value @ serde_json::Value::Object(_)) => Some(
-                value
-                    .get("match")
-                    .map(crate::plugin_match::MatchRules::from_value)
-                    .unwrap_or_default(),
-            ),
-            _ => None,
-        }
-    })
-}
-
 fn menu_allowed(plugin_id: &str) -> bool {
-    menu_rules(plugin_id).is_some()
+    crate::plugin_events::EventRouter::providers("contextMenu.resolve",&[],"",Vec::new()).iter().any(|p|matches!(&p.handler,crate::plugin_events::Handler::Plugin(plugin) if plugin.id==plugin_id))
 }
 fn menu_response_valid(
     result: &serde_json::Value,
@@ -719,220 +690,77 @@ fn validated_submenu(
     })
 }
 
-fn context_menu_metadata_allowed(plugin_id: &str) -> bool {
-    let Some(plugin) = crate::plugin_host::catalog()
-        .into_iter()
-        .find(|plugin| plugin.id == plugin_id && plugin.enabled && plugin.approved)
-    else {
-        return false;
-    };
-    let declared = plugin
-        .declared_permissions
-        .into_iter()
-        .collect::<std::collections::BTreeSet<_>>();
-    crate::plugin_permissions::allowed(plugin_id, &declared, "metadata").unwrap_or(false)
-}
-
-fn context_menu_resource_metadata(path: &str) -> serde_json::Value {
-    use std::path::Path;
-    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
-    let metadata = if crate::mounts::handles(path) {
-        None
-    } else {
-        std::fs::symlink_metadata(path).ok()
-    };
-    let is_directory = metadata.as_ref().is_some_and(|value| value.is_dir());
-    let modified = metadata
-        .as_ref()
-        .and_then(|value| value.modified().ok())
-        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|value| value.as_secs());
-    let extension = Path::new(name)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    serde_json::json!({
-        "name": name,
-        "kind": if is_directory { "directory" } else { "file" },
-        "isDirectory": is_directory,
-        "extension": extension,
-        "mime": crate::plugin_match::mime_for(&extension),
-        "size": metadata.as_ref().map(|value| value.len()),
-        "modified": modified,
-        "readOnly": metadata.as_ref().map(|value| value.permissions().readonly()),
-        "remote": crate::mounts::handles(path),
-    })
-}
-
-/// Core-owned before-open event. The UI does not get to invoke protected
-/// hooks methods directly or choose which providers will receive the event.
-/// Core-owned toolbar action. Plugin UI cannot invoke the protected
-/// toolbar.invoke method directly; only the Explorer toolbar triggers it.
 #[tauri::command]
 pub(crate) async fn plugin_toolbar_invoke(
     plugin_id: String,
     directory: String,
     paths: Vec<String>,
 ) -> Result<serde_json::Value, String> {
-    let plugin = crate::plugin_host::catalog()
-        .into_iter()
-        .find(|plugin| {
-            plugin.id == plugin_id
-                && plugin.enabled
-                && plugin.approved
-                && plugin.backend_available
-                && plugin
-                    .extensions
-                    .get("toolbar")
-                    .is_some_and(serde_json::Value::is_object)
-        })
-        .ok_or("toolbar provider not active")?;
     if paths.len() > 256 {
         return Err("too many toolbar targets".into());
     }
-    let mut selected = if paths.is_empty() {
-        vec![directory.clone()]
-    } else {
-        paths
-    };
-    let mut resolved_directory = directory;
-    for path in &mut selected {
-        if crate::mounts::handles(path) {
-            *path = materialize_file(path.clone()).await?;
-        } else {
-            crate::mounts::reject_local(path)?;
-        }
-    }
-    if crate::mounts::handles(&resolved_directory) {
-        resolved_directory = std::path::Path::new(&selected[0])
-            .parent()
-            .ok_or("invalid toolbar directory")?
-            .to_string_lossy()
-            .into_owned();
-    }
     tauri::async_runtime::spawn_blocking(move || {
-        use crate::plugin_permission_policy::{Capability, PermissionPolicy};
-        let declared = plugin
-            .declared_permissions
+        let targets = if paths.is_empty() {
+            vec![directory.clone()]
+        } else {
+            paths
+        };
+        let resources = targets
             .iter()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>();
-        let policy = PermissionPolicy::new(&plugin.id, &declared);
-        let session_id = crate::mounts::new_id()?;
-        let targets = selected
-            .iter()
-            .map(|path| {
-                let resource = crate::plugin_resource_context::ResourceSnapshot::new(
-                    path,
-                    std::path::Path::new(path),
-                );
-                resource.project(
-                    &plugin.id,
-                    &session_id,
-                    policy.allowed(Capability::Metadata),
-                    policy.allowed(Capability::FilesRead),
-                )
-            })
-            .collect::<Vec<_>>();
-        let params = serde_json::json!({"sessionId":session_id,"targets":targets});
-        let selected_paths = selected
-            .into_iter()
-            .map(std::path::PathBuf::from)
-            .collect::<Vec<_>>();
-        crate::plugin_events::invoke_selected(
-            &plugin.id,
+            .map(|p| crate::plugin_resource_context::ResourceSnapshot::resolve(p))
+            .collect::<Result<Vec<_>, _>>()?;
+        crate::plugin_events::call_owner(
             "toolbar.invoke",
-            params,
-            &resolved_directory,
-            &selected_paths,
+            &plugin_id,
+            serde_json::json!({}),
+            &resources,
+            Some(&directory),
         )
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value, String> {
-    let local = if crate::mounts::handles(&path) {
-        materialize_file(path.clone()).await?
-    } else {
-        crate::mounts::reject_local(&path)?;
-        path.clone()
-    };
     tauri::async_runtime::spawn_blocking(move || {
-        use crate::plugin_permission_policy::{Capability, PermissionPolicy};
-        let file = std::path::Path::new(&local);
-        let snapshot = crate::plugin_resource_context::ResourceSnapshot::new(&path, file);
-        if snapshot.is_dir {
-            return Ok(serde_json::json!({"handled":false}));
-        }
-        let extension = std::path::Path::new(&path)
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or(&snapshot.ext)
-            .to_ascii_lowercase();
-        let mime = crate::plugin_match::mime_for(&extension);
-        let providers =
-            crate::plugin_events::matching_plugins("hooks.invoke", &extension, &mime, false);
-        for provider in providers {
-            if provider
-                .contribution
-                .get("event")
-                .and_then(serde_json::Value::as_str)
-                != Some("beforeOpen")
-            {
-                continue;
-            }
-            let plugin = provider.plugin;
-            let declared = plugin
-                .declared_permissions
-                .iter()
-                .cloned()
-                .collect::<std::collections::BTreeSet<_>>();
-            let policy = PermissionPolicy::new(&plugin.id, &declared);
-            if !policy.allowed(Capability::Hooks) {
-                continue;
-            }
-            let context = snapshot.context(
-                &plugin.id,
-                policy.allowed(Capability::Metadata),
-                policy.allowed(Capability::FilesRead),
-            );
-            let mut params = serde_json::to_value(context).map_err(|error| error.to_string())?;
-            params["event"] = serde_json::json!("beforeOpen");
-            let directory = file.parent().ok_or("hook target has no parent")?;
-            match crate::plugin_events::invoke_selected(
-                &plugin.id,
-                "hooks.invoke",
-                params,
-                &directory.to_string_lossy(),
-                &[file.to_path_buf()],
-            ) {
-                Ok(response) => {
-                    if response.get("handled").and_then(serde_json::Value::as_bool) == Some(true) {
-                        return Ok(serde_json::json!({
-                            "handled":true,
-                            "preview":response.get("preview")
-                                .and_then(serde_json::Value::as_bool)
-                                .unwrap_or(false)
-                        }));
-                    }
-                }
-                Err(error) => {
-                    let _ = crate::plugin_errors::report(
-                        &plugin.id,
-                        "hooks",
-                        &format!("beforeOpen: {error}"),
-                        None,
-                    );
-                }
-            }
-        }
-        Ok::<_, String>(serde_json::json!({"handled":false}))
+        use crate::plugin_events::{EventRouter, Handler};
+        let resource = crate::plugin_resource_context::ResourceSnapshot::resolve(&path)?;
+        let metadata = serde_json::to_value(resource.metadata()).map_err(|e| e.to_string())?;
+        let providers = EventRouter::providers("hooks.invoke", &[metadata], "", Vec::new())
+            .into_iter()
+            .filter(|p| {
+                let Handler::Plugin(plugin) = &p.handler else {
+                    return false;
+                };
+                plugin.extensions["hooks"]["event"] == "beforeOpen"
+            })
+            .collect();
+        Ok::<_, String>(EventRouter::resolve(
+            "hooks.invoke",
+            providers,
+            |_, _| Err("no builtin hook".into()),
+            |plugin| {
+                crate::plugin_events::invoke_resources(
+                    plugin,
+                    "hooks.invoke",
+                    serde_json::json!({"event":"beforeOpen"}),
+                    std::slice::from_ref(&resource),
+                    None,
+                )
+            },
+            |_, value| Ok(value),
+            |value| value["handled"] == true,
+            |results| {
+                results
+                    .into_iter()
+                    .find_map(|(_, result)| result.ok().filter(|value| value["handled"] == true))
+                    .unwrap_or_else(|| serde_json::json!({"handled":false}))
+            },
+        ))
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -948,119 +776,50 @@ pub(crate) fn preview_candidates(
 pub(crate) async fn preview_open(
     path: String,
     provider_id: Option<String>,
+    provider_order: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
-    let display = path.clone();
-    let local = if crate::mounts::handles(&path) {
-        materialize_file(path).await?
-    } else {
-        path
-    };
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_preview::open_provider(&display, &local, provider_id.as_deref())
+        crate::plugin_preview::open_resource(
+            &path,
+            provider_id.as_deref(),
+            provider_order.as_deref(),
+        )
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub(crate) async fn plugin_context_menu_resolve(
-    plugin_id: String,
     directory: String,
     paths: Vec<String>,
     _is_directory: bool,
     _read_only: bool,
     _is_remote: bool,
-) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        if !menu_allowed(&plugin_id)
-            || paths.is_empty()
-            || paths.len() > 256
-            || directory.is_empty()
-        {
-            return Err("menu plugin or selection not allowed".into());
-        }
-        let rules = menu_rules(&plugin_id).ok_or("menu plugin or selection not allowed")?;
-        if !rules.matches_selection(paths.len()) {
-            return Ok(serde_json::json!({"menuSessionId": null, "items": []}));
-        }
-        let selection_matches = paths.iter().any(|path| {
-            let metadata = context_menu_resource_metadata(path);
-            rules.matches(
-                metadata
-                    .get("extension")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or(""),
-                metadata
-                    .get("mime")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or(""),
-                metadata
-                    .get("isDirectory")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false),
-            )
-        });
-        if !selection_matches {
-            return Ok(serde_json::json!({"menuSessionId": null, "items": []}));
-        }
-        let session_id = crate::mounts::new_id()?;
-        let selection_refs = paths
-            .iter()
-            .map(|_| crate::mounts::new_id().map(|id| format!("fiex-resource:{id}")))
-            .collect::<Result<Vec<_>, _>>()?;
-        let directory_ref = format!("fiex-resource:{}", crate::mounts::new_id()?);
-        let metadata_allowed = context_menu_metadata_allowed(&plugin_id);
-        let targets = paths
-            .iter()
-            .zip(&selection_refs)
-            .map(|(path, reference)| {
-                serde_json::json!({
-                    "ref": {"mountId": "session", "nodeId": reference},
-                    "metadata": metadata_allowed.then(|| context_menu_resource_metadata(path)),
-                })
-            })
-            .collect::<Vec<_>>();
-        let request = serde_json::json!({
-            "menuSessionId": session_id,
-            "interactionId": crate::mounts::new_id()?,
-            "targets": targets,
-            "directoryRef": directory_ref,
-        });
-        // Menu discovery carries metadata only. The operation scope contains
-        // no file selection, so the plugin cannot read content before a click.
-        let result = crate::plugin_events::invoke_selected(
-            &plugin_id,
-            "contextMenu.resolve",
-            request,
-            &directory,
-            &[],
-        )?;
-        let actions = root_menu_valid(&result)?;
-        let submenus = submenu_depths(&result);
-        let mut guard = context_menu_sessions()
-            .lock()
-            .map_err(|_| "menu registry unavailable")?;
-        guard.retain(|_, session| session.created.elapsed().as_secs() < 90);
-        if guard.len() >= 128 {
-            return Err("menu session capacity exceeded".into());
-        }
-        guard.insert(
-            session_id.clone(),
-            ContextMenuSession {
-                plugin_id,
-                directory,
-                selection: paths,
-                selection_refs,
-                directory_ref,
-                actions,
-                submenus,
-                created: std::time::Instant::now(),
+) -> Result<Vec<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(move ||{
+        use crate::plugin_events::{EventRouter,Handler};
+        if paths.is_empty()||paths.len()>256||directory.is_empty(){return Err("invalid menu selection".into());}
+        let resources=paths.iter().map(|p|crate::plugin_resource_context::ResourceSnapshot::resolve(p)).collect::<Result<Vec<_>,_>>()?;
+        let metadata=resources.iter().map(|r|serde_json::to_value(r.metadata()).unwrap_or_default()).collect::<Vec<_>>();
+        let providers=EventRouter::providers("contextMenu.resolve",&metadata,&directory,Vec::new());
+        Ok(EventRouter::resolve("contextMenu.resolve",providers,|_,_|Err("no builtin menu registered".into()),
+            |plugin|{
+                let session_id=crate::mounts::new_id()?;
+                let mut result=crate::plugin_events::invoke_resources(plugin,"contextMenu.resolve",serde_json::json!({"menuSessionId":session_id,"interactionId":crate::mounts::new_id()?}),&resources,Some(&directory))?;
+                result["menuSessionId"]=serde_json::json!(session_id);Ok(result)
             },
-        );
-        Ok(serde_json::json!({"menuSessionId":session_id,"items":result["items"]}))
-    })
-    .await
-    .map_err(|error| error.to_string())?
+            |provider,result|{
+                let Handler::Plugin(plugin)=&provider.handler else{return Err("invalid menu provider".into());};
+                let actions=root_menu_valid(&result)?;let submenus=submenu_depths(&result);
+                let session_id=result["menuSessionId"].as_str().ok_or("missing menu session")?.to_string();
+                let mut guard=context_menu_sessions().lock().map_err(|_|"menu registry unavailable")?;
+                guard.retain(|_,s|s.created.elapsed().as_secs()<90);
+                if guard.len()>=128{return Err("menu session capacity exceeded".into());}
+                guard.insert(session_id,ContextMenuSession{plugin_id:plugin.id.clone(),directory:directory.clone(),resources:resources.clone(),actions,submenus,created:std::time::Instant::now()});
+                Ok(serde_json::json!({"pluginId":plugin.id,"menuSessionId":result["menuSessionId"],"items":result["items"]}))
+            },|_|true,|results|results.into_iter().filter_map(|(_,r)|r.ok()).collect::<Vec<_>>()))
+    }).await.map_err(|e|e.to_string())?
 }
 /// Resolve children on demand whenever a user opens a submenu. No file
 /// content grant is attached until the user clicks a validated action.
@@ -1069,7 +828,7 @@ pub(crate) async fn plugin_context_menu_children(
     menu_session_id: String,
     parent_id: String,
 ) -> Result<serde_json::Value, String> {
-    let (plugin_id, directory, paths, refs, directory_ref, depth) = {
+    let (plugin_id, directory, resources, depth) = {
         let guard = context_menu_sessions()
             .lock()
             .map_err(|_| "menu registry unavailable")?;
@@ -1081,38 +840,13 @@ pub(crate) async fn plugin_context_menu_children(
         (
             session.plugin_id.clone(),
             session.directory.clone(),
-            session.selection.clone(),
-            session.selection_refs.clone(),
-            session.directory_ref.clone(),
+            session.resources.clone(),
             depth,
         )
     };
     tauri::async_runtime::spawn_blocking(move || {
-        let metadata_allowed = context_menu_metadata_allowed(&plugin_id);
-        let targets = paths
-            .iter()
-            .zip(&refs)
-            .map(|(path, reference)| {
-                serde_json::json!({
-                    "ref":{"mountId":"session","nodeId":reference},
-                    "metadata":metadata_allowed.then(|| context_menu_resource_metadata(path))
-                })
-            })
-            .collect::<Vec<_>>();
-        let params = serde_json::json!({
-            "menuSessionId":menu_session_id,
-            "parentId":parent_id,
-            "interactionId":crate::mounts::new_id()?,
-            "directoryRef":directory_ref,
-            "targets":targets
-        });
-        let result = crate::plugin_events::invoke_selected(
-            &plugin_id,
-            "contextMenu.resolve",
-            params,
-            &directory,
-            &[],
-        )?;
+        let params=serde_json::json!({"menuSessionId":menu_session_id,"parentId":parent_id,"interactionId":crate::mounts::new_id()?});
+        let result=crate::plugin_events::call_owner("contextMenu.resolve",&plugin_id,params,&resources,Some(&directory))?;
         let validated = validated_submenu(&result, &parent_id, depth)?;
         let mut guard = context_menu_sessions()
             .lock()
@@ -1134,6 +868,7 @@ pub(crate) async fn plugin_context_menu_children(
         {
             return Err("duplicate menu item id".into());
         }
+        if session.actions.len()+session.submenus.len()+validated.actions.len()+validated.submenus.len()>512{return Err("menu session item limit exceeded".into());}
         session.actions.extend(validated.actions);
         session.submenus.extend(validated.submenus);
         Ok::<_, String>(serde_json::json!({"items":validated.items}))
@@ -1158,50 +893,11 @@ pub(crate) async fn plugin_context_menu_execute(
     {
         return Err("menu session expired or item was not offered".into());
     }
-    let mut paths = session.selection;
-    let mut directory = session.directory;
-    for path in &mut paths {
-        if crate::mounts::handles(path) {
-            *path = materialize_file(path.clone()).await?;
-        }
-    }
-    if crate::mounts::handles(&directory) {
-        directory = std::path::Path::new(&paths[0])
-            .parent()
-            .ok_or("bad selection")?
-            .to_string_lossy()
-            .into_owned();
-    }
     tauri::async_runtime::spawn_blocking(move || {
-        let metadata_allowed = context_menu_metadata_allowed(&session.plugin_id);
-        let targets = paths
-            .iter()
-            .zip(&session.selection_refs)
-            .map(|(path, reference)| {
-                serde_json::json!({
-                    "ref": {"mountId": "session", "nodeId": reference},
-                    "metadata": metadata_allowed.then(|| context_menu_resource_metadata(path)),
-                })
-            })
-            .collect::<Vec<_>>();
-        let parameters = serde_json::json!({
-            "menuSessionId": menu_session_id,
-            "itemId": item_id,
-            "interactionId": crate::mounts::new_id()?,
-            "targets": targets,
-            "directoryRef": session.directory_ref,
-            "paths": paths,
-            "path": paths[0],
-            "root": directory
-        });
-        let selected: Vec<std::path::PathBuf> = paths.iter().map(Into::into).collect();
-        let mut result = crate::plugin_events::invoke_selected(
-            &session.plugin_id,
-            "contextMenu.execute",
-            parameters,
-            &directory,
-            &selected,
-        )?;
+        let paths=session.resources.iter().map(crate::plugin_resource_context::ResourceSnapshot::materialize).collect::<Result<Vec<_>,_>>()?;
+        let directory=if crate::mounts::handles(&session.directory){paths[0].parent().ok_or("invalid action directory")?.to_string_lossy().into_owned()}else{session.directory.clone()};
+        let parameters=serde_json::json!({"menuSessionId":menu_session_id,"itemId":item_id,"interactionId":crate::mounts::new_id()?,"paths":paths,"path":paths[0],"root":directory});
+        let mut result=crate::plugin_events::call_owner("contextMenu.execute",&session.plugin_id,parameters,&session.resources,Some(&session.directory))?;
         if result.get("kind").and_then(serde_json::Value::as_str) == Some("panel") {
             let entry = result
                 .get("entry")

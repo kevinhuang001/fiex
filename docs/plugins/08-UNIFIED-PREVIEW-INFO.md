@@ -1,94 +1,66 @@
-# 08 · Info 与 Preview
+# 统一 Provider 调用架构
 
-## 共同点
+所有 Core 系统事件由 `plugins/events.rs` 的 `EventRouter` 协调：统一 Registry 匹配、Builtin/Plugin 执行、逐 Provider 校验和事件结果策略。功能模块只提供内置处理函数、具体结果校验及组合规则。自定义插件 RPC 保留在原有授权桥接中，不参与系统事件广播。
 
-- Manifest 中 `info` / `preview` 都是**单个对象**，不是数组；
-- 没有贡献 id；Provider 身份是插件 id；
-- 内置 Provider 和插件 Provider 共享事件匹配规则、`EventContext.targets` 和调用入口；
-- Info 可匹配多个插件 Provider 并汇总 sections；Preview 根据优先级选择一个 Provider；
-- `match` 是包含谓词：`extensions`、`mimeTypes`、`kinds`；
-- 元数据和读取权限由 `PermissionPolicy` + 当前 Scope 决定，缓存不会绕过授权。
-
-## Info
-
-插件 Manifest：
-
-```json
-"info": {
-  "priority": 100,
-  "match": { "extensions": ["pdf"], "kinds": ["file"] }
-}
+```mermaid
+flowchart TD
+  UI[Core UI] --> Router[EventRouter]
+  Router --> Registry[Provider Registry]
+  Registry --> Broker[Resource Broker and Operation Scope]
+  Broker --> Builtin[Core builtin handler]
+  Broker --> Host[PluginHost]
+  Host --> SDK[RequestContext]
+  Builtin --> Policy[Event result policy]
+  SDK --> Policy
+  Policy --> UI
 ```
 
-Core 调用 `info.resolve`，传入通用 `EventContext`（method 本身就是事件名称）：
+## 统一请求
+
+JSON-RPC 的 method 标识事件。唯一资源集合是 `targets`，不再同时使用 target 与 selection。
 
 ```json
 {
-  "sessionId": "opaque",
+  "sessionId": "opaque-session",
   "targets": [
     {
-      "ref": { "mountId": "m1", "nodeId": "n9" },
-      "metadata": { "name": "a.pdf", "kind": "file", "size": 1024 },
-      "read": { "resourceId": "read-opaque" }
+      "ref": { "mountId": "local", "nodeId": "opaque-resource" },
+      "metadata": { "name": "song.mp3", "kind": "file", "size": 4194304, "mime": "audio/mpeg" }
     }
   ]
 }
 ```
 
-插件返回：
+各事件独有参数（查询词、菜单项 ID、连接配置等）与 targets 并列，使用 `ctx.params()` 获取；`ctx.targets()` 提供统一目标集合，`ctx.metadata(ref)` 只访问本次已投影的属性。
 
-```json
-{
-  "sections": [
-    {
-      "id": "document",
-      "title": "文档",
-      "rows": [{ "label": "页数", "value": "12" }]
-    }
-  ]
-}
-```
+读取目标使用 `ctx.files().open_ref(&target.reference)`。名称是展示信息，不是读取能力。`ScopedRead`、`read.resourceId` 和全局读取令牌注册表已删除。Core 与 SDK 共用 ResourceRef、ResourceContext、ResourceMetadata、EventContext 以及 InfoSection/InfoRow、PreviewView 的定义；没有 InfoContext、PreviewContext、InfoSectionView 或 InfoResponse 转换链。
 
-- section id 由响应提供；Core 不要求 Manifest 提供 id；
-- `read` 只有 `files.read` 被批准时才出现；
-- 插件自己的 section 和 Core 的 metadata/audio/video section 合并展示；
-- 插件失败只影响该 section。
+## 资源与授权
 
-## Preview
+`plugins/resource_context.rs` 解析本地、Connection、VFS 的元数据。本地属性只取一次，目录装饰复用传入的列表属性；远程 stat 不下载文件。内容 Provider 按需调用 materialize，同一操作内的快照共享一次内容准备结果。缓存位置只存在于 Core。
 
-Manifest：
+`EventRouter::resource_scope` 为每个 Provider 建立独立 Scope；`prepare` 在 Host 边界统一执行元数据裁剪和引用绑定。文件、网络与命令 Broker 在每次反向 IPC 时再次检查许可。其他 Provider/操作知道相同引用也不能获得访问权。
 
-```json
-"preview": {
-  "priority": 80,
-  "maxBytes": 1048576,
-  "match": { "extensions": ["md"], "kinds": ["file"] },
-  "panel": { "entry": "ui/preview.html", "title": "Markdown" }
-}
-```
+菜单根解析和懒加载子菜单都使用 metadata-only Scope，不能读取文件、修改文件、创建本地 VFS 视图或执行命令。只有有效会话中确实出现过的 action 才能执行，并为已确认目标重新创建操作范围。菜单会话限期、一次执行、总项数与深度限制保留。预览 iframe 的后续自定义请求从预览会话恢复相同目标，并按当前批准权限重建 Scope。
 
-Provider 列表 id：
+## 事件结果策略
 
-```text
-plugin:<plugin-id>
-```
+| 事件                       | 策略                                                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Info                       | 按优先级合并所有合法 Sections；Core 补充来源和插件命名空间；失败独立显示错误 Section                                          |
+| Decorations                | 合并可见资源的装饰、去重徽标；高优先级覆盖冲突字段；限制字段、颜色和 package 图标来源                                         |
+| ContextMenu                | Core 匹配并汇集各 Provider 的独立菜单会话；UI 只调用一次；子菜单按需向同一会话解析                                            |
+| Preview                    | 首选 Provider 在前，其余按优先级或用户允许顺序尝试；调用失败、校验失败或 unsupported 继续下一个；最终使用不读取内容的内置兜底 |
+| Search                     | Core 合并本地遍历和插件结果；逐源校验、限定搜索根目录/挂载、规范化路径去重、限量及取消；UI 不再另发插件搜索                   |
+| Toolbar / Connection / VFS | 指定 Provider 独占；不广播给其他连接或挂载；保留 Connection NavigationTarget 与 VFS 专用结果校验                              |
+| beforeOpen hooks           | 按优先级尝试到第一个合法 handled=true；失败不会阻止后续 Provider                                                              |
 
-Core 调用 `preview.open`，传入相同的 `EventContext.targets`。插件返回 `PreviewView`：
+Provider 执行具有异常隔离与 4 MiB 结果上限。PluginHost 继续负责 RPC 超时、进程、任务取消和句柄清理。Info/菜单/搜索/预览分别拥有自己的字段和大小规则；不会将所有功能强行转换成同一个响应 DTO。
 
-- `kind: "text"` / `"html"` / `"pdf"` / `"image"` / `"audio"` / `"video"` 等 Core 支持的视图；
-- html 面板必须是插件包内文件，通过 Core CSP/路径校验；
-- 不允许返回任意外部 URL；
-- `providerId` 使用 `plugin:<plugin-id>`。
+## 代码入口
 
-## 候选选择
-
-- 按 `priority` 降序；
-- 同优先级按注册顺序/内置优先策略；
-- 用户可在预览切换器选择其他候选；
-- 没有 Provider 时使用 fallback。
-
-## 资源读取
-
-- Preview 的 `read.resourceId` 是会话绑定、限期、进程所有权的引用；
-- 大文件分块读取，不内联到 JSON；
-- 预览会话关闭、插件撤权或文件身份变化后，旧引用立即失效。
+- `plugins/events.rs`：Registry、EventRouter、公共验证入口、独占调用、Scope/targets 准备。
+- `plugins/resource_context.rs`：资源快照、远程 stat 与按需 materialize。
+- `plugins/info.rs`、`plugins/preview.rs`、`plugins/decorations/dynamic.rs`、`plugins/search.rs`：事件处理和结果规则。
+- `desktop/plugins.rs`：Tauri 适配、菜单会话和 UI 资源处理，不在前端遍历 Provider。
+- `core/search.rs`：已有遍历与取消逻辑，以 Builtin 搜索来源接入统一结果策略。

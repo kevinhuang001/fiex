@@ -350,7 +350,7 @@ pub(crate) async fn search_files(
     } = request;
     if remote::is_remote(&root) {
         let started = std::time::Instant::now();
-        let mut pending = vec![root];
+        let mut pending = vec![root.clone()];
         let mut entries = Vec::new();
         let mut visited = 0;
         while let Some(path) = pending.pop() {
@@ -372,6 +372,17 @@ pub(crate) async fn search_files(
                 }
             }
         }
+        let entries = crate::plugin_search::resolve(
+            &crate::plugin_search::PluginSearchInput {
+                query: query.clone(),
+                root: root.clone(),
+                hidden,
+                ignores: ignores.clone(),
+                limit: Some(500),
+            },
+            || Ok(serde_json::json!({"entries":entries})),
+            || false,
+        );
         let _ = on_batch.send(SearchBatch {
             entries,
             done: true,
@@ -386,6 +397,17 @@ pub(crate) async fn search_files(
             let started = std::time::Instant::now();
             let (entries, truncated) =
                 crate::plugin_vfs::search(&root, &query, hidden, &ignores, 500)?;
+            let entries = crate::plugin_search::resolve(
+                &crate::plugin_search::PluginSearchInput {
+                    query: query.clone(),
+                    root: root.clone(),
+                    hidden,
+                    ignores: ignores.clone(),
+                    limit: Some(500),
+                },
+                || Ok(serde_json::json!({"entries":entries})),
+                || false,
+            );
             let _ = on_batch.send(SearchBatch {
                 entries,
                 done: true,
@@ -402,6 +424,17 @@ pub(crate) async fn search_files(
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let entries = crate::usbfs::search(&route, &query, 500)?;
+            let entries = crate::plugin_search::resolve(
+                &crate::plugin_search::PluginSearchInput {
+                    query: query.clone(),
+                    root: root.clone(),
+                    hidden,
+                    ignores: ignores.clone(),
+                    limit: Some(500),
+                },
+                || Ok(serde_json::json!({"entries":entries})),
+                || false,
+            );
             let _ = on_batch.send(SearchBatch {
                 entries,
                 done: true,
