@@ -104,7 +104,10 @@ html.dark .app.has-background .list-header {
   min-height: 0;
   overflow: auto;
   padding: 9px 12px 20px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+.sidebar-content::-webkit-scrollbar {
+  display: none;
 }
 .tag-nav {
   padding-left: 14px;
