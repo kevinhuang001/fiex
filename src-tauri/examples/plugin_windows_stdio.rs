@@ -11,28 +11,45 @@ fn main() {
     plugin_sandbox::run_wrapper_if_requested();
     let mode = std::env::args().nth(1);
     if mode.is_none() {
+        let diagnostics = tempfile::tempdir().expect("worker diagnostic directory");
         for mode in ["missing-stderr", "missing-all"] {
+            let report = diagnostics.path().join(format!("{mode}.txt"));
+            let failure = || {
+                std::fs::read_to_string(&report)
+                    .unwrap_or_else(|_| "worker produced no panic diagnostic".into())
+            };
             let mut child = Command::new(std::env::current_exe().unwrap())
                 .arg(mode)
+                .arg(&report)
                 .creation_flags(0x08000000) // CREATE_NO_WINDOW
                 .spawn()
                 .expect("start console-free regression worker");
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
             loop {
                 if let Some(status) = child.try_wait().unwrap() {
-                    assert!(status.success(), "{mode} failed: {status}");
+                    assert!(status.success(), "{mode} failed: {status}: {}", failure());
                     break;
                 }
                 if std::time::Instant::now() >= deadline {
                     let _ = child.kill();
                     let _ = child.wait();
-                    panic!("{mode}: plugin IPC stalled without a console");
+                    panic!(
+                        "{mode}: plugin IPC stalled without a console: {}",
+                        failure()
+                    );
                 }
                 std::thread::sleep(std::time::Duration::from_millis(25));
             }
         }
         return;
     }
+
+    // The worker deliberately removes stderr below. Preserve failures through
+    // a separate file so the parent can include the actual error in CI logs.
+    let report = std::env::args().nth(2).expect("worker diagnostic path");
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = std::fs::write(&report, info.to_string());
+    }));
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -53,7 +70,15 @@ fn main() {
         .into_iter()
         .find(|(manifest, _)| manifest.id == id)
         .expect("mock plugin fixture");
-    plugin_host::approve_install(id).unwrap();
+    // Earlier smoke tests and the first worker may already have authorized the
+    // fixture. Installation approval intentionally rejects repeated approval.
+    let entry = plugin_host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == id)
+        .expect("mock plugin catalog entry");
+    if !entry.approved {
+        plugin_host::approve_install(id).unwrap();
+    }
     plugin_host::activate(
         id,
         &plugin_host::activation_requirements(&manifest).unwrap(),
