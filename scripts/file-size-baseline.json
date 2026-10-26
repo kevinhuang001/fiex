@@ -11,7 +11,7 @@
   "src-tauri/src/plugins/decorations/dynamic.rs": 427,
   "src-tauri/src/plugins/events.rs": 647,
   "src-tauri/src/plugins/fs_access.rs": 1094,
-  "src-tauri/src/plugins/host/manifest.rs": 742,
+  "src-tauri/src/plugins/host/manifest.rs": 692,
   "src-tauri/src/plugins/host/process/host.rs": 321,
   "src-tauri/src/plugins/host/process/spawn.rs": 315,
   "src-tauri/src/plugins/info.rs": 509,
