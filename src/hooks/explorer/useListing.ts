@@ -2,15 +2,9 @@ import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
-import { syncDecorationIcons } from '@/lib/decorationIcons'
-import type {
-  Entry,
-  EntryDecoration,
-  Listing,
-  Location,
-  Preferences,
-  RemoteConnection,
-} from '@/lib/types'
+import { clearDecorationIcons, syncDecorationIcons } from '@/lib/decorationIcons'
+import { listDirectory } from '@/lib/listing'
+import type { Entry, EntryDecoration, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
 /** Everything a pane lists: entries, decorations, locations, connections,
@@ -38,13 +32,15 @@ export function useListing(
   const [warnings, setWarnings] = useState<string[]>([])
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
+  const iconOwner = useRef(crypto.randomUUID())
   const request = useRef(0)
   const locationsRequest = useRef(0)
   const decorationRequest = useRef(0)
   const searchRequest = useRef(0)
   useEffect(() => {
-    syncDecorationIcons(decorations)
+    syncDecorationIcons(decorations, iconOwner.current)
   }, [decorations])
+  useEffect(() => () => clearDecorationIcons(iconOwner.current), [])
   const reload = useCallback(() => setRefresh((v) => v + 1), [getLocale()])
   useEffect(() => {
     if (!native || !enabled) return
@@ -138,11 +134,7 @@ export function useListing(
     const id = ++request.current
     setLoading(true)
     setError('')
-    void call<Listing>('list_directory', {
-      path,
-      hidden: prefs.hidden,
-      ignores: prefs.displayIgnore,
-    })
+    void listDirectory(path, prefs.hidden, prefs.displayIgnore)
       .then((l) => {
         if (active && id === request.current) {
           if (l.path !== path) {

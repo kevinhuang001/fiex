@@ -1,12 +1,13 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { call } from '@/lib/api'
+import { listDirectory } from '@/lib/listing'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { usePreferences } from '@/hooks/usePreferences'
 import { commonPlaces } from '@/lib/places'
 import { settleFilePicker, type FilePickerRequest } from '@/lib/filePicker'
 import { kind } from '@/lib/files'
-import type { Entry, Listing, Location, RemoteConnection } from '@/lib/types'
+import type { Entry, Location, RemoteConnection } from '@/lib/types'
 
 import type { PickerDialogState } from './PickerDialogs'
 import type { PickerMenuState } from './PickerMenu'
@@ -73,7 +74,7 @@ export function usePicker(request: FilePickerRequest) {
   useEffect(() => {
     let alive = true
     setError('')
-    void call<Listing>('list_directory', { path: directory })
+    void listDirectory(directory)
       .then((value) => {
         if (!alive) return
         setEntries(value.entries || [])

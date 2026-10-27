@@ -287,6 +287,7 @@ pub fn install(ticket: &str, allow_untrusted: bool) -> Result<String, String> {
     if backup.exists() {
         let _ = fs::remove_dir_all(&backup);
     }
+    plugin_host::invalidate_discovery();
     Ok(id)
 }
 pub fn cancel(ticket: &str) -> Result<(), String> {
@@ -307,5 +308,7 @@ pub fn uninstall(id: &str) -> Result<(), String> {
     plugin_host::global().stop(id);
     // Remove approval FIRST: even on deletion failure, plugin cannot launch.
     plugin_permissions::revoke_install(id)?;
-    fs::remove_dir_all(directory).map_err(|e| e.to_string())
+    fs::remove_dir_all(directory).map_err(|e| e.to_string())?;
+    plugin_host::invalidate_discovery();
+    Ok(())
 }

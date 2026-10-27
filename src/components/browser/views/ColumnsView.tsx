@@ -5,9 +5,9 @@ import { BrowserColumn } from '../BrowserColumn'
 import { FileIcon } from '../../FileIcon'
 import { TagDots } from '../../TagDots'
 import { NameCell, rowVars, SyncBadge, Thumbnail } from './shared'
-import { call } from '@/lib/api'
+import { listDirectory } from '@/lib/listing'
 import { kind, parent, size } from '@/lib/files'
-import type { Entry, Listing } from '@/lib/types'
+import type { Entry } from '@/lib/types'
 import type { Props, SharedRow } from './shared'
 import type { KeyboardEvent } from 'react'
 
@@ -30,11 +30,7 @@ export function ColumnsView({
   const selected = x.entries.find((e) => e.path === x.selected[0])
   useEffect(() => {
     let active = true
-    void call<Listing>('list_directory', {
-      path: parent(x.path),
-      hidden: prefs.hidden,
-      ignores: prefs.displayIgnore,
-    })
+    void listDirectory(parent(x.path), prefs.hidden, prefs.displayIgnore)
       .then((l) => {
         if (active) setLeft(l.entries)
       })
@@ -48,11 +44,7 @@ export function ColumnsView({
     setRight([])
     setError('')
     if (selected?.isDir)
-      void call<Listing>('list_directory', {
-        path: selected.path,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-      })
+      void listDirectory(selected.path, prefs.hidden, prefs.displayIgnore)
         .then((l) => {
           if (active) setRight(l.entries)
         })

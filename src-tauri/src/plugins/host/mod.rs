@@ -8,6 +8,7 @@ mod permissions;
 mod process;
 
 pub(crate) use catalog::catalog_matching;
+pub(crate) use catalog::invalidate_discovery;
 pub use catalog::{catalog, exists, installed_manifests, themes, PluginInfo};
 pub(crate) use manifest::preview_loading_entry;
 pub use manifest::{

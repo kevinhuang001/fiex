@@ -96,7 +96,13 @@ pub(crate) async fn list_directory(
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-pub(crate) fn file_info(path: String) -> Result<files::Entry, String> {
+pub(crate) async fn file_info(path: String) -> Result<files::Entry, String> {
+    tauri::async_runtime::spawn_blocking(move || file_info_blocking(&path))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
     if remote::is_remote(&path) {
         return remote::stat(&path);
     }

@@ -6,6 +6,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+#[cfg(not(test))]
+use std::sync::{Mutex, OnceLock};
+#[cfg(not(test))]
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +98,46 @@ pub(crate) fn discover() -> Vec<(PluginManifest, PathBuf)> {
     list.sort_by(|a, b| a.0.name.cmp(&b.0.name));
     list
 }
+
+/// Discovery is used by every provider match. Cache only the manifest scan;
+/// permission state is read on every catalog request and invocation still
+/// performs fresh discovery and authorization.
+#[cfg(not(test))]
+type DiscoverySnapshot = Mutex<Option<(Instant, Vec<(PluginManifest, PathBuf)>)>>;
+#[cfg(not(test))]
+static DISCOVERY: OnceLock<DiscoverySnapshot> = OnceLock::new();
+
+pub(crate) fn invalidate_discovery() {
+    #[cfg(not(test))]
+    if let Some(cache) = DISCOVERY.get() {
+        if let Ok(mut snapshot) = cache.lock() {
+            *snapshot = None;
+        }
+    }
+}
+
+fn discovery_for_matching() -> Vec<(PluginManifest, PathBuf)> {
+    #[cfg(test)]
+    {
+        discover()
+    }
+    #[cfg(not(test))]
+    {
+        let snapshot = DISCOVERY.get_or_init(|| Mutex::new(None));
+        if let Ok(guard) = snapshot.lock() {
+            if let Some((at, manifests)) = guard.as_ref() {
+                if at.elapsed() < Duration::from_secs(2) {
+                    return manifests.clone();
+                }
+            }
+        }
+        let fresh = discover();
+        if let Ok(mut guard) = snapshot.lock() {
+            *guard = Some((Instant::now(), fresh.clone()));
+        }
+        fresh
+    }
+}
 fn platform() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
@@ -135,7 +179,7 @@ pub fn catalog() -> Vec<PluginInfo> {
 
 /// Apply event match predicates before permission, executable and PATH probes.
 pub(crate) fn catalog_matching(predicate: impl Fn(&PluginManifest) -> bool) -> Vec<PluginInfo> {
-    discover()
+    discovery_for_matching()
         .into_iter()
         .filter(|(manifest, _)| predicate(manifest))
         .map(|(manifest, folder)| {

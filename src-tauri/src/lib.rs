@@ -15,10 +15,10 @@ mod macos_material;
 mod native_drag;
 #[path = "core/operations.rs"]
 pub mod operations;
-#[path = "plugins/contracts.rs"]
-pub mod plugin_contracts;
 #[path = "plugins/cache.rs"]
 pub mod plugin_cache;
+#[path = "plugins/contracts.rs"]
+pub mod plugin_contracts;
 #[path = "plugins/decorations/mod.rs"]
 pub mod plugin_decorations;
 #[path = "plugins/errors.rs"]

@@ -67,7 +67,9 @@ pub fn put(key: String, value: Value) {
     if let Some(old) = cache.entries.remove(&key) {
         cache.bytes -= old.bytes;
     }
-    cache.entries.retain(|_, entry| entry.inserted.elapsed() < TTL);
+    cache
+        .entries
+        .retain(|_, entry| entry.inserted.elapsed() < TTL);
     cache.bytes = cache.entries.values().map(|entry| entry.bytes).sum();
     while cache.entries.len() >= MAX_ENTRIES || cache.bytes + bytes > MAX_BYTES {
         let Some(oldest) = cache

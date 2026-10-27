@@ -132,7 +132,14 @@ pub async fn list_listing(
     let rel = rel_string(&relative);
     let mut metadata = load_meta(&conn);
     let mut warnings = Vec::new();
-    let files = match list_remote(&conn, &rel) {
+    // Provider RPC and remote pagination are synchronous. Keep them off the
+    // async runtime while preserving the per-connection metadata lock.
+    let listing_conn = conn.clone();
+    let listing_rel = rel.clone();
+    let listed = tokio::task::spawn_blocking(move || list_remote(&listing_conn, &listing_rel))
+        .await
+        .map_err(|error| error.to_string())?;
+    let files = match listed {
         Ok(files) => {
             remember_listing(&rel, &files, &mut metadata);
             save_meta(&conn, &metadata)?;
