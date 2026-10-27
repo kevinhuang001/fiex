@@ -113,3 +113,7 @@ Core 保存该集合；未声明的操作用 `method_not_found` 拒绝，不会�
 
 protocol 4 的 `vfs.list/stat/readSmall/search` 与 `fs.writeFile` 均已删除。
 `vfs.openView` 仍保留，它创建的是导航视图，不是文件操作。
+
+已知缺口：按名称新建**空文件**尚无协议操作（`fs.beginWrite` 只针对已存在的
+node）。Core 对挂载路径会明确拒绝并提示先新建文件夹再复制；目录创建走
+`fs.mkdir`，不受影响。
