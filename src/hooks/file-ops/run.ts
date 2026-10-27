@@ -16,7 +16,15 @@ export function useRunner({
   setBusy: Dispatch<SetStateAction<string>>
 }) {
   const running = useRef(false)
-  const run: Run = async (label, fn, detail, cancellable = false, activityKind, onActivity) => {
+  const run: Run = async (
+    label,
+    fn,
+    detail,
+    cancellable = false,
+    activityKind,
+    onActivity,
+    quiet = false,
+  ) => {
     if (running.current) return
     running.current = true
     setBusy(label)
@@ -36,6 +44,8 @@ export function useRunner({
               }
             : undefined,
           activityKind,
+          undefined,
+          !quiet,
         )
       : undefined
     if (activity) onActivity?.(activity)

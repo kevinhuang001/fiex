@@ -1,6 +1,6 @@
 //! Durable, restart-safe reconciliation. Provider revisions are opaque and
 //! providers enforce their protocol-specific revision checks. Failed uploads retain bytes.
-use super::{config::*, files::*, store::*, sync::*};
+use super::{cache::*, config::*, files::*, store::*, sync::*};
 use serde_json::{json, Value};
 use std::fs;
 
@@ -71,11 +71,17 @@ fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<S
     };
     entry.size = size;
     entry.conflict = false;
+    entry.uploaded = true;
     save_meta(conn, &meta)?;
     Ok(revision.into())
 }
 
-fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
+fn reconcile_file(
+    conn: &StoredConnection,
+    rel: &str,
+    pull: bool,
+    changes: &mut Vec<CacheChange>,
+) -> Result<(), String> {
     let mut meta = load_meta(conn);
     let Some(file) = meta.files.get(rel).cloned() else {
         return Ok(());
@@ -83,7 +89,22 @@ fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
     if file.is_dir || !file.downloaded || file.conflict {
         return Ok(());
     }
-    check_cache_path(conn, &local_for(conn, rel))?;
+    let local = local_for(conn, rel);
+    check_cache_path(conn, &local)?;
+    if !local.is_file() {
+        if pull {
+            return Err(crate::i18n::t("缓存文件缺失").into());
+        }
+        // A vanished unpinned cache is forgotten; the next open downloads it.
+        let entry = meta.files.get_mut(rel).unwrap();
+        entry.downloaded = false;
+        entry.uploaded = false;
+        entry.baseline.clear();
+        entry.local_stamp.clear();
+        save_meta(conn, &meta)?;
+        changes.push(cache_change(conn, rel, "uncached"));
+        return Ok(());
+    }
     let changed = dirty(conn, rel, &file);
     let remote = stat(conn, rel, &file)?;
     let revision = remote["revision"]
@@ -94,11 +115,25 @@ fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
         if changed {
             meta.files.get_mut(rel).unwrap().conflict = true;
             save_meta(conn, &meta)?;
+            changes.push(cache_change(conn, rel, "conflict"));
             return Err(crate::i18n::t("本地与云端均有修改，请处理同步冲突").into());
+        }
+        if !pull {
+            // Cache is push-only: a newer remote revision invalidates the copy
+            // instead of being fetched behind the user's back.
+            fs::remove_file(&local).map_err(|e| e.to_string())?;
+            let entry = meta.files.get_mut(rel).unwrap();
+            entry.downloaded = false;
+            entry.uploaded = false;
+            entry.baseline.clear();
+            entry.local_stamp.clear();
+            entry.revision = revision.into();
+            save_meta(conn, &meta)?;
+            changes.push(cache_change(conn, rel, "uncached"));
+            return Ok(());
         }
         // Download to a separate sibling and recheck local contents before
         // replacement, so an editor save during network I/O is preserved.
-        let local = local_for(conn, rel);
         let staged = tempfile::NamedTempFile::new_in(local.parent().ok_or("invalid cache path")?)
             .map_err(|e| e.to_string())?;
         fetch_remote(
@@ -120,26 +155,31 @@ fn reconcile_file(conn: &StoredConnection, rel: &str) -> Result<(), String> {
         entry.baseline = fingerprint(&local)?;
         entry.local_stamp = stamp(&local)?;
         entry.size = fs::metadata(&local).map_err(|e| e.to_string())?.len();
+        entry.uploaded = false;
         save_meta(conn, &meta)?;
+        changes.push(cache_change(conn, rel, "cached"));
     } else if changed {
         upload(conn, rel, &file)?;
+        changes.push(cache_change(conn, rel, "uploaded"));
     }
     Ok(())
 }
 
 pub async fn reconcile() {
     for conn in load_stored() {
-        reconcile_connection(&conn.id).await;
+        let _ = reconcile_connection(&conn.id).await;
     }
 }
 
-pub async fn reconcile_connection(id: &str) {
+pub async fn reconcile_connection(id: &str) -> Vec<CacheChange> {
+    let mut changes = Vec::new();
     for conn in load_stored().into_iter().filter(|conn| conn.id == id) {
         if ensure_provider_access(&conn).is_err() {
             continue;
         }
         // The desktop scheduler runs separate connections independently.
         let _guard = lock(&conn).await;
+        let before = downloaded_keys(&load_meta(&conn));
         let meta = load_meta(&conn);
         let pins: Vec<_> = meta
             .files
@@ -159,27 +199,45 @@ pub async fn reconcile_connection(id: &str) {
             } else {
                 download_inner(&path, &TransferOptions::default()).map(|_| ())
             };
-            record_result(&conn, &rel, result);
+            record_result(&conn, &rel, result, &mut changes);
+        }
+        // Files a pinned folder pulled for the first time are cache changes too.
+        for (key, file) in load_meta(&conn).files.iter() {
+            if file.downloaded && !before.contains(key) {
+                changes.push(cache_change(&conn, key, "cached"));
+            }
         }
         let keys: Vec<_> = load_meta(&conn)
             .files
             .iter()
             .filter(|(_, file)| file.downloaded && !file.is_dir)
-            .map(|(key, _)| key.clone())
+            .map(|(key, file)| (key.clone(), file.pinned))
             .collect();
-        for rel in keys {
-            record_result(&conn, &rel, reconcile_file(&conn, &rel));
+        for (rel, pull) in keys {
+            let result = reconcile_file(&conn, &rel, pull, &mut changes);
+            record_result(&conn, &rel, result, &mut changes);
         }
     }
+    changes
 }
 
-fn record_result(conn: &StoredConnection, rel: &str, result: Result<(), String>) {
+fn record_result(
+    conn: &StoredConnection,
+    rel: &str,
+    result: Result<(), String>,
+    changes: &mut Vec<CacheChange>,
+) {
     let mut meta = load_meta(conn);
     match result {
         Ok(()) => {
             meta.errors.remove(rel);
         }
         Err(error) => {
+            // Only a new or changed failure earns a fresh activity entry.
+            let previous = meta.errors.get(rel).cloned();
+            if previous.as_deref() != Some(error.as_str()) {
+                changes.push(cache_failure(conn, rel, &error));
+            }
             meta.errors.insert(rel.into(), error);
         }
     }
@@ -218,7 +276,7 @@ pub async fn resolve(path: &str, keep_local: bool) -> Result<(), String> {
     }
     meta.files.get_mut(&rel).unwrap().conflict = false;
     save_meta(&conn, &meta)?;
-    reconcile_file(&conn, &rel)
+    reconcile_file(&conn, &rel, true, &mut Vec::new())
 }
 
 #[cfg(test)]

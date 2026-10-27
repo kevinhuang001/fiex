@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
-import { CloudCheck, CloudDownload } from 'lucide-react'
+import { CloudCheck, CloudDownload, CloudUpload, Pin } from 'lucide-react'
 import { FileIcon } from '../../FileIcon'
 import { InlineRename } from '../InlineRename'
 import { asset } from '@/lib/api'
@@ -51,7 +51,7 @@ export function SyncBadge({ sync }: { sync: Entry['sync'] }) {
   if (!sync) return null
   const labels = {
     synced: t('已缓存'),
-    cloud: t('仅云端'),
+    cloud: t('未缓存'),
     pinned: t('始终保留在本地'),
     pending: t('等待上传'),
     conflict: t('同步冲突'),
@@ -59,8 +59,30 @@ export function SyncBadge({ sync }: { sync: Entry['sync'] }) {
   const label = labels[sync]
   return (
     <span className={`sync-badge ${sync}`} title={label}>
-      {sync === 'cloud' ? <CloudDownload size={11} /> : <CloudCheck size={11} />}
+      {sync === 'cloud' ? (
+        <CloudDownload size={11} />
+      ) : sync === 'pinned' ? (
+        <Pin size={11} fill="currentColor" />
+      ) : (
+        <CloudCheck size={11} />
+      )}
       <span>{label}</span>
+    </span>
+  )
+}
+
+/** Sync mode and upload state are independent: cached and pinned entries can
+ *  both additionally show that the current bytes were uploaded. */
+export function SyncBadges({ entry }: { entry: Entry }) {
+  return (
+    <span className="sync-badges">
+      <SyncBadge sync={entry.sync} />
+      {entry.uploaded && (entry.hasCache || entry.pinned) && (
+        <span className="sync-badge uploaded" title={t('已上传')}>
+          <CloudUpload size={11} />
+          <span>{t('已上传')}</span>
+        </span>
+      )}
     </span>
   )
 }

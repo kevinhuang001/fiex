@@ -20,6 +20,8 @@ export type Run = <T>(
   cancellable?: boolean,
   activityKind?: ActivityKind,
   onActivity?: (id: string) => void,
+  /** Record the activity without opening the panel. */
+  quiet?: boolean,
 ) => Promise<T | undefined>
 
 export type HandleResult = (result: OperationResult) => void

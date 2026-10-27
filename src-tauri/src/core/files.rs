@@ -2,7 +2,7 @@ use crate::tags::{read_tags, Tag};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     pub path: String,
@@ -17,6 +17,15 @@ pub struct Entry {
     pub readonly: bool,
     pub link_target: Option<String>,
     pub tags: Vec<Tag>,
+    /// Whether this entry, or a directory descendant, has cached bytes.
+    #[serde(default)]
+    pub has_cache: bool,
+    /// Connection entries pinned with "Always keep locally".
+    #[serde(default)]
+    pub pinned: bool,
+    /// The current bytes of this connection entry reached the remote.
+    #[serde(default)]
+    pub uploaded: bool,
     pub sync: Option<String>,
 }
 
@@ -99,6 +108,9 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
         readonly: meta.permissions().readonly(),
         link_target,
         tags: read_tags(path),
+        has_cache: false,
+        pinned: false,
+        uploaded: false,
         sync: None,
     })
 }

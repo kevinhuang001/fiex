@@ -20,6 +20,12 @@ export interface Entry {
   readonly: boolean
   linkTarget: string | null
   tags: Tag[]
+  /** This entry, or a directory descendant, has cached bytes. */
+  hasCache?: boolean
+  /** "Always keep locally" is enabled for a connection entry. */
+  pinned?: boolean
+  /** The current bytes of a connection entry reached the remote. */
+  uploaded?: boolean
   sync: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | null
 }
 export interface Listing {
@@ -144,12 +150,16 @@ export interface Preferences {
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap
   pinnedPluginTools: string[]
+  /** Background connection reconciliation cadence, in seconds. */
+  syncInterval: number
 }
 
 export interface OperationProgress {
   done: number
   total: number
   step?: string
+  /** `bytes` renders sizes instead of file counts. */
+  unit?: 'bytes' | 'files'
 }
 
 export interface RemoteConnection {

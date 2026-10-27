@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { TagDots } from '../../TagDots'
-import { NameCell, rowVars, SyncBadge, Thumbnail } from './shared'
+import { NameCell, rowVars, SyncBadges, Thumbnail } from './shared'
 import { VirtualFileGrid } from '../VirtualFileGrid'
 import { groups, kind, size } from '@/lib/files'
 import type { Entry, Preferences } from '@/lib/types'
@@ -74,7 +74,7 @@ export function GridView({
                 </span>
                 <NameCell explorer={explorer} entry={e} className="tile-label" />
                 <TagDots tags={e.tags} />
-                <SyncBadge sync={e.sync} />
+                <SyncBadges entry={e} />
               </div>
             )
           }}
@@ -114,7 +114,7 @@ export function GridView({
                     </span>
                     <NameCell explorer={explorer} entry={e} className="tile-label" />
                     <TagDots tags={e.tags} />
-                    <SyncBadge sync={e.sync} />
+                    <SyncBadges entry={e} />
                   </div>
                 )
               })}

@@ -1,4 +1,4 @@
-//! Download bookkeeping plus sync, unsync and conflict helpers.
+//! Download bookkeeping plus pin, uncache and conflict helpers.
 
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf};
@@ -30,6 +30,9 @@ pub(crate) struct RemoteMetaFile {
     pub(crate) excluded: bool,
     #[serde(default)]
     pub(crate) conflict: bool,
+    /// The last local edit was accepted by the remote.
+    #[serde(default)]
+    pub(crate) uploaded: bool,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -156,7 +159,7 @@ pub async fn sync(paths: &[String], options: &TransferOptions) -> Result<(), Str
     Ok(())
 }
 
-pub async fn unsync(paths: &[String]) -> Result<(), String> {
+pub async fn unpin(paths: &[String]) -> Result<(), String> {
     for path in paths {
         let Some((conn, rel)) = connection_for_path(path) else {
             continue;
@@ -164,17 +167,44 @@ pub async fn unsync(paths: &[String]) -> Result<(), String> {
         let _guard = lock(&conn).await;
         let rel = rel_string(&rel);
         let mut meta = load_meta(&conn);
+        for (key, file) in meta.files.iter_mut() {
+            if in_tree(key, &rel) && file.pinned {
+                // Keep the bytes as a plain cache; the exclusion stops a pinned
+                // ancestor from silently pinning it again.
+                file.pinned = false;
+                file.excluded = true;
+            }
+        }
+        save_meta(&conn, &meta)?;
+    }
+    Ok(())
+}
+
+pub async fn uncache(paths: &[String]) -> Result<(), String> {
+    for path in paths {
+        let Some((conn, rel)) = connection_for_path(path) else {
+            continue;
+        };
+        let _guard = lock(&conn).await;
+        let rel = rel_string(&rel);
+        let mut meta = load_meta(&conn);
+        // Pins own their bytes; uncache only drops unpinned cache entries.
         let keys: Vec<_> = meta
             .files
-            .keys()
-            .filter(|key| in_tree(key, &rel))
-            .cloned()
+            .iter()
+            .filter(|(key, file)| in_tree(key, &rel) && !file.pinned)
+            .map(|(key, _)| key.clone())
             .collect();
-        // Validate the whole subtree before removing any bytes.
+        // Validate the whole selection before removing any bytes.
         for key in &keys {
             let file = &meta.files[key];
-            if file.conflict || dirty(&conn, key, file) {
-                return Err(crate::i18n::t("存在未同步的修改或冲突，不能释放本地空间").into());
+            if file.conflict
+                || (file.downloaded
+                    && !file.is_dir
+                    && local_for(&conn, key).is_file()
+                    && dirty(&conn, key, file))
+            {
+                return Err(crate::i18n::t("存在未同步的修改或冲突，不能取消缓存").into());
             }
         }
         for key in keys {
@@ -183,7 +213,9 @@ pub async fn unsync(paths: &[String]) -> Result<(), String> {
                 fs::remove_file(local_for(&conn, &key)).map_err(|e| e.to_string())?;
             }
             file.downloaded = false;
-            file.pinned = false;
+            file.uploaded = false;
+            file.baseline.clear();
+            file.local_stamp.clear();
             file.excluded = true;
         }
         save_meta(&conn, &meta)?;

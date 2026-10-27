@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { Eye, History, Home } from 'lucide-react'
+import { Eye, History, Home, RefreshCw } from 'lucide-react'
 import { SelectField } from '../ui/SelectField'
 import type { Preferences } from '@/lib/types'
 
@@ -69,6 +69,27 @@ export function BehaviorSettings({
           >
             <i />
           </button>
+        </div>
+      </div>
+      <div className="settings-row">
+        <div className="settings-row-label">
+          <span className="settings-row-icon" style={{ background: '#8b5cf6' }}>
+            <RefreshCw size={15} />
+          </span>
+          {t('同步周期')}
+        </div>
+        <div className="settings-row-control">
+          <SelectField
+            label={t('同步周期')}
+            value={String(prefs.syncInterval)}
+            options={[
+              { value: '30', label: t('30 秒') },
+              { value: '60', label: t('1 分钟') },
+              { value: '300', label: t('5 分钟') },
+              { value: '900', label: t('15 分钟') },
+            ]}
+            onChange={(value) => update({ syncInterval: Number(value) })}
+          />
         </div>
       </div>
     </div>

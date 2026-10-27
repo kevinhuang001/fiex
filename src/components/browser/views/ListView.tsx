@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { FileIcon } from '../../FileIcon'
 import { TagDots } from '../../TagDots'
-import { DecoratedValue, NameCell, rowVars, SyncBadge } from './shared'
+import { DecoratedValue, NameCell, rowVars, SyncBadges } from './shared'
 import { date, kind, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
@@ -65,7 +65,7 @@ export function ListView({
                     <FileIcon entry={item.entry} size={25} />
                     <NameCell explorer={explorer} entry={item.entry} className="file-label" />
                     <TagDots tags={item.entry.tags} />
-                    <SyncBadge sync={item.entry.sync} />
+                    <SyncBadges entry={item.entry} />
                     {item.entry.readonly && explorer.renaming !== item.entry.path && (
                       <small>{t('只读')}</small>
                     )}

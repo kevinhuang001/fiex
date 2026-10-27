@@ -4,11 +4,13 @@ import { progressChannel } from '@/hooks/useActivity'
 import {
   CloudCheck,
   CloudDownload,
+  CloudOff,
   Copy,
   ExternalLink,
   Eye,
   Info,
   Pencil,
+  PinOff,
   RotateCcw,
   Scissors,
   Tags,
@@ -79,14 +81,27 @@ export function contextItems({
     ...(isRemotePath(menu.entry.path)
       ? [
           {
-            label: t('始终保留在本地'),
-            icon: <CloudDownload />,
+            label: menu.entry.pinned ? t('取消保留在本地') : t('始终保留在本地'),
+            icon: menu.entry.pinned ? <PinOff /> : <CloudDownload />,
             hint: '',
             action: () => {
               const paths = x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]
+              if (menu.entry.pinned) {
+                void run(t('正在取消保留…'), async () => {
+                  await call('remote_unpin', { paths })
+                  x.reload()
+                })
+                return
+              }
+              const connection = x.connections.find(
+                (candidate) =>
+                  menu.entry.path === candidate.mountPath ||
+                  menu.entry.path.startsWith(candidate.mountPath.replace(/\/$/, '') + '/'),
+              )
+              const label = connection?.name ? t('{0} 触发同步', connection.name) : t('触发同步')
               let onProgress: ReturnType<typeof progressChannel> | undefined
               void run(
-                t('正在保存离线副本…'),
+                label,
                 async () => {
                   await call('remote_sync', { paths, onProgress })
                   x.reload()
@@ -97,27 +112,56 @@ export function contextItems({
                 (id) => {
                   onProgress = progressChannel(id)
                 },
+                // Pin downloads are recorded but never open the panel.
+                true,
               )
             },
           },
-          {
-            label: t('释放本地空间'),
-            icon: <CloudCheck />,
-            hint: '',
-            action: () => {
-              const paths = x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]
-              void run(
-                t('正在释放本地空间…'),
-                async () => {
-                  await call('remote_unsync', { paths })
-                  x.reload()
+          ...(menu.entry.hasCache
+            ? menu.entry.pinned || menu.entry.sync === 'conflict'
+              ? []
+              : [
+                  {
+                    label: t('取消缓存'),
+                    icon: <CloudOff />,
+                    hint: '',
+                    action: () => {
+                      const paths = x.selected.includes(menu.entry.path)
+                        ? x.selected
+                        : [menu.entry.path]
+                      // Uncaching is immediate bookkeeping; keep it out of the
+                      // activity centre and only surface real failures.
+                      void call('remote_uncache', { paths })
+                        .then(() => x.reload())
+                        .catch((error) => x.setError(String(error)))
+                    },
+                  },
+                ]
+            : [
+                {
+                  label: t('缓存到本地'),
+                  icon: <CloudDownload />,
+                  hint: '',
+                  action: () => {
+                    const paths = x.selected.includes(menu.entry.path)
+                      ? x.selected
+                      : [menu.entry.path]
+                    let onProgress: ReturnType<typeof progressChannel> | undefined
+                    void run(
+                      t('正在缓存…'),
+                      async () => {
+                        await call('remote_cache', { paths, onProgress })
+                      },
+                      t('{0} 个项目', paths.length),
+                      true,
+                      'transfer',
+                      (id) => {
+                        onProgress = progressChannel(id)
+                      },
+                    )
+                  },
                 },
-                t('{0} 个项目', paths.length),
-                false,
-                'sync',
-              )
-            },
-          },
+              ]),
           ...(menu.entry.sync === 'conflict'
             ? [
                 ...[true, false].map((keepLocal) => ({
@@ -125,16 +169,10 @@ export function contextItems({
                   icon: <CloudCheck />,
                   hint: '',
                   action: () => {
-                    void run(
-                      t('正在处理同步冲突…'),
-                      async () => {
-                        await call('remote_resolve', { path: menu.entry.path, keepLocal })
-                        x.reload()
-                      },
-                      menu.entry.name,
-                      false,
-                      'sync',
-                    )
+                    void run(t('正在处理同步冲突…'), async () => {
+                      await call('remote_resolve', { path: menu.entry.path, keepLocal })
+                      x.reload()
+                    })
                   },
                 })),
               ]

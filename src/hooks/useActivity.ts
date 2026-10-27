@@ -20,6 +20,8 @@ export interface ActivityItem {
   done?: number
   total?: number
   step?: string
+  /** `bytes` renders sizes instead of file counts in the details pane. */
+  unit?: 'bytes' | 'files'
   /** Plugin identity for per-plugin filtering in the status centre. */
   pluginId?: string
 }
@@ -89,6 +91,7 @@ export function beginActivity(
   cancel?: () => void,
   kind: ActivityKind = 'transfer',
   pluginId?: string,
+  reveal = true,
 ): string {
   const label = rawLabel.replace(/^正在/, '').replace(/…$/, '')
   const id = `${Date.now()}-${++seq}`
@@ -106,10 +109,10 @@ export function beginActivity(
     ...items,
   ].slice(0, LIMIT)
   // Transfers and syncs surface their progress; other operations stay in
-  // history without covering the window.
-  // Transfers, syncs and plugin tasks surface their progress; other
-  // operations stay in history without covering the window.
-  if (kind === 'transfer' || kind === 'delete' || kind === 'sync' || kind === 'plugin') open = true
+  // history without covering the window. A quiet activity is recorded for
+  // history but does not open the panel.
+  if (reveal && (kind === 'transfer' || kind === 'delete' || kind === 'sync' || kind === 'plugin'))
+    open = true
   if (cancel) cancellers.set(id, cancel)
   persist()
   emit()
@@ -121,7 +124,7 @@ export function updateActivity(
   patch: Partial<
     Pick<
       ActivityItem,
-      'label' | 'progress' | 'indeterminate' | 'done' | 'total' | 'step' | 'detail'
+      'label' | 'progress' | 'indeterminate' | 'done' | 'total' | 'step' | 'detail' | 'unit'
     >
   >,
 ) {
@@ -149,22 +152,24 @@ export function progressChannel(id: string) {
     const channel = {
       onmessage: undefined as ((progress: OperationProgress) => void) | undefined,
     }
-    channel.onmessage = ({ done, total, step }) =>
+    channel.onmessage = ({ done, total, step, unit }) =>
       updateActivity(id, {
         done,
         total,
         progress: total > 0 ? done / total : undefined,
         step: step || undefined,
+        unit,
       })
     return channel as unknown as Channel<OperationProgress>
   }
   const channel = new Channel<OperationProgress>()
-  channel.onmessage = ({ done, total, step }) =>
+  channel.onmessage = ({ done, total, step, unit }) =>
     updateActivity(id, {
       done,
       total,
       progress: total > 0 ? done / total : undefined,
       step: step || undefined,
+      unit,
     })
   return channel
 }
@@ -205,6 +210,31 @@ export function finishActivity(id: string, error?: string, detail?: string) {
 
 export function listActivity(): ActivityItem[] {
   return items
+}
+
+/** Adds a finished entry without opening the panel: background cache and pin
+ *  transitions belong in history without interrupting the user. */
+export function recordActivity(
+  label: string,
+  detail?: string,
+  kind: ActivityKind = 'sync',
+  status: 'done' | 'error' = 'done',
+) {
+  const id = `${Date.now()}-${++seq}`
+  items = [
+    {
+      id,
+      kind,
+      label,
+      detail,
+      status,
+      startedAt: Date.now(),
+      finishedAt: Date.now(),
+    },
+    ...items,
+  ].slice(0, LIMIT)
+  persist()
+  emit()
 }
 
 function clearActivity() {

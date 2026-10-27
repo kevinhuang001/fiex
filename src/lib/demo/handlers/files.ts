@@ -1,6 +1,15 @@
-import type { Listing } from '../../types'
+import type { Listing, OperationProgress } from '../../types'
 import { basename, join, parent } from '../../files'
-import { demoChanges, ignored, item, repoFor, root } from '../data'
+import {
+  demoChanges,
+  demoRemoteEntries,
+  demoRemoteRoot,
+  demoRemoteWarnings,
+  ignored,
+  item,
+  repoFor,
+  root,
+} from '../data'
 import { notHandled, state } from './shared'
 
 export async function handleFiles(command: string, a: Record<string, unknown>): Promise<unknown> {
@@ -24,27 +33,8 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           warnings: [],
         }
       }
-      const remoteRoot = 'fiex://mount/demo-webdav'
-      if ((a.path as string).startsWith(remoteRoot)) {
-        return {
-          path: a.path,
-          entries: [
-            {
-              ...item(remoteRoot + '/产品截图.png', false, 'image/png', 2_400_000),
-              sync: 'synced',
-            },
-            {
-              ...item(remoteRoot + '/会议记录.md', false, 'text/markdown', 18_000),
-              sync: 'synced',
-            },
-            {
-              ...item(remoteRoot + '/素材.zip', false, 'application/zip', 45_000_000),
-              sync: 'cloud',
-            },
-            { ...item(remoteRoot + '/2026 规划', true), sync: 'cloud' },
-          ],
-          warnings: [],
-        }
+      if ((a.path as string).startsWith(demoRemoteRoot)) {
+        return { path: a.path, entries: demoRemoteEntries, warnings: demoRemoteWarnings }
       }
 
       if (
@@ -198,6 +188,18 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     case 'recycle':
       state.entries = state.entries.filter((e) => !(a.paths as string[]).includes(e.path))
       return { paths: a.paths, errors: [], skipped: 0 }
+    case 'remote_download':
+    case 'remote_open':
+    case 'remote_cache': {
+      const progress = a.onProgress as { onmessage?: (v: OperationProgress) => void } | undefined
+      const total = 8 * 1024 * 1024
+      const step = basename(String(a.path || (a.paths as string[])?.[0] || ''))
+      for (let index = 1; progress?.onmessage && index <= 6; index += 1) {
+        progress.onmessage({ done: Math.round((total * index) / 6), total, step, unit: 'bytes' })
+        await new Promise((resolve) => setTimeout(resolve, 140))
+      }
+      return null
+    }
     case 'transfer': {
       const progress = a.onProgress as
         { onmessage?: (value: { done: number; total: number; step?: string }) => void } | undefined

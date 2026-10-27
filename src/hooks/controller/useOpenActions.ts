@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import type { Explorer } from '@/hooks/useExplorer'
+import { progressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import type { Entry, Ide, Preferences, Tag } from '@/lib/types'
@@ -48,18 +49,32 @@ export function useOpenActions({
       pane.navigate(e.path)
       return
     }
-    void run(t('正在打开…'), async () => {
-      const outcome = await runBeforeOpenHooks(e)
-      if (outcome.preview) {
-        setPreview(e)
-        return
-      }
-      if (outcome.handled) {
-        pane.reload()
-        return
-      }
-      await call('open_path', { path: e.path })
-    })
+    const remote = isRemotePath(e.path)
+    let onProgress: ReturnType<typeof progressChannel> | undefined
+    void run(
+      remote ? t('正在下载…') : t('正在打开…'),
+      async () => {
+        const outcome = await runBeforeOpenHooks(e)
+        if (outcome.preview) {
+          setPreview(e)
+          return
+        }
+        if (outcome.handled) {
+          pane.reload()
+          return
+        }
+        if (remote) await call('remote_open', { path: e.path, onProgress })
+        else await call('open_path', { path: e.path })
+      },
+      e.name,
+      false,
+      remote ? 'transfer' : undefined,
+      remote
+        ? (id) => {
+            onProgress = progressChannel(id)
+          }
+        : undefined,
+    )
   }
   const previewEntry = (entry: Entry, pane = x) => {
     if (!isRemotePath(entry.path)) {

@@ -160,6 +160,7 @@ pub async fn list_listing(
             .filter(|(key, _)| super::sync::in_tree(key, &rel))
             .map(|(key, error)| format!("{key}: {error}")),
     );
+    let cached_dirs = super::cache::cached_dirs(&metadata);
     let filters = crate::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
     for file in files {
@@ -172,11 +173,20 @@ pub async fn list_listing(
             format!("{}/{}", rel_string(&relative), file.name)
         };
         let local = local_for(&conn, &child);
-        let downloaded = metadata
-            .files
-            .get(&child)
-            .is_some_and(|meta| meta.downloaded)
-            && local.is_file();
+        let state = metadata.files.get(&child);
+        let downloaded = state.is_some_and(|meta| meta.downloaded) && local.is_file();
+        let has_cache = if file.is_dir {
+            cached_dirs.contains(&child)
+        } else {
+            downloaded
+        };
+        let pinned = state.is_some_and(|meta| meta.pinned);
+        let dirty = state.is_some_and(|meta| super::sync::dirty(&conn, &child, meta));
+        // "Uploaded" is orthogonal to the sync mode, but only meaningful while
+        // the entry still has a cache or a pin (an uncached entry has no copy).
+        let uploaded = state.is_some_and(|meta| meta.uploaded && !meta.conflict)
+            && !dirty
+            && (has_cache || pinned);
         entries.push(crate::files::Entry {
             path: super::config::navigation_path(&conn, &child)?,
             name: file.name,
@@ -196,18 +206,19 @@ pub async fn list_listing(
             readonly: true,
             link_target: None,
             tags: Vec::new(),
+            has_cache,
+            pinned,
+            uploaded,
             sync: Some(
-                metadata
-                    .files
-                    .get(&child)
+                state
                     .map(|m| {
                         if m.conflict {
                             "conflict"
-                        } else if super::sync::dirty(&conn, &child, m) {
+                        } else if dirty {
                             "pending"
                         } else if m.pinned {
                             "pinned"
-                        } else if downloaded {
+                        } else if has_cache {
                             "synced"
                         } else {
                             "cloud"
@@ -444,6 +455,7 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
     fetch_remote(&conn, node, &local, options)?;
     let file = meta.files.get_mut(&rel).unwrap();
     file.downloaded = true;
+    file.uploaded = false;
     file.baseline = super::sync::fingerprint(&local)?;
     file.local_stamp = super::sync::stamp(&local)?;
     save_meta(&conn, &meta)?;
@@ -615,6 +627,18 @@ pub fn stat(path: &str) -> Result<crate::files::Entry, String> {
     if !rel.is_empty() && file.is_none() {
         return Err("remote node not found".into());
     }
+    let pinned = file.is_some_and(|entry| entry.pinned);
+    let dirty = file.is_some_and(|entry| super::sync::dirty(&conn, &rel, entry));
+    let has_cache = file.is_some_and(|entry| {
+        if entry.is_dir {
+            super::cache::subtree_has_cache(&meta, &rel)
+        } else {
+            entry.downloaded && local_for(&conn, &rel).is_file()
+        }
+    });
+    let uploaded = file.is_some_and(|entry| entry.uploaded && !entry.conflict)
+        && !dirty
+        && (has_cache || pinned);
     let name = relative
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -638,6 +662,9 @@ pub fn stat(path: &str) -> Result<crate::files::Entry, String> {
         readonly: true,
         link_target: None,
         tags: vec![],
+        has_cache,
+        pinned,
+        uploaded,
         sync: Some("cloud".into()),
     })
 }

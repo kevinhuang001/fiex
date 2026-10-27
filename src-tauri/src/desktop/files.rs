@@ -23,6 +23,9 @@ pub(crate) struct OperationProgress {
     total: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     step: Option<String>,
+    /// `bytes` renders sizes in the activity centre instead of file counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unit: Option<String>,
 }
 
 pub(crate) fn progress_emitter(
@@ -33,8 +36,23 @@ pub(crate) fn progress_emitter(
             done,
             total,
             step: step.map(str::to_string),
+            unit: None,
         });
     }
+}
+
+pub(crate) type ByteProgress = std::sync::Arc<dyn Fn(u64, Option<u64>, Option<&str>) + Send + Sync>;
+
+/// Download progress is byte-based; the activity centre formats it as sizes.
+pub(crate) fn byte_progress_emitter(channel: Channel<OperationProgress>) -> ByteProgress {
+    std::sync::Arc::new(move |done, total, step| {
+        let _ = channel.send(OperationProgress {
+            done,
+            total: total.unwrap_or(0),
+            step: step.map(str::to_string),
+            unit: Some("bytes".into()),
+        });
+    })
 }
 pub(crate) type Watch = Mutex<HashMap<String, (String, notify::RecommendedWatcher)>>;
 #[tauri::command]

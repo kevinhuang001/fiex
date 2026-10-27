@@ -1220,6 +1220,11 @@ body.dragging-file * {
   line-height: 1.5;
   white-space: nowrap;
 }
+.sync-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .file-tile .sync-badge span,
 .column-view .sync-badge span {
   display: none;
@@ -1854,7 +1859,12 @@ body.dragging-file * {
 }
 
 .sync-badge.pinned {
-  color: var(--accent);
+  color: #8b5cf6;
+  background: color-mix(in srgb, #8b5cf6 12%, transparent);
+}
+.sync-badge.uploaded {
+  color: #0d9488;
+  background: color-mix(in srgb, #0d9488 11%, transparent);
 }
 .sync-badge.pending {
   color: #b77a16;

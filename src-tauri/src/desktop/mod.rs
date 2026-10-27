@@ -16,6 +16,7 @@ mod locale;
 mod tray;
 use locale::locale_set;
 use tray::{setup_tray, QUITTING};
+mod scheduler;
 #[macro_use]
 mod plugins;
 pub(crate) mod shell_profile;
@@ -174,8 +175,12 @@ pub fn run() {
             remove_remote_connection,
             remote_download,
             remote_download_dir,
+            remote_cache,
+            remote_open,
             remote_sync,
-            remote_unsync,
+            remote_uncache,
+            remote_unpin,
+            remote_set_sync_interval,
             remote_resolve,
             eject_device,
             eject_usb,
@@ -220,30 +225,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let handle = app.handle().clone();
-            std::thread::spawn(move || {
-                let running =
-                    std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
-                loop {
-                    for connection in crate::remote::list_connections() {
-                        let id = connection.id;
-                        if !running.lock().unwrap().insert(id.clone()) {
-                            continue;
-                        }
-                        let running = running.clone();
-                        let handle = handle.clone();
-                        std::thread::spawn(move || {
-                            tauri::async_runtime::block_on(crate::remote::reconcile_connection(
-                                &id,
-                            ));
-                            use tauri::Emitter;
-                            let _ = handle.emit("remote-sync", ());
-                            running.lock().unwrap().remove(&id);
-                        });
-                    }
-                    std::thread::sleep(std::time::Duration::from_secs(30));
-                }
-            });
+            scheduler::spawn(app.handle().clone());
             {
                 use tauri::Emitter;
                 let handle = app.handle().clone();

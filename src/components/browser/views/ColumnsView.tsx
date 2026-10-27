@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { BrowserColumn } from '../BrowserColumn'
 import { FileIcon } from '../../FileIcon'
 import { TagDots } from '../../TagDots'
-import { NameCell, rowVars, SyncBadge, Thumbnail } from './shared'
+import { NameCell, rowVars, SyncBadges, Thumbnail } from './shared'
 import { listDirectory } from '@/lib/listing'
 import { kind, parent, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
@@ -79,7 +79,7 @@ export function ColumnsView({
             <FileIcon entry={e} size={24} />
             <NameCell explorer={x} entry={e} className="column-label" />
             <TagDots tags={e.tags} size={6} />
-            <SyncBadge sync={e.sync} />
+            <SyncBadges entry={e} />
             {e.isDir && <ChevronRight size={13} />}
           </div>
         )

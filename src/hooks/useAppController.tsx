@@ -17,8 +17,10 @@ import { useDesktopEnvironment } from './useDesktopEnvironment'
 import { useFileOperations } from './useFileOperations'
 import { usePaneLayout } from './usePaneLayout'
 import { usePathEditor } from './usePathEditor'
+import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
 export function useAppController() {
+  useRemoteActivity()
   const [prefs, update] = usePreferences()
   const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
   const left = useExplorer(
