@@ -177,37 +177,37 @@ fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, St
                 .map_err(|e| e.to_string())?;
             let truncated = bytes.len() > MAX_TEXT;
             let text = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_TEXT)]).into_owned();
-            Ok(serde_json::json!({
+            serde_json::json!({
                 "kind": "text",
                 "text": text,
                 "truncated": truncated,
                 "size": size,
-            }))
+            })
         }
-        Builtin::Image => Ok(serde_json::json!({
+        Builtin::Image => serde_json::json!({
             "kind": "image",
             "path": local.to_string_lossy(),
             "name": name,
             "mime": mime,
-        })),
-        Builtin::Media => Ok(serde_json::json!({
+        }),
+        Builtin::Media => serde_json::json!({
             "kind": "media",
             "media": if mime.starts_with("video/") { "video" } else { "audio" },
             "path": local.to_string_lossy(),
             "name": name,
             "mime": mime,
-        })),
-        Builtin::Pdf => Ok(serde_json::json!({
+        }),
+        Builtin::Pdf => serde_json::json!({
             "kind": "pdf",
             "path": local.to_string_lossy(),
             "name": name,
-        })),
-        Builtin::Fallback => Ok(serde_json::json!({
+        }),
+        Builtin::Fallback => serde_json::json!({
             "kind": "fallback",
             "name": name,
             "extension": ext,
-        })),
-    }?;
+        }),
+    };
     if let Some(key) = cache_key {
         crate::plugin_cache::put(key, view.clone());
     }
