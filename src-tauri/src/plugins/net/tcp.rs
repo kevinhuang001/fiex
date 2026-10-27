@@ -159,6 +159,10 @@ pub fn tcp_close(owner: &str, params: &Value) -> Result<(), String> {
 
 pub fn cleanup(owner: &str) {
     if let Ok(mut entries) = http_streams().lock() {
+        // Abort in-flight streamed uploads before dropping their handles.
+        for entry in entries.values().filter(|entry| entry.owner == owner) {
+            entry.abort();
+        }
         entries.retain(|_, entry| entry.owner != owner);
     }
     if let Ok(mut entries) = streams().lock() {

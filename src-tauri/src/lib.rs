@@ -6,6 +6,8 @@ pub(crate) mod desktop;
 pub mod drag_session;
 #[path = "core/files.rs"]
 pub mod files;
+#[path = "plugins/fs_resolver.rs"]
+pub mod fs_resolver;
 pub mod i18n;
 #[path = "core/ignores.rs"]
 pub mod ignores;
@@ -27,6 +29,8 @@ pub mod plugin_decorations;
 pub mod plugin_errors;
 #[path = "plugins/events.rs"]
 pub mod plugin_events;
+#[path = "plugins/file_capabilities.rs"]
+pub mod plugin_file_capabilities;
 #[path = "plugins/fs_access.rs"]
 pub mod plugin_fs_access;
 #[path = "plugins/host/mod.rs"]
@@ -47,6 +51,8 @@ pub mod plugin_permission_prompt;
 pub mod plugin_permissions;
 #[path = "plugins/preview.rs"]
 pub mod plugin_preview;
+#[path = "plugins/provider_registry.rs"]
+pub mod plugin_providers;
 #[path = "plugins/request_resources.rs"]
 pub mod plugin_request_resources;
 #[path = "plugins/resource_context.rs"]

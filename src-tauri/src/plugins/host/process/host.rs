@@ -302,17 +302,19 @@ impl PluginHost {
         }
         self.invoke_scoped(plugin_id, method, params, root)
     }
-    pub(crate) fn invoke_vfs(
+    /// Unified file-system entry point. Connections and views share `fs.*`;
+    /// the caller decides whether an Operation Scope is attached.
+    pub fn invoke_fs(
         &self,
         plugin_id: &str,
         method: &str,
         params: Value,
-        scope: crate::plugin_fs_access::Scope,
+        scope: Option<crate::plugin_fs_access::Scope>,
     ) -> Result<Value, String> {
-        if !method.starts_with("vfs.") {
-            return Err("invalid VFS method".into());
+        if !method.starts_with("fs.") {
+            return Err("invalid file-system method".into());
         }
-        self.invoke_scoped(plugin_id, method, params, Some(scope))
+        self.invoke_scoped(plugin_id, method, params, scope)
     }
     pub(crate) fn invoke_scoped(
         &self,
@@ -325,19 +327,7 @@ impl PluginHost {
             .into_iter()
             .find(|(m, _)| m.id == plugin_id)
             .ok_or("plugin not installed")?;
-        if method.starts_with("vfs.") {
-            if manifest
-                .extensions
-                .get("vfs")
-                .is_none_or(|v| !v.is_object())
-            {
-                return Err("PermissionDenied: VFS provider declaration required".into());
-            }
-            if task_root.is_none() {
-                return Err("VFS requests require a Core-bound view scope".into());
-            }
-        }
-        if (method.starts_with("fs.") || method.starts_with("connection."))
+        if method.starts_with("connection.")
             && manifest
                 .extensions
                 .get("connections")
@@ -348,10 +338,14 @@ impl PluginHost {
         if method.starts_with("fs.")
             && manifest
                 .extensions
+                .get("connections")
+                .is_none_or(|v| !v.is_object())
+            && manifest
+                .extensions
                 .get("vfs")
                 .is_none_or(|v| !v.is_object())
         {
-            return Err("PermissionDenied: VFS provider declaration required".into());
+            return Err("PermissionDenied: file-system provider declaration required".into());
         }
         let declared = declared(&manifest)?;
         let state = crate::plugin_permissions::status(plugin_id, &declared)?;

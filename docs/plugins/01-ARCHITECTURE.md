@@ -10,6 +10,8 @@ Fiex Desktop / Sidebar / TabHost
     |      Capability + Grant + Scope 的单一判断入口
     +-- Resource Broker
     |      fs_access / plugin_net / process / resources / ipc
+    +-- FsResolver         Core 侧统一 fs.* 客户端：信封、校验、流
+    +-- ProviderRegistry   插件 initialize 上报的能力集合
     +-- VFS / mounts       Core 分配 mountId，处理资源身份与视图
     +-- EventRouter        统一匹配、执行、校验和事件结果策略
     +-- ResourceSnapshot   targets 元数据、操作引用与按需内容
@@ -20,6 +22,26 @@ Fiex Desktop / Sidebar / TabHost
            Rust SDK / HTTP / TCP / files / tasks
            Plugin-owned sandboxed HTML + MessagePort
 ```
+
+## 命名
+
+Core 负责 Resolve，SDK 负责 Provide：
+
+| 功能        | Core                                              | SDK                   |
+| ----------- | ------------------------------------------------- | --------------------- |
+| Info        | `InfoResolver`（`plugin_info`）                   | `InfoProvider`        |
+| Preview     | `PreviewResolver`（`plugin_preview`）             | `PreviewProvider`     |
+| 右键菜单    | `ContextMenuResolver`（`plugin_context_menu`）    | `ContextMenuProvider` |
+| Decorations | `DecorationResolver`（`plugin_decorations`）      | `DecorationProvider`  |
+| Search      | `SearchResolver`（`plugin_search`）               | `SearchProvider`      |
+| Toolbar     | `ToolbarResolver`                                 | `ToolbarProvider`     |
+| 文件系统    | `FsResolver`（`fs_resolver`）+ `ProviderRegistry` | `FileSystemProvider`  |
+
+- Resolver 负责匹配、协调、调用、校验和结果聚合；Provider 是插件实现。
+- `ResourceBroker`（`fs_access` / `net` / `process` / `resources`）
+  负责资源解析、权限、Operation Scope 和访问路由。
+- `EventRouter` 保留，负责通用事件调度；`ProviderRegistry` 保存
+  `RegisteredProvider`（已声明的能力与元数据）。
 
 ## 权限边界
 
@@ -62,4 +84,6 @@ Manifest 声明（这个包最多能申请什么）
 - 插件进程是独立 native 进程；RPC 允许并发 in-flight request。
 - Core 对插件响应、路径、HTML 和导航结果一律按不可信输入校验。
 - 大文件通过有界句柄/分块传输，不把完整内容塞进 JSON。
+- 连接与独立视图共用 `fs.*`：读取用 `openRead/readStream/closeRead`，写入用
+  `beginWrite/writeStream/commit/abort`，详细合同见 [10-UNIFIED-FS](10-UNIFIED-FS.md)。
 - 后台任务由 `ctx.spawn_internal_task` / `spawn_task` 管理，任务不延长失效授权。

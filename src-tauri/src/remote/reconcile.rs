@@ -7,6 +7,7 @@ use std::fs;
 fn invoke(conn: &StoredConnection, method: &str, mut params: Value) -> Result<Value, String> {
     let plugin = ensure_provider_access(conn)?;
     params["connection"] = provider_config(conn);
+    params["mountId"] = json!(conn.mount_id);
     crate::plugin_host::global().invoke(&plugin, method, params)
 }
 
@@ -15,6 +16,80 @@ fn stat(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<Val
         conn,
         "fs.stat",
         json!({"nodeId": if file.node_id.is_empty() { rel } else { &file.node_id }}),
+    )
+}
+
+/// A provider write stream that has not committed yet. Dropping it (any error
+/// on the way to `fs.commit`) aborts the stream so unpublished bytes vanish and
+/// the local snapshot/baseline stay untouched for a retry.
+struct WriteLease<'a> {
+    plugin: &'a str,
+    mount_id: &'a str,
+    stream: &'a str,
+    finished: bool,
+}
+
+impl Drop for WriteLease<'_> {
+    fn drop(&mut self) {
+        if !self.finished {
+            let _ = crate::plugin_host::global().invoke(
+                self.plugin,
+                "fs.abort",
+                json!({"mountId": self.mount_id, "streamId": self.stream}),
+            );
+        }
+    }
+}
+
+/// Push one immutable snapshot through `fs.writeStream` in protocol-sized
+/// chunks. `offset` is always the number of bytes already accepted by the
+/// provider.
+fn stream_snapshot(
+    plugin: &str,
+    mount_id: &str,
+    stream: &str,
+    path: &std::path::Path,
+    size: u64,
+) -> Result<Value, String> {
+    use base64::Engine;
+    use std::io::Read;
+
+    const CHUNK: usize = 256 * 1024;
+    let mut snapshot = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut buffer = vec![0u8; CHUNK];
+    let mut offset = 0u64;
+    loop {
+        let read = snapshot.read(&mut buffer).map_err(|e| e.to_string())?;
+        if read == 0 {
+            break;
+        }
+        let base64 = base64::engine::general_purpose::STANDARD.encode(&buffer[..read]);
+        let response = crate::plugin_host::global().invoke(
+            plugin,
+            "fs.writeStream",
+            json!({
+                "mountId": mount_id,
+                "streamId": stream,
+                "offset": offset,
+                "base64": base64
+            }),
+        )?;
+        let written = response
+            .get("written")
+            .and_then(Value::as_u64)
+            .unwrap_or(read as u64);
+        if written != read as u64 {
+            return Err("provider acknowledged a short write".into());
+        }
+        offset += read as u64;
+    }
+    if offset != size {
+        return Err("upload snapshot changed during transfer".into());
+    }
+    crate::plugin_host::global().invoke(
+        plugin,
+        "fs.commit",
+        json!({"mountId": mount_id, "streamId": stream}),
     )
 }
 
@@ -41,28 +116,43 @@ fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<S
         .map_err(|e| e.to_string())?
         .len();
     let plugin = ensure_provider_access(conn)?;
-    let source = snapshot
-        .path()
-        .file_name()
-        .ok_or("invalid upload source")?
-        .to_string_lossy()
-        .into_owned();
     let node = if file.node_id.is_empty() {
         rel
     } else {
         &file.node_id
     };
-    let result = crate::plugin_host::global().invoke_selected(&plugin, "fs.writeFile",
-        json!({"connection":provider_config(conn), "nodeId":node, "source":source, "size":size, "ifRevision":file.revision}),
-        snapshot.path().parent().ok_or("invalid upload source")?.to_str().ok_or("invalid upload path")?,
-        &[snapshot.path().to_path_buf()])?;
-    let revision = result["revision"]
+    // Core streams the bytes: providers never receive a snapshot ref and run
+    // no Operation Scope for uploads.
+    let started = invoke(
+        conn,
+        "fs.beginWrite",
+        json!({
+            "nodeId": node,
+            "size": size,
+            "ifRevision": file.revision,
+        }),
+    )?;
+    let stream_id = started
+        .get("streamId")
+        .and_then(Value::as_str)
+        .ok_or("provider returned no write stream")?
+        .to_string();
+    let mut lease = WriteLease {
+        plugin: &plugin,
+        mount_id: &conn.mount_id,
+        stream: &stream_id,
+        finished: false,
+    };
+    let committed = stream_snapshot(&plugin, &conn.mount_id, &stream_id, snapshot.path(), size)?;
+    let revision = committed["revision"]
         .as_str()
-        .filter(|r| !r.is_empty())
-        .ok_or("missing committed revision")?;
+        .filter(|revision| !revision.is_empty())
+        .ok_or("missing committed revision")?
+        .to_string();
+    lease.finished = true;
     let mut meta = load_meta(conn);
     let entry = meta.files.get_mut(rel).ok_or("cache entry disappeared")?;
-    entry.revision = revision.into();
+    entry.revision = revision.clone();
     entry.baseline = before;
     entry.local_stamp = if fingerprint(&local)? == entry.baseline {
         stamp(&local)?
@@ -73,7 +163,7 @@ fn upload(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<S
     entry.conflict = false;
     entry.uploaded = true;
     save_meta(conn, &meta)?;
-    Ok(revision.into())
+    Ok(revision)
 }
 
 fn reconcile_file(

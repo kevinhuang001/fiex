@@ -1,6 +1,8 @@
 //! Shared EventRouter pipeline for builtin and plugin menus.
 mod actions;
 mod builtin;
+mod connection_cache;
+mod file_ops;
 pub use actions::execute_remote;
 #[cfg(test)]
 mod tests;
@@ -118,7 +120,7 @@ pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
         "contextMenu.resolve",
         &metadata,
         directory,
-        builtin::providers(),
+        builtin::providers(&ctx),
     );
     Ok(EventRouter::resolve(
         "contextMenu.resolve",

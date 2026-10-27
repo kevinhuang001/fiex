@@ -29,6 +29,14 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             ctx.running.require_permission(Capability::Network)?;
             crate::plugin_net::http_read(&owner, ctx.params)
         }
+        "host.net.http.body" => {
+            ctx.running.require_permission(Capability::Network)?;
+            crate::plugin_net::http_body(&owner, ctx.params)
+        }
+        "host.net.http.response" => {
+            ctx.running.require_permission(Capability::Network)?;
+            crate::plugin_net::http_response(&owner, ctx.params)
+        }
         "host.net.http.close" => {
             crate::plugin_net::http_close(&owner, ctx.params)?;
             Ok(Value::Null)

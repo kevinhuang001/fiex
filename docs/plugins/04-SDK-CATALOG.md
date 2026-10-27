@@ -60,6 +60,24 @@ let task = ctx.spawn_task(|task| {
 
 `spawn_internal_task` 用于内部长期流（例如 SSH 终端），不进入用户任务中心。
 
+### Provider
+
+文件系统插件只实现 `FileSystemProvider` 的方法，并用属性宏标注 `impl`：
+
+```rust
+#[fiex_sdk::filesystem]
+impl FileSystemProvider for GoogleDrive {
+    fn list(&self, request: &FsRequest<'_>) -> Result<FsListing, RpcError> { … }
+    fn stat(&self, request: &FsRequest<'_>) -> Result<FsEntry, RpcError> { … }
+    fn read(&self, request: &FsRequest<'_>) -> Result<FsRead, RpcError> { … }
+    fn write(&self, request: &FsRequest<'_>) -> Result<FsWrite, RpcError> { … }
+}
+```
+
+宏只把实现块里出现的方法计入能力，`plugin.initialize` 自动上报
+`fs.operations`；Core 据此决定是否下发 `fs.*`。协议的完整定义见
+[10-UNIFIED-FS](10-UNIFIED-FS.md)。
+
 ### 其他 Host API
 
 - `ctx.storage()`：类型化插件命名空间（含 CAS）；

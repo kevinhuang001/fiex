@@ -22,6 +22,7 @@ export function useListing(
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
   const [directoryReadOnly, setDirectoryReadOnly] = useState(false)
+  const [directoryCanCreate, setDirectoryCanCreate] = useState(true)
   const [virtualVolume, setVirtualVolume] = useState(false)
   const [readOnly, setReadOnly] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -137,6 +138,7 @@ export function useListing(
             return
           }
           setDirectoryReadOnly(Boolean(l.readOnly))
+          setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
           setVirtualVolume(Boolean(l.virtualVolume))
           setListedPath(path)
           setEntries(l.entries)
@@ -309,6 +311,7 @@ export function useListing(
     setTagFilter,
     readOnly,
     directoryReadOnly,
+    directoryCanCreate,
     virtualVolume,
     setReadOnly,
     locations,

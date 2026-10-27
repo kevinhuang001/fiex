@@ -16,6 +16,9 @@ pub struct Entry {
     pub mime: String,
     pub readonly: bool,
     pub link_target: Option<String>,
+    /// Provider operations this entry allows. Empty means unrestricted.
+    #[serde(default)]
+    pub allowed_ops: Vec<String>,
     pub tags: Vec<Tag>,
     /// Whether this entry, or a directory descendant, has cached bytes.
     #[serde(default)]
@@ -107,6 +110,7 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
             .to_string(),
         readonly: meta.permissions().readonly(),
         link_target,
+        allowed_ops: Vec::new(),
         tags: read_tags(path),
         has_cache: false,
         pinned: false,
@@ -118,6 +122,9 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
     pub read_only: bool,
+    /// The directory itself accepts `mkdir` (provider/node capability).
+    #[serde(default)]
+    pub can_create: bool,
     pub virtual_volume: bool,
     pub path: String,
     pub entries: Vec<Entry>,
@@ -147,8 +154,12 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         }
     }
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
+    // Local creation follows the directory's own permission; the OS still
+    // rejects a call on a read-only volume.
+    let can_create = fs::metadata(&path).is_ok_and(|meta| !meta.permissions().readonly());
     Ok(Listing {
         read_only: false,
+        can_create,
         virtual_volume: false,
         path: path.to_string_lossy().into_owned(),
         entries,

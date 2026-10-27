@@ -1,5 +1,7 @@
 //! Builtin menu policy. The frontend receives data, never provider closures.
+use super::file_ops::{groups, BuiltinResolver, Selection};
 use crate::plugin_events::Provider;
+use crate::plugin_file_capabilities::FileCapabilities;
 use serde_json::{json, Value};
 
 pub(super) struct Context {
@@ -8,7 +10,10 @@ pub(super) struct Context {
     pub entries: Vec<crate::files::Entry>,
     pub read_only: bool,
     pub in_trash: bool,
+    all_local: bool,
+    capabilities: FileCapabilities,
 }
+
 impl Context {
     pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
         fn entry(path: &str) -> Result<crate::files::Entry, String> {
@@ -24,11 +29,15 @@ impl Context {
             .iter()
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
+        // `recent://` is a Core-owned view, not a directory on disk.
         let read_only = if directory == "recent://" {
             true
         } else {
             entry(directory)?.readonly
         };
+        let capabilities = crate::plugin_file_capabilities::for_selection(paths, &entries);
+        let all_local = !crate::mounts::handles(directory)
+            && paths.iter().all(|path| !crate::mounts::handles(path));
         let in_trash = !crate::mounts::handles(directory)
             && crate::volumes::trash_path()
                 .is_some_and(|trash| std::path::Path::new(directory).starts_with(trash));
@@ -38,131 +47,86 @@ impl Context {
             entries,
             read_only,
             in_trash,
+            all_local,
+            capabilities,
         })
     }
+
+    pub(super) fn selection(&self) -> Selection<'_> {
+        Selection {
+            paths: &self.paths,
+            entries: &self.entries,
+            read_only: self.read_only,
+            in_trash: self.in_trash,
+            all_local: self.all_local,
+        }
+    }
+
+    /// Resolvers whose capability exists for this selection.
+    pub(super) fn resolvers(&self) -> Vec<&'static dyn BuiltinResolver> {
+        let selection = self.selection();
+        groups()
+            .iter()
+            .copied()
+            .filter(|resolver| resolver.available(&selection, &self.capabilities))
+            .collect()
+    }
+
+    /// Tests build menus without touching the mount registry.
+    #[cfg(test)]
+    pub(super) fn for_test(
+        directory: &str,
+        paths: Vec<String>,
+        entries: Vec<crate::files::Entry>,
+        read_only: bool,
+        in_trash: bool,
+    ) -> Self {
+        let capabilities = crate::plugin_file_capabilities::for_selection(&paths, &entries);
+        Self::for_test_caps(directory, paths, entries, read_only, in_trash, capabilities)
+    }
+
+    /// Tests pin the capability snapshot to exercise menu gating directly.
+    #[cfg(test)]
+    pub(super) fn for_test_caps(
+        directory: &str,
+        paths: Vec<String>,
+        entries: Vec<crate::files::Entry>,
+        read_only: bool,
+        in_trash: bool,
+        capabilities: FileCapabilities,
+    ) -> Self {
+        let all_local = !crate::mounts::handles(directory)
+            && paths.iter().all(|path| !crate::mounts::handles(path));
+        Self {
+            directory: directory.into(),
+            paths,
+            entries,
+            read_only,
+            in_trash,
+            all_local,
+            capabilities,
+        }
+    }
 }
-const IDS: &[&str] = &[
-    "builtin:opening",
-    "builtin:tags",
-    "builtin:connection-cache",
-    "builtin:rename",
-    "builtin:batch-rename",
-    "builtin:clipboard",
-    "builtin:terminal",
-    "builtin:copy-path",
-    "builtin:trash",
-];
-pub(super) fn providers() -> Vec<Provider> {
-    IDS.iter()
-        .enumerate()
-        .map(|(index, id)| Provider::builtin(id, 100 - index as i64))
+
+/// Only groups this selection can actually use become menu providers.
+pub(super) fn providers(ctx: &Context) -> Vec<Provider> {
+    ctx.resolvers()
+        .into_iter()
+        .map(|resolver| Provider::builtin(resolver.id(), resolver.priority()))
         .collect()
 }
-fn item(id: &str, title: &'static str, icon: &str, shortcut: &str, disabled: bool) -> Value {
-    json!({"id":id,"kind":"action","title":crate::i18n::t(title),"icon":icon,"shortcut":shortcut,"disabled":disabled})
-}
+
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
-    let many = ctx.paths.len() > 1;
-    let ro = ctx.read_only;
-    let items = match id {
-        "builtin:opening" => {
-            let mut items = vec![item("open", "打开", "open", "open", false)];
-            if !many {
-                items.extend([
-                    item("preview", "快速查看", "eye", "quickLook", false),
-                    item("info", "显示简介", "info", "info", false),
-                ]);
-            }
-            items
-        }
-        "builtin:tags" if cfg!(target_os = "macos") => vec![item("tags", "标签…", "tags", "", ro)],
-        "builtin:tags" => vec![],
-        "builtin:connection-cache" => connection_items(ctx),
-        "builtin:rename" if !many => vec![item("rename", "重新命名", "pencil", "rename", ro)],
-        "builtin:batch-rename" if many => {
-            vec![item("batchRename", "批量重命名…", "pencil", "", ro)]
-        }
-        "builtin:rename" | "builtin:batch-rename" => vec![],
-        "builtin:clipboard" => vec![
-            item("copy", "复制", "copy", "copy", false),
-            item("cut", "剪切", "scissors", "cut", ro),
-            item("duplicate", "创建副本", "copy", "duplicate", ro),
-        ],
-        "builtin:terminal" => vec![item("terminal", "Open in Terminal", "terminal", "", ro)],
-        "builtin:copy-path" => vec![item("copyPath", "复制路径", "copy", "", false)],
-        "builtin:trash" => {
-            let mut items = if ctx.in_trash {
-                vec![
-                    item("restore", "放回原处", "restore", "", false),
-                    item("delete", "彻底删除", "trash", "", ro),
-                ]
-            } else {
-                vec![item("trash", "移到废纸篓", "trash", "trash", ro)]
-            };
-            for item in &mut items {
-                item["placement"] = json!("tail");
-                item["danger"] = json!(item["id"] != "restore");
-            }
-            items
-        }
-        _ => return Err("unknown builtin menu provider".into()),
-    };
-    Ok(json!({"items":items}))
+    let resolver = ctx
+        .resolvers()
+        .into_iter()
+        .find(|resolver| resolver.id() == id)
+        .ok_or("unknown or unavailable builtin menu provider")?;
+    let selection = ctx.selection();
+    Ok(json!({"items": resolver.items(&selection, &ctx.capabilities)}))
 }
-fn activity(item: &mut Value, label: &str, kind: &str, quiet: bool) {
-    item["activity"] = json!({"label":label,"kind":kind,"quiet":quiet});
-}
-fn connection_items(ctx: &Context) -> Vec<Value> {
-    if !ctx.paths.iter().all(|path| crate::remote::is_remote(path)) {
-        return vec![];
-    }
-    let pinned = ctx.entries.iter().all(|entry| entry.pinned);
-    let cached = ctx.entries.iter().all(|entry| entry.has_cache);
-    let conflict = ctx
-        .entries
-        .iter()
-        .any(|entry| entry.sync.as_deref() == Some("conflict"));
-    let mut pin = if pinned {
-        item("remote.unpin", "取消保留在本地", "pin-off", "", false)
-    } else {
-        item("remote.pin", "始终保留在本地", "cloud-download", "", false)
-    };
-    let label = crate::remote::connection_for_path(&ctx.paths[0])
-        .map(|(connection, _)| crate::i18n::t("{0} 触发同步").replace("{0}", &connection.name))
-        .unwrap_or_else(|| crate::i18n::t("触发同步").into());
-    if !pinned {
-        activity(&mut pin, &label, "sync", true);
-    }
-    let mut items = vec![pin];
-    if !cached {
-        let mut cache = item("remote.cache", "缓存到本地", "cloud-download", "", false);
-        activity(&mut cache, crate::i18n::t("正在缓存…"), "transfer", false);
-        items.push(cache);
-    } else if !ctx
-        .entries
-        .iter()
-        .any(|entry| entry.pinned || matches!(entry.sync.as_deref(), Some("conflict" | "pending")))
-    {
-        items.push(item("remote.uncache", "取消缓存", "cloud-off", "", false));
-    }
-    if conflict {
-        items.push(item(
-            "remote.keepLocal",
-            "用本地版本覆盖云端",
-            "cloud-check",
-            "",
-            false,
-        ));
-        items.push(item(
-            "remote.keepRemote",
-            "保留本地备份并采用云端版本",
-            "cloud-check",
-            "",
-            false,
-        ));
-    }
-    items
-}
+
 pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, String> {
     let offered = resolve(id, ctx)?;
     if !offered["items"].as_array().is_some_and(|items| {

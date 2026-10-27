@@ -4,6 +4,8 @@
 mod cache;
 mod config;
 mod files;
+#[cfg(feature = "desktop")]
+mod mutate;
 mod reconcile;
 mod store;
 mod sync;
@@ -42,6 +44,8 @@ pub use files::{
     cached_path, download, download_dir, eject, ensure_downloaded, list_listing, provider_list,
     stat, ProgressFn, TransferOptions,
 };
+#[cfg(feature = "desktop")]
+pub(crate) use mutate::{create, remove, rename};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 #[cfg(feature = "desktop")]
 pub(crate) use store::load_stored;

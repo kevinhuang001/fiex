@@ -30,6 +30,8 @@ export interface Entry {
 }
 export interface Listing {
   readOnly?: boolean
+  /** The current directory accepts `mkdir` (provider capability ∩ node). */
+  canCreate?: boolean
   virtualVolume?: boolean
   path: string
   entries: Entry[]

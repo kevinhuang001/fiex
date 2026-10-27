@@ -172,6 +172,9 @@ impl Running {
         if result.get("pluginId").and_then(Value::as_str) != Some(self.plugin_id.as_str()) {
             return Err(RpcFailure::fatal("plugin identity mismatch"));
         }
+        // The declaration is part of the handshake: Core stores what the
+        // provider says it implements and gates `fs.*` on it.
+        crate::plugin_providers::register(&self.plugin_id, &result);
         self.initialized.store(true, Ordering::Release);
         Ok(())
     }
@@ -188,6 +191,8 @@ impl Running {
         }
         if method != "plugin.initialize" {
             self.ensure_initialized()?;
+            crate::plugin_providers::authorize_method(&self.plugin_id, method)
+                .map_err(RpcFailure::business)?;
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let owner = format!("{}:op:{id}", self.base_owner);
@@ -220,11 +225,9 @@ impl Running {
             self.finish_operation(id);
             return Err(RpcFailure::fatal(error));
         }
-        let result = match receiver.recv_timeout(if method == "fs.writeFile" {
-            Duration::from_secs(86_520)
-        } else {
-            self.request_timeout
-        }) {
+        // Streaming chunk calls are short; long uploads are many bounded
+        // requests instead of one unbounded call.
+        let result = match receiver.recv_timeout(self.request_timeout) {
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 Err(RpcFailure::fatal("plugin request deadline exceeded"))

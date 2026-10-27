@@ -111,7 +111,7 @@ export function ExplorerToolbar({
           size="icon"
           title={t('新建文件夹 {0}', hint('newFolder'))}
           aria-label={t('新建文件夹')}
-          disabled={x.directoryReadOnly}
+          disabled={x.directoryReadOnly || !x.directoryCanCreate}
           onClick={() => create(true)}
         >
           <FolderPlus weight="regular" size={20} />
