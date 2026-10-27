@@ -160,47 +160,6 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             }
             crate::plugin_fs_access::stat_batch(&scope, paths)
         }
-        "host.fs.read" => {
-            let path = ctx.arg("path")?;
-            ctx.running
-                .ensure_fs(&ctx.scope()?, Capability::FilesRead, &path)?;
-            let offset = ctx
-                .params
-                .get("offset")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            let length = ctx
-                .params
-                .get("length")
-                .and_then(Value::as_u64)
-                .unwrap_or(1024 * 1024) as usize;
-            crate::plugin_fs_access::read(&owner, &ctx.scope()?, &path, offset, length)
-        }
-        "host.fs.create" => {
-            let path = ctx.arg("path")?;
-            ctx.running
-                .ensure_fs(&ctx.scope()?, Capability::FilesCreate, &path)?;
-            crate::plugin_fs_access::create(&ctx.scope()?, &path)
-        }
-        "host.fs.write" => {
-            let path = ctx.arg("path")?;
-            let buffer = ctx.arg("buffer")?;
-            let mode = ctx
-                .params
-                .get("mode")
-                .and_then(Value::as_str)
-                .unwrap_or("truncate");
-            ctx.running.ensure_fs(
-                &ctx.scope()?,
-                if mode == "create" {
-                    Capability::FilesCreate
-                } else {
-                    Capability::FilesWrite
-                },
-                &path,
-            )?;
-            crate::plugin_fs_access::write(&owner, &ctx.scope()?, &path, &buffer, mode)
-        }
         "host.fs.remove" => {
             let path = ctx.arg("path")?;
             let scope = ctx.scope()?;

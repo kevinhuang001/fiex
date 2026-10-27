@@ -13,7 +13,7 @@ pub fn approve_install(id: &str, declared: &BTreeSet<String>) -> Result<PluginGr
 
 /// Installation consent explicitly covers the requested exact domains and
 /// executable names. Plugin processes can never execute commands directly;
-/// the host proxy checks this set on every `host.exec` call.
+/// the host proxy checks this set on every `host.process.run` call.
 pub fn approve_install_with_domains(
     id: &str,
     declared: &BTreeSet<String>,

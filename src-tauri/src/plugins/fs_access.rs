@@ -192,10 +192,7 @@ impl Scope {
         if self.metadata_only
             && ((method.starts_with("host.fs.")
                 && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
-                || matches!(
-                    method,
-                    "host.exec" | "host.process.run" | "host.vfs.openView"
-                ))
+                || matches!(method, "host.process.run" | "host.vfs.openView"))
         {
             return Err("discovery scope permits metadata only".into());
         }
@@ -472,6 +469,7 @@ pub fn stat_batch(root: &Scope, paths: &[Value]) -> Result<Value, String> {
         .collect();
     Ok(json!({"results": results}))
 }
+#[cfg(test)]
 pub fn create(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
@@ -501,21 +499,6 @@ pub fn read_chunk(root: &Scope, input: &str, offset: u64, length: usize) -> Resu
     Ok(
         json!({"base64": STANDARD.encode(&data), "size": read, "eof": offset.saturating_add(read as u64) >= total}),
     )
-}
-pub fn read(
-    owner: &str,
-    root: &Scope,
-    input: &str,
-    offset: u64,
-    length: usize,
-) -> Result<Value, String> {
-    let value = read_chunk(root, input, offset, length)?;
-    let data = STANDARD
-        .decode(value["base64"].as_str().unwrap_or(""))
-        .map_err(|e| e.to_string())?;
-    let buffer = crate::plugin_ipc::create(owner, data.len().max(1), false)?;
-    crate::plugin_ipc::write(&buffer.id, &data)?;
-    Ok(json!({"buffer": buffer, "size": data.len(), "eof": value["eof"]}))
 }
 pub fn remove(root: &Scope, input: &str) -> Result<(), String> {
     let path = relative(root, input)?;
@@ -825,26 +808,6 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
     })();
     if result.is_err() && temp_exists {
         let _ = target_dir.remove_file(&temp_name);
-    }
-    result
-}
-pub fn write(
-    owner: &str,
-    root: &Scope,
-    path: &str,
-    buffer: &str,
-    mode: &str,
-) -> Result<Value, String> {
-    let bytes = crate::plugin_ipc::read(owner, buffer)?;
-    let handle = begin_write(owner, root, path, mode == "create")?;
-    let result = (|| {
-        for chunk in bytes.chunks(MAX_CHUNK) {
-            write_chunk(owner, &handle, &STANDARD.encode(chunk))?;
-        }
-        commit(owner, &handle)
-    })();
-    if result.is_err() {
-        let _ = abort(owner, &handle);
     }
     result
 }

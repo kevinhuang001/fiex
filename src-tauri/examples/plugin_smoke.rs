@@ -187,8 +187,14 @@ fn main() {
             .expect("direct execution must be blocked");
         assert_eq!(blocked["blocked"], true);
         let exec = plugin_host::global()
-            .invoke(&id, "mock.exec", json!({}))
-            .expect("host exec proxy failed");
+            .invoke_selected(
+                &id,
+                "mock.exec",
+                json!({}),
+                root.path().to_str().unwrap(),
+                &[],
+            )
+            .expect("host process proxy failed");
         assert!(
             exec["stdout"]
                 .as_str()

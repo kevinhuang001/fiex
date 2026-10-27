@@ -1,10 +1,8 @@
 //! Host methods outside the filesystem and network families: VFS views,
 //! previews, buffers, private storage, diagnostics and command execution.
-use super::super::super::spawn::{host_exec, run_command};
+use super::super::super::spawn::run_command;
 use super::Context;
 use serde_json::{json, Value};
-use std::fs;
-use std::path::{Component, Path};
 
 pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     let owner = ctx.owner();
@@ -50,33 +48,6 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         | "host.terminal.size"
         | "host.terminal.closed"
         | "host.terminal.end" => Err(crate::i18n::t("终端仅在桌面版可用").into()),
-        "host.preview.create" => {
-            use base64::Engine;
-            let name = ctx.arg("name")?;
-            if name.is_empty()
-                || !Path::new(&name)
-                    .components()
-                    .all(|c| matches!(c, Component::Normal(_)))
-                || Path::new(&name).components().count() != 1
-            {
-                return Err("invalid preview name".into());
-            }
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(ctx.arg("base64")?)
-                .map_err(|error| error.to_string())?;
-            if bytes.len() > 1024 * 1024 {
-                return Err("preview too large".into());
-            }
-            let directory = dirs::cache_dir()
-                .ok_or("cache directory unavailable")?
-                .join("fiex")
-                .join("plugin-previews")
-                .join(&plugin_id);
-            fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-            let path = directory.join(&name);
-            fs::write(&path, bytes).map_err(|error| error.to_string())?;
-            Ok(json!(path.to_string_lossy()))
-        }
         "host.buffer.create" => {
             let size = ctx
                 .params
@@ -175,10 +146,6 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             let detail = ctx.params.get("detail").and_then(Value::as_str);
             crate::plugin_errors::report_limited(&plugin_id, code, message, detail);
             Ok(Value::Null)
-        }
-        "host.exec" => {
-            ctx.running.ensure_command(&ctx.arg("command")?)?;
-            host_exec(&plugin_id, &ctx.running.declared, ctx.params)
         }
         "host.process.run" => {
             ctx.running.ensure_command(&ctx.arg("command")?)?;

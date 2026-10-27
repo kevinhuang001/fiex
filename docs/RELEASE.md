@@ -127,7 +127,7 @@
 
 ## Git
 
-- Git links libgit2 through `git2`; no local Git executable and no `host.exec`.
+- Git links libgit2 through `git2`; no local Git executable and no legacy `host.exec` entry.
 - The plugin owns status, refs, staging, commits, identity, history, remote save/push/fast-forward pull and read-only commit VFS browsing.
 - Divergent pulls stop before modifying the worktree.
 

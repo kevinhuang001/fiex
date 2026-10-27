@@ -97,7 +97,7 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
                 return Ok(refs::metadata(&value));
             }
             let capability = match method {
-                "host.fs.openRead" | "host.fs.read" | "host.fs.readChunk" => Capability::FilesRead,
+                "host.fs.openRead" | "host.fs.readChunk" => Capability::FilesRead,
                 "host.fs.list" => Capability::FoldersRead,
                 "host.fs.beginWrite" => {
                     if params

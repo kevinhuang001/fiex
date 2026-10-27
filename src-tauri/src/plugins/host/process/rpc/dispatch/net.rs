@@ -33,11 +33,6 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             crate::plugin_net::http_close(&owner, ctx.params)?;
             Ok(Value::Null)
         }
-        "host.net.http" => {
-            let host = request_url_host(ctx.params)?;
-            ctx.running.ensure_network_target(&host)?;
-            crate::plugin_net::http(&owner, &ctx.policy, ctx.params)
-        }
         "host.net.tcp.open" => {
             let host = ctx.arg("host")?;
             ctx.running.ensure_network_target(&host)?;
@@ -50,14 +45,6 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         "host.net.tcp.writeBytes" => {
             ctx.running.require_permission(Capability::Network)?;
             crate::plugin_net::tcp_write_bytes(&owner, ctx.params)
-        }
-        "host.net.tcp.read" => {
-            ctx.running.require_permission(Capability::Network)?;
-            crate::plugin_net::tcp_read(&owner, ctx.params)
-        }
-        "host.net.tcp.write" => {
-            ctx.running.require_permission(Capability::Network)?;
-            crate::plugin_net::tcp_write(&owner, ctx.params)
         }
         "host.net.tcp.shutdown" => {
             crate::plugin_net::tcp_shutdown(&owner, ctx.params)?;

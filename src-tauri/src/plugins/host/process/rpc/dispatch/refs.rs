@@ -75,12 +75,9 @@ pub(super) fn intercept(
     }
     const TARGET_METHODS: &[&str] = &[
         "host.fs.openRead",
-        "host.fs.read",
         "host.fs.readChunk",
         "host.fs.list",
         "host.fs.stat",
-        "host.fs.create",
-        "host.fs.write",
         "host.fs.beginWrite",
         "host.fs.mkdir",
         "host.fs.remove",

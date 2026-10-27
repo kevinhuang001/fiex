@@ -4,18 +4,13 @@
 //! TCP is a controlled byte stream sharing HTTP's approved hostname/IP list.
 #[path = "net/tcp.rs"]
 mod tcp;
-use crate::{plugin_ipc, plugin_permission_policy::PermissionPolicy};
+use crate::plugin_permission_policy::PermissionPolicy;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-pub use tcp::{
-    cleanup, tcp_close, tcp_open, tcp_read, tcp_read_bytes, tcp_shutdown, tcp_write,
-    tcp_write_bytes,
-};
-
-const MAX_HTTP_BODY: usize = 64 * 1024 * 1024;
+pub use tcp::{cleanup, tcp_close, tcp_open, tcp_read_bytes, tcp_shutdown, tcp_write_bytes};
 
 fn text_param<'a>(p: &'a Value, key: &str) -> Result<&'a str, String> {
     p.get(key)
@@ -39,100 +34,6 @@ fn http_method(value: &str) -> bool {
             | "MOVE"
             | "COPY"
     )
-}
-
-pub fn http(owner: &str, policy: &PermissionPolicy<'_>, params: &Value) -> Result<Value, String> {
-    let url = text_param(params, "url")?;
-    let method = text_param(params, "method")?.to_ascii_uppercase();
-    if !http_method(&method) {
-        return Err("unsupported HTTP method".into());
-    }
-    let parsed = reqwest::Url::parse(url).map_err(|error| error.to_string())?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err("only http and https are supported".into());
-    }
-    let host = parsed.host_str().ok_or("URL has no host")?;
-    if !policy.domain_allowed(host)? {
-        return Err("network domain not granted".into());
-    }
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Some(values) = params.get("headers").and_then(Value::as_object) {
-        for (key, value) in values.iter().take(64) {
-            let name = reqwest::header::HeaderName::from_bytes(key.as_bytes())
-                .map_err(|error| error.to_string())?;
-            let value = value.as_str().ok_or("header value must be a string")?;
-            if value.len() > 8192 {
-                return Err("header value too large".into());
-            }
-            headers.append(
-                name,
-                reqwest::header::HeaderValue::from_str(value).map_err(|error| error.to_string())?,
-            );
-        }
-    }
-    let body = match params.get("bodyBuffer").and_then(Value::as_str) {
-        Some(buffer) => Some(plugin_ipc::read(owner, buffer)?),
-        None => None,
-    };
-    if body
-        .as_ref()
-        .is_some_and(|value| value.len() > MAX_HTTP_BODY)
-    {
-        return Err("request body too large".into());
-    }
-    let allow_invalid_certs = params
-        .get("allowInvalidCerts")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .redirect(reqwest::redirect::Policy::none())
-        .danger_accept_invalid_certs(allow_invalid_certs)
-        .build()
-        .map_err(|error| error.to_string())?;
-    let mut request = client
-        .request(
-            reqwest::Method::from_bytes(method.as_bytes()).map_err(|error| error.to_string())?,
-            parsed,
-        )
-        .headers(headers);
-    if let Some(body) = body {
-        request = request.body(body);
-    }
-    let response = request.send().map_err(|error| error.to_string())?;
-    let status = response.status().as_u16();
-    let mut response_headers = BTreeMap::new();
-    for (name, value) in response.headers().iter().take(128) {
-        if let Ok(value) = value.to_str() {
-            response_headers.insert(name.as_str().to_owned(), value.to_owned());
-        }
-    }
-    let mut bytes = Vec::new();
-    response
-        .take((MAX_HTTP_BODY + 1) as u64)
-        .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
-    if bytes.len() > MAX_HTTP_BODY {
-        return Err("response body too large".into());
-    }
-    let mut result = json!({
-        "status": status,
-        "headers": response_headers,
-    });
-    if bytes.len() <= 512 * 1024 {
-        use base64::Engine;
-        result["bodyBase64"] = json!(base64::engine::general_purpose::STANDARD.encode(&bytes));
-        if let Ok(text) = std::str::from_utf8(&bytes) {
-            result["body"] = json!(text);
-        }
-        result["bodySize"] = json!(bytes.len());
-    } else {
-        let descriptor = plugin_ipc::create(owner, bytes.len(), false)?;
-        plugin_ipc::write(&descriptor.id, &bytes)?;
-        result["bodyBuffer"] = serde_json::to_value(descriptor).map_err(|e| e.to_string())?;
-        result["bodySize"] = json!(bytes.len());
-    }
-    Ok(result)
 }
 
 #[derive(Clone)]

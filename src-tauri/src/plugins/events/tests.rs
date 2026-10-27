@@ -51,7 +51,7 @@ fn resource_identity_is_not_an_operation_grant() {
         "host.fs.openRead",
         "host.fs.beginWrite",
         "host.process.run",
-        "host.exec",
+        "host.process.run",
         "host.vfs.openView",
     ] {
         assert!(operation.clone().authorize_method(method).is_err());

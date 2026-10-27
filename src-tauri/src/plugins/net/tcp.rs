@@ -1,5 +1,5 @@
 use super::{http_streams, text_param};
-use crate::{plugin_ipc, plugin_permission_policy::PermissionPolicy, plugin_permissions};
+use crate::{plugin_permission_policy::PermissionPolicy, plugin_permissions};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -11,7 +11,6 @@ use std::{
 #[path = "tcp/deadline.rs"]
 mod deadline;
 use deadline::{io_error, Deadline};
-const MAX_TCP_CHUNK: usize = 8 * 1024 * 1024;
 
 struct TcpEntry {
     owner: String,
@@ -129,29 +128,6 @@ fn write(stream: &TcpDuplex, params: &Value, mut bytes: &[u8]) -> Result<(), Str
         bytes = &bytes[size..];
     }
     Ok(())
-}
-pub fn tcp_read(owner: &str, params: &Value) -> Result<Value, String> {
-    let size = params
-        .get("size")
-        .and_then(Value::as_u64)
-        .unwrap_or(65536)
-        .clamp(1, MAX_TCP_CHUNK as u64) as usize;
-    let stream = tcp_stream(owner, text_param(params, "stream")?)?;
-    let mut bytes = vec![0; size];
-    let read = read(&stream, params, &mut bytes)?;
-    bytes.truncate(read);
-    if bytes.is_empty() {
-        return Ok(json!({"buffer": Value::Null, "size": 0, "eof": true}));
-    }
-    let descriptor = plugin_ipc::create(owner, bytes.len(), false)?;
-    plugin_ipc::write(&descriptor.id, &bytes)?;
-    Ok(json!({"buffer": descriptor, "size": read, "eof": false}))
-}
-pub fn tcp_write(owner: &str, params: &Value) -> Result<Value, String> {
-    let bytes = plugin_ipc::read(owner, text_param(params, "buffer")?)?;
-    let stream = tcp_stream(owner, text_param(params, "stream")?)?;
-    write(&stream, params, &bytes)?;
-    Ok(json!({"size":bytes.len()}))
 }
 pub fn tcp_shutdown(owner: &str, params: &Value) -> Result<(), String> {
     let stream = tcp_stream(owner, text_param(params, "stream")?)?;
