@@ -109,7 +109,7 @@ export function beginActivity(
   // history without covering the window.
   // Transfers, syncs and plugin tasks surface their progress; other
   // operations stay in history without covering the window.
-  if (kind === 'transfer' || kind === 'sync' || kind === 'plugin') open = true
+  if (kind === 'transfer' || kind === 'delete' || kind === 'sync' || kind === 'plugin') open = true
   if (cancel) cancellers.set(id, cancel)
   persist()
   emit()

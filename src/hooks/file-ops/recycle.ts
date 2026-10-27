@@ -5,17 +5,11 @@ import { progressChannel } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
 
 /** Moving entries to the Trash and deleting them for good. */
-export function recycleActions({
-  x,
-  notify,
-  writable,
-  inTrash,
-  setDialog,
-  run,
-  handleResult,
-}: FileOpsContext) {
+export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOpsContext) {
   const moveToTrash = async (paths: string[], onProgress?: ReturnType<typeof progressChannel>) => {
-    handleResult(await call<OperationResult>('recycle', { paths, onProgress }))
+    const result = await call<OperationResult>('recycle', { paths, onProgress })
+    if (result.errors.length)
+      throw new Error(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
     x.setSelected([])
     x.reload()
   }
@@ -81,7 +75,6 @@ export function recycleActions({
         )
         if (removed === undefined) return
         x.setSelected([])
-        notify(removed > 0 ? t('已清空 {0} 个项目', removed) : t('废纸篓已经是空的'))
       },
     })
   }

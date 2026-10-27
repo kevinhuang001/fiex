@@ -307,6 +307,7 @@ export function PluginSettings() {
         }
       }
       setMessage(t('插件设置已保存'))
+      setSettingsFor(null)
       setDraft((old) =>
         Object.fromEntries(
           Object.entries(old).map(([key, value]) =>

@@ -313,6 +313,38 @@ fn size_text(bytes: u64) -> String {
     }
 }
 
+/// Sum file lengths below a local directory for the Info sheet. Symlinks are
+/// skipped so a link cycle cannot trap the walk; unreadable entries count 0.
+fn directory_size(path: &Path) -> Option<u64> {
+    let metadata = std::fs::metadata(path).ok()?;
+    if !metadata.is_dir() {
+        return None;
+    }
+    let mut total = 0u64;
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                stack.push(entry.path());
+            } else if file_type.is_file() {
+                if let Ok(metadata) = entry.metadata() {
+                    total = total.saturating_add(metadata.len());
+                }
+            }
+        }
+    }
+    Some(total)
+}
+
 fn metadata_section(
     display: &str,
     local: &Path,
@@ -349,7 +381,9 @@ fn metadata_section(
         row(
             crate::i18n::t("大小"),
             if is_dir {
-                "—".to_string()
+                directory_size(local)
+                    .map(size_text)
+                    .unwrap_or_else(|| "—".into())
             } else {
                 projected
                     .and_then(|value| value.size)
@@ -516,6 +550,11 @@ mod tests {
             .expect("core.metadata section");
         assert!(metadata.rows.iter().any(|row| row.label == "大小"));
         assert!(metadata.rows.iter().any(|row| row.label == "扩展名"));
+        let sub = dir.path().join("nested");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("part.bin"), b"12345").unwrap();
+        let size = directory_size(dir.path()).unwrap();
+        assert!(size >= 5, "{size}");
         assert_eq!(timestamp_text(0), "1970-01-01 00:00");
     }
 
