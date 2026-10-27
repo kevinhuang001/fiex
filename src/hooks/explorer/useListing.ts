@@ -297,7 +297,7 @@ export function useListing(
   const refreshConnections = useCallback(async () => {
     try {
       const list = await call<RemoteConnection[]>('remote_connections')
-      setConnections(Array.isArray(list) ? list : [])
+      setConnections(Array.isArray(list) ? [...list] : [])
     } catch {
       setConnections([])
     }
