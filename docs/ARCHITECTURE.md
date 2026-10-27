@@ -22,19 +22,19 @@ Fiex has one React frontend and one Rust library. Tauri commands form the bounda
 
 `src-tauri/src/lib.rs` declares real Rust module trees. It has no path-mounted modules, forwarding files or old-name compatibility exports. Native command names and serialized frontend payloads are independent of Rust module paths.
 
-| Directory | Responsibility |
-| --- | --- |
-| `core/` | Local file operations, transfers, search, volumes, tags, recent items, terminals and drag sessions |
-| `desktop/` | Tauri adapters, windows, startup and scheduling |
-| `platform/` | OS proxy, drag and macOS window integration |
-| `plugins/events/` | Event contracts, matching, resolver registry, dispatch, scope preparation and common validation |
-| `plugins/resolvers/` | Info, Preview, Decorations, Context Menu, Search and filesystem resolution |
-| `plugins/resource/` | Resource snapshots, ref projection, scoped file access, file capabilities and operation teardown |
-| `plugins/security/` | Manifest/user permission decisions, prompts, grant storage and OS sandbox |
-| `plugins/host/` | Discovery, manifest validation, process lifecycle, transport and host RPC dispatch |
-| `plugins/net/` | HTTP request construction, response handles, bounded upload pipe, upload lifecycle and TCP |
-| `remote/` | Connection configuration, remote cache, reconciliation and synchronization |
-| `usbfs/` | Filesystem drivers and their transfer adapter |
+| Directory            | Responsibility                                                                                     |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| `core/`              | Local file operations, transfers, search, volumes, tags, recent items, terminals and drag sessions |
+| `desktop/`           | Tauri adapters, windows, startup and scheduling                                                    |
+| `platform/`          | OS proxy, drag and macOS window integration                                                        |
+| `plugins/events/`    | Event contracts, matching, resolver registry, dispatch, scope preparation and common validation    |
+| `plugins/resolvers/` | Info, Preview, Decorations, Context Menu, Search and filesystem resolution                         |
+| `plugins/resource/`  | Resource snapshots, ref projection, scoped file access, file capabilities and operation teardown   |
+| `plugins/security/`  | Manifest/user permission decisions, prompts, grant storage and OS sandbox                          |
+| `plugins/host/`      | Discovery, manifest validation, process lifecycle, transport and host RPC dispatch                 |
+| `plugins/net/`       | HTTP request construction, response handles, bounded upload pipe, upload lifecycle and TCP         |
+| `remote/`            | Connection configuration, remote cache, reconciliation and synchronization                         |
+| `usbfs/`             | Filesystem drivers and their transfer adapter                                                      |
 
 Core calls its event candidates `Resolver`; SDK implementations remain Providers. The event contract table defines the extension and collection policy once: merge (Info, Decorations, menus, Search), first supported (Preview, Hooks), or owner only (Toolbar, menu execution, connections). The router isolates resolver panics and validates each result before the feature collector sees it. Custom business RPC stays outside this event registry.
 

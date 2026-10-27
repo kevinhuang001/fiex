@@ -78,6 +78,7 @@ fn int_field(info: &plist::Dictionary, key: &str) -> u64 {
         .unwrap_or_default()
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn virtual_path(device: &str, filesystem: &str) -> Option<String> {
     #[cfg(feature = "usbfs")]
     {
