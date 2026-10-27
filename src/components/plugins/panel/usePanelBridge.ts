@@ -16,7 +16,7 @@ import {
   updateActivity,
 } from '@/hooks/useActivity'
 import type { PluginPanelRequest } from './usePanelSession'
-import { operationPaths } from './operationPaths'
+import { PanelResources } from './resources'
 import { MemoryCache } from '@/lib/cache'
 
 export const MAX_PANEL_WIDTH = 720
@@ -135,7 +135,7 @@ export function usePanelBridge({
     const target = frameRef.current
     dispose.current?.()
     const current = request
-    const chosenPaths = new Set<string>()
+    const resources = new PanelResources(current.pluginId)
     const connect = () => {
       try {
         dispose.current = attachFiexPanel({
@@ -200,23 +200,27 @@ export function usePanelBridge({
               ].includes(method)
             )
               throw new Error('Panel is hidden')
-            if (method === 'context.get')
+            if (method === 'context.get') {
+              const targets = await resources.describe(current.selection)
+              const directory =
+                current.allowCreate || current.selection.length === 0
+                  ? (await resources.describe([current.directory]))[0]
+                  : undefined
               return {
-                directoryPath:
-                  native && current.directory.startsWith('fiex:')
-                    ? await call<string>('plugin_context_directory', {
-                        pluginId: current.pluginId,
-                        path: current.directory,
-                      })
-                    : current.directory,
                 locale: getLocale(),
-                selectionPaths: current.selection,
+                targets,
+                ...(directory ? { directory } : {}),
                 panelId: current.panelId,
                 panelTitle: current.title,
                 uiTimeoutMs: current.timeoutMs ?? 15000,
                 ...(current.source ? { source: current.source } : {}),
-                ...(current.preview ? { preview: current.preview } : {}),
-              }
+                ...(current.preview
+                  ? {
+                      preview: { name: current.preview.name, extension: current.preview.extension },
+                    }
+                  : {}),
+              } as unknown as JsonValue
+            }
             if (method === 'panel.close') {
               onClose()
               return null
@@ -369,18 +373,8 @@ export function usePanelBridge({
                 method: p.method,
                 params: baseParams,
                 directory: current.directory,
-                // The current folder is a candidate permission, not a grant:
-                // operationPaths only returns paths the plugin names in this
-                // call. Only a create-capable plugin can turn it into an output
-                // root, and it must name it explicitly.
-                selectedPaths: operationPaths(baseParams, [
-                  ...current.selection,
-                  ...chosenPaths,
-                  ...((current.selection.length === 0 && chosenPaths.size === 0) ||
-                  current.allowCreate
-                    ? [current.directory]
-                    : []),
-                ]),
+                selectedPaths: resources.bindings(baseParams).map((binding) => binding.path),
+                resourceBindings: resources.bindings(baseParams),
               })
             }
             if (method === 'plugin.task') {
@@ -396,7 +390,7 @@ export function usePanelBridge({
               // The chooser is rendered by the host and only returns the path the
               // user explicitly picks; it never grants directory browsing.
               const p = (params || {}) as {
-                directory?: string
+                directory?: import('../../../../sdk/ui/src/index').ResourceRef
                 suggestedName?: string
                 extensions?: string[]
               }
@@ -406,14 +400,15 @@ export function usePanelBridge({
                 mode: method.slice('dialog.'.length) as
                   'openFile' | 'openFiles' | 'openDirectory' | 'saveFile',
                 suggestedName: p.suggestedName,
-                directory: p.directory || current.directory,
+                directory: resources.path(p.directory) || current.directory,
                 extensions: p.extensions,
               })
-              if (Array.isArray(picked)) picked.forEach((path) => chosenPaths.add(path))
-              else if (typeof picked === 'string') chosenPaths.add(picked)
-              if (method === 'dialog.openFiles')
-                return Array.isArray(picked) ? picked : picked ? [picked] : null
-              return typeof picked === 'string' ? picked : null
+              const described = await resources.describe(
+                Array.isArray(picked) ? picked : picked ? [picked] : [],
+              )
+              return (method === 'dialog.openFiles'
+                ? described
+                : described[0] || null) as unknown as JsonValue
             }
             throw new Error('Unsupported panel operation')
           },

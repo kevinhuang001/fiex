@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getLocale } from '@/i18n'
 import { call } from '@/lib/api'
 import { clearDecorationIcons, syncDecorationIcons } from '@/lib/decorationIcons'
-import { resolveDecorations } from '@/lib/decorations'
 import type { Entry, EntryDecoration } from '@/lib/types'
 
-/** Decorate listing metadata immediately, then merge validated plugin results.
- * A failed or stale plugin response cannot remove builtin presentation. */
+/** Receive the unified Core decoration DTO. Search requests builtin providers
+ * only; stale responses never paint onto a different listing. */
 export function useEntryDecorations({
   entries,
   path,
@@ -22,49 +21,40 @@ export function useEntryDecorations({
 }) {
   const [snapshot, setSnapshot] = useState<{
     entries: Entry[]
+    key: string
     values: Record<string, EntryDecoration>
   }>()
   const [iconOwner] = useState(() => crypto.randomUUID())
   const request = useRef(0)
   const locale = getLocale()
-  const decorations = useMemo(
-    () =>
-      resolveDecorations(
-        entries,
-        enabled && !query && snapshot?.entries === entries ? snapshot.values : {},
-      ),
-    [entries, snapshot, enabled, query, locale],
-  )
+  const key = JSON.stringify([path, Boolean(query), locale])
+  const decorations = snapshot?.entries === entries && snapshot.key === key ? snapshot.values : {}
 
   useEffect(() => {
     syncDecorationIcons(decorations, iconOwner)
   }, [decorations, iconOwner])
   useEffect(() => () => clearDecorationIcons(iconOwner), [iconOwner])
   useEffect(() => {
-    if (!enabled || query || !path || !entries.length) return
+    if (!enabled || !path || !entries.length) return
     const generation = ++request.current
     const timer = window.setTimeout(() => {
       void call<EntryDecoration[]>('plugin_decorations', {
         directory: path,
-        entries: entries.map(({ path, name, isDir, extension, mime }) => ({
-          path,
-          name,
-          isDir,
-          extension,
-          mime,
-        })),
+        entries,
+        includePlugins: !query,
       })
         .then((values) => {
           if (generation !== request.current) return
           setSnapshot({
             entries,
+            key,
             values: Object.fromEntries(values.map((value) => [value.path, value])),
           })
         })
         .catch(() => {
-          if (generation === request.current) setSnapshot({ entries, values: {} })
+          if (generation === request.current) setSnapshot({ entries, key, values: {} })
         })
-    }, 120)
+    }, 0)
     return () => {
       window.clearTimeout(timer)
       ++request.current

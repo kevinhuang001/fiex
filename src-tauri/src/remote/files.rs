@@ -665,7 +665,20 @@ pub fn stat(path: &str) -> Result<crate::files::Entry, String> {
         has_cache,
         pinned,
         uploaded,
-        sync: Some("cloud".into()),
+        sync: Some(
+            if file.is_some_and(|entry| entry.conflict) {
+                "conflict"
+            } else if dirty {
+                "pending"
+            } else if pinned {
+                "pinned"
+            } else if has_cache {
+                "synced"
+            } else {
+                "cloud"
+            }
+            .into(),
+        ),
     })
 }
 /// OS operations receive only a checked materialized cache path.

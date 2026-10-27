@@ -15,17 +15,13 @@ import {
 interface Context {
   paths: string[]
   path: string
-  isDirectory: boolean
-  readOnly: boolean
-  isRemote: boolean
+  resolvedMenus: PluginMenu[]
 }
 
 export function PluginContextActions({
   paths,
   path,
-  isDirectory,
-  readOnly,
-  isRemote,
+  resolvedMenus,
   onClose,
   onError,
 }: Context & { onClose: () => void; onError: (error: string) => void }) {
@@ -38,7 +34,6 @@ export function PluginContextActions({
   const submenu = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | null>(null)
   const focusFirst = useRef(false)
-  const selectionKey = JSON.stringify(paths)
   const cancelClose = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
     closeTimer.current = null
@@ -50,33 +45,12 @@ export function PluginContextActions({
     closeTimer.current = window.setTimeout(() => setOpen(false), 500)
   }
   useEffect(() => cancelClose, [])
-  // Resolve every plugin's menu as soon as the root menu opens, so the
-  // submenu is already populated when the user hovers it. The backend resolves
-  // active providers itself; the catalog below only supplies names and icons,
-  // so loading it must not trigger a second resolve that could close the menu.
   useEffect(() => {
-    let active = true
     requestedSubmenus.current.clear()
-    setMenus([])
+    setMenus(resolvedMenus)
     setOpen(false)
     setFlip({ left: false, up: false })
-    void call<PluginMenu[]>('plugin_context_menu_resolve', {
-      directory: path,
-      paths: JSON.parse(selectionKey) as string[],
-      isDirectory,
-      readOnly,
-      isRemote,
-    })
-      .then((menus) => {
-        if (active) setMenus(Array.isArray(menus) ? menus : [])
-      })
-      .catch(() => {
-        if (active) setMenus([])
-      })
-    return () => {
-      active = false
-    }
-  }, [path, selectionKey, isDirectory, readOnly, isRemote])
+  }, [resolvedMenus])
   useLayoutEffect(() => {
     if (!open || !submenu.current) return
     if (focusFirst.current) {

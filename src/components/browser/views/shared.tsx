@@ -149,7 +149,7 @@ export function NameCell({
       >
         {entry.name}
       </span>
-      <Badges badges={field?.badges} />
+      <Badges badges={[...(decoration?.nativeBadges || []), ...(field?.badges || [])]} />
       {label !== entry.name && <small className="decoration-label">{label}</small>}
     </>
   )

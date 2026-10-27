@@ -59,32 +59,57 @@ fn save(path: &Path, items: &BTreeMap<String, Value>) -> Result<(), String> {
     }
     let parent = path.parent().ok_or("invalid plugin storage directory")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let temp = parent.join(format!(
-        "{}.tmp-{}",
-        path.file_name().unwrap_or_default().to_string_lossy(),
-        std::process::id()
-    ));
-    let result = (|| {
-        let mut f = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|e| e.to_string())?;
-        use std::io::Write;
-        f.write_all(&data).map_err(|e| e.to_string())?;
-        f.sync_all().map_err(|e| e.to_string())?;
-        #[cfg(windows)]
-        if path.exists() {
-            fs::remove_file(path).map_err(|e| e.to_string())?;
-        }
-        fs::rename(&temp, path).map_err(|e| e.to_string())?;
-        Ok::<(), String>(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    result
+    let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(|error| error.to_string())?;
+    use std::io::Write;
+    temp.write_all(&data).map_err(|error| error.to_string())?;
+    temp.as_file()
+        .sync_all()
+        .map_err(|error| error.to_string())?;
+    temp.persist(path).map_err(|error| error.to_string())?;
+    Ok(())
 }
+
+fn compare_at(
+    path: &Path,
+    key: &str,
+    expected: Option<&Value>,
+    next: Option<Value>,
+) -> Result<bool, String> {
+    let mut items = load(path)?;
+    if items.get(key) != expected {
+        return Ok(false);
+    }
+    if let Some(value) = next {
+        items.insert(key.into(), value);
+    } else {
+        items.remove(key);
+    }
+    save(path, &items)?;
+    Ok(true)
+}
+/// One compare and replacement under the same Core lock, including a
+/// distinction between an absent key and a stored JSON null.
+pub fn compare_and_set(
+    plugin: &str,
+    scope: &str,
+    key: &str,
+    expected: Option<Value>,
+    next: Option<Value>,
+) -> Result<bool, String> {
+    validate(plugin, scope, key)?;
+    if let Some(value) = &next {
+        if serde_json::to_vec(value)
+            .map_err(|error| error.to_string())?
+            .len()
+            > MAX_VALUE_BYTES
+        {
+            return Err("plugin storage value too large".into());
+        }
+    }
+    let _guard = mutex().lock().map_err(|_| "plugin storage lock poisoned")?;
+    compare_at(&file(plugin, scope)?, key, expected.as_ref(), next)
+}
+
 pub fn get(plugin: &str, scope: &str, key: &str) -> Result<Option<Value>, String> {
     validate(plugin, scope, key)?;
     let _guard = mutex().lock().map_err(|_| "plugin storage lock poisoned")?;
@@ -162,5 +187,99 @@ mod tests {
             Value::String("a".repeat(MAX_VALUE_BYTES + 1))
         )
         .is_err());
+    }
+}
+
+/// Typed wire status for the authenticated SDK keychain service. Access denied
+/// includes a locked store or a platform/user authorization refusal; it is not
+/// conflated with an absent credential or an unavailable backend.
+pub fn secret_response(
+    plugin: &str,
+    scope: &str,
+    key: &str,
+    operation: &str,
+    value: Option<&str>,
+) -> Result<Value, String> {
+    use keyring::v1::{Entry, Error};
+    use serde_json::json;
+    fn error(error: Error) -> Value {
+        let status = match &error {
+            Error::NoEntry => "missing",
+            Error::NoStorageAccess(_) => "denied",
+            _ => "unavailable",
+        };
+        json!({"status":status,"message":error.to_string()})
+    }
+    validate(plugin, scope, key)?;
+    let entry = match Entry::new("org.fiex.plugin", &format!("{plugin}:{scope}:{key}")) {
+        Ok(entry) => entry,
+        Err(failure) => return Ok(error(failure)),
+    };
+    Ok(match operation {
+        "get" => match entry.get_password() {
+            Ok(value) => json!({"status":"present","value":value}),
+            Err(failure) => error(failure),
+        },
+        "set" => {
+            let value = value.ok_or("missing secret value")?;
+            if value.len() > 65536 {
+                return Err("secret too large".into());
+            }
+            match entry.set_password(value) {
+                Ok(()) => json!({"status":"ok"}),
+                Err(failure) => error(failure),
+            }
+        }
+        "delete" => match entry.delete_credential() {
+            Ok(()) | Err(Error::NoEntry) => json!({"status":"ok"}),
+            Err(failure) => error(failure),
+        },
+        _ => return Err("unknown credential operation".into()),
+    })
+}
+
+#[cfg(test)]
+mod atomic_tests {
+    use super::*;
+    #[test]
+    fn cas_distinguishes_absent_null_and_conflicts() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state.json");
+        assert!(compare_at(&path, "key", None, Some(Value::Null)).unwrap());
+        assert!(!compare_at(&path, "key", None, Some(Value::Bool(true))).unwrap());
+        assert!(compare_at(&path, "key", Some(&Value::Null), Some(Value::from(1))).unwrap());
+        assert!(!compare_at(&path, "key", Some(&Value::Null), None).unwrap());
+        assert_eq!(load(&path).unwrap()["key"], Value::from(1));
+    }
+    #[test]
+    fn concurrent_compare_updates_do_not_lose_increments() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = std::sync::Arc::new(temp.path().join("state.json"));
+        let workers = (0..4)
+            .map(|_| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..20 {
+                        loop {
+                            let current = {
+                                let _guard = mutex().lock().unwrap();
+                                load(&path).unwrap().get("count").cloned()
+                            };
+                            let next = Value::from(
+                                current.as_ref().and_then(Value::as_u64).unwrap_or(0) + 1,
+                            );
+                            let _guard = mutex().lock().unwrap();
+                            if compare_at(&path, "count", current.as_ref(), Some(next)).unwrap() {
+                                break;
+                            }
+                        }
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        assert_eq!(load(&path).unwrap()["count"], Value::from(80));
     }
 }

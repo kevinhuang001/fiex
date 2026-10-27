@@ -33,10 +33,12 @@ pub(crate) async fn plugin_invoke(
     directory: Option<String>,
     selected_paths: Option<Vec<String>>,
     preview_session_id: Option<String>,
+    resource_bindings: Option<Vec<crate::plugin_resource_context::ResourceBinding>>,
 ) -> Result<serde_json::Value, String> {
     if crate::plugin_events::is_protected_method(&method) {
         return Err("PermissionDenied: provider and host methods are Core-only".into());
     }
+    let mut bindings = resource_bindings.unwrap_or_default();
     let mut directory = directory;
     let mut selected_paths = selected_paths;
     let mut params = params;
@@ -85,6 +87,11 @@ pub(crate) async fn plugin_invoke(
                 }
             }
             replace(&mut params, &replacements);
+            for binding in &mut bindings {
+                if let Some(local) = replacements.get(&binding.path) {
+                    binding.path = local.clone();
+                }
+            }
         }
     }
     let preview_scope = preview_session_id
@@ -94,7 +101,8 @@ pub(crate) async fn plugin_invoke(
     let id = plugin_id.clone();
     let call = method.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        if let Some(scope) = preview_scope {
+        if let Some(mut scope) = preview_scope {
+            crate::plugin_resource_context::bind_selected(&mut scope, &bindings)?;
             return crate::plugin_host::global().invoke_scoped(
                 &plugin_id,
                 &method,
@@ -103,16 +111,18 @@ pub(crate) async fn plugin_invoke(
             );
         }
         match (directory, selected_paths) {
-            (Some(directory), Some(paths)) => crate::plugin_host::global().invoke_selected(
-                &plugin_id,
-                &method,
-                params,
-                &directory,
-                &paths
-                    .into_iter()
-                    .map(std::path::PathBuf::from)
-                    .collect::<Vec<_>>(),
-            ),
+            (Some(directory), Some(paths)) => crate::plugin_host::global()
+                .invoke_selected_with_bindings(
+                    &plugin_id,
+                    &method,
+                    params,
+                    &directory,
+                    &paths
+                        .into_iter()
+                        .map(std::path::PathBuf::from)
+                        .collect::<Vec<_>>(),
+                    &bindings,
+                ),
             (Some(directory), None) => crate::plugin_host::global().invoke_selected(
                 &plugin_id,
                 &method,
@@ -279,12 +289,17 @@ pub(crate) fn plugin_status() -> Vec<(String, bool)> {
 pub(crate) async fn plugin_decorations(
     directory: String,
     entries: Vec<crate::plugin_decorations::DecorationEntry>,
+    include_plugins: Option<bool>,
 ) -> Result<Vec<crate::plugin_decorations::Decoration>, String> {
     if !directory.starts_with('/') && !directory.contains(":\\") && !directory.contains("://") {
         return Err("invalid decoration directory".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_decorations::query(&directory, entries)
+        crate::plugin_decorations::query_with_plugins(
+            &directory,
+            entries,
+            include_plugins.unwrap_or(true),
+        )
     })
     .await
     .map_err(|error| error.to_string())
@@ -517,193 +532,6 @@ pub(crate) fn plugin_context_directory(plugin_id: String, path: String) -> Resul
     }
 }
 
-type ContextMenuRegistry = std::collections::HashMap<String, ContextMenuSession>;
-struct ContextMenuSession {
-    plugin_id: String,
-    directory: String,
-    resources: Vec<crate::plugin_resource_context::ResourceSnapshot>,
-    actions: std::collections::HashSet<String>,
-    submenus: std::collections::HashMap<String, usize>,
-    created: std::time::Instant,
-}
-fn context_menu_sessions() -> &'static std::sync::Mutex<ContextMenuRegistry> {
-    static SESSIONS: std::sync::OnceLock<std::sync::Mutex<ContextMenuRegistry>> =
-        std::sync::OnceLock::new();
-    SESSIONS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
-}
-fn menu_allowed(session: &ContextMenuSession) -> bool {
-    crate::plugin_events::menu_allowed(&session.plugin_id, &session.resources, &session.directory)
-}
-fn menu_response_valid(
-    result: &serde_json::Value,
-) -> Result<std::collections::HashSet<String>, String> {
-    use std::collections::{HashMap, HashSet};
-    let items = result
-        .get("items")
-        .and_then(serde_json::Value::as_array)
-        .ok_or("menu response requires items[]")?;
-    if items.len() > 100 {
-        return Err("too many menu items".into());
-    }
-    let mut ids = HashSet::new();
-    let mut kinds = HashMap::new();
-    let mut parents = HashMap::new();
-    let mut actions = HashSet::new();
-    for item in items {
-        let id = item
-            .get("id")
-            .and_then(serde_json::Value::as_str)
-            .ok_or("menu item id missing")?;
-        if id.is_empty()
-            || id.len() > 80
-            || !id
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
-            || !ids.insert(id.to_owned())
-        {
-            return Err("invalid or duplicate menu item id".into());
-        }
-        let kind = item
-            .get("kind")
-            .and_then(serde_json::Value::as_str)
-            .ok_or("menu kind missing")?;
-        if !matches!(kind, "action" | "submenu" | "separator") {
-            return Err("invalid menu item kind".into());
-        }
-        let title = item
-            .get("title")
-            .and_then(serde_json::Value::as_str)
-            .ok_or("menu title missing")?;
-        if title.is_empty() || title.len() > 128 {
-            return Err("invalid menu item title".into());
-        }
-        if item.get("when").is_some() || item.get("children").is_some() {
-            return Err("static nested menus are forbidden".into());
-        }
-        if let Some(parent) = item.get("parentId") {
-            parents.insert(
-                id.to_owned(),
-                parent.as_str().ok_or("invalid menu parent")?.to_owned(),
-            );
-        }
-        if kind == "action" {
-            actions.insert(id.to_owned());
-        }
-        kinds.insert(id.to_owned(), kind.to_owned());
-    }
-    for id in &ids {
-        let mut current = id.as_str();
-        let mut depth = 1;
-        let mut seen = HashSet::new();
-        while let Some(parent) = parents.get(current) {
-            if !seen.insert(current) || kinds.get(parent).map(String::as_str) != Some("submenu") {
-                return Err("menu contains a cycle or invalid parent".into());
-            }
-            depth += 1;
-            if depth > 4 {
-                return Err("menu nesting exceeds depth limit".into());
-            }
-            current = parent;
-        }
-    }
-    Ok(actions)
-}
-/// Track submenu depth so a lazy expansion cannot exceed the four-level cap.
-fn root_menu_valid(
-    result: &serde_json::Value,
-) -> Result<std::collections::HashSet<String>, String> {
-    let items = result
-        .get("items")
-        .and_then(serde_json::Value::as_array)
-        .ok_or("menu response requires items[]")?;
-    if items.iter().any(|item| item.get("parentId").is_some()) {
-        return Err("root menu must not include submenu children".into());
-    }
-    menu_response_valid(result)
-}
-
-fn submenu_depths(result: &serde_json::Value) -> std::collections::HashMap<String, usize> {
-    use std::collections::HashMap;
-    let Some(items) = result.get("items").and_then(serde_json::Value::as_array) else {
-        return HashMap::new();
-    };
-    let by_id: HashMap<&str, &serde_json::Value> = items
-        .iter()
-        .filter_map(|item| {
-            item.get("id")
-                .and_then(serde_json::Value::as_str)
-                .map(|id| (id, item))
-        })
-        .collect();
-    let mut depths = HashMap::new();
-    for item in items {
-        if item.get("kind").and_then(serde_json::Value::as_str) != Some("submenu") {
-            continue;
-        }
-        let Some(id) = item.get("id").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        let mut depth = 1;
-        let mut current = item;
-        while let Some(parent) = current.get("parentId").and_then(serde_json::Value::as_str) {
-            depth += 1;
-            let Some(ancestor) = by_id.get(parent) else {
-                break;
-            };
-            current = ancestor;
-        }
-        depths.insert(id.to_string(), depth);
-    }
-    depths
-}
-
-/// Validate each lazy submenu response independently. The plugin cannot
-/// supply the parent id or forge actions from another menu session.
-struct ValidatedSubmenu {
-    items: Vec<serde_json::Value>,
-    actions: std::collections::HashSet<String>,
-    submenus: std::collections::HashMap<String, usize>,
-}
-
-fn validated_submenu(
-    value: &serde_json::Value,
-    parent_id: &str,
-    parent_depth: usize,
-) -> Result<ValidatedSubmenu, String> {
-    let children = value
-        .get("items")
-        .and_then(serde_json::Value::as_array)
-        .ok_or("submenu response requires items[]")?;
-    if children.len() > 99 || (parent_depth >= 4 && !children.is_empty()) {
-        return Err("submenu exceeds item/depth limit".into());
-    }
-    let mut items = Vec::with_capacity(children.len() + 1);
-    items.push(serde_json::json!({"id":parent_id,"kind":"submenu","title":"parent"}));
-    for child in children {
-        let mut child = child
-            .as_object()
-            .ok_or("submenu entry must be an object")?
-            .clone();
-        if child.contains_key("parentId") {
-            return Err("submenu children must not supply parentId".into());
-        }
-        child.insert("parentId".into(), serde_json::json!(parent_id));
-        items.push(serde_json::Value::Object(child));
-    }
-    let response = serde_json::json!({"items":items});
-    let actions = menu_response_valid(&response)?;
-    let submenus = submenu_depths(&response)
-        .into_iter()
-        .filter(|(id, _)| id != parent_id)
-        .map(|(id, _)| (id, parent_depth + 1))
-        .collect();
-    Ok(ValidatedSubmenu {
-        items: items.into_iter().skip(1).collect(),
-        actions,
-        submenus,
-    })
-}
-
 #[tauri::command]
 pub(crate) async fn plugin_toolbar_invoke(
     plugin_id: String,
@@ -824,85 +652,21 @@ pub(crate) async fn preview_open(
 pub(crate) async fn plugin_context_menu_resolve(
     directory: String,
     paths: Vec<String>,
-    _is_directory: bool,
-    _read_only: bool,
-    _is_remote: bool,
 ) -> Result<Vec<serde_json::Value>, String> {
-    tauri::async_runtime::spawn_blocking(move ||{
-        use crate::plugin_events::{EventRouter,Handler};
-        if paths.is_empty()||paths.len()>256||directory.is_empty(){return Err("invalid menu selection".into());}
-        let resources=paths.iter().map(|p|crate::plugin_resource_context::ResourceSnapshot::resolve(p)).collect::<Result<Vec<_>,_>>()?;
-        let metadata=resources.iter().map(|r|serde_json::to_value(r.metadata()).unwrap_or_default()).collect::<Vec<_>>();
-        let providers=EventRouter::providers("contextMenu.resolve",&metadata,&directory,Vec::new());
-        Ok(EventRouter::resolve("contextMenu.resolve",providers,|_,_|Err("no builtin menu registered".into()),
-            |plugin|{
-                let session_id=crate::mounts::new_id()?;
-                let mut result=crate::plugin_events::invoke_resources(plugin,"contextMenu.resolve",serde_json::json!({"menuSessionId":session_id,"interactionId":crate::mounts::new_id()?}),&resources,Some(&directory))?;
-                result["menuSessionId"]=serde_json::json!(session_id);Ok(result)
-            },
-            |provider,result|{
-                let Handler::Plugin(plugin)=&provider.handler else{return Err("invalid menu provider".into());};
-                let actions=root_menu_valid(&result)?;let submenus=submenu_depths(&result);
-                let session_id=result["menuSessionId"].as_str().ok_or("missing menu session")?.to_string();
-                let mut guard=context_menu_sessions().lock().map_err(|_|"menu registry unavailable")?;
-                guard.retain(|_,s|s.created.elapsed().as_secs()<90);
-                if guard.len()>=128{return Err("menu session capacity exceeded".into());}
-                guard.insert(session_id,ContextMenuSession{plugin_id:plugin.id.clone(),directory:directory.clone(),resources:resources.clone(),actions,submenus,created:std::time::Instant::now()});
-                Ok(serde_json::json!({"pluginId":plugin.id,"menuSessionId":result["menuSessionId"],"items":result["items"]}))
-            },|_|true,|results|results.into_iter().filter_map(|(_,r)|r.ok()).collect::<Vec<_>>()))
-    }).await.map_err(|e|e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_context_menu::query(&directory, &paths)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
-/// Resolve children on demand whenever a user opens a submenu. No file
-/// content grant is attached until the user clicks a validated action.
+
 #[tauri::command]
 pub(crate) async fn plugin_context_menu_children(
     menu_session_id: String,
     parent_id: String,
 ) -> Result<serde_json::Value, String> {
-    let (plugin_id, directory, resources, depth) = {
-        let guard = context_menu_sessions()
-            .lock()
-            .map_err(|_| "menu registry unavailable")?;
-        let session = guard.get(&menu_session_id).ok_or("menu session expired")?;
-        if session.created.elapsed().as_secs() >= 90 || !menu_allowed(session) {
-            return Err("menu session expired".into());
-        }
-        let depth = *session.submenus.get(&parent_id).ok_or("unknown submenu")?;
-        (
-            session.plugin_id.clone(),
-            session.directory.clone(),
-            session.resources.clone(),
-            depth,
-        )
-    };
     tauri::async_runtime::spawn_blocking(move || {
-        let params=serde_json::json!({"menuSessionId":menu_session_id,"parentId":parent_id,"interactionId":crate::mounts::new_id()?});
-        let result=crate::plugin_events::call_owner("contextMenu.resolve",&plugin_id,params,&resources,Some(&directory))?;
-        let validated = validated_submenu(&result, &parent_id, depth)?;
-        let mut guard = context_menu_sessions()
-            .lock()
-            .map_err(|_| "menu registry unavailable")?;
-        let session = guard
-            .get_mut(&menu_session_id)
-            .ok_or("menu session expired")?;
-        if session.created.elapsed().as_secs() >= 90 || session.plugin_id != plugin_id {
-            return Err("menu session expired".into());
-        }
-        if validated
-            .actions
-            .iter()
-            .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
-            || validated
-                .submenus
-                .keys()
-                .any(|id| session.actions.contains(id) || session.submenus.contains_key(id))
-        {
-            return Err("duplicate menu item id".into());
-        }
-        if session.actions.len()+session.submenus.len()+validated.actions.len()+validated.submenus.len()>512{return Err("menu session item limit exceeded".into());}
-        session.actions.extend(validated.actions);
-        session.submenus.extend(validated.submenus);
-        Ok::<_, String>(serde_json::json!({"items":validated.items}))
+        crate::plugin_context_menu::children(&menu_session_id, &parent_id)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -912,100 +676,58 @@ pub(crate) async fn plugin_context_menu_children(
 pub(crate) async fn plugin_context_menu_execute(
     menu_session_id: String,
     item_id: String,
+    on_progress: Option<tauri::ipc::Channel<super::files::OperationProgress>>,
+    cancel: tauri::State<'_, crate::operations::OperationCancel>,
 ) -> Result<serde_json::Value, String> {
-    let session = context_menu_sessions()
-        .lock()
-        .map_err(|_| "menu registry unavailable")?
-        .remove(&menu_session_id)
-        .ok_or("menu session invalid or already used")?;
-    if session.created.elapsed().as_secs() >= 90
-        || !session.actions.contains(&item_id)
-        || !menu_allowed(&session)
-    {
-        return Err("menu session expired or item was not offered".into());
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::plugin_context_menu::execute(&menu_session_id, &item_id)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    if result["kind"] == "remoteAction" {
+        let progress = on_progress.map(super::files::byte_progress_emitter);
+        let options = crate::remote::TransferOptions {
+            cancel: Some(cancel.flag()),
+            progress: progress.map(|emit| {
+                std::sync::Arc::new(move |done, total| emit(done, total, None))
+                    as std::sync::Arc<crate::remote::ProgressFn>
+            }),
+        };
+        crate::plugin_context_menu::execute_remote(&result, &options).await?;
+        return Ok(serde_json::json!({"handled":true}));
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub(crate) async fn plugin_describe_resources(
+    plugin_id: String,
+    paths: Vec<String>,
+) -> Result<Vec<crate::plugin_contracts::ResourceContext>, String> {
+    if paths.len() > 256 {
+        return Err("too many resource candidates".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let paths=session.resources.iter().map(crate::plugin_resource_context::ResourceSnapshot::materialize).collect::<Result<Vec<_>,_>>()?;
-        let directory=if crate::mounts::handles(&session.directory){paths[0].parent().ok_or("invalid action directory")?.to_string_lossy().into_owned()}else{session.directory.clone()};
-        let parameters=serde_json::json!({"menuSessionId":menu_session_id,"itemId":item_id,"interactionId":crate::mounts::new_id()?,"paths":paths,"path":paths[0],"root":directory});
-        let mut result=crate::plugin_events::call_owner("contextMenu.execute",&session.plugin_id,parameters,&session.resources,Some(&session.directory))?;
-        if result.get("kind").and_then(serde_json::Value::as_str) == Some("panel") {
-            let entry = result
-                .get("entry")
-                .and_then(serde_json::Value::as_str)
-                .ok_or("panel result missing entry")?;
-            let asset = crate::plugin_host::plugin_view_asset(&session.plugin_id, entry)?;
-            let object = result.as_object_mut().ok_or("invalid panel result")?;
-            object.remove("entry");
-            object.insert("assetPath".into(), serde_json::json!(asset));
-        }
-        Ok::<serde_json::Value, String>(result)
+        let plugin = crate::plugin_host::catalog()
+            .into_iter()
+            .find(|plugin| plugin.id == plugin_id && plugin.approved && plugin.enabled)
+            .ok_or("plugin unavailable")?;
+        let declared = plugin.declared_permissions.iter().cloned().collect();
+        let policy = crate::plugin_permission_policy::PermissionPolicy::new(&plugin_id, &declared);
+        paths
+            .iter()
+            .map(|path| {
+                Ok(
+                    crate::plugin_resource_context::ResourceSnapshot::resolve(path)?.project(
+                        &plugin_id,
+                        "",
+                        policy.allowed(crate::plugin_permission_policy::Capability::Metadata),
+                        false,
+                    ),
+                )
+            })
+            .collect()
     })
     .await
     .map_err(|error| error.to_string())?
-}
-
-#[cfg(test)]
-mod context_menu_session_tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn menu_rejects_nested_legacy_fields_and_unknown_parent() {
-        assert!(menu_response_valid(&json!({"items": [
-            {"id":"root","kind":"submenu","title":"Root"},
-            {"id":"open","kind":"action","title":"Open","parentId":"root"}
-        ]}))
-        .unwrap()
-        .contains("open"));
-        for invalid in [
-            json!({"items":[{"id":"a","title":"A","kind":"action","when":"true"}]}),
-            json!({"items":[{"id":"a","title":"A","kind":"action","children":[]}]}),
-            json!({"items":[{"id":"a","title":"A","kind":"action","parentId":"missing"}]}),
-            json!({"items":[{"id":"a","title":"A","kind":"submenu","parentId":"a"}]}),
-            json!({"items":[{"id":"a","title":"A","kind":"action"},{"id":"a","title":"B","kind":"action"}]}),
-        ] {
-            assert!(menu_response_valid(&invalid).is_err());
-        }
-    }
-
-    #[test]
-    fn dynamic_children_require_a_valid_parent_and_cannot_forge_ids() {
-        let response = serde_json::json!({
-            "items":[{"id":"child","kind":"action","title":"Child"}]
-        });
-        let validated = validated_submenu(&response, "root", 1).unwrap();
-        assert_eq!(validated.items[0]["parentId"], "root");
-        assert!(validated.actions.contains("child"));
-        assert!(validated.submenus.is_empty());
-        assert!(validated_submenu(&response, "root", 4).is_err());
-        let spoof = serde_json::json!({"items":[{
-            "id":"child","kind":"action","title":"Child","parentId":"other"
-        }]});
-        assert!(validated_submenu(&spoof, "root", 1).is_err());
-    }
-
-    #[test]
-    fn root_menu_requires_lazy_submenu_children() {
-        let nested = serde_json::json!({"items":[
-            {"id":"group","kind":"submenu","title":"Group"},
-            {"id":"run","kind":"action","title":"Run","parentId":"group"}
-        ]});
-        assert!(root_menu_valid(&nested).is_err());
-        let root = serde_json::json!({"items":[
-            {"id":"group","kind":"submenu","title":"Group"}
-        ]});
-        assert!(root_menu_valid(&root).unwrap().is_empty());
-    }
-
-    #[test]
-    fn submenu_cannot_be_executed_as_an_action() {
-        let valid = menu_response_valid(&json!({"items":[
-            {"id":"group","title":"Group","kind":"submenu"},
-            {"id":"act","title":"Act","kind":"action","parentId":"group"}
-        ]}))
-        .unwrap();
-        assert!(!valid.contains("group"));
-        assert!(valid.contains("act"));
-    }
 }

@@ -53,17 +53,3 @@ export type ContextMenuProps = Pick<
 export type ContextItemsProps = Omit<ContextMenuProps, 'setMenu' | 'menu'> & {
   menu: NonNullable<AppController['menu']>
 }
-
-export type ContextMenuProviderContext = ContextItemsProps & {
-  /** Clicked entry, or the whole selection when it contains the clicked entry. */
-  paths: string[]
-  multiple: boolean
-}
-
-export interface ContextMenuProvider {
-  id: string
-  order: number
-  placement?: 'tail'
-  matches: (context: ContextMenuProviderContext) => boolean
-  resolve: (context: ContextMenuProviderContext) => ContextItem[]
-}

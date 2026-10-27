@@ -203,3 +203,28 @@ mod tests {
         );
     }
 }
+
+/// Private Core-UI binding. Plugin iframe SDKs receive only `reference`; the
+/// path travels out of band and must be inside this invocation's selection.
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceBinding {
+    #[serde(rename = "ref")]
+    pub reference: ResourceRef,
+    pub path: String,
+}
+pub fn bind_selected(
+    scope: &mut crate::plugin_fs_access::Scope,
+    bindings: &[ResourceBinding],
+) -> Result<(), String> {
+    for binding in bindings {
+        let path = std::path::Path::new(&binding.path);
+        scope.authorize(&binding.path)?;
+        let snapshot = ResourceSnapshot::new(&binding.path, path);
+        scope.bind_resource(
+            &serde_json::json!({"ref":binding.reference,"metadata":snapshot.metadata()}),
+            Some(path),
+        )?;
+    }
+    Ok(())
+}

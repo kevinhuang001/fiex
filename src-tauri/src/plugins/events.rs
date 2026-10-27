@@ -409,22 +409,6 @@ pub fn resource_scope(
             false
         ))
         .collect::<Vec<_>>());
-    // A lifecycle hook (beforeOpen) receives the operation event, not the
-    // menu-shaped paths payload. Give it the selected file so it can act on the
-    // resource after Core matched it; the value comes from the same snapshot
-    // whose access the scope already grants.
-    if method == "hooks.invoke" && params.get("path").is_none() {
-        if let Some(resource) = resources
-            .first()
-            .filter(|resource| !crate::mounts::handles(&resource.display))
-        {
-            params["path"] = json!(
-                crate::plugin_fs_access::canonical_selection(&resource.local)?
-                    .to_string_lossy()
-                    .into_owned()
-            );
-        }
-    }
     let mut paths = resources
         .iter()
         .filter(|r| !crate::mounts::handles(&r.display))
@@ -468,7 +452,7 @@ pub fn resource_scope(
         scope.restrict_to_metadata();
     }
     for (resource, target) in resources.iter().zip(params["targets"].as_array().unwrap()) {
-        let local = if content && !crate::mounts::handles(&resource.display) {
+        let local = if !crate::mounts::handles(&resource.display) {
             Some(crate::plugin_fs_access::canonical_selection(
                 &resource.local,
             )?)

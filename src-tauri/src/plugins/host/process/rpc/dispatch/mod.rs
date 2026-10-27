@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 mod fs;
 mod net;
 mod other;
+mod refs;
 mod task_routes;
 
 pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<Value, String> {
@@ -55,7 +56,22 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
     if let Some(scope) = &actor.scope {
         scope.authorize_method(method)?;
     }
+    if let Some(result) = refs::intercept(running, &actor, method, params)? {
+        return Ok(result);
+    }
     let policy = running.policy();
+    let mut named_params;
+    let params = if method == "host.fs.rename" {
+        let scope = actor.scope.as_ref().ok_or("no operation scope")?;
+        let destination = params.get("destination").ok_or("missing destination ref")?;
+        named_params = params.clone();
+        named_params["from"] =
+            json!(scope.resolve_reference(params.get("ref").ok_or("missing source ref")?)?);
+        named_params["to"] = json!(scope.resolve_reference(destination)?);
+        &named_params
+    } else {
+        params
+    };
     let mut remote_params;
     let p = if method.starts_with("host.fs.") {
         let remote = actor
@@ -78,7 +94,7 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
                         value[key] = json!(0);
                     }
                 }
-                return Ok(value);
+                return Ok(refs::metadata(&value));
             }
             let capability = match method {
                 "host.fs.openRead" | "host.fs.read" | "host.fs.readChunk" => Capability::FilesRead,
@@ -140,7 +156,11 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
                         })
                     })
                     .collect::<Vec<_>>();
-                return Ok(json!(values));
+                return refs::listing(
+                    actor.scope.as_ref().ok_or("no operation scope")?,
+                    &params["ref"],
+                    json!(values),
+                );
             }
             let local = resource.materialize()?;
             let directory = local.parent().ok_or("remote target has no parent")?;
@@ -164,39 +184,16 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
     let mut resolved;
     let p = if let Some(reference) = p.get("ref") {
         let scope = actor.scope.as_ref().ok_or("no operation scope")?;
-        if method == "host.fs.stat" {
+        if method == "host.fs.stat" && scope.resolve_reference(reference).is_err() {
             if let Some(metadata) = scope.metadata_reference(reference)? {
                 running.ensure_permission(Capability::Metadata)?;
-                return Ok(metadata.clone());
+                return Ok(refs::metadata(metadata));
             }
         }
         resolved = p.clone();
         resolved["path"] = json!(scope.resolve_reference(reference)?);
         &resolved
-    } else if method.starts_with("host.fs.") {
-        if let Some(path) = p
-            .get("path")
-            .and_then(Value::as_str)
-            .map(|path| {
-                actor
-                    .scope
-                    .as_ref()
-                    .map(|scope| scope.resource_alias(path))
-                    .transpose()
-            })
-            .transpose()?
-            .flatten()
-            .flatten()
-        {
-            resolved = p.clone();
-            resolved["path"] = json!(path);
-            &resolved
-        } else {
-            p
-        }
-    } else {
-        p
-    };
+    } else { p };
     let actor = &actor;
     let mut ctx = Context {
         running,
@@ -206,7 +203,16 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
         policy,
     };
     if method.starts_with("host.fs.") {
-        fs::dispatch(&mut ctx)
+        let result = fs::dispatch(&mut ctx)?;
+        match method {
+            "host.fs.stat" => Ok(refs::metadata(&result)),
+            "host.fs.list" => refs::listing(
+                actor.scope.as_ref().ok_or("no operation scope")?,
+                &params["ref"],
+                result,
+            ),
+            _ => Ok(result),
+        }
     } else if method.starts_with("host.net.") {
         net::dispatch(&mut ctx)
     } else {

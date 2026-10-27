@@ -87,8 +87,7 @@ export interface ConflictResolution {
   action: ConflictAction
 }
 export interface DecorationBadge {
-  /** Trusted local providers may request the existing status presentation.
-   * Native plugin decoding strips these optional fields. */
+  /** Only Core builtin decoration providers emit these presentation fields. */
   dot?: boolean
   status?: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | 'uploaded'
   icon?: 'cloud-check' | 'cloud-download' | 'cloud-upload' | 'pin'
@@ -110,6 +109,7 @@ export interface DecorationField {
 }
 export type DecorationTarget = 'name' | 'modified' | 'size' | 'kind' | 'row'
 export interface EntryDecoration {
+  nativeBadges?: DecorationBadge[]
   path: string
   badges: DecorationBadge[]
   label?: string

@@ -81,6 +81,7 @@ pub fn run() {
             platform,
             locale_set,
             plugin_invoke,
+            plugin_describe_resources,
             plugin_before_open,
             plugin_toolbar_invoke,
             plugin_context_menu_resolve,

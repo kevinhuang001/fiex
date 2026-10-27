@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct DecorationEntry {
     pub path: String,
     pub name: String,
@@ -14,6 +15,40 @@ pub struct DecorationEntry {
     pub extension: String,
     #[serde(default)]
     pub mime: String,
+    #[serde(default)]
+    pub readonly: bool,
+    #[serde(default)]
+    pub tags: Vec<DecorationTag>,
+    #[serde(default)]
+    pub sync: Option<String>,
+    #[serde(default)]
+    pub has_cache: bool,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub uploaded: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct DecorationTag {
+    pub name: String,
+    pub color: u8,
+    #[serde(default)]
+    pub hex: Option<String>,
+}
+
+/// Presentation metadata emitted only by Core builtin providers. Plugin
+/// decoding never accepts this field, so plugins cannot forge native status.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct NativeBadge {
+    pub text: String,
+    pub color: String,
+    pub tooltip: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    pub dot: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -54,6 +89,8 @@ pub struct DecorationField {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Decoration {
+    #[serde(default)]
+    pub native_badges: Vec<NativeBadge>,
     pub path: String,
     #[serde(default)]
     pub badges: Vec<DecorationBadge>,

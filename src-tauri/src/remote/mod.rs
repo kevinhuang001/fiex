@@ -18,12 +18,14 @@ pub fn set_sync_interval(seconds: u64) {
     SYNC_INTERVAL_SECS.store(seconds.clamp(5, 24 * 60 * 60), Ordering::Relaxed);
 }
 
+#[cfg(feature = "desktop")]
 pub(crate) fn sync_interval() -> u64 {
     SYNC_INTERVAL_SECS.load(Ordering::Relaxed)
 }
 
 /// Sleep until the next round is due, re-reading the interval once a second so
 /// a settings change applies without waiting out the previous sleep.
+#[cfg(feature = "desktop")]
 pub(crate) fn wait_for_round() {
     let started = std::time::Instant::now();
     while started.elapsed().as_secs() < sync_interval() {

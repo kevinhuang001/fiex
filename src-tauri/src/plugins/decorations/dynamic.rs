@@ -8,8 +8,8 @@
 use super::types::{
     Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle,
 };
-use crate::plugin_host::{self, PluginManifest};
-use serde_json::{json, Value};
+use crate::plugin_host::PluginManifest;
+use serde_json::Value;
 use std::collections::HashMap;
 
 fn allowed_color(value: &str) -> bool {
@@ -119,7 +119,7 @@ fn safe_fields(fields: HashMap<String, DecorationField>) -> HashMap<String, Deco
 
 pub(super) struct Pending {
     priority: i32,
-    value: Decoration,
+    pub(super) value: Decoration,
 }
 
 pub(super) fn merge(
@@ -144,7 +144,12 @@ pub(super) fn merge(
     let fields = safe_fields(fields);
     let label = safe_text(value.label.as_deref(), 120);
     let description = safe_text(value.description.as_deref(), 200);
-    if fields.is_empty() && label.is_none() && description.is_none() && value.icon.is_none() {
+    if fields.is_empty()
+        && value.native_badges.is_empty()
+        && label.is_none()
+        && description.is_none()
+        && value.icon.is_none()
+    {
         return;
     }
     let pending = result.entry(path.to_owned()).or_insert_with(|| Pending {
@@ -157,6 +162,7 @@ pub(super) fn merge(
     if !pending.value.providers.iter().any(|item| item == provider) {
         pending.value.providers.push(provider.to_owned());
     }
+    pending.value.native_badges.extend(value.native_badges);
     for (key, field) in fields {
         let target = pending.value.fields.entry(key).or_default();
         for badge in field.badges {
@@ -184,7 +190,7 @@ pub(super) fn merge(
     pending.priority = pending.priority.max(priority);
 }
 
-fn decode(
+pub(super) fn decode(
     entries: &HashMap<String, DecorationEntry>,
     manifest: &PluginManifest,
     folder: &std::path::Path,
@@ -258,95 +264,11 @@ fn decode(
             icon,
             icon_path,
             providers: vec![],
+            native_badges: vec![],
         };
         merge(&mut result, entries, &path, 0, &manifest.name, value);
     }
     Ok(result.into_values().map(|pending| pending.value).collect())
-}
-
-pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> {
-    let entries = entries
-        .into_iter()
-        .map(|entry| (entry.path.clone(), entry))
-        .collect::<HashMap<_, _>>();
-    use crate::plugin_events::{EventRouter, Handler};
-    let mut ordered = entries.values().collect::<Vec<_>>();
-    ordered.sort_by(|a, b| a.path.cmp(&b.path));
-    let mut resources = ordered
-        .iter()
-        .map(|e| {
-            crate::plugin_resource_context::ResourceSnapshot::from_metadata(
-                &e.path,
-                crate::plugin_contracts::ResourceMetadata {
-                    name: e.name.clone(),
-                    kind: if e.is_dir { "directory" } else { "file" }.into(),
-                    extension: Some(e.extension.clone()),
-                    mime: Some(e.mime.clone()),
-                    size: None,
-                    modified: None,
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    if let Ok(root) = crate::plugin_resource_context::ResourceSnapshot::resolve(directory) {
-        resources.insert(0, root);
-    }
-    let metadata = resources
-        .iter()
-        .map(|r| serde_json::to_value(r.metadata()).unwrap_or_default())
-        .collect::<Vec<_>>();
-    let providers = EventRouter::providers("decorations.resolve", &metadata, directory, Vec::new());
-    let manifests = plugin_host::installed_manifests()
-        .into_iter()
-        .map(|(m, f)| (m.id.clone(), (m, f)))
-        .collect::<HashMap<_, _>>();
-    let result = EventRouter::resolve(
-        "decorations.resolve",
-        providers,
-        |_, _| Err("no builtin decorations".into()),
-        |plugin| {
-            crate::plugin_events::invoke_resources(
-                plugin,
-                "decorations.resolve",
-                json!({"directory":directory}),
-                &resources,
-                Some(directory),
-            )
-        },
-        |provider, response| {
-            let Handler::Plugin(plugin) = &provider.handler else {
-                return Err("invalid decoration provider".into());
-            };
-            let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
-            decode(&entries, manifest, folder, response)
-        },
-        |_| true,
-        |outcomes| {
-            let mut merged = HashMap::new();
-            for (provider, result) in outcomes.into_iter().rev() {
-                if let Ok(values) = result {
-                    for value in values {
-                        let path = value.path.clone();
-                        merge(
-                            &mut merged,
-                            &entries,
-                            &path,
-                            provider.priority.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
-                            &provider.name,
-                            value,
-                        );
-                    }
-                }
-            }
-            merged
-        },
-    );
-    let mut values = result
-        .into_values()
-        .map(|pending| pending.value)
-        .collect::<Vec<_>>();
-    values.sort_by(|a, b| a.path.cmp(&b.path));
-    values
 }
 
 #[cfg(test)]

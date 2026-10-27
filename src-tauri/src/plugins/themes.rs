@@ -105,7 +105,7 @@ mod tests {
             "id": "test.theme",
             "name": "Theme",
             "version": "1.0.0",
-            "runtime": { "protocolVersion": "3.0", "entrypoints": entrypoints },
+            "runtime": { "protocolVersion": "4.0", "entrypoints": entrypoints },
             "extensions": { "themes": themes }
         }))
         .unwrap()

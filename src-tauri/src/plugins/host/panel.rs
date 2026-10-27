@@ -206,7 +206,7 @@ mod tests {
             "name": "Preview",
             "version": "0.1.0",
             "description": "fixture",
-            "runtime": { "protocolVersion": "3.0", "entrypoints": {} },
+            "runtime": { "protocolVersion": "4.0", "entrypoints": {} },
             "permissions": {},
             "extensions": {
                 "preview": {

@@ -227,6 +227,17 @@ impl PluginHost {
         directory: &str,
         paths: &[PathBuf],
     ) -> Result<Value, String> {
+        self.invoke_selected_with_bindings(plugin_id, method, params, directory, paths, &[])
+    }
+    pub fn invoke_selected_with_bindings(
+        &self,
+        plugin_id: &str,
+        method: &str,
+        params: Value,
+        directory: &str,
+        paths: &[PathBuf],
+        bindings: &[crate::plugin_resource_context::ResourceBinding],
+    ) -> Result<Value, String> {
         if crate::mounts::handles(directory) {
             let (uri, source) = crate::mounts::resolve(directory)?;
             let crate::mounts::Source::View(view) = source else {
@@ -285,6 +296,10 @@ impl PluginHost {
                 &common, &canonical,
             )?)
         };
+        let mut root = root;
+        if let Some(scope) = &mut root {
+            crate::plugin_resource_context::bind_selected(scope, bindings)?;
+        }
         self.invoke_scoped(plugin_id, method, params, root)
     }
     pub(crate) fn invoke_vfs(
@@ -348,6 +363,16 @@ impl PluginHost {
             crate::plugin_events::prepare(plugin_id, method, params, &mut task_root, &declared)?;
         if let Some(object) = params.as_object_mut() {
             object.insert("networkDomains".into(), json!(state.network_domains));
+        }
+        if let Some(scope) = &mut task_root {
+            let policy =
+                crate::plugin_permission_policy::PermissionPolicy::new(plugin_id, &declared);
+            crate::plugin_request_resources::project(
+                plugin_id,
+                &mut params,
+                scope,
+                policy.allowed(crate::plugin_permission_policy::Capability::Metadata),
+            )?;
         }
         let existing = self
             .children

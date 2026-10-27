@@ -17,6 +17,8 @@ mod native_drag;
 pub mod operations;
 #[path = "plugins/cache.rs"]
 pub mod plugin_cache;
+#[path = "plugins/context_menu/mod.rs"]
+pub mod plugin_context_menu;
 #[path = "plugins/contracts.rs"]
 pub mod plugin_contracts;
 #[path = "plugins/decorations/mod.rs"]
@@ -45,6 +47,8 @@ pub mod plugin_permission_prompt;
 pub mod plugin_permissions;
 #[path = "plugins/preview.rs"]
 pub mod plugin_preview;
+#[path = "plugins/request_resources.rs"]
+pub mod plugin_request_resources;
 #[path = "plugins/resource_context.rs"]
 pub mod plugin_resource_context;
 #[path = "plugins/resources.rs"]
