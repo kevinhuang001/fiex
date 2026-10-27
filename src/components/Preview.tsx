@@ -25,7 +25,10 @@ import {
 } from '@/lib/preview'
 import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
 import type { Entry } from '@/lib/types'
+import { MemoryCache } from '@/lib/cache'
 const PdfPreview = lazy(() => import('./PdfPreview'))
+// Candidate discovery depends on the installed/enabled plugins; keep it brief.
+const candidateCache = new MemoryCache<PreviewCandidate[]>(64, 3_000)
 
 export function Preview({
   entry,
@@ -64,11 +67,14 @@ export function Preview({
     setMenuOpen(false)
     if (!entry) return
     setLoading(true)
-    void call<PreviewCandidate[]>('preview_candidates', {
-      extension: entry.extension,
-      mime: entry.mime,
-      isDir: entry.isDir,
-    })
+    void candidateCache
+      .get(JSON.stringify([entry.extension, entry.mime, entry.isDir]), () =>
+        call<PreviewCandidate[]>('preview_candidates', {
+          extension: entry.extension,
+          mime: entry.mime,
+          isDir: entry.isDir,
+        }),
+      )
       .then((values) => {
         if (!active) return
         const disabled = new Set(previewDisabled())
@@ -106,28 +112,42 @@ export function Preview({
     setPreviewReady(false)
     const open = async () => {
       let page: PluginLoadingPage | null = null
-      // A declared loading page is resolved first so the preview opens directly
-      // into plugin-owned UI instead of flashing Core's generic spinner.
-      if (pluginId && declaresLoading) {
-        try {
-          if (native) {
-            const path = await call<string | null>('preview_loading_asset', { pluginId })
-            if (path) page = { pluginId, sessionId: crypto.randomUUID(), src: asset(path) }
-          } else {
-            const html = await call<string | null>('preview_loading', { pluginId })
-            if (html) page = { pluginId, sessionId: crypto.randomUUID(), html }
-          }
-        } catch {
-          // The loading page is cosmetic; a bad entry must not block preview.open.
-        }
-        if (!active) return
-        if (page) setLoadingPage(page)
-      }
-      const value = await call<ResolvedPreview>('preview_open', {
+      let finished = false
+      // Start the actual provider request before resolving its decorative loading page.
+      // Both Core commands may involve a plugin process; serializing them adds latency.
+      const result = call<ResolvedPreview>('preview_open', {
         path: entry.path,
         providerId,
         providerOrder: candidates.map((candidate) => candidate.id),
-      })
+      }).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      )
+      // Show a declared loading page while the provider runs, when it arrives
+      // before the preview result.
+      if (pluginId && declaresLoading) {
+        void (
+          native
+            ? call<string | null>('preview_loading_asset', { pluginId }).then((path) =>
+                path ? { pluginId, sessionId: crypto.randomUUID(), src: asset(path) } : null,
+              )
+            : call<string | null>('preview_loading', { pluginId }).then((html) =>
+                html ? { pluginId, sessionId: crypto.randomUUID(), html } : null,
+              )
+        )
+          .then((loaded) => {
+            if (!active || finished || !loaded) return
+            page = loaded
+            setLoadingPage(loaded)
+          })
+          .catch(() => {
+            // A bad loading document must not block the actual preview.
+          })
+      }
+      const outcome = await result
+      finished = true
+      if ('error' in outcome) throw outcome.error
+      const value = outcome.value
       if (!active) return
       setResolved(value)
       // Keep the plugin loading document until the preview itself reports that

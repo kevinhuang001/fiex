@@ -4,10 +4,11 @@ import { Link2 } from 'lucide-react'
 import { call } from '@/lib/api'
 import { kind } from '@/lib/files'
 import { fileVisual } from '@/lib/fileIcons'
+import { MemoryCache } from '@/lib/cache'
 import { useDecorationIcon } from '@/lib/decorationIcons'
 import type { Entry } from '@/lib/types'
 
-const cache = new Map<string, Promise<string | null>>()
+const cache = new MemoryCache<string | null>(600, 5 * 60_000)
 // Bound native icon work: GTK icon extraction runs on the UI thread.
 const iconQueue: (() => void)[] = []
 let iconRequests = 0
@@ -70,13 +71,11 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
     let active = true
     const stop = whenVisible(ref.current, () => {
       const key = `${e.path}:${e.modified}:${pixels}`
-      if (!cache.has(key)) {
-        if (cache.size >= 600) cache.delete(cache.keys().next().value!)
-        cache.set(key, nativeIcon(e.path, pixels))
-      }
-      void cache.get(key)!.then((url) => {
-        if (active) setNative(url)
-      })
+      void cache
+        .get(key, () => nativeIcon(e.path, pixels))
+        .then((url) => {
+          if (active) setNative(url)
+        })
     })
     return () => {
       active = false

@@ -157,10 +157,16 @@ pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
 }
 
 fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, String> {
+    let cache_key = (kind == Builtin::Text)
+        .then(|| crate::plugin_cache::key("preview.text", local))
+        .flatten();
+    if let Some(value) = cache_key.as_deref().and_then(crate::plugin_cache::get) {
+        return Ok(value);
+    }
     let name = name_of(local);
     let ext = extension(local);
     let mime = mime_for(&ext);
-    match kind {
+    let view = match kind {
         Builtin::Text => {
             use std::io::Read;
             let file = fs::File::open(local).map_err(|e| e.to_string())?;
@@ -201,7 +207,11 @@ fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Result<Value, St
             "name": name,
             "extension": ext,
         })),
+    }?;
+    if let Some(key) = cache_key {
+        crate::plugin_cache::put(key, view.clone());
     }
+    Ok(view)
 }
 
 fn mime_for(ext: &str) -> String {

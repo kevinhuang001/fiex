@@ -226,6 +226,14 @@ pub fn media_sections(path: &Path) -> Vec<InfoSection> {
     if !path.is_file() {
         return Vec::new();
     }
+    let cache_key = crate::plugin_cache::key("info.media", path);
+    if let Some(sections) = cache_key
+        .as_deref()
+        .and_then(crate::plugin_cache::get)
+        .and_then(|value| serde_json::from_value(value).ok())
+    {
+        return sections;
+    }
     let ext = extension(path);
     let is_video = ["mp4", "m4v", "mov", "mkv", "webm"].contains(&ext.as_str());
     let mut sections = Vec::new();
@@ -239,6 +247,11 @@ pub fn media_sections(path: &Path) -> Vec<InfoSection> {
         }
     } else if let Some(section) = audio_section(path) {
         sections.push(section);
+    }
+    if let Some(key) = cache_key {
+        if let Ok(value) = serde_json::to_value(&sections) {
+            crate::plugin_cache::put(key, value);
+        }
     }
     sections
 }

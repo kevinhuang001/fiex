@@ -17,6 +17,7 @@ import {
 } from '@/hooks/useActivity'
 import type { PluginPanelRequest } from './usePanelSession'
 import { operationPaths } from './operationPaths'
+import { MemoryCache } from '@/lib/cache'
 
 export const MAX_PANEL_WIDTH = 720
 export const MAX_PANEL_HEIGHT = 680
@@ -68,8 +69,8 @@ export function usePanelBridge({
   const [error, setError] = useState('')
   const [size, setSize] = useState({ width: 560, height: 560 })
   const taskIds = useRef(new Set<string>())
-  const htmlCache = useRef(new Map<string, string>())
-  const urlCache = useRef(new Map<string, string>())
+  const htmlCache = useRef(new MemoryCache<string>(16, 30_000))
+  const urlCache = useRef(new MemoryCache<string>(16, 30_000))
   const dispose = useRef<null | (() => void)>(null)
   const loadPanel = (
     pluginId: string,
@@ -80,20 +81,15 @@ export function usePanelBridge({
     // bundles in packaged builds. Desktop loads the same HTML from the asset
     // protocol with the plugin document's own policy.
     if (native) {
-      const cachedUrl = urlCache.current.get(key)
-      if (cachedUrl) return Promise.resolve({ url: cachedUrl })
-      return call<string>('plugin_panel_asset', { pluginId, panelId }).then((path) => {
-        const url = convertFileSrc(path)
-        urlCache.current.set(key, url)
-        return { url }
-      })
+      return urlCache.current
+        .get(key, () =>
+          call<string>('plugin_panel_asset', { pluginId, panelId }).then(convertFileSrc),
+        )
+        .then((url) => ({ url }))
     }
-    const cached = htmlCache.current.get(key)
-    if (cached) return Promise.resolve({ html: cached })
-    return call<string>('plugin_panel_html', { pluginId, panelId }).then((value) => {
-      htmlCache.current.set(key, value)
-      return { html: value }
-    })
+    return htmlCache.current
+      .get(key, () => call<string>('plugin_panel_html', { pluginId, panelId }))
+      .then((html) => ({ html }))
   }
   useEffect(() => {
     let live = true
