@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { native } from '@/lib/api'
 import type { EntryDecoration } from './types'
@@ -45,9 +45,7 @@ export function clearDecorationIcons(owner: string) {
 }
 
 export function useDecorationIcon(path: string): string | undefined {
-  return useSyncExternalStore(
-    (listener) => subscribe(path, listener),
-    () => icons.get(path),
-    () => undefined,
-  )
+  const subscribePath = useCallback((listener: () => void) => subscribe(path, listener), [path])
+  const snapshot = useCallback(() => icons.get(path), [path])
+  return useSyncExternalStore(subscribePath, snapshot, () => undefined)
 }

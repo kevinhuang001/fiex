@@ -32,15 +32,15 @@ export function useListing(
   const [warnings, setWarnings] = useState<string[]>([])
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
-  const iconOwner = useRef(crypto.randomUUID())
+  const [iconOwner] = useState(() => crypto.randomUUID())
   const request = useRef(0)
   const locationsRequest = useRef(0)
   const decorationRequest = useRef(0)
   const searchRequest = useRef(0)
   useEffect(() => {
-    syncDecorationIcons(decorations, iconOwner.current)
-  }, [decorations])
-  useEffect(() => () => clearDecorationIcons(iconOwner.current), [])
+    syncDecorationIcons(decorations, iconOwner)
+  }, [decorations, iconOwner])
+  useEffect(() => () => clearDecorationIcons(iconOwner), [iconOwner])
   const reload = useCallback(() => setRefresh((v) => v + 1), [getLocale()])
   useEffect(() => {
     if (!native || !enabled) return
