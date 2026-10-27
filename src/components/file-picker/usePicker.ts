@@ -6,6 +6,7 @@ import { useMenuPosition } from '@/lib/menuPosition'
 import { usePreferences } from '@/hooks/usePreferences'
 import { commonPlaces } from '@/lib/places'
 import { settleFilePicker, type FilePickerRequest } from '@/lib/filePicker'
+import { loadPickerSidebarData, pickerSidebarSnapshot } from '@/lib/filePickerData'
 import { kind } from '@/lib/files'
 import type { Entry, Location, RemoteConnection } from '@/lib/types'
 
@@ -32,8 +33,13 @@ export function usePicker(request: FilePickerRequest) {
   const [preferences] = usePreferences()
   const [directory, setDirectory] = useState('')
   const [entries, setEntries] = useState<Entry[]>([])
-  const [locations, setLocations] = useState<Location[]>([])
-  const [connections, setConnections] = useState<RemoteConnection[]>([])
+  const initialSidebar = pickerSidebarSnapshot()
+  const [locations, setLocations] = useState<Location[]>(initialSidebar?.locations || [])
+  const [connections, setConnections] = useState<RemoteConnection[]>(() =>
+    (initialSidebar?.connections || []).filter((item) =>
+      item.mountPath.startsWith('fiex://mount/'),
+    ),
+  )
   const [selected, setSelected] = useState<string[]>([])
   const [history, setHistory] = useState<string[]>([])
   const [index, setIndex] = useState(-1)
@@ -63,12 +69,29 @@ export function usePicker(request: FilePickerRequest) {
   }
 
   useEffect(() => {
-    void call<Location[]>('locations')
-      .then((values) => setLocations(values || []))
+    let alive = true
+    void loadPickerSidebarData()
+      .then(({ locations, connections }) => {
+        if (!alive) return
+        setLocations(locations)
+        // A picker can only navigate VFS-backed connections.
+        setConnections(connections.filter((item) => item.mountPath.startsWith('fiex://mount/')))
+        if (!directory) {
+          const target =
+            request.directory ||
+            (locations.find((item) => item.kind === 'home') || locations[0])?.path ||
+            ''
+          if (target) {
+            setDirectory(target)
+            setHistory([target])
+            setIndex(0)
+          }
+        }
+      })
       .catch(() => {})
-    void call<RemoteConnection[]>('remote_connections')
-      .then((values) => setConnections(values || []))
-      .catch(() => {})
+    return () => {
+      alive = false
+    }
   }, [])
 
   useEffect(() => {
@@ -86,16 +109,6 @@ export function usePicker(request: FilePickerRequest) {
       alive = false
     }
   }, [directory, reload])
-
-  useEffect(() => {
-    if (!directory && request.directory) navigate(request.directory)
-    if (!directory && !request.directory)
-      void call<Location[]>('locations').then((values) => {
-        const home = (values || []).find((item) => item.kind === 'home') || values?.[0]
-        if (home && !directory) navigate(home.path)
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (request.mode !== 'saveFile') return
@@ -129,7 +142,11 @@ export function usePicker(request: FilePickerRequest) {
 
   useEffect(() => {
     if (!menu) return
-    const close = () => setMenu(null)
+    const close = (event: PointerEvent) => {
+      // A pointerdown on a menu item must reach its click handler; closing the
+      // menu here would unmount the button before the click fires.
+      if (!menuRef.current?.contains(event.target as Node)) setMenu(null)
+    }
     const escape = (event: KeyboardEvent) => event.key === 'Escape' && setMenu(null)
     window.addEventListener('pointerdown', close)
     window.addEventListener('keydown', escape)
@@ -345,7 +362,9 @@ export function usePicker(request: FilePickerRequest) {
   const cancelReplace = () => setReplace(false)
   const cancel = () => settleFilePicker(null)
 
-  const places = commonPlaces(locations)
+  const places = commonPlaces(locations).filter(
+    (item) => item.kind !== 'applications' && item.kind !== 'trash',
+  )
   const favorites = preferences.favorites || []
   const disks = locations.filter((location) => location.kind === 'disk')
 

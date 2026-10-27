@@ -33,7 +33,6 @@ export function PickerEntries({
       onContextMenu={(event) => onContextMenu(event)}
     >
       {error && <p className="file-picker-hint error">{error}</p>}
-      {!error && !visible.length && <p className="file-picker-hint">{t('此文件夹为空。')}</p>}
       {view === 'list'
         ? grouped.map((section) => (
             <div key={section.label || 'all'}>

@@ -6,6 +6,24 @@ import { notHandled, state } from './shared'
 export async function handleFiles(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
     case 'list_directory': {
+      const requested = String(a.path || '')
+      if (requested === 'recent:' || requested === 'recent://') {
+        const names = [
+          'Notes.md',
+          '产品介绍.pptx',
+          '预算明细.csv',
+          '示例数据库.db',
+          'Palette.json',
+          'Archive.zip',
+        ]
+        return {
+          path: 'recent://',
+          entries: names
+            .map((name) => state.entries.find((entry) => entry.name === name))
+            .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+          warnings: [],
+        }
+      }
       const remoteRoot = 'fiex://mount/demo-webdav'
       if ((a.path as string).startsWith(remoteRoot)) {
         return {

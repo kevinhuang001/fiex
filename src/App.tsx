@@ -16,6 +16,7 @@ import { PluginPermissionHost } from '@/components/plugins/PluginPermissionHost'
 import { TerminalView } from '@/components/ssh/SshTerminalView'
 import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
+import { warmFilePickerData } from '@/lib/filePickerData'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { asset, call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -27,6 +28,10 @@ export default function App() {
 
   const app = useAppController()
   usePluginTasks()
+
+  useEffect(() => {
+    warmFilePickerData()
+  }, [])
   const pluginViewOf = (path: string) =>
     /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
   const terminalOf = (path: string) => /^fiex-terminal:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]

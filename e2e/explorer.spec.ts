@@ -61,6 +61,7 @@ test('closing the last tab collapses the split pane', async ({ page }) => {
   await expect(page.getByRole('complementary', { name: '第二个面板' })).toHaveCount(0)
 })
 test('plugin search providers add results to the same query', async ({ page }) => {
+  await expect(page.getByText('Notes.md', { exact: true }).first()).toBeVisible()
   await page.getByRole('textbox', { name: '搜索文件' }).fill('plugin-index-hit')
   await expect(page.getByText('Indexed result.txt', { exact: true })).toBeVisible({
     timeout: 15000,

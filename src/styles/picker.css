@@ -338,6 +338,8 @@
 .file-picker-menu {
   position: fixed;
   z-index: 80;
+  /* The overlay root is pointer-events:none; the menu must opt back in. */
+  pointer-events: auto;
   min-width: 168px;
   padding: 5px;
   border: 1px solid var(--line);
@@ -424,4 +426,12 @@ html.dark .file-picker-name input,
 html.dark .file-picker-search,
 html.dark .file-picker-dialog-field input {
   background: var(--canvas);
+}
+
+.file-picker-crumbs {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.file-picker-crumbs::-webkit-scrollbar {
+  display: none;
 }
