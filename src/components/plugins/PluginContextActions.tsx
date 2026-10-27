@@ -3,7 +3,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 import { call } from '@/lib/api'
 import { usePluginCatalog } from '@/lib/plugins'
-import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
+import {
+  beginActivity,
+  finishActivity,
+  quietProgressChannel,
+  updateActivity,
+} from '@/hooks/useActivity'
 import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/PluginPanelHost'
 import {
   PluginMenuNode,
@@ -111,6 +116,7 @@ export function PluginContextActions({
       const response = await call<unknown>('plugin_context_menu_execute', {
         menuSessionId: menu.menuSessionId,
         itemId: item.id,
+        onProgress: quietProgressChannel(),
       })
       if (
         response &&

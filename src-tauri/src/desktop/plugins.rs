@@ -676,7 +676,7 @@ pub(crate) async fn plugin_context_menu_children(
 pub(crate) async fn plugin_context_menu_execute(
     menu_session_id: String,
     item_id: String,
-    on_progress: Option<tauri::ipc::Channel<super::files::OperationProgress>>,
+    on_progress: tauri::ipc::Channel<super::files::OperationProgress>,
     cancel: tauri::State<'_, crate::operations::OperationCancel>,
 ) -> Result<serde_json::Value, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -685,7 +685,7 @@ pub(crate) async fn plugin_context_menu_execute(
     .await
     .map_err(|error| error.to_string())??;
     if result["kind"] == "remoteAction" {
-        let progress = on_progress.map(super::files::byte_progress_emitter);
+        let progress = Some(super::files::byte_progress_emitter(on_progress));
         let options = crate::remote::TransferOptions {
             cancel: Some(cancel.flag()),
             progress: progress.map(|emit| {

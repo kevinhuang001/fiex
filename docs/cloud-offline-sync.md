@@ -29,7 +29,7 @@
 | `fs.readStream` | `streamId, offset, maxBytes` | `{base64, eof}`                         |
 | `fs.closeRead`  | `streamId`                   | null                                    |
 
-文件上传统一使用 `fs.writeFile({nodeId, source, size, ifRevision}) -> {revision}`。Core 只向该次操作授权上传快照这个文件，插件用 SDK 的 `files().open_read(source)` 读取；HTTP 插件可以用 `body_reader`，Google Drive 在插件内部以 256 KiB 分块完成 resumable 上传。没有 `writeMode`、`sync` 或 `conflictControl` 配置字段。
+文件上传统一使用 `fs.writeFile({nodeId, source, size, ifRevision}) -> {revision}`。Core 只向该次操作授权上传快照这个文件，插件用 SDK 的 `files().open_read(&source)` 读取，`source` 是 Core 授权的 `ResourceRef`，不是宿主路径；HTTP 插件可以用 `body_reader`，Google Drive 在插件内部以 256 KiB 分块完成 resumable 上传。没有 `writeMode`、`sync` 或 `conflictControl` 配置字段。
 
 WebDAV 使用 HEAD/PROPFIND ETag 和 If-Match 条件 PUT；没有强 ETag 的服务器仍可离线缓存，但拒绝不安全的自动覆盖。SMB 使用修改/变更时间和大小校验，先写远端临时文件，提交前再检查后原子替换。OpenList 使用 `/api/fs/get` 的元数据基线和 `/api/fs/put` 的流式上传；其 API 无标准 CAS，属于尽力检测并发冲突，不能承诺服务端原子版本条件。SMB 提交前检查与替换之间同样存在协议客户端不配合时的窄竞争窗口。这些差异由 Provider 的版本检查和实际操作结果体现，比较后写入不能描述为 CAS。
 

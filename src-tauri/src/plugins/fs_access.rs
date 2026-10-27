@@ -229,7 +229,6 @@ impl Scope {
             let path = canonical_selection(path)?.to_string_lossy().into_owned();
             self.authorize(&path)?;
             std::sync::Arc::make_mut(&mut self.references).insert(key.clone(), path.clone());
-
         }
         if let Some(metadata) = resource.get("metadata").filter(|v| v.is_object()) {
             let mut metadata = metadata.clone();

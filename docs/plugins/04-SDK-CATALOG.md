@@ -22,7 +22,7 @@ fn main() {
 ```rust
 let files = ctx.files();
 let text = files.read_to_string("notes.txt")?;
-let mut input = files.open_read("large.bin")?;
+let mut input = files.open_read(&target.reference)?;
 let mut output = files.begin_write("copy.bin", false)?;
 std::io::copy(&mut input, &mut output)?;
 output.commit()?;
@@ -62,8 +62,8 @@ let task = ctx.spawn_task(|task| {
 
 ### 其他 Host API
 
-- `ctx.storage_get/set`：插件命名空间；
-- `ctx.secret_get/set`：Secret Broker；
+- `ctx.storage()`：类型化插件命名空间（含 CAS）；
+- `ctx.secrets()`：系统钥匙串（区分拒绝/不可用/缺失）；
 - `ctx.process_run`：已声明的外部命令；
 - `ctx.invoke`：调用 Host RPC；
 - `ctx.open_vfs_view`：打开自己注册的 VFS 视图。

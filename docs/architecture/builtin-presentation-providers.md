@@ -1,63 +1,52 @@
 # Builtin context-menu and decoration providers
 
-Context menus and entry decorations keep their feature-specific decisions out
-of the generic menu/list/tile/column renderers.
+Context menus and entry decorations keep feature-specific decisions out of the
+generic menu/list/tile/column renderers.
 
 ## Context menus
 
-`src/components/explorer/context-menu/items.tsx` is the builtin provider registry
-and collector. Each provider has an ID, order, predicate, resolver and optional
-`tail` placement. The collector captures the effective selection once: a click
-inside the current selection targets that selection; a click outside it targets
-only the clicked entry. Providers receive both `paths` and `multiple`.
+Builtin and plugin context menus share one Rust pipeline in
+`src-tauri/src/plugins/context_menu/`. `builtin.rs` owns the Core menu policy:
+opening/inspection, macOS tags, connection cache/sync, single rename, batch
+rename, clipboard/duplicate, terminal, copy path and Trash. Its providers are
+registered with the same `EventRouter` used for plugins, so ordering, match
+rules and execute authorization are identical.
 
-The builtin providers are opening/inspection, macOS tags, connection cache/sync,
-single rename, batch rename, clipboard/duplicate, terminal, copy path, and Trash.
-Batch rename's predicate requires more than one effective target. Connection
-operations require all targets to belong to remote connections; a mixed
-local/remote selection does not offer operations that would fail halfway.
-Delete/restore actions explicitly declare tail placement; translations never
-control grouping or item identity.
+`query()` captures the effective selection once (a click inside the current
+selection targets that selection; a click outside targets only the clicked
+entry), projects resource refs and asks every matching provider for items. Menu
+sessions expire, reject disabled/unknown item ids and can only execute through
+the provider that produced them. Submenus are lazy for plugins and validated
+for depth, duplicate ids and item count.
 
-These builtin providers execute in the frontend because their commands include
-opening dialogs, clipboard state, preview and activity UI. Their action closures
-reuse the existing controller and native command boundaries. They resolve
-synchronously and do not introduce another IPC round trip or download files
-while discovering a menu. Adding a builtin requires a provider module and a
-registry entry, not a new conditional in the renderer.
+Builtin executions return a frontend-only `coreAction` (open, preview, info,
+tags, rename, clipboard, trash, …) or a `remoteAction` handled by
+`context_menu/actions.rs`. Plugin executions may open a panel. The frontend
+`FileContextMenu` renders the returned items in tail/non-tail order,
+`PluginContextActions` inserts plugin submenus, and `execute.ts` applies the
+returned core action. The frontend does not reconstruct availability,
+selection or connection policy.
 
-Plugin menu providers retain the native `contextMenu.resolve` EventRouter,
-validation, expiring menu sessions, lazy submenus and `contextMenu.execute`
-authorization. `PluginContextActions` remains between builtin items and the tail.
-The frontend registry does not grant plugin permissions or expose builtin
-command closures over plugin RPC. This is a frontend presentation-provider
-registry, separate from Rust's plugin EventRouter.
+Adding a builtin means adding policy to `builtin.rs` (and the matching core
+action in `execute.ts` if it is a new command), not a new conditional in every
+renderer.
 
 ## Decorations
 
-`src/lib/decorations` resolves independent tag, read-only and connection-status
-providers from existing listing metadata. They return the same `EntryDecoration`
-shape used by native plugin results. The connection provider owns cached,
-uncached, pinned, pending, conflict and uploaded badges; uploaded is independent
-of cache/pin mode. The tag provider keeps the five-dot limit.
+`src-tauri/src/plugins/decorations/` resolves builtin tag, read-only and
+connection-status providers from the same listing metadata used by plugins. The
+connection provider owns cached, uncached, pinned, pending, conflict and
+uploaded badges; uploaded is independent of cache/pin mode. The tag provider
+keeps the five-dot limit.
 
-`useEntryDecorations` immediately resolves builtins and merges the native
-`plugin_decorations` response when it arrives. Builtins remain visible during
-plugin loading, failure and search. Responses for an older listing are ignored,
-and an older response is never painted onto a new listing. Icon publication and
-cleanup are owned by this hook rather than the listing controller.
-
-Builtin provider priorities define their merge order. Validated plugin output
-is applied afterward: it can override labels, descriptions, icons and style
-properties; badges append and per-column fields survive. Builtin badges do not
-consume Core's existing plugin badge allowance. The inputs are never mutated.
-Only currently listed paths are admitted to the collected result.
+Builtin and plugin results are merged in deterministic priority order. Plugin
+output can override labels, descriptions, icons and style properties; badges
+append and per-column fields survive. Builtin badges do not consume Core's
+plugin badge allowance. Inputs are never mutated and only currently listed
+paths are admitted.
 
 `NameCell`/`Badges` render the collected DTO, and all views use those renderers.
-They contain no connection-state, upload-state, tag or read-only policy. Optional
-local badge presentation fields (`dot`, `status`, `icon`) preserve the existing
-visuals. Rust's plugin decoration decoder strips those fields, so this does not
-change the plugin SDK/wire contract or weaken native sanitization.
+They contain no connection-state, upload-state, tag or read-only policy.
 
 Run `npm test`, `npm run build`, `npm run check:i18n`, and the Playwright suite to
 validate selection matching, cache commands, presentation merging and UI flows.

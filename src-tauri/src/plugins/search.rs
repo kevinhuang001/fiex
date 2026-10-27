@@ -68,7 +68,7 @@ pub fn resolve(
                 .ok_or("invalid search entries")?;
             let mut values = Vec::new();
             for value in items.iter().take(limit) {
-                let entry = match provider.handler {
+                let mut entry = match provider.handler {
                     Handler::Builtin(_) => {
                         serde_json::from_value::<Entry>(value.clone()).map_err(|e| e.to_string())?
                     }
@@ -84,12 +84,21 @@ pub fn resolve(
                     }
                 } else {
                     let root = dunce::canonicalize(&request.root).map_err(|e| e.to_string())?;
-                    let path = crate::plugin_fs_access::canonical_selection(std::path::Path::new(
-                        &entry.path,
-                    ))?;
-                    if !path.starts_with(root) {
+                    // Providers receive the root as an opaque ref. A local
+                    // provider may therefore return a path relative to that
+                    // root; resolve it here and never trust a bare relative
+                    // path as a host location.
+                    let candidate = std::path::Path::new(&entry.path);
+                    let candidate = if candidate.is_absolute() {
+                        candidate.to_path_buf()
+                    } else {
+                        root.join(candidate)
+                    };
+                    let path = crate::plugin_fs_access::canonical_selection(&candidate)?;
+                    if !path.starts_with(&root) {
                         return Err("search result outside requested root".into());
                     }
+                    entry.path = path.to_string_lossy().into_owned();
                 }
                 if !request.hidden && entry.name.starts_with('.') {
                     continue;

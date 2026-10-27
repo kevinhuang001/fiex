@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
-import { progressChannel } from '@/hooks/useActivity'
+import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { ContextMenuProps } from './types'
 import type { CoreMenu, CoreMenuItem } from './useContextMenu'
 
@@ -67,7 +67,7 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
   }
 }
 export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props: ContextMenuProps) {
-  let onProgress: ReturnType<typeof progressChannel> | undefined
+  let onProgress: ReturnType<typeof progressChannel> | undefined = quietProgressChannel()
   const execute = async () => {
     const effect = await call<CoreAction | { handled: boolean }>('plugin_context_menu_execute', {
       menuSessionId: menu.menuSessionId,

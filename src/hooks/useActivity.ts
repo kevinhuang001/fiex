@@ -144,6 +144,12 @@ export function updateActivity(
   if (changed) emit()
 }
 
+/** A progress channel for actions that have no activity row to update. */
+export function quietProgressChannel() {
+  if (!native) return undefined
+  return new Channel<OperationProgress>()
+}
+
 export function progressChannel(id: string) {
   // The browser fixture has no Tauri internals, so it receives a plain object
   // whose `onmessage` the demo mock can call to simulate a progress channel.

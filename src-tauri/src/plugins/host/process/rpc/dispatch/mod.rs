@@ -193,7 +193,9 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
         resolved = p.clone();
         resolved["path"] = json!(scope.resolve_reference(reference)?);
         &resolved
-    } else { p };
+    } else {
+        p
+    };
     let actor = &actor;
     let mut ctx = Context {
         running,
