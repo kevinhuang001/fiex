@@ -43,11 +43,12 @@ button {
     background 0.12s,
     color 0.12s;
 }
+/* Focus is communicated by the component's own surface/state; the generic
+   accent outline read as a stray blue ring on dialogs and Radix triggers. */
 button:focus-visible,
 input:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
 }
 input[type='checkbox'] {
   accent-color: var(--accent);

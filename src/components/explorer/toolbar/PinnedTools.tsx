@@ -117,7 +117,7 @@ export function PinnedTools({ prefs, update, x, onManagePlugins }: PinnedToolsPr
                 size="icon"
                 className={`plugin-tool-button ${pinDrag?.from === index ? 'dragging' : ''}`}
                 style={{ transform: pinShift(index) }}
-                title={t('{0} · {1}（拖动排序，右键取消固定）', plugin.name, tool.title)}
+                title={`${plugin.name} · ${tool.title}`}
                 aria-label={`${plugin.name} ${tool.title}`}
                 onPointerDown={(event) => beginPinDrag(event, index)}
                 onContextMenu={(event) => {

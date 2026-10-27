@@ -49,7 +49,7 @@ export function ExplorerStatusBar({
               )
             }
           >
-            <TerminalSquare size={13} />
+            <TerminalSquare size={15} />
             {t('终端')}
           </button>
           <button
@@ -58,7 +58,7 @@ export function ExplorerStatusBar({
             aria-label={t('工作区')}
             onClick={() => workspace.setOpen(!workspace.open)}
           >
-            <ListChecks size={13} />
+            <ListChecks size={15} />
             {t('工作区')}
             <span className="workspace-count">{workspace.items.length}</span>
           </button>

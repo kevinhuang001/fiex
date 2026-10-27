@@ -9,7 +9,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--canvas);
-  max-width: min(960px, calc(100vw - 24px));
+  max-width: min(960px, calc(var(--ui-vw, 100vw) - 24px));
   max-height: min(86vh, 820px);
   transform: translate(-50%, -50%);
   /* Laid out but invisible until the plugin reports a settled size. */
@@ -32,6 +32,10 @@
   to {
     opacity: 0;
   }
+}
+.plugin-panel-popover:focus-visible,
+.plugin-panel-popover .icon-button:focus-visible {
+  outline: none;
 }
 .plugin-panel-popover.revealed {
   visibility: visible;
@@ -286,8 +290,8 @@
 
 /* Mobile-style permission request: one decision at a time. */
 .plugin-permission-prompt-modal {
-  width: min(356px, calc(100vw - 32px));
-  padding: 26px 22px 18px;
+  width: min(400px, calc(var(--ui-vw, 100vw) - 32px));
+  padding: 28px 24px 20px;
   border-radius: 22px;
 }
 .plugin-permission-prompt-modal .modal-close {
@@ -358,9 +362,9 @@
 
 /* Store: independent, centered sheet; cards keep a comfortable width. */
 .plugin-store-modal {
-  width: min(980px, calc(100vw - 48px));
-  max-width: calc(100vw - 48px);
-  height: min(760px, calc(100vh - 64px));
+  width: min(980px, calc(var(--ui-vw, 100vw) - 48px));
+  max-width: calc(var(--ui-vw, 100vw) - 48px);
+  height: min(760px, calc(var(--ui-vh, 100vh) - 64px));
   padding: 26px 30px;
   display: flex;
   flex-direction: column;
@@ -400,7 +404,7 @@
 }
 /* Compact store sheet: narrower dialog, same centered column. */
 .plugin-store-modal {
-  width: min(780px, calc(100vw - 48px));
+  width: min(780px, calc(var(--ui-vw, 100vw) - 48px));
   padding: 22px 24px;
 }
 .plugin-store-modal .plugin-store {
@@ -408,7 +412,7 @@
 }
 /* Compact store: two wider cards per row and a slim toolbar. */
 .plugin-store-modal {
-  width: min(740px, calc(100vw - 48px));
+  width: min(740px, calc(var(--ui-vw, 100vw) - 48px));
   padding: 20px 24px 22px;
 }
 .plugin-store-modal > header {
@@ -448,7 +452,7 @@
 }
 /* Permission manager: grouped sections, one profile header, compact switch rows. */
 .plugin-permissions-modal {
-  width: min(620px, calc(100vw - 32px));
+  width: min(620px, calc(var(--ui-vw, 100vw) - 32px));
 }
 .plugin-permissions-modal > header {
   margin-bottom: 16px;
@@ -582,7 +586,7 @@
   cursor: not-allowed;
 }
 .plugin-domain-modal {
-  width: min(460px, calc(100vw - 32px));
+  width: min(460px, calc(var(--ui-vw, 100vw) - 32px));
 }
 .plugin-domain-page {
   display: flex;
@@ -597,7 +601,7 @@
 }
 /* Local import: identity and signature only. */
 .plugin-import-modal {
-  width: min(420px, calc(100vw - 32px));
+  width: min(420px, calc(var(--ui-vw, 100vw) - 32px));
 }
 .plugin-import-page {
   display: flex;
@@ -676,17 +680,17 @@
   background: color-mix(in srgb, var(--warning) 9%, var(--surface));
 }
 .plugin-permissions-modal {
-  width: min(560px, calc(100vw - 32px));
+  width: min(560px, calc(var(--ui-vw, 100vw) - 32px));
 }
 .plugin-toolbar-actions-only {
   padding-top: 12px;
 }
 .plugin-domain-modal {
-  width: min(400px, calc(100vw - 32px));
+  width: min(400px, calc(var(--ui-vw, 100vw) - 32px));
 }
 /* Store cards: compact two-column grid with the action at the bottom. */
 .plugin-store-modal {
-  width: min(600px, calc(100vw - 48px));
+  width: min(600px, calc(var(--ui-vw, 100vw) - 48px));
   padding: 18px 22px 20px;
 }
 .plugin-store-modal .plugin-store {
@@ -735,7 +739,7 @@
   margin-top: 2px;
 }
 .plugin-store-modal {
-  width: min(540px, calc(100vw - 40px));
+  width: min(540px, calc(var(--ui-vw, 100vw) - 40px));
   padding: 16px 20px 18px;
 }
 .plugin-store-modal .plugin-store {
@@ -825,8 +829,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  width: min(430px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
+  width: min(430px, calc(var(--ui-vw, 100vw) - 32px));
+  max-height: calc(var(--ui-vh, 100vh) - 48px);
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -1091,6 +1095,9 @@
 .plugin-permission-prompt-toggles {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  /* The frame spans the (fixed-width) prompt and grows with its rows; long
+     permission lists scroll instead of stretching the dialog. */
   max-height: min(46vh, 360px);
   margin: 10px 0 4px;
   padding: 2px;

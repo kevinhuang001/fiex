@@ -5,7 +5,7 @@ import { demo, native } from '@/lib/api'
 import type { OperationProgress } from '@/lib/types'
 
 type ActivityStatus = 'running' | 'done' | 'error'
-export type ActivityKind = 'transfer' | 'git' | 'delete' | 'sync' | 'plugin'
+export type ActivityKind = 'transfer' | 'delete' | 'sync' | 'plugin'
 
 export interface ActivityItem {
   id: string
@@ -20,6 +20,8 @@ export interface ActivityItem {
   done?: number
   total?: number
   step?: string
+  /** Plugin identity for per-plugin filtering in the status centre. */
+  pluginId?: string
 }
 
 const LIMIT = 60
@@ -42,7 +44,6 @@ function load(): ActivityItem[] {
           item &&
           typeof item.label === 'string' &&
           (item.kind === 'transfer' ||
-            item.kind === 'git' ||
             item.kind === 'delete' ||
             item.kind === 'sync' ||
             item.kind === 'plugin'),
@@ -57,6 +58,8 @@ function load(): ActivityItem[] {
         finishedAt: item.finishedAt ? Number(item.finishedAt) : undefined,
         detail: item.status === 'running' ? t('应用已关闭') : item.detail,
         indeterminate: Boolean(item.indeterminate),
+        pluginId:
+          item.kind === 'plugin' && typeof item.pluginId === 'string' ? item.pluginId : undefined,
       }))
   } catch {
     return []
@@ -85,11 +88,21 @@ export function beginActivity(
   detail?: string,
   cancel?: () => void,
   kind: ActivityKind = 'transfer',
+  pluginId?: string,
 ): string {
   const label = rawLabel.replace(/^正在/, '').replace(/…$/, '')
   const id = `${Date.now()}-${++seq}`
+  const source = kind === 'plugin' && pluginId ? { pluginId } : {}
   items = [
-    { id, kind, label, detail, status: 'running' as const, startedAt: Date.now() },
+    {
+      id,
+      kind,
+      label,
+      detail,
+      status: 'running' as const,
+      startedAt: Date.now(),
+      ...source,
+    },
     ...items,
   ].slice(0, LIMIT)
   // Transfers and syncs surface their progress; other operations stay in

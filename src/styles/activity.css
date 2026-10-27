@@ -12,6 +12,11 @@
   border-radius: 15px;
   background: var(--canvas);
 }
+.activity-center.filter-open {
+  /* The filter menu may grow past the list height; let it escape the panel
+     and scroll inside the viewport instead of being clipped. */
+  overflow: visible;
+}
 .activity-center header {
   display: flex;
   align-items: center;
@@ -24,8 +29,80 @@
   font-size: 13px;
   font-weight: 650;
 }
-.activity-center header .activity-close {
+.activity-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   margin-left: auto;
+}
+.activity-filter {
+  position: relative;
+  display: flex;
+}
+.activity-filter-button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+.activity-filter-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  display: flex;
+  width: 216px;
+  max-height: min(58vh, 380px, calc(100vh - 190px));
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.activity-filter-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.activity-filter-menu button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 3px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
+}
+.activity-filter-heading {
+  padding: 5px 8px 2px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+.activity-filter-menu button:hover {
+  background: var(--hover);
+}
+.activity-filter-menu button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.activity-filter-menu button svg {
+  color: var(--accent);
 }
 .activity-running {
   padding: 4px 8px;
@@ -149,6 +226,11 @@
   gap: 8px;
   padding: 34px 12px;
   color: var(--muted);
+  font-size: 11px;
+}
+.activity-empty button {
+  color: var(--accent);
+  background: transparent;
   font-size: 11px;
 }
 .activity-details {

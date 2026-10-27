@@ -61,15 +61,7 @@ export function Sidebar({
               />
             )
           }
-          return (
-            <Devices
-              key="devices"
-              x={x}
-              onEject={onEject}
-              onEjectDevice={onEjectDevice}
-              onMount={onMount}
-            />
-          )
+          return <Devices key="devices" x={x} onMount={onMount} setMenu={setMenu} />
         })}
       </div>
       <SidebarMenu
@@ -78,6 +70,9 @@ export function Sidebar({
         update={update}
         onTrash={onTrash}
         onEmptyTrash={onEmptyTrash}
+        onEject={onEject}
+        onEjectDevice={onEjectDevice}
+        onMount={onMount}
         setMenu={setMenu}
         menuRef={menuRef}
         menuPosition={menuPosition}

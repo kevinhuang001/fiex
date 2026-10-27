@@ -11,6 +11,17 @@ use std::time::{Duration, Instant};
 const EXEC_OUTPUT_LIMIT: usize = 1024 * 1024;
 const EXEC_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// Plugin commands are headless. On Windows a console-subsystem child would
+/// otherwise flash a black window when the plugin shells out (GPG, Git, ...).
+#[cfg(windows)]
+fn hide_console(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x08000000);
+}
+
+#[cfg(not(windows))]
+fn hide_console(_: &mut Command) {}
+
 fn read_capped(mut reader: impl Read) -> (Vec<u8>, bool) {
     let mut output = Vec::new();
     let mut truncated = false;
@@ -115,6 +126,7 @@ pub(super) fn host_exec(
     if let Some(cwd) = &cwd {
         process.current_dir(cwd);
     }
+    hide_console(&mut process);
     let mut child = process
         .spawn()
         .map_err(|error| format!("command failed to start: {error}"))?;
@@ -243,6 +255,7 @@ pub fn run_command(
             process.env(key, value);
         }
     }
+    hide_console(&mut process);
     let mut child = process
         .spawn()
         .map_err(|error| format!("command failed to start: {error}"))?;

@@ -4,7 +4,7 @@ import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
 import { call, demo } from '@/lib/api'
 import type { Preferences } from '@/lib/types'
-import { Image as ImageIcon, Palette, SlidersHorizontal, Sun } from 'lucide-react'
+import { Image as ImageIcon, Languages, Palette, SlidersHorizontal, Sun } from 'lucide-react'
 
 export function AppearanceSettings({
   prefs,
@@ -50,10 +50,15 @@ export function AppearanceSettings({
     <>
       <div className="settings-card">
         <div className="settings-row">
-          <div className="settings-row-label">{t('语言 / Language')}</div>
+          <div className="settings-row-label">
+            <span className="settings-row-icon" style={{ background: '#14b8a6' }}>
+              <Languages size={15} />
+            </span>
+            {t('语言')}
+          </div>
           <div className="settings-row-control">
             <SelectField
-              label={t('语言 / Language')}
+              label={t('语言')}
               value={prefs.locale}
               options={[
                 { value: 'zh-CN', label: t('简体中文') },

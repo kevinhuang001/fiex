@@ -16,13 +16,13 @@ describe('plugin catalog helpers', () => {
         contextMenus: true,
         preview: undefined,
       },
-      ['git'],
+      ['make'],
     )
     expect(categories).toEqual(['info', 'contextMenus'])
   })
 
   it('falls back to commands when no contribution category exists', () => {
-    expect(pluginCategories({}, ['git'])).toEqual(['commands'])
+    expect(pluginCategories({}, ['make'])).toEqual(['commands'])
     expect(pluginCategories({}, [])).toEqual([])
   })
 })

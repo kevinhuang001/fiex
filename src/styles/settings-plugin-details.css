@@ -158,7 +158,7 @@
 
 /* App store modal */
 .plugin-store-modal {
-  width: min(860px, calc(100vw - 40px));
+  width: min(860px, calc(var(--ui-vw, 100vw) - 40px));
 }
 .plugin-store {
   gap: 14px;
@@ -446,7 +446,7 @@
 }
 .plugin-store-modal {
   width: 720px;
-  max-width: calc(100vw - 48px);
+  max-width: calc(var(--ui-vw, 100vw) - 48px);
 }
 .plugin-store {
   gap: 11px;
@@ -504,7 +504,7 @@
 }
 .plugin-permissions-modal {
   width: 560px;
-  max-width: calc(100vw - 48px);
+  max-width: calc(var(--ui-vw, 100vw) - 48px);
 }
 .plugin-permissions-page {
   gap: 11px;
@@ -1014,7 +1014,7 @@
 
 .plugin-list-modal {
   width: 440px;
-  max-width: calc(100vw - 40px);
+  max-width: calc(var(--ui-vw, 100vw) - 40px);
   padding: 18px;
 }
 .plugin-list-modal > header,
@@ -1090,7 +1090,7 @@
 
 .plugin-list-confirm {
   width: 380px;
-  max-width: calc(100vw - 40px);
+  max-width: calc(var(--ui-vw, 100vw) - 40px);
   padding: 18px;
 }
 
@@ -1203,4 +1203,12 @@
 .plugin-menu-settings[data-highlighted] {
   color: var(--text);
   background: var(--hover);
+}
+
+.plugin-logs-modal {
+  width: 560px;
+  max-width: calc(var(--ui-vw, 100vw) - 48px);
+}
+.plugin-logs-page {
+  gap: 10px;
 }

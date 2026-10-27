@@ -7,11 +7,11 @@ import { CaretRightIcon as ChevronRight } from '@phosphor-icons/react/dist/csr/C
 import { CodeIcon as Code2 } from '@phosphor-icons/react/dist/csr/Code'
 import { ColumnsIcon as Columns2 } from '@phosphor-icons/react/dist/csr/Columns'
 import { FolderPlusIcon as FolderPlus } from '@phosphor-icons/react/dist/csr/FolderPlus'
-import { ScrollIcon as ScrollText } from '@phosphor-icons/react/dist/csr/Scroll'
+import { PulseIcon as ActivityIcon } from '@phosphor-icons/react/dist/csr/Pulse'
 import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/SidebarSimple'
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
-import { useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
 import { PinnedTools } from './toolbar/PinnedTools'
@@ -61,7 +61,14 @@ export function ExplorerToolbar({
   | 'setPluginManager'
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshTimer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current)
+    },
+    [],
+  )
   const { picker, pickerRef, pickerPosition, openPicker, closePicker } = useToolbarPicker()
   const leftDefaults = ['group', 'sort', 'newFolder', 'ide', 'terminal']
   const rightDefaults = ['refresh', 'split', 'activity']
@@ -157,19 +164,21 @@ export function ExplorerToolbar({
         <Button
           variant="ghost"
           size="icon"
-          className="toolbar-secondary focus-visible:ring-0"
+          className="toolbar-secondary refresh-button focus-visible:ring-0"
           title={t('刷新')}
           aria-label={t('刷新')}
+          aria-busy={refreshing}
           onClick={() => {
-            setRefreshKey((key) => key + 1)
             refreshAll()
+            setRefreshing(true)
+            if (refreshTimer.current !== null) window.clearTimeout(refreshTimer.current)
+            refreshTimer.current = window.setTimeout(() => setRefreshing(false), 950)
           }}
         >
           <RefreshCw
-            key={refreshKey}
             weight="regular"
             size={20}
-            className={refreshKey ? 'refresh-turn' : ''}
+            className={refreshing ? 'spin refresh-icon' : 'refresh-icon'}
           />
         </Button>
       )
@@ -196,7 +205,7 @@ export function ExplorerToolbar({
         aria-label={t('状态中心')}
         onClick={() => activity.setOpen(!activity.open)}
       >
-        <ScrollText weight="regular" size={20} />
+        <ActivityIcon weight="regular" size={20} />
       </Button>
     )
   }

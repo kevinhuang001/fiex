@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react'
-import type { Dispatch, SetStateAction } from 'react'
+import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { ContextSubmenu, MenuPosition, SetMenu } from './types'
 
 /** A menu row that expands into a nested menu on hover or click. */
@@ -16,12 +16,22 @@ export function SubmenuItem({
   menuPosition: MenuPosition
   setMenu: SetMenu
 }) {
+  const timer = useRef<number | null>(null)
+  const cancel = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
+  }
+  useEffect(() => cancel, [])
+  const openNow = () => {
+    cancel()
+    setOpen(true)
+  }
+  const scheduleClose = () => {
+    cancel()
+    timer.current = window.setTimeout(() => setOpen(false), 500)
+  }
   return (
-    <div
-      className="context-submenu-wrap"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
+    <div className="context-submenu-wrap" onMouseEnter={openNow} onMouseLeave={scheduleClose}>
       <button
         role="menuitem"
         disabled={item.disabled}
@@ -29,6 +39,7 @@ export function SubmenuItem({
         aria-expanded={open}
         onClick={(event) => {
           event.stopPropagation()
+          cancel()
           setOpen((value) => !value)
         }}
       >
@@ -40,6 +51,7 @@ export function SubmenuItem({
         <div
           className={`context-submenu${menuPosition.left + 380 > window.innerWidth ? ' open-left' : ''}`}
           role="menu"
+          onMouseEnter={cancel}
         >
           {item.submenu.map((entry) => (
             <button

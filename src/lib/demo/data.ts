@@ -36,7 +36,6 @@ export function ignored(name: string, patterns: unknown): boolean {
   })
 }
 
-export const demoBranch = 'main'
 export const firstCommit = 'a'.repeat(40),
   secondCommit = 'b'.repeat(40)
 export const demoHistory = [
@@ -143,7 +142,6 @@ for (let i = 0; i < bulkCount; i++)
       120,
     ),
   )
-export const snapshotEntries = structuredClone(demoEntries)
 
 export let demoGitEntries: Record<string, string> = {
   '/Users/kevin/Documents/Notes.md': ' M',

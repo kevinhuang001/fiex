@@ -1,3 +1,6 @@
+.context-menu.sidebar-menu {
+  width: 160px;
+}
 .context-menu {
   position: fixed;
   z-index: 40;
@@ -48,7 +51,7 @@
   top: auto;
   bottom: 0;
   z-index: 50;
-  max-height: calc(100vh - 20px);
+  max-height: calc(var(--ui-vh, 100vh) - 20px);
   overflow-y: auto;
   width: 124px;
   padding: 5px;
@@ -75,6 +78,10 @@
   backdrop-filter: blur(7px);
   animation: fade 0.15s;
 }
+.modal:focus-visible,
+.modal .icon-button:focus-visible {
+  outline: none;
+}
 .modal {
   position: fixed;
   top: 50%;
@@ -83,8 +90,8 @@
   z-index: 51;
   background: var(--surface);
   width: 420px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 24px);
+  max-width: calc(var(--ui-vw, 100vw) - 24px);
+  max-height: calc(var(--ui-vh, 100vh) - 24px);
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--line) 60%, white);
   box-shadow: var(--shadow);
@@ -197,16 +204,16 @@
   .modal {
     padding: 16px;
     border-radius: 14px;
-    max-width: calc(100vw - 20px);
-    max-height: calc(100vh - 20px);
+    max-width: calc(var(--ui-vw, 100vw) - 20px);
+    max-height: calc(var(--ui-vh, 100vh) - 20px);
   }
   .settings-modal,
   .plugin-manager-modal,
   .plugin-store-modal {
-    width: calc(100vw - 20px);
-    max-width: calc(100vw - 20px);
-    height: calc(100vh - 20px);
-    max-height: calc(100vh - 20px);
+    width: calc(var(--ui-vw, 100vw) - 20px);
+    max-width: calc(var(--ui-vw, 100vw) - 20px);
+    height: calc(var(--ui-vh, 100vh) - 20px);
+    max-height: calc(var(--ui-vh, 100vh) - 20px);
   }
   .plugin-store-modal .plugin-store-grid {
     grid-template-columns: 1fr;

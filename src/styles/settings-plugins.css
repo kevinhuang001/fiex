@@ -871,8 +871,8 @@
 /* Plugin manager opened from the toolbar: the page keeps its own store and
    permission dialogs, while the shell owns the large scrollable surface. */
 .plugin-manager-modal {
-  width: min(980px, calc(100vw - 40px));
-  height: min(820px, calc(100vh - 60px));
+  width: min(860px, calc(var(--ui-vw, 100vw) - 40px));
+  height: min(680px, calc(var(--ui-vh, 100vh) - 60px));
   padding: 0;
   overflow: hidden;
   display: flex;

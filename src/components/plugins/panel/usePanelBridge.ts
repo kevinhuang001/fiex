@@ -274,6 +274,7 @@ export function usePanelBridge({
                 typeof p.detail === 'string' ? p.detail : undefined,
                 undefined,
                 'plugin',
+                current.pluginId,
               )
               taskIds.current.add(id)
               updateActivity(id, { indeterminate: true })
@@ -293,6 +294,7 @@ export function usePanelBridge({
                 typeof p.detail === 'string' ? p.detail : undefined,
                 undefined,
                 'plugin',
+                current.pluginId,
               )
               taskIds.current.add(id)
               if (typeof p.progress === 'number') updateActivity(id, { progress: p.progress })

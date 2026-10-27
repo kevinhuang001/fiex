@@ -346,9 +346,7 @@ pub fn reject_local(path: &str) -> Result<(), String> {
         );
     }
     if path.starts_with("history://") {
-        return Err(
-            crate::i18n::t("旧历史地址已失效，请在 Git 面板重新选择提交并保存标签页/书签").into(),
-        );
+        return Err(crate::i18n::t("旧历史地址已失效，请重新选择提交并保存标签页/书签").into());
     }
     Ok(())
 }

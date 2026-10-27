@@ -2,6 +2,7 @@
 //! Fiex was opened from Explorer and has no console or inherited stderr.
 use std::{
     io::{Read, Write},
+    os::windows::process::CommandExt,
     path::Path,
     process::{Child, Command, Stdio},
 };
@@ -10,12 +11,16 @@ pub(super) fn spawn(executable: &Path, payload: &str) -> Result<Child, String> {
     // Arapuca skips invalid standard handles and only sets STARTF_USESTDHANDLES
     // when it has all three. Never inherit the GUI application's absent stderr:
     // it would also prevent the plugin's stdin/stdout IPC from being bound.
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .arg("--fiex-plugin-sandbox")
         .arg(payload)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        // The GUI host has no console; never allocate one for the plugin.
+        .creation_flags(0x08000000);
+    let mut child = command
         .spawn()
         .map_err(|e| format!("plugin sandbox launcher failed: {e}"))?;
     let mut stderr = child.stderr.take().expect("piped launcher stderr");

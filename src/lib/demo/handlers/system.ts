@@ -33,6 +33,8 @@ const demoConnectionSettings: Record<string, Record<string, string | number | bo
   'demo-webdav': { url: 'https://example.com' },
 }
 
+let demoUsbMounted = true
+
 export function handleSystem(command: string, a: Record<string, unknown> = {}): unknown {
   switch (command) {
     case 'platform': {
@@ -91,7 +93,27 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
           mounted: true,
           usbfs: false,
         },
+        ...(demoUsbMounted
+          ? [
+              {
+                name: 'SanDisk USB',
+                path: '/Volumes/SanDisk',
+                kind: 'disk',
+                available: 14.2e9,
+                total: 32e9,
+                removable: true,
+                filesystem: 'exFAT',
+                device: '/dev/disk4s1',
+                mounted: true,
+                usbfs: false,
+              },
+            ]
+          : []),
       ]
+    case 'eject_device':
+    case 'eject_usb':
+      demoUsbMounted = false
+      return null
     case 'detect_shells':
       return [
         { id: '/bin/zsh', name: 'zsh', path: '/bin/zsh' },
@@ -110,8 +132,6 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'trash_path':
       return root + '/.Trash'
     case 'open_applications':
-      return null
-    case 'open_in_vscode':
       return null
     case 'detect_ides':
       return [

@@ -48,6 +48,7 @@ export function usePluginTasks() {
               }).catch(() => {})
             },
             'plugin',
+            payload.pluginId,
           )
           activities.set(payload.taskId, activity)
         }

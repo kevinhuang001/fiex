@@ -107,7 +107,7 @@ export function DomainDialog({
             <div className="plugin-domain-add">
               <input
                 aria-label={t('添加允许的域名')}
-                placeholder={t('域名、IP 或 gitea.example.com')}
+                placeholder={t('域名或 IP，例如 example.com')}
                 value={draft}
                 disabled={busy || !granted}
                 onChange={(event) => onDraftChange(event.target.value)}

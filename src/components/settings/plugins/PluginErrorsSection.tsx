@@ -64,9 +64,7 @@ export function PluginErrorsSection({ pluginId }: { pluginId: string }) {
             {t('清空记录')}
           </Button>
         </>
-      ) : (
-        <p className="sidebar-hint">{t('命令缺失、进程退出、面板或 RPC 失败都会记录在这里。')}</p>
-      )}
+      ) : null}
     </section>
   )
 }

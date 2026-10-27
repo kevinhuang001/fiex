@@ -1,6 +1,6 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Cloud, HardDrive, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
+import { ArrowLeft, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call, demo } from '@/lib/api'
@@ -184,15 +184,7 @@ export function ConnectionDialog({
                 className="connection-plugin-choice"
                 onClick={() => choose(choiceKey(plugin.id), factory.fields)}
               >
-                {plugin.id === '__builtin__' || plugin.id.endsWith('.ssh') ? (
-                  <TerminalSquare size={20} />
-                ) : plugin.id.endsWith('.webdav') ? (
-                  <Cloud size={20} />
-                ) : plugin.id.endsWith('.smb') ? (
-                  <HardDrive size={20} />
-                ) : (
-                  <Plug size={20} />
-                )}
+                {plugin.id === '__builtin__' ? <TerminalSquare size={20} /> : <Plug size={20} />}
                 <span>
                   <strong>{factory.title || plugin.name}</strong>
                   <small>

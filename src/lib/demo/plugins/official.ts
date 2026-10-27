@@ -128,6 +128,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         allowedNetworkDomains: [],
         author: { name: 'Fiex Contributors' },
         extensions: {
+          settings: [{ id: 'previewPages', label: '预览页数', type: 'number', defaultValue: 6 }],
           info: { command: 'office.info', extensions: ['docx', 'xlsx', 'pptx'], priority: 100 },
           preview: {
             extensions: ['docx', 'xlsx', 'pptx'],

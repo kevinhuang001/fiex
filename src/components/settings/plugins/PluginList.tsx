@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { Download, Puzzle, Settings2, ShieldCheck, Trash2 } from 'lucide-react'
+import { Download, Puzzle, ScrollText, Settings2, ShieldCheck, Trash2 } from 'lucide-react'
 import { PLUGIN_CATEGORIES, pluginCategories, type PluginInfo } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { pluginIcon } from '../PluginInstaller'
@@ -14,6 +14,7 @@ export function PluginList({
   busy,
   onOpenSettings,
   onOpenDetails,
+  onOpenLogs,
   onRemove,
   onToggleActivation,
   onBrowseStore,
@@ -22,6 +23,7 @@ export function PluginList({
   busy: boolean
   onOpenSettings: (plugin: PluginInfo) => void
   onOpenDetails: (plugin: PluginInfo) => void
+  onOpenLogs: (plugin: PluginInfo) => void
   onRemove: (plugin: PluginInfo) => void
   onToggleActivation: (plugin: PluginInfo, enabled: boolean) => void
   onBrowseStore: () => void
@@ -85,6 +87,16 @@ export function PluginList({
                     <Settings2 size={15} />
                   </Button>
                 )}
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t('查看 {0} 的日志', plugin.name)}
+                  title={t('插件日志')}
+                  onClick={() => onOpenLogs(plugin)}
+                >
+                  <ScrollText size={14} />
+                </Button>
                 <Button
                   type="button"
                   size="icon-sm"

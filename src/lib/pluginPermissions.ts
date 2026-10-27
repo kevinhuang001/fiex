@@ -110,10 +110,19 @@ const activationSections = [
   {
     id: 'files',
     get title() {
-      return t('文件与文件夹')
+      return t('访问文件')
     },
     get hint() {
-      return t('读取或修改授权目录中的文件与文件夹属性、目录项和内容。')
+      return t('读取或修改授权目录中的文件内容与基础属性。')
+    },
+  },
+  {
+    id: 'folders',
+    get title() {
+      return t('访问文件夹')
+    },
+    get hint() {
+      return t('列出、创建、重命名或删除授权目录中的文件夹。')
     },
   },
   {
@@ -167,17 +176,14 @@ const rank = (value: string) => {
   return index === -1 ? permissionOrder.length : index
 }
 
-/** Files and folders share one review section; network targets stay with the
- * network capability and commands with the command capability. */
+/** Files and folders are reviewed separately; metadata covers both, so it is
+ * reviewed with files. Network targets stay with the network capability and
+ * commands with the command capability. */
 function permissionSection(permission: string): ActivationSectionId {
   if (permission === 'network') return 'network'
   if (permission === 'commands') return 'commands'
-  if (
-    permission === 'metadata' ||
-    permission.startsWith('files.') ||
-    permission.startsWith('folders.')
-  )
-    return 'files'
+  if (permission === 'metadata' || permission.startsWith('files.')) return 'files'
+  if (permission.startsWith('folders.')) return 'folders'
   return 'other'
 }
 

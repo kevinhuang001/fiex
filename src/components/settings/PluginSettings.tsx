@@ -11,6 +11,7 @@ import {
 } from './plugins/PluginAlerts'
 import { PluginList } from './plugins/PluginList'
 import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
+import { PluginLogsSheet } from './plugins/PluginLogsSheet'
 import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
 import { PluginStore, PluginStoreToolbar } from './plugins/PluginStore'
 import { PluginCategoryFilter } from './plugins/PluginCategoryFilter'
@@ -67,6 +68,7 @@ export function PluginSettings() {
   }, [])
   const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
+  const [logsFor, setLogsFor] = useState<PluginInfo | null>(null)
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -341,7 +343,13 @@ export function PluginSettings() {
             setMessage('')
             setDomainSettingsOpen(false)
             setCommandSettingsOpen(false)
+            setLogsFor(null)
             setPermissionsFor(plugin)
+          }}
+          onOpenLogs={(plugin) => {
+            setMessage('')
+            setPermissionsFor(null)
+            setLogsFor(plugin)
           }}
           onRemove={(plugin) => {
             setMessage('')
@@ -384,6 +392,8 @@ export function PluginSettings() {
           else setCommandSettingsOpen(true)
         }}
       />
+
+      <PluginLogsSheet plugin={logsFor} onClose={() => setLogsFor(null)} />
 
       {permissionsFor &&
         domainSettingsOpen &&

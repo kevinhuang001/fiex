@@ -130,20 +130,20 @@
   gap: 7px;
   color: var(--text);
   background: transparent;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 .workspace-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 17px;
-  padding: 0 5px;
+  min-width: 20px;
+  height: 19px;
+  padding: 0 6px;
   border-radius: 7px;
   background: var(--hover);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .statusbar-terminal {
@@ -154,7 +154,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 10px;
+  font-size: 13px;
   cursor: pointer;
 }
 .statusbar-terminal:hover {
@@ -171,8 +171,13 @@
   cursor: ns-resize;
   background: transparent;
 }
-.workspace-resizer:hover {
+.workspace-resizer:hover,
+body.resizing-workspace .workspace-resizer {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+body.resizing-workspace {
+  cursor: ns-resize;
+  user-select: none;
 }
 .workspace-bar .workspace-items {
   height: calc(100% - 5px);

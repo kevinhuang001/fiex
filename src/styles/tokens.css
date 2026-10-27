@@ -33,6 +33,8 @@
   --radius-tab: 10px;
   --radius-menu: 12px;
   --radius-submenu: 10px;
+  /* Shared by the status bar and the terminal overlay anchored above it. */
+  --statusbar-height: 34px;
   /* Surface tokens. Each defaults to the value the component already used, so
      the built-in appearance is unchanged and a theme can restyle one surface
      without repainting the whole palette. Values may be gradients or shadows. */

@@ -78,6 +78,12 @@ export function PluginMenuNode({
     if (timer.current !== null) window.clearTimeout(timer.current)
     timer.current = null
   }
+  // Give the pointer time to cross the gap between a submenu trigger and its
+  // panel before collapsing the panel.
+  const scheduleClose = () => {
+    cancel()
+    timer.current = window.setTimeout(() => setExpanded(false), 500)
+  }
   useEffect(() => cancel, [])
   useLayoutEffect(() => {
     if (expanded && submenu.current) {
@@ -96,15 +102,7 @@ export function PluginMenuNode({
       if (!descendants.length) onExpand(item.id)
     }
     return (
-      <div
-        className="context-submenu-wrap"
-        onMouseEnter={expand}
-        onMouseLeave={() => {
-          cancel()
-          // A sibling submenu takes over immediately; no lingering panel.
-          setExpanded(false)
-        }}
-      >
+      <div className="context-submenu-wrap" onMouseEnter={expand} onMouseLeave={scheduleClose}>
         <button
           role="menuitem"
           aria-haspopup="menu"

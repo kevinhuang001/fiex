@@ -7,6 +7,9 @@
   overflow: hidden;
   user-select: none;
 }
+.fiex-overlay-root {
+  display: contents;
+}
 .app-background {
   position: absolute;
   inset: 0;
@@ -20,7 +23,7 @@
   background: color-mix(in srgb, var(--surface) 52%, transparent);
 }
 .app.has-background .main {
-  background: color-mix(in srgb, var(--canvas) 58%, transparent);
+  background: color-mix(in srgb, var(--canvas) 46%, transparent);
 }
 .app.has-background .toolbar {
   background: color-mix(in srgb, var(--surface) 45%, transparent);
@@ -42,11 +45,31 @@
 .app.has-background .statusbar {
   background: color-mix(in srgb, var(--canvas) 48%, transparent);
 }
+.app.has-background .terminal-panel,
+.app.has-background .ssh-terminal-view {
+  background: color-mix(in srgb, var(--surface) 26%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+.app.has-background .terminal-panel-bar,
+.app.has-background .terminal-panel-body {
+  background: transparent;
+}
+.app.has-background .terminal-panel-tab.active,
+.app.has-background .terminal-panel-tab:hover {
+  background: color-mix(in srgb, var(--surface) 48%, transparent);
+}
+.app.has-background .workspace-bar {
+  background: color-mix(in srgb, var(--surface) 44%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+}
+.app.has-background .workspace-chip {
+  background: color-mix(in srgb, var(--canvas) 55%, transparent);
+}
 html.dark .app-background {
   filter: brightness(0.68) saturate(0.9);
 }
 html.dark .app.has-background .main {
-  background: color-mix(in srgb, var(--canvas) 70%, transparent);
+  background: color-mix(in srgb, var(--canvas) 60%, transparent);
 }
 html.dark .app.has-background .sidebar {
   background: color-mix(in srgb, var(--surface) 62%, transparent);
@@ -59,6 +82,13 @@ html.dark .app.has-background .tabs {
 }
 html.dark .app.has-background .list-header {
   background: color-mix(in srgb, var(--canvas) 62%, transparent);
+}
+html.dark .app.has-background .terminal-panel,
+html.dark .app.has-background .ssh-terminal-view {
+  background: color-mix(in srgb, var(--surface) 24%, transparent);
+}
+html.dark .app.has-background .workspace-bar {
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
 }
 .sidebar {
   width: 220px;
@@ -945,9 +975,9 @@ html.dark .app.has-background .list-header {
   width: 100%;
   align-items: center;
   justify-content: flex-start;
-  gap: 10px;
-  height: 28px;
-  padding: 0 12px;
+  gap: 11px;
+  height: var(--statusbar-height, 34px);
+  padding: 0 13px;
 }
 .statusbar.workspace-open .workspace-items {
   padding: 6px 14px 8px;
@@ -955,12 +985,12 @@ html.dark .app.has-background .list-header {
 .statusbar {
   flex-direction: column;
   align-items: stretch;
-  min-height: 28px;
+  min-height: var(--statusbar-height, 34px);
   padding: 0;
   border-top: 1px solid var(--line);
   display: flex;
   gap: 0;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--muted);
   background: var(--statusbar-background);
 }
@@ -1071,6 +1101,10 @@ html.dark .app.has-background .list-header {
   padding: 6px 30px;
   white-space: pre-wrap;
 }
+.fiex-menu[data-slot='dropdown-menu-content'] {
+  /* Radix portals menus to the body; follow the browser-demo UI scale. */
+  zoom: var(--ui-scale, 1);
+}
 .fiex-menu {
   font-size: 11px !important;
   border-radius: var(--radius-menu) !important;
@@ -1149,21 +1183,32 @@ body.dragging-toolbar {
   position: relative;
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
+  padding: 8px 6px 8px 10px;
   background: var(--surface);
 }
 .ssh-terminal-host {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 8px 6px 0 10px;
+  padding: 0;
   overflow: hidden;
 }
 .ssh-terminal-host .xterm {
   height: 100%;
 }
-.ssh-terminal-host .xterm-viewport {
+.ssh-terminal-host .xterm-viewport,
+.ssh-terminal-host .xterm-scrollable-element {
   background: transparent !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none;
+}
+.ssh-terminal-host .xterm-viewport::-webkit-scrollbar,
+.ssh-terminal-host .xterm-scrollable-element::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 .ssh-terminal-status {
   position: absolute;
@@ -1204,7 +1249,7 @@ body.dragging-toolbar {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 172px;
+  min-width: 160px;
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1283,6 +1328,7 @@ body.dragging-toolbar {
 .full-view-pane {
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 .full-view-pane[hidden] {
@@ -1294,14 +1340,15 @@ body.dragging-toolbar {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(28px + var(--workspace-height, 0px));
-  z-index: 20;
+  bottom: calc(var(--statusbar-height, 34px) + var(--workspace-height, 0px));
+  z-index: 30;
   display: flex;
+  min-width: 0;
   min-height: 120px;
   flex-direction: column;
   border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   background: var(--surface);
-  box-shadow: 0 -12px 36px color-mix(in srgb, var(--text) 12%, transparent);
 }
 .terminal-panel.closed {
   display: none;
@@ -1313,8 +1360,13 @@ body.dragging-toolbar {
   cursor: ns-resize;
   background: transparent;
 }
-.terminal-panel-resizer:hover {
+.terminal-panel-resizer:hover,
+body.resizing-terminal .terminal-panel-resizer {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+body.resizing-terminal {
+  cursor: ns-resize;
+  user-select: none;
 }
 .terminal-panel-bar {
   display: flex;
@@ -1445,6 +1497,7 @@ body.dragging-toolbar {
 .terminal-panel-body {
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--surface);
@@ -1452,6 +1505,7 @@ body.dragging-toolbar {
 .terminal-panel-pane {
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 .terminal-panel-pane[hidden] {

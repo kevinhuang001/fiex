@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
+import { overlayRoot } from '@/lib/portal'
 import { Modal } from '@/components/ui/Modal'
 import { currentFilePicker, subscribeFilePicker, type FilePickerRequest } from '@/lib/filePicker'
 
@@ -98,7 +99,7 @@ function Picker({ request }: { request: FilePickerRequest }) {
               close: picker.closeMenu,
             }}
           />,
-          document.body,
+          overlayRoot() ?? document.body,
         )}
       <PickerDialogs
         dialog={picker.dialog}

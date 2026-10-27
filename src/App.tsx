@@ -41,6 +41,21 @@ export default function App() {
   const autostarted = useRef(false)
   const [viewTitles, setViewTitles] = useState<Record<string, string>>({})
   const tabName = (path: string) => viewTitles[path] || app.displayName(path)
+  // Browser demo has no native webview zoom; scale the app shell instead so
+  // the preference still resizes text, icons, menus and dialogs together.
+  const uiScale = native ? 1 : app.prefs.fontSize / 11
+  useEffect(() => {
+    if (native) return
+    const root = document.documentElement
+    root.style.setProperty('--ui-scale', String(uiScale))
+    root.style.setProperty('--ui-vw', `calc(100vw / ${uiScale})`)
+    root.style.setProperty('--ui-vh', `calc(100vh / ${uiScale})`)
+    return () => {
+      root.style.removeProperty('--ui-scale')
+      root.style.removeProperty('--ui-vw')
+      root.style.removeProperty('--ui-vh')
+    }
+  }, [uiScale])
   const backgroundPath = app.prefs.backgroundImage
   const backgroundUrl = backgroundPath
     ? native && !backgroundPath.includes('://')
@@ -94,7 +109,18 @@ export default function App() {
     <div
       className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''} ${backgroundUrl ? 'has-background' : ''}`}
       data-platform={app.platform}
-      style={{ '--label-size': '11px' } as CSSProperties}
+      style={
+        {
+          '--label-size': '11px',
+          ...(native
+            ? {}
+            : {
+                zoom: uiScale,
+                width: `calc(100vw / ${uiScale})`,
+                height: `calc(100vh / ${uiScale})`,
+              }),
+        } as CSSProperties
+      }
     >
       {backgroundUrl && (
         <div
@@ -264,6 +290,7 @@ export default function App() {
         {!fullView && <ExplorerStatusBar {...app} />}
         <ActivityCenter />
       </main>
+      <div id="fiex-overlay-root" className="fiex-overlay-root" />
       {app.dragging && (
         <div className="drop-overlay">
           <Download />

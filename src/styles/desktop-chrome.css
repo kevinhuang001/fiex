@@ -44,13 +44,6 @@
   border-color: var(--line);
   border-radius: 15px;
 }
-.git-panel {
-  top: 76px;
-  border-color: var(--line);
-  border-radius: 15px;
-  background: var(--canvas);
-  box-shadow: 0 20px 60px color-mix(in srgb, var(--text) 18%, transparent);
-}
 
 /* Application chrome and layers. */
 .toolbar button svg {
@@ -62,8 +55,16 @@
   width: 20px;
   height: 20px;
 }
-.refresh-turn {
-  animation: spin 550ms ease-in-out 1;
+.refresh-button {
+  border-radius: 999px !important;
+}
+.refresh-icon {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform;
+}
+.refresh-icon.spin {
+  animation-duration: 900ms;
 }
 .tabs {
   height: 46px;
@@ -99,19 +100,6 @@
 }
 .pane-resizer {
   transform: translateX(50%);
-}
-.device-row > .nav-item {
-  padding-right: 34px;
-}
-.device-eject {
-  position: absolute;
-  right: 20px;
-  top: 14px;
-  opacity: 0.7;
-}
-.device-row:focus-within .device-eject,
-.device-row:hover .device-eject {
-  opacity: 1;
 }
 .settings-content {
   display: flex;
@@ -153,6 +141,9 @@
 }
 .select-menu {
   z-index: 80;
+  /* The generic menu width is too wide for the compact settings selects. */
+  min-width: 160px !important;
+  max-width: 240px !important;
 }
 .workspace-bar {
   z-index: 5;
@@ -165,9 +156,6 @@
 }
 
 /* Compact task sheets share the same rhythm and neutral surfaces. */
-.compress-dialog {
-  width: 430px;
-}
 .preview-text .preview-body {
   height: auto;
   min-height: 140px;
@@ -316,17 +304,17 @@
 /* The focused pane gets a faint tint so the active side is obvious in split
    view without drawing another border. */
 .pane-main.pane-active {
-  background: color-mix(in srgb, var(--accent) 3%, var(--canvas));
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 .secondary-pane.pane-active {
-  background: color-mix(in srgb, var(--accent) 3%, var(--canvas));
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 .secondary-pane.pane-active > .path-toolbar {
   background: transparent;
 }
 .dark .pane-main.pane-active,
 .dark .secondary-pane.pane-active {
-  background: color-mix(in srgb, var(--accent) 5%, var(--canvas));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 /* Settings cards are flex children; without this they shrink and clip their

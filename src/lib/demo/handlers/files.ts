@@ -1,58 +1,11 @@
 import type { Listing } from '../../types'
 import { basename, join, parent } from '../../files'
-import { demoChanges, ignored, item, repoFor, root, snapshotEntries } from '../data'
-import { demoViews, notHandled, state } from './shared'
+import { demoChanges, ignored, item, repoFor, root } from '../data'
+import { notHandled, state } from './shared'
 
 export async function handleFiles(command: string, a: Record<string, unknown>): Promise<unknown> {
   switch (command) {
-    case 'file_checksums':
-      return [
-        {
-          algorithm: 'SHA-256',
-          value: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
-          copyable: true,
-        },
-        {
-          algorithm: 'SHA-512',
-          value:
-            'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
-        },
-        { algorithm: 'SHA-1', value: 'a9993e364706816aba3e25717850c26c9cd0d89d', copyable: true },
-        { algorithm: 'MD5', value: '900150983cd24fb0d6963f7d28e17f72', copyable: true },
-        { algorithm: 'CRC32', value: '352441c2', copyable: true },
-      ]
     case 'list_directory': {
-      const view = [...demoViews].find(([uri]) => String(a.path).startsWith(uri))
-      if (view) {
-        const [base, descriptor] = view
-        const original =
-          descriptor.root +
-          '/' +
-          String(a.path).slice(base.length).split('/').map(decodeURIComponent).join('/')
-        return {
-          path: a.path,
-          entries: snapshotEntries
-            .filter(
-              (e) =>
-                parent(e.path) === original.replace(/\/$/, '') &&
-                (a.hidden || !e.name.startsWith('.')) &&
-                !ignored(e.name, a.ignores),
-            )
-            .map((e) => ({
-              ...e,
-              path:
-                base +
-                e.path
-                  .slice(view[1].root.length + 1)
-                  .split('/')
-                  .map(encodeURIComponent)
-                  .join('/'),
-              readonly: true,
-            })),
-          warnings: [],
-        }
-      }
-
       const remoteRoot = 'fiex://mount/demo-webdav'
       if ((a.path as string).startsWith(remoteRoot)) {
         return {
@@ -172,8 +125,6 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     case 'read_preview':
       if (String(a.path).endsWith('/Palette.json'))
         return '{\n  "accent": "#387ca8",\n  "surface": "#f8fafc",\n  "radius": 12\n}'
-      if ([...demoViews.keys()].some((uri) => String(a.path).startsWith(uri)))
-        return '# Fiex · 历史版本\n\n这是提交时保存的内容，当前工作区没有改变。'
       return '# Fiex\n\n留一点空间，给重要的文件。\n\n支持四种视图、快速查找与空格预览。'
     case 'set_tags': {
       const tags = a.tags as { name: string; color: number }[]

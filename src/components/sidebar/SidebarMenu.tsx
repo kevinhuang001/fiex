@@ -1,19 +1,25 @@
 import { t } from '@/i18n'
-import { Folder, Trash, X } from 'lucide-react'
+import { Folder, Plug, Trash, Unplug, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { MenuPosition, SidebarMenuState, SidebarProps, SetSidebarMenu } from './types'
 
-/** The trash and favorite context menu shared by the sidebar sections. */
+/** The trash, favorite and device context menus shared by the sidebar sections. */
 export function SidebarMenu({
   menu,
   prefs,
   update,
   onTrash,
   onEmptyTrash,
+  onEject,
+  onEjectDevice,
+  onMount,
   setMenu,
   menuRef,
   menuPosition,
-}: Pick<SidebarProps, 'prefs' | 'update' | 'onTrash' | 'onEmptyTrash'> & {
+}: Pick<
+  SidebarProps,
+  'prefs' | 'update' | 'onTrash' | 'onEmptyTrash' | 'onEject' | 'onEjectDevice' | 'onMount'
+> & {
   menu: SidebarMenuState | null
   setMenu: SetSidebarMenu
   menuRef: RefObject<HTMLDivElement | null>
@@ -25,7 +31,13 @@ export function SidebarMenu({
       ref={menuRef}
       className="context-menu sidebar-menu"
       role="menu"
-      aria-label={menu.kind === 'trash' ? t('废纸篓') : t('收藏')}
+      aria-label={
+        menu.kind === 'trash'
+          ? t('废纸篓')
+          : menu.kind === 'favorite'
+            ? t('收藏')
+            : menu.name || t('设备')
+      }
       style={menuPosition}
     >
       {menu.kind === 'trash' ? (
@@ -51,7 +63,7 @@ export function SidebarMenu({
             {t('清空废纸篓')}
           </button>
         </>
-      ) : (
+      ) : menu.kind === 'favorite' ? (
         <button
           role="menuitem"
           onClick={() => {
@@ -64,6 +76,34 @@ export function SidebarMenu({
           <X size={14} />
           {t('从侧栏移除')}
         </button>
+      ) : (
+        <>
+          {!menu.mounted && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                setMenu(null)
+                onMount(menu.device)
+              }}
+            >
+              <Plug size={14} />
+              {t('挂载')}
+            </button>
+          )}
+          {menu.canEject && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                setMenu(null)
+                if (menu.usbfs) onEjectDevice(menu.device)
+                else if (menu.path) onEject(menu.path)
+              }}
+            >
+              <Unplug size={14} />
+              {t('弹出')}
+            </button>
+          )}
+        </>
       )}
     </div>
   )

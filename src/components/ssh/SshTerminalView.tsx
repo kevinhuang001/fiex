@@ -11,11 +11,32 @@ import { call, native } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
 
 import { terminalEvents, type SshEvent, type SessionStatus } from './sessionEvents'
+import { attachDemoShell } from './terminalDemoShell'
+
+function withAlpha(color: string, alpha: number) {
+  const value = color.trim()
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(value)
+  if (hex) {
+    const digits =
+      hex[1].length === 3
+        ? hex[1]
+            .split('')
+            .map((part) => part + part)
+            .join('')
+        : hex[1]
+    const [r, g, b] = [0, 2, 4].map((index) => parseInt(digits.slice(index, index + 2), 16))
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
+  const rgb = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i.exec(value)
+  return rgb ? `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})` : value
+}
 
 function terminalTheme(color = '') {
   const { mode, tokens } = themeSnapshot()
+  const surface = tokens.surface || (mode === 'dark' ? '#22303c' : '#f8fafc')
   return {
-    background: tokens.surface || (mode === 'dark' ? '#1e1e1e' : '#ffffff'),
+    // Let the terminal surface, or the wallpaper behind it, show through.
+    background: withAlpha(surface, 0.4),
     foreground: color || tokens.text || (mode === 'dark' ? '#e6e6e6' : '#1f2328'),
     cursor: tokens.accent || (mode === 'dark' ? '#7aa2f7' : '#2f6fed'),
     cursorAccent: tokens.surface || (mode === 'dark' ? '#1e1e1e' : '#ffffff'),
@@ -58,78 +79,6 @@ function terminalFontFamily(terminalFont?: string) {
     .join(', ')
 }
 
-/** Tiny interactive shell used only by the web demo. It never executes input. */
-function attachDemoShell(terminal: { write: (value: string) => void }, cwd?: string) {
-  const home = cwd && !cwd.includes('://') ? cwd : '/Users/kevin/Documents'
-  let line = ''
-  const prompt = '\x1b[32muser@fiex\x1b[0m:\x1b[34m~\x1b[0m$ '
-  const write = (value: string) => terminal.write(value)
-  write(
-    t('\u001b[1;36mFiex 终端\u001b[0m\r\n') +
-      t(
-        '\u001b[90mWeb demo shell — 桌面版会在这里启动真实本地 shell。输入 help 查看命令。\u001b[0m\r\n\r\n',
-      ) +
-      prompt,
-  )
-  const run = (command: string) => {
-    const [name, ...args] = command.trim().split(/\s+/)
-    const arg = args.join(' ')
-    switch (name) {
-      case '':
-        break
-      case 'help':
-        write(t('\r\n可用命令：ls  pwd  echo  whoami  date  clear  help\r\n'))
-        break
-      case 'ls':
-        write('\r\nDocuments  Downloads  Music  Pictures  README.md  package.json\r\n')
-        break
-      case 'pwd':
-        write(`\r\n${home}\r\n`)
-        break
-      case 'echo':
-        write(`\r\n${arg}\r\n`)
-        break
-      case 'whoami':
-        write('\r\nuser\r\n')
-        break
-      case 'date':
-        write(`\r\n${new Date().toString()}\r\n`)
-        break
-      case 'clear':
-        write('\x1b[2J\x1b[H')
-        return
-      default:
-        write(t('\r\ncommand not found: {0}（这是 Web 演示终端）\r\n', name))
-    }
-  }
-  const disposable = (
-    terminal as unknown as {
-      onData: (listener: (data: string) => void) => { dispose: () => void }
-    }
-  ).onData((data) => {
-    for (const character of data) {
-      if (character === '\r' || character === '\n') {
-        write('\r\n')
-        run(line)
-        line = ''
-        write(prompt)
-      } else if (character === '\x7f') {
-        if (line) {
-          line = line.slice(0, -1)
-          write('\b \b')
-        }
-      } else if (character === '\x03') {
-        write('^C\r\n' + prompt)
-        line = ''
-      } else if (character >= ' ') {
-        line += character
-        write(character)
-      }
-    }
-  })
-  return () => disposable.dispose()
-}
-
 /** Built-in SSH terminal; uses the system OpenSSH client through a real PTY. */
 export function TerminalView({
   connectionId,
@@ -165,6 +114,8 @@ export function TerminalView({
     let sessionId = ''
     const terminal = new Terminal({
       allowProposedApi: true,
+      // Let the translucent panel surface show through the cell background.
+      allowTransparency: true,
       // A steady cursor avoids the unequal, very fast blink some WebViews show.
       cursorBlink: false,
       fontFamily: terminalFontFamily(terminalFont),
@@ -187,7 +138,7 @@ export function TerminalView({
     terminal.unicode.activeVersion = '11'
     terminal.open(element)
     terminalRef.current = terminal
-    fit.fit()
+    if (element.clientWidth > 1 && element.clientHeight > 1) fit.fit()
     terminal.focus()
 
     const applyTheme = () => {
@@ -209,6 +160,9 @@ export function TerminalView({
         })
     })
     const resize = () => {
+      // Hidden panes report 0×0; fitting there would shrink the PTY to two
+      // columns until the tab becomes visible again.
+      if (element.clientWidth < 2 || element.clientHeight < 2) return
       fit.fit()
       if (sessionId)
         void call('ssh_resize', { sessionId, cols: terminal.cols, rows: terminal.rows }).catch(
@@ -218,6 +172,7 @@ export function TerminalView({
     resizeRef.current = resize
     const observer = new ResizeObserver(() => requestAnimationFrame(resize))
     observer.observe(element)
+    void document.fonts?.ready.then(() => requestAnimationFrame(resize)).catch(() => {})
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown') return true
       const copy = event.code === 'KeyC' && (event.metaKey || event.shiftKey)

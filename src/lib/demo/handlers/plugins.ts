@@ -275,6 +275,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           return {
             entries: [
               { name: 'Documents/', isDir: true, size: 0 },
+              { name: '空文件夹/', isDir: true, size: 0 },
               { name: 'Documents/设计稿.png', isDir: false, size: 524288 },
               { name: 'Documents/spec.md', isDir: false, size: 1280 },
               { name: 'Projects/', isDir: true, size: 0 },
@@ -579,7 +580,22 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
             xlsx: '<h2>\u9884\u7b97</h2>\n<table>\n<tr><th><p>\u9879\u76ee</p></th><th><p>Q1</p></th><th><p>Q2</p></th><th><p>Q3</p></th></tr>\n<tr><td><p>\u7814\u53d1</p></td><td><p>400000</p></td><td><p>400000</p></td><td><p>400000</p></td></tr>\n<tr><td><p>\u5e02\u573a</p></td><td><p>150000</p></td><td><p>150000</p></td><td><p>150000</p></td></tr>\n<tr><td><p>\u5408\u8ba1</p></td><td><p></p></td><td><p></p></td><td><p></p></td></tr>\n</table>\n<hr />\n<h2>\u6536\u5165</h2>\n<table>\n<tr><th><p>\u5b63\u5ea6</p></th><th><p>\u6536\u5165</p></th></tr>\n<tr><td><p>Q1</p></td><td><p>820000</p></td></tr>\n<tr><td><p>Q2</p></td><td><p>960000</p></td></tr>\n<tr><td><p>Q3</p></td><td><p>1120000</p></td></tr>\n</table>',
             pptx: '<h2>Fiex \u4ea7\u54c1\u4ecb\u7ecd</h2>\n<p><span style="font-size:32pt">\u4e00\u4e2a\u66f4\u5feb\u7684\u6587\u4ef6\u7ba1\u7406\u5668</span></p>\n<hr />\n<h2>\u63d2\u4ef6\u5316</h2>\n<ul>\n<li><p><span style="font-size:32pt">Office \u9884\u89c8\u3001SQLite \u67e5\u770b\u5668\u3001\u8fdc\u7a0b\u8fde\u63a5\u90fd\u4ee5\u63d2\u4ef6\u5f62\u5f0f\u5b89\u88c5\u3002</span></p></li>\n</ul>\n<hr />\n<h2>\u4e0b\u4e00\u6b65</h2>\n<ul>\n<li><p><span style="font-size:32pt">\u5b8c\u5584\u9884\u89c8\u4e0e\u641c\u7d22\uff0c\u4fdd\u6301\u6838\u5fc3\u8f7b\u91cf\u3002</span></p></li>\n</ul>',
           }
-          return { kind: extension, html: rendered[extension] || '' }
+          const configured = Number(
+            pluginSettings.get('org.fiex.office-preview:global:previewPages') ?? 6,
+          )
+          const pages = Number.isFinite(configured)
+            ? Math.min(30, Math.max(1, Math.trunc(configured)))
+            : 6
+          let html = rendered[extension] || ''
+          let truncated = false
+          if (extension === 'pptx' || extension === 'xlsx') {
+            const sections = html.split(/\n?<hr \/>\n?/)
+            if (sections.length > pages) {
+              html = sections.slice(0, pages).join('\n<hr />\n')
+              truncated = true
+            }
+          }
+          return { kind: extension, html, pages, truncated }
         }
         if (method === 'git.status')
           return {

@@ -4,13 +4,11 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { PluginInfo } from '@/lib/plugins'
 import { PermissionList } from './PermissionList'
-import { PluginErrorsSection } from './PluginErrorsSection'
 import { pluginIcon } from '../PluginInstaller'
 
 /**
- * Plugin detail: identity, consent state, the per-permission switches and the
- * recent-error diagnostics. Permission writes stay in the page and arrive as
- * callbacks.
+ * Plugin detail: identity, consent state and the per-permission switches.
+ * Permission writes stay in the page and arrive as callbacks.
  */
 export function PluginPermissionsSheet({
   plugin,
@@ -88,7 +86,6 @@ export function PluginPermissionsSheet({
               />
             </div>
           </section>
-          <PluginErrorsSection pluginId={plugin.id} />
           {message && (
             <p role="status" className="plugin-page-message">
               {message}

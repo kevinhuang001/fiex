@@ -1,18 +1,19 @@
 import { t } from '@/i18n'
-import { HardDrive, Unplug, Usb } from 'lucide-react'
+import { HardDrive, Usb } from 'lucide-react'
 import { Fragment } from 'react'
 import { size } from '@/lib/files'
-import type { SidebarProps } from './types'
+import type { SetSidebarMenu, SidebarProps } from './types'
 
 const DISK_COLORS = ['#5b9cf8', '#55b98a', '#e0a44a', '#b47ad6', '#e06c75', '#56b6c9']
 
 /** Disks and USB volumes with capacity meters and eject/mount buttons. */
 export function Devices({
   x,
-  onEject,
-  onEjectDevice,
   onMount,
-}: Pick<SidebarProps, 'x' | 'onEject' | 'onEjectDevice' | 'onMount'>) {
+  setMenu,
+}: Pick<SidebarProps, 'x' | 'onMount'> & {
+  setMenu: SetSidebarMenu
+}) {
   return (
     <Fragment>
       <div className="sidebar-section-title devices-title">
@@ -26,8 +27,33 @@ export function Devices({
             location.total > 0
               ? Math.min(100, Math.max(0, (1 - location.available / location.total) * 100))
               : 0
+          // Removable volumes are ejectable even when the OS mounts them at a
+          // Windows drive letter; fixed system volumes stay protected.
+          const ejectable =
+            Boolean(location.usbfs) ||
+            (location.mounted &&
+              location.path !== '/' &&
+              (location.removable || !/^[A-Za-z]:[\\/]?$/.test(location.path)))
           return (
-            <div className="device-row" key={location.path || location.device}>
+            <div
+              className="device-row"
+              key={location.path || location.device}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                if (location.mounted && !ejectable) return
+                setMenu({
+                  kind: 'device',
+                  x: event.clientX,
+                  y: event.clientY,
+                  name: location.name || location.path || location.device,
+                  device: location.device,
+                  path: location.path,
+                  mounted: location.mounted,
+                  usbfs: Boolean(location.usbfs),
+                  canEject: ejectable,
+                })
+              }}
+            >
               <button
                 className={`nav-item disk-item ${location.mounted || location.usbfs ? '' : 'disk-unmounted'} ${x.path === location.path ? 'active' : ''}`}
                 onClick={() =>
@@ -80,27 +106,6 @@ export function Devices({
                   )}
                 </span>
               </button>
-              {location.usbfs ? (
-                <button
-                  className="device-eject icon-button"
-                  title={t('弹出 U 盘')}
-                  onClick={() => onEjectDevice(location.device)}
-                >
-                  <Unplug size={13} />
-                </button>
-              ) : (
-                location.mounted &&
-                location.path !== '/' &&
-                !/^[A-Za-z]:[\\/]?$/.test(location.path) && (
-                  <button
-                    className="device-eject icon-button"
-                    title={t('弹出设备')}
-                    onClick={() => onEject(location.path)}
-                  >
-                    <Unplug size={13} />
-                  </button>
-                )
-              )}
             </div>
           )
         })}

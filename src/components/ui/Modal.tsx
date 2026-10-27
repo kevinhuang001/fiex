@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import type { CSSProperties, ReactNode } from 'react'
+import { overlayRoot } from '@/lib/portal'
 export function Modal({
   open,
   onClose,
@@ -25,7 +26,7 @@ export function Modal({
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
-      <Dialog.Portal>
+      <Dialog.Portal container={overlayRoot()}>
         <Dialog.Overlay className="modal-overlay" />
         <Dialog.Content
           className={`modal ${wide ? 'modal-wide' : ''} ${className || ''}`}

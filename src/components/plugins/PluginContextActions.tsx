@@ -45,9 +45,9 @@ export function PluginContextActions({
   }
   const scheduleClose = () => {
     cancelClose()
-    // Leaving the plugin trigger closes the group at once; nested panels manage
-    // their own hover state and must not overlap a sibling plugin.
-    setOpen(false)
+    // Leave a short grace period so crossing the gap into the submenu (or a
+    // nested submenu) does not collapse the panel under the pointer.
+    closeTimer.current = window.setTimeout(() => setOpen(false), 500)
   }
   useEffect(() => cancelClose, [])
   // Resolve every plugin's menu as soon as the root menu opens, so the
@@ -179,6 +179,7 @@ export function PluginContextActions({
         paths.length + t(' 个项目'),
         undefined,
         'plugin',
+        plugin?.id,
       )
       updateActivity(activityId, { indeterminate: true })
       finishActivity(activityId, undefined, t('已提交'))

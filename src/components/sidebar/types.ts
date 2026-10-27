@@ -21,7 +21,19 @@ export interface SidebarProps {
 }
 
 export type SidebarMenuState =
-  { kind: 'trash'; x: number; y: number } | { kind: 'favorite'; x: number; y: number; path: string }
+  | { kind: 'trash'; x: number; y: number }
+  | { kind: 'favorite'; x: number; y: number; path: string }
+  | {
+      kind: 'device'
+      x: number
+      y: number
+      name: string
+      device: string
+      path: string
+      mounted: boolean
+      usbfs: boolean
+      canEject: boolean
+    }
 
 export type SetSidebarMenu = Dispatch<SetStateAction<SidebarMenuState | null>>
 

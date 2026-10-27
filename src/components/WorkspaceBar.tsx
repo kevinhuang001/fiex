@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { Entry } from '@/lib/types'
 import { FileIcon } from './FileIcon'
+import { uiScale } from '@/lib/uiScale'
 
 export function WorkspaceBar({
   items,
@@ -34,16 +35,32 @@ export function WorkspaceBar({
     const handle = panel.current?.querySelector('.workspace-resizer')
     if (!handle) return
     let bottom = 0
+    let next = 0
+    let scale = 1
+    let limit = 0
+    const apply = () => {
+      const main = panel.current?.parentElement
+      if (panel.current) panel.current.style.height = `${next}px`
+      // Keep the terminal/pane bottoms anchored while the pointer moves,
+      // without rerendering the whole dock on every mouse event.
+      if (main) main.style.setProperty('--workspace-height', `${next}px`)
+    }
     const move = (event: MouseEvent) => {
-      const next = bottom - event.clientY
-      setHeight(Math.min(Math.max(64, window.innerHeight * 0.6), Math.max(52, next)))
+      next = Math.min(limit, Math.max(52, (bottom - event.clientY) / scale))
+      apply()
     }
     const up = () => {
       document.removeEventListener('mousemove', move)
       document.removeEventListener('mouseup', up)
+      document.body.classList.remove('resizing-workspace')
+      setHeight(next)
     }
     const start = () => {
+      scale = uiScale()
+      limit = Math.max(64, (window.innerHeight / scale) * 0.6)
       bottom = panel.current?.getBoundingClientRect().bottom ?? window.innerHeight
+      next = panel.current?.getBoundingClientRect().height ?? 0
+      document.body.classList.add('resizing-workspace')
       document.addEventListener('mousemove', move)
       document.addEventListener('mouseup', up)
     }
@@ -52,6 +69,7 @@ export function WorkspaceBar({
       handle.removeEventListener('mousedown', start)
       document.removeEventListener('mousemove', move)
       document.removeEventListener('mouseup', up)
+      document.body.classList.remove('resizing-workspace')
     }
   }, [open])
 
