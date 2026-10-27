@@ -7,13 +7,11 @@ import type { FileOpsContext } from './types'
 /** Copying, moving and duplicating entries, including conflict resolution. */
 export function transferActions({
   x,
-  notify,
   writable,
   conflict,
   setConflict,
   setClipboard,
   run,
-  handleResult,
 }: FileOpsContext) {
   const executeTransfer = async (
     paths: string[],
@@ -53,11 +51,8 @@ export function transferActions({
     }
     setConflict(null)
     if (moving) setClipboard(null)
-    try {
-      handleResult(result)
-    } catch (error) {
-      x.setError(String(error))
-    }
+    if (result.errors.length)
+      x.setError(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
   }
   const transfer = (paths: string[], destination: string, moving: boolean) => {
     if (!writable() || !paths.length || conflict) return
@@ -69,10 +64,7 @@ export function transferActions({
   }
   const copy = (moving: boolean) => {
     if (moving && !writable()) return
-    if (x.selected.length) {
-      setClipboard({ paths: [...x.selected], moving })
-      notify(moving ? t('已剪切') : t('已复制'))
-    }
+    if (x.selected.length) setClipboard({ paths: [...x.selected], moving })
   }
   const duplicate = () => {
     if (!writable()) return
@@ -80,16 +72,16 @@ export function transferActions({
     void run(
       t('正在创建副本…'),
       async () => {
-        handleResult(
-          await call<OperationResult>('transfer', {
-            paths: x.selected,
-            destination: x.path,
-            moving: false,
-            keepBoth: true,
-            ignores: [],
-            onProgress,
-          }),
-        )
+        const result = await call<OperationResult>('transfer', {
+          paths: x.selected,
+          destination: x.path,
+          moving: false,
+          keepBoth: true,
+          ignores: [],
+          onProgress,
+        })
+        if (result.errors.length)
+          throw new Error(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
       },
       undefined,
       true,

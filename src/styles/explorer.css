@@ -1521,8 +1521,10 @@ body.resizing-terminal {
 .terminal-settings-menu {
   position: absolute;
   right: 0;
-  top: 28px;
+  bottom: 28px;
   z-index: 30;
+  max-height: calc(var(--ui-vh, 100vh) - 80px);
+  overflow-y: auto;
   display: grid;
   width: 240px;
   gap: 12px;
