@@ -435,3 +435,18 @@ html.dark .file-picker-dialog-field input {
 .file-picker-crumbs::-webkit-scrollbar {
   display: none;
 }
+
+.file-picker-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  height: 100%;
+  color: var(--muted);
+  font-size: 12px;
+}
+.file-picker-entries.grid .file-picker-empty-state {
+  grid-column: 1 / -1;
+}

@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import type { MouseEvent as ReactMouseEvent } from 'react'
+import { FolderOpen } from 'lucide-react'
 import { FileIcon } from '@/components/FileIcon'
 import { date, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
@@ -33,6 +34,12 @@ export function PickerEntries({
       onContextMenu={(event) => onContextMenu(event)}
     >
       {error && <p className="file-picker-hint error">{error}</p>}
+      {!error && !visible.length && (
+        <div className="file-picker-empty-state">
+          <FolderOpen size={30} strokeWidth={1.5} />
+          <span>{t('文件夹是空的')}</span>
+        </div>
+      )}
       {view === 'list'
         ? grouped.map((section) => (
             <div key={section.label || 'all'}>
