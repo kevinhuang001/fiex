@@ -103,16 +103,16 @@ pub(crate) async fn file_info(path: String) -> Result<files::Entry, String> {
 }
 
 fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
-    if remote::is_remote(&path) {
-        return remote::stat(&path);
+    if remote::is_remote(path) {
+        return remote::stat(path);
     }
-    if crate::plugin_vfs::handles(&path) {
-        return crate::plugin_vfs::stat(&path);
+    if crate::plugin_vfs::handles(path) {
+        return crate::plugin_vfs::stat(path);
     }
-    if let Some(route) = crate::usbfs::route(&path) {
+    if let Some(route) = crate::usbfs::route(path) {
         return crate::usbfs::entry(&route);
     }
-    files::entry(std::path::Path::new(&path))
+    files::entry(std::path::Path::new(path))
 }
 #[tauri::command]
 pub(crate) async fn read_preview(path: String) -> Result<String, String> {
