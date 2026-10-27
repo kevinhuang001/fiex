@@ -221,7 +221,7 @@ pub(crate) fn plugin_terminal_end(owner: &str, params: &serde_json::Value) -> Re
         .lock()
         .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
     if !values.get(id).is_some_and(|session| session.owner == owner) {
-        return Err(crate::i18n::t("终端会话不存在"));
+        return Err(crate::i18n::t("终端会话不存在").into());
     }
     let session = values.remove(id).ok_or("终端会话不存在")?;
     session.closed.store(true, Ordering::Release);

@@ -569,7 +569,7 @@ test('plugin rows expose a delete action with confirmation', async ({ page }) =>
   await checksum.hover()
   await checksum.getByRole('button', { name: '卸载 校验和', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '卸载插件' })
-  await expect(dialog).toContainText('确定卸载「校验和」吗？')
+  await expect(dialog).toContainText('确定卸载“校验和”吗？')
   await dialog.getByRole('button', { name: '取消', exact: true }).click()
   await expect(dialog).toHaveCount(0)
   await expect(checksum).toBeVisible()
@@ -645,7 +645,7 @@ test('settings creates, edits and deletes tags through the confirmation', async 
 
   await page.getByRole('button', { name: '删除标签 审阅中' }).click()
   const confirm = page.getByRole('dialog', { name: '删除标签' })
-  await expect(confirm).toContainText('确定删除标签「审阅中」吗？')
+  await expect(confirm).toContainText('确定删除标签“审阅中”吗？')
   await confirm.getByRole('button', { name: '取消', exact: true }).click()
   await expect(page.getByRole('button', { name: '删除标签 审阅中' })).toBeVisible()
 
