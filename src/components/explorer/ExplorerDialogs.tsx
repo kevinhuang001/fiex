@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { AppController } from '@/hooks/useAppController'
 import { call } from '@/lib/api'
-import { CheckCircle2, LoaderCircle, X } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 export function ExplorerDialogs({
   left,
   preview,
@@ -60,8 +60,6 @@ export function ExplorerDialogs({
   update,
   terminals,
   ides,
-  toast,
-  setToast,
 }: Pick<
   AppController,
   | 'left'
@@ -103,8 +101,6 @@ export function ExplorerDialogs({
   | 'update'
   | 'terminals'
   | 'ides'
-  | 'toast'
-  | 'setToast'
 >) {
   return (
     <>
@@ -280,15 +276,6 @@ export function ExplorerDialogs({
         <Suspense fallback={null}>
           <PluginManagerDialog open={pluginManager} onClose={() => setPluginManager(false)} />
         </Suspense>
-      )}
-      {toast && (
-        <div className="toast" role="status">
-          <CheckCircle2 size={16} />
-          {toast}
-          <button title={t('关闭通知')} onClick={() => setToast('')}>
-            <X size={13} />
-          </button>
-        </div>
       )}
     </>
   )

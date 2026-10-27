@@ -1312,6 +1312,7 @@ body.dragging-toolbar {
 }
 .nav-item > .connection-autostart {
   display: inline-flex;
+  margin-right: -4px;
   align-items: center;
   justify-content: center;
   width: auto;

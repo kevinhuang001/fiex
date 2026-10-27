@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 /** Dialog and overlay state: the modal dialog with its draft value/error/busy
  *  flags, the preview/info/settings/tag/connection overlays, the context menu,
- *  the toast, and preview navigation across the current listing. */
+ *  and preview navigation across the current listing. */
 export function useDialogs(x: Explorer) {
   const [sidebar, setSidebar] = useState(true)
   const [preview, setPreview] = useState<Entry | null>(null)
@@ -16,7 +16,6 @@ export function useDialogs(x: Explorer) {
   const [dialogValue, setDialogValue] = useState('')
   const [dialogError, setDialogError] = useState('')
   const [dialogBusy, setDialogBusy] = useState(false)
-  const [toast, setToast] = useState('')
   const [trashIssue, setTrashIssue] = useState(false)
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
@@ -30,12 +29,9 @@ export function useDialogs(x: Explorer) {
     return x.entries.filter((entry) => selected.has(entry.path))
   }, [x.entries, x.selected])
   const first = chosen[0]
-  const notify = useCallback((s: string) => setToast(s), [])
-  useEffect(() => {
-    if (!toast) return
-    const timer = setTimeout(() => setToast(''), 5000)
-    return () => clearTimeout(timer)
-  }, [toast])
+  // Bottom notifications are intentionally disabled; operations report through
+  // Status Center and inline errors instead.
+  const notify = useCallback((_message: string) => {}, [])
   useEffect(() => {
     if (dialog) {
       setDialogValue(dialog.value || '')
@@ -70,8 +66,6 @@ export function useDialogs(x: Explorer) {
     setDialogError,
     dialogBusy,
     setDialogBusy,
-    toast,
-    setToast,
     trashIssue,
     setTrashIssue,
     tagOpen,
