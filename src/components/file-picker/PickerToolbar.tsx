@@ -1,14 +1,6 @@
 import { t } from '@/i18n'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import {
-  ArrowLeft,
-  ArrowRight,
-  ChevronUp,
-  LayoutGrid,
-  List,
-  MoreHorizontal,
-  Search,
-} from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronUp, MoreHorizontal, Search } from 'lucide-react'
 
 export function PickerToolbar({
   directory,
@@ -21,8 +13,6 @@ export function PickerToolbar({
   onMore,
   filter,
   onFilter,
-  view,
-  onToggleView,
 }: {
   directory: string
   canBack: boolean
@@ -34,8 +24,6 @@ export function PickerToolbar({
   onMore(event: ReactMouseEvent<HTMLButtonElement>): void
   filter: string
   onFilter(value: string): void
-  view: 'list' | 'grid'
-  onToggleView(): void
 }) {
   const segments = directory.split('/').filter(Boolean)
   return (
@@ -85,13 +73,6 @@ export function PickerToolbar({
           aria-label={t('搜索')}
         />
       </label>
-      <button
-        type="button"
-        aria-label={view === 'list' ? t('图标视图') : t('列表视图')}
-        onClick={onToggleView}
-      >
-        {view === 'list' ? <LayoutGrid size={15} /> : <List size={15} />}
-      </button>
     </div>
   )
 }

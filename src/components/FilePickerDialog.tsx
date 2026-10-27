@@ -63,8 +63,6 @@ function Picker({ request }: { request: FilePickerRequest }) {
             onMore={picker.openBlankMenu}
             filter={picker.filter}
             onFilter={picker.setFilter}
-            view={picker.view}
-            onToggleView={picker.toggleView}
           />
           <PickerEntries
             view={picker.view}
