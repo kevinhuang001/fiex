@@ -3,7 +3,7 @@ use super::rpc::Running;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -44,138 +44,6 @@ fn read_capped(mut reader: impl Read) -> (Vec<u8>, bool) {
     (output, truncated)
 }
 
-pub(super) fn host_exec(
-    plugin_id: &str,
-    declared: &BTreeSet<String>,
-    params: &Value,
-) -> Result<Value, String> {
-    let command = params
-        .get("command")
-        .and_then(Value::as_str)
-        .ok_or("missing command")?;
-    if !crate::plugin_permissions::valid_command(command)
-        || !crate::plugin_permissions::allowed_command(plugin_id, declared, command)?
-    {
-        return Err("command was not approved by the user".into());
-    }
-    let args = params
-        .get("args")
-        .and_then(Value::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .map(|value| {
-                    value
-                        .as_str()
-                        .map(str::to_owned)
-                        .ok_or_else(|| "command arguments must be strings".to_string())
-                })
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .transpose()?
-        .unwrap_or_default();
-    if args.len() > 128
-        || args
-            .iter()
-            .any(|arg| arg.len() > 8192 || arg.contains('\0'))
-    {
-        return Err("command arguments are too large".into());
-    }
-    let cwd = params
-        .get("cwd")
-        .and_then(Value::as_str)
-        .map(PathBuf::from)
-        .map(|path| dunce::canonicalize(path).map_err(|error| error.to_string()))
-        .transpose()?;
-    if cwd.as_ref().is_some_and(|path| !path.is_dir()) {
-        return Err("command working directory is not a folder".into());
-    }
-    let executable =
-        which::which(command).map_err(|error| format!("command unavailable: {error}"))?;
-    let mut process = Command::new(executable);
-    process
-        .args(&args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env_clear()
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GCM_INTERACTIVE", "Never");
-    for key in [
-        "PATH",
-        "HOME",
-        "USERPROFILE",
-        "LANG",
-        "LC_ALL",
-        "TMPDIR",
-        "TEMP",
-        "TMP",
-        "SystemRoot",
-        "PATHEXT",
-        "SSH_AUTH_SOCK",
-        "GNUPGHOME",
-        "GPG_TTY",
-        "DISPLAY",
-        "WAYLAND_DISPLAY",
-        "DBUS_SESSION_BUS_ADDRESS",
-    ] {
-        if let Some(value) = std::env::var_os(key) {
-            process.env(key, value);
-        }
-    }
-    if let Some(cwd) = &cwd {
-        process.current_dir(cwd);
-    }
-    hide_console(&mut process);
-    let mut child = process
-        .spawn()
-        .map_err(|error| format!("command failed to start: {error}"))?;
-    if let Some(stdin) = params.get("stdin").and_then(Value::as_str) {
-        if let Some(mut pipe) = child.stdin.take() {
-            pipe.write_all(stdin.as_bytes())
-                .map_err(|error| error.to_string())?;
-        }
-    } else {
-        drop(child.stdin.take());
-    }
-    let out_thread = child
-        .stdout
-        .take()
-        .map(|stream| thread::spawn(move || read_capped(stream)));
-    let err_thread = child
-        .stderr
-        .take()
-        .map(|stream| thread::spawn(move || read_capped(stream)));
-    let deadline = Instant::now() + EXEC_TIMEOUT;
-    let status = loop {
-        match child.try_wait().map_err(|error| error.to_string())? {
-            Some(status) => break status,
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("command timed out".into());
-            }
-            None => thread::sleep(Duration::from_millis(20)),
-        }
-    };
-    let (stdout, out_truncated) = out_thread
-        .map(|handle| handle.join().unwrap_or_default())
-        .unwrap_or_default();
-    let (stderr, err_truncated) = err_thread
-        .map(|handle| handle.join().unwrap_or_default())
-        .unwrap_or_default();
-    use base64::Engine;
-    let engine = base64::engine::general_purpose::STANDARD;
-    Ok(json!({
-        "code": status.code(),
-        "stdout": String::from_utf8_lossy(&stdout),
-        "stdoutBase64": engine.encode(&stdout),
-        "stderr": String::from_utf8_lossy(&stderr),
-        "stderrBase64": engine.encode(&stderr),
-        "truncated": out_truncated || err_truncated
-    }))
-}
-
 pub fn run_command(
     plugin_id: &str,
     declared: &BTreeSet<String>,
@@ -186,8 +54,8 @@ pub fn run_command(
         .get("command")
         .and_then(Value::as_str)
         .ok_or("missing command")?;
-    if !crate::plugin_permissions::valid_command(command)
-        || !crate::plugin_permissions::allowed_command(plugin_id, declared, command)?
+    if !crate::plugins::security::permissions::valid_command(command)
+        || !crate::plugins::security::permissions::allowed_command(plugin_id, declared, command)?
     {
         return Err("command was not approved by the user".into());
     }

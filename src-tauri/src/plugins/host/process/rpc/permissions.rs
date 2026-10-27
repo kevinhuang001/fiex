@@ -1,24 +1,24 @@
 use super::Running;
-use crate::plugin_permission_policy::Capability;
+use crate::plugins::security::policy::Capability;
 use std::sync::atomic::Ordering;
 
 impl Running {
-    pub(super) fn policy(&self) -> crate::plugin_permission_policy::PermissionPolicy<'_> {
-        crate::plugin_permission_policy::PermissionPolicy::new(&self.plugin_id, &self.declared)
+    pub(super) fn policy(&self) -> crate::plugins::security::policy::PermissionPolicy<'_> {
+        crate::plugins::security::policy::PermissionPolicy::new(&self.plugin_id, &self.declared)
     }
 
     fn refuse(
         &self,
-        capability: crate::plugin_permission_policy::Capability,
-        decision: crate::plugin_permission_policy::Decision,
+        capability: crate::plugins::security::policy::Capability,
+        decision: crate::plugins::security::policy::Decision,
     ) -> Result<(), String> {
         match decision {
-            crate::plugin_permission_policy::Decision::Allowed => Ok(()),
-            crate::plugin_permission_policy::Decision::Prompt => Err(format!(
+            crate::plugins::security::policy::Decision::Allowed => Ok(()),
+            crate::plugins::security::policy::Decision::Prompt => Err(format!(
                 "PermissionDenied: {} was revoked for this operation",
                 capability.as_str()
             )),
-            crate::plugin_permission_policy::Decision::Denied(reason) => {
+            crate::plugins::security::policy::Decision::Denied(reason) => {
                 Err(reason.message(capability))
             }
         }
@@ -29,11 +29,11 @@ impl Running {
     /// never grants another.
     fn prompt(
         &self,
-        capability: crate::plugin_permission_policy::Capability,
-        kind: crate::plugin_permission_prompt::PromptKind,
+        capability: crate::plugins::security::policy::Capability,
+        kind: crate::plugins::security::prompt::PromptKind,
         target: Option<&str>,
     ) -> Result<(), String> {
-        use crate::plugin_permission_prompt::PromptKind;
+        use crate::plugins::security::prompt::PromptKind;
         if self.closed.load(Ordering::Acquire) {
             return Err("PermissionDenied: plugin process is stopping".into());
         }
@@ -44,13 +44,13 @@ impl Running {
         let grant_permission = permission.clone();
         let target = target.map(str::to_owned);
         let grant_target = target.clone();
-        crate::plugin_permission_prompt::request(
+        crate::plugins::security::prompt::request(
             &plugin_id,
             &permission,
             kind,
             target.as_deref(),
             Box::new(move || match kind {
-                PromptKind::Permission => crate::plugin_permissions::set_granted(
+                PromptKind::Permission => crate::plugins::security::permissions::set_granted(
                     &grant_plugin,
                     &declared,
                     &grant_permission,
@@ -63,27 +63,37 @@ impl Running {
                         .ok_or("missing network target for permission grant")?;
                     // Allow the base capability and this exact host together;
                     // without the base grant `domain_allowed` would still fail.
-                    crate::plugin_permissions::set_granted(
+                    crate::plugins::security::permissions::set_granted(
                         &grant_plugin,
                         &declared,
                         "network",
                         true,
                     )?;
-                    crate::plugin_permissions::set_domain(&grant_plugin, &declared, target, true)
-                        .map(|_| ())
+                    crate::plugins::security::permissions::set_domain(
+                        &grant_plugin,
+                        &declared,
+                        target,
+                        true,
+                    )
+                    .map(|_| ())
                 }
                 PromptKind::Command => {
                     let target = grant_target
                         .as_deref()
                         .ok_or("missing command for permission grant")?;
-                    crate::plugin_permissions::set_granted(
+                    crate::plugins::security::permissions::set_granted(
                         &grant_plugin,
                         &declared,
                         "commands",
                         true,
                     )?;
-                    crate::plugin_permissions::set_command(&grant_plugin, &declared, target, true)
-                        .map(|_| ())
+                    crate::plugins::security::permissions::set_command(
+                        &grant_plugin,
+                        &declared,
+                        target,
+                        true,
+                    )
+                    .map(|_| ())
                 }
             }),
         )
@@ -93,14 +103,14 @@ impl Running {
     /// first so an out-of-scope target is rejected without a prompt.
     pub(super) fn ensure_permission(
         &self,
-        capability: crate::plugin_permission_policy::Capability,
+        capability: crate::plugins::security::policy::Capability,
     ) -> Result<(), String> {
         match self.policy().check(capability)? {
-            crate::plugin_permission_policy::Decision::Allowed => Ok(()),
-            crate::plugin_permission_policy::Decision::Prompt => {
+            crate::plugins::security::policy::Decision::Allowed => Ok(()),
+            crate::plugins::security::policy::Decision::Prompt => {
                 self.prompt(
                     capability,
-                    crate::plugin_permission_prompt::PromptKind::Permission,
+                    crate::plugins::security::prompt::PromptKind::Permission,
                     None,
                 )?;
                 // Re-check after the UI answer: a concurrent plugin disable or
@@ -108,7 +118,7 @@ impl Running {
                 let decision = self.policy().check(capability)?;
                 self.refuse(capability, decision)
             }
-            crate::plugin_permission_policy::Decision::Denied(reason) => {
+            crate::plugins::security::policy::Decision::Denied(reason) => {
                 Err(reason.message(capability))
             }
         }
@@ -118,14 +128,14 @@ impl Running {
     /// revoked mid-operation the remaining call fails closed.
     pub(super) fn require_permission(
         &self,
-        capability: crate::plugin_permission_policy::Capability,
+        capability: crate::plugins::security::policy::Capability,
     ) -> Result<(), String> {
         let decision = self.policy().check(capability)?;
         self.refuse(capability, decision)
     }
 
     pub(super) fn require_writer(&self, owner: &str, handle: &str) -> Result<(), String> {
-        let permission = crate::plugin_fs_access::writer_permission(owner, handle)?;
+        let permission = crate::plugins::resource::fs_access::writer_permission(owner, handle)?;
         let capability = Capability::from_name(permission)
             .ok_or_else(|| "unknown write capability".to_string())?;
         self.require_permission(capability)
@@ -133,8 +143,8 @@ impl Running {
 
     pub(super) fn ensure_fs(
         &self,
-        scope: &crate::plugin_fs_access::Scope,
-        capability: crate::plugin_permission_policy::Capability,
+        scope: &crate::plugins::resource::fs_access::Scope,
+        capability: crate::plugins::security::policy::Capability,
         path: &str,
     ) -> Result<(), String> {
         scope.authorize(path)?;
@@ -142,35 +152,35 @@ impl Running {
     }
 
     pub(super) fn ensure_network_target(&self, host: &str) -> Result<(), String> {
-        use crate::plugin_permission_policy::Capability;
-        let host = crate::plugin_permissions::normalize_domain(host)?;
+        use crate::plugins::security::policy::Capability;
+        let host = crate::plugins::security::permissions::normalize_domain(host)?;
         match self.policy().domain_check(&host)? {
-            crate::plugin_permission_policy::Decision::Allowed => Ok(()),
-            crate::plugin_permission_policy::Decision::Prompt => {
+            crate::plugins::security::policy::Decision::Allowed => Ok(()),
+            crate::plugins::security::policy::Decision::Prompt => {
                 self.prompt(
                     Capability::Network,
-                    crate::plugin_permission_prompt::PromptKind::Network,
+                    crate::plugins::security::prompt::PromptKind::Network,
                     Some(&host),
                 )?;
                 match self.policy().domain_check(&host)? {
-                    crate::plugin_permission_policy::Decision::Allowed => Ok(()),
-                    crate::plugin_permission_policy::Decision::Prompt => {
+                    crate::plugins::security::policy::Decision::Allowed => Ok(()),
+                    crate::plugins::security::policy::Decision::Prompt => {
                         Err("PermissionDenied: network target was not granted".into())
                     }
-                    crate::plugin_permission_policy::Decision::Denied(reason) => {
+                    crate::plugins::security::policy::Decision::Denied(reason) => {
                         Err(reason.message(Capability::Network))
                     }
                 }
             }
-            crate::plugin_permission_policy::Decision::Denied(reason) => {
+            crate::plugins::security::policy::Decision::Denied(reason) => {
                 Err(reason.message(Capability::Network))
             }
         }
     }
 
     pub(super) fn ensure_command(&self, command: &str) -> Result<(), String> {
-        use crate::plugin_permission_policy::Capability;
-        if !crate::plugin_permissions::valid_command(command) {
+        use crate::plugins::security::policy::Capability;
+        if !crate::plugins::security::permissions::valid_command(command) {
             return Err("invalid command name".into());
         }
         let command = command.to_ascii_lowercase();
@@ -180,24 +190,24 @@ impl Running {
             return Err("PermissionDenied: command is not declared by this plugin".into());
         }
         match self.policy().command_check(&command)? {
-            crate::plugin_permission_policy::Decision::Allowed => Ok(()),
-            crate::plugin_permission_policy::Decision::Prompt => {
+            crate::plugins::security::policy::Decision::Allowed => Ok(()),
+            crate::plugins::security::policy::Decision::Prompt => {
                 self.prompt(
                     Capability::Commands,
-                    crate::plugin_permission_prompt::PromptKind::Command,
+                    crate::plugins::security::prompt::PromptKind::Command,
                     Some(&command),
                 )?;
                 match self.policy().command_check(&command)? {
-                    crate::plugin_permission_policy::Decision::Allowed => Ok(()),
-                    crate::plugin_permission_policy::Decision::Prompt => {
+                    crate::plugins::security::policy::Decision::Allowed => Ok(()),
+                    crate::plugins::security::policy::Decision::Prompt => {
                         Err("PermissionDenied: command was not granted".into())
                     }
-                    crate::plugin_permission_policy::Decision::Denied(reason) => {
+                    crate::plugins::security::policy::Decision::Denied(reason) => {
                         Err(reason.message(Capability::Commands))
                     }
                 }
             }
-            crate::plugin_permission_policy::Decision::Denied(reason) => {
+            crate::plugins::security::policy::Decision::Denied(reason) => {
                 Err(reason.message(Capability::Commands))
             }
         }

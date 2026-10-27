@@ -1,6 +1,5 @@
-import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
-import { CloudCheck, CloudDownload } from 'lucide-react'
+import { DecorationBadges as Badges } from '../DecorationBadges'
 import { FileIcon } from '../../FileIcon'
 import { InlineRename } from '../InlineRename'
 import { asset } from '@/lib/api'
@@ -8,7 +7,6 @@ import { useDecorationIcon } from '@/lib/decorationIcons'
 import { isImage } from '@/lib/files'
 import type { Explorer } from '@/hooks/useExplorer'
 import type {
-  DecorationBadge,
   DecorationField,
   DecorationStyle,
   DecorationTarget,
@@ -47,24 +45,6 @@ interface RowBindings {
 
 export type SharedRow = (entry: Entry) => RowBindings
 
-export function SyncBadge({ sync }: { sync: Entry['sync'] }) {
-  if (!sync) return null
-  const labels = {
-    synced: t('已缓存'),
-    cloud: t('仅云端'),
-    pinned: t('始终保留在本地'),
-    pending: t('等待上传'),
-    conflict: t('同步冲突'),
-  }
-  const label = labels[sync]
-  return (
-    <span className={`sync-badge ${sync}`} title={label}>
-      {sync === 'cloud' ? <CloudDownload size={11} /> : <CloudCheck size={11} />}
-      <span>{label}</span>
-    </span>
-  )
-}
-
 function fieldOf(
   decoration: EntryDecoration | undefined,
   target: DecorationTarget,
@@ -93,27 +73,6 @@ function fieldStyle(style: DecorationStyle | undefined): CSSProperties | undefin
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
   } as CSSProperties
-}
-
-function Badges({ badges }: { badges?: DecorationBadge[] }) {
-  return (
-    <>
-      {badges?.map((badge) => (
-        <span
-          key={`${badge.text}-${badge.color}`}
-          className={`decoration-badge ${badge.color.startsWith('#') ? 'custom' : badge.color}`}
-          style={
-            badge.color.startsWith('#')
-              ? { color: badge.color, borderColor: badge.color }
-              : undefined
-          }
-          title={badge.tooltip}
-        >
-          {badge.text}
-        </span>
-      ))}
-    </>
-  )
 }
 
 export function DecoratedValue({
@@ -190,7 +149,7 @@ export function NameCell({
       >
         {entry.name}
       </span>
-      <Badges badges={field?.badges} />
+      <Badges badges={[...(decoration?.nativeBadges || []), ...(field?.badges || [])]} />
       {label !== entry.name && <small className="decoration-label">{label}</small>}
     </>
   )

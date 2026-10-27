@@ -1,5 +1,5 @@
 //! Core-owned navigation identities. URIs locate resources; they never grant access.
-use crate::plugin_fs_access::Scope;
+use crate::plugins::resource::fs_access::Scope;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -143,7 +143,7 @@ fn registry() -> &'static Mutex<Registry> {
     REGISTRY.get_or_init(|| Mutex::new(Registry::default()))
 }
 pub fn owner(plugin_id: &str, _contribution: &str) -> Result<(), String> {
-    let plugin = crate::plugin_host::catalog()
+    let plugin = crate::plugins::host::catalog()
         .into_iter()
         .find(|p| p.id == plugin_id && p.enabled && p.approved && p.backend_available)
         .ok_or("PermissionDenied: VFS owner unavailable")?;

@@ -14,7 +14,7 @@ mod signing;
 pub use marketplace::{marketplace, release_assets, MarketplacePlugin};
 pub use package::install_root;
 
-use crate::{plugin_host, plugin_permissions};
+use crate::{plugins::host as plugin_host, plugins::security::permissions as plugin_permissions};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -28,7 +28,7 @@ use tempfile::TempDir;
 struct Staged {
     dir: TempDir,
     manifest: plugin_host::PluginManifest,
-    verification: crate::plugin_signing::Verification,
+    verification: crate::plugins::signing::Verification,
     update: bool,
     previous_declared: Option<std::collections::BTreeSet<String>>,
 }
@@ -114,9 +114,9 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
         .map_err(|e| e.to_string())?;
     package::unpack(&package, staging.path())?;
     let (manifest_bytes, manifest) = package::read_manifest(staging.path())?;
-    let verification = crate::plugin_signing::verify(&manifest_bytes, &manifest, staging.path())?;
-    crate::plugin_resources::validate(&manifest, staging.path())?;
-    crate::plugin_themes::load(&manifest, staging.path())?;
+    let verification = crate::plugins::signing::verify(&manifest_bytes, &manifest, staging.path())?;
+    crate::plugins::resources::validate(&manifest, staging.path())?;
+    crate::plugins::themes::load(&manifest, staging.path())?;
     let declared = plugin_host::declared_permissions(&manifest)?;
     let requested_network_all = manifest.permissions.network.all;
     let requested_network_domains = plugin_permissions::validate_network_domains(
@@ -139,7 +139,7 @@ fn stage_package(package: Vec<u8>, repository: &str) -> Result<InstallPreview, S
     let update = existing.is_dir();
     // Make only the manifest-declared native executable runnable. No other
     // executable permission is accepted from the downloaded archive.
-    if !crate::plugin_themes::is_theme(&manifest) {
+    if !crate::plugins::themes::is_theme(&manifest) {
         let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
         let current = manifest
             .runtime
@@ -238,7 +238,7 @@ pub fn install(ticket: &str, allow_untrusted: bool) -> Result<String, String> {
             .map(|value| value.as_nanos())
             .unwrap_or_default()
     ));
-    crate::plugin_host::global().stop(&id);
+    crate::plugins::host::global().stop(&id);
     if destination.exists() {
         fs::rename(&destination, &backup).map_err(|e| e.to_string())?;
     }

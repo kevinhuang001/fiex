@@ -11,7 +11,6 @@ export const SHORTCUT_ACTIONS = [
   'newTab',
   'closeTab',
   'newFolder',
-  'newFile',
   'rename',
   'trash',
   'back',
@@ -69,9 +68,6 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   get newFolder() {
     return t('新建文件夹')
   },
-  get newFile() {
-    return t('新建文件')
-  },
   get rename() {
     return t('重新命名')
   },
@@ -122,7 +118,6 @@ export const SHORTCUT_GROUPS: { title: string; actions: ShortcutAction[] }[] = [
       'open',
       'rename',
       'newFolder',
-      'newFile',
       'copy',
       'cut',
       'paste',

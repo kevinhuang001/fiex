@@ -62,18 +62,18 @@ export function transferActions({
     if (conflict)
       await executeTransfer(conflict.paths, conflict.destination, conflict.moving, resolutions)
   }
-  const copy = (moving: boolean) => {
+  const copy = (moving: boolean, paths = x.selected) => {
     if (moving && !writable()) return
-    if (x.selected.length) setClipboard({ paths: [...x.selected], moving })
+    if (paths.length) setClipboard({ paths: [...paths], moving })
   }
-  const duplicate = () => {
+  const duplicate = (paths = x.selected) => {
     if (!writable()) return
     let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
       t('正在创建副本…'),
       async () => {
         const result = await call<OperationResult>('transfer', {
-          paths: x.selected,
+          paths,
           destination: x.path,
           moving: false,
           keepBoth: true,

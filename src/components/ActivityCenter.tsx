@@ -1,15 +1,6 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  CircleAlert,
-  Clock3,
-  Filter,
-  LoaderCircle,
-  X,
-} from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Clock3, Filter, LoaderCircle, X } from 'lucide-react'
 import {
   cancelActivity,
   isCancellable,
@@ -19,6 +10,7 @@ import {
 } from '@/hooks/useActivity'
 import { usePluginCatalog } from '@/lib/plugins'
 import { activityEta as eta } from '@/lib/activity'
+import { size } from '@/lib/files'
 
 const time = (value: number) =>
   new Date(value).toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' })
@@ -27,7 +19,7 @@ function StatusIcon({ item }: { item: ActivityItem }) {
   return item.status === 'running' ? (
     <LoaderCircle size={17} className="spin" />
   ) : item.status === 'error' ? (
-    <CircleAlert size={17} />
+    <X size={17} />
   ) : (
     <Check size={17} />
   )
@@ -80,7 +72,12 @@ function ActivityDetails({ item }: { item: ActivityItem }) {
           <div>
             <dt>{t('进度')}</dt>
             <dd>
-              {percent}%{item.total ? t(' · {0}/{1} 文件', item.done ?? 0, item.total) : ''}
+              {percent}%
+              {item.total
+                ? item.unit === 'bytes'
+                  ? t(' · {0} / {1}', size(item.done ?? 0), size(item.total))
+                  : t(' · {0}/{1} 文件', item.done ?? 0, item.total)
+                : ''}
             </dd>
           </div>
         )}
@@ -333,7 +330,9 @@ export function ActivityCenter() {
                         ` · ${Math.round(item.progress * 100)}%`}
                       {item.status === 'running' &&
                         item.total !== undefined &&
-                        t(' · {0}/{1} 文件', item.done ?? 0, item.total)}
+                        (item.unit === 'bytes'
+                          ? t(' · {0} / {1}', size(item.done ?? 0), size(item.total))
+                          : t(' · {0}/{1} 文件', item.done ?? 0, item.total))}
                       {item.status === 'running' && eta(item) && t(' · 预计 {0}', eta(item))}
                     </small>
                     {item.status === 'running' && (

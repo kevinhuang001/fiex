@@ -208,7 +208,7 @@ pub fn read_path(route: &Route) -> Result<Vec<u8>, String> {
     read(&route.driver_device, route.kind, &route.rel)
 }
 
-pub fn listing(route: &Route) -> Result<Vec<crate::files::Entry>, String> {
+pub fn listing(route: &Route) -> Result<Vec<crate::core::files::Entry>, String> {
     ensure_access(route)?;
     let files = list(&route.driver_device, route.kind, &route.rel)?;
     Ok(files
@@ -216,7 +216,7 @@ pub fn listing(route: &Route) -> Result<Vec<crate::files::Entry>, String> {
         .map(|file| {
             let rel = join_rel(&route.rel, &file.name);
             let path = format!("{}/{}", route.root.trim_end_matches('/'), rel);
-            crate::files::Entry {
+            crate::core::files::Entry {
                 path,
                 extension: Path::new(&file.name)
                     .extension()
@@ -234,13 +234,13 @@ pub fn listing(route: &Route) -> Result<Vec<crate::files::Entry>, String> {
                 readonly: file.readonly,
                 link_target: None,
                 tags: vec![],
-                sync: None,
+                ..Default::default()
             }
         })
         .collect())
 }
 
-pub fn entry(route: &Route) -> Result<crate::files::Entry, String> {
+pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
     let (parent, name) = route
         .rel
         .rsplit_once('/')
@@ -260,7 +260,7 @@ pub fn search(
     route: &Route,
     query: &str,
     limit: usize,
-) -> Result<Vec<crate::files::Entry>, String> {
+) -> Result<Vec<crate::core::files::Entry>, String> {
     let needle = query.to_lowercase();
     let mut out = Vec::new();
     let mut pending = vec![route.clone()];

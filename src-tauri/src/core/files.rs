@@ -1,8 +1,8 @@
-use crate::tags::{read_tags, Tag};
+use crate::core::tags::{read_tags, Tag};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     pub path: String,
@@ -16,7 +16,19 @@ pub struct Entry {
     pub mime: String,
     pub readonly: bool,
     pub link_target: Option<String>,
+    /// Provider operations this entry allows. Empty means unrestricted.
+    #[serde(default)]
+    pub allowed_ops: Vec<String>,
     pub tags: Vec<Tag>,
+    /// Whether this entry, or a directory descendant, has cached bytes.
+    #[serde(default)]
+    pub has_cache: bool,
+    /// Connection entries pinned with "Always keep locally".
+    #[serde(default)]
+    pub pinned: bool,
+    /// The current bytes of this connection entry reached the remote.
+    #[serde(default)]
+    pub uploaded: bool,
     pub sync: Option<String>,
 }
 
@@ -40,7 +52,7 @@ fn shortcut_target(path: &Path) -> Option<String> {
 }
 
 pub fn entry(path: &Path) -> Result<Entry, String> {
-    crate::mounts::reject_local(&path.to_string_lossy())?;
+    crate::plugins::mounts::reject_local(&path.to_string_lossy())?;
     let link = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     // Most entries are not links. Reuse lstat instead of issuing a second
     // metadata syscall for every item in a large directory.
@@ -98,7 +110,11 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
             .to_string(),
         readonly: meta.permissions().readonly(),
         link_target,
+        allowed_ops: Vec::new(),
         tags: read_tags(path),
+        has_cache: false,
+        pinned: false,
+        uploaded: false,
         sync: None,
     })
 }
@@ -106,15 +122,18 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
     pub read_only: bool,
+    /// The directory itself accepts `mkdir` (provider/node capability).
+    #[serde(default)]
+    pub can_create: bool,
     pub virtual_volume: bool,
     pub path: String,
     pub entries: Vec<Entry>,
     pub warnings: Vec<String>,
 }
 pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
-    let ignore = crate::ignores::IgnoreSet::new(ignores);
+    let ignore = crate::core::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
     let mut warnings = Vec::new();
     for item in fs::read_dir(&path).map_err(|e| e.to_string())? {
@@ -135,8 +154,12 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         }
     }
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
+    // Local creation follows the directory's own permission; the OS still
+    // rejects a call on a read-only volume.
+    let can_create = fs::metadata(&path).is_ok_and(|meta| !meta.permissions().readonly());
     Ok(Listing {
         read_only: false,
+        can_create,
         virtual_volume: false,
         path: path.to_string_lossy().into_owned(),
         entries,
@@ -165,7 +188,7 @@ pub fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 pub fn text_preview(path: &str) -> Result<String, String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     use std::io::Read;
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut bytes = Vec::new();
@@ -206,13 +229,13 @@ mod tests {
             name: "TestTag".into(),
             color: 6,
         }];
-        crate::tags::set_tags(&[file.to_string_lossy().into_owned()], &tags).unwrap();
+        crate::core::tags::set_tags(&[file.to_string_lossy().into_owned()], &tags).unwrap();
         let entry = super::entry(&file).unwrap();
         assert!(entry
             .tags
             .iter()
             .any(|tag| tag.name == "TestTag" && tag.color == 6));
-        crate::tags::set_tags(&[file.to_string_lossy().into_owned()], &[]).unwrap();
+        crate::core::tags::set_tags(&[file.to_string_lossy().into_owned()], &[]).unwrap();
         assert!(super::entry(&file).unwrap().tags.is_empty());
     }
 }

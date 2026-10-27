@@ -1,7 +1,7 @@
 //! The platform Trash: locating it, recording where items came from so they can
 //! be restored, and emptying it.
 
-use crate::operations::check_cancelled;
+use crate::core::operations::check_cancelled;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -230,7 +230,7 @@ fn remove_entry(path: &Path) -> Result<(), String> {
 /// no meaning and the user explicitly asks for the item to be gone.
 pub fn delete_permanently(paths: &[String], cancel: &AtomicBool) -> Result<usize, String> {
     for path in paths {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
     }
     let mut removed = 0;
     for path in paths {

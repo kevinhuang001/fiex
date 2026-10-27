@@ -6,8 +6,8 @@ use super::{
     progress::Progress,
 };
 use crate::{
-    ignores::IgnoreSet,
-    operations::{
+    core::ignores::IgnoreSet,
+    core::operations::{
         check_cancelled, copy_stream, copy_tree_with_progress, exists, unique, OperationResult,
         Undo, CANCELLED,
     },
@@ -434,8 +434,8 @@ pub(crate) fn execute(
 mod tests {
     use super::*;
     use crate::{
-        operations::Operations,
-        transfers::{Action, NEVER_CANCELLED},
+        core::operations::Operations,
+        core::transfers::{Action, NEVER_CANCELLED},
     };
 
     fn resolve(result: &OperationResult, action: Action) -> Vec<Resolution> {

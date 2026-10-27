@@ -74,7 +74,7 @@ fn shell_escape(path: &std::path::Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 pub fn launch(path: &str, id: &str) -> Result<(), String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
     let dir: PathBuf = if path.is_dir() {
         path
@@ -220,11 +220,11 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
     Ok(())
 }
 pub fn open_path(path: &str) -> Result<(), String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     open::that_detached(path).map_err(|e| e.to_string())
 }
 pub fn reveal(path: &str) -> Result<(), String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     #[cfg(target_os = "macos")]
     {
         Command::new("open")
@@ -406,7 +406,7 @@ pub fn detect_ides() -> Vec<Ide> {
 }
 
 pub fn launch_ide(path: &str, id: &str) -> Result<(), String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     let path = dunce::canonicalize(path).map_err(|error| error.to_string())?;
     let (id, _app) = IDES
         .iter()

@@ -3,6 +3,7 @@ import type { AppController } from '@/hooks/useAppController'
 import type { useMenuPosition } from '@/lib/menuPosition'
 
 export interface ContextAction {
+  id?: string
   disabled?: boolean
   danger?: boolean
   label: string
@@ -11,6 +12,7 @@ export interface ContextAction {
   action: () => void
 }
 export interface ContextSubmenu {
+  id?: string
   disabled?: boolean
   label: string
   icon: ReactNode

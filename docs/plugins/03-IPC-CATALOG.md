@@ -13,23 +13,32 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 
 ## Core → 插件
 
-| 方法                                    | 参数                                  | 返回                                |
-| --------------------------------------- | ------------------------------------- | ----------------------------------- |
-| `plugin.initialize`                     | `protocolVersion, hostVersion?`       | `pluginId, ready`                   |
-| `plugin.ping` / `plugin.shutdown`       | 空                                    | `alive` / `null`                    |
-| `connection.validate`                   | `connection`                          | `valid`                             |
-| `connection.open` / `connection.create` | `connectionId/factoryId/connection…`  | `NavigationTarget`                  |
-| `info.resolve`                          | `EventContext.targets`                | `{ sections: [...] }`               |
-| `preview.open`                          | `EventContext.targets`                | `PreviewView`                       |
-| `decorations.resolve`                   | `DecorationContext`                   | `{decorations:[...]}`               |
-| `contextMenu.resolve`                   | `menuSessionId,targets,parentId?`     | `{items:[...]}`                     |
-| `contextMenu.execute`                   | `menuSessionId,itemId,interactionId`  | 操作结果                            |
-| `search.query`                          | `query, root, hidden, ignores, limit` | `{entries:[...]}`                   |
-| `toolbar.invoke`                        | `EventContext.targets`                | 业务结果                            |
-| `hooks.invoke`                          | `event, targets`                      | `HookResponse`（beforeOpen 已接线） |
-| `terminal.open`                         | `sessionId, cols, rows, connection`   | `{started:true}`（SSH 插件）        |
+| 方法                                                          | 参数                                                  | 返回                                                      |
+| ------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| `plugin.initialize`                                           | `protocolVersion, hostVersion?`                       | `pluginId, ready, fs.operations[]`                        |
+| `plugin.ping` / `plugin.shutdown`                             | 空                                                    | `alive` / `null`                                          |
+| `connection.validate`                                         | `connection`                                          | `valid`                                                   |
+| `connection.open` / `connection.create`                       | `connectionId/factoryId/connection…`                  | `NavigationTarget`                                        |
+| `info.resolve`                                                | `EventContext.targets`                                | `{ sections: [...] }`                                     |
+| `preview.open`                                                | `EventContext.targets`                                | `PreviewView`                                             |
+| `decorations.resolve`                                         | `DecorationContext`                                   | `{decorations:[...]}`                                     |
+| `contextMenu.resolve`                                         | `menuSessionId,targets,parentId?`                     | `{items:[...]}`                                           |
+| `contextMenu.execute`                                         | `menuSessionId,itemId,interactionId`                  | 操作结果                                                  |
+| `search.query`                                                | `query, root(ref), hidden, ignores, limit`            | `{entries:[...]}`                                         |
+| `fs.list`                                                     | `mountId,nodeId,cursor?,limit,hidden?,ignores?`       | `{entries:[FsEntry],nextCursor?,warnings?}`               |
+| `fs.stat`                                                     | `mountId,nodeId`                                      | `FsEntry`                                                 |
+| `fs.search`                                                   | `mountId,nodeId,query,limit,hidden?,ignores?`         | `{entries:[FsEntry],truncated?}`                          |
+| `fs.openRead` / `fs.readStream` / `fs.closeRead`              | `nodeId` / `streamId,offset,maxBytes` / `streamId`    | `{streamId,size?}` / `{base64,eof}` / `null`              |
+| `fs.beginWrite` / `fs.writeStream` / `fs.commit` / `fs.abort` | `nodeId                                               | parentId+name,size?,ifRevision?`/`streamId,offset,base64` | `{streamId}` / `{written}` / `FsEntry` / `null` |
+| `fs.mkdir` / `fs.rename` / `fs.remove`                        | `parentId,name` / `nodeId,name?,parentId?` / `nodeId` | `FsEntry` / `FsEntry` / `null`                            |
+| `toolbar.invoke`                                              | `EventContext.targets`                                | 业务结果                                                  |
+| `hooks.invoke`                                                | `event, targets`                                      | `HookResponse`（beforeOpen 已接线）                       |
+| `terminal.open`                                               | `sessionId, cols, rows, connection`                   | `{started:true}`（SSH 插件）                              |
 
 Root `contextMenu.resolve` 返回的 `items` 只包含顶层 action、submenu、separator，不能提供子菜单静态项。用户打开 submenu 时，Core 使用原来的菜单 Session 再次调用 `contextMenu.resolve`，附带 `parentId`；插件只返回该 submenu 的直接子项（不得指定 `parentId`）。Core 校验 ID、层级和会话归属后补充 `parentId` 并展示。菜单解析仅投影允许的元数据，不授予文件内容访问；`contextMenu.execute` 才会附上本次选中资源的操作 Scope。
+
+连接与独立视图共用上表的 `fs.*`，差别只在请求携带 `connection` 还是
+`contributionId`/`viewContext`。完整字段见 [10-UNIFIED-FS](10-UNIFIED-FS.md)。
 
 ## 标准事件上下文
 
@@ -70,22 +79,21 @@ Decorations 返回直接成员名：
 
 ## 插件 → Core
 
-| 方法                                                    | 关键参数                  | 许可                              |
-| ------------------------------------------------------- | ------------------------- | --------------------------------- |
-| `host.fs.stat` / `statBatch`                            | refs                      | `metadata` + Scope                |
-| `host.fs.list`                                          | directory ref             | `folders.read` + Scope            |
-| `host.fs.openRead` / `readChunk`                        | ref / read handle         | `files.read` + Scope              |
-| `host.fs.read/readOpen/closeRead`                       | resource/handle           | 读取所有权 + Scope                |
-| `host.fs.beginWrite/writeChunk/commit/abort`            | 目标 ref/缓冲区/句柄      | `files.write` 或 `files.create`   |
-| `host.fs.mkdir`                                         | parent,name               | `folders.create`                  |
-| `host.fs.remove` / `rename`                             | 目标/源+目标              | 按真实对象类型检查对应权限        |
-| `host.net.http.*`                                       | URL/headers/body          | 已批准 Network host               |
-| `host.net.tcp.open/readBytes/writeBytes/shutdown/close` | host/port/stream          | 已批准 Network host，读写独立推进 |
-| `host.process.run` / `host.exec`                        | 已声明命令                | `commands`                        |
-| `host.storage.*` / `host.secret.*`                      | 插件命名空间键            | 插件进程身份                      |
-| `host.vfs.openView`                                     | VFS 资源                  | 已注册 `vfs` + MountRegistry      |
-| `host.terminal.*`                                       | `sessionId`、base64、尺寸 | 终端 Session owner（仅 SSH 插件） |
-| `host.task.*`                                           | 任务/进度/取消            | 当前 operation/task 授权          |
+| 方法                                                        | 关键参数                  | 许可                              |
+| ----------------------------------------------------------- | ------------------------- | --------------------------------- |
+| `host.fs.stat` / `statBatch`                                | refs                      | `metadata` + Scope                |
+| `host.fs.list`                                              | directory ref             | `folders.read` + Scope            |
+| `host.fs.openRead` / `readChunk` / `readOpen` / `closeRead` | ref / read handle         | `files.read` + Scope              |
+| `host.fs.beginWrite/writeChunk/commit/abort`                | 目标 ref/缓冲区/句柄      | `files.write` 或 `files.create`   |
+| `host.fs.mkdir`                                             | parent,name               | `folders.create`                  |
+| `host.fs.remove` / `rename`                                 | 目标/源+目标              | 按真实对象类型检查对应权限        |
+| `host.net.http.*`                                           | URL/headers/body          | 已批准 Network host               |
+| `host.net.tcp.open/readBytes/writeBytes/shutdown/close`     | host/port/stream          | 已批准 Network host，读写独立推进 |
+| `host.process.run`                                          | 已声明命令                | `commands`                        |
+| `host.storage.*` / `host.secret.*`                          | 插件命名空间键            | 插件进程身份                      |
+| `host.vfs.openView`                                         | VFS 资源                  | 已注册 `vfs` + MountRegistry      |
+| `host.terminal.*`                                           | `sessionId`、base64、尺寸 | 终端 Session owner（仅 SSH 插件） |
+| `host.task.*`                                               | 任务/进度/取消            | 当前 operation/task 授权          |
 
 权限被用户关闭时，`host.*` 调用会等待 Core 统一弹出的授权请求（同一插件/权限/目标合并为一个弹窗）。允许后 Core 先持久化授权再继续；拒绝、超时或插件停止会返回 `permission_denied`，调用方不会收到部分结果。Manifest 未声明或超出已批准声明快照的权限不会触发弹窗，直接拒绝。
 

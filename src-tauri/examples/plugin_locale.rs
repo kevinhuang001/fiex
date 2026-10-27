@@ -1,5 +1,5 @@
 //! Integration regression: locale belongs to the request, not business params.
-use fiex_lib::{i18n, plugin_host, plugin_sandbox};
+use fiex_lib::{i18n, plugins::host as plugin_host, plugins::security::sandbox as plugin_sandbox};
 use serde_json::json;
 fn main() {
     plugin_sandbox::run_wrapper_if_requested();

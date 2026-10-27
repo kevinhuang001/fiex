@@ -2,7 +2,7 @@
 //! and copy trees.
 
 use super::{check_cancelled, exists, OperationResult};
-use crate::{files::validate_name, ignores::IgnoreSet};
+use crate::{core::files::validate_name, core::ignores::IgnoreSet};
 use std::{
     fs,
     io::{Read, Write},
@@ -11,7 +11,7 @@ use std::{
 };
 
 pub(super) fn create_entry(dir: &str, name: &str, folder: bool) -> Result<PathBuf, String> {
-    crate::mounts::reject_local(dir)?;
+    crate::plugins::mounts::reject_local(dir)?;
     validate_name(name)?;
     let path = Path::new(dir).join(name);
     if folder {
@@ -29,7 +29,7 @@ pub(super) fn create_entry(dir: &str, name: &str, folder: bool) -> Result<PathBu
 /// Rename in place. `None` means the name did not change, so there is nothing
 /// to undo.
 pub(super) fn rename_entry(source: &str, name: &str) -> Result<Option<PathBuf>, String> {
-    crate::mounts::reject_local(source)?;
+    crate::plugins::mounts::reject_local(source)?;
     validate_name(name)?;
     let src = Path::new(source);
     let dest = src.with_file_name(name);
@@ -199,14 +199,14 @@ pub(crate) fn copy_tree_with_progress(
 
 pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
     for path in paths {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
     }
     let mut result = OperationResult::default();
     for path in paths {
-        let before = crate::volumes::trash_names();
+        let before = crate::core::volumes::trash_names();
         match trash::delete(path) {
             Ok(()) => {
-                crate::volumes::record_trashed(path, &before);
+                crate::core::volumes::record_trashed(path, &before);
                 result.paths.push(path.clone());
             }
             Err(e) => result.errors.push(format!("{path}: {e}")),
@@ -218,7 +218,7 @@ pub fn recycle(paths: &[String]) -> Result<OperationResult, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operations::CANCELLED;
+    use crate::core::operations::CANCELLED;
     use std::sync::atomic::Ordering;
 
     #[test]

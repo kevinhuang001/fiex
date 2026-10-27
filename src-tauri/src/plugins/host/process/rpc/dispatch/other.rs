@@ -1,10 +1,8 @@
 //! Host methods outside the filesystem and network families: VFS views,
 //! previews, buffers, private storage, diagnostics and command execution.
-use super::super::super::spawn::{host_exec, run_command};
+use super::super::super::spawn::run_command;
 use super::Context;
 use serde_json::{json, Value};
-use std::fs;
-use std::path::{Component, Path};
 
 pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     let owner = ctx.owner();
@@ -12,7 +10,13 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     match ctx.method {
         "host.vfs.openView" => {
             let scope = ctx.scope()?;
-            crate::mounts::open_view(&plugin_id, ctx.params, &scope)
+            let mut params = ctx.params.clone();
+            params["resourceRoot"] = json!(scope.resolve_reference(
+                ctx.params
+                    .get("resourceRoot")
+                    .ok_or("missing resource ref")?
+            )?);
+            crate::plugins::mounts::open_view(&plugin_id, &params, &scope)
         }
         #[cfg(feature = "desktop")]
         "host.terminal.ready" => {
@@ -44,33 +48,6 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         | "host.terminal.size"
         | "host.terminal.closed"
         | "host.terminal.end" => Err(crate::i18n::t("终端仅在桌面版可用").into()),
-        "host.preview.create" => {
-            use base64::Engine;
-            let name = ctx.arg("name")?;
-            if name.is_empty()
-                || !Path::new(&name)
-                    .components()
-                    .all(|c| matches!(c, Component::Normal(_)))
-                || Path::new(&name).components().count() != 1
-            {
-                return Err("invalid preview name".into());
-            }
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(ctx.arg("base64")?)
-                .map_err(|error| error.to_string())?;
-            if bytes.len() > 1024 * 1024 {
-                return Err("preview too large".into());
-            }
-            let directory = dirs::cache_dir()
-                .ok_or("cache directory unavailable")?
-                .join("fiex")
-                .join("plugin-previews")
-                .join(&plugin_id);
-            fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-            let path = directory.join(&name);
-            fs::write(&path, bytes).map_err(|error| error.to_string())?;
-            Ok(json!(path.to_string_lossy()))
-        }
         "host.buffer.create" => {
             let size = ctx
                 .params
@@ -82,57 +59,82 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                 .get("writable")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            serde_json::to_value(crate::plugin_ipc::create(&owner, size, writable)?)
+            serde_json::to_value(crate::plugins::ipc::create(&owner, size, writable)?)
                 .map_err(|error| error.to_string())
         }
         "host.buffer.map" => {
             let id = ctx.arg("id")?;
-            serde_json::to_value(crate::plugin_ipc::map(&owner, &id)?)
+            serde_json::to_value(crate::plugins::ipc::map(&owner, &id)?)
                 .map_err(|error| error.to_string())
         }
         "host.buffer.release" => {
             let id = ctx.arg("id")?;
-            crate::plugin_ipc::release(&owner, &id)?;
+            crate::plugins::ipc::release(&owner, &id)?;
             Ok(Value::Null)
         }
         "host.storage.get" => {
-            Ok(
-                crate::plugin_storage::get(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?
-                    .unwrap_or(Value::Null),
-            )
+            let value =
+                crate::plugins::storage::get(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
+            Ok(json!({"found":value.is_some(),"value":value}))
         }
-        "host.storage.set" => {
-            let value = ctx.params.get("value").cloned().ok_or("missing value")?;
-            crate::plugin_storage::set(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?, value)?;
-            Ok(Value::Null)
-        }
-        "host.storage.delete" => {
-            crate::plugin_storage::delete(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
-            Ok(Value::Null)
-        }
-        "host.storage.keys" => Ok(json!(crate::plugin_storage::list_keys(
-            &plugin_id,
-            &ctx.arg("scope")?
-        )?)),
-        "host.secret.get" => Ok(json!(crate::plugin_storage::secret_get(
-            &plugin_id,
-            &ctx.arg("scope")?,
-            &ctx.arg("key")?
-        )?)),
-        "host.secret.set" => {
-            crate::plugin_storage::secret_set(
+        "host.storage.compareAndSet" => {
+            let expected = if ctx.params["expectedExists"]
+                .as_bool()
+                .ok_or("missing expectedExists")?
+            {
+                Some(
+                    ctx.params
+                        .get("expected")
+                        .cloned()
+                        .ok_or("missing expected")?,
+                )
+            } else {
+                None
+            };
+            let next = if ctx.params["delete"]
+                .as_bool()
+                .ok_or("missing delete flag")?
+            {
+                None
+            } else {
+                Some(ctx.params.get("value").cloned().ok_or("missing value")?)
+            };
+            Ok(json!(crate::plugins::storage::compare_and_set(
                 &plugin_id,
                 &ctx.arg("scope")?,
                 &ctx.arg("key")?,
-                &ctx.arg("value")?,
-            )?;
+                expected,
+                next
+            )?))
+        }
+        "host.storage.set" => {
+            let value = ctx.params.get("value").cloned().ok_or("missing value")?;
+            crate::plugins::storage::set(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?, value)?;
             Ok(Value::Null)
         }
-        "host.secret.delete" => {
-            crate::plugin_storage::secret_delete(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
+        "host.storage.delete" => {
+            crate::plugins::storage::delete(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
             Ok(Value::Null)
         }
-        "host.secret.available" => Ok(json!(crate::plugin_storage::secret_available())),
+        "host.storage.keys" => Ok(json!(crate::plugins::storage::list_keys(
+            &plugin_id,
+            &ctx.arg("scope")?
+        )?)),
+        "host.secret.get" | "host.secret.set" | "host.secret.delete" => {
+            let operation = ctx
+                .method
+                .rsplit('.')
+                .next()
+                .ok_or("missing secret operation")?;
+            crate::plugins::storage::secret_response(
+                &plugin_id,
+                &ctx.arg("scope")?,
+                &ctx.arg("key")?,
+                operation,
+                ctx.params["value"].as_str(),
+            )
+        }
+        "host.secret.available" => Ok(json!(crate::plugins::storage::secret_available())),
         // Diagnostics only: no permission gate, capped and best effort.
         "host.error.report" => {
             let code = ctx.params.get("code").and_then(Value::as_str).unwrap_or("");
@@ -142,20 +144,41 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                 .and_then(Value::as_str)
                 .ok_or("missing message")?;
             let detail = ctx.params.get("detail").and_then(Value::as_str);
-            crate::plugin_errors::report_limited(&plugin_id, code, message, detail);
+            crate::plugins::errors::report_limited(&plugin_id, code, message, detail);
             Ok(Value::Null)
-        }
-        "host.exec" => {
-            ctx.running.ensure_command(&ctx.arg("command")?)?;
-            host_exec(&plugin_id, &ctx.running.declared, ctx.params)
         }
         "host.process.run" => {
             ctx.running.ensure_command(&ctx.arg("command")?)?;
+            let scope = ctx.scope()?;
+            let mut params = ctx.params.clone();
+            if let Some(args) = params["args"].as_array_mut() {
+                for arg in args {
+                    if let Some(encoded) =
+                        arg.as_str().and_then(|text| text.strip_prefix("fiex-ref:"))
+                    {
+                        let reference: Value = serde_json::from_str(encoded)
+                            .map_err(|_| "invalid resource argument")?;
+                        *arg = json!(scope.resolve_reference(&reference)?);
+                    }
+                }
+            }
+            let directory = if let Some(reference) = ctx.params.get("cwd") {
+                Some(std::path::PathBuf::from(
+                    scope.resolve_reference(reference)?,
+                ))
+            } else {
+                ctx.scope_path()
+            };
+            if ctx.params.get("cwd").is_some() {
+                if let Some(directory) = &directory {
+                    scope.authorize(&directory.to_string_lossy())?;
+                }
+            }
             run_command(
                 &plugin_id,
                 &ctx.running.declared,
-                ctx.params,
-                ctx.scope_path().as_deref(),
+                &params,
+                directory.as_deref(),
             )
         }
         _ => Err("host method not available or permission denied".into()),

@@ -1,5 +1,5 @@
 //! Host integration: static toolbar/preview panels and dynamic menu panels.
-use fiex_lib::plugin_host;
+use fiex_lib::plugins::host as plugin_host;
 use serde_json::{json, Value};
 
 fn check_panel(id: &str, panel_id: &str, html: &str) {
@@ -10,7 +10,7 @@ fn check_panel(id: &str, panel_id: &str, html: &str) {
 }
 
 fn main() {
-    fiex_lib::plugin_sandbox::run_wrapper_if_requested();
+    fiex_lib::plugins::security::sandbox::run_wrapper_if_requested();
     let ids: Vec<String> = std::env::args().skip(1).collect();
     assert!(
         !ids.is_empty(),
@@ -19,10 +19,12 @@ fn main() {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("example.txt");
     std::fs::write(&file, "panel fixture").unwrap();
-    let resources = [fiex_lib::plugin_resource_context::ResourceSnapshot::new(
-        file.to_str().unwrap(),
-        &file,
-    )];
+    let resources = [
+        fiex_lib::plugins::resource::resource_context::ResourceSnapshot::new(
+            file.to_str().unwrap(),
+            &file,
+        ),
+    ];
     for id in ids {
         let (manifest, _) = plugin_host::installed_manifests()
             .into_iter()
@@ -52,7 +54,7 @@ fn main() {
         }
 
         if manifest.extensions["contextMenus"].as_bool() == Some(true) {
-            let response = fiex_lib::plugin_events::call_owner(
+            let response = fiex_lib::plugins::events::call_owner(
                 "contextMenu.resolve",
                 &id,
                 json!({}),
@@ -70,7 +72,7 @@ fn main() {
             );
             for item in items.clone() {
                 if item["kind"] == "submenu" {
-                    let children = fiex_lib::plugin_events::call_owner(
+                    let children = fiex_lib::plugins::events::call_owner(
                         "contextMenu.resolve",
                         &id,
                         json!({"parentId":item["id"]}),
@@ -100,7 +102,7 @@ fn main() {
                 if id == "org.fiex.gpg" && item_id != "gpg.encrypt" {
                     continue;
                 }
-                let result = fiex_lib::plugin_events::call_owner(
+                let result = fiex_lib::plugins::events::call_owner(
                     "contextMenu.execute",
                     &id,
                     json!({"itemId":item_id}),

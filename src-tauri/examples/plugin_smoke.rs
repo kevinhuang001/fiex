@@ -1,10 +1,10 @@
 //! Test-only executable used by Core CI and official plugin integration CI.
 //! It is not included in Fiex production application bundles.
-use fiex_lib::plugin_host;
+use fiex_lib::plugins::host as plugin_host;
 use serde_json::json;
 
 fn main() {
-    fiex_lib::plugin_sandbox::run_wrapper_if_requested();
+    fiex_lib::plugins::security::sandbox::run_wrapper_if_requested();
     let id = std::env::args()
         .nth(1)
         .expect("usage: cargo run --example plugin_smoke -- <plugin-id>");
@@ -187,8 +187,14 @@ fn main() {
             .expect("direct execution must be blocked");
         assert_eq!(blocked["blocked"], true);
         let exec = plugin_host::global()
-            .invoke(&id, "mock.exec", json!({}))
-            .expect("host exec proxy failed");
+            .invoke_selected(
+                &id,
+                "mock.exec",
+                json!({}),
+                root.path().to_str().unwrap(),
+                &[],
+            )
+            .expect("host process proxy failed");
         assert!(
             exec["stdout"]
                 .as_str()

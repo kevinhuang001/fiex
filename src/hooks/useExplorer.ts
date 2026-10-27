@@ -21,6 +21,7 @@ export function useExplorer(
     setTagFilter: listing.setTagFilter,
     readOnly: listing.readOnly,
     directoryReadOnly: listing.directoryReadOnly,
+    directoryCanCreate: listing.directoryCanCreate,
     virtualVolume: listing.virtualVolume,
     setReadOnly: listing.setReadOnly,
     locations: listing.locations,

@@ -1,7 +1,7 @@
 //! GitHub Release discovery and marketplace catalog parsing. A repository is
 //! only a content source: every entry still goes through the same download,
 //! manifest validation and explicit permission consent as a local package.
-use crate::{plugin_host, plugin_permissions};
+use crate::{plugins::host as plugin_host, plugins::security::permissions as plugin_permissions};
 use serde::{Deserialize, Serialize};
 use std::{io::Read, time::Duration};
 
@@ -44,7 +44,7 @@ pub(super) fn request_client() -> Result<reqwest::blocking::Client, String> {
     let mut builder = reqwest::blocking::Client::builder()
         .user_agent("Fiex-Plugin-Installer/0.1")
         .timeout(Duration::from_secs(65));
-    if let Some(proxy) = crate::system_proxy::proxy_url() {
+    if let Some(proxy) = crate::platform::system_proxy::proxy_url() {
         builder = builder.proxy(reqwest::Proxy::all(proxy).map_err(|e| e.to_string())?);
     }
     builder.build().map_err(|e| e.to_string())

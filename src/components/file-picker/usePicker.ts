@@ -292,7 +292,6 @@ export function usePicker(request: FilePickerRequest) {
       const path = await call<string>('create_entry', {
         path: directory,
         name: name.trim(),
-        folder: true,
       })
       setSelected([path])
     })

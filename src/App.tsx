@@ -186,14 +186,6 @@ export default function App() {
             </button>
           </div>
         )}
-        {!fullView && app.x.warnings.length > 0 && (
-          <details className="warnings">
-            <summary>
-              {app.x.warnings.length} {t('个项目无法读取')}
-            </summary>
-            {app.x.warnings.join('\n')}
-          </details>
-        )}
         {fullViews.map((view) => (
           <div
             className="full-view-pane"

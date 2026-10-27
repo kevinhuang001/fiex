@@ -165,3 +165,45 @@ export const demoGpgKeys = [
     hasSecret: false,
   },
 ]
+
+export const demoRemoteRoot = 'fiex://mount/demo-webdav'
+
+/** Connection fixture covering every cache/pin badge, including a conflict. */
+export const demoRemoteEntries: Entry[] = [
+  {
+    ...item(demoRemoteRoot + '/产品截图.png', false, 'image/png', 2_400_000),
+    sync: 'synced',
+    hasCache: true,
+    uploaded: true,
+  },
+  {
+    ...item(demoRemoteRoot + '/会议记录.md', false, 'text/markdown', 18_000),
+    sync: 'synced',
+    hasCache: true,
+  },
+  {
+    ...item(demoRemoteRoot + '/设计素材.psd', false, 'image/vnd.adobe.photoshop', 88_000_000),
+    sync: 'pinned',
+    pinned: true,
+    hasCache: true,
+    uploaded: true,
+  },
+  {
+    ...item(demoRemoteRoot + '/季度汇报.key', false, 'application/vnd.apple.keynote', 6_400_000),
+    sync: 'conflict',
+    hasCache: true,
+  },
+  {
+    ...item(demoRemoteRoot + '/素材.zip', false, 'application/zip', 45_000_000),
+    sync: 'cloud',
+  },
+  { ...item(demoRemoteRoot + '/2026 规划', true), sync: 'synced', hasCache: true },
+  {
+    ...item(demoRemoteRoot + '/离线备份', true),
+    sync: 'pinned',
+    pinned: true,
+    hasCache: true,
+  },
+]
+
+export const demoRemoteWarnings = ['季度汇报.key: 本地与云端均有修改，请处理同步冲突']

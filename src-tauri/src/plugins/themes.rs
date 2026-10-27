@@ -1,5 +1,5 @@
 //! Declarative, process-free theme extensions. No CSS selectors or scripts.
-use crate::plugin_host::PluginManifest;
+use crate::plugins::host::PluginManifest;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -105,7 +105,7 @@ mod tests {
             "id": "test.theme",
             "name": "Theme",
             "version": "1.0.0",
-            "runtime": { "protocolVersion": "3.0", "entrypoints": entrypoints },
+            "runtime": { "protocolVersion": "5.0", "entrypoints": entrypoints },
             "extensions": { "themes": themes }
         }))
         .unwrap()

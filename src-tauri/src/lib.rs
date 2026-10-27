@@ -1,88 +1,16 @@
+//! Fiex native library. Module ownership follows functional domains.
 #[cfg(feature = "ci-driver")]
 mod ci_driver;
+pub mod core;
 #[cfg(feature = "desktop")]
 pub(crate) mod desktop;
-#[path = "core/drag_session.rs"]
-pub mod drag_session;
-#[path = "core/files.rs"]
-pub mod files;
 pub mod i18n;
-#[path = "core/ignores.rs"]
-pub mod ignores;
-#[cfg(all(feature = "desktop", target_os = "macos"))]
-mod macos_material;
-#[cfg(all(feature = "desktop", target_os = "linux"))]
-mod native_drag;
-#[path = "core/operations.rs"]
-pub mod operations;
-#[path = "plugins/cache.rs"]
-pub mod plugin_cache;
-#[path = "plugins/contracts.rs"]
-pub mod plugin_contracts;
-#[path = "plugins/decorations/mod.rs"]
-pub mod plugin_decorations;
-#[path = "plugins/errors.rs"]
-pub mod plugin_errors;
-#[path = "plugins/events.rs"]
-pub mod plugin_events;
-#[path = "plugins/fs_access.rs"]
-pub mod plugin_fs_access;
-#[path = "plugins/host/mod.rs"]
-pub mod plugin_host;
-#[path = "plugins/info.rs"]
-pub mod plugin_info;
-#[path = "plugins/installer/mod.rs"]
-pub mod plugin_installer;
-#[path = "plugins/ipc.rs"]
-pub mod plugin_ipc;
-#[path = "plugins/match_rules.rs"]
-pub mod plugin_match;
-#[path = "plugins/net.rs"]
-pub mod plugin_net;
-pub mod plugin_permission_policy;
-pub mod plugin_permission_prompt;
-#[path = "plugins/permissions/mod.rs"]
-pub mod plugin_permissions;
-#[path = "plugins/preview.rs"]
-pub mod plugin_preview;
-#[path = "plugins/resource_context.rs"]
-pub mod plugin_resource_context;
-#[path = "plugins/resources.rs"]
-pub mod plugin_resources;
-#[path = "plugins/signing.rs"]
-pub mod plugin_signing;
-pub use fiex_plugin_sdk as plugin_sdk;
-#[path = "plugins/mounts.rs"]
-pub mod mounts;
-#[path = "plugins/sandbox/mod.rs"]
-pub mod plugin_sandbox;
-#[path = "plugins/search.rs"]
-pub mod plugin_search;
-#[path = "plugins/storage.rs"]
-pub mod plugin_storage;
-#[path = "plugins/task_events.rs"]
-pub mod plugin_task_events;
-#[path = "plugins/themes.rs"]
-pub mod plugin_themes;
-#[path = "plugins/vfs.rs"]
-pub mod plugin_vfs;
-#[path = "core/recent.rs"]
-pub mod recent;
+pub mod platform;
+pub mod plugins;
 pub mod remote;
-#[path = "core/search.rs"]
-pub mod search;
-pub mod system_proxy;
-#[path = "core/tags.rs"]
-pub mod tags;
-#[path = "core/terminals.rs"]
-pub mod terminals;
-#[path = "core/transfers.rs"]
-pub mod transfers;
 #[cfg(feature = "usbfs")]
 pub mod usbfs;
-#[cfg(feature = "usbfs")]
-pub mod virtual_transfers;
-#[path = "core/volumes.rs"]
-pub mod volumes;
+pub use fiex_plugin_sdk as plugin_sdk;
+
 #[cfg(feature = "desktop")]
 pub use desktop::run;

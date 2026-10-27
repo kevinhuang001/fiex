@@ -20,10 +20,18 @@ export interface Entry {
   readonly: boolean
   linkTarget: string | null
   tags: Tag[]
+  /** This entry, or a directory descendant, has cached bytes. */
+  hasCache?: boolean
+  /** "Always keep locally" is enabled for a connection entry. */
+  pinned?: boolean
+  /** The current bytes of a connection entry reached the remote. */
+  uploaded?: boolean
   sync: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | null
 }
 export interface Listing {
   readOnly?: boolean
+  /** The current directory accepts `mkdir` (provider capability ∩ node). */
+  canCreate?: boolean
   virtualVolume?: boolean
   path: string
   entries: Entry[]
@@ -81,6 +89,11 @@ export interface ConflictResolution {
   action: ConflictAction
 }
 export interface DecorationBadge {
+  /** Only Core builtin decoration providers emit these presentation fields. */
+  dot?: boolean
+  status?: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | 'uploaded'
+  icon?: 'cloud-check' | 'cloud-download' | 'cloud-upload' | 'pin'
+
   text: string
   color: string
   tooltip?: string
@@ -98,6 +111,7 @@ export interface DecorationField {
 }
 export type DecorationTarget = 'name' | 'modified' | 'size' | 'kind' | 'row'
 export interface EntryDecoration {
+  nativeBadges?: DecorationBadge[]
   path: string
   badges: DecorationBadge[]
   label?: string
@@ -144,12 +158,16 @@ export interface Preferences {
   shortcutStyle: ShortcutStyle
   shortcuts: ShortcutMap
   pinnedPluginTools: string[]
+  /** Background connection reconciliation cadence, in seconds. */
+  syncInterval: number
 }
 
 export interface OperationProgress {
   done: number
   total: number
   step?: string
+  /** `bytes` renders sizes instead of file counts. */
+  unit?: 'bytes' | 'files'
 }
 
 export interface RemoteConnection {

@@ -47,7 +47,7 @@ impl RpcFailure {
 #[derive(Clone)]
 pub(super) struct TaskEntry {
     pub(super) owner: String,
-    pub(super) scope: Option<crate::plugin_fs_access::Scope>,
+    pub(super) scope: Option<crate::plugins::resource::fs_access::Scope>,
     pub(super) info: PluginTaskInfo,
 }
 
@@ -58,7 +58,7 @@ pub(super) struct Running {
     /// Executable names approved by this package's manifest. A runtime grant
     /// can never widen this list.
     commands: BTreeSet<String>,
-    child: Mutex<crate::plugin_sandbox::SandboxChild>,
+    child: Mutex<crate::plugins::security::sandbox::SandboxChild>,
     stdin: Mutex<Box<dyn Write + Send>>,
     pending: Mutex<HashMap<u64, mpsc::Sender<Result<Value, RpcFailure>>>>,
     operations: Mutex<HashMap<u64, actor::Operation>>,

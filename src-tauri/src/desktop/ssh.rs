@@ -240,7 +240,7 @@ async fn plugin_ssh_open(
     rows: u16,
     on_event: Channel<SshEvent>,
 ) -> Result<String, String> {
-    let id = crate::mounts::new_id()?;
+    let id = crate::plugins::mounts::new_id()?;
     let input = Arc::new(Mutex::new(VecDeque::new()));
     let size = Arc::new(Mutex::new((cols.max(20), rows.max(4))));
     let closed = Arc::new(AtomicBool::new(false));
@@ -261,7 +261,7 @@ async fn plugin_ssh_open(
     let config = crate::remote::provider_config(&connection);
     let session_id = id.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_host::global().invoke(
+        crate::plugins::host::global().invoke(
             &plugin_id,
             "terminal.open",
             serde_json::json!({
@@ -344,7 +344,7 @@ fn start_session(
         .master
         .take_writer()
         .map_err(|error| error.to_string())?;
-    let session_id = crate::mounts::new_id()?;
+    let session_id = crate::plugins::mounts::new_id()?;
     sessions()
         .lock()
         .map_err(|_| crate::i18n::t("终端会话表不可用"))?

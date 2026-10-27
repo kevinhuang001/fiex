@@ -16,6 +16,7 @@ mod locale;
 mod tray;
 use locale::locale_set;
 use tray::{setup_tray, QUITTING};
+mod scheduler;
 #[macro_use]
 mod plugins;
 pub(crate) mod shell_profile;
@@ -34,10 +35,10 @@ pub(crate) use system::*;
 pub(crate) use volumes::*;
 
 use crate::{
-    drag_session::DragSessions,
-    operations::{OperationCancel, Operations},
-    recent,
-    search::SearchState,
+    core::drag_session::DragSessions,
+    core::operations::{OperationCancel, Operations},
+    core::recent,
+    core::search::SearchState,
 };
 use std::sync::atomic::Ordering;
 use tauri::Manager;
@@ -80,6 +81,7 @@ pub fn run() {
             platform,
             locale_set,
             plugin_invoke,
+            plugin_describe_resources,
             plugin_before_open,
             plugin_toolbar_invoke,
             plugin_context_menu_resolve,
@@ -174,8 +176,12 @@ pub fn run() {
             remove_remote_connection,
             remote_download,
             remote_download_dir,
+            remote_cache,
+            remote_open,
             remote_sync,
-            remote_unsync,
+            remote_uncache,
+            remote_unpin,
+            remote_set_sync_interval,
             remote_resolve,
             eject_device,
             eject_usb,
@@ -204,7 +210,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {
-                crate::mounts::forget_window(window.label());
+                crate::plugins::mounts::forget_window(window.label());
                 window
                     .state::<Watch>()
                     .lock()
@@ -220,42 +226,19 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            let handle = app.handle().clone();
-            std::thread::spawn(move || {
-                let running =
-                    std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
-                loop {
-                    for connection in crate::remote::list_connections() {
-                        let id = connection.id;
-                        if !running.lock().unwrap().insert(id.clone()) {
-                            continue;
-                        }
-                        let running = running.clone();
-                        let handle = handle.clone();
-                        std::thread::spawn(move || {
-                            tauri::async_runtime::block_on(crate::remote::reconcile_connection(
-                                &id,
-                            ));
-                            use tauri::Emitter;
-                            let _ = handle.emit("remote-sync", ());
-                            running.lock().unwrap().remove(&id);
-                        });
-                    }
-                    std::thread::sleep(std::time::Duration::from_secs(30));
-                }
-            });
+            scheduler::spawn(app.handle().clone());
             {
                 use tauri::Emitter;
                 let handle = app.handle().clone();
-                crate::plugin_task_events::set_sink(Box::new(move |event| {
+                crate::plugins::task_events::set_sink(Box::new(move |event| {
                     let _ = handle.emit("plugin-task", &event);
                 }));
                 let handle = app.handle().clone();
-                crate::plugin_permission_prompt::set_sink(Box::new(move |event| match event {
-                    crate::plugin_permission_prompt::PermissionPromptEvent::Requested(request) => {
+                crate::plugins::security::prompt::set_sink(Box::new(move |event| match event {
+                    crate::plugins::security::prompt::PermissionPromptEvent::Requested(request) => {
                         let _ = handle.emit("plugin-permission-request", &request);
                     }
-                    crate::plugin_permission_prompt::PermissionPromptEvent::Resolved { id } => {
+                    crate::plugins::security::prompt::PermissionPromptEvent::Resolved { id } => {
                         let _ = handle
                             .emit("plugin-permission-resolved", serde_json::json!({"id": id}));
                     }
@@ -265,11 +248,11 @@ pub fn run() {
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                crate::macos_material::configure(&window);
+                crate::platform::macos_material::configure(&window);
             }
             setup_tray(app.handle())?;
             std::thread::spawn(|| {
-                crate::plugin_host::global().start_enabled();
+                crate::plugins::host::global().start_enabled();
             });
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
@@ -297,8 +280,8 @@ pub fn run() {
         .expect("Cannot start Fiex")
         .run(|_, event| {
             if matches!(event, tauri::RunEvent::Exit) {
-                crate::plugin_host::global().shutdown();
-                crate::plugin_vfs::cleanup_exports();
+                crate::plugins::host::global().shutdown();
+                crate::plugins::vfs::cleanup_exports();
             }
         });
 }

@@ -1,112 +1,91 @@
 import { t } from '@/i18n'
 import { useMenuPosition } from '@/lib/menuPosition'
-import { useRef, useState } from 'react'
+import { useMemo, useRef } from 'react'
+import {
+  CloudCheck,
+  CloudDownload,
+  CloudOff,
+  Copy,
+  ExternalLink,
+  Eye,
+  Info,
+  Pencil,
+  PinOff,
+  RotateCcw,
+  Scissors,
+  Tags,
+  TerminalSquare,
+  Trash2,
+} from 'lucide-react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
-import { contextItems } from './items'
-import { ContextMenuButton } from './ContextMenuButton'
-import { SubmenuItem } from './SubmenuItem'
+import { useContextMenu } from './useContextMenu'
+import { executeCoreMenu } from './execute'
+import type { CoreMenu, CoreMenuItem } from './useContextMenu'
 import type { ContextMenuProps } from './types'
 
-export function FileContextMenu({
-  menu,
-  hint,
-  open,
-  previewEntry,
-  setInfo,
-  openBatchRename,
-  platform,
-  openTags,
-  x,
-  isRemotePath,
-  run,
-  copy,
-  duplicate,
-  terminal,
-  notify,
-  recycle,
-  deletePermanently,
-  restoreFromTrash,
-  inTrash,
-  setMenu,
-}: ContextMenuProps) {
-  const [submenuOpen, setSubmenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
-  const allItems = menu
-    ? contextItems({
-        menu,
-        hint,
-        open,
-        previewEntry,
-        setInfo,
-        openBatchRename,
-        platform,
-        openTags,
-        x,
-        isRemotePath,
-        run,
-        copy,
-        duplicate,
-        terminal,
-        notify,
-        recycle,
-        deletePermanently,
-        restoreFromTrash,
-        inTrash,
-      })
-    : []
-  const tailLabels = new Set([t('移到废纸篓'), t('彻底删除'), t('放回原处')])
-  const items = allItems.filter((item) => !tailLabels.has(item.label))
-  const tail = allItems.filter((item) => tailLabels.has(item.label))
+const icons = {
+  open: ExternalLink,
+  eye: Eye,
+  info: Info,
+  pencil: Pencil,
+  tags: Tags,
+  copy: Copy,
+  scissors: Scissors,
+  terminal: TerminalSquare,
+  trash: Trash2,
+  restore: RotateCcw,
+  'cloud-check': CloudCheck,
+  'cloud-download': CloudDownload,
+  'cloud-off': CloudOff,
+  'pin-off': PinOff,
+}
+
+export function FileContextMenu(props: ContextMenuProps) {
+  const { menu, x, setMenu } = props
+  const ref = useRef<HTMLDivElement>(null)
+  const position = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, ref, Boolean(menu))
+  const { paths, menus, error } = useContextMenu(props)
+  const builtin = useMemo(
+    () => menus.filter((menu): menu is CoreMenu => menu.kind === 'builtin'),
+    [menus],
+  )
+  const plugins = useMemo(() => menus.filter((menu) => menu.kind === 'plugin'), [menus])
+  if (!menu) return null
+  const render = (group: CoreMenu, item: CoreMenuItem) => {
+    const Icon = icons[item.icon as keyof typeof icons]
+    return (
+      <button
+        key={`${group.providerId}:${item.id}`}
+        role="menuitem"
+        disabled={item.disabled}
+        className={item.danger ? 'context-danger' : undefined}
+        onClick={() => {
+          setMenu(null)
+          void executeCoreMenu(group, item, props)
+        }}
+      >
+        {Icon && <Icon />}
+        {item.title}
+        {item.shortcut && <span className="shortcut">{props.hint(item.shortcut)}</span>}
+      </button>
+    )
+  }
   return (
-    <>
-      {menu && (
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label={t('文件操作')}
-          className="context-menu"
-          style={menuPosition}
-        >
-          {items.map((a) =>
-            'submenu' in a ? (
-              <SubmenuItem
-                key={a.label}
-                item={a}
-                open={submenuOpen}
-                setOpen={setSubmenuOpen}
-                menuPosition={menuPosition}
-                setMenu={setMenu}
-              />
-            ) : (
-              <ContextMenuButton key={a.label} item={a} setMenu={setMenu} />
-            ),
-          )}
-          <PluginContextActions
-            paths={x.selected.includes(menu.entry.path) ? x.selected : [menu.entry.path]}
-            path={x.path}
-            isDirectory={menu.entry.isDir}
-            readOnly={x.readOnly}
-            isRemote={isRemotePath(menu.entry.path)}
-            onClose={() => setMenu(null)}
-            onError={x.setError}
-          />
-          {tail.map((a) =>
-            'submenu' in a ? (
-              <SubmenuItem
-                key={a.label}
-                item={a}
-                open={submenuOpen}
-                setOpen={setSubmenuOpen}
-                menuPosition={menuPosition}
-                setMenu={setMenu}
-              />
-            ) : (
-              <ContextMenuButton key={a.label} item={a} setMenu={setMenu} />
-            ),
-          )}
-        </div>
+    <div ref={ref} role="menu" aria-label={t('文件操作')} className="context-menu" style={position}>
+      {builtin.flatMap((group) =>
+        group.items.filter((item) => item.placement !== 'tail').map((item) => render(group, item)),
       )}
-    </>
+      <PluginContextActions
+        paths={paths}
+        path={x.path}
+        resolvedMenus={plugins}
+        onClose={() => setMenu(null)}
+        onError={x.setError}
+      />
+      {builtin.flatMap((group) =>
+        group.items.filter((item) => item.placement === 'tail').map((item) => render(group, item)),
+      )}
+      {error && <p role="alert">{error}</p>}
+    </div>
   )
 }

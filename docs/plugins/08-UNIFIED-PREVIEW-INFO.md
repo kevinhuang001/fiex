@@ -1,6 +1,6 @@
 # 统一 Provider 调用架构
 
-所有 Core 系统事件由 `plugins/events.rs` 的 `EventRouter` 协调：统一 Registry 匹配、Builtin/Plugin 执行、逐 Provider 校验和事件结果策略。功能模块只提供内置处理函数、具体结果校验及组合规则。自定义插件 RPC 保留在原有授权桥接中，不参与系统事件广播。
+所有 Core 系统事件由 `plugins/events/mod.rs` 的 `EventRouter` 协调：统一 Registry 匹配、Builtin/Plugin 执行、逐 Provider 校验和事件结果策略。功能模块只提供内置处理函数、具体结果校验及组合规则。自定义插件 RPC 保留在原有授权桥接中，不参与系统事件广播。
 
 ```mermaid
 flowchart TD
@@ -63,8 +63,8 @@ Provider 执行具有异常隔离与 4 MiB 结果上限。PluginHost 继续负�
 
 ## 代码入口
 
-- `plugins/events.rs`：Registry、EventRouter、公共验证入口、独占调用、Scope/targets 准备。
+- `plugins/events/mod.rs`：Registry、EventRouter、公共验证入口、独占调用、Scope/targets 准备。
 - `plugins/resource_context.rs`：资源快照、远程 stat 与按需 materialize。
-- `plugins/info.rs`、`plugins/preview.rs`、`plugins/decorations/dynamic.rs`、`plugins/search.rs`：事件处理和结果规则。
+- `plugins/resolvers/info/`、`plugins/resolvers/preview/`、`plugins/resolvers/decorations/dynamic.rs`、`plugins/resolvers/search/`：事件处理和结果规则。
 - `desktop/plugins.rs`：Tauri 适配、菜单会话和 UI 资源处理，不在前端遍历 Provider。
 - `core/search.rs`：已有遍历与取消逻辑，以 Builtin 搜索来源接入统一结果策略。

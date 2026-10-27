@@ -17,8 +17,10 @@ import { useDesktopEnvironment } from './useDesktopEnvironment'
 import { useFileOperations } from './useFileOperations'
 import { usePaneLayout } from './usePaneLayout'
 import { usePathEditor } from './usePathEditor'
+import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
 export function useAppController() {
+  useRemoteActivity()
   const [prefs, update] = usePreferences()
   const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
   const left = useExplorer(
@@ -130,8 +132,9 @@ export function useAppController() {
         ).values(),
       ]
     : chosen
-  const openBatchRename = () => {
-    if (chosen.length > 1) setBatchRename(chosen)
+  const openBatchRename = (paths = x.selected) => {
+    const targets = x.entries.filter((entry) => paths.includes(entry.path))
+    if (targets.length > 1) setBatchRename(targets)
   }
   const applyBatchRename = async (renames: { path: string; name: string }[]) => {
     // Two-phase rename: move every source to a unique temporary name first,

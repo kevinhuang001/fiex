@@ -89,9 +89,7 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
             let Some(entry) = finished else {
                 return Ok(Value::Null);
             };
-            crate::plugin_fs_access::cleanup(&entry.owner);
-            crate::plugin_ipc::cleanup(&entry.owner);
-            crate::plugin_net::cleanup(&entry.owner);
+            crate::plugins::resource::lifecycle::release(&entry.owner);
             running.emit_task(&entry.info);
             running.remember_task(entry.info);
             Ok(Value::Null)

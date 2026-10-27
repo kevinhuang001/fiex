@@ -3,13 +3,14 @@
 //! directory watching, and search.
 
 use crate::{
-    files,
-    operations::{self, OperationCancel, OperationResult, Operations},
-    recent, remote,
-    search::{SearchBatch, SearchState},
-    terminals,
-    transfers::Resolution,
-    volumes,
+    core::files,
+    core::operations::{self, OperationCancel, OperationResult, Operations},
+    core::recent,
+    core::search::{SearchBatch, SearchState},
+    core::terminals,
+    core::transfers::Resolution,
+    core::volumes,
+    remote,
 };
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,9 @@ pub(crate) struct OperationProgress {
     total: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     step: Option<String>,
+    /// `bytes` renders sizes in the activity centre instead of file counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unit: Option<String>,
 }
 
 pub(crate) fn progress_emitter(
@@ -33,8 +37,23 @@ pub(crate) fn progress_emitter(
             done,
             total,
             step: step.map(str::to_string),
+            unit: None,
         });
     }
+}
+
+pub(crate) type ByteProgress = std::sync::Arc<dyn Fn(u64, Option<u64>, Option<&str>) + Send + Sync>;
+
+/// Download progress is byte-based; the activity centre formats it as sizes.
+pub(crate) fn byte_progress_emitter(channel: Channel<OperationProgress>) -> ByteProgress {
+    std::sync::Arc::new(move |done, total, step| {
+        let _ = channel.send(OperationProgress {
+            done,
+            total: total.unwrap_or(0),
+            step: step.map(str::to_string),
+            unit: Some("bytes".into()),
+        });
+    })
 }
 pub(crate) type Watch = Mutex<HashMap<String, (String, notify::RecommendedWatcher)>>;
 #[tauri::command]
@@ -47,6 +66,7 @@ pub(crate) async fn list_directory(
     if path == "recent://" {
         return Ok(files::Listing {
             read_only: true,
+            can_create: false,
             virtual_volume: true,
             path,
             entries: recent::entries(&recent),
@@ -58,9 +78,9 @@ pub(crate) async fn list_directory(
             .await?
             .ok_or_else(|| "MountNotFound: connection removed".into());
     }
-    if crate::plugin_vfs::handles(&path) {
+    if crate::plugins::vfs::handles(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
-            crate::plugin_vfs::list(&path, hidden, &ignores)
+            crate::plugins::vfs::list(&path, hidden, &ignores)
         })
         .await
         .map_err(|e| e.to_string())?;
@@ -70,18 +90,20 @@ pub(crate) async fn list_directory(
         let listing_path = path.clone();
         return tauri::async_runtime::spawn_blocking(move || {
             let mut entries = crate::usbfs::listing(&route)?;
-            let filter = crate::ignores::IgnoreSet::new(&ignores);
+            let filter = crate::core::ignores::IgnoreSet::new(&ignores);
             entries.retain(|entry| {
                 (hidden || !entry.name.starts_with('.'))
                     && !filter.is_ignored(std::path::Path::new(&entry.name))
             });
+            let read_only = matches!(
+                route.kind,
+                crate::usbfs::FsKind::Apfs
+                    | crate::usbfs::FsKind::Hfs
+                    | crate::usbfs::FsKind::Btrfs
+            );
             Ok(files::Listing {
-                read_only: matches!(
-                    route.kind,
-                    crate::usbfs::FsKind::Apfs
-                        | crate::usbfs::FsKind::Hfs
-                        | crate::usbfs::FsKind::Btrfs
-                ),
+                read_only,
+                can_create: !read_only,
                 virtual_volume: true,
                 path: listing_path,
                 entries,
@@ -106,8 +128,8 @@ fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
     if remote::is_remote(path) {
         return remote::stat(path);
     }
-    if crate::plugin_vfs::handles(path) {
-        return crate::plugin_vfs::stat(path);
+    if crate::plugins::vfs::handles(path) {
+        return crate::plugins::vfs::stat(path);
     }
     if let Some(route) = crate::usbfs::route(path) {
         return crate::usbfs::entry(&route);
@@ -122,9 +144,9 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
             .await
             .map_err(|e| e.to_string())?;
     }
-    if crate::plugin_vfs::handles(&path) {
+    if crate::plugins::vfs::handles(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
-            let bytes = crate::plugin_vfs::read_small(&path, 512 * 1024)?;
+            let bytes = crate::plugins::vfs::read_prefix(&path, 512 * 1024)?;
             Ok(String::from_utf8_lossy(&bytes).into_owned())
         })
         .await
@@ -143,26 +165,48 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-pub(crate) fn create_entry(
+pub(crate) async fn create_entry(
     path: String,
     name: String,
-    folder: bool,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
-    crate::mounts::reject_local(&path)?;
+    if !crate::plugins::vfs::handles(&path) {
+        crate::plugins::mounts::reject_local(&path)?;
+    }
+    // Only folders: the protocol has no "create an empty file by name" op.
+    crate::plugins::resource::file_capabilities::require(
+        &path,
+        crate::plugins::provider_registry::FsOperation::Mkdir,
+    )?;
     if let Some(route) = crate::usbfs::route(&path) {
-        crate::usbfs::create(&route, &name, folder)?;
+        crate::usbfs::create(&route, &name, true)?;
         return Ok(format!("{}/{}", path.trim_end_matches('/'), name));
     }
-    state.create(&path, &name, folder)
+    if remote::is_remote(&path) {
+        return remote::create(&path, &name).await;
+    }
+    if crate::plugins::vfs::handles(&path) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            crate::plugins::vfs::create(&path, &name)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+    state.create(&path, &name, true)
 }
 #[tauri::command]
-pub(crate) fn rename_entry(
+pub(crate) async fn rename_entry(
     path: String,
     name: String,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
-    crate::mounts::reject_local(&path)?;
+    if !crate::plugins::vfs::handles(&path) {
+        crate::plugins::mounts::reject_local(&path)?;
+    }
+    crate::plugins::resource::file_capabilities::require(
+        &path,
+        crate::plugins::provider_registry::FsOperation::Rename,
+    )?;
     if let Some(route) = crate::usbfs::route(&path) {
         crate::usbfs::rename(&route, &name)?;
         return Ok(format!(
@@ -172,6 +216,16 @@ pub(crate) fn rename_entry(
                 .unwrap_or("/"),
             name
         ));
+    }
+    if remote::is_remote(&path) {
+        return remote::rename(&path, &name).await;
+    }
+    if crate::plugins::vfs::handles(&path) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            crate::plugins::vfs::rename(&path, &name)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
     }
     state.rename(&path, &name)
 }
@@ -208,17 +262,17 @@ pub(crate) async fn transfer(
                 remote::ensure_downloaded(source, &transfer_options).await?;
             }
             materialized.push(remote::cached_path(source)?);
-        } else if crate::plugin_vfs::handles(source) {
+        } else if crate::plugins::vfs::handles(source) {
             if moving {
                 return Err("VFS view is read-only".into());
             }
-            materialized.push(crate::plugin_vfs::materialize(source)?);
+            materialized.push(crate::plugins::vfs::materialize(source)?);
         } else {
-            crate::mounts::reject_local(source)?;
+            crate::plugins::mounts::reject_local(source)?;
             materialized.push(source.clone());
         }
     }
-    crate::mounts::reject_local(&destination)?;
+    crate::plugins::mounts::reject_local(&destination)?;
     let paths = materialized;
     if crate::usbfs::route(&destination).is_some()
         || paths.iter().any(|p| crate::usbfs::route(p).is_some())
@@ -227,7 +281,7 @@ pub(crate) async fn transfer(
         let cancel = cancel.inner().clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
             let flag = cancel.flag();
-            crate::virtual_transfers::transfer(
+            crate::usbfs::transfers::transfer(
                 &paths,
                 &destination,
                 moving,
@@ -275,7 +329,13 @@ pub(crate) async fn recycle(
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
     for path in &paths {
-        crate::mounts::reject_local(path)?;
+        if !crate::plugins::vfs::handles(path) {
+            crate::plugins::mounts::reject_local(path)?;
+        }
+        crate::plugins::resource::file_capabilities::require(
+            path,
+            crate::plugins::provider_registry::FsOperation::Remove,
+        )?;
     }
     let cancel = cancel.inner().clone();
     let emit = progress_emitter(on_progress);
@@ -299,8 +359,18 @@ pub(crate) async fn recycle(
                 .file_name()
                 .and_then(|name| name.to_str());
             emit(index as u64 + 1, total, step);
-            if let Some(route) = crate::usbfs::route(&path) {
+            if remote::is_remote(&path) {
+                match futures::executor::block_on(remote::remove(&path)) {
+                    Ok(()) => result.paths.push(path),
+                    Err(error) => result.errors.push(format!("{path}: {error}")),
+                }
+            } else if let Some(route) = crate::usbfs::route(&path) {
                 match crate::usbfs::remove(&route) {
+                    Ok(()) => result.paths.push(path),
+                    Err(error) => result.errors.push(format!("{path}: {error}")),
+                }
+            } else if crate::plugins::vfs::handles(&path) {
+                match crate::plugins::vfs::remove(&path) {
                     Ok(()) => result.paths.push(path),
                     Err(error) => result.errors.push(format!("{path}: {error}")),
                 }
@@ -378,8 +448,8 @@ pub(crate) async fn search_files(
                 }
             }
         }
-        let entries = crate::plugin_search::resolve(
-            &crate::plugin_search::PluginSearchInput {
+        let entries = crate::plugins::resolvers::search::resolve(
+            &crate::plugins::resolvers::search::PluginSearchInput {
                 query: query.clone(),
                 root: root.clone(),
                 hidden,
@@ -398,13 +468,13 @@ pub(crate) async fn search_files(
         });
         return Ok(());
     }
-    if crate::plugin_vfs::handles(&root) {
+    if crate::plugins::vfs::handles(&root) {
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let (entries, truncated) =
-                crate::plugin_vfs::search(&root, &query, hidden, &ignores, 500)?;
-            let entries = crate::plugin_search::resolve(
-                &crate::plugin_search::PluginSearchInput {
+                crate::plugins::vfs::search(&root, &query, hidden, &ignores, 500)?;
+            let entries = crate::plugins::resolvers::search::resolve(
+                &crate::plugins::resolvers::search::PluginSearchInput {
                     query: query.clone(),
                     root: root.clone(),
                     hidden,
@@ -430,8 +500,8 @@ pub(crate) async fn search_files(
         return tauri::async_runtime::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let entries = crate::usbfs::search(&route, &query, 500)?;
-            let entries = crate::plugin_search::resolve(
-                &crate::plugin_search::PluginSearchInput {
+            let entries = crate::plugins::resolvers::search::resolve(
+                &crate::plugins::resolvers::search::PluginSearchInput {
                     query: query.clone(),
                     root: root.clone(),
                     hidden,
@@ -494,7 +564,7 @@ pub(crate) fn watch_directory(
     pane: String,
     state: tauri::State<'_, Watch>,
 ) -> Result<(), String> {
-    crate::mounts::reject_local(&path)?;
+    crate::plugins::mounts::reject_local(&path)?;
     let mut watcher =
         notify::recommended_watcher(move |event: Result<notify::Event, notify::Error>| {
             if let Ok(event) = event {
@@ -565,10 +635,10 @@ pub(crate) async fn restore_from_trash(
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<usize, String> {
     for path in &paths {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
     }
     if let Some(path) = &fallback {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
     }
     let flag = cancel.flag();
     tauri::async_runtime::spawn_blocking(move || {
@@ -583,10 +653,32 @@ pub(crate) async fn delete_permanently(
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<usize, String> {
     for path in &paths {
-        crate::mounts::reject_local(path)?;
+        if !crate::plugins::vfs::handles(path) {
+            crate::plugins::mounts::reject_local(path)?;
+        }
+        crate::plugins::resource::file_capabilities::require(
+            path,
+            crate::plugins::provider_registry::FsOperation::Remove,
+        )?;
     }
     let flag = cancel.flag();
-    tauri::async_runtime::spawn_blocking(move || volumes::delete_permanently(&paths, &flag))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut removed = 0;
+        let mut local = Vec::new();
+        for path in paths {
+            if remote::is_remote(&path) {
+                futures::executor::block_on(remote::remove(&path))?;
+                removed += 1;
+            } else if crate::plugins::vfs::handles(&path) {
+                crate::plugins::vfs::remove(&path)?;
+                removed += 1;
+            } else {
+                local.push(path);
+            }
+        }
+        removed += volumes::delete_permanently(&local, &flag)?;
+        Ok(removed)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }

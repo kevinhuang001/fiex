@@ -233,8 +233,11 @@ pub fn declared_permissions(manifest: &PluginManifest) -> Result<BTreeSet<String
     if manifest.permissions.hooks.enabled {
         declared.insert("hooks".to_string());
     }
-    crate::plugin_permissions::validate_commands(&declared, &manifest.permissions.commands.allow)?;
-    crate::plugin_permissions::validate_network_domains(
+    crate::plugins::security::permissions::validate_commands(
+        &declared,
+        &manifest.permissions.commands.allow,
+    )?;
+    crate::plugins::security::permissions::validate_network_domains(
         &declared,
         &manifest.permissions.network.domains,
     )?;
@@ -247,17 +250,17 @@ pub(crate) fn declared(manifest: &PluginManifest) -> Result<BTreeSet<String>, St
 
 pub fn activation_requirements(
     manifest: &PluginManifest,
-) -> Result<crate::plugin_permissions::ActivationConsent, String> {
+) -> Result<crate::plugins::security::permissions::ActivationConsent, String> {
     let permissions = declared(manifest)?;
-    let domains = crate::plugin_permissions::validate_network_domains(
+    let domains = crate::plugins::security::permissions::validate_network_domains(
         &permissions,
         &manifest.permissions.network.domains,
     )?;
-    let commands = crate::plugin_permissions::validate_commands(
+    let commands = crate::plugins::security::permissions::validate_commands(
         &permissions,
         &manifest.permissions.commands.allow,
     )?;
-    Ok(crate::plugin_permissions::ActivationConsent {
+    Ok(crate::plugins::security::permissions::ActivationConsent {
         permissions,
         network_all: manifest.permissions.network.all,
         domains,
@@ -318,7 +321,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         match enabled {
             Value::Bool(_) => {}
             Value::Object(object) => {
-                crate::plugin_match::validate(object.get("match"), false, true)?
+                crate::plugins::match_rules::validate(object.get("match"), false, true)?
             }
             _ => return Err("extensions.contextMenus must be true or {match}".into()),
         }
@@ -334,7 +337,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                         ));
                     }
                 }
-                crate::plugin_match::validate(object.get("match"), true, false)?;
+                crate::plugins::match_rules::validate(object.get("match"), true, false)?;
             }
             _ => return Err("extensions.decorations must be true or {match,priority}".into()),
         }
@@ -357,7 +360,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         if key == "info" && object.contains_key("command") {
             return Err("extensions.info.command is removed; info.resolve is fixed".into());
         }
-        crate::plugin_match::validate(object.get("match"), false, false)?;
+        crate::plugins::match_rules::validate(object.get("match"), false, false)?;
         if key == "preview" {
             if let Some(loading) = object.get("loading") {
                 let loading = loading
@@ -399,7 +402,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                 "extensions.search.title/command are removed; search.query is fixed".into(),
             );
         }
-        crate::plugin_match::validate(object.get("match"), false, false)?;
+        crate::plugins::match_rules::validate(object.get("match"), false, false)?;
         if key == "hooks" && object.contains_key("method") {
             return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());
         }

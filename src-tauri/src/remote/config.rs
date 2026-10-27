@@ -22,7 +22,7 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
         }
         return Err(crate::i18n::t("内置连接类型不支持").into());
     }
-    let plugin = crate::plugin_host::catalog()
+    let plugin = crate::plugins::host::catalog()
         .into_iter()
         .find(|plugin| {
             plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
@@ -30,7 +30,7 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
         .ok_or("连接插件未安装、启用或已被撤销授权")?;
     declared_connection_fields(&plugin_id, &conn.kind)?;
     let declared = plugin.declared_permissions.iter().cloned().collect();
-    crate::plugin_permission_policy::PermissionPolicy::new(&plugin_id, &declared)
+    crate::plugins::security::policy::PermissionPolicy::new(&plugin_id, &declared)
         .require_all()
         .map_err(|_| crate::i18n::t("插件权限未授权").to_string())?;
     Ok(plugin_id)
@@ -67,7 +67,7 @@ pub(crate) fn declared_connection_fields(
         return builtin_connection_fields(kind)
             .ok_or_else(|| crate::i18n::t("内置连接类型不支持").to_string());
     }
-    let plugin = crate::plugin_host::catalog()
+    let plugin = crate::plugins::host::catalog()
         .into_iter()
         .find(|plugin| {
             plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
@@ -107,7 +107,7 @@ pub(crate) fn declared_connection_fields(
 /// Explicitly pass credentials only to the selected, authorized provider
 /// subprocess; the connection registry itself never serializes passwords.
 fn allowed_network_domains(plugin_id: &str) -> Vec<String> {
-    let Some(plugin) = crate::plugin_host::catalog()
+    let Some(plugin) = crate::plugins::host::catalog()
         .into_iter()
         .find(|plugin| plugin.id == plugin_id)
     else {
@@ -118,7 +118,7 @@ fn allowed_network_domains(plugin_id: &str) -> Vec<String> {
         .iter()
         .cloned()
         .collect::<std::collections::BTreeSet<_>>();
-    let mut domains = crate::plugin_permissions::status(plugin_id, &declared)
+    let mut domains = crate::plugins::security::permissions::status(plugin_id, &declared)
         .map(|state| state.network_domains.into_iter().collect::<Vec<_>>())
         .unwrap_or_default();
     for loopback in ["localhost", "127.0.0.1", "::1"] {
@@ -139,7 +139,7 @@ pub(crate) fn provider_config(conn: &StoredConnection) -> serde_json::Value {
     let scope = format!("connection-{}", conn.id);
     for field in &conn.secret_keys {
         if let Ok(value) =
-            crate::plugin_storage::secret_get(&connection_plugin_id(conn), &scope, field)
+            crate::plugins::storage::secret_get(&connection_plugin_id(conn), &scope, field)
         {
             if !value.is_empty() {
                 config.insert(field.clone(), serde_json::Value::String(value));
@@ -165,7 +165,7 @@ pub(crate) fn connection_domain(
             .ok()
             .and_then(|url| url.host_str().map(str::to_owned))
             .unwrap_or_else(|| value.split('/').next().unwrap_or(value).to_owned());
-        if let Ok(domain) = crate::plugin_permissions::normalize_domain(&host) {
+        if let Ok(domain) = crate::plugins::security::permissions::normalize_domain(&host) {
             return Some(domain);
         }
     }
@@ -203,14 +203,16 @@ fn virtual_target(path: &str) -> Option<PathBuf> {
 }
 
 pub fn navigation_path(conn: &StoredConnection, relative: &str) -> Result<String, String> {
-    crate::mounts::uri(&conn.mount_id, relative)
+    crate::plugins::mounts::uri(&conn.mount_id, relative)
 }
 
 pub fn connection_for_path(path: &str) -> Option<(StoredConnection, PathBuf)> {
-    if crate::mounts::handles(path) {
-        let (uri, source) = crate::mounts::resolve(path).ok()?;
+    if crate::plugins::mounts::handles(path) {
+        let (uri, source) = crate::plugins::mounts::resolve(path).ok()?;
         return match source {
-            crate::mounts::Source::Connection(conn) => Some((conn, PathBuf::from(uri.relative))),
+            crate::plugins::mounts::Source::Connection(conn) => {
+                Some((conn, PathBuf::from(uri.relative)))
+            }
             _ => None,
         };
     }

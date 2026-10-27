@@ -3,7 +3,7 @@
 
 #[cfg(windows)]
 fn main() {
-    use fiex_lib::{plugin_host, plugin_sandbox};
+    use fiex_lib::{plugins::host as plugin_host, plugins::security::sandbox as plugin_sandbox};
     use serde_json::json;
     use std::{os::windows::process::CommandExt, process::Command};
 

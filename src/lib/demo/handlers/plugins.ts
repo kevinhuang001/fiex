@@ -1,6 +1,9 @@
+import { demoBuiltinMenus, executeDemoBuiltin } from '../presentation/menus'
+import { demoDecorations } from '../presentation/decorations'
+import type { Entry, EntryDecoration } from '@/lib/types'
 import { demoGitEntries, demoGpgKeys, demoHistory } from '../data'
 import { demoPlugins, marketplace, officialMode, query } from '../plugins'
-import { notHandled } from './shared'
+import { notHandled, state } from './shared'
 import { applyDemoPermissionResponse, requestDemoPermission } from '../permission'
 import { createDemoGpgKey, deleteDemoGpgKey } from '../gpgKeys'
 
@@ -190,19 +193,35 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         return await response.text()
       }
       if (query.has('pluginFixture'))
-        return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type==='fiex.bridge.probe'){window.parent.postMessage({type:'fiex.bridge.listening'},'*');return;}\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=message.data?.result?.selectionPaths||[];\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
+        return "<html><body><h2>示例插件面板</h2><div id=\"selected\">连接中</div>\n<script>\nwindow.addEventListener('message', (event) => {\n if(event.data?.type==='fiex.bridge.probe'){window.parent.postMessage({type:'fiex.bridge.listening'},'*');return;}\n if(event.data?.type!=='fiex.bridge.init'||!event.ports?.[0])return;\n const port=event.ports[0];\n port.onmessage=(message)=>{\n   if(message.data?.type==='response') {\n     const p=(message.data?.result?.targets||[]).map(t=>t.metadata?.name||'');\n     document.getElementById('selected').textContent=p.join(',');\n   }\n };\n port.start();\n port.postMessage({type:'fiex.bridge.ready',bridgeVersion:'1.0',sessionId:event.data.sessionId,nonce:event.data.nonce});\n port.postMessage({type:'request',bridgeVersion:'1.0',sessionId:event.data.sessionId,requestId:'fixture-1',method:'context.get',params:{}});\n});\n</script></body></html>"
       throw new Error('No installed fixture plugin')
     }
+    case 'plugin_describe_resources':
+      return (a.paths as string[]).map((path) => {
+        const entry = state.entries.find((entry) => entry.path === path)
+        return {
+          ref: { mountId: 'demo', nodeId: crypto.randomUUID() },
+          metadata: {
+            name: entry?.name || path.split('/').pop() || '',
+            kind: entry?.isDir ? 'directory' : 'file',
+            extension: entry?.extension || '',
+            size: entry?.size || 0,
+          },
+        }
+      })
     case 'plugin_context_menu_resolve':
-      return demoPlugins
-        .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
-        .flatMap((plugin) => {
-          try {
-            return [resolveDemoMenu({ ...a, pluginId: plugin.id })]
-          } catch {
-            return []
-          }
-        })
+      return [
+        ...demoBuiltinMenus(a),
+        ...demoPlugins
+          .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+          .flatMap((plugin) => {
+            try {
+              return [{ ...resolveDemoMenu({ ...a, pluginId: plugin.id }), kind: 'plugin' }]
+            } catch {
+              return []
+            }
+          }),
+      ]
     case 'plugin_context_menu_children': {
       const session = demoMenuSessions.get(String(a.menuSessionId || ''))
       const parentId = String(a.parentId || '')
@@ -216,6 +235,8 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return { items: children }
     }
     case 'plugin_context_menu_execute': {
+      const builtin = await executeDemoBuiltin(a)
+      if (builtin) return builtin
       const menuSessionId = String(a.menuSessionId || '')
       const session = demoMenuSessions.get(menuSessionId)
       demoMenuSessions.delete(menuSessionId)
@@ -659,40 +680,43 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return { ok: true, method, params }
     }
     case 'plugin_decorations': {
-      if (!officialMode) return []
-      const entries = (a.entries || []) as Array<{ path: string; extension?: string }>
-      return entries.flatMap((entry) => {
-        const extension = (entry.extension || '').toLowerCase()
-        if (entry.path.endsWith('/Notes.md'))
-          return [
-            {
-              path: entry.path,
-              badges: [],
-              fields: {
-                name: {
-                  badges: [{ text: 'M', color: 'orange', tooltip: 'Git：已修改' }],
-                  style: { color: '#c2710c', fontWeight: '600' },
-                },
-                modified: { style: { color: '#c2710c' } },
-                size: { badges: [{ text: '新', color: 'green' }] },
-                kind: { style: { color: '#2f6f9f' } },
-                row: { style: { backgroundLight: '#fff9f0', backgroundDark: '#2b2118' } },
-              },
-              icon: 'fiex-resource://org.example.icon-theme/markdown',
-              iconPath: '/plugin-icons/plugin-markdown.svg',
-              providers: ['Git'],
-            },
-          ]
-        if (['zip', 'rar', '7z', 'gz', 'bz2', 'xz', 'tar'].includes(extension))
-          return [
-            {
-              path: entry.path,
-              badges: [{ text: extension.toUpperCase().slice(0, 3), color: 'neutral' }],
-              providers: ['Archive'],
-            },
-          ]
-        return []
-      })
+      const entries = (a.entries || []) as Entry[]
+      const plugins: EntryDecoration[] =
+        !officialMode || a.includePlugins === false
+          ? []
+          : entries.flatMap((entry) => {
+              const extension = (entry.extension || '').toLowerCase()
+              if (entry.path.endsWith('/Notes.md'))
+                return [
+                  {
+                    path: entry.path,
+                    badges: [],
+                    fields: {
+                      name: {
+                        badges: [{ text: 'M', color: 'orange', tooltip: 'Git：已修改' }],
+                        style: { color: '#c2710c', fontWeight: '600' },
+                      },
+                      modified: { style: { color: '#c2710c' } },
+                      size: { badges: [{ text: '新', color: 'green' }] },
+                      kind: { style: { color: '#2f6f9f' } },
+                      row: { style: { backgroundLight: '#fff9f0', backgroundDark: '#2b2118' } },
+                    },
+                    icon: 'fiex-resource://org.example.icon-theme/markdown',
+                    iconPath: '/plugin-icons/plugin-markdown.svg',
+                    providers: ['Git'],
+                  },
+                ]
+              if (['zip', 'rar', '7z', 'gz', 'bz2', 'xz', 'tar'].includes(extension))
+                return [
+                  {
+                    path: entry.path,
+                    badges: [{ text: extension.toUpperCase().slice(0, 3), color: 'neutral' }],
+                    providers: ['Archive'],
+                  },
+                ]
+              return []
+            })
+      return demoDecorations(entries, plugins)
     }
     case 'plugin_file_dialog': {
       const extensions = Array.isArray(a.extensions) ? a.extensions : []

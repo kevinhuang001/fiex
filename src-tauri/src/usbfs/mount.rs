@@ -62,7 +62,6 @@ fn authorized() -> &'static std::sync::Mutex<std::collections::HashSet<String>> 
     SET.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
-#[allow(dead_code)]
 fn can_open(device: &str) -> bool {
     std::fs::OpenOptions::new()
         .read(true)

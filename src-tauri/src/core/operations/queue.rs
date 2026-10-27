@@ -67,7 +67,7 @@ impl Operations {
         moving: bool,
         keep_both: bool,
         ignores: &[String],
-        resolutions: &[crate::transfers::Resolution],
+        resolutions: &[crate::core::transfers::Resolution],
         cancel: &AtomicBool,
     ) -> Result<OperationResult, String> {
         self.transfer_resolved_with_progress(
@@ -90,15 +90,15 @@ impl Operations {
         moving: bool,
         keep_both: bool,
         ignores: &[String],
-        resolutions: &[crate::transfers::Resolution],
+        resolutions: &[crate::core::transfers::Resolution],
         cancel: &AtomicBool,
         progress: &(dyn Fn(u64, u64, Option<&str>) + Sync),
     ) -> Result<OperationResult, String> {
-        crate::mounts::reject_local(destination)?;
+        crate::plugins::mounts::reject_local(destination)?;
         for source in sources {
-            crate::mounts::reject_local(source)?;
+            crate::plugins::mounts::reject_local(source)?;
         }
-        let (result, undo) = crate::transfers::execute(
+        let (result, undo) = crate::core::transfers::execute(
             sources,
             destination,
             moving,
@@ -125,8 +125,12 @@ impl Operations {
                     } else {
                         fs::create_dir_all(dest.parent().ok_or(crate::i18n::t("原路径无效"))?)
                             .map_err(|e| e.to_string())?;
-                        crate::transfers::move_tree(src, dest, &crate::transfers::NEVER_CANCELLED)
-                            .map(|_| ())
+                        crate::core::transfers::move_tree(
+                            src,
+                            dest,
+                            &crate::core::transfers::NEVER_CANCELLED,
+                        )
+                        .map(|_| ())
                     }
                 }
                 // Put copies/new files in Trash on undo, preserving any intervening edits.
@@ -152,7 +156,7 @@ impl Operations {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operations::{OperationCancel, CANCELLED};
+    use crate::core::operations::{OperationCancel, CANCELLED};
 
     #[test]
     fn transfers_never_overwrite() {

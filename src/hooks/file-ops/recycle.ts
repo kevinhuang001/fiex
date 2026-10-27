@@ -14,10 +14,10 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
     x.reload()
   }
   // Moving to the Trash is reversible, so it never asks for confirmation.
-  const recycle = () => {
+  const recycle = (selection = x.selected) => {
     if (!writable()) return
-    if (!x.selected.length) return
-    const paths = [...x.selected]
+    if (!selection.length) return
+    const paths = [...selection]
     if (inTrash) {
       deletePermanently(paths)
       return

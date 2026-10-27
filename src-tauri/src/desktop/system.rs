@@ -1,7 +1,7 @@
 //! Platform, window, launch, terminal/IDE, tag, clipboard-adjacent and
 //! CI-driver commands plus the per-window start path state.
 
-use crate::{recent, remote, tags, terminals};
+use crate::{core::recent, core::tags, core::terminals, remote};
 use std::{collections::HashMap, sync::Mutex};
 use tauri::Manager;
 
@@ -77,13 +77,13 @@ pub(crate) async fn new_window(app: tauri::AppHandle, path: String) -> Result<()
         .build()
         .map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
-    crate::macos_material::configure(&window);
+    crate::platform::macos_material::configure(&window);
     let _ = window;
     Ok(())
 }
 #[tauri::command]
-pub(crate) fn system_proxy_info() -> crate::system_proxy::ProxyInfo {
-    crate::system_proxy::info()
+pub(crate) fn system_proxy_info() -> crate::platform::system_proxy::ProxyInfo {
+    crate::platform::system_proxy::info()
 }
 #[tauri::command]
 pub(crate) fn platform() -> &'static str {
@@ -113,7 +113,7 @@ pub(crate) async fn detect_ides() -> Result<Vec<terminals::Ide>, String> {
 }
 #[tauri::command]
 pub(crate) async fn open_in_ide(path: String, id: String) -> Result<(), String> {
-    crate::mounts::reject_local(&path)?;
+    crate::plugins::mounts::reject_local(&path)?;
     tauri::async_runtime::spawn_blocking(move || terminals::launch_ide(&path, &id))
         .await
         .map_err(|error| error.to_string())?
@@ -129,7 +129,7 @@ pub(crate) fn open_external_url(url: String) -> Result<(), String> {
 
 #[tauri::command]
 pub(crate) fn open_terminal(path: String, id: String) -> Result<(), String> {
-    crate::mounts::reject_local(&path)?;
+    crate::plugins::mounts::reject_local(&path)?;
     terminals::launch(&path, &id)
 }
 #[tauri::command]
@@ -137,9 +137,9 @@ pub(crate) async fn open_path(
     path: String,
     recent: tauri::State<'_, recent::Recent>,
 ) -> Result<(), String> {
-    if crate::plugin_vfs::handles(&path) && !remote::is_remote(&path) {
+    if crate::plugins::vfs::handles(&path) && !remote::is_remote(&path) {
         let path =
-            tauri::async_runtime::spawn_blocking(move || crate::plugin_vfs::materialize(&path))
+            tauri::async_runtime::spawn_blocking(move || crate::plugins::vfs::materialize(&path))
                 .await
                 .map_err(|e| e.to_string())??;
         return terminals::open_path(&path);
@@ -176,7 +176,7 @@ pub(crate) async fn open_path(
 }
 #[tauri::command]
 pub(crate) fn reveal_path(path: String) -> Result<(), String> {
-    crate::mounts::reject_local(&path)?;
+    crate::plugins::mounts::reject_local(&path)?;
     terminals::reveal(&path)
 }
 #[tauri::command]
@@ -186,7 +186,7 @@ pub(crate) fn open_applications() -> Result<(), String> {
 #[tauri::command]
 pub(crate) fn set_tags(paths: Vec<String>, tags: Vec<tags::Tag>) -> Result<(), String> {
     for path in &paths {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
     }
     tags::set_tags(&paths, &tags)
 }

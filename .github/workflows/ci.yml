@@ -157,7 +157,7 @@ jobs:
             "id": "org.fiex.panels",
             "name": "Panel fixture",
             "version": "1.0.0",
-            "runtime": { "protocolVersion": "3.0" },
+            "runtime": { "protocolVersion": "5.0" },
             "extensions": {
               "toolbar": {
                 "title": "Toolbar panel",

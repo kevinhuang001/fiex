@@ -1,5 +1,5 @@
 //! The same predicate gates discovery and scope preparation before native IPC.
-use super::{extension_for, ResourceSnapshot};
+use super::{event, ResourceSnapshot};
 use serde_json::{json, Value};
 
 pub(super) fn matches(
@@ -8,13 +8,13 @@ pub(super) fn matches(
     metadata: &[Value],
     directory: &str,
 ) -> bool {
-    let Some(contribution) = extension_for(method).and_then(|key| extensions.get(key)) else {
+    let Some(contribution) = event(method).and_then(|event| extensions.get(event.extension)) else {
         return false;
     };
     if !contribution.is_object() && contribution.as_bool() != Some(true) {
         return false;
     }
-    crate::plugin_match::MatchRules::from_contribution(contribution)
+    crate::plugins::match_rules::MatchRules::from_contribution(contribution)
         .is_ok_and(|rules| rules.matches_event(metadata, directory))
 }
 
@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn unmatched_provider_is_rejected_before_scope_or_ipc() {
-        let plugin = crate::plugin_host::PluginInfo {
+        let plugin = crate::plugins::host::PluginInfo {
             schema_version: 2,
             id: "org.fiex.unmatched".into(),
             name: "Unmatched".into(),

@@ -46,6 +46,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     shortcutStyle: style,
     shortcuts: defaultShortcuts(style),
     pinnedPluginTools: [],
+    syncInterval: 30,
   }
 }
 
@@ -161,6 +162,10 @@ function load(): Preferences {
         typeof stored.restoreTabs === 'boolean' ? stored.restoreTabs : fallback.restoreTabs,
       shortcutStyle: style,
       shortcuts,
+      syncInterval:
+        typeof stored.syncInterval === 'number' && [30, 60, 300, 900].includes(stored.syncInterval)
+          ? stored.syncInterval
+          : fallback.syncInterval,
     }
   } catch {
     return fallback
@@ -178,6 +183,10 @@ export function usePreferences() {
   useEffect(() => {
     localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
   }, [prefs])
+  useEffect(() => {
+    // The desktop scheduler owns the timer; keep it in step with settings.
+    void call('remote_set_sync_interval', { seconds: prefs.syncInterval }).catch(() => {})
+  }, [prefs.syncInterval])
   useEffect(() => {
     let alive = true
     const media = matchMedia('(prefers-color-scheme: dark)')
