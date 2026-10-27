@@ -1,8 +1,9 @@
 //! Volume, usbfs, mount and drag-and-drop commands.
 
 use crate::{
-    drag_session::{DragSessions, DropPlan},
-    remote, volumes,
+    core::drag_session::{DragSessions, DropPlan},
+    core::volumes,
+    remote,
 };
 use tauri::{ipc::Channel, Manager};
 
@@ -19,7 +20,7 @@ pub(crate) async fn register_drag(
     let mut moving = !copy_requested
         && !paths
             .iter()
-            .any(|p| remote::is_remote(p) || crate::plugin_vfs::handles(p));
+            .any(|p| remote::is_remote(p) || crate::plugins::vfs::handles(p));
     let mut materialized = Vec::new();
     for path in &paths {
         if remote::is_remote(path) {
@@ -29,10 +30,10 @@ pub(crate) async fn register_drag(
                 remote::ensure_downloaded(path, &remote::TransferOptions::default()).await?;
             }
             materialized.push(remote::cached_path(path)?);
-        } else if crate::plugin_vfs::handles(path) {
-            materialized.push(crate::plugin_vfs::materialize(path)?);
+        } else if crate::plugins::vfs::handles(path) {
+            materialized.push(crate::plugins::vfs::materialize(path)?);
         } else {
-            crate::mounts::reject_local(path)?;
+            crate::plugins::mounts::reject_local(path)?;
             materialized.push(path.clone());
         }
     }
@@ -87,7 +88,7 @@ pub(crate) async fn drag_files(
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
-        crate::native_drag::start(window, paths, on_event).await
+        crate::platform::native_drag::start(window, paths, on_event).await
     }
     #[cfg(not(target_os = "linux"))]
     {

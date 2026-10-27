@@ -69,7 +69,7 @@ fn approved_package(plugin_id: &str) -> Result<(PluginManifest, PathBuf), String
         .into_iter()
         .find(|(manifest, _)| manifest.id == plugin_id)
         .ok_or("plugin is not installed")?;
-    let rights = crate::plugin_permissions::status(plugin_id, &declared(&manifest)?)?;
+    let rights = crate::plugins::security::permissions::status(plugin_id, &declared(&manifest)?)?;
     if !rights.approved || !rights.enabled {
         return Err("plugin disabled or not approved".into());
     }

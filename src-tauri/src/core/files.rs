@@ -1,4 +1,4 @@
-use crate::tags::{read_tags, Tag};
+use crate::core::tags::{read_tags, Tag};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
@@ -52,7 +52,7 @@ fn shortcut_target(path: &Path) -> Option<String> {
 }
 
 pub fn entry(path: &Path) -> Result<Entry, String> {
-    crate::mounts::reject_local(&path.to_string_lossy())?;
+    crate::plugins::mounts::reject_local(&path.to_string_lossy())?;
     let link = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     // Most entries are not links. Reuse lstat instead of issuing a second
     // metadata syscall for every item in a large directory.
@@ -131,9 +131,9 @@ pub struct Listing {
     pub warnings: Vec<String>,
 }
 pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
-    let ignore = crate::ignores::IgnoreSet::new(ignores);
+    let ignore = crate::core::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
     let mut warnings = Vec::new();
     for item in fs::read_dir(&path).map_err(|e| e.to_string())? {
@@ -188,7 +188,7 @@ pub fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 pub fn text_preview(path: &str) -> Result<String, String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     use std::io::Read;
     let file = fs::File::open(path).map_err(|e| e.to_string())?;
     let mut bytes = Vec::new();
@@ -229,13 +229,13 @@ mod tests {
             name: "TestTag".into(),
             color: 6,
         }];
-        crate::tags::set_tags(&[file.to_string_lossy().into_owned()], &tags).unwrap();
+        crate::core::tags::set_tags(&[file.to_string_lossy().into_owned()], &tags).unwrap();
         let entry = super::entry(&file).unwrap();
         assert!(entry
             .tags
             .iter()
             .any(|tag| tag.name == "TestTag" && tag.color == 6));
-        crate::tags::set_tags(&[file.to_string_lossy().into_owned()], &[]).unwrap();
+        crate::core::tags::set_tags(&[file.to_string_lossy().into_owned()], &[]).unwrap();
         assert!(super::entry(&file).unwrap().tags.is_empty());
     }
 }

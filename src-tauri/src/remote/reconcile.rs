@@ -8,7 +8,7 @@ fn invoke(conn: &StoredConnection, method: &str, mut params: Value) -> Result<Va
     let plugin = ensure_provider_access(conn)?;
     params["connection"] = provider_config(conn);
     params["mountId"] = json!(conn.mount_id);
-    crate::plugin_host::global().invoke(&plugin, method, params)
+    crate::plugins::host::global().invoke(&plugin, method, params)
 }
 
 fn stat(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<Value, String> {
@@ -32,7 +32,7 @@ struct WriteLease<'a> {
 impl Drop for WriteLease<'_> {
     fn drop(&mut self) {
         if !self.finished {
-            let _ = crate::plugin_host::global().invoke(
+            let _ = crate::plugins::host::global().invoke(
                 self.plugin,
                 "fs.abort",
                 json!({"mountId": self.mount_id, "streamId": self.stream}),
@@ -64,7 +64,7 @@ fn stream_snapshot(
             break;
         }
         let base64 = base64::engine::general_purpose::STANDARD.encode(&buffer[..read]);
-        let response = crate::plugin_host::global().invoke(
+        let response = crate::plugins::host::global().invoke(
             plugin,
             "fs.writeStream",
             json!({
@@ -86,7 +86,7 @@ fn stream_snapshot(
     if offset != size {
         return Err("upload snapshot changed during transfer".into());
     }
-    crate::plugin_host::global().invoke(
+    crate::plugins::host::global().invoke(
         plugin,
         "fs.commit",
         json!({"mountId": mount_id, "streamId": stream}),

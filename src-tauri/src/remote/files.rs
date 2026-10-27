@@ -9,7 +9,7 @@ use std::{
     },
 };
 
-use crate::plugin_providers::FsOperation;
+use crate::plugins::provider_registry::FsOperation;
 
 use super::{
     config::{
@@ -39,7 +39,7 @@ pub(crate) struct RemoteFile {
 /// intersected with the entry's own `allowedOps`. Core never grants more than
 /// either layer allows.
 fn effective_ops(plugin_id: &str, allowed: Option<&[String]>) -> Vec<FsOperation> {
-    let declared = crate::plugin_providers::operations(plugin_id).unwrap_or_default();
+    let declared = crate::plugins::provider_registry::operations(plugin_id).unwrap_or_default();
     FsOperation::ALL
         .into_iter()
         .filter(|operation| declared.contains(operation))
@@ -107,7 +107,7 @@ pub(crate) fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<Remo
         if page_count > 1000 {
             return Err("provider sent too many pages".into());
         }
-        let page = crate::plugin_host::global().invoke(
+        let page = crate::plugins::host::global().invoke(
             &plugin_id,
             "fs.list",
             serde_json::json!({
@@ -190,7 +190,7 @@ pub async fn list_listing(
     path: &str,
     hidden: bool,
     ignores: &[String],
-) -> Result<Option<crate::files::Listing>, String> {
+) -> Result<Option<crate::core::files::Listing>, String> {
     let Some((conn, relative)) = connection_for_path(path) else {
         return Ok(None);
     };
@@ -228,7 +228,7 @@ pub async fn list_listing(
             .map(|(key, error)| format!("{key}: {error}")),
     );
     let cached_dirs = super::cache::cached_dirs(&metadata);
-    let filters = crate::ignores::IgnoreSet::new(ignores);
+    let filters = crate::core::ignores::IgnoreSet::new(ignores);
     let mut entries = Vec::new();
     for file in files {
         if (!hidden && file.name.starts_with('.')) || filters.is_ignored(Path::new(&file.name)) {
@@ -256,7 +256,7 @@ pub async fn list_listing(
             && (has_cache || pinned);
         let (readonly, allowed_ops) =
             entry_capabilities(&plugin_id, file.allowed_ops.as_deref(), file.readonly);
-        entries.push(crate::files::Entry {
+        entries.push(crate::core::files::Entry {
             path: super::config::navigation_path(&conn, &child)?,
             name: file.name,
             is_dir: file.is_dir,
@@ -304,14 +304,14 @@ pub async fn list_listing(
     // Creating inside this directory needs the provider's `mkdir` and the
     // directory node's own stored `allowedOps`/`readonly`.
     let directory = metadata.files.get(&rel);
-    let can_create = crate::plugin_providers::supports(&plugin_id, FsOperation::Mkdir)
+    let can_create = crate::plugins::provider_registry::supports(&plugin_id, FsOperation::Mkdir)
         && directory.is_none_or(|file| {
             !file.readonly
                 && file.allowed_ops.as_deref().is_none_or(|ops| {
                     ops.is_empty() || ops.iter().any(|op| op == FsOperation::Mkdir.as_str())
                 })
         });
-    Ok(Some(crate::files::Listing {
+    Ok(Some(crate::core::files::Listing {
         read_only: mount_readonly,
         can_create,
         virtual_volume: true,
@@ -359,13 +359,13 @@ pub(crate) fn fetch_remote(
     const MAX_TRANSFER: u64 = i64::MAX as u64;
     let plugin_id = ensure_provider_access(conn)?;
     if options.cancelled() {
-        return Err(crate::operations::CANCELLED.into());
+        return Err(crate::core::operations::CANCELLED.into());
     }
     super::config::check_cache_path(conn, dest)?;
     let parent = dest.parent().ok_or("invalid download destination")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let mut staging = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
-    let opened = crate::plugin_host::global().invoke(
+    let opened = crate::plugins::host::global().invoke(
         &plugin_id,
         "fs.openRead",
         serde_json::json!({
@@ -391,7 +391,7 @@ pub(crate) fn fetch_remote(
     }
     impl Drop for ReadLease<'_> {
         fn drop(&mut self) {
-            let _ = crate::plugin_host::global().invoke(
+            let _ = crate::plugins::host::global().invoke(
                 self.plugin,
                 "fs.closeRead",
                 serde_json::json!({"mountId": self.mount_id, "streamId": self.stream}),
@@ -405,12 +405,12 @@ pub(crate) fn fetch_remote(
     };
     loop {
         if options.cancelled() {
-            return Err(crate::operations::CANCELLED.into());
+            return Err(crate::core::operations::CANCELLED.into());
         }
         if offset >= MAX_TRANSFER {
             return Err("remote file exceeds maximum allowed transfer size".into());
         }
-        let response = match crate::plugin_host::global().invoke(
+        let response = match crate::plugins::host::global().invoke(
             &plugin_id,
             "fs.readStream",
             serde_json::json!({
@@ -489,7 +489,7 @@ pub async fn provider_list(
         .map(|m| m.node_id.as_str())
         .filter(|s| !s.is_empty())
         .unwrap_or(relative);
-    crate::plugin_host::global().invoke(
+    crate::plugins::host::global().invoke(
         &plugin_id,
         "fs.list",
         serde_json::json!({
@@ -504,7 +504,7 @@ pub async fn provider_list(
 
 pub async fn download(path: &str, options: &TransferOptions) -> Result<String, String> {
     let Some((conn, _)) = connection_for_path(path) else {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
         return Ok(path.into());
     };
     let _guard = super::sync::lock(&conn).await;
@@ -513,7 +513,7 @@ pub async fn download(path: &str, options: &TransferOptions) -> Result<String, S
 
 pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<String, String> {
     let Some((conn, rel)) = connection_for_path(path) else {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
         return Ok(path.into());
     };
     ensure_provider_access(&conn)?;
@@ -533,7 +533,7 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
     }
     if meta.files.get(&rel).is_some_and(|f| f.revision.is_empty()) {
         let file = &meta.files[&rel];
-        if let Ok(info) = crate::plugin_host::global().invoke(
+        if let Ok(info) = crate::plugins::host::global().invoke(
             &ensure_provider_access(&conn)?,
             "fs.stat",
             serde_json::json!({
@@ -580,7 +580,7 @@ pub(crate) fn download_dir_inner(path: &str, options: &TransferOptions) -> Resul
     let mut pending = vec![rel_string(&rel)];
     while let Some(current) = pending.pop() {
         if options.cancelled() {
-            return Err(crate::operations::CANCELLED.into());
+            return Err(crate::core::operations::CANCELLED.into());
         }
         let mut meta = load_meta(&conn);
         let files = list_remote(&conn, &current)?;
@@ -663,13 +663,13 @@ pub async fn ensure_downloaded(path: &str, options: &TransferOptions) -> Result<
     if connection_for_path(path).is_some() {
         download(path, options).await
     } else {
-        crate::mounts::reject_local(path)?;
+        crate::plugins::mounts::reject_local(path)?;
         Ok(path.into())
     }
 }
 
 pub fn eject(path: &str) -> Result<(), String> {
-    crate::mounts::reject_local(path)?;
+    crate::plugins::mounts::reject_local(path)?;
     #[cfg(target_os = "macos")]
     {
         let status = std::process::Command::new("diskutil")
@@ -720,7 +720,7 @@ pub fn eject(path: &str) -> Result<(), String> {
 }
 
 /// Metadata remains usable before a file has ever been downloaded.
-pub fn stat(path: &str) -> Result<crate::files::Entry, String> {
+pub fn stat(path: &str) -> Result<crate::core::files::Entry, String> {
     let (conn, relative) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
     let plugin_id = ensure_provider_access(&conn)?;
     let rel = rel_string(&relative);
@@ -753,7 +753,7 @@ pub fn stat(path: &str) -> Result<crate::files::Entry, String> {
     let (readonly, allowed_ops) = file
         .map(|entry| entry_capabilities(&plugin_id, entry.allowed_ops.as_deref(), entry.readonly))
         .unwrap_or_else(|| entry_capabilities(&plugin_id, None, false));
-    Ok(crate::files::Entry {
+    Ok(crate::core::files::Entry {
         path: super::config::navigation_path(&conn, &rel)?,
         name,
         is_dir: file.is_none_or(|m| m.is_dir),
@@ -836,7 +836,7 @@ mod tests {
     #[test]
     fn readonly_intersects_declared_and_node_capabilities() {
         let plugin = "org.example.capability-test";
-        crate::plugin_providers::register(
+        crate::plugins::provider_registry::register(
             plugin,
             &serde_json::json!({"fs":{"operations":["list","stat","read","write","remove"]}}),
         );
@@ -848,7 +848,7 @@ mod tests {
         // A node cannot expose an operation the plugin never declared.
         let undeclared = vec!["rename".to_string()];
         assert!(entry_capabilities(plugin, Some(&undeclared), false).0);
-        crate::plugin_providers::forget(plugin);
+        crate::plugins::provider_registry::forget(plugin);
         assert!(entry_capabilities(plugin, None, false).0);
     }
     #[test]

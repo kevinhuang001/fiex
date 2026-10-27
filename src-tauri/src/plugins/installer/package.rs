@@ -1,6 +1,6 @@
 //! Package validation: ZIP extraction, manifest loading, size limits and the
 //! on-disk plugin installation root.
-use crate::plugin_host;
+use crate::plugins::host as plugin_host;
 use std::{
     fs,
     io::{Cursor, Write},
@@ -79,7 +79,7 @@ pub(super) fn read_manifest(root: &Path) -> Result<(Vec<u8>, plugin_host::Plugin
     let manifest: plugin_host::PluginManifest =
         serde_json::from_slice(&manifest_bytes).map_err(|e| format!("manifest invalid: {e}"))?;
     if manifest.schema_version != 2
-        || (!crate::plugin_themes::is_theme(&manifest)
+        || (!crate::plugins::themes::is_theme(&manifest)
             && manifest.runtime.protocol_version != crate::plugin_sdk::PROTOCOL_VERSION)
     {
         return Err("unsupported manifest or protocol version".into());

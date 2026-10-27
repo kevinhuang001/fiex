@@ -109,13 +109,13 @@ pub(crate) fn load_stored() -> Vec<StoredConnection> {
     let mut identities = std::collections::HashSet::new();
     for item in &mut items {
         if item.mount_id.is_empty() {
-            let Ok(id) = crate::mounts::new_id() else {
+            let Ok(id) = crate::plugins::mounts::new_id() else {
                 continue;
             };
             item.mount_id = id;
             changed = true;
         }
-        if crate::mounts::uri(&item.mount_id, "").is_err()
+        if crate::plugins::mounts::uri(&item.mount_id, "").is_err()
             || !identities.insert(item.mount_id.clone())
         {
             // Never silently redirect a duplicated or corrupted identity.
@@ -128,7 +128,7 @@ pub(crate) fn load_stored() -> Vec<StoredConnection> {
     }
     for item in &mut items {
         for field in &item.secret_keys {
-            if let Ok(value) = crate::plugin_storage::secret_get(
+            if let Ok(value) = crate::plugins::storage::secret_get(
                 &connection_plugin_id(item),
                 &format!("connection-{}", item.id),
                 field,
@@ -233,7 +233,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .clone()
         .ok_or("connection plugin ID is required")?;
     let builtin = plugin_id == super::config::BUILTIN_PLUGIN_ID;
-    if !builtin && !crate::plugin_host::valid_id(&plugin_id) {
+    if !builtin && !crate::plugins::host::valid_id(&plugin_id) {
         return Err(crate::i18n::t("连接插件 ID 无效").into());
     }
     if builtin && kind != super::config::BUILTIN_SSH {
@@ -324,7 +324,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     }
     let id = match previous.as_ref() {
         Some(conn) => conn.id.clone(),
-        None => crate::mounts::new_id()?,
+        None => crate::plugins::mounts::new_id()?,
     };
     let mut settings = input.settings;
     // An empty value in an update keeps the existing keyring credential;
@@ -345,7 +345,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         mount_id: previous
             .as_ref()
             .map(|c| c.mount_id.clone())
-            .unwrap_or(crate::mounts::new_id()?),
+            .unwrap_or(crate::plugins::mounts::new_id()?),
         name: name.into(),
         kind: kind.into(),
         plugin_id: plugin_id.clone(),
@@ -359,9 +359,9 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         // Saving a connection is explicit user intent to reach this host. The
         // exact hostname is added to the plugin's own allowlist before validation.
         if let Some(domain) = connection_domain(&record.settings) {
-            crate::plugin_host::set_network_domain(&plugin_id, &domain, true)?;
+            crate::plugins::host::set_network_domain(&plugin_id, &domain, true)?;
         }
-        crate::plugin_host::global().invoke(
+        crate::plugins::host::global().invoke(
             &plugin_id,
             "connection.validate",
             serde_json::json!({"connection": provider_config(&record)}),
@@ -375,7 +375,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .and_then(serde_json::Value::as_str)
         {
             if !value.is_empty() {
-                crate::plugin_storage::secret_set(&plugin_id, &scope, field, value)?;
+                crate::plugins::storage::secret_set(&plugin_id, &scope, field, value)?;
             }
         }
     }
@@ -424,9 +424,9 @@ pub fn remove_connection(id: &str) -> Result<(), String> {
         let scope = format!("connection-{id}");
         let plugin_id = connection_plugin_id(&conn);
         for field in &conn.secret_keys {
-            let _ = crate::plugin_storage::secret_delete(&plugin_id, &scope, field);
+            let _ = crate::plugins::storage::secret_delete(&plugin_id, &scope, field);
         }
-        let _ = crate::plugin_storage::secret_delete(&plugin_id, &scope, "password");
+        let _ = crate::plugins::storage::secret_delete(&plugin_id, &scope, "password");
     }
     Ok(())
 }
@@ -454,13 +454,13 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             "connectionId": connection.id,
         }));
     }
-    let target = crate::plugin_events::invoke(
+    let target = crate::plugins::events::invoke(
         &plugin_id,
         "connection.open",
         serde_json::json!({
             "connectionId": connection.id,
             "mountId": connection.mount_id,
-            "interactionId": crate::mounts::new_id()?,
+            "interactionId": crate::plugins::mounts::new_id()?,
             "connection": provider_config(&connection),
         }),
     )?;
@@ -473,7 +473,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             if mount_id != connection.mount_id {
                 return Err("PermissionDenied: foreign connection mount".into());
             }
-            let registered = crate::plugin_host::catalog()
+            let registered = crate::plugins::host::catalog()
                 .into_iter()
                 .find(|plugin| plugin.id == plugin_id)
                 .and_then(|plugin| plugin.extensions.get("vfs").cloned())
@@ -495,7 +495,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                 .ok_or("VFS navigation missing nodeId")?;
             Ok(serde_json::json!({
                 "kind": "vfs",
-                "path": crate::mounts::uri(&connection.mount_id, node_id)?,
+                "path": crate::plugins::mounts::uri(&connection.mount_id, node_id)?,
             }))
         }
         Some("pluginView") => {
@@ -528,7 +528,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             {
                 return Err("pluginView state exceeds size limit".into());
             }
-            let asset_path = crate::plugin_host::plugin_view_asset(&plugin_id, entry)?;
+            let asset_path = crate::plugins::host::plugin_view_asset(&plugin_id, entry)?;
             Ok(serde_json::json!({
                 "kind": "pluginView",
                 "pluginId": plugin_id,

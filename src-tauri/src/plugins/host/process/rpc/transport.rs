@@ -13,18 +13,18 @@ use std::{
 };
 
 /// Identity and budgets captured when a resident plugin process starts.
-pub(in crate::plugin_host::process) struct RunningInit {
-    pub(in crate::plugin_host::process) plugin_id: String,
-    pub(in crate::plugin_host::process) base_owner: String,
-    pub(in crate::plugin_host::process) declared: BTreeSet<String>,
-    pub(in crate::plugin_host::process) commands: BTreeSet<String>,
-    pub(in crate::plugin_host::process) request_timeout: Duration,
+pub(in crate::plugins::host::process) struct RunningInit {
+    pub(in crate::plugins::host::process) plugin_id: String,
+    pub(in crate::plugins::host::process) base_owner: String,
+    pub(in crate::plugins::host::process) declared: BTreeSet<String>,
+    pub(in crate::plugins::host::process) commands: BTreeSet<String>,
+    pub(in crate::plugins::host::process) request_timeout: Duration,
 }
 
 impl Running {
-    pub(in crate::plugin_host::process) fn start(
+    pub(in crate::plugins::host::process) fn start(
         init: RunningInit,
-        child: crate::plugin_sandbox::SandboxChild,
+        child: crate::plugins::security::sandbox::SandboxChild,
         stdin: Box<dyn Write + Send>,
         stdout: BufReader<Box<dyn Read + Send>>,
     ) -> Arc<Self> {
@@ -139,7 +139,7 @@ impl Running {
 
     pub(super) fn fail(&self, message: &str) {
         self.closed.store(true, Ordering::Release);
-        crate::plugin_permission_prompt::cancel_plugin(&self.plugin_id);
+        crate::plugins::security::prompt::cancel_plugin(&self.plugin_id);
         let diagnostic = self.exit_diagnostic();
         let message = format!("{message} ({diagnostic})");
         if let Ok(mut pending) = self.pending.lock() {
@@ -174,16 +174,16 @@ impl Running {
         }
         // The declaration is part of the handshake: Core stores what the
         // provider says it implements and gates `fs.*` on it.
-        crate::plugin_providers::register(&self.plugin_id, &result);
+        crate::plugins::provider_registry::register(&self.plugin_id, &result);
         self.initialized.store(true, Ordering::Release);
         Ok(())
     }
 
-    pub(in crate::plugin_host::process) fn rpc(
+    pub(in crate::plugins::host::process) fn rpc(
         &self,
         method: &str,
         params: Value,
-        scope: Option<crate::plugin_fs_access::Scope>,
+        scope: Option<crate::plugins::resource::fs_access::Scope>,
     ) -> Result<Value, RpcFailure> {
         let locale = crate::i18n::locale();
         if self.closed.load(Ordering::Acquire) {
@@ -191,7 +191,7 @@ impl Running {
         }
         if method != "plugin.initialize" {
             self.ensure_initialized()?;
-            crate::plugin_providers::authorize_method(&self.plugin_id, method)
+            crate::plugins::provider_registry::authorize_method(&self.plugin_id, method)
                 .map_err(RpcFailure::business)?;
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
@@ -250,9 +250,7 @@ impl Running {
             .ok()
             .and_then(|mut operations| operations.remove(&id));
         if let Some(operation) = operation {
-            crate::plugin_fs_access::cleanup(&operation.owner);
-            crate::plugin_ipc::cleanup(&operation.owner);
-            crate::plugin_net::cleanup(&operation.owner);
+            crate::plugins::resource::lifecycle::release(&operation.owner);
         }
     }
 }

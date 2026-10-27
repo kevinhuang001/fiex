@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 struct Instance {
     running: Arc<Running>,
-    kill: crate::plugin_sandbox::KillHandle,
+    kill: crate::plugins::security::sandbox::KillHandle,
 }
 
 #[derive(Default)]
@@ -52,7 +52,7 @@ impl PluginHost {
             }
         }
     }
-    pub fn task(&self, task_id: &str) -> Option<crate::plugin_host::PluginTaskInfo> {
+    pub fn task(&self, task_id: &str) -> Option<crate::plugins::host::PluginTaskInfo> {
         self.children
             .lock()
             .ok()?
@@ -83,18 +83,19 @@ impl PluginHost {
     }
     fn spawn_instance(
         plugin_id: &str,
-        manifest: &crate::plugin_host::PluginManifest,
+        manifest: &crate::plugins::host::PluginManifest,
         directory: &std::path::Path,
         declared: std::collections::BTreeSet<String>,
     ) -> Result<Arc<Instance>, String> {
-        let state = crate::plugin_permissions::status(plugin_id, &declared)?;
+        let state = crate::plugins::security::permissions::status(plugin_id, &declared)?;
         if !state.approved || !state.enabled {
             return Err("plugin is disabled or installation consent is pending".into());
         }
-        crate::plugin_signing::verify_installed(manifest, directory)?;
+        crate::plugins::signing::verify_installed(manifest, directory)?;
         let path = executable(manifest, directory)?;
-        let policy = crate::plugin_sandbox::Policy::new(&path, directory, &state, &declared);
-        let mut sandbox = crate::plugin_sandbox::spawn(&policy)?;
+        let policy =
+            crate::plugins::security::sandbox::Policy::new(&path, directory, &state, &declared);
+        let mut sandbox = crate::plugins::security::sandbox::spawn(&policy)?;
         let stdin = std::mem::replace(
             &mut sandbox.stdin,
             Box::new(std::io::sink()) as Box<dyn Write + Send>,
@@ -125,7 +126,7 @@ impl PluginHost {
                 declared,
                 commands,
                 request_timeout: std::time::Duration::from_millis(
-                    crate::plugin_host::request_timeout_ms(&manifest.extensions),
+                    crate::plugins::host::request_timeout_ms(&manifest.extensions),
                 ),
             },
             sandbox,
@@ -175,7 +176,7 @@ impl PluginHost {
     /// recorded and skipped instead of blocking the window.
     pub fn start_enabled(&self) {
         for (manifest, directory) in discover() {
-            if crate::plugin_themes::is_theme(&manifest)
+            if crate::plugins::themes::is_theme(&manifest)
                 || executable(&manifest, &directory).is_err()
             {
                 continue;
@@ -183,7 +184,8 @@ impl PluginHost {
             let Ok(declared) = declared(&manifest) else {
                 continue;
             };
-            let Ok(state) = crate::plugin_permissions::status(&manifest.id, &declared) else {
+            let Ok(state) = crate::plugins::security::permissions::status(&manifest.id, &declared)
+            else {
                 continue;
             };
             if !state.approved || !state.enabled {
@@ -197,27 +199,6 @@ impl PluginHost {
 
     pub fn invoke(&self, plugin_id: &str, method: &str, params: Value) -> Result<Value, String> {
         self.invoke_scoped(plugin_id, method, params, None)
-    }
-    pub fn invoke_at(
-        &self,
-        plugin_id: &str,
-        method: &str,
-        params: Value,
-        directory: &str,
-    ) -> Result<Value, String> {
-        let root = if directory.contains("://") {
-            None
-        } else {
-            Some(dunce::canonicalize(directory).map_err(|e| e.to_string())?)
-        };
-        self.invoke_scoped(
-            plugin_id,
-            method,
-            params,
-            root.as_deref()
-                .map(crate::plugin_fs_access::Scope::new)
-                .transpose()?,
-        )
     }
     pub fn invoke_selected(
         &self,
@@ -236,11 +217,11 @@ impl PluginHost {
         params: Value,
         directory: &str,
         paths: &[PathBuf],
-        bindings: &[crate::plugin_resource_context::ResourceBinding],
+        bindings: &[crate::plugins::resource::resource_context::ResourceBinding],
     ) -> Result<Value, String> {
-        if crate::mounts::handles(directory) {
-            let (uri, source) = crate::mounts::resolve(directory)?;
-            let crate::mounts::Source::View(view) = source else {
+        if crate::plugins::mounts::handles(directory) {
+            let (uri, source) = crate::plugins::mounts::resolve(directory)?;
+            let crate::plugins::mounts::Source::View(view) = source else {
                 return Err("connection views cannot grant local filesystem access".into());
             };
             if view.descriptor.plugin_id != plugin_id {
@@ -248,8 +229,8 @@ impl PluginHost {
             }
             for path in paths {
                 let selected = path.to_string_lossy();
-                if crate::mounts::handles(&selected) {
-                    let selected = crate::mounts::parse(&selected)?;
+                if crate::plugins::mounts::handles(&selected) {
+                    let selected = crate::plugins::mounts::parse(&selected)?;
                     if selected.mount_id != uri.mount_id {
                         return Err("PermissionDenied: foreign mount".into());
                     }
@@ -263,7 +244,7 @@ impl PluginHost {
             if directory.contains("://") {
                 None
             } else {
-                Some(crate::plugin_fs_access::Scope::selected(
+                Some(crate::plugins::resource::fs_access::Scope::selected(
                     &PathBuf::from(directory),
                     paths,
                 )?)
@@ -271,7 +252,7 @@ impl PluginHost {
         } else {
             let canonical: Vec<PathBuf> = paths
                 .iter()
-                .map(|path| crate::plugin_fs_access::canonical_selection(path))
+                .map(|path| crate::plugins::resource::fs_access::canonical_selection(path))
                 .collect::<Result<_, _>>()?;
             let current = dunce::canonicalize(directory)
                 .ok()
@@ -292,13 +273,13 @@ impl PluginHost {
                         .to_path_buf();
                 }
             }
-            Some(crate::plugin_fs_access::Scope::selected(
+            Some(crate::plugins::resource::fs_access::Scope::selected(
                 &common, &canonical,
             )?)
         };
         let mut root = root;
         if let Some(scope) = &mut root {
-            crate::plugin_resource_context::bind_selected(scope, bindings)?;
+            crate::plugins::resource::resource_context::bind_selected(scope, bindings)?;
         }
         self.invoke_scoped(plugin_id, method, params, root)
     }
@@ -309,7 +290,7 @@ impl PluginHost {
         plugin_id: &str,
         method: &str,
         params: Value,
-        scope: Option<crate::plugin_fs_access::Scope>,
+        scope: Option<crate::plugins::resource::fs_access::Scope>,
     ) -> Result<Value, String> {
         if !method.starts_with("fs.") {
             return Err("invalid file-system method".into());
@@ -321,7 +302,7 @@ impl PluginHost {
         plugin_id: &str,
         method: &str,
         params: Value,
-        task_root: Option<crate::plugin_fs_access::Scope>,
+        task_root: Option<crate::plugins::resource::fs_access::Scope>,
     ) -> Result<Value, String> {
         let (manifest, dir) = discover()
             .into_iter()
@@ -348,24 +329,24 @@ impl PluginHost {
             return Err("PermissionDenied: file-system provider declaration required".into());
         }
         let declared = declared(&manifest)?;
-        let state = crate::plugin_permissions::status(plugin_id, &declared)?;
+        let state = crate::plugins::security::permissions::status(plugin_id, &declared)?;
         if !state.approved || !state.enabled {
             return Err("plugin is disabled or installation consent is pending".into());
         }
         let mut task_root = task_root;
         let mut params =
-            crate::plugin_events::prepare(plugin_id, method, params, &mut task_root, &declared)?;
+            crate::plugins::events::prepare(plugin_id, method, params, &mut task_root, &declared)?;
         if let Some(object) = params.as_object_mut() {
             object.insert("networkDomains".into(), json!(state.network_domains));
         }
         if let Some(scope) = &mut task_root {
             let policy =
-                crate::plugin_permission_policy::PermissionPolicy::new(plugin_id, &declared);
-            crate::plugin_request_resources::project(
+                crate::plugins::security::policy::PermissionPolicy::new(plugin_id, &declared);
+            crate::plugins::resource::request_resources::project(
                 plugin_id,
                 &mut params,
                 scope,
-                policy.allowed(crate::plugin_permission_policy::Capability::Metadata),
+                policy.allowed(crate::plugins::security::policy::Capability::Metadata),
             )?;
         }
         let existing = self

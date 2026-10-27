@@ -2,7 +2,7 @@
 //! marketplace installation, decorations, themes, errors, search sources and
 //! the host-owned native file dialogs.
 
-use crate::files;
+use crate::core::files;
 /// Generic plugin process bridge. Deliberately runs on the blocking pool:
 /// stdout/IPC must never block the WebView or Tauri's async scheduler.
 /// Errors that are normal before activation must not flood the diagnostic log.
@@ -23,7 +23,7 @@ fn record_plugin_error(plugin_id: &str, source: &str, message: &str) {
     if expected_plugin_error(message) {
         return;
     }
-    let _ = crate::plugin_errors::report(plugin_id, source, message, None);
+    let _ = crate::plugins::errors::report(plugin_id, source, message, None);
 }
 #[tauri::command]
 pub(crate) async fn plugin_invoke(
@@ -33,9 +33,9 @@ pub(crate) async fn plugin_invoke(
     directory: Option<String>,
     selected_paths: Option<Vec<String>>,
     preview_session_id: Option<String>,
-    resource_bindings: Option<Vec<crate::plugin_resource_context::ResourceBinding>>,
+    resource_bindings: Option<Vec<crate::plugins::resource::resource_context::ResourceBinding>>,
 ) -> Result<serde_json::Value, String> {
-    if crate::plugin_events::is_protected_method(&method) {
+    if crate::plugins::events::is_protected_method(&method) {
         return Err("PermissionDenied: provider and host methods are Core-only".into());
     }
     let mut bindings = resource_bindings.unwrap_or_default();
@@ -47,14 +47,17 @@ pub(crate) async fn plugin_invoke(
     if let Some(paths) = selected_paths.as_mut() {
         let mut replacements = std::collections::HashMap::new();
         for path in paths.iter_mut() {
-            if crate::mounts::handles(path) {
+            if crate::plugins::mounts::handles(path) {
                 let local = materialize_file(path.clone()).await?;
                 replacements.insert(path.clone(), local.clone());
                 *path = local;
             }
         }
         if !replacements.is_empty() {
-            if let Some(original) = directory.as_ref().filter(|p| crate::mounts::handles(p)) {
+            if let Some(original) = directory
+                .as_ref()
+                .filter(|p| crate::plugins::mounts::handles(p))
+            {
                 let local = std::path::Path::new(&paths[0])
                     .parent()
                     .ok_or("invalid materialization path")?
@@ -96,14 +99,14 @@ pub(crate) async fn plugin_invoke(
     }
     let preview_scope = preview_session_id
         .as_deref()
-        .map(|id| crate::plugin_preview::session_scope(id, &plugin_id))
+        .map(|id| crate::plugins::resolvers::preview::session_scope(id, &plugin_id))
         .transpose()?;
     let id = plugin_id.clone();
     let call = method.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(mut scope) = preview_scope {
-            crate::plugin_resource_context::bind_selected(&mut scope, &bindings)?;
-            return crate::plugin_host::global().invoke_scoped(
+            crate::plugins::resource::resource_context::bind_selected(&mut scope, &bindings)?;
+            return crate::plugins::host::global().invoke_scoped(
                 &plugin_id,
                 &method,
                 params,
@@ -111,7 +114,7 @@ pub(crate) async fn plugin_invoke(
             );
         }
         match (directory, selected_paths) {
-            (Some(directory), Some(paths)) => crate::plugin_host::global()
+            (Some(directory), Some(paths)) => crate::plugins::host::global()
                 .invoke_selected_with_bindings(
                     &plugin_id,
                     &method,
@@ -123,7 +126,7 @@ pub(crate) async fn plugin_invoke(
                         .collect::<Vec<_>>(),
                     &bindings,
                 ),
-            (Some(directory), None) => crate::plugin_host::global().invoke_selected(
+            (Some(directory), None) => crate::plugins::host::global().invoke_selected(
                 &plugin_id,
                 &method,
                 params,
@@ -131,7 +134,7 @@ pub(crate) async fn plugin_invoke(
                 &[],
             ),
             (None, Some(_)) => Err("selected paths require an operation directory".into()),
-            (None, None) => crate::plugin_host::global().invoke(&plugin_id, &method, params),
+            (None, None) => crate::plugins::host::global().invoke(&plugin_id, &method, params),
         }
     })
     .await
@@ -141,18 +144,20 @@ pub(crate) async fn plugin_invoke(
 #[tauri::command]
 pub(crate) async fn plugin_marketplace(
     repository: Option<String>,
-) -> Result<Vec<crate::plugin_installer::MarketplacePlugin>, String> {
+) -> Result<Vec<crate::plugins::installer::MarketplacePlugin>, String> {
     let repository = repository
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "kevinhuang001/fiex-official-plugins".into());
-    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::marketplace(&repository))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::installer::marketplace(&repository)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub(crate) async fn plugin_release_assets(repository: String) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_installer::release_assets(&repository)
+        crate::plugins::installer::release_assets(&repository)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -161,9 +166,9 @@ pub(crate) async fn plugin_release_assets(repository: String) -> Result<Vec<Stri
 pub(crate) async fn plugin_prepare_install(
     repository: String,
     asset_name: String,
-) -> Result<crate::plugin_installer::InstallPreview, String> {
+) -> Result<crate::plugins::installer::InstallPreview, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_installer::prepare(&repository, &asset_name)
+        crate::plugins::installer::prepare(&repository, &asset_name)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -171,8 +176,8 @@ pub(crate) async fn plugin_prepare_install(
 #[tauri::command]
 pub(crate) async fn plugin_prepare_local_install(
     path: String,
-) -> Result<crate::plugin_installer::InstallPreview, String> {
-    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::prepare_local(&path))
+) -> Result<crate::plugins::installer::InstallPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::plugins::installer::prepare_local(&path))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -182,30 +187,30 @@ pub(crate) async fn plugin_confirm_install(
     allow_untrusted: Option<bool>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_installer::install(&ticket, allow_untrusted.unwrap_or(false))
+        crate::plugins::installer::install(&ticket, allow_untrusted.unwrap_or(false))
     })
     .await
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub(crate) fn plugin_cancel_install(ticket: String) -> Result<(), String> {
-    crate::plugin_installer::cancel(&ticket)
+    crate::plugins::installer::cancel(&ticket)
 }
 #[tauri::command]
 pub(crate) async fn plugin_uninstall(plugin_id: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || crate::plugin_installer::uninstall(&plugin_id))
+    tauri::async_runtime::spawn_blocking(move || crate::plugins::installer::uninstall(&plugin_id))
         .await
         .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub(crate) async fn plugin_activate(
     plugin_id: String,
-    consent: crate::plugin_permissions::ActivationConsent,
+    consent: crate::plugins::security::permissions::ActivationConsent,
 ) -> Result<(), String> {
     // Activation verifies the package and starts the resident backend, which
     // may touch the filesystem. Keep that off the WebView thread.
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_host::activate(&plugin_id, &consent)
+        crate::plugins::host::activate(&plugin_id, &consent)
             .inspect_err(|error| record_plugin_error(&plugin_id, "permission", error))
     })
     .await
@@ -213,7 +218,7 @@ pub(crate) async fn plugin_activate(
 }
 #[tauri::command]
 pub(crate) fn plugin_set_enabled(plugin_id: String, enabled: bool) -> Result<(), String> {
-    crate::plugin_host::set_enabled(&plugin_id, enabled)
+    crate::plugins::host::set_enabled(&plugin_id, enabled)
 }
 #[tauri::command]
 pub(crate) fn plugin_set_permission(
@@ -221,13 +226,13 @@ pub(crate) fn plugin_set_permission(
     permission: String,
     granted: bool,
 ) -> Result<(), String> {
-    crate::plugin_host::set_permission(&plugin_id, &permission, granted)
+    crate::plugins::host::set_permission(&plugin_id, &permission, granted)
 }
 /// The UI answers a Core-owned runtime permission prompt. The plugin never
 /// participates in this path.
 #[tauri::command]
 pub(crate) fn plugin_permission_respond(request_id: String, allow: bool) -> Result<(), String> {
-    crate::plugin_permission_prompt::respond(&request_id, allow)
+    crate::plugins::security::prompt::respond(&request_id, allow)
 }
 #[tauri::command]
 pub(crate) fn plugin_set_command(
@@ -235,11 +240,11 @@ pub(crate) fn plugin_set_command(
     command: String,
     granted: bool,
 ) -> Result<(), String> {
-    crate::plugin_host::set_command(&plugin_id, &command, granted)
+    crate::plugins::host::set_command(&plugin_id, &command, granted)
 }
 #[tauri::command]
 pub(crate) fn plugin_set_network_all(plugin_id: String, all: bool) -> Result<(), String> {
-    crate::plugin_host::set_network_all(&plugin_id, all)
+    crate::plugins::host::set_network_all(&plugin_id, all)
 }
 #[tauri::command]
 pub(crate) fn plugin_set_network_domain(
@@ -247,16 +252,18 @@ pub(crate) fn plugin_set_network_domain(
     domain: String,
     granted: bool,
 ) -> Result<(), String> {
-    crate::plugin_host::set_network_domain(&plugin_id, &domain, granted)
+    crate::plugins::host::set_network_domain(&plugin_id, &domain, granted)
 }
 #[tauri::command]
 pub(crate) fn plugin_approve_install(plugin_id: String) -> Result<(), String> {
-    crate::plugin_host::approve_install(&plugin_id)
+    crate::plugins::host::approve_install(&plugin_id)
 }
 #[tauri::command]
-pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::InfoSection> {
+pub(crate) async fn file_info_details(
+    path: String,
+) -> Vec<crate::plugins::resolvers::info::InfoSection> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_info::file_info_resource(&path).unwrap_or_default()
+        crate::plugins::resolvers::info::file_info_resource(&path).unwrap_or_default()
     })
     .await
     .unwrap_or_default()
@@ -265,22 +272,22 @@ pub(crate) async fn file_info_details(path: String) -> Vec<crate::plugin_info::I
 pub(crate) fn plugin_task(
     plugin_id: String,
     task_id: String,
-) -> Option<crate::plugin_host::PluginTaskInfo> {
-    crate::plugin_host::global()
+) -> Option<crate::plugins::host::PluginTaskInfo> {
+    crate::plugins::host::global()
         .task(&task_id)
         .filter(|task| task.plugin_id == plugin_id)
 }
 #[tauri::command]
 pub(crate) fn plugin_cancel_task(plugin_id: String, task_id: String) -> Result<(), String> {
-    let task = crate::plugin_host::global()
+    let task = crate::plugins::host::global()
         .task(&task_id)
         .filter(|task| task.plugin_id == plugin_id)
         .ok_or("background task not found")?;
-    crate::plugin_host::global().cancel_task(&task.task_id)
+    crate::plugins::host::global().cancel_task(&task.task_id)
 }
 #[tauri::command]
 pub(crate) fn plugin_status() -> Vec<(String, bool)> {
-    crate::plugin_host::catalog()
+    crate::plugins::host::catalog()
         .into_iter()
         .map(|item| (item.id, item.backend_available))
         .collect()
@@ -288,14 +295,14 @@ pub(crate) fn plugin_status() -> Vec<(String, bool)> {
 #[tauri::command]
 pub(crate) async fn plugin_decorations(
     directory: String,
-    entries: Vec<crate::plugin_decorations::DecorationEntry>,
+    entries: Vec<crate::plugins::resolvers::decorations::DecorationEntry>,
     include_plugins: Option<bool>,
-) -> Result<Vec<crate::plugin_decorations::Decoration>, String> {
+) -> Result<Vec<crate::plugins::resolvers::decorations::Decoration>, String> {
     if !directory.starts_with('/') && !directory.contains(":\\") && !directory.contains("://") {
         return Err("invalid decoration directory".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_decorations::query_with_plugins(
+        crate::plugins::resolvers::decorations::query_with_plugins(
             &directory,
             entries,
             include_plugins.unwrap_or(true),
@@ -305,39 +312,39 @@ pub(crate) async fn plugin_decorations(
     .map_err(|error| error.to_string())
 }
 #[tauri::command]
-pub(crate) fn plugin_themes() -> Vec<crate::plugin_themes::Theme> {
-    crate::plugin_host::themes()
+pub(crate) fn plugin_themes() -> Vec<crate::plugins::themes::Theme> {
+    crate::plugins::host::themes()
 }
 #[tauri::command]
 pub(crate) fn plugin_network_domains(plugin_id: String) -> Result<Vec<String>, String> {
-    crate::plugin_host::network_domains(&plugin_id)
+    crate::plugins::host::network_domains(&plugin_id)
 }
 #[tauri::command]
 pub(crate) fn plugin_permission_allowed(
     plugin_id: String,
     permission: String,
 ) -> Result<bool, String> {
-    crate::plugin_host::permission_allowed(&plugin_id, &permission)
+    crate::plugins::host::permission_allowed(&plugin_id, &permission)
 }
 #[tauri::command]
 pub(crate) fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<String, String> {
-    crate::plugin_host::panel_html(&plugin_id, &panel_id).inspect_err(|error| {
+    crate::plugins::host::panel_html(&plugin_id, &panel_id).inspect_err(|error| {
         record_plugin_error(&plugin_id, "panel", &format!("{panel_id}: {error}"))
     })
 }
 #[tauri::command]
 pub(crate) fn plugin_panel_asset(plugin_id: String, panel_id: String) -> Result<String, String> {
-    crate::plugin_host::panel_asset(&plugin_id, &panel_id).inspect_err(|error| {
+    crate::plugins::host::panel_asset(&plugin_id, &panel_id).inspect_err(|error| {
         record_plugin_error(&plugin_id, "panel", &format!("{panel_id}: {error}"))
     })
 }
 #[tauri::command]
-pub(crate) fn plugins_list() -> Vec<crate::plugin_host::PluginInfo> {
-    crate::plugin_host::catalog()
+pub(crate) fn plugins_list() -> Vec<crate::plugins::host::PluginInfo> {
+    crate::plugins::host::catalog()
 }
 #[tauri::command]
-pub(crate) fn plugin_errors(plugin_id: String) -> Vec<crate::plugin_errors::PluginError> {
-    crate::plugin_errors::list(&plugin_id)
+pub(crate) fn plugin_errors(plugin_id: String) -> Vec<crate::plugins::errors::PluginError> {
+    crate::plugins::errors::list(&plugin_id)
 }
 #[tauri::command]
 pub(crate) fn plugin_error_report(
@@ -346,11 +353,11 @@ pub(crate) fn plugin_error_report(
     message: String,
     detail: Option<String>,
 ) -> Result<(), String> {
-    crate::plugin_errors::report(&plugin_id, &source, &message, detail.as_deref())
+    crate::plugins::errors::report(&plugin_id, &source, &message, detail.as_deref())
 }
 #[tauri::command]
 pub(crate) fn plugin_error_clear(plugin_id: String) {
-    crate::plugin_errors::clear(&plugin_id);
+    crate::plugins::errors::clear(&plugin_id);
 }
 #[tauri::command]
 pub(crate) fn plugin_storage_get(
@@ -358,7 +365,7 @@ pub(crate) fn plugin_storage_get(
     scope: String,
     key: String,
 ) -> Result<Option<serde_json::Value>, String> {
-    crate::plugin_storage::get(&plugin_id, &scope, &key)
+    crate::plugins::storage::get(&plugin_id, &scope, &key)
 }
 #[tauri::command]
 pub(crate) fn plugin_storage_set(
@@ -367,7 +374,7 @@ pub(crate) fn plugin_storage_set(
     key: String,
     value: serde_json::Value,
 ) -> Result<(), String> {
-    crate::plugin_storage::set(&plugin_id, &scope, &key, value)
+    crate::plugins::storage::set(&plugin_id, &scope, &key, value)
 }
 #[tauri::command]
 pub(crate) fn plugin_storage_delete(
@@ -375,7 +382,7 @@ pub(crate) fn plugin_storage_delete(
     scope: String,
     key: String,
 ) -> Result<(), String> {
-    crate::plugin_storage::delete(&plugin_id, &scope, &key)
+    crate::plugins::storage::delete(&plugin_id, &scope, &key)
 }
 #[tauri::command]
 pub(crate) fn plugin_secret_set(
@@ -384,7 +391,7 @@ pub(crate) fn plugin_secret_set(
     key: String,
     value: String,
 ) -> Result<(), String> {
-    let permitted = crate::plugin_host::catalog()
+    let permitted = crate::plugins::host::catalog()
         .into_iter()
         .find(|p| p.id == plugin_id)
         .and_then(|p| p.extensions.get("settings").cloned())
@@ -398,20 +405,22 @@ pub(crate) fn plugin_secret_set(
     if !permitted || scope != "global" {
         return Err("secret setting is not declared".into());
     }
-    crate::plugin_storage::secret_set(&plugin_id, &scope, &key, &value)
+    crate::plugins::storage::secret_set(&plugin_id, &scope, &key, &value)
 }
 #[tauri::command]
 pub(crate) fn plugin_secret_available() -> bool {
-    crate::plugin_storage::secret_available()
+    crate::plugins::storage::secret_available()
 }
 
 #[tauri::command]
 pub(crate) async fn plugin_search(
-    request: crate::plugin_search::PluginSearchInput,
+    request: crate::plugins::resolvers::search::PluginSearchInput,
 ) -> Result<Vec<files::Entry>, String> {
-    tauri::async_runtime::spawn_blocking(move || Ok(crate::plugin_search::query(&request)))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(crate::plugins::resolvers::search::query(&request))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Host-owned native file chooser. Returns only a selected path; plugin
@@ -495,7 +504,7 @@ pub(crate) fn vfs_retain_views(
     paths: Vec<String>,
     durable: Vec<String>,
 ) -> Result<(), String> {
-    crate::mounts::retain(window.label(), &paths, &durable)
+    crate::plugins::mounts::retain(window.label(), &paths, &durable)
 }
 #[tauri::command]
 pub(crate) async fn materialize_file(path: String) -> Result<String, String> {
@@ -507,12 +516,14 @@ pub(crate) async fn materialize_file(path: String) -> Result<String, String> {
         return crate::remote::ensure_downloaded(&path, &crate::remote::TransferOptions::default())
             .await;
     }
-    if crate::plugin_vfs::handles(&path) {
-        return tauri::async_runtime::spawn_blocking(move || crate::plugin_vfs::materialize(&path))
-            .await
-            .map_err(|e| e.to_string())?;
+    if crate::plugins::vfs::handles(&path) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            crate::plugins::vfs::materialize(&path)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
     }
-    crate::mounts::reject_local(&path)?;
+    crate::plugins::mounts::reject_local(&path)?;
     Ok(path)
 }
 
@@ -520,12 +531,12 @@ pub(crate) async fn materialize_file(path: String) -> Result<String, String> {
 /// resource context. Other plugins see the URI, never the backing local root.
 #[tauri::command]
 pub(crate) fn plugin_context_directory(plugin_id: String, path: String) -> Result<String, String> {
-    if !crate::mounts::handles(&path) {
+    if !crate::plugins::mounts::handles(&path) {
         return Ok(path);
     }
-    let (_, source) = crate::mounts::resolve(&path)?;
+    let (_, source) = crate::plugins::mounts::resolve(&path)?;
     match source {
-        crate::mounts::Source::View(view) if view.descriptor.plugin_id == plugin_id => {
+        crate::plugins::mounts::Source::View(view) if view.descriptor.plugin_id == plugin_id => {
             Ok(view.descriptor.resource_root)
         }
         _ => Ok(path),
@@ -549,9 +560,9 @@ pub(crate) async fn plugin_toolbar_invoke(
         };
         let resources = targets
             .iter()
-            .map(|p| crate::plugin_resource_context::ResourceSnapshot::resolve(p))
+            .map(|p| crate::plugins::resource::resource_context::ResourceSnapshot::resolve(p))
             .collect::<Result<Vec<_>, _>>()?;
-        crate::plugin_events::call_owner(
+        crate::plugins::events::call_owner(
             "toolbar.invoke",
             &plugin_id,
             serde_json::json!({}),
@@ -566,8 +577,9 @@ pub(crate) async fn plugin_toolbar_invoke(
 #[tauri::command]
 pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        use crate::plugin_events::{EventRouter, Handler};
-        let resource = crate::plugin_resource_context::ResourceSnapshot::resolve(&path)?;
+        use crate::plugins::events::{EventRouter, Handler};
+        let resource =
+            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&path)?;
         let metadata = serde_json::to_value(resource.metadata()).map_err(|e| e.to_string())?;
         let providers = EventRouter::providers("hooks.invoke", &[metadata], "", Vec::new())
             .into_iter()
@@ -583,7 +595,7 @@ pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value
             providers,
             |_, _| Err("no builtin hook".into()),
             |plugin| {
-                crate::plugin_events::invoke_resources(
+                crate::plugins::events::invoke_resources(
                     plugin,
                     "hooks.invoke",
                     serde_json::json!({"event":"beforeOpen"}),
@@ -611,7 +623,7 @@ pub(crate) fn preview_candidates(
     mime: String,
     is_dir: bool,
 ) -> Vec<serde_json::Value> {
-    crate::plugin_preview::candidates_json(&extension, &mime, is_dir)
+    crate::plugins::resolvers::preview::candidates_json(&extension, &mime, is_dir)
 }
 
 /// Optional package-local loading document for a plugin preview. It contains
@@ -619,14 +631,14 @@ pub(crate) fn preview_candidates(
 /// the same sandboxed Core-owned iframe while `preview.open` runs.
 #[tauri::command]
 pub(crate) fn preview_loading(plugin_id: String) -> Result<Option<String>, String> {
-    crate::plugin_host::preview_loading(&plugin_id).inspect_err(|error| {
+    crate::plugins::host::preview_loading(&plugin_id).inspect_err(|error| {
         record_plugin_error(&plugin_id, "preview", &format!("loading: {error}"))
     })
 }
 
 #[tauri::command]
 pub(crate) fn preview_loading_asset(plugin_id: String) -> Result<Option<String>, String> {
-    crate::plugin_host::preview_loading_asset(&plugin_id).inspect_err(|error| {
+    crate::plugins::host::preview_loading_asset(&plugin_id).inspect_err(|error| {
         record_plugin_error(&plugin_id, "preview", &format!("loading asset: {error}"))
     })
 }
@@ -638,7 +650,7 @@ pub(crate) async fn preview_open(
     provider_order: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_preview::open_resource(
+        crate::plugins::resolvers::preview::open_resource(
             &path,
             provider_id.as_deref(),
             provider_order.as_deref(),
@@ -654,7 +666,7 @@ pub(crate) async fn plugin_context_menu_resolve(
     paths: Vec<String>,
 ) -> Result<Vec<serde_json::Value>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_context_menu::query(&directory, &paths)
+        crate::plugins::resolvers::context_menu::query(&directory, &paths)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -666,7 +678,7 @@ pub(crate) async fn plugin_context_menu_children(
     parent_id: String,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_context_menu::children(&menu_session_id, &parent_id)
+        crate::plugins::resolvers::context_menu::children(&menu_session_id, &parent_id)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -677,10 +689,10 @@ pub(crate) async fn plugin_context_menu_execute(
     menu_session_id: String,
     item_id: String,
     on_progress: tauri::ipc::Channel<super::files::OperationProgress>,
-    cancel: tauri::State<'_, crate::operations::OperationCancel>,
+    cancel: tauri::State<'_, crate::core::operations::OperationCancel>,
 ) -> Result<serde_json::Value, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::plugin_context_menu::execute(&menu_session_id, &item_id)
+        crate::plugins::resolvers::context_menu::execute(&menu_session_id, &item_id)
     })
     .await
     .map_err(|error| error.to_string())??;
@@ -693,7 +705,7 @@ pub(crate) async fn plugin_context_menu_execute(
                     as std::sync::Arc<crate::remote::ProgressFn>
             }),
         };
-        crate::plugin_context_menu::execute_remote(&result, &options).await?;
+        crate::plugins::resolvers::context_menu::execute_remote(&result, &options).await?;
         return Ok(serde_json::json!({"handled":true}));
     }
     Ok(result)
@@ -703,27 +715,28 @@ pub(crate) async fn plugin_context_menu_execute(
 pub(crate) async fn plugin_describe_resources(
     plugin_id: String,
     paths: Vec<String>,
-) -> Result<Vec<crate::plugin_contracts::ResourceContext>, String> {
+) -> Result<Vec<crate::plugins::contracts::ResourceContext>, String> {
     if paths.len() > 256 {
         return Err("too many resource candidates".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let plugin = crate::plugin_host::catalog()
+        let plugin = crate::plugins::host::catalog()
             .into_iter()
             .find(|plugin| plugin.id == plugin_id && plugin.approved && plugin.enabled)
             .ok_or("plugin unavailable")?;
         let declared = plugin.declared_permissions.iter().cloned().collect();
-        let policy = crate::plugin_permission_policy::PermissionPolicy::new(&plugin_id, &declared);
+        let policy = crate::plugins::security::policy::PermissionPolicy::new(&plugin_id, &declared);
         paths
             .iter()
             .map(|path| {
                 Ok(
-                    crate::plugin_resource_context::ResourceSnapshot::resolve(path)?.project(
-                        &plugin_id,
-                        "",
-                        policy.allowed(crate::plugin_permission_policy::Capability::Metadata),
-                        false,
-                    ),
+                    crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)?
+                        .project(
+                            &plugin_id,
+                            "",
+                            policy.allowed(crate::plugins::security::policy::Capability::Metadata),
+                            false,
+                        ),
                 )
             })
             .collect()

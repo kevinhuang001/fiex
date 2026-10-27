@@ -1,5 +1,5 @@
 //! Declarative, process-free theme extensions. No CSS selectors or scripts.
-use crate::plugin_host::PluginManifest;
+use crate::plugins::host::PluginManifest;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,

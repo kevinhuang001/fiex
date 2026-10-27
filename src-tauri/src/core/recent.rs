@@ -1,7 +1,7 @@
 //! Recently opened files, persisted so the sidebar's Recent location survives
 //! restarts. Only local, regular files are tracked: remote downloads and disk
 //! image caches have no meaningful path for the user to return to.
-use crate::files::{entry, Entry};
+use crate::core::files::{entry, Entry};
 use std::{
     fs,
     path::{Path, PathBuf},

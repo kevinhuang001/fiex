@@ -1,12 +1,12 @@
 //! Generic plugin-owned virtual filesystems.
 //!
 //! Explicit VFS extensions are routed through Core-owned view identities and the
-//! shared [`crate::fs_resolver`], so views use the same `fs.*` protocol as
+//! shared [`crate::plugins::resolvers::fs`], so views use the same `fs.*` protocol as
 //! connections. Views remain navigation identities; UI extensions never confer
 //! provider eligibility.
-use crate::files::{Entry, Listing};
-use crate::fs_resolver::{FsEntry, FsKind, Mount, Source};
-use crate::plugin_providers::FsOperation;
+use crate::core::files::{Entry, Listing};
+use crate::plugins::provider_registry::FsOperation;
+use crate::plugins::resolvers::fs::{FsEntry, FsKind, Mount, Source};
 use serde_json::Value;
 
 /// Stream reads are chunked so a large export never sits in memory.
@@ -14,19 +14,30 @@ const READ_CHUNK: usize = 256 * 1024;
 
 /// Claim every Core URI, including invalid/revoked ones, before OS fallback.
 pub fn handles(path: &str) -> bool {
-    crate::mounts::handles(path)
+    crate::plugins::mounts::handles(path)
 }
 
-fn resolve(path: &str) -> Result<(crate::mounts::Uri, crate::mounts::View), String> {
-    let (uri, source) = crate::mounts::resolve(path)?;
+fn resolve(
+    path: &str,
+) -> Result<(crate::plugins::mounts::Uri, crate::plugins::mounts::View), String> {
+    let (uri, source) = crate::plugins::mounts::resolve(path)?;
     match source {
-        crate::mounts::Source::View(view) => Ok((uri, view)),
-        crate::mounts::Source::Connection(_) => {
+        crate::plugins::mounts::Source::View(view) => Ok((uri, view)),
+        crate::plugins::mounts::Source::Connection(_) => {
             Err("connection request requires the Core connection adapter".into())
         }
     }
 }
-fn node(path: &str) -> Result<(crate::mounts::Uri, crate::mounts::View, String), String> {
+fn node(
+    path: &str,
+) -> Result<
+    (
+        crate::plugins::mounts::Uri,
+        crate::plugins::mounts::View,
+        String,
+    ),
+    String,
+> {
     let (uri, mut view) = resolve(path)?;
     if view.node_id(&uri.relative)?.is_none() {
         // Address-bar/bookmark navigation may target an opaque node not visited
@@ -38,19 +49,23 @@ fn node(path: &str) -> Result<(crate::mounts::Uri, crate::mounts::View, String),
             } else {
                 format!("{parent}/{part}")
             };
-            let current = crate::mounts::view(&uri.mount_id)?;
+            let current = crate::plugins::mounts::view(&uri.mount_id)?;
             if current.node_id(&target)?.is_none() {
-                list(&crate::mounts::uri(&uri.mount_id, &parent)?, true, &[])?;
+                list(
+                    &crate::plugins::mounts::uri(&uri.mount_id, &parent)?,
+                    true,
+                    &[],
+                )?;
             }
             parent = target;
         }
-        view = crate::mounts::view(&uri.mount_id)?;
+        view = crate::plugins::mounts::view(&uri.mount_id)?;
     }
     let id = view.node_id(&uri.relative)?.ok_or("VFS node not found")?;
     Ok((uri, view, id))
 }
 /// The provider identity a view sends with every `fs.*` request.
-fn mount_for(uri: &crate::mounts::Uri, view: &crate::mounts::View) -> Mount {
+fn mount_for(uri: &crate::plugins::mounts::Uri, view: &crate::plugins::mounts::View) -> Mount {
     Mount {
         mount_id: uri.mount_id.clone(),
         plugin_id: view.descriptor.plugin_id.clone(),
@@ -74,7 +89,7 @@ fn writable(mount: &Mount) -> bool {
 }
 /// Child location of `name`, never trusting a provider-supplied path.
 fn child(relative: &str, name: &str) -> Result<String, String> {
-    crate::mounts::segment(name)?;
+    crate::plugins::mounts::segment(name)?;
     Ok(if relative.is_empty() {
         name.to_string()
     } else {
@@ -83,17 +98,17 @@ fn child(relative: &str, name: &str) -> Result<String, String> {
 }
 fn project_entry(
     mount: &Mount,
-    uri: &crate::mounts::Uri,
+    uri: &crate::plugins::mounts::Uri,
     relative: &str,
     entry: FsEntry,
 ) -> Result<(Entry, String), String> {
-    crate::mounts::segment(&entry.name)?;
+    crate::plugins::mounts::segment(&entry.name)?;
     // The provider's node is authoritative, but its name must match the
     // location Core already bound it to.
     if !relative.is_empty() && relative.rsplit('/').next() != Some(entry.name.as_str()) {
         return Err("provider node name does not match its location".into());
     }
-    let path = crate::mounts::uri(&uri.mount_id, relative)?;
+    let path = crate::plugins::mounts::uri(&uri.mount_id, relative)?;
     let allowed_ops = FsOperation::ALL
         .into_iter()
         .filter(|operation| mount.supports(*operation) && entry.allows(*operation))
@@ -133,12 +148,12 @@ fn project_entry(
 }
 fn bound_entry(
     mount: &Mount,
-    uri: &crate::mounts::Uri,
+    uri: &crate::plugins::mounts::Uri,
     relative: &str,
     entry: FsEntry,
 ) -> Result<Entry, String> {
     let (entry, id) = project_entry(mount, uri, relative, entry)?;
-    crate::mounts::bind_node(&uri.mount_id, relative, &id)?;
+    crate::plugins::mounts::bind_node(&uri.mount_id, relative, &id)?;
     Ok(entry)
 }
 pub fn entry_from(value: Value) -> Result<Entry, String> {
@@ -164,7 +179,7 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         read_only: !writable(&mount),
         can_create,
         virtual_volume: true,
-        path: crate::mounts::uri(&uri.mount_id, &uri.relative)?,
+        path: crate::plugins::mounts::uri(&uri.mount_id, &uri.relative)?,
         entries,
         warnings: listing.warnings,
     })
@@ -216,7 +231,7 @@ pub fn search(
                 .relative_path
                 .clone()
                 .ok_or("search entry missing relativePath")?;
-            crate::mounts::uri(&uri.mount_id, &relative)?;
+            crate::plugins::mounts::uri(&uri.mount_id, &relative)?;
             if !uri.relative.is_empty() && !relative.starts_with(&format!("{}/", uri.relative)) {
                 return Err("search entry escaped subtree".into());
             }
@@ -260,7 +275,7 @@ pub fn materialize(path: &str) -> Result<String, String> {
     if entry.is_dir {
         return Err("VFS directories cannot be opened as OS folders".into());
     }
-    crate::mounts::segment(&entry.name)?;
+    crate::plugins::mounts::segment(&entry.name)?;
     let mut exports = exports()
         .lock()
         .map_err(|_| "export registry unavailable")?;
@@ -319,10 +334,10 @@ pub fn create(path: &str, name: &str) -> Result<String, String> {
     match created {
         Some(entry) => {
             let relative = child(&uri.relative, &entry.name)?;
-            crate::mounts::bind_node(&uri.mount_id, &relative, &entry.node_id)?;
-            crate::mounts::uri(&uri.mount_id, &relative)
+            crate::plugins::mounts::bind_node(&uri.mount_id, &relative, &entry.node_id)?;
+            crate::plugins::mounts::uri(&uri.mount_id, &relative)
         }
-        None => crate::mounts::uri(&uri.mount_id, &child(&uri.relative, name)?),
+        None => crate::plugins::mounts::uri(&uri.mount_id, &child(&uri.relative, name)?),
     }
 }
 
@@ -336,8 +351,8 @@ pub fn rename(path: &str, name: &str) -> Result<String, String> {
         .rsplit_once('/')
         .map_or("", |(parent, _)| parent);
     let relative = child(parent, &entry.name)?;
-    crate::mounts::bind_node(&uri.mount_id, &relative, &entry.node_id)?;
-    crate::mounts::uri(&uri.mount_id, &relative)
+    crate::plugins::mounts::bind_node(&uri.mount_id, &relative, &entry.node_id)?;
+    crate::plugins::mounts::uri(&uri.mount_id, &relative)
 }
 
 pub fn remove(path: &str) -> Result<(), String> {
@@ -380,7 +395,7 @@ mod tests {
 
     #[test]
     fn provider_cannot_choose_a_different_mount_or_escape_with_a_name() {
-        let location = crate::mounts::parse("fiex://mount/owner-one/folder").unwrap();
+        let location = crate::plugins::mounts::parse("fiex://mount/owner-one/folder").unwrap();
         let mount = mount("test.vfs.identity");
         let (projected, node) = project_entry(
             &mount,
@@ -410,11 +425,11 @@ mod tests {
     #[test]
     fn capabilities_narrow_the_provider_and_mark_entries_readonly() {
         let plugin = "test.vfs.capabilities";
-        crate::plugin_providers::register(
+        crate::plugins::provider_registry::register(
             plugin,
             &json!({"fs":{"operations":["list","stat","read","write","rename","remove"]}}),
         );
-        let location = crate::mounts::parse("fiex://mount/owner-one/folder").unwrap();
+        let location = crate::plugins::mounts::parse("fiex://mount/owner-one/folder").unwrap();
         let mount = mount(plugin);
         let mut writable = file_entry("a.txt");
         writable.allowed_ops = Some(vec![FsOperation::Read, FsOperation::Rename]);
@@ -426,7 +441,7 @@ mod tests {
         let (projected, _) = project_entry(&mount, &location, "folder/b.txt", read_only).unwrap();
         assert_eq!(projected.allowed_ops, vec!["read"]);
         assert!(projected.readonly);
-        crate::plugin_providers::forget(plugin);
+        crate::plugins::provider_registry::forget(plugin);
     }
 
     #[test]

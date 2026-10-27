@@ -1,0 +1,117 @@
+//! Core event pipeline: discover → dispatch → validate → collect.
+use crate::plugins::resource::resource_context::ResourceSnapshot;
+use serde_json::{json, Value};
+mod contract;
+mod matching;
+mod registry;
+mod router;
+mod scope;
+mod validation;
+use contract::{event, Dispatch};
+pub use registry::{Handler, Resolver};
+pub use router::EventRouter;
+#[cfg(test)]
+use scope::action_folders;
+pub use scope::{prepare, resource_scope};
+pub use validation::validate_result;
+/// Core-owned system events are not exposed through the plugin UI bridge.
+/// Unknown methods remain legal plugin-local business methods.
+pub fn is_protected_method(method: &str) -> bool {
+    event(method).is_some()
+        || [
+            "host.",
+            "core.",
+            "plugin.",
+            "contextMenu.",
+            "vfs.",
+            "fs.",
+            "connection.",
+        ]
+        .iter()
+        .any(|prefix| method.starts_with(prefix))
+}
+
+fn require_event(method: &str) -> Result<(), String> {
+    if event(method).is_some() {
+        Ok(())
+    } else {
+        Err(format!("unregistered Core event: {method}"))
+    }
+}
+
+/// Recheck a stored menu session using its actual targets, never empty placeholders.
+pub fn menu_allowed(plugin_id: &str, resources: &[ResourceSnapshot], directory: &str) -> bool {
+    EventRouter::providers(
+        "contextMenu.resolve",
+        &matching::metadata(resources),
+        directory,
+        Vec::new(),
+    )
+    .iter()
+    .any(|provider| matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id))
+}
+
+pub fn call_owner(
+    method: &str,
+    plugin_id: &str,
+    params: Value,
+    resources: &[ResourceSnapshot],
+    directory: Option<&str>,
+) -> Result<Value, String> {
+    let metadata = matching::metadata(resources);
+    let providers = EventRouter::providers(method, &metadata, directory.unwrap_or(""), Vec::new())
+        .into_iter()
+        .filter(|p| matches!(&p.handler,Handler::Plugin(plugin) if plugin.id==plugin_id))
+        .collect();
+    EventRouter::resolve(
+        method,
+        providers,
+        |_, _| Err("builtin owner not registered".into()),
+        |plugin| invoke_resources(plugin, method, params.clone(), resources, directory),
+        |_, value| Ok(value),
+        |_| true,
+        |results| {
+            results
+                .into_iter()
+                .next()
+                .ok_or_else(|| "event owner unavailable or does not match targets".to_string())?
+                .1
+        },
+    )
+}
+
+pub fn invoke(plugin: &str, method: &str, params: Value) -> Result<Value, String> {
+    require_event(method)?;
+    let result = crate::plugins::host::global().invoke(plugin, method, params)?;
+    validate_result(method, &result)?;
+    Ok(result)
+}
+pub fn invoke_prepared(
+    plugin: &str,
+    method: &str,
+    params: Value,
+    scope: crate::plugins::resource::fs_access::Scope,
+) -> Result<Value, String> {
+    require_event(method)?;
+    let value =
+        crate::plugins::host::global().invoke_scoped(plugin, method, params, Some(scope))?;
+    validate_result(method, &value)?;
+    Ok(value)
+}
+
+pub fn invoke_resources(
+    plugin: &crate::plugins::host::PluginInfo,
+    method: &str,
+    params: Value,
+    resources: &[ResourceSnapshot],
+    directory: Option<&str>,
+) -> Result<Value, String> {
+    let (params, scope) = resource_scope(plugin, method, params, resources, directory)?;
+    let result =
+        crate::plugins::host::global().invoke_scoped(&plugin.id, method, params, Some(scope))?;
+    validate_result(method, &result)?;
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests;

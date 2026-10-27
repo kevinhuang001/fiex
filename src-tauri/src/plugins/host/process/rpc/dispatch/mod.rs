@@ -2,7 +2,7 @@
 //! concrete method groups live in `fs`, `net` and `other` so each family stays
 //! small and every permission decision is next to the operation it guards.
 use super::{actor::Actor, Running};
-use crate::plugin_permission_policy::{Capability, PermissionPolicy};
+use crate::plugins::security::policy::{Capability, PermissionPolicy};
 use serde_json::{json, Value};
 
 mod fs;
@@ -36,7 +36,7 @@ impl Context<'_> {
         self.actor.owner.clone()
     }
 
-    pub(super) fn scope(&self) -> Result<crate::plugin_fs_access::Scope, String> {
+    pub(super) fn scope(&self) -> Result<crate::plugins::resource::fs_access::Scope, String> {
         self.actor
             .scope
             .clone()
@@ -138,7 +138,7 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
                     .ok_or("remote directory unavailable")?
                     .entries
                 } else {
-                    crate::plugin_vfs::list(&resource.display, true, &[])?.entries
+                    crate::plugins::vfs::list(&resource.display, true, &[])?.entries
                 };
                 let values = entries
                     .into_iter()
@@ -164,8 +164,10 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
             }
             let local = resource.materialize()?;
             let directory = local.parent().ok_or("remote target has no parent")?;
-            let mut scope =
-                crate::plugin_fs_access::Scope::selected(directory, std::slice::from_ref(&local))?;
+            let mut scope = crate::plugins::resource::fs_access::Scope::selected(
+                directory,
+                std::slice::from_ref(&local),
+            )?;
             let target = json!({
                 "ref": params.get("ref").cloned().unwrap_or_else(|| json!(resource.reference)),
                 "metadata": resource.metadata()

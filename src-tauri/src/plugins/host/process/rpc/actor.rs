@@ -4,12 +4,12 @@ use serde_json::Value;
 #[derive(Clone)]
 pub(super) struct Operation {
     pub(super) owner: String,
-    pub(super) scope: Option<crate::plugin_fs_access::Scope>,
+    pub(super) scope: Option<crate::plugins::resource::fs_access::Scope>,
 }
 
 pub(super) struct Actor {
     pub(super) owner: String,
-    pub(super) scope: Option<crate::plugin_fs_access::Scope>,
+    pub(super) scope: Option<crate::plugins::resource::fs_access::Scope>,
 }
 
 impl Running {

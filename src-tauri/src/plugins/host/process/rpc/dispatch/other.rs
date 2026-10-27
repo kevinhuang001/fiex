@@ -16,7 +16,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                     .get("resourceRoot")
                     .ok_or("missing resource ref")?
             )?);
-            crate::mounts::open_view(&plugin_id, &params, &scope)
+            crate::plugins::mounts::open_view(&plugin_id, &params, &scope)
         }
         #[cfg(feature = "desktop")]
         "host.terminal.ready" => {
@@ -59,22 +59,22 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                 .get("writable")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            serde_json::to_value(crate::plugin_ipc::create(&owner, size, writable)?)
+            serde_json::to_value(crate::plugins::ipc::create(&owner, size, writable)?)
                 .map_err(|error| error.to_string())
         }
         "host.buffer.map" => {
             let id = ctx.arg("id")?;
-            serde_json::to_value(crate::plugin_ipc::map(&owner, &id)?)
+            serde_json::to_value(crate::plugins::ipc::map(&owner, &id)?)
                 .map_err(|error| error.to_string())
         }
         "host.buffer.release" => {
             let id = ctx.arg("id")?;
-            crate::plugin_ipc::release(&owner, &id)?;
+            crate::plugins::ipc::release(&owner, &id)?;
             Ok(Value::Null)
         }
         "host.storage.get" => {
             let value =
-                crate::plugin_storage::get(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
+                crate::plugins::storage::get(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
             Ok(json!({"found":value.is_some(),"value":value}))
         }
         "host.storage.compareAndSet" => {
@@ -99,7 +99,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             } else {
                 Some(ctx.params.get("value").cloned().ok_or("missing value")?)
             };
-            Ok(json!(crate::plugin_storage::compare_and_set(
+            Ok(json!(crate::plugins::storage::compare_and_set(
                 &plugin_id,
                 &ctx.arg("scope")?,
                 &ctx.arg("key")?,
@@ -109,14 +109,14 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         }
         "host.storage.set" => {
             let value = ctx.params.get("value").cloned().ok_or("missing value")?;
-            crate::plugin_storage::set(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?, value)?;
+            crate::plugins::storage::set(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?, value)?;
             Ok(Value::Null)
         }
         "host.storage.delete" => {
-            crate::plugin_storage::delete(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
+            crate::plugins::storage::delete(&plugin_id, &ctx.arg("scope")?, &ctx.arg("key")?)?;
             Ok(Value::Null)
         }
-        "host.storage.keys" => Ok(json!(crate::plugin_storage::list_keys(
+        "host.storage.keys" => Ok(json!(crate::plugins::storage::list_keys(
             &plugin_id,
             &ctx.arg("scope")?
         )?)),
@@ -126,7 +126,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                 .rsplit('.')
                 .next()
                 .ok_or("missing secret operation")?;
-            crate::plugin_storage::secret_response(
+            crate::plugins::storage::secret_response(
                 &plugin_id,
                 &ctx.arg("scope")?,
                 &ctx.arg("key")?,
@@ -134,7 +134,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                 ctx.params["value"].as_str(),
             )
         }
-        "host.secret.available" => Ok(json!(crate::plugin_storage::secret_available())),
+        "host.secret.available" => Ok(json!(crate::plugins::storage::secret_available())),
         // Diagnostics only: no permission gate, capped and best effort.
         "host.error.report" => {
             let code = ctx.params.get("code").and_then(Value::as_str).unwrap_or("");
@@ -144,7 +144,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
                 .and_then(Value::as_str)
                 .ok_or("missing message")?;
             let detail = ctx.params.get("detail").and_then(Value::as_str);
-            crate::plugin_errors::report_limited(&plugin_id, code, message, detail);
+            crate::plugins::errors::report_limited(&plugin_id, code, message, detail);
             Ok(Value::Null)
         }
         "host.process.run" => {

@@ -3,7 +3,7 @@
 //! The signature covers the exact `manifest.json` bytes. The manifest carries a
 //! SHA-256 digest for every other file in the package, so verifying the
 //! signature and then every file proves the complete package was signed.
-use crate::plugin_host::{PluginManifest, PluginPublisher};
+use crate::plugins::host::{PluginManifest, PluginPublisher};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -270,8 +270,8 @@ mod tests {
             version: "1.0.0".into(),
             description: String::new(),
             icon: None,
-            runtime: crate::plugin_host::PluginRuntime::default(),
-            permissions: crate::plugin_host::PluginPermissions::default(),
+            runtime: crate::plugins::host::PluginRuntime::default(),
+            permissions: crate::plugins::host::PluginPermissions::default(),
             extensions: Value::Null,
             author: None,
             publisher: Some(publisher),

@@ -4,7 +4,7 @@
 //! dynamic decorations as `fiex-resource://<plugin-id>/<resource-id>`. Core
 //! validates the path, media type and SVG content at install time, and resolves
 //! the reference only when the namespace matches the decorating plugin.
-use crate::plugin_host::PluginManifest;
+use crate::plugins::host::PluginManifest;
 use serde_json::Value;
 use std::path::{Component, Path, PathBuf};
 

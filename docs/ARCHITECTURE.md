@@ -20,15 +20,29 @@ Fiex has one React frontend and one Rust library. Tauri commands form the bounda
 
 ## Native library
 
-- `files.rs`: entry metadata, directory listing, filename validation and text previews.
-- `tags.rs`: Finder tag data and macOS extended attributes.
-- `volumes.rs`: common locations, mounted/unmounted disks, device mounting and Trash discovery, with platform-specific implementations guarded by `cfg`.
-- `core/operations.rs`, `core/search.rs`, `remote.rs`, `usbfs.rs` and `core/terminals.rs` retain their focused domains.
-- `plugins/host.rs`, `plugins/installer.rs`, `plugins/permissions.rs`, `plugins/sandbox.rs` and `plugins/vfs.rs` own plugin lifecycle, installation, permissions, OS confinement and generic virtual paths.
-- Git, WebDAV, SMB, archive, checksum and Everything search implementations live in the separate `fiex-official-plugins` repository. Core contains no Git, archive, checksum or provider-specific commands; those features are delivered entirely by installed plugins.
-- `desktop.rs`: Tauri command adapters and application startup. Callers reference the owning native module directly; moved APIs have no compatibility re-exports.
+`src-tauri/src/lib.rs` declares real Rust module trees. It has no path-mounted modules, forwarding files or old-name compatibility exports. Native command names and serialized frontend payloads are independent of Rust module paths.
 
-The obsolete icon-size preference migration has been removed. PDF.js's `legacy/build` import is the upstream distribution used for WebView compatibility, not an old Fiex implementation.
+| Directory | Responsibility |
+| --- | --- |
+| `core/` | Local file operations, transfers, search, volumes, tags, recent items, terminals and drag sessions |
+| `desktop/` | Tauri adapters, windows, startup and scheduling |
+| `platform/` | OS proxy, drag and macOS window integration |
+| `plugins/events/` | Event contracts, matching, resolver registry, dispatch, scope preparation and common validation |
+| `plugins/resolvers/` | Info, Preview, Decorations, Context Menu, Search and filesystem resolution |
+| `plugins/resource/` | Resource snapshots, ref projection, scoped file access, file capabilities and operation teardown |
+| `plugins/security/` | Manifest/user permission decisions, prompts, grant storage and OS sandbox |
+| `plugins/host/` | Discovery, manifest validation, process lifecycle, transport and host RPC dispatch |
+| `plugins/net/` | HTTP request construction, response handles, bounded upload pipe, upload lifecycle and TCP |
+| `remote/` | Connection configuration, remote cache, reconciliation and synchronization |
+| `usbfs/` | Filesystem drivers and their transfer adapter |
+
+Core calls its event candidates `Resolver`; SDK implementations remain Providers. The event contract table defines the extension and collection policy once: merge (Info, Decorations, menus, Search), first supported (Preview, Hooks), or owner only (Toolbar, menu execution, connections). The router isolates resolver panics and validates each result before the feature collector sees it. Custom business RPC stays outside this event registry.
+
+Each feature resolver owns its business validation and collector. Info separates media probes from metadata formatting; Preview separates builtin rendering from plugin session lifecycle; filesystem resolution separates mount dispatch, entry validation and stream lifecycle. `resource/fs_access/` separates scope authorization, directory operations, read handles and transactional writes. One resource lifecycle function releases file, IPC and network handles on operation/task teardown.
+
+Resource projection creates refs for Core selections. Arbitrary business fields such as `path`, `source`, `destination` and `root` are no longer rewritten as a compatibility mechanism. The controlled filesystem API accepts refs; the host never derives authorization from a business string.
+
+Git, WebDAV, SMB, archive, checksum and Everything implementations live in `fiex-official-plugins`. Core contains the shared protocol, permission checks and IO brokers rather than provider-specific commands.
 
 ## Validation
 

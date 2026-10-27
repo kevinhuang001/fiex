@@ -4,8 +4,8 @@
 //! with `ignore::WalkBuilder`. Advanced indexed/semantic search belongs in a
 //! plugin through `extensions.search`.
 use crate::{
-    files::{entry, Entry},
-    ignores::IgnoreSet,
+    core::files::{entry, Entry},
+    core::ignores::IgnoreSet,
 };
 use ignore::WalkBuilder;
 use serde::Serialize;
@@ -80,8 +80,8 @@ impl SearchState {
             );
             truncated |= root_truncated;
             skipped += root_skipped;
-            let found = crate::plugin_search::resolve(
-                &crate::plugin_search::PluginSearchInput {
+            let found = crate::plugins::resolvers::search::resolve(
+                &crate::plugins::resolvers::search::PluginSearchInput {
                     query: query.into(),
                     root: root.clone(),
                     hidden,
@@ -133,8 +133,8 @@ impl SearchState {
             ticket,
             RESULT_LIMIT,
         );
-        let entries = crate::plugin_search::resolve(
-            &crate::plugin_search::PluginSearchInput {
+        let entries = crate::plugins::resolvers::search::resolve(
+            &crate::plugins::resolvers::search::PluginSearchInput {
                 query: query.into(),
                 root: root.into(),
                 hidden,
@@ -235,7 +235,7 @@ fn search_root(
 pub fn accessible_roots() -> Vec<String> {
     let home = dirs::home_dir().filter(|path| path.is_dir());
     let mut roots = Vec::new();
-    for location in crate::volumes::locations() {
+    for location in crate::core::volumes::locations() {
         if location.kind != "disk"
             || !location.mounted
             || location.usbfs

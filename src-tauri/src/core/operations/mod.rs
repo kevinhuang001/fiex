@@ -65,7 +65,7 @@ pub struct OperationResult {
     pub paths: Vec<String>,
     pub errors: Vec<String>,
     pub skipped: usize,
-    pub conflicts: Vec<crate::transfers::Conflict>,
+    pub conflicts: Vec<crate::core::transfers::Conflict>,
 }
 
 pub(crate) fn exists(path: &Path) -> bool {

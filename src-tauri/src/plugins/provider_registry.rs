@@ -142,10 +142,6 @@ pub fn supports(plugin_id: &str, operation: FsOperation) -> bool {
     get(plugin_id).is_some_and(|provider| provider.declares(operation))
 }
 
-pub fn declares_anything(plugin_id: &str) -> bool {
-    get(plugin_id).is_some_and(|provider| provider.reported)
-}
-
 /// Gate one outgoing method against the declaration. Non-file methods pass.
 pub fn authorize_method(plugin_id: &str, method: &str) -> Result<(), String> {
     let Some(operation) = FsOperation::from_method(method) else {

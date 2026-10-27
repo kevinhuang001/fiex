@@ -54,8 +54,8 @@ pub fn run_command(
         .get("command")
         .and_then(Value::as_str)
         .ok_or("missing command")?;
-    if !crate::plugin_permissions::valid_command(command)
-        || !crate::plugin_permissions::allowed_command(plugin_id, declared, command)?
+    if !crate::plugins::security::permissions::valid_command(command)
+        || !crate::plugins::security::permissions::allowed_command(plugin_id, declared, command)?
     {
         return Err("command was not approved by the user".into());
     }

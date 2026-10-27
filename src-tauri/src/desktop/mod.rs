@@ -35,10 +35,10 @@ pub(crate) use system::*;
 pub(crate) use volumes::*;
 
 use crate::{
-    drag_session::DragSessions,
-    operations::{OperationCancel, Operations},
-    recent,
-    search::SearchState,
+    core::drag_session::DragSessions,
+    core::operations::{OperationCancel, Operations},
+    core::recent,
+    core::search::SearchState,
 };
 use std::sync::atomic::Ordering;
 use tauri::Manager;
@@ -210,7 +210,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {
-                crate::mounts::forget_window(window.label());
+                crate::plugins::mounts::forget_window(window.label());
                 window
                     .state::<Watch>()
                     .lock()
@@ -230,15 +230,15 @@ pub fn run() {
             {
                 use tauri::Emitter;
                 let handle = app.handle().clone();
-                crate::plugin_task_events::set_sink(Box::new(move |event| {
+                crate::plugins::task_events::set_sink(Box::new(move |event| {
                     let _ = handle.emit("plugin-task", &event);
                 }));
                 let handle = app.handle().clone();
-                crate::plugin_permission_prompt::set_sink(Box::new(move |event| match event {
-                    crate::plugin_permission_prompt::PermissionPromptEvent::Requested(request) => {
+                crate::plugins::security::prompt::set_sink(Box::new(move |event| match event {
+                    crate::plugins::security::prompt::PermissionPromptEvent::Requested(request) => {
                         let _ = handle.emit("plugin-permission-request", &request);
                     }
-                    crate::plugin_permission_prompt::PermissionPromptEvent::Resolved { id } => {
+                    crate::plugins::security::prompt::PermissionPromptEvent::Resolved { id } => {
                         let _ = handle
                             .emit("plugin-permission-resolved", serde_json::json!({"id": id}));
                     }
@@ -248,11 +248,11 @@ pub fn run() {
             crate::ci_driver::start(app.handle().clone()).map_err(std::io::Error::other)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                crate::macos_material::configure(&window);
+                crate::platform::macos_material::configure(&window);
             }
             setup_tray(app.handle())?;
             std::thread::spawn(|| {
-                crate::plugin_host::global().start_enabled();
+                crate::plugins::host::global().start_enabled();
             });
             #[cfg(target_os = "windows")]
             if let Some(window) = app.get_webview_window("main") {
@@ -280,8 +280,8 @@ pub fn run() {
         .expect("Cannot start Fiex")
         .run(|_, event| {
             if matches!(event, tauri::RunEvent::Exit) {
-                crate::plugin_host::global().shutdown();
-                crate::plugin_vfs::cleanup_exports();
+                crate::plugins::host::global().shutdown();
+                crate::plugins::vfs::cleanup_exports();
             }
         });
 }

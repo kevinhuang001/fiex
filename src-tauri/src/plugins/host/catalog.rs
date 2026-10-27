@@ -81,7 +81,7 @@ pub(crate) fn discover() -> Vec<(PluginManifest, PathBuf)> {
                 continue;
             }
             if manifest.schema_version != 2
-                || (!crate::plugin_themes::is_theme(&manifest)
+                || (!crate::plugins::themes::is_theme(&manifest)
                     && manifest.runtime.protocol_version != plugin_sdk::PROTOCOL_VERSION)
                 || !valid_id(&manifest.id)
                 || manifest.name.len() > 128
@@ -184,14 +184,14 @@ pub(crate) fn catalog_matching(predicate: impl Fn(&PluginManifest) -> bool) -> V
         .filter(|(manifest, _)| predicate(manifest))
         .map(|(manifest, folder)| {
             let manifest = super::localize::manifest(manifest);
-            let backend =
-                crate::plugin_themes::is_theme(&manifest) || executable(&manifest, &folder).is_ok();
+            let backend = crate::plugins::themes::is_theme(&manifest)
+                || executable(&manifest, &folder).is_ok();
             let declared = declared(&manifest).unwrap_or_default();
-            let state =
-                crate::plugin_permissions::status(&manifest.id, &declared).unwrap_or_default(); // unreadable policy fails closed
-                                                                                                // `enabled` means the package may run. Individual capabilities may
-                                                                                                // be switched off; their operations ask again instead of
-                                                                                                // deactivating the whole plugin.
+            let state = crate::plugins::security::permissions::status(&manifest.id, &declared)
+                .unwrap_or_default(); // unreadable policy fails closed
+                                      // `enabled` means the package may run. Individual capabilities may
+                                      // be switched off; their operations ask again instead of
+                                      // deactivating the whole plugin.
             let active = state.approved && state.enabled;
             let requested = activation_requirements(&manifest).unwrap_or_default();
             let missing_commands = missing_commands(&requested.commands);
@@ -228,17 +228,17 @@ pub fn installed_manifests() -> Vec<(PluginManifest, PathBuf)> {
 pub fn exists(id: &str) -> bool {
     discover().iter().any(|(m, _)| m.id == id)
 }
-pub fn themes() -> Vec<crate::plugin_themes::Theme> {
+pub fn themes() -> Vec<crate::plugins::themes::Theme> {
     discover()
         .into_iter()
         .filter(|(manifest, _)| {
             activation_requirements(manifest).is_ok_and(|required| {
-                crate::plugin_permissions::status(&manifest.id, &required.permissions)
+                crate::plugins::security::permissions::status(&manifest.id, &required.permissions)
                     .is_ok_and(|state| state.approved && state.enabled)
             })
         })
         .flat_map(|(manifest, folder)| {
-            crate::plugin_themes::load(&manifest, &folder).unwrap_or_default()
+            crate::plugins::themes::load(&manifest, &folder).unwrap_or_default()
         })
         .collect()
 }

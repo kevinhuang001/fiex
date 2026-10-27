@@ -8,7 +8,7 @@
 
 use std::fs;
 
-use crate::fs_resolver::{mount_for_path, FsEntry};
+use crate::plugins::resolvers::fs::{mount_for_path, FsEntry};
 
 use super::{
     config::{check_cache_path, connection_for_path, local_for, navigation_path, rel_string},

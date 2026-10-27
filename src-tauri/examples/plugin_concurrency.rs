@@ -3,11 +3,11 @@
 //! The fixture method waits on a two-party barrier. If Core serialized plugin
 //! requests, the first call would block forever; with concurrent dispatch both
 //! calls meet and return.
-use fiex_lib::plugin_host;
+use fiex_lib::plugins::host as plugin_host;
 use serde_json::json;
 
 fn main() {
-    fiex_lib::plugin_sandbox::run_wrapper_if_requested();
+    fiex_lib::plugins::security::sandbox::run_wrapper_if_requested();
     let id = "org.fiex.mock";
     let (manifest, _) = plugin_host::installed_manifests()
         .into_iter()

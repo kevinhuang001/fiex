@@ -1,7 +1,7 @@
 //! Ref-only public file protocol. All host paths below this layer are Core
 //! implementation details and must never be accepted from a plugin payload.
 use super::{run, Actor, Running};
-use crate::plugin_permission_policy::Capability;
+use crate::plugins::security::policy::Capability;
 use serde_json::{json, Value};
 
 pub(super) fn intercept(
@@ -54,14 +54,14 @@ pub(super) fn intercept(
             snapshot.display
         } else {
             let path = scope.resolve_reference(reference)?;
-            if !crate::plugin_fs_access::is_directory(scope, &path)? {
+            if !crate::plugins::resource::fs_access::is_directory(scope, &path)? {
                 return Err("parent ref must be a directory".into());
             }
             path
         };
-        let child = if crate::mounts::handles(&parent) {
-            let uri = crate::mounts::parse(&parent)?;
-            crate::mounts::uri(
+        let child = if crate::plugins::mounts::handles(&parent) {
+            let uri = crate::plugins::mounts::parse(&parent)?;
+            crate::plugins::mounts::uri(
                 &uri.mount_id,
                 format!("{}/{}", uri.relative.trim_end_matches('/'), name).trim_start_matches('/'),
             )?
@@ -108,7 +108,7 @@ pub(super) fn metadata(value: &Value) -> Value {
         "extension":value["extension"],"mime":value["mime"],"size":value["size"],"modified":value["modified"]})
 }
 pub(super) fn listing(
-    scope: &crate::plugin_fs_access::Scope,
+    scope: &crate::plugins::resource::fs_access::Scope,
     parent: &Value,
     values: Value,
 ) -> Result<Value, String> {
@@ -118,11 +118,12 @@ pub(super) fn listing(
         let raw = value["path"]
             .as_str()
             .ok_or("entry missing internal path")?;
-        let display = if crate::mounts::handles(raw) || std::path::Path::new(raw).is_absolute() {
-            raw.to_string()
-        } else {
-            scope.path().join(raw).to_string_lossy().into_owned()
-        };
+        let display =
+            if crate::plugins::mounts::handles(raw) || std::path::Path::new(raw).is_absolute() {
+                raw.to_string()
+            } else {
+                scope.path().join(raw).to_string_lossy().into_owned()
+            };
         let metadata =
             serde_json::from_value(metadata(value)).map_err(|error| error.to_string())?;
         result.push(scope.issue_child(parent, &display, Some(metadata))?);

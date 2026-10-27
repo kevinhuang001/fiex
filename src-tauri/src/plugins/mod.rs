@@ -1,0 +1,21 @@
+//! Plugin lifecycle, services, resource security and event resolvers.
+pub mod cache;
+pub mod contracts;
+pub mod errors;
+pub mod events;
+pub mod host;
+pub mod installer;
+pub mod ipc;
+pub mod match_rules;
+pub mod mounts;
+pub mod net;
+pub mod provider_registry;
+pub mod resolvers;
+pub mod resource;
+pub mod resources;
+pub mod security;
+pub mod signing;
+pub mod storage;
+pub mod task_events;
+pub mod themes;
+pub mod vfs;

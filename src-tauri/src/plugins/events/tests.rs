@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn preview_skips_invalid_provider_and_stops_after_success() {
     let providers = vec![
-        Provider::builtin("invalid", 100),
-        Provider::builtin("working", 50),
-        Provider::builtin("unused", 0),
+        Resolver::builtin("invalid", 100),
+        Resolver::builtin("working", 50),
+        Resolver::builtin("unused", 0),
     ];
     let mut calls = Vec::new();
     let result = EventRouter::resolve(
@@ -40,8 +40,11 @@ fn resource_identity_is_not_an_operation_grant() {
     std::fs::write(&file, b"abc").unwrap();
     let resource = ResourceSnapshot::new(file.to_str().unwrap(), &file);
     let value = json!(resource.project("plugin", "session", true, false));
-    let mut operation =
-        crate::plugin_fs_access::Scope::selected(dir.path(), std::slice::from_ref(&file)).unwrap();
+    let mut operation = crate::plugins::resource::fs_access::Scope::selected(
+        dir.path(),
+        std::slice::from_ref(&file),
+    )
+    .unwrap();
     let other = operation.clone();
     operation.bind_resource(&value, Some(&file)).unwrap();
     assert!(operation.resolve_reference(&value["ref"]).is_ok());
@@ -64,8 +67,8 @@ fn explicit_open_actions_may_create_results_next_to_the_selection() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("selected.zip");
     std::fs::write(&file, b"x").unwrap();
-    let file = crate::plugin_fs_access::canonical_selection(&file).unwrap();
-    let folder = crate::plugin_fs_access::canonical_selection(dir.path()).unwrap();
+    let file = crate::plugins::resource::fs_access::canonical_selection(&file).unwrap();
+    let folder = crate::plugins::resource::fs_access::canonical_selection(dir.path()).unwrap();
     let declared = std::collections::BTreeSet::from([
         "files.create".to_string(),
         "folders.create".to_string(),
