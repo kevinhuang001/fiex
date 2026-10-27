@@ -37,6 +37,7 @@ export function useListing(
   const locationsRequest = useRef(0)
   const decorationRequest = useRef(0)
   const searchRequest = useRef(0)
+  const cancelQueue = useRef<Promise<unknown>>(Promise.resolve())
   useEffect(() => {
     syncDecorationIcons(decorations, iconOwner)
   }, [decorations, iconOwner])
@@ -200,9 +201,15 @@ export function useListing(
     }
   }, [enabled, path, pane, reload, virtualVolume])
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !path) return
     const generation = ++searchRequest.current
-    void call('cancel_search', { pane }).catch(() => {})
+    const cancel = () => {
+      cancelQueue.current = cancelQueue.current
+        .then(() => call('cancel_search', { pane }))
+        .catch(() => {})
+      return cancelQueue.current
+    }
+    const cancelled = cancel()
     if (!query.trim()) {
       setSearching(false)
       setSearchStats('')
@@ -214,33 +221,38 @@ export function useListing(
     setSelected([])
     setError('')
     const timer = setTimeout(() => {
-      void search(
-        pane,
-        globalSearch ? 'everywhere://' : path,
-        query,
-        prefs.hidden,
-        prefs.displayIgnore,
-        (b) => {
+      void cancelled
+        .then(() => {
           if (generation !== searchRequest.current) return
-          startTransition(() => setEntries((v) => [...v, ...b.entries]))
-          if (b.done) {
+          return search(
+            pane,
+            globalSearch ? 'everywhere://' : path,
+            query,
+            prefs.hidden,
+            prefs.displayIgnore,
+            (b) => {
+              if (generation !== searchRequest.current) return
+              startTransition(() => setEntries((v) => [...v, ...b.entries]))
+              if (b.done) {
+                setSearching(false)
+                setSearchStats(
+                  `${b.elapsedMs} ms${b.truncated ? t(' · 已达到 500 项上限，请缩小范围') : ''}${b.skipped ? t(' · {0} 个位置无法访问', b.skipped) : ''}`,
+                )
+              }
+            },
+          )
+        })
+        .catch((e) => {
+          if (generation === searchRequest.current) {
+            setError(String(e))
             setSearching(false)
-            setSearchStats(
-              `${b.elapsedMs} ms${b.truncated ? t(' · 已达到 500 项上限，请缩小范围') : ''}${b.skipped ? t(' · {0} 个位置无法访问', b.skipped) : ''}`,
-            )
           }
-        },
-      ).catch((e) => {
-        if (generation === searchRequest.current) {
-          setError(String(e))
-          setSearching(false)
-        }
-      })
+        })
     }, 200)
     return () => {
       clearTimeout(timer)
       ++searchRequest.current
-      void call('cancel_search', { pane }).catch(() => {})
+      void cancel()
     }
   }, [enabled, pane, query, globalSearch, path, prefs.hidden, prefs.displayIgnore, refresh])
   useEffect(() => {

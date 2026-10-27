@@ -1,6 +1,6 @@
 .workspace-bar {
   position: relative;
-  z-index: 30;
+  z-index: 5;
   flex: 0 0 auto;
   border-top: 1px solid var(--line);
   background: var(--surface);

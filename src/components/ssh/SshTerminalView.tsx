@@ -12,11 +12,11 @@ import { themeSnapshot } from '@/lib/themes'
 
 import { terminalEvents, type SshEvent, type SessionStatus } from './sessionEvents'
 
-function terminalTheme() {
+function terminalTheme(color = '') {
   const { mode, tokens } = themeSnapshot()
   return {
     background: tokens.surface || (mode === 'dark' ? '#1e1e1e' : '#ffffff'),
-    foreground: tokens.text || (mode === 'dark' ? '#e6e6e6' : '#1f2328'),
+    foreground: color || tokens.text || (mode === 'dark' ? '#e6e6e6' : '#1f2328'),
     cursor: tokens.accent || (mode === 'dark' ? '#7aa2f7' : '#2f6fed'),
     cursorAccent: tokens.surface || (mode === 'dark' ? '#1e1e1e' : '#ffffff'),
     selectionBackground: tokens.selected || (mode === 'dark' ? '#3b4261' : '#cfe0ff'),
@@ -37,6 +37,25 @@ function terminalTheme() {
     brightCyan: '#56d4dd',
     brightWhite: '#ffffff',
   }
+}
+
+function terminalFontFamily(terminalFont?: string) {
+  return [
+    terminalFont,
+    'JetBrainsMono Nerd Font',
+    'MesloLGS NF',
+    'Hack Nerd Font',
+    'FiraCode Nerd Font',
+    'JetBrains Mono',
+    'SFMono-Regular',
+    'Menlo',
+    'Consolas',
+    'Liberation Mono',
+    'monospace',
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => (value === 'monospace' ? value : `"${value}"`))
+    .join(', ')
 }
 
 /** Tiny interactive shell used only by the web demo. It never executes input. */
@@ -119,6 +138,7 @@ export function TerminalView({
   name,
   terminalFont,
   terminalFontSize,
+  terminalColor,
 }: {
   connectionId?: string
   cwd?: string
@@ -127,8 +147,13 @@ export function TerminalView({
   /** A system font family chosen in Settings; Nerd Font names are supported. */
   terminalFont?: string
   terminalFontSize?: number
+  terminalColor?: string
 }) {
   const host = useRef<HTMLDivElement>(null)
+  const terminalRef = useRef<Terminal | null>(null)
+  const resizeRef = useRef<(() => void) | null>(null)
+  const colorRef = useRef(terminalColor)
+  colorRef.current = terminalColor
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [error, setError] = useState('')
@@ -142,26 +167,11 @@ export function TerminalView({
       allowProposedApi: true,
       // A steady cursor avoids the unequal, very fast blink some WebViews show.
       cursorBlink: false,
-      fontFamily: [
-        terminalFont,
-        'JetBrainsMono Nerd Font',
-        'MesloLGS NF',
-        'Hack Nerd Font',
-        'FiraCode Nerd Font',
-        'JetBrains Mono',
-        'SFMono-Regular',
-        'Menlo',
-        'Consolas',
-        'Liberation Mono',
-        'monospace',
-      ]
-        .filter((value): value is string => Boolean(value))
-        .map((value) => (value === 'monospace' ? value : `"${value}"`))
-        .join(', '),
+      fontFamily: terminalFontFamily(terminalFont),
       fontSize: terminalFontSize ?? 13,
       lineHeight: 1.15,
       scrollback: 20000,
-      theme: terminalTheme(),
+      theme: terminalTheme(colorRef.current),
       windowsPty: { backend: 'conpty' },
     })
     const fit = new FitAddon()
@@ -176,11 +186,12 @@ export function TerminalView({
     )
     terminal.unicode.activeVersion = '11'
     terminal.open(element)
+    terminalRef.current = terminal
     fit.fit()
     terminal.focus()
 
     const applyTheme = () => {
-      terminal.options.theme = terminalTheme()
+      terminal.options.theme = terminalTheme(colorRef.current)
     }
     window.addEventListener('fiex:theme-changed', applyTheme)
 
@@ -204,6 +215,7 @@ export function TerminalView({
           () => {},
         )
     }
+    resizeRef.current = resize
     const observer = new ResizeObserver(() => requestAnimationFrame(resize))
     observer.observe(element)
     terminal.attachCustomKeyEventHandler((event) => {
@@ -233,6 +245,8 @@ export function TerminalView({
         observer.disconnect()
         window.removeEventListener('fiex:theme-changed', applyTheme)
         disposeShell()
+        terminalRef.current = null
+        resizeRef.current = null
         terminal.dispose()
       }
     }
@@ -280,9 +294,21 @@ export function TerminalView({
       observer.disconnect()
       window.removeEventListener('fiex:theme-changed', applyTheme)
       if (sessionId) void call('ssh_close', { sessionId }).catch(() => {})
+      terminalRef.current = null
+      resizeRef.current = null
       terminal.dispose()
     }
   }, [connectionId, cwd, shell, attempt])
+
+  useEffect(() => {
+    const terminal = terminalRef.current
+    if (!terminal) return
+    terminal.options.fontFamily = terminalFontFamily(terminalFont)
+    terminal.options.fontSize = terminalFontSize ?? 13
+    terminal.options.theme = terminalTheme(terminalColor)
+    const frame = requestAnimationFrame(() => resizeRef.current?.())
+    return () => cancelAnimationFrame(frame)
+  }, [terminalFont, terminalFontSize, terminalColor])
 
   return (
     <div className="ssh-terminal-view" data-connection={connectionId}>

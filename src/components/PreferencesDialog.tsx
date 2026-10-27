@@ -156,8 +156,12 @@ export function PreferencesDialog({
           </aside>
 
           <section className="settings-content">
-            {section === 'appearance' && <AppearanceSettings prefs={prefs} update={update} />}
-            {section === 'behavior' && <BehaviorSettings prefs={prefs} update={update} />}
+            {section === 'appearance' && (
+              <>
+                <AppearanceSettings prefs={prefs} update={update} />
+                <BehaviorSettings prefs={prefs} update={update} />
+              </>
+            )}
 
             {section === 'shortcuts' && <ShortcutSettings prefs={prefs} update={update} />}
 

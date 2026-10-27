@@ -578,6 +578,7 @@
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  margin-left: auto;
   opacity: 0.55;
   transition:
     opacity 120ms ease,

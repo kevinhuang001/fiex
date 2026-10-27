@@ -4,14 +4,13 @@ import {
   Keyboard,
   Palette,
   PanelLeft,
-  Rocket,
   Tags,
   TerminalSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { t } from '@/i18n'
 export type SectionId =
-  'appearance' | 'behavior' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about'
+  'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about'
 
 interface Section {
   id: SectionId
@@ -25,20 +24,11 @@ export const sections: Section[] = [
   {
     id: 'appearance',
     get label() {
-      return t('外观')
+      return t('通用')
     },
     icon: Palette,
     color: '#3b82f6',
-    keywords: ['theme', 'dark', 'light', '主题', '深色', '浅色', '图标'],
-  },
-  {
-    id: 'behavior',
-    get label() {
-      return t('启动与显示')
-    },
-    icon: Rocket,
-    color: '#14b8a6',
-    keywords: ['behavior', 'startup', '启动', '隐藏文件', '标签页', '行为'],
+    keywords: ['theme', 'dark', 'light', '主题', '深色', '浅色', '图标', '启动', '隐藏文件'],
   },
   {
     id: 'shortcuts',
@@ -114,21 +104,21 @@ export const searchEntries: SearchEntry[] = [
     keywords: ['dark', 'light', '深色', '浅色', '跟随系统'],
   },
   {
-    section: 'behavior',
+    section: 'appearance',
     get label() {
       return t('显示隐藏文件')
     },
     keywords: ['hidden', '隐藏文件', '.ds_store'],
   },
   {
-    section: 'behavior',
+    section: 'appearance',
     get label() {
       return t('启动页')
     },
     keywords: ['start', '启动', '首页'],
   },
   {
-    section: 'behavior',
+    section: 'appearance',
     get label() {
       return t('启动时恢复标签页')
     },

@@ -22,6 +22,15 @@ export function WorkspaceBar({
   const itemsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const main = panel.current?.parentElement
+    if (!main) return
+    main.style.setProperty('--workspace-height', `${height}px`)
+    return () => {
+      main.style.removeProperty('--workspace-height')
+    }
+  }, [open, height])
+
+  useEffect(() => {
     const handle = panel.current?.querySelector('.workspace-resizer')
     if (!handle) return
     let bottom = 0

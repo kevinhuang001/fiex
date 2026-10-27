@@ -130,6 +130,7 @@ export interface Preferences {
   fontSize: number
   terminalFont: string
   terminalFontSize: number
+  terminalColor: string
   startPage: StartPage
   displayIgnore: string[]
   sidebarOrder: SidebarSection[]

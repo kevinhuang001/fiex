@@ -252,16 +252,53 @@ test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
     localStorage.setItem(key, JSON.stringify({ ...prefs, terminal: 'builtin' }))
   })
   await page.reload()
+  const contentHeight = await page.locator('.pane-main').evaluate((element) => element.clientHeight)
   await page.getByRole('button', { name: 'Open in Terminal' }).click()
   await expect(page.locator('.terminal-panel')).toBeVisible()
+  expect(await page.locator('.pane-main').evaluate((element) => element.clientHeight)).toBe(
+    contentHeight,
+  )
   await expect(page.locator('.terminal-panel-tab')).toHaveCount(1)
   await expect(page.locator('.terminal-panel')).toContainText('Fiex 终端')
+  const resizer = await page.locator('.terminal-panel-resizer').boundingBox()
+  if (!resizer) throw new Error('terminal resizer is missing')
+  await page.mouse.move(resizer.x + 20, resizer.y + 3)
+  await page.mouse.down()
+  await page.mouse.move(resizer.x + 20, resizer.y - 45, { steps: 4 })
+  await page.mouse.up()
+  expect(await page.locator('.pane-main').evaluate((element) => element.clientHeight)).toBe(
+    contentHeight,
+  )
+  await page.getByRole('button', { name: '终端设置' }).click()
+  const settings = page.getByRole('group', { name: '终端设置' })
+  await settings.getByRole('slider').fill('17')
+  await settings.getByLabel('字体颜色').fill('#55aaff')
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('fiex:preferences') || '{}').terminalFontSize,
+      ),
+    )
+    .toBe(17)
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('fiex:preferences') || '{}').terminalColor,
+      ),
+    )
+    .toBe('#55aaff')
+  await settings.getByRole('button', { name: '跟随主题' }).click()
+  await page.getByRole('button', { name: '终端设置' }).click()
   await page.getByRole('button', { name: '新建终端' }).click()
   await page.getByRole('menuitem', { name: 'bash' }).click()
   await expect(page.locator('.terminal-panel-tab')).toHaveCount(2)
   await page.getByRole('button', { name: '收起终端' }).click()
   await expect(page.locator('.terminal-panel')).toBeHidden()
   await page.getByRole('button', { name: 'Open in Terminal' }).click()
+  await expect(page.locator('.terminal-panel')).toBeVisible()
+  await page.getByRole('button', { name: '打开终端' }).click()
+  await expect(page.locator('.terminal-panel')).toBeHidden()
+  await page.getByRole('button', { name: '打开终端' }).click()
   await expect(page.locator('.terminal-panel')).toBeVisible()
 })
 
@@ -428,7 +465,7 @@ test('settings sections keep preferences and release shortcut recording on exit'
   await page.getByRole('button', { name: '设置', exact: true }).click()
   await page.getByRole('button', { name: '快捷键', exact: true }).click()
   await page.getByRole('button', { name: '设置 复制 快捷键', exact: true }).first().click()
-  await page.getByRole('button', { name: '外观', exact: true }).click()
+  await page.getByRole('button', { name: '通用', exact: true }).click()
   await page.getByRole('button', { name: '深色', exact: true }).click()
   await page.getByRole('button', { name: '侧边栏', exact: true }).click()
   const desktop = page.getByRole('checkbox', { name: '显示桌面', exact: true })

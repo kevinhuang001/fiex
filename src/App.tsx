@@ -174,6 +174,7 @@ export default function App() {
                 connectionId={view.terminal}
                 terminalFont={app.prefs.terminalFont}
                 terminalFontSize={app.prefs.terminalFontSize}
+                terminalColor={app.prefs.terminalColor}
                 name={
                   app.left.connections.find((connection) => connection.id === view.terminal)
                     ?.name || 'SSH'
@@ -240,6 +241,8 @@ export default function App() {
         <TerminalPanel
           terminalFont={app.prefs.terminalFont}
           terminalFontSize={app.prefs.terminalFontSize}
+          terminalColor={app.prefs.terminalColor}
+          onSettingsChange={app.update}
         />
         {!fullView && (
           <WorkspaceBar

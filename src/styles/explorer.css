@@ -1291,12 +1291,17 @@ body.dragging-toolbar {
 
 /* Integrated terminal panel (local shell / SSH-style PTY). */
 .terminal-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(28px + var(--workspace-height, 0px));
+  z-index: 20;
   display: flex;
-  flex: 0 0 auto;
   min-height: 120px;
   flex-direction: column;
   border-top: 1px solid var(--line);
   background: var(--surface);
+  box-shadow: 0 -12px 36px color-mix(in srgb, var(--text) 12%, transparent);
 }
 .terminal-panel.closed {
   display: none;
@@ -1455,6 +1460,58 @@ body.dragging-toolbar {
 
 .terminal-shell-picker {
   position: relative;
+}
+.terminal-settings-picker {
+  position: relative;
+}
+.terminal-settings-menu {
+  position: absolute;
+  right: 0;
+  top: 28px;
+  z-index: 30;
+  display: grid;
+  width: 240px;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.terminal-settings-menu label {
+  display: grid;
+  gap: 5px;
+  color: var(--text);
+  font-size: 11px;
+}
+.terminal-settings-menu select,
+.terminal-settings-menu input[type='range'] {
+  width: 100%;
+}
+.terminal-settings-menu select {
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--canvas);
+  color: var(--text);
+}
+.terminal-color-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.terminal-color-control input {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.terminal-panel-actions .terminal-color-control button {
+  width: auto;
+  padding: 0 7px;
+  font-size: 11px;
 }
 .terminal-shell-menu {
   position: absolute;

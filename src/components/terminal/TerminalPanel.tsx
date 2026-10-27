@@ -1,9 +1,10 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, Plus } from 'lucide-react'
+import { ChevronDown, Plus, Settings2 } from 'lucide-react'
 import { TerminalView } from '@/components/ssh/SshTerminalView'
 import { TerminalTabs } from './TerminalTabs'
 import { call } from '@/lib/api'
+import type { Preferences } from '@/lib/types'
 
 interface TerminalTab {
   id: string
@@ -24,9 +25,13 @@ interface ShellChoice {
 export function TerminalPanel({
   terminalFont,
   terminalFontSize,
+  terminalColor,
+  onSettingsChange,
 }: {
   terminalFont?: string
   terminalFontSize?: number
+  terminalColor?: string
+  onSettingsChange: (patch: Partial<Preferences>) => void
 }) {
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [active, setActive] = useState('')
@@ -34,10 +39,19 @@ export function TerminalPanel({
   const [height, setHeight] = useState(260)
   const [shells, setShells] = useState<ShellChoice[]>([])
   const [shellMenu, setShellMenu] = useState(false)
+  const [settingsMenu, setSettingsMenu] = useState(false)
+  const [fonts, setFonts] = useState<string[]>([])
   const lastCwd = useRef('')
   const nextNumber = useRef(1)
   const panel = useRef<HTMLElement>(null)
   const shellMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!settingsMenu || fonts.length) return
+    void call<string[]>('system_fonts')
+      .then((items) => setFonts(Array.isArray(items) ? items : []))
+      .catch(() => {})
+  }, [settingsMenu, fonts.length])
 
   useEffect(() => {
     void call<ShellChoice[]>('detect_shells')
@@ -45,13 +59,16 @@ export function TerminalPanel({
       .catch(() => {})
   }, [])
   useEffect(() => {
-    if (!shellMenu) return
+    if (!shellMenu && !settingsMenu) return
     const close = (event: MouseEvent) => {
-      if (!shellMenuRef.current?.contains(event.target as Node)) setShellMenu(false)
+      if (!shellMenuRef.current?.contains(event.target as Node)) {
+        setShellMenu(false)
+        setSettingsMenu(false)
+      }
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
-  }, [shellMenu])
+  }, [shellMenu, settingsMenu])
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -77,7 +94,9 @@ export function TerminalPanel({
       const cwd = detail?.cwd || lastCwd.current
       if (cwd) lastCwd.current = cwd
       if (tabs.length) {
-        setOpen(true)
+        setOpen((value) => !value)
+        setShellMenu(false)
+        setSettingsMenu(false)
         if (!active || !tabs.some((tab) => tab.id === active)) setActive(tabs[tabs.length - 1].id)
         return
       }
@@ -174,7 +193,10 @@ export function TerminalPanel({
               title={t('新建终端')}
               aria-label={t('新建终端')}
               aria-expanded={shellMenu}
-              onClick={() => setShellMenu((value) => !value)}
+              onClick={() => {
+                setSettingsMenu(false)
+                setShellMenu((value) => !value)
+              }}
             >
               <Plus size={14} />
             </button>
@@ -194,11 +216,77 @@ export function TerminalPanel({
               </div>
             )}
           </div>
+          <div className="terminal-settings-picker">
+            <button
+              type="button"
+              title={t('终端设置')}
+              aria-label={t('终端设置')}
+              aria-expanded={settingsMenu}
+              onClick={() => {
+                setShellMenu(false)
+                setSettingsMenu((value) => !value)
+              }}
+            >
+              <Settings2 size={14} />
+            </button>
+            {settingsMenu && (
+              <div className="terminal-settings-menu" role="group" aria-label={t('终端设置')}>
+                <label>
+                  <span>{t('终端字体')}</span>
+                  <select
+                    value={terminalFont || ''}
+                    onChange={(event) => onSettingsChange({ terminalFont: event.target.value })}
+                  >
+                    <option value="">{t('Fiex 默认（含 Nerd Font 回退）')}</option>
+                    {terminalFont && !fonts.includes(terminalFont) && (
+                      <option value={terminalFont}>{terminalFont}</option>
+                    )}
+                    {fonts.map((font) => (
+                      <option key={font} value={font}>
+                        {font}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>
+                    {t('终端字号')} · {terminalFontSize ?? 13}px
+                  </span>
+                  <input
+                    type="range"
+                    min="9"
+                    max="24"
+                    value={terminalFontSize ?? 13}
+                    onChange={(event) =>
+                      onSettingsChange({ terminalFontSize: Number(event.target.value) })
+                    }
+                  />
+                </label>
+                <label>
+                  <span>{t('字体颜色')}</span>
+                  <span className="terminal-color-control">
+                    <input
+                      type="color"
+                      aria-label={t('字体颜色')}
+                      value={terminalColor || '#e6e6e6'}
+                      onChange={(event) => onSettingsChange({ terminalColor: event.target.value })}
+                    />
+                    <button type="button" onClick={() => onSettingsChange({ terminalColor: '' })}>
+                      {t('跟随主题')}
+                    </button>
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             title={t('收起终端')}
             aria-label={t('收起终端')}
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              setOpen(false)
+              setSettingsMenu(false)
+            }}
           >
             <ChevronDown size={14} />
           </button>
@@ -212,6 +300,7 @@ export function TerminalPanel({
               shell={tab.shell}
               terminalFont={terminalFont}
               terminalFontSize={terminalFontSize}
+              terminalColor={terminalColor}
               name={t('终端 {0}{1}', tab.number, tab.shellName ? ` · ${tab.shellName}` : '')}
             />
           </div>
