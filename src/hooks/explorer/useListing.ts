@@ -1,10 +1,10 @@
+import { useEntryDecorations } from './useEntryDecorations'
 import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
-import { clearDecorationIcons, syncDecorationIcons } from '@/lib/decorationIcons'
 import { listDirectory } from '@/lib/listing'
-import type { Entry, EntryDecoration, Location, Preferences, RemoteConnection } from '@/lib/types'
+import type { Entry, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
 /** Everything a pane lists: entries, decorations, locations, connections,
@@ -20,7 +20,6 @@ export function useListing(
   const { path, query, globalSearch, history, navigate, setSelected, setRenaming, setError } = nav
   const [locations, setLocations] = useState<Location[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
-  const [decorations, setDecorations] = useState<Record<string, EntryDecoration>>({})
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
   const [directoryReadOnly, setDirectoryReadOnly] = useState(false)
   const [virtualVolume, setVirtualVolume] = useState(false)
@@ -30,18 +29,13 @@ export function useListing(
   const [searchStats, setSearchStats] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
+  const decorations = useEntryDecorations({ entries, path, enabled, query, refresh })
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
-  const [iconOwner] = useState(() => crypto.randomUUID())
   const request = useRef(0)
   const locationsRequest = useRef(0)
-  const decorationRequest = useRef(0)
   const searchRequest = useRef(0)
   const cancelQueue = useRef<Promise<unknown>>(Promise.resolve())
-  useEffect(() => {
-    syncDecorationIcons(decorations, iconOwner)
-  }, [decorations, iconOwner])
-  useEffect(() => () => clearDecorationIcons(iconOwner), [iconOwner])
   const reload = useCallback(() => setRefresh((v) => v + 1), [getLocale()])
   useEffect(() => {
     if (!native || !enabled) return
@@ -306,36 +300,6 @@ export function useListing(
     if (!enabled) return
     void refreshConnections()
   }, [enabled, refreshConnections])
-  useEffect(() => {
-    if (!enabled || query || !path || entries.length === 0) {
-      setDecorations({})
-      return
-    }
-    const generation = ++decorationRequest.current
-    const timer = window.setTimeout(() => {
-      void call<EntryDecoration[]>('plugin_decorations', {
-        directory: path,
-        entries: entries.map((entry) => ({
-          path: entry.path,
-          name: entry.name,
-          isDir: entry.isDir,
-          extension: entry.extension,
-          mime: entry.mime,
-        })),
-      })
-        .then((values) => {
-          if (generation !== decorationRequest.current) return
-          setDecorations(Object.fromEntries(values.map((value) => [value.path, value])))
-        })
-        .catch(() => {
-          if (generation === decorationRequest.current) setDecorations({})
-        })
-    }, 120)
-    return () => {
-      window.clearTimeout(timer)
-      ++decorationRequest.current
-    }
-  }, [enabled, path, entries, query, refresh])
   return {
     entries: visibleEntries,
     decorations,

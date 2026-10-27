@@ -3,6 +3,7 @@ import type { AppController } from '@/hooks/useAppController'
 import type { useMenuPosition } from '@/lib/menuPosition'
 
 export interface ContextAction {
+  id?: string
   disabled?: boolean
   danger?: boolean
   label: string
@@ -11,6 +12,7 @@ export interface ContextAction {
   action: () => void
 }
 export interface ContextSubmenu {
+  id?: string
   disabled?: boolean
   label: string
   icon: ReactNode
@@ -50,4 +52,18 @@ export type ContextMenuProps = Pick<
 /** Everything needed to build the item list; menu is known to be open. */
 export type ContextItemsProps = Omit<ContextMenuProps, 'setMenu' | 'menu'> & {
   menu: NonNullable<AppController['menu']>
+}
+
+export type ContextMenuProviderContext = ContextItemsProps & {
+  /** Clicked entry, or the whole selection when it contains the clicked entry. */
+  paths: string[]
+  multiple: boolean
+}
+
+export interface ContextMenuProvider {
+  id: string
+  order: number
+  placement?: 'tail'
+  matches: (context: ContextMenuProviderContext) => boolean
+  resolve: (context: ContextMenuProviderContext) => ContextItem[]
 }

@@ -87,6 +87,12 @@ export interface ConflictResolution {
   action: ConflictAction
 }
 export interface DecorationBadge {
+  /** Trusted local providers may request the existing status presentation.
+   * Native plugin decoding strips these optional fields. */
+  dot?: boolean
+  status?: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | 'uploaded'
+  icon?: 'cloud-check' | 'cloud-download' | 'cloud-upload' | 'pin'
+
   text: string
   color: string
   tooltip?: string
