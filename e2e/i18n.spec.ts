@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test('language changes apply on confirmation and persist after reload', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
-  await page.getByRole('button', { name: '语言 / Language', exact: true }).click()
+  await page.getByRole('button', { name: '语言', exact: true }).click()
   await page.getByRole('menuitemradio', { name: 'English', exact: true }).click()
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
   await page.getByRole('button', { name: '确认', exact: true }).click()

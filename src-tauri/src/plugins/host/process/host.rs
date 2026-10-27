@@ -16,8 +16,23 @@ struct Instance {
 #[derive(Default)]
 pub struct PluginHost {
     children: Mutex<HashMap<String, Arc<Instance>>>,
+    /// One startup gate per plugin. Several Git/task RPCs can arrive before
+    /// the first process is inserted; without this they all pass the empty
+    /// check and spawn a short-lived duplicate process.
+    start_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
 }
 impl PluginHost {
+    fn start_gate(&self, id: &str) -> Result<Arc<Mutex<()>>, String> {
+        let mut gates = self
+            .start_locks
+            .lock()
+            .map_err(|_| "plugin startup lock poisoned")?;
+        Ok(gates
+            .entry(id.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone())
+    }
+
     pub fn stop(&self, id: &str) {
         if let Ok(mut processes) = self.children.lock() {
             if let Some(instance) = processes.remove(id) {
@@ -131,6 +146,16 @@ impl PluginHost {
         {
             return Ok(());
         }
+        let gate = self.start_gate(plugin_id)?;
+        let _starting = gate.lock().map_err(|_| "plugin startup lock poisoned")?;
+        if self
+            .children
+            .lock()
+            .map_err(|_| "plugin host lock poisoned")?
+            .contains_key(plugin_id)
+        {
+            return Ok(());
+        }
         let (manifest, directory) = discover()
             .into_iter()
             .find(|(manifest, _)| manifest.id == plugin_id)
@@ -139,14 +164,10 @@ impl PluginHost {
         // Process creation and signature verification can be slow. Do them
         // outside the host lock so a slow plugin never blocks other providers.
         let instance = Self::spawn_instance(plugin_id, &manifest, &directory, declared)?;
-        let mut children = self
-            .children
+        self.children
             .lock()
-            .map_err(|_| "plugin host lock poisoned")?;
-        if children.contains_key(plugin_id) {
-            return Ok(());
-        }
-        children.insert(plugin_id.to_string(), instance);
+            .map_err(|_| "plugin host lock poisoned")?
+            .insert(plugin_id.to_string(), instance);
         Ok(())
     }
     /// Start every approved, enabled native plugin after app startup. The
@@ -337,16 +358,23 @@ impl PluginHost {
         let instance = if let Some(instance) = existing {
             instance
         } else {
-            // Never hold the host lock across process creation.
-            let created = Self::spawn_instance(plugin_id, &manifest, &dir, declared)?;
-            let mut guard = self
+            let gate = self.start_gate(plugin_id)?;
+            let _starting = gate.lock().map_err(|_| "plugin startup lock poisoned")?;
+            let existing = self
                 .children
                 .lock()
-                .map_err(|_| "plugin host lock poisoned")?;
-            if let Some(instance) = guard.get(plugin_id) {
-                instance.clone()
+                .map_err(|_| "plugin host lock poisoned")?
+                .get(plugin_id)
+                .cloned();
+            if let Some(instance) = existing {
+                instance
             } else {
-                guard.insert(plugin_id.to_string(), created.clone());
+                // Never hold the host lock across process creation.
+                let created = Self::spawn_instance(plugin_id, &manifest, &dir, declared)?;
+                self.children
+                    .lock()
+                    .map_err(|_| "plugin host lock poisoned")?
+                    .insert(plugin_id.to_string(), created.clone());
                 created
             }
         };

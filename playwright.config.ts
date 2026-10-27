@@ -2,6 +2,9 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: 'e2e',
   fullyParallel: true,
+  // The demo mutates shared fixtures; parallel workers make timeout-based
+  // assertions flaky on CI. Keep the suite deterministic in CI.
+  workers: process.env.CI ? 1 : undefined,
   use: {
     baseURL: 'http://127.0.0.1:1420',
     viewport: { width: 1200, height: 780 },

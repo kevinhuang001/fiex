@@ -363,7 +363,7 @@ test('settings are custom controls and theme persists', async ({ page }) => {
   await page.getByRole('button', { name: '设置', exact: true }).last().click()
   await page.getByRole('button', { name: '深色', exact: true }).click()
   await expect(page.locator('html')).not.toHaveClass('dark')
-  await page.getByRole('button', { name: '启动与显示', exact: true }).click()
+  await page.getByRole('button', { name: '通用', exact: true }).click()
   await page.getByRole('switch', { name: '显示隐藏文件' }).click()
   await expect(page.getByRole('switch', { name: '显示隐藏文件' })).toHaveAttribute(
     'aria-checked',
@@ -789,6 +789,7 @@ test('activation reviews grouped permissions and grants nothing when cancelled',
   await row.getByRole('switch').click()
   const reopened = page.getByRole('dialog', { name: '权限请求' })
   await reopened.getByRole('button', { name: '继续', exact: true }).click()
+  await reopened.getByRole('button', { name: '继续', exact: true }).click()
   await expect(reopened.getByRole('checkbox', { name: 'github.com', exact: true })).toBeChecked()
   await reopened.getByRole('button', { name: '继续', exact: true }).click()
   await expect(reopened.getByRole('checkbox', { name: 'git', exact: true })).toBeChecked()
@@ -808,6 +809,7 @@ test('activation can deselect a permission and target before activating', async 
   const read = sheet.getByRole('checkbox', { name: '读取文件', exact: true })
   await expect(read).toBeChecked()
   await read.uncheck()
+  await sheet.getByRole('button', { name: '继续', exact: true }).click()
   await sheet.getByRole('button', { name: '继续', exact: true }).click()
   await sheet.getByRole('checkbox', { name: 'github.com', exact: true }).uncheck()
   await sheet.getByRole('button', { name: '继续', exact: true }).click()
