@@ -7,7 +7,6 @@ import {
   demoRemoteWarnings,
   ignored,
   item,
-  repoFor,
   root,
 } from '../data'
 import { notHandled, state } from './shared'
@@ -169,8 +168,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
     case 'create_entry': {
       const path = join(a.path as string, a.name as string)
       if (state.entries.some((e) => e.path === path)) throw new Error('同名项目已存在')
-      state.entries.push(item(path, a.folder as boolean))
-      if (!a.folder && repoFor(path)) demoChanges[path] = '??'
+      state.entries.push(item(path, true))
       return path
     }
     case 'rename_entry': {

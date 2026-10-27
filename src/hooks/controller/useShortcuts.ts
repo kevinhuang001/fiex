@@ -60,7 +60,7 @@ export function useShortcuts({
   clipboard: { paths: string[]; moving: boolean } | null
   transfer: Transfer
   undo: () => void
-  create: (folder: boolean) => Promise<void>
+  create: () => Promise<void>
   newWorkspaceTab: () => void
   closeWorkspaceTab: (index: number) => void
   duplicate: () => void
@@ -100,10 +100,7 @@ export function useShortcuts({
       },
       undo,
       newFolder: () => {
-        void create(true)
-      },
-      newFile: () => {
-        void create(false)
+        void create()
       },
       newTab: newWorkspaceTab,
       closeTab: () => closeWorkspaceTab(left.tab),

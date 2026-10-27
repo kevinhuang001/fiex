@@ -167,37 +167,28 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
 pub(crate) async fn create_entry(
     path: String,
     name: String,
-    folder: bool,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
     if !crate::plugin_vfs::handles(&path) {
         crate::mounts::reject_local(&path)?;
     }
-    // A stale menu or toolbar must not create inside a provider that never
-    // declared `mkdir`/`write` or a node that narrowed them away.
-    crate::plugin_file_capabilities::require(
-        &path,
-        if folder {
-            crate::plugin_providers::FsOperation::Mkdir
-        } else {
-            crate::plugin_providers::FsOperation::Write
-        },
-    )?;
+    // Only folders: the protocol has no "create an empty file by name" op.
+    crate::plugin_file_capabilities::require(&path, crate::plugin_providers::FsOperation::Mkdir)?;
     if let Some(route) = crate::usbfs::route(&path) {
-        crate::usbfs::create(&route, &name, folder)?;
+        crate::usbfs::create(&route, &name, true)?;
         return Ok(format!("{}/{}", path.trim_end_matches('/'), name));
     }
     if remote::is_remote(&path) {
-        return remote::create(&path, &name, folder).await;
+        return remote::create(&path, &name).await;
     }
     if crate::plugin_vfs::handles(&path) {
         return tauri::async_runtime::spawn_blocking(move || {
-            crate::plugin_vfs::create(&path, &name, folder)
+            crate::plugin_vfs::create(&path, &name)
         })
         .await
         .map_err(|e| e.to_string())?;
     }
-    state.create(&path, &name, folder)
+    state.create(&path, &name, true)
 }
 #[tauri::command]
 pub(crate) async fn rename_entry(

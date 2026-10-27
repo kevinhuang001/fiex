@@ -312,17 +312,7 @@ pub fn materialize(path: &str) -> Result<String, String> {
 }
 
 /// Create an empty file or a directory inside `path`, returning its URI.
-pub fn create(path: &str, name: &str, folder: bool) -> Result<String, String> {
-    if !folder {
-        // `fs.*` has one write path: it targets an existing node. Creating an
-        // empty file by name needs a protocol operation that no provider
-        // implements yet, so Core refuses instead of sending a request every
-        // provider would reject.
-        return Err(crate::i18n::t(
-            "当前文件系统不支持直接新建空文件，请新建文件夹或从本地复制文件",
-        )
-        .into());
-    }
+pub fn create(path: &str, name: &str) -> Result<String, String> {
     let (uri, view, node_id) = node(path)?;
     let mount = mount_for(&uri, &view);
     let created = Some(mount.mkdir(&node_id, name)?);

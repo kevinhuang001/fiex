@@ -8,7 +8,7 @@
 
 use std::fs;
 
-use crate::fs_resolver::{mount_for_path, FsEntry, WriteRequest};
+use crate::fs_resolver::{mount_for_path, FsEntry};
 
 use super::{
     config::{check_cache_path, connection_for_path, local_for, navigation_path, rel_string},
@@ -58,32 +58,21 @@ fn move_cache(old: &std::path::Path, new: &std::path::Path) -> Result<(), String
     fs::rename(old, new).map_err(|e| e.to_string())
 }
 
-pub async fn create(path: &str, name: &str, folder: bool) -> Result<String, String> {
+/// New entries are folders: `fs.*` has no create-empty-file operation.
+pub async fn create(path: &str, name: &str) -> Result<String, String> {
     let (conn, relative) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
     let _guard = super::sync::lock(&conn).await;
     let rel = rel_string(&relative);
     let mount = mount_for_path(path)?;
     let mut meta = load_meta(&conn);
     let parent = node_id(&meta, &rel);
-    let created = if folder {
-        Some(mount.mkdir(&parent, name)?)
-    } else {
-        mount
-            .begin_write(WriteRequest {
-                node_id: None,
-                parent_id: Some(&parent),
-                name: Some(name),
-                size: None,
-                if_revision: None,
-            })?
-            .commit()?
-    };
+    let created = Some(mount.mkdir(&parent, name)?);
     let created_name = created
         .as_ref()
         .map_or_else(|| name.to_string(), |entry| entry.name.clone());
     let child = child_path(&rel, &created_name);
     let mut file = RemoteMetaFile {
-        is_dir: folder,
+        is_dir: true,
         ..RemoteMetaFile::default()
     };
     if let Some(entry) = &created {
