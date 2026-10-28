@@ -42,14 +42,12 @@ This checkpoint reflects the current protocol-6 PR stack, not a release declarat
 
 ### Release-blocking architectural gaps
 
-| Area | Evidence in current sources | What remains |
-| --- | --- | --- |
-| Built-in virtual storage | `src-tauri/src/core/fs/mod.rs` rejects opaque built-in paths; `core/volumes/virtual_resolvers.rs` still mixes storage and presentation | Put Recent, Applications and Trash behind concrete `FsAdapter` implementations and keep dedicated UI actions separate |
-| Desktop dispatch | `src-tauri/src/desktop/files/listing.rs` still chooses code paths per remote/USB/virtual/local | Dispatch listing, info and operations by resolved resource capability, not origin switches |
-| Transfer transactions | `core/fs/transfer.rs` stages and commits per node but lacks full later-failure rollback | Add rollback or durable recovery for previously committed targets, byte progress, revision checks and cancellation tests |
-| Native interoperability | `desktop/volumes.rs` lacks a macOS/Windows native file-promise bridge | Implement and verify Explorer OLE descriptors/contents, Finder promises/file URLs, and external inbound writes to writable providers |
-| Identity and invalidation | `core/drag_session.rs` keeps path pairs, and virtual roots do not share complete ref/session invalidation | Preserve refs across window drags, invalidate on unmount/revoke/revision, and prevent stale child capabilities |
-| Large-file proof | Bounded read/write chunks exist; no full 10GB simulated transfer/export matrix has been verified | Prove bounded memory, cancellation, progress, external consumer lifetime, and multi-source rollback |
+- **Built-in virtual storage**: `core/fs/mod.rs` still rejects opaque built-in paths. Migrate Recent, Applications and Trash into dedicated adapters; split storage from the old `VirtualResolver`.
+- **Desktop dispatch**: `desktop/files/listing.rs` still switches between remote, plugin, USB, virtual and local paths. Resolve through resource capabilities instead.
+- **Transfer transactions**: `core/fs/transfer.rs` does not roll back targets already committed before a later failure. Add rollback/recovery, revision checks, cancellation and byte progress.
+- **Native interoperability**: `desktop/volumes.rs` lacks Windows OLE and macOS file-promise bridges. External drops into plugin/USB VFS are not fully unified.
+- **Identity and invalidation**: `core/drag_session.rs` still stores path pairs. Preserve refs across window drags, revoke stale sessions and implement mount/node generation checks.
+- **Large-file proof**: bounded chunks exist, but the full 10GB simulated test matrix, OS consumer lifetime, cancellation and recovery checks have not run.
 
 The **A01–A25 acceptance matrix is still unverified end-to-end**. None of the rows is marked fully accepted by this checkpoint. At a minimum A16/A17 (Windows/macOS external drag), A14/A15 (cross-source transaction safety), A19/A20 (external drop and ref-bearing internal drag), and A21 (invalidation) block stable release.
 
