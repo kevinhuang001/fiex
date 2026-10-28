@@ -28,6 +28,13 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     let mut result = Vec::new();
     let mut fresh = Vec::new();
     for path in paths {
+        // On macOS/Linux Trash is backed by a real filesystem directory.
+        // Never classify it as an ordinary local exportable path.
+        if crate::core::volumes::virtual_resolvers::resolver_for(path)
+            .is_some_and(|resolver| resolver.id() == "core:trash")
+        {
+            return Err("Unsupported: Trash items cannot be exported".into());
+        }
         // Local files already have a native path. A view of a user-owned app
         // resolves through its confined store before reaching this boundary.
         if crate::core::volumes::applications::is_user(path) {
