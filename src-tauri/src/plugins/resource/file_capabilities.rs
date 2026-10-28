@@ -134,10 +134,10 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
     if crate::core::volumes::virtual_resolvers::resolver_for(path)
         .is_some_and(|p| p.id() == "core:trash")
     {
-        return FileCapabilities {
-            remove: true,
-            ..FileCapabilities::default()
-        };
+        // Permanent deletion is a dedicated, explicit Trash action. Never
+        // advertise ordinary fs.remove: a generic plugin must not turn
+        // "delete" into an irreversible purge of trashed content.
+        return FileCapabilities::default();
     }
     if let Some(route) = crate::usbfs::route(path) {
         let writable = matches!(
@@ -178,10 +178,10 @@ pub fn for_path(path: &str) -> FileCapabilities {
     if crate::core::volumes::virtual_resolvers::resolver_for(path)
         .is_some_and(|p| p.id() == "core:trash")
     {
-        return FileCapabilities {
-            remove: true,
-            ..FileCapabilities::default()
-        };
+        // Permanent deletion is a dedicated, explicit Trash action. Never
+        // advertise ordinary fs.remove: a generic plugin must not turn
+        // "delete" into an irreversible purge of trashed content.
+        return FileCapabilities::default();
     }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         return crate::core::volumes::virtual_resolvers::resource_entry(path)
@@ -307,6 +307,13 @@ mod tests {
         // READONLY does not replace per-operation parent/server permissions.
         let readonly = from_entry(&declared, &entry("/m/a", &["remove"], true));
         assert!(readonly.remove && !readonly.read);
+    }
+
+    #[test]
+    fn trash_does_not_grant_generic_delete() {
+        let trashed = entry("recyclebin://an-item", &["remove"], false);
+        assert!(!for_entry("recyclebin://an-item", &trashed).remove);
+        assert!(!for_path("recyclebin://an-item").remove);
     }
 
     #[test]
