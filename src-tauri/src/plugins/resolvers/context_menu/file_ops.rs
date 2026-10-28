@@ -197,14 +197,14 @@ impl BuiltinResolver for Clipboard {
     }
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
         !selection.paths.is_empty()
-            && (capabilities.read || (capabilities.rename && !selection.read_only))
+            && (capabilities.read || (capabilities.read && capabilities.remove && !selection.read_only))
     }
     fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value> {
         let mut items = Vec::new();
         if capabilities.read {
             items.push(item("copy", "复制", "copy", "copy"));
         }
-        if capabilities.rename && !selection.read_only {
+        if capabilities.read && capabilities.remove && !selection.read_only {
             items.push(item("cut", "剪切", "scissors", "cut"));
         }
         if capabilities.read && capabilities.write && !selection.read_only {

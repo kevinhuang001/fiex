@@ -14,6 +14,20 @@ pub(crate) async fn transfer(
     on_progress: Channel<OperationProgress>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
+    if destination == "recent://" || crate::core::volumes::virtual_resolvers::resolver_for(&destination).is_some_and(|p| p.id() == "core:trash") {
+        return Err("VFS destination does not support writes".into());
+    }
+    let applications_destination = destination == crate::core::volumes::applications::URI || crate::core::volumes::applications::is_user(&destination);
+    let destination = if applications_destination {
+        crate::core::volumes::applications::stored_path(&destination)?.to_string_lossy().into_owned()
+    } else { destination };
+    let paths = paths.into_iter().map(|source| {
+        if crate::core::volumes::applications::is_user(&source) {
+            crate::core::volumes::applications::stored_path(&source).map(|path| path.to_string_lossy().into_owned())
+        } else if crate::core::volumes::virtual_resolvers::opaque(&source) {
+            Err("VFS entry has no transferable content".into())
+        } else { Ok(source) }
+    }).collect::<Result<Vec<_>, String>>()?;
     // Mount sources are materialized into the local engine. The engine copies
     // them, and once every copy succeeds the provider-owned originals are
     // removed here, so a drag that means "move" really deletes from the VFS.
@@ -173,6 +187,11 @@ pub(crate) async fn transfer(
                 }
                 let _ = events.emit("directory-changed", ());
             }
+        }
+    }
+    if applications_destination {
+        if let Ok(out) = &mut result {
+            for path in &mut out.paths { *path = crate::core::volumes::applications::stored_uri(std::path::Path::new(path))?; }
         }
     }
     result

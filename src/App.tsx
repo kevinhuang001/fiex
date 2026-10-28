@@ -14,7 +14,6 @@ import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
 import { PluginServices } from '@/components/plugins/PluginServices'
-import { TerminalView } from '@/components/terminal/TerminalView'
 import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
 import { warmFilePickerData } from '@/lib/filePickerData'
@@ -34,14 +33,11 @@ export default function App() {
   }, [])
   const pluginViewOf = (path: string) =>
     /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
-  const terminalOf = (path: string) => /^fiex-terminal:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
   const pluginViewId = pluginViewOf(app.left.path)
-  const terminalId = terminalOf(app.left.path)
-  const fullView = Boolean(pluginViewId || terminalId)
+  const fullView = Boolean(pluginViewId)
   const fullViews = app.left.tabs.flatMap((path, index) => {
-    const terminal = terminalOf(path)
     const plugin = pluginViewOf(path)
-    return terminal || plugin ? [{ path, index, terminal, plugin }] : []
+    return plugin ? [{ path, index, plugin }] : []
   })
   const [viewTitles, setViewTitles] = useState<Record<string, string>>({})
   const tabName = (path: string) => viewTitles[path] || app.displayName(path)
@@ -136,18 +132,7 @@ export default function App() {
             key={`${view.path}:${view.index}`}
             hidden={view.index !== app.left.tab}
           >
-            {view.terminal ? (
-              <TerminalView
-                connectionId={view.terminal}
-                terminalFont={app.prefs.terminalFont}
-                terminalFontSize={app.prefs.terminalFontSize}
-                terminalColor={app.prefs.terminalColor}
-                name={
-                  app.left.connections.find((connection) => connection.id === view.terminal)
-                    ?.name || 'SSH'
-                }
-              />
-            ) : view.plugin ? (
+            {view.plugin ? (
               <PluginConnectionView
                 connectionId={view.plugin}
                 onNavigate={app.left.navigate}
@@ -168,7 +153,8 @@ export default function App() {
               onPointerDownCapture={() => app.setActive('left')}
               data-drop-folder={
                 /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) &&
-                app.left.path !== 'applications://'
+                app.left.path !== 'applications://' &&
+                !app.left.path.startsWith('applications://user/')
                   ? undefined
                   : app.left.path
               }

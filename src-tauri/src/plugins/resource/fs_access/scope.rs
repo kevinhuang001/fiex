@@ -25,6 +25,7 @@ pub struct Scope {
     pub(super) references: std::sync::Arc<HashMap<String, String>>,
     pub(super) metadata_refs: std::sync::Arc<HashMap<String, Value>>,
     pub(super) metadata_only: bool,
+    pub(super) read_only: bool,
     pub(super) issued: std::sync::Arc<
         Mutex<HashMap<String, crate::plugins::resource::resource_context::ResourceSnapshot>>,
     >,
@@ -43,6 +44,7 @@ impl Scope {
             references: Default::default(),
             metadata_refs: Default::default(),
             metadata_only: false,
+            read_only: false,
             issued: Default::default(),
             remote_resources: Default::default(),
         })
@@ -72,7 +74,11 @@ impl Scope {
     pub fn restrict_to_metadata(&mut self) {
         self.metadata_only = true;
     }
+    pub fn restrict_to_readonly(&mut self) { self.read_only = true; }
     pub fn authorize_method(&self, method: &str) -> Result<(), String> {
+        if self.read_only && matches!(method, "host.fs.mkdir" | "host.fs.beginWrite" | "host.fs.writeChunk" | "host.fs.writeBuffer" | "host.fs.commit" | "host.fs.remove" | "host.fs.rename" | "host.process.run" | "host.vfs.openView") {
+            return Err("PermissionDenied: view does not support writes".into());
+        }
         if self.metadata_only
             && ((method.starts_with("host.fs.")
                 && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))

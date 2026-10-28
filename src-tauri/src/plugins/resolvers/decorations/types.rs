@@ -18,6 +18,8 @@ pub struct DecorationEntry {
     #[serde(default)]
     pub readonly: bool,
     #[serde(default)]
+    pub allowed_ops: Vec<String>,
+    #[serde(default)]
     pub tags: Vec<DecorationTag>,
     #[serde(default)]
     pub sync: Option<String>,
@@ -116,3 +118,4 @@ pub struct Decoration {
     #[serde(default)]
     pub providers: Vec<String>,
 }
+

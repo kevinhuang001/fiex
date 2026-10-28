@@ -98,12 +98,7 @@ pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
         ctx.entries
             .iter()
             .map(|entry| {
-                let mut snapshot = ResourceSnapshot::from_metadata(
-                    &entry.path,
-                    ResourceSnapshot::entry_metadata(entry),
-                );
-                snapshot.read_only = entry.readonly;
-                snapshot
+                ResourceSnapshot::from_entry(&entry.path, entry)
             })
             .collect::<Vec<_>>(),
     );

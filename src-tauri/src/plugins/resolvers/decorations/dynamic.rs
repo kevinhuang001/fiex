@@ -206,10 +206,10 @@ pub(super) fn decode(
         // Prefer the direct child name; Core resolves it against the visible
         // directory. Legacy `path` is accepted only when it names an entry.
         let path = match item.get("name").and_then(Value::as_str) {
-            Some(name) => entries
-                .values()
-                .find(|entry| entry.name == name)
-                .map(|entry| entry.path.clone()),
+            Some(name) => {
+                let matches = entries.values().filter(|entry| entry.name == name).collect::<Vec<_>>();
+                (matches.len() == 1).then(|| matches[0].path.clone())
+            },
             None => item
                 .get("path")
                 .and_then(Value::as_str)
@@ -274,3 +274,4 @@ pub(super) fn decode(
 
 #[cfg(test)]
 mod tests;
+

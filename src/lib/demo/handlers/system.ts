@@ -16,8 +16,8 @@ const demoConnections: RemoteConnection[] = [
     id: 'demo-ssh',
     name: '生产服务器',
     kind: 'ssh',
-    pluginId: '__builtin__',
-    mountPath: 'fiex-terminal://demo-ssh',
+    pluginId: 'org.example.terminal',
+    mountPath: 'fiex-plugin-view://demo-ssh',
     saved: true,
     autostart: false,
   },
@@ -159,7 +159,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
         autostart: false,
       }
       connection.name = input.name
-      connection.mountPath ||= 'fiex-terminal://' + connection.id
+      connection.mountPath ||= 'fiex-plugin-view://' + connection.id
       demoConnectionSettings[connection.id] = { ...input.settings }
       if (!existing) demoConnections.push(connection)
       return connection
@@ -167,8 +167,14 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'connection_open': {
       const connection = demoConnections.find((item) => item.id === a.id)
       if (!connection) throw new Error('connection not found')
-      return connection.kind === 'ssh'
-        ? { kind: 'terminal', connectionId: connection.id }
+      return connection.mountPath.startsWith('fiex-plugin-view://')
+        ? {
+            kind: 'pluginView',
+            pluginId: connection.pluginId,
+            connectionId: connection.id,
+            assetPath: '/demo/connection.html',
+            state: {},
+          }
         : { kind: 'vfs', path: connection.mountPath }
     }
     case 'remote_connections':
@@ -183,9 +189,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'plugin_connection_menu_resolve': {
       const connection = demoConnections.find((item) => item.id === String(a.connectionId || ''))
       if (!connection) throw new Error('connection not found')
-      const terminal = connection.pluginId === '__builtin__' && connection.kind === 'ssh'
-      const pluginView = connection.pluginId === 'org.fiex.ssh'
-      const vfs = !terminal && !pluginView && connection.mountPath.startsWith('fiex://mount/')
+      const vfs = connection.mountPath.startsWith('fiex://mount/')
       const session = crypto.randomUUID()
       const group = (providerId: string, items: unknown[]) => ({
         kind: 'builtin',

@@ -77,7 +77,7 @@ pub(super) fn action_folders(
         return Ok(Vec::new());
     }
     let mut folders = Vec::new();
-    if let Some(folder) = directory.filter(|value| !crate::plugins::mounts::handles(value)) {
+    if let Some(folder) = directory.filter(|value| !crate::plugins::mounts::handles(value) && !crate::core::volumes::virtual_resolvers::opaque(value)) {
         folders.push(crate::plugins::resource::fs_access::canonical_selection(
             Path::new(folder),
         )?);
@@ -122,7 +122,7 @@ pub fn resource_scope(
         .collect::<Vec<_>>());
     let mut paths = resources
         .iter()
-        .filter(|r| !crate::plugins::mounts::handles(&r.display))
+        .filter(|r| !crate::plugins::mounts::handles(&r.display) && (!crate::core::volumes::virtual_resolvers::opaque(&r.display) || crate::core::volumes::applications::is_user(&r.display)))
         .map(|r| crate::plugins::resource::fs_access::canonical_selection(&r.local))
         .collect::<Result<Vec<_>, _>>()?;
     for folder in action_folders(method, directory, &paths, policy.declared())? {
@@ -140,6 +140,20 @@ pub fn resource_scope(
             if target["metadata"].is_object() {
                 target["metadata"]["readonly"] = json!(resource.read_only);
             }
+        }
+    }
+    params["location"] = json!({
+        "kind": if directory.is_some_and(crate::core::volumes::virtual_resolvers::opaque) { "vfs" }
+                else if directory.is_some_and(crate::plugins::mounts::handles) { "vfs" } else { "fs" },
+        "providerId": directory.and_then(|d| crate::core::volumes::virtual_resolvers::resolver_for(d).map(|p| p.id().to_owned())
+            .or_else(|| crate::plugins::resolvers::fs::mount_plugin_id(d).ok())),
+        "selectionCount": resources.len(),
+    });
+    for (resource, target) in resources.iter().zip(params["targets"].as_array_mut().unwrap()) {
+        if policy.allowed(crate::plugins::security::policy::Capability::Metadata) && target["metadata"].is_object() {
+            let mut caps = resource.operations.unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(&resource.display));
+            if directory == Some("recent://") { caps = caps.intersect(crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY); }
+            target["metadata"]["operations"] = json!({"read":caps.read,"write":caps.write,"mkdir":caps.create,"rename":caps.rename,"remove":caps.remove});
         }
     }
     // Use exact files for content actions. Metadata-only remote targets are
@@ -163,7 +177,7 @@ pub fn resource_scope(
         scope.restrict_to_metadata();
     }
     for (resource, target) in resources.iter().zip(params["targets"].as_array().unwrap()) {
-        let local = if !crate::plugins::mounts::handles(&resource.display) {
+        let local = if !crate::plugins::mounts::handles(&resource.display) && (!crate::core::volumes::virtual_resolvers::opaque(&resource.display) || crate::core::volumes::applications::is_user(&resource.display)) {
             Some(crate::plugins::resource::fs_access::canonical_selection(
                 &resource.local,
             )?)
@@ -177,12 +191,14 @@ pub fn resource_scope(
     }
     // Directory events explicitly authorize their requested root, not an unrelated current pane.
     if matches!(method, "decorations.resolve" | "search.query") {
-        if let Some(dir) = directory.filter(|d| !crate::plugins::mounts::handles(d)) {
+        if let Some(dir) = directory.filter(|d| !crate::plugins::mounts::handles(d) && !crate::core::volumes::virtual_resolvers::opaque(d)) {
             scope = crate::plugins::resource::fs_access::Scope::new(Path::new(dir))?;
             for (r, target) in resources.iter().zip(params["targets"].as_array().unwrap()) {
                 scope.bind_resource(target, Some(&r.local))?;
             }
         }
     }
+    if directory == Some("recent://") { scope.restrict_to_readonly(); }
+    if directory.and_then(crate::core::volumes::virtual_resolvers::resolver_for).is_some_and(|p| p.id() == "core:trash") { scope.restrict_to_metadata(); }
     Ok((params, scope))
 }

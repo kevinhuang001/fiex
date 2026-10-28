@@ -46,7 +46,7 @@
   background: color-mix(in srgb, var(--canvas) 48%, transparent);
 }
 .app.has-background .terminal-panel,
-.app.has-background .ssh-terminal-view {
+.app.has-background .local-terminal-view {
   background: color-mix(in srgb, var(--surface) 26%, transparent);
   backdrop-filter: blur(20px) saturate(140%);
 }
@@ -84,7 +84,7 @@ html.dark .app.has-background .list-header {
   background: color-mix(in srgb, var(--canvas) 62%, transparent);
 }
 html.dark .app.has-background .terminal-panel,
-html.dark .app.has-background .ssh-terminal-view {
+html.dark .app.has-background .local-terminal-view {
   background: color-mix(in srgb, var(--surface) 24%, transparent);
 }
 html.dark .app.has-background .workspace-bar {
@@ -1206,7 +1206,7 @@ body.dragging-toolbar {
 }
 
 /* Built-in SSH terminal: fill the right content area like a PluginView. */
-.ssh-terminal-view {
+.local-terminal-view {
   position: relative;
   display: flex;
   flex: 1;
@@ -1215,29 +1215,29 @@ body.dragging-toolbar {
   padding: 8px 6px 8px 10px;
   background: var(--surface);
 }
-.ssh-terminal-host {
+.local-terminal-host {
   flex: 1;
   min-width: 0;
   min-height: 0;
   padding: 0;
   overflow: hidden;
 }
-.ssh-terminal-host .xterm {
+.local-terminal-host .xterm {
   height: 100%;
 }
-.ssh-terminal-host .xterm-viewport,
-.ssh-terminal-host .xterm-scrollable-element {
+.local-terminal-host .xterm-viewport,
+.local-terminal-host .xterm-scrollable-element {
   background: transparent !important;
   scrollbar-width: none !important;
   -ms-overflow-style: none;
 }
-.ssh-terminal-host .xterm-viewport::-webkit-scrollbar,
-.ssh-terminal-host .xterm-scrollable-element::-webkit-scrollbar {
+.local-terminal-host .xterm-viewport::-webkit-scrollbar,
+.local-terminal-host .xterm-scrollable-element::-webkit-scrollbar {
   width: 0;
   height: 0;
   display: none;
 }
-.ssh-terminal-status {
+.local-terminal-status {
   position: absolute;
   left: 50%;
   bottom: 18px;
@@ -1254,7 +1254,7 @@ body.dragging-toolbar {
   color: var(--muted);
   font-size: 11px;
 }
-.ssh-terminal-status button {
+.local-terminal-status button {
   display: inline-flex;
   align-items: center;
   gap: 5px;

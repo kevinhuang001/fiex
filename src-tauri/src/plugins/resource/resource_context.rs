@@ -20,13 +20,14 @@ pub struct ResourceSnapshot {
     pub mime: String,
     pub name: String,
     metadata: Option<ResourceMetadata>,
+    pub operations: Option<crate::plugins::resource::file_capabilities::FileCapabilities>,
 }
 
 impl ResourceSnapshot {
     pub fn new(display: &str, local: &Path) -> Self {
         let stat = fs::symlink_metadata(local).ok();
         let is_dir = stat.as_ref().is_some_and(fs::Metadata::is_dir);
-        let read_only = stat.as_ref().is_some_and(|s| s.permissions().readonly());
+        let read_only = stat.as_ref().is_some_and(|s| crate::core::files::metadata_readonly(s));
         let name = local
             .file_name()
             .map(|value| value.to_string_lossy().into_owned())
@@ -71,6 +72,7 @@ impl ResourceSnapshot {
             mime,
             name,
             metadata,
+            operations: None,
         }
     }
 
@@ -89,6 +91,14 @@ impl ResourceSnapshot {
     }
 
     pub fn resolve(display: &str) -> Result<Self, String> {
+        if crate::core::volumes::virtual_resolvers::opaque(display) {
+            let entry = crate::core::volumes::virtual_resolvers::resource_entry(display)?;
+            return Ok(Self::from_entry(display, &entry));
+        }
+        if let Some(route) = crate::usbfs::route(display) {
+            let entry = crate::usbfs::entry(&route)?;
+            return Ok(Self::from_entry(display, &entry));
+        }
         if !crate::plugins::mounts::handles(display) {
             return Ok(Self::new(display, Path::new(display)));
         }
@@ -97,9 +107,16 @@ impl ResourceSnapshot {
         } else {
             crate::plugins::vfs::stat(display)?
         };
-        let mut resource = Self::from_metadata(display, Self::entry_metadata(&entry));
+        Ok(Self::from_entry(display, &entry))
+    }
+    pub fn from_entry(display: &str, entry: &crate::core::files::Entry) -> Self {
+        let mut resource = Self::from_metadata(display, Self::entry_metadata(entry));
+        if crate::core::volumes::applications::is_user(display) {
+            if let Ok(path) = crate::core::volumes::applications::stored_path(display) { resource.local = path; }
+        }
         resource.read_only = entry.readonly;
-        Ok(resource)
+        resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(display, entry));
+        resource
     }
     pub fn entry_metadata(entry: &crate::core::files::Entry) -> ResourceMetadata {
         ResourceMetadata {
@@ -115,7 +132,8 @@ impl ResourceSnapshot {
         let reference = ResourceRef {
             mount_id: crate::plugins::mounts::parse(display)
                 .map(|uri| uri.mount_id)
-                .unwrap_or_else(|_| "local".into()),
+                .unwrap_or_else(|_| crate::core::volumes::virtual_resolvers::resolver_for(display)
+                    .map(|provider| provider.id().to_owned()).unwrap_or_else(|| "local".into())),
             node_id: Self::local_ref().node_id,
         };
         Self {
@@ -130,6 +148,7 @@ impl ResourceSnapshot {
             mime: metadata.mime.clone().unwrap_or_default(),
             name: metadata.name.clone(),
             metadata: Some(metadata),
+            operations: None,
         }
     }
     pub fn materialize(&self) -> Result<PathBuf, String> {
@@ -141,6 +160,10 @@ impl ResourceSnapshot {
             .clone()
     }
     fn materialize_uncached(&self) -> Result<PathBuf, String> {
+        if crate::core::volumes::applications::is_user(&self.display) { return crate::core::volumes::applications::stored_path(&self.display); }
+        if crate::core::volumes::virtual_resolvers::opaque(&self.display) {
+            return Err("VFS entry has no file content".into());
+        }
         if !crate::plugins::mounts::handles(&self.display) {
             return Ok(self.local.clone());
         }

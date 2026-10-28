@@ -6,10 +6,13 @@ pub(crate) async fn create_entry(
     name: String,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
+    if path == crate::core::volumes::applications::URI || crate::core::volumes::applications::is_user(&path) {
+        return crate::core::volumes::applications::create_stored(&path, &name, true);
+    }
     if !crate::plugins::vfs::handles(&path) {
         crate::plugins::mounts::reject_local(&path)?;
     }
-    // Only folders: the protocol has no "create an empty file by name" op.
+    // Folder creation follows the owning adapter mkdir capability.
     crate::plugins::resource::file_capabilities::require(
         &path,
         crate::plugins::provider_registry::FsOperation::Mkdir,
@@ -37,6 +40,9 @@ pub(crate) async fn rename_entry(
     name: String,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
+    if crate::core::volumes::applications::is_user(&path) {
+        return crate::core::volumes::applications::rename_stored(&path, &name);
+    }
     if !crate::plugins::vfs::handles(&path) {
         crate::plugins::mounts::reject_local(&path)?;
     }
@@ -72,6 +78,9 @@ pub(crate) async fn rename_entry(
 /// here and rely on the OS.
 #[tauri::command]
 pub(crate) async fn create_file_entry(path: String, name: String) -> Result<String, String> {
+    if path == crate::core::volumes::applications::URI || crate::core::volumes::applications::is_user(&path) {
+        return crate::core::volumes::applications::create_stored(&path, &name, false);
+    }
     if !crate::plugins::vfs::handles(&path) {
         crate::plugins::mounts::reject_local(&path)?;
     }

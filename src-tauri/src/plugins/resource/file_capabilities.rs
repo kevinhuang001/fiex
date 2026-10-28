@@ -4,8 +4,8 @@
 //! every command guard. It is the intersection of the three layers described by
 //! the unified file-system protocol: the provider's declared operations, the
 //! node's `allowedOps`/`readonly`, and (implicitly) the fact that Core can only
-//! act through an installed provider. Local paths stay unrestricted: Core owns
-//! them and the OS enforces permissions on the actual call.
+//! act through an installed provider. Local file content permissions and USB driver restrictions are reflected
+//! here; the OS still enforces ACLs and current access on each actual call.
 //!
 //! The menu uses [`for_selection`] to decide which items exist; commands use
 //! [`require`]/[`require_selection`] so a stale UI can never perform an
@@ -98,15 +98,28 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
     FileCapabilities {
         read: allows(FsOperation::Read),
         write: !readonly && allows(FsOperation::Write),
-        create: !readonly && allows(FsOperation::Mkdir),
+        create: entry.is_dir && !readonly && allows(FsOperation::Mkdir),
         rename: !readonly && allows(FsOperation::Rename),
         remove: !readonly && allows(FsOperation::Remove),
     }
 }
 
-fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
+pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
+    if crate::core::volumes::virtual_resolvers::opaque(path) {
+        let declared = crate::core::volumes::virtual_resolvers::resolver_for(path)
+            .map(|provider| provider.operations(path).into_iter().filter_map(FsOperation::parse).collect::<Vec<_>>())
+            .unwrap_or_default();
+        return from_entry(&declared, entry);
+    }
+    if crate::core::volumes::virtual_resolvers::resolver_for(path).is_some_and(|p| p.id() == "core:trash") {
+        return FileCapabilities { remove: true, ..FileCapabilities::default() };
+    }
+    if crate::usbfs::route(path).is_some() {
+        return if entry.readonly { FileCapabilities::READ_ONLY } else { FileCapabilities::ALL };
+    }
     if !crate::plugins::mounts::handles(path) {
-        return FileCapabilities::ALL;
+        return FileCapabilities { write: !entry.readonly, create: !entry.readonly,
+            remove: !cfg!(windows) || !entry.readonly, ..FileCapabilities::ALL };
     }
     declared_operations(path)
         .map(|declared| from_entry(&declared, entry))
@@ -116,8 +129,19 @@ fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
 /// Capabilities of a single path. Local paths are unrestricted; a mount is the
 /// provider's declared operations narrowed by the node's entry.
 pub fn for_path(path: &str) -> FileCapabilities {
+    if crate::core::volumes::virtual_resolvers::resolver_for(path).is_some_and(|p| p.id() == "core:trash") {
+        return FileCapabilities { remove: true, ..FileCapabilities::default() };
+    }
+    if crate::core::volumes::virtual_resolvers::opaque(path) {
+        return crate::core::volumes::virtual_resolvers::resource_entry(path)
+            .map(|entry| for_entry(path, &entry)).unwrap_or_default();
+    }
+    if let Some(route) = crate::usbfs::route(path) {
+        return crate::usbfs::entry(&route).map(|entry| for_entry(path, &entry)).unwrap_or_default();
+    }
     if !crate::plugins::mounts::handles(path) {
-        return FileCapabilities::ALL;
+        return crate::core::files::entry(std::path::Path::new(path))
+            .map(|entry| for_entry(path, &entry)).unwrap_or(FileCapabilities::ALL);
     }
     let Some(declared) = declared_operations(path) else {
         return FileCapabilities::default();
@@ -193,7 +217,7 @@ mod tests {
         let local = entry("/tmp/example", &[], true);
         assert_eq!(
             for_selection(&["/tmp/example".into()], &[local]),
-            FileCapabilities::ALL
+            FileCapabilities { write: false, create: false, remove: !cfg!(windows), ..FileCapabilities::ALL }
         );
     }
 

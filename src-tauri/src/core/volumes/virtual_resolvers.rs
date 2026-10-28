@@ -1,6 +1,6 @@
 //! The three Core-owned virtual folders (Recent, Applications, Trash) share
 //! one provider surface. They never cross plugin IPC: Core lists, opens,
-//! decorates and builds their context menus locally.
+//! supplies data locally; all presentation contributions use EventRouter.
 
 use super::{applications, recycle, trash};
 #[cfg(not(target_os = "windows"))]
@@ -9,8 +9,6 @@ use crate::core::files::Entry;
 use serde_json::json;
 #[cfg(not(target_os = "windows"))]
 use std::path::Path;
-#[allow(unused_imports)]
-use std::path::PathBuf;
 
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
@@ -37,7 +35,18 @@ pub struct VirtualAction {
 pub trait VirtualResolver: Send + Sync {
     fn id(&self) -> &'static str;
     fn readonly(&self) -> bool;
-    fn list(&self, ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String>;
+    /// Explicit storage-operation ceiling. Presentation and dispatch must not
+    /// infer write support from an adapter name or from readonly=false.
+    fn operations(&self, path: &str) -> Vec<&'static str> {
+        match self.id() {
+            "core:recent" => vec!["list", "stat", "read"],
+            "core:trash" => vec!["list", "stat", "remove"],
+            "core:applications" if path == APPLICATIONS_URI => vec!["list", "stat", "write", "mkdir"],
+            "core:applications" if applications::is_user(path) => vec!["list", "stat", "read", "write", "mkdir", "rename", "remove"],
+            _ => vec!["stat"],
+        }
+    }
+    fn list(&self, path: &str, ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String>;
     fn stat(&self, path: &str, ctx: &VirtualContext<'_>) -> Result<Entry, String>;
     fn open(&self, path: &str) -> Result<(), String>;
     fn remove(&self, paths: &[String]) -> Result<usize, String>;
@@ -57,7 +66,8 @@ impl VirtualResolver for RecentResolver {
     fn readonly(&self) -> bool {
         true
     }
-    fn list(&self, ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String> {
+    fn list(&self, path: &str, ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String> {
+        let _ = path;
         Ok(ctx.recent.to_vec())
     }
     fn stat(&self, path: &str, ctx: &VirtualContext<'_>) -> Result<Entry, String> {
@@ -106,20 +116,18 @@ impl VirtualResolver for ApplicationResolver {
         // read-only so Core's context-menu resolver can hide delete for it.
         false
     }
-    fn list(&self, _ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String> {
-        applications::list()
+    fn list(&self, path: &str, _ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String> {
+        applications::list_at(path)
     }
     fn stat(&self, path: &str, _ctx: &VirtualContext<'_>) -> Result<Entry, String> {
+        if applications::is_user(path) { return applications::stored_entry(path); }
         applications::list()?
             .into_iter()
             .find(|entry| entry.path == path)
             .ok_or_else(|| crate::i18n::t("应用不存在").into())
     }
     fn open(&self, path: &str) -> Result<(), String> {
-        let encoded = path
-            .strip_prefix(applications::URI)
-            .ok_or_else(|| crate::i18n::t("无法启动应用").to_string())?;
-        applications::open(encoded)
+        applications::open(path.strip_prefix(applications::URI).unwrap_or(path))
     }
     fn remove(&self, paths: &[String]) -> Result<usize, String> {
         let mut removed = 0;
@@ -184,7 +192,8 @@ impl VirtualResolver for TrashResolver {
     fn readonly(&self) -> bool {
         false
     }
-    fn list(&self, _ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String> {
+    fn list(&self, path: &str, _ctx: &VirtualContext<'_>) -> Result<Vec<Entry>, String> {
+        let _ = path;
         #[cfg(target_os = "windows")]
         {
             recycle::list()
@@ -279,82 +288,32 @@ pub fn icon_for(path: &str) -> Option<String> {
     resolver_for(path).and_then(|resolver| resolver.icon(path))
 }
 
-/// Encode the provider and selection into an opaque menu token so executing a
-/// virtual menu item never reinterprets host paths.
-pub fn menu_token(resolver: &dyn VirtualResolver, paths: &[String]) -> String {
-    use base64::Engine;
-    let payload = serde_json::to_vec(&json!({
-        "provider": resolver.id(),
-        "paths": paths,
-    }))
-    .unwrap_or_default();
-    format!(
-        "virtual:{}",
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload)
-    )
-}
-
-pub fn parse_menu_token(
-    token: &str,
-) -> Result<(&'static dyn VirtualResolver, Vec<String>), String> {
-    use base64::Engine;
-    let encoded = token
-        .strip_prefix("virtual:")
-        .ok_or("unknown menu session")?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(encoded)
-        .map_err(|error| error.to_string())?;
-    let value: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
-    let provider = match value["provider"].as_str() {
-        Some("core:recent") => &RECENT as &'static dyn VirtualResolver,
-        Some("core:applications") => &APPLICATIONS,
-        Some("core:trash") => &TRASH,
-        _ => return Err("unknown virtual provider".into()),
-    };
-    let paths =
-        serde_json::from_value(value["paths"].clone()).map_err(|error| error.to_string())?;
-    Ok((provider, paths))
-}
-
+/// One menu contract for Core-owned and plugin-owned VFS adapters.
 pub fn menu_json(resolver: &dyn VirtualResolver, paths: &[String]) -> serde_json::Value {
-    let items = resolver
-        .menu(paths.first().map(String::as_str).unwrap_or(""))
-        .into_iter()
-        .map(|item| {
-            json!({
-                "id": item.id,
-                "kind": "action",
-                "title": item.title,
-                "icon": item.icon,
-                "danger": item.danger,
-                "placement": if item.tail { Some("tail") } else { None },
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({
-        "kind": "builtin",
-        "providerId": format!("builtin:{}", resolver.id()),
-        "menuSessionId": menu_token(resolver, paths),
-        "items": items,
-    })
+    let items = if paths.is_empty() { vec![] } else {
+        resolver.menu(&paths[0]).into_iter().filter(|item| {
+            paths.iter().all(|path| resolver.menu(path).iter().any(|other| other.id == item.id))
+        }).map(|item| json!({
+            "id": item.id, "kind": "action", "title": item.title,
+            "icon": item.icon, "danger": item.danger,
+            "placement": if item.tail { Some("tail") } else { None },
+        })).collect::<Vec<_>>()
+    };
+    json!({"items": items})
 }
 
-pub fn resolve_menu(directory: &str, paths: &[String]) -> Option<serde_json::Value> {
-    resolver_for(directory).map(|provider| menu_json(provider, paths))
+/// URI-backed resources have no host path. Never canonicalize or materialize
+/// these identifiers as files, even for metadata-only extension calls.
+pub fn opaque(path: &str) -> bool {
+    path == RECENT_URI || path.starts_with(APPLICATIONS_URI) || recycle::is_virtual(path)
 }
 
-pub fn execute_menu(token: &str, item: &str) -> Result<serde_json::Value, String> {
-    let (provider, paths) = parse_menu_token(token)?;
-    let action = provider.execute(item, &paths)?;
-    Ok(json!({
-        "kind": "coreAction",
-        "command": action.command,
-        "paths": action.paths,
-    }))
+pub fn resource_entry(path: &str) -> Result<Entry, String> {
+    let provider = resolver_for(path).ok_or("unknown builtin VFS")?;
+    if path == RECENT_URI || path == APPLICATIONS_URI || path == recycle::URI {
+        return Ok(Entry { path: path.into(), name: provider.id().into(), is_dir: true,
+            readonly: false, allowed_ops: provider.operations(path).into_iter().map(str::to_owned).collect(), ..Default::default() });
+    }
+    provider.stat(path, &VirtualContext { recent: &[] })
 }
 
-pub fn directory_for(path: &str) -> Option<PathBuf> {
-    let _ = path;
-    None
-}

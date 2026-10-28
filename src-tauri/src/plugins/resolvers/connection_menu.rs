@@ -13,7 +13,6 @@ const PLUGIN_PREFIX: &str = "plugin:";
 
 struct Context {
     info: ConnectionInfo,
-    terminal: bool,
     can_sync: bool,
 }
 
@@ -23,12 +22,10 @@ impl Context {
             .into_iter()
             .find(|connection| connection.id == id)
             .ok_or("connection not found")?;
-        let terminal = info.plugin_id == "__builtin__" && info.kind == "ssh";
-        let plugin_view = info.plugin_id == "org.fiex.ssh";
-        let can_sync = !terminal && !plugin_view && info.mount_path.starts_with("fiex://mount/");
+        let plugin_view = info.mount_path.starts_with("fiex-plugin-view://");
+        let can_sync = !plugin_view && info.mount_path.starts_with("fiex://mount/");
         Ok(Self {
             info,
-            terminal,
             can_sync,
         })
     }
@@ -43,7 +40,7 @@ impl Context {
             "mountPath": self.info.mount_path,
             "saved": self.info.saved,
             "autostart": self.info.autostart,
-            "terminal": self.terminal,
+            "pluginView": self.info.mount_path.starts_with("fiex-plugin-view://"),
             "vfs": self.can_sync,
         })
     }
@@ -306,8 +303,7 @@ mod tests {
     use super::*;
 
     fn ctx(plugin_id: &str, kind: &str, mount: &str, saved: bool, autostart: bool) -> Context {
-        let terminal = plugin_id == "__builtin__" && kind == "ssh";
-        let plugin_view = plugin_id == "org.fiex.ssh";
+        let plugin_view = mount.starts_with("fiex-plugin-view://");
         Context {
             info: ConnectionInfo {
                 id: "c1".into(),
@@ -320,8 +316,7 @@ mod tests {
                 can_read: true,
                 can_write: false,
             },
-            terminal,
-            can_sync: !terminal && !plugin_view && mount.starts_with("fiex://mount/"),
+            can_sync: !plugin_view && mount.starts_with("fiex://mount/"),
         }
     }
 
@@ -354,8 +349,8 @@ mod tests {
     #[test]
     fn terminal_and_plugin_views_do_not_offer_sync() {
         for menu in [
-            ctx("__builtin__", "ssh", "fiex-terminal://c1", true, false),
-            ctx("org.fiex.ssh", "ssh", "fiex-plugin-view://c1", true, false),
+            ctx("org.example.other", "other", "fiex-plugin-view://c1", true, false),
+            ctx("org.example.view", "ssh", "fiex-plugin-view://c1", true, false),
         ] {
             assert!(builtin_items("builtin:connection-sync", &menu)
                 .unwrap()
@@ -395,3 +390,4 @@ mod tests {
         }
     }
 }
+

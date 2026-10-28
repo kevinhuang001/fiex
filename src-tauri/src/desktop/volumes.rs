@@ -23,7 +23,11 @@ pub(crate) async fn register_drag(
             .any(|p| remote::is_remote(p) || crate::plugins::vfs::handles(p));
     let mut materialized = Vec::new();
     for path in &paths {
-        if remote::is_remote(path) {
+        if crate::core::volumes::applications::is_user(path) {
+            materialized.push(crate::core::volumes::applications::stored_path(path)?.to_string_lossy().into_owned());
+        } else if crate::core::volumes::virtual_resolvers::opaque(path) {
+            return Err("VFS entry has no transferable content".into());
+        } else if remote::is_remote(path) {
             if remote::stat(path)?.is_dir {
                 remote::download_dir(path, &remote::TransferOptions::default()).await?;
             } else {

@@ -1,7 +1,7 @@
 //! Local shell discovery and profile-aware PTY startup.
 use super::{
     shell_profile::startup_args,
-    ssh::{home, start_session, SshEvent},
+    terminal::{home, start_session, TerminalEvent},
 };
 #[cfg(not(windows))]
 use crate::core::shells::order_shells;
@@ -80,14 +80,14 @@ pub(crate) fn detect_shells() -> Vec<ShellChoice> {
     shell_choices()
 }
 
-/// Local integrated terminal. Reuses the same PTY/session/event pipeline as SSH.
+/// Local integrated terminal. Owns only local shell PTYs.
 #[tauri::command]
 pub(crate) async fn local_terminal_open(
     cwd: Option<String>,
     shell: Option<String>,
     cols: u16,
     rows: u16,
-    on_event: Channel<SshEvent>,
+    on_event: Channel<TerminalEvent>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let shell = shell

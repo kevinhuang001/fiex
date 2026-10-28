@@ -130,3 +130,7 @@ SDK 使用普通 `FSProvider` trait，不再使用过程宏。`operations()` 必
 mount、connection/view 和 node/parent 参数，返回 `{operations: [...]}`。
 Core 与 SDK 均检查此集合；未报告 discovery 的旧协议 5 插件保留静态能力行为。
 完整接口规范见 SDK 的 `docs/fs-provider-discovery.md`。
+
+## Core builtin VFS and presentation policy
+
+Recent is a nonwritable projection; Applications writes resolve into `~/.fiex/applications`; Trash exposes restore/delete rather than generic uploads. The operation matrix, readonly/provenance semantics, additive presentation event fields and builtin resolver inventory are defined in [VFS presentation contract](../architecture/vfs-presentation-contract.md).

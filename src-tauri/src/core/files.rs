@@ -51,6 +51,11 @@ fn shortcut_target(path: &Path) -> Option<String> {
     link.relative_path().clone()
 }
 
+pub fn metadata_readonly(meta: &fs::Metadata) -> bool {
+    if cfg!(windows) && meta.is_dir() { return false; }
+    meta.permissions().readonly()
+}
+
 pub fn entry(path: &Path) -> Result<Entry, String> {
     crate::plugins::mounts::reject_local(&path.to_string_lossy())?;
     let link = fs::symlink_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -108,7 +113,7 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
         mime: mime_guess::from_path(path)
             .first_or_octet_stream()
             .to_string(),
-        readonly: meta.permissions().readonly(),
+        readonly: metadata_readonly(&meta),
         link_target,
         allowed_ops: Vec::new(),
         tags: read_tags(path),
@@ -159,7 +164,7 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
     // Local creation follows the directory's own permission; the OS still
     // rejects a call on a read-only volume.
-    let can_create = fs::metadata(&path).is_ok_and(|meta| !meta.permissions().readonly());
+    let can_create = fs::metadata(&path).is_ok_and(|meta| !metadata_readonly(&meta));
     Ok(Listing {
         read_only: false,
         can_create,
@@ -243,3 +248,4 @@ mod tests {
         assert!(super::entry(&file).unwrap().tags.is_empty());
     }
 }
+

@@ -14,10 +14,10 @@ pub(crate) async fn list_directory(
         };
         return Ok(files::Listing {
             read_only: resolver.readonly(),
-            can_create: false,
+            can_create: path == crate::core::volumes::applications::URI || crate::core::volumes::applications::is_user(&path),
             virtual_volume: true,
-            path,
-            entries: resolver.list(&ctx)?,
+            path: path.clone(),
+            entries: resolver.list(&path, &ctx)?,
             warnings: vec![],
             default_view: resolver.default_view().map(str::to_owned),
         });
@@ -76,6 +76,9 @@ pub(crate) async fn file_info(path: String) -> Result<files::Entry, String> {
 }
 
 pub(super) fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
+    if crate::core::volumes::virtual_resolvers::opaque(path) {
+        return crate::core::volumes::virtual_resolvers::resource_entry(path);
+    }
     if remote::is_remote(path) {
         return remote::stat(path);
     }
@@ -90,6 +93,10 @@ pub(super) fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
 
 #[tauri::command]
 pub(crate) async fn read_preview(path: String) -> Result<String, String> {
+    if crate::core::volumes::applications::is_user(&path) {
+        let path = crate::core::volumes::applications::stored_path(&path)?;
+        return files::text_preview(&path.to_string_lossy());
+    }
     if remote::is_remote(&path) {
         let path = remote::ensure_downloaded(&path, &remote::TransferOptions::default()).await?;
         return tauri::async_runtime::spawn_blocking(move || files::text_preview(&path))
@@ -116,3 +123,4 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
         .await
         .map_err(|e| e.to_string())?
 }
+

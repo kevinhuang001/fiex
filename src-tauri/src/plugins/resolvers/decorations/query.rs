@@ -20,29 +20,17 @@ pub fn query_with_plugins(
     use crate::plugins::events::{EventRouter, Handler};
     let mut ordered = entries.values().collect::<Vec<_>>();
     ordered.sort_by(|a, b| a.path.cmp(&b.path));
-    let mut resources = ordered
+    let resources = ordered
         .iter()
         .map(|e| {
-            crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-                &e.path,
-                crate::plugins::contracts::ResourceMetadata {
-                    name: e.name.clone(),
-                    kind: if e.is_dir { "directory" } else { "file" }.into(),
-                    extension: Some(e.extension.clone()),
-                    mime: Some(e.mime.clone()),
-                    size: None,
-                    modified: None,
-                },
-            )
+            crate::plugins::resource::resource_context::ResourceSnapshot::from_entry(
+                &e.path, &crate::core::files::Entry {
+                    path: e.path.clone(), name: e.name.clone(), is_dir: e.is_dir,
+                    extension: e.extension.clone(), mime: e.mime.clone(), readonly: e.readonly,
+                    allowed_ops: e.allowed_ops.clone(), ..Default::default()
+                })
         })
         .collect::<Vec<_>>();
-    if include_plugins {
-        if let Ok(root) =
-            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(directory)
-        {
-            resources.insert(0, root);
-        }
-    }
     let metadata = resources
         .iter()
         .map(|r| serde_json::to_value(r.metadata()).unwrap_or_default())
@@ -60,7 +48,7 @@ pub fn query_with_plugins(
     let result = EventRouter::resolve(
         "decorations.resolve",
         providers,
-        |_, id| super::builtin::resolve(id, &entries),
+        |_, id| super::builtin::resolve_in(id, directory, &entries),
         |plugin| {
             crate::plugins::events::invoke_resources(
                 plugin,
@@ -79,6 +67,20 @@ pub fn query_with_plugins(
                 unreachable!()
             };
             let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
+            let mut response = response;
+            if let Some(items) = response["decorations"].as_array_mut() {
+                for item in items {
+                    if let Some(reference) = item.get("ref") {
+                        let resource = resources.iter().find(|resource| serde_json::to_value(&resource.reference).ok().as_ref() == Some(reference));
+                        if let Some(resource) = resource {
+                            item["path"] = json!(resource.display);
+                            if let Some(object) = item.as_object_mut() { object.remove("name"); }
+                        } else {
+                            *item = json!({});
+                        }
+                    }
+                }
+            }
             decode(&entries, manifest, folder, response)
         },
         |_| true,

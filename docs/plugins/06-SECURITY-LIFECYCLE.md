@@ -106,12 +106,7 @@ Manifest 声明
 
 ## 终端
 
-SSH 插件通过 `host.terminal.*` 使用 Core 的 xterm 会话：
-
-- session 由 Core 创建并绑定 plugin owner；
-- 只有拥有该 Session 的插件能读写；
-- 前端输入进入 Core 队列，插件轮询读取；
-- 关闭标签会结束 Session。
+远端终端由连接插件在自己的 PluginView 内管理。Core 不提供远端 PTY、终端输入队列或 `host.terminal.*`；Core 只实现本地 shell PTY。网络、任务、授权和面板通信使用通用服务。
 
 ## 激活与生命周期
 

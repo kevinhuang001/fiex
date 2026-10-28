@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { native } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import type { useAppController } from './useAppController'
 
 /** Browser/native window integration, independent of the explorer render tree. */
@@ -41,21 +41,20 @@ export function useAppEnvironment(app: ReturnType<typeof useAppController>) {
     if (!native || autostarted.current || !app.left.hasListing) return
     autostarted.current = true
     const sessions = app.left.connections.filter(
-      (connection) =>
-        (connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh') &&
-        connection.autostart &&
-        connection.saved !== false,
+      (connection) => connection.autostart && connection.saved !== false,
     )
     for (const session of sessions) {
-      // The SSH plugin owns its terminal in a PluginView; only the built-in
-      // OpenSSH connection is a Core terminal tab.
-      const path =
-        session.pluginId === 'org.fiex.ssh'
-          ? `fiex-plugin-view://${session.id}`
-          : `fiex-terminal://${session.id}`
+      // Each provider resolves its own navigation target, including autostart.
+      const path = session.mountPath
       if (app.left.tabs.includes(path)) continue
-      app.newWorkspaceTab()
-      app.left.navigate(path)
+      void call<{ kind: string; path?: string }>('connection_open', { id: session.id })
+        .then((target) => {
+          app.newWorkspaceTab()
+          app.left.navigate(
+            target.kind === 'vfs' ? target.path! : `fiex-plugin-view://${session.id}`,
+          )
+        })
+        .catch((error) => app.left.setError(String(error)))
     }
   }, [app.left.hasListing, app.left.connections, app.left.tabs])
 
