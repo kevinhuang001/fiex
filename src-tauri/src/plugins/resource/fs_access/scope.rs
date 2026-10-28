@@ -3,7 +3,10 @@
 use super::*;
 
 pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
-    if path.components().any(|part| matches!(part, Component::ParentDir)) {
+    if path
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
         return Err("selection must not contain parent traversal".into());
     }
     let mut ancestor = path;
@@ -11,13 +14,17 @@ pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
     loop {
         match dunce::canonicalize(ancestor) {
             Ok(base) => {
-                return Ok(missing.into_iter().rev().fold(base, |base: PathBuf, name| {
-                    base.join(name)
-                }));
+                return Ok(missing
+                    .into_iter()
+                    .rev()
+                    .fold(base, |base: PathBuf, name| base.join(name)));
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 missing.push(
-                    ancestor.file_name().ok_or("selection has no name")?.to_os_string(),
+                    ancestor
+                        .file_name()
+                        .ok_or("selection has no name")?
+                        .to_os_string(),
                 );
                 ancestor = ancestor.parent().ok_or("selection has no parent")?;
             }
