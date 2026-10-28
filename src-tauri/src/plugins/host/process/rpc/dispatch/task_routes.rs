@@ -30,7 +30,7 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
                 .get("label")
                 .and_then(Value::as_str)
                 .filter(|label| !label.is_empty())
-                .unwrap_or("插件后台任务");
+                .unwrap_or(crate::i18n::t("插件后台任务"));
             let mut tasks = running
                 .tasks
                 .lock()

@@ -1071,6 +1071,8 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   white-space: normal;
+  /* Reserve two lines so every card's action row starts at the same height. */
+  min-height: 3.2em;
 }
 .plugin-manager-page .plugin-row-title {
   gap: 5px;
@@ -1084,10 +1086,12 @@
 }
 .plugin-manager-page .plugin-row-actions {
   grid-area: actions;
+  align-items: center;
   justify-content: flex-end;
   width: 100%;
+  min-height: 26px;
   margin-left: 0;
-  padding-top: 8px;
+  padding-top: 7px;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
 }
 

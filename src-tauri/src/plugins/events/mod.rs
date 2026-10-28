@@ -23,8 +23,8 @@ pub fn is_protected_method(method: &str) -> bool {
             "core.",
             "plugin.",
             "contextMenu.",
+            "connectionContextMenu.",
             "vfs.",
-            "fs.",
             "connection.",
         ]
         .iter()

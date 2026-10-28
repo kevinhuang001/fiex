@@ -27,7 +27,7 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
         .find(|plugin| {
             plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
         })
-        .ok_or("连接插件未安装、启用或已被撤销授权")?;
+        .ok_or(crate::i18n::t("连接插件未安装、启用或已被撤销授权"))?;
     declared_connection_fields(&plugin_id, &conn.kind)?;
     let declared = plugin.declared_permissions.iter().cloned().collect();
     crate::plugins::security::policy::PermissionPolicy::new(&plugin_id, &declared)
@@ -72,35 +72,39 @@ pub(crate) fn declared_connection_fields(
         .find(|plugin| {
             plugin.id == plugin_id && plugin.enabled && plugin.approved && plugin.backend_available
         })
-        .ok_or("连接插件尚未安装、启用或授权")?;
+        .ok_or(crate::i18n::t("连接插件尚未安装、启用或授权"))?;
     let factory = plugin
         .extensions
         .get("connections")
         .filter(|factory| factory.is_object())
-        .ok_or("插件未声明连接类型")?;
+        .ok_or(crate::i18n::t("插件未声明连接类型"))?;
     let _ = kind;
     let mut fields = Vec::new();
     for field in factory
         .get("fields")
         .and_then(serde_json::Value::as_array)
-        .ok_or("连接插件的字段声明无效")?
+        .ok_or(crate::i18n::t("连接插件的字段声明无效"))?
     {
         let key = field
             .get("id")
             .and_then(serde_json::Value::as_str)
-            .ok_or("连接字段缺少 ID")?;
+            .ok_or(crate::i18n::t("连接字段缺少 ID"))?;
         let ty = field
             .get("type")
             .and_then(serde_json::Value::as_str)
-            .ok_or("连接字段缺少类型")?;
+            .ok_or(crate::i18n::t("连接字段缺少类型"))?;
         if key.is_empty() || key.len() > 80 || fields.iter().any(|(id, _)| id == key) {
             return Err(crate::i18n::t("连接字段 ID 无效或重复").into());
         }
-        if !matches!(ty, "text" | "url" | "number" | "checkbox" | "secret") {
+        if !matches!(
+            ty,
+            "text" | "url" | "number" | "checkbox" | "secret" | "list" | "file"
+        ) {
             return Err(crate::i18n::t("连接字段类型不支持").into());
         }
         fields.push((key.to_string(), ty.to_string()));
     }
+    super::credentials::append_private_fields(factory, &mut fields)?;
     Ok(fields)
 }
 
@@ -138,6 +142,14 @@ pub(crate) fn provider_config(conn: &StoredConnection) -> serde_json::Value {
     config.extend(conn.settings.clone());
     let scope = format!("connection-{}", conn.id);
     for field in &conn.secret_keys {
+        // A newly entered secret takes precedence over the previously saved value.
+        if config
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|v| !v.is_empty())
+        {
+            continue;
+        }
         if let Ok(value) =
             crate::plugins::storage::secret_get(&connection_plugin_id(conn), &scope, field)
         {

@@ -29,7 +29,7 @@ export function ExplorerDialogs({
   dialog,
   dialogBusy,
   conflict,
-  setConflict,
+  cancelConflict,
   resolveConflict,
   busy,
   setDialog,
@@ -70,7 +70,7 @@ export function ExplorerDialogs({
   | 'dialog'
   | 'dialogBusy'
   | 'conflict'
-  | 'setConflict'
+  | 'cancelConflict'
   | 'resolveConflict'
   | 'busy'
   | 'setDialog'
@@ -109,7 +109,7 @@ export function ExplorerDialogs({
       <ConflictDialog
         request={conflict}
         busy={Boolean(busy)}
-        onClose={() => setConflict(null)}
+        onClose={cancelConflict}
         onResolve={resolveConflict}
       />
       <Preview

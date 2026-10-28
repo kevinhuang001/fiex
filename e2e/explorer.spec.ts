@@ -577,10 +577,11 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
     .filter({ hasText: '校验和' })
     .getByRole('button', { name: '获取' })
     .click()
-  const review = page.getByRole('dialog', { name: '确认插件安装及权限' })
+  const review = page.getByRole('dialog', { name: '安装插件' })
   await expect(review).toContainText('读取文件')
-  await review.getByRole('button', { name: '安装（权限默认关闭）' }).click()
+  await review.getByRole('button', { name: '安装并授权激活' }).click()
   await expect(page.locator('.plugin-row').filter({ hasText: '校验和' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: '权限请求' })).toBeVisible()
 })
 test('local import shows identity and signature only', async ({ page }) => {
   await page.goto('/?demo&pluginFixture')
@@ -882,4 +883,55 @@ test('closing and reopening the same plugin context retains its iframe', async (
   await open()
   await expect(frame).toHaveAttribute('data-session-test', 'retained')
   await expect(frame).toHaveCount(1)
+})
+
+test('a copied package stays off without prompting and manual activation succeeds', async ({
+  page,
+}) => {
+  await page.goto('/?demo')
+  await page.evaluate(async () => {
+    const path = '/src/lib/demo/plugins/index.ts'
+    const { demoPlugins } = await import(/* @vite-ignore */ path)
+    demoPlugins.push({
+      id: 'org.test.copied',
+      name: 'Copied Package',
+      version: '1.0.0',
+      enabled: false,
+      approved: false,
+      backendAvailable: true,
+      declaredPermissions: [],
+      grantedPermissions: [],
+      requestedNetworkDomains: [],
+      allowedNetworkDomains: [],
+    })
+    window.dispatchEvent(new Event('fiex:plugins-changed'))
+  })
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
+  const row = page.locator('.plugin-row').filter({ hasText: 'Copied Package' })
+  await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+  await expect(page.getByRole('dialog', { name: '权限请求' })).toHaveCount(0)
+  await row.getByRole('switch').click()
+  await page
+    .getByRole('dialog', { name: '权限请求' })
+    .getByRole('button', { name: '激活', exact: true })
+    .click()
+  await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
+})
+
+test('confirming a local import immediately opens activation consent', async ({ page }) => {
+  await page.getByRole('button', { name: '插件', exact: true }).click()
+  await page.getByRole('menuitem', { name: '插件设置', exact: true }).click()
+  await page.getByRole('button', { name: '导入插件', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: '导入插件' })
+    .getByRole('button', { name: '导入插件', exact: true })
+    .click()
+  const consent = page.getByRole('dialog', { name: '权限请求' })
+  await expect(consent).toBeVisible()
+  await expect(consent).toContainText('本地示例插件')
+  await consent.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(
+    page.locator('.plugin-row').filter({ hasText: '本地示例插件' }).getByRole('switch'),
+  ).toHaveAttribute('aria-checked', 'false')
 })

@@ -19,9 +19,12 @@ import type { CSSProperties, MouseEvent, PointerEvent, ReactNode } from 'react'
 export interface Props {
   explorer: Explorer
   prefs: Preferences
+  /** Persists preference patches (list column widths live here). */
+  updatePrefs: (patch: Partial<Preferences>) => void
   onOpen: (e: Entry) => void
   onPreview: (e: Entry) => void
   onMenu: (e: Entry, x: number, y: number) => void
+  onBlankMenu: (x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
   onBookmark: (paths: string[]) => void
   onWorkspace: (paths: string[]) => void

@@ -9,6 +9,7 @@ pub(super) fn providers() -> Vec<Resolver> {
         "builtin:tags",
         "builtin:readonly",
         "builtin:connection-status",
+        "builtin:application-icon",
     ]
     .into_iter()
     .enumerate()
@@ -56,6 +57,25 @@ pub(super) fn resolve(
 ) -> Result<Value, String> {
     let mut decorations = Vec::new();
     for entry in entries.values() {
+        if id == "builtin:application-icon" {
+            // Only real application entries get the recognized badge; ordinary
+            // files in Recent or a folder never inherit it.
+            let recognized = entry
+                .path
+                .starts_with(crate::core::volumes::applications::URI)
+                || entry.extension.eq_ignore_ascii_case("app");
+            if !recognized || crate::core::volumes::applications::is_user(&entry.path) {
+                continue;
+            }
+            let mut decoration = Decoration {
+                path: entry.path.clone(),
+                native_badges: vec![badge("已识别", "blue", None, None)],
+                ..Default::default()
+            };
+            decoration.icon_path = application_icon(entry);
+            decorations.push(decoration);
+            continue;
+        }
         let native_badges = match id {
             "builtin:connection-status" => connection(entry),
             "builtin:readonly" if entry.readonly => vec![badge("只读", "gray", None, None)],
@@ -100,4 +120,22 @@ pub(super) fn resolve(
         }
     }
     Ok(json!({"decorations":decorations}))
+}
+
+fn application_icon(entry: &DecorationEntry) -> Option<String> {
+    use crate::core::volumes::applications;
+    if applications::is_user(&entry.path) {
+        return None;
+    }
+    let source = if entry.path.starts_with(applications::URI) {
+        entry.link_target.as_deref()?
+    } else if entry.extension.eq_ignore_ascii_case("app") {
+        entry.path.as_str()
+    } else {
+        return None;
+    };
+    if source.starts_with("aumid:") {
+        return None;
+    }
+    applications::cached_icon(source)
 }

@@ -35,20 +35,23 @@ pub(crate) fn cache_failure(conn: &StoredConnection, rel: &str, error: &str) -> 
     }
 }
 
-/// Directories that hold at least one downloaded file, so listings can show a
-/// directory as cached before it is opened.
+/// Directories whose *entire* file subtree has been downloaded. A folder with
+/// one cached file among several is not "cached"; the badge means the contents
+/// are available offline, not that a cache exists somewhere below.
 pub(crate) fn cached_dirs(meta: &RemoteMeta) -> std::collections::HashSet<String> {
     let mut dirs = std::collections::HashSet::new();
     for (key, file) in &meta.files {
-        if !file.downloaded {
+        if !file.is_dir || key.is_empty() {
             continue;
         }
-        let mut parent = key.rsplit_once('/').map(|(parent, _)| parent).unwrap_or("");
-        while !parent.is_empty() && dirs.insert(parent.to_string()) {
-            parent = parent
-                .rsplit_once('/')
-                .map(|(parent, _)| parent)
-                .unwrap_or("");
+        let files = meta
+            .files
+            .iter()
+            .filter(|(child, entry)| !entry.is_dir && in_tree(child, key))
+            .map(|(_, entry)| entry)
+            .collect::<Vec<_>>();
+        if !files.is_empty() && files.iter().all(|entry| entry.downloaded) {
+            dirs.insert(key.clone());
         }
     }
     dirs
@@ -85,8 +88,20 @@ mod tests {
     #[test]
     fn cached_dirs_cover_every_ancestor() {
         let mut meta = RemoteMeta::default();
-        meta.files.insert("a".into(), RemoteMetaFile::default());
-        meta.files.insert("a/b".into(), RemoteMetaFile::default());
+        meta.files.insert(
+            "a".into(),
+            RemoteMetaFile {
+                is_dir: true,
+                ..Default::default()
+            },
+        );
+        meta.files.insert(
+            "a/b".into(),
+            RemoteMetaFile {
+                is_dir: true,
+                ..Default::default()
+            },
+        );
         meta.files.insert("a/b/c.txt".into(), cached(false));
         let dirs = cached_dirs(&meta);
         assert!(dirs.contains("a"));
@@ -94,6 +109,30 @@ mod tests {
         assert!(!dirs.contains(""));
         assert!(subtree_has_cache(&meta, "a"));
         assert!(!subtree_has_cache(&meta, "z"));
+    }
+
+    #[test]
+    fn a_partially_cached_folder_is_not_marked_cached() {
+        let mut meta = RemoteMeta::default();
+        meta.files.insert(
+            "a".into(),
+            RemoteMetaFile {
+                is_dir: true,
+                ..Default::default()
+            },
+        );
+        meta.files.insert("a/one.txt".into(), cached(false));
+        meta.files.insert(
+            "a/two.txt".into(),
+            RemoteMetaFile {
+                is_dir: false,
+                downloaded: false,
+                ..Default::default()
+            },
+        );
+        assert!(!cached_dirs(&meta).contains("a"));
+        meta.files.get_mut("a/two.txt").unwrap().downloaded = true;
+        assert!(cached_dirs(&meta).contains("a"));
     }
 
     #[test]

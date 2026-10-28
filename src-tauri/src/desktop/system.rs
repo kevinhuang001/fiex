@@ -137,6 +137,9 @@ pub(crate) async fn open_path(
     path: String,
     recent: tauri::State<'_, recent::Recent>,
 ) -> Result<(), String> {
+    if let Some(resolver) = crate::core::volumes::virtual_resolvers::resolver_for(&path) {
+        return resolver.open(&path);
+    }
     if crate::plugins::vfs::handles(&path) && !remote::is_remote(&path) {
         let path =
             tauri::async_runtime::spawn_blocking(move || crate::plugins::vfs::materialize(&path))

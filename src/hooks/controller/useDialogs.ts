@@ -22,7 +22,7 @@ export function useDialogs(x: Explorer) {
   const [connectionToEdit, setConnectionToEdit] = useState<RemoteConnection | null>(null)
   const [tagPaths, setTagPaths] = useState<string[]>([])
   const [tagInitial, setTagInitial] = useState<Tag[]>([])
-  const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry | null } | null>(null)
   const searchInput = useRef<HTMLInputElement>(null)
   const chosen = useMemo(() => {
     const selected = new Set(x.selected)

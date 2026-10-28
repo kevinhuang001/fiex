@@ -62,11 +62,12 @@ let task = ctx.spawn_task(|task| {
 
 ### Provider
 
-文件系统插件只实现 `FileSystemProvider` 的方法，并用属性宏标注 `impl`：
+文件系统插件只实现 `FSProvider` 的方法，并显式实现 `operations()`：
 
 ```rust
-#[fiex_sdk::filesystem]
-impl FileSystemProvider for GoogleDrive {
+impl FSProvider for GoogleDrive {
+    fn operations(&self) -> &'static [sdk::filesystem::FsOp] { &[sdk::filesystem::FsOp::List, sdk::filesystem::FsOp::Stat, sdk::filesystem::FsOp::Read, sdk::filesystem::FsOp::Write] }
+
     fn list(&self, request: &FsRequest<'_>) -> Result<FsListing, RpcError> { … }
     fn stat(&self, request: &FsRequest<'_>) -> Result<FsEntry, RpcError> { … }
     fn read(&self, request: &FsRequest<'_>) -> Result<FsRead, RpcError> { … }
@@ -74,8 +75,8 @@ impl FileSystemProvider for GoogleDrive {
 }
 ```
 
-宏只把实现块里出现的方法计入能力，`plugin.initialize` 自动上报
-`fs.operations`；Core 据此决定是否下发 `fs.*`。协议的完整定义见
+`operations()` 主动声明实现上限；`discover(ctx)` 按服务器权限缩小能力。
+`plugin.initialize` 自动上报 `vfs.operations` 和 `vfs.discovery: true`；Core 据此决定是否下发 `vfs.*`。协议的完整定义见
 [10-UNIFIED-FS](10-UNIFIED-FS.md)。
 
 ### 其他 Host API
@@ -96,3 +97,12 @@ impl FileSystemProvider for GoogleDrive {
 - `scripts/package-fiex-plugin.py` 生成 `.fiexplugin`；
 - `plugin_smoke`、`scripts/test-plugin-process.py` 和 CI 集成测试验证真实进程握手；
 - `official/ssh` 的集成测试还会连接真实 sshd，验证 TCP Broker、SSH 握手、PTY 和命令输出。
+
+### 浏览器 OAuth 与连接凭据
+
+`ctx.oauth().authorize(&OAuthRequest)` 对应 `host.oauth.authorize`。Core 检查精确授权域名、
+打开系统浏览器、接收随机 loopback 端口回调、校验 state，并提供 PKCE S256 的
+`code / redirect_uri / code_verifier`；插件通过 Host HTTP 完成服务商 token exchange。
+连接可通过 `extensions.connections.credentials` 声明自动生成的私有凭据字段，
+`connection.validate` 使用 `ConnectionValidation` 返回这些值；Core 负责落入用户选择的
+凭据后端，不把秘密值返回编辑连接界面。完整规范见 SDK 的 `docs/browser-oauth.md`。

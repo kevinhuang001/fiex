@@ -4,9 +4,10 @@ import { usePreferences } from '@/hooks/usePreferences'
 import { call, native } from '@/lib/api'
 import { basename } from '@/lib/files'
 import { loadSavedTabs, saveTabs } from '@/lib/tabs'
-import type { Entry } from '@/lib/types'
+import { loadFolderView, saveFolderView } from '@/lib/folderView'
+import type { Entry, Preferences } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useConnectionActions } from './controller/useConnectionActions'
 import { useDialogs } from './controller/useDialogs'
 import { useDropTargets } from './controller/useDropTargets'
@@ -15,13 +16,14 @@ import { useShortcuts } from './controller/useShortcuts'
 import { useWorkspaceActions } from './controller/useWorkspaceActions'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
 import { useFileOperations } from './useFileOperations'
+import { finishActivity } from '@/hooks/useActivity'
 import { usePaneLayout } from './usePaneLayout'
 import { usePathEditor } from './usePathEditor'
 import { useRemoteActivity } from './useRemoteActivity'
 import { useWorkspace } from './useWorkspace'
 export function useAppController() {
   useRemoteActivity()
-  const [prefs, update] = usePreferences()
+  const [prefs, applyPreferences] = usePreferences()
   const [batchRename, setBatchRename] = useState<Entry[] | null>(null)
   const left = useExplorer(
     prefs,
@@ -30,6 +32,35 @@ export function useAppController() {
     'left',
     prefs.restoreTabs ? loadSavedTabs() : undefined,
   )
+  const appliedFolder = useRef('')
+  const update = (patch: Partial<Preferences>) => {
+    if (
+      left.path &&
+      ('view' in patch || 'sort' in patch || 'descending' in patch || 'group' in patch)
+    ) {
+      saveFolderView(left.path, {
+        view: patch.view ?? prefs.view,
+        sort: patch.sort ?? prefs.sort,
+        descending: patch.descending ?? prefs.descending,
+        group: patch.group ?? prefs.group,
+      })
+    }
+    applyPreferences(patch)
+  }
+  useEffect(() => {
+    const path = left.path
+    if (!path || !left.hasListing || appliedFolder.current === path) return
+    appliedFolder.current = path
+    const remembered = loadFolderView(path)
+    applyPreferences({
+      view: remembered?.view ?? left.defaultView ?? 'list',
+      sort: remembered?.sort ?? 'name',
+      descending: remembered?.descending ?? false,
+      group: remembered?.group ?? 'none',
+    })
+    // Applying the folder's own view must not overwrite it as "last used".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [left.path, left.hasListing, left.defaultView])
   const {
     x,
     right,
@@ -189,6 +220,7 @@ export function useAppController() {
     setClipboard,
     run,
     create,
+    createFile,
     recycle,
     deletePermanently,
     restoreFromTrash,
@@ -199,6 +231,13 @@ export function useAppController() {
     duplicate,
     undo,
   } = useFileOperations({ x, writable, notify, setDialog, trashPath })
+
+  // Closing the conflict dialog without a choice must not leave the held
+  // status-centre row running forever.
+  const cancelConflict = () => {
+    if (conflict?.activityId) finishActivity(conflict.activityId, t('已取消'))
+    setConflict(null)
+  }
 
   const { ejectDevice, ejectUsb, mountDevice, removeConnection, isRemotePath, displayName } =
     useConnectionActions({ x, left, right, run, notify, setDialog, trashPath })
@@ -274,6 +313,7 @@ export function useAppController() {
     transfer,
     undo,
     create,
+    createFile,
     newWorkspaceTab,
     closeWorkspaceTab,
     duplicate,
@@ -330,6 +370,7 @@ export function useAppController() {
     displayName,
     hint,
     create,
+    createFile,
     ides,
     openIde,
     terminal,
@@ -355,6 +396,7 @@ export function useAppController() {
     busy,
     conflict,
     setConflict,
+    cancelConflict,
     resolveConflict,
     chosen,
     chosenAll,

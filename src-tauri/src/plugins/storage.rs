@@ -22,7 +22,7 @@ fn valid_segment(value: &str) -> bool {
         && value != ".."
         && !value.starts_with('.')
 }
-fn validate(plugin: &str, scope: &str, key: &str) -> Result<(), String> {
+pub(super) fn validate(plugin: &str, scope: &str, key: &str) -> Result<(), String> {
     if !valid_segment(plugin) || !valid_segment(scope) || !valid_segment(key) {
         return Err("invalid plugin, scope or key".into());
     }
@@ -141,34 +141,6 @@ pub fn list_keys(plugin: &str, scope: &str) -> Result<Vec<String>, String> {
     let _guard = mutex().lock().map_err(|_| "plugin storage lock poisoned")?;
     Ok(load(&file(plugin, scope)?)?.into_keys().collect())
 }
-fn secret_entry(plugin: &str, scope: &str, key: &str) -> Result<keyring::v1::Entry, String> {
-    validate(plugin, scope, key)?;
-    keyring::v1::Entry::new("org.fiex.plugin", &format!("{plugin}:{scope}:{key}"))
-        .map_err(|e| format!("system credential store unavailable: {e}"))
-}
-pub fn secret_set(plugin: &str, scope: &str, key: &str, value: &str) -> Result<(), String> {
-    if value.len() > 65536 {
-        return Err("secret too large".into());
-    }
-    secret_entry(plugin, scope, key)?
-        .set_password(value)
-        .map_err(|e| format!("credential store write failed: {e}"))
-}
-/// Called only by authenticated host IPC; NEVER expose to untrusted iframe Tauri invoke.
-pub fn secret_get(plugin: &str, scope: &str, key: &str) -> Result<String, String> {
-    secret_entry(plugin, scope, key)?
-        .get_password()
-        .map_err(|e| format!("credential store access failed: {e}"))
-}
-pub fn secret_delete(plugin: &str, scope: &str, key: &str) -> Result<(), String> {
-    secret_entry(plugin, scope, key)?
-        .delete_credential()
-        .map_err(|e| format!("credential store delete failed: {e}"))
-}
-pub fn secret_available() -> bool {
-    keyring::v1::Entry::store_status().is_ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,54 +160,6 @@ mod tests {
         )
         .is_err());
     }
-}
-
-/// Typed wire status for the authenticated SDK keychain service. Access denied
-/// includes a locked store or a platform/user authorization refusal; it is not
-/// conflated with an absent credential or an unavailable backend.
-pub fn secret_response(
-    plugin: &str,
-    scope: &str,
-    key: &str,
-    operation: &str,
-    value: Option<&str>,
-) -> Result<Value, String> {
-    use keyring::v1::{Entry, Error};
-    use serde_json::json;
-    fn error(error: Error) -> Value {
-        let status = match &error {
-            Error::NoEntry => "missing",
-            Error::NoStorageAccess(_) => "denied",
-            _ => "unavailable",
-        };
-        json!({"status":status,"message":error.to_string()})
-    }
-    validate(plugin, scope, key)?;
-    let entry = match Entry::new("org.fiex.plugin", &format!("{plugin}:{scope}:{key}")) {
-        Ok(entry) => entry,
-        Err(failure) => return Ok(error(failure)),
-    };
-    Ok(match operation {
-        "get" => match entry.get_password() {
-            Ok(value) => json!({"status":"present","value":value}),
-            Err(failure) => error(failure),
-        },
-        "set" => {
-            let value = value.ok_or("missing secret value")?;
-            if value.len() > 65536 {
-                return Err("secret too large".into());
-            }
-            match entry.set_password(value) {
-                Ok(()) => json!({"status":"ok"}),
-                Err(failure) => error(failure),
-            }
-        }
-        "delete" => match entry.delete_credential() {
-            Ok(()) | Err(Error::NoEntry) => json!({"status":"ok"}),
-            Err(failure) => error(failure),
-        },
-        _ => return Err("unknown credential operation".into()),
-    })
 }
 
 #[cfg(test)]
@@ -283,3 +207,8 @@ mod atomic_tests {
         assert_eq!(load(&path).unwrap()["count"], Value::from(80));
     }
 }
+
+pub use super::credentials::{
+    credential_backend, secret_available, secret_delete, secret_get, secret_response, secret_set,
+    set_credential_backend,
+};

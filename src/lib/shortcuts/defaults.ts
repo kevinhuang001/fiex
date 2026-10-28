@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { isWindows } from '@/lib/platform'
 export const SHORTCUT_ACTIONS = [
   'quickLook',
   'search',
@@ -11,6 +12,7 @@ export const SHORTCUT_ACTIONS = [
   'newTab',
   'closeTab',
   'newFolder',
+  'newFile',
   'rename',
   'trash',
   'back',
@@ -68,11 +70,14 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   get newFolder() {
     return t('新建文件夹')
   },
+  get newFile() {
+    return t('新建空文件')
+  },
   get rename() {
     return t('重新命名')
   },
   get trash() {
-    return t('移到废纸篓')
+    return t(isWindows() ? '移到回收站' : '移到废纸篓')
   },
   get back() {
     return t('后退')
@@ -118,6 +123,7 @@ export const SHORTCUT_GROUPS: { title: string; actions: ShortcutAction[] }[] = [
       'open',
       'rename',
       'newFolder',
+      'newFile',
       'copy',
       'cut',
       'paste',

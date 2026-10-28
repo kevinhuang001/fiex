@@ -12,7 +12,7 @@
 6. 插件不能直接访问宿主文件、Socket、Tauri API、Keyring 或任意 DOM；必须走 SDK/Host Broker。
 7. Connection 导航只有两种目标：`vfs` 与 `pluginView`。
 8. SSH 是官方连接插件；终端 UI 由 Core 的 xterm.js 提供，TCP 由 Host Broker 建立。
-9. 所有文件操作只有一套 `fs.*`；插件在 `plugin.initialize` 上报能力，Core 据此决定可下发的操作和可显示的菜单项。
+9. 所有文件操作只有一套 `vfs.*`；插件在 `plugin.initialize` 上报能力，Core 据此决定可下发的操作和可显示的菜单项。
 
 ## 文档索引
 

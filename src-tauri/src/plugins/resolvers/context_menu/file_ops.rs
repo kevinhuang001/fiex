@@ -1,23 +1,26 @@
 //! Capability-gated builtin context-menu providers.
 //!
 //! The menu is a list of small resolvers. A group exists only when its
-//! capability exists, so an unsupported rename/delete/new-folder group is
-//! absent from the resolver list instead of appearing with an empty item array.
+//! capability exists, so an unsupported rename/delete group is absent from the
+//! resolver list instead of appearing with an empty item array.
 //! The capability matrix is:
 //!
-//! - `opening`: always; `open` is disabled for a file entry without `read`
+//! - `opening`: always; `open` is omitted for a file entry without `read`
 //!   (a directory opens by navigation and needs no read), `preview` requires
 //!   `read`, `info` only reads Core metadata.
 //! - `rename` / `batch-rename`: require `rename` in a writable directory.
 //! - `clipboard`: `copy` requires `read`, `cut` requires `rename` in a writable
 //!   directory, `duplicate` requires `read && write` in a writable directory.
-//! - `new-folder`: requires `create` and a writable directory.
 //! - `trash`: requires `remove` in a writable directory; `restore`/`delete`
 //!   keep today's in-trash behaviour.
 //! - `terminal` / `tags`: local selections only, because Core has no remote
 //!   terminal or tag path.
 //! - `copy-path`: always; it only uses the location Core already knows.
 //! - `connection-cache`: remote selections only, unchanged otherwise.
+//!
+//! Folder creation is not a menu group: the toolbar owns the single
+//! "new folder" affordance and disables it from the listing's `canCreate`
+//! (provider `mkdir` ∩ the directory node's own restrictions).
 //!
 //! Presence decides availability: an unsupported operation is absent from the
 //! menu, never emitted as a disabled item. [`crate::plugins::resource::file_capabilities`]
@@ -53,8 +56,8 @@ pub(super) trait BuiltinResolver {
 const GROUPS: [&dyn BuiltinResolver; 10] = [
     &Opening,
     &Tags,
+    &Create,
     &ConnectionCache,
-    &NewFolder,
     &Rename,
     &BatchRename,
     &Clipboard,
@@ -75,8 +78,8 @@ impl BuiltinResolver for Opening {
     fn priority(&self) -> i64 {
         100
     }
-    fn available(&self, _: &Selection<'_>, _: &FileCapabilities) -> bool {
-        true
+    fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
+        !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value> {
         // Directories navigate without reading; a file needs `read` to open.
@@ -107,7 +110,7 @@ impl BuiltinResolver for Tags {
         99
     }
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
-        selection.all_local
+        selection.all_local && !selection.paths.is_empty()
     }
     fn items(&self, _selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
         if cfg!(target_os = "macos") {
@@ -118,20 +121,29 @@ impl BuiltinResolver for Tags {
     }
 }
 
-struct NewFolder;
-impl BuiltinResolver for NewFolder {
+/// Blank-canvas actions: there is no selection, so only creating entries is
+/// meaningful. Both items are capability-gated: `mkdir` for a folder and the
+/// provider's `write` (parentId + name) for an empty file.
+struct Create;
+impl BuiltinResolver for Create {
     fn id(&self) -> &'static str {
-        "builtin:new-folder"
+        "builtin:create"
     }
     fn priority(&self) -> i64 {
-        97
+        98
     }
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.create && !selection.read_only
+        selection.paths.is_empty() && (capabilities.create || capabilities.write)
     }
-    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
-        // Offered items stay actionable; Core re-checks `mkdir` on execute.
-        vec![item("newFolder", "新建文件夹", "folder-plus", "newFolder")]
+    fn items(&self, _selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value> {
+        let mut items = Vec::new();
+        if capabilities.create {
+            items.push(item("newFolder", "新建文件夹…", "folder-plus", "newFolder"));
+        }
+        if capabilities.write {
+            items.push(item("newFile", "新建空文件…", "file-plus", "newFile"));
+        }
+        items
     }
 }
 
@@ -144,7 +156,7 @@ impl BuiltinResolver for Rename {
         96
     }
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.rename && !selection.read_only
+        capabilities.rename && !selection.read_only && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
         if selection.many() {
@@ -164,7 +176,7 @@ impl BuiltinResolver for BatchRename {
         95
     }
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.rename && !selection.read_only
+        capabilities.rename && !selection.read_only && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
         if selection.many() {
@@ -184,7 +196,8 @@ impl BuiltinResolver for Clipboard {
         94
     }
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.read || (capabilities.rename && !selection.read_only)
+        !selection.paths.is_empty()
+            && (capabilities.read || (capabilities.rename && !selection.read_only))
     }
     fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value> {
         let mut items = Vec::new();
@@ -210,7 +223,7 @@ impl BuiltinResolver for Terminal {
         93
     }
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
-        selection.all_local
+        selection.all_local && !selection.paths.is_empty()
     }
     fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
         vec![item("terminal", "Open in Terminal", "terminal", "")]
@@ -225,8 +238,8 @@ impl BuiltinResolver for CopyPath {
     fn priority(&self) -> i64 {
         92
     }
-    fn available(&self, _: &Selection<'_>, _: &FileCapabilities) -> bool {
-        true
+    fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
+        !selection.paths.is_empty()
     }
     fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
         vec![item("copyPath", "复制路径", "copy", "")]
@@ -242,7 +255,7 @@ impl BuiltinResolver for Trash {
         91
     }
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.remove && !selection.read_only
+        capabilities.remove && !selection.read_only && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
         let mut items = if selection.in_trash {
@@ -250,8 +263,19 @@ impl BuiltinResolver for Trash {
                 item("restore", "放回原处", "restore", ""),
                 item("delete", "彻底删除", "trash", ""),
             ]
+        } else if selection.all_local {
+            // The platform Trash only accepts local paths. Windows exposes the
+            // Recycle Bin under that name; the rest keep the Trash wording.
+            let title = if cfg!(windows) {
+                "移到回收站"
+            } else {
+                "移到废纸篓"
+            };
+            vec![item("trash", title, "trash", "trash")]
         } else {
-            vec![item("trash", "移到废纸篓", "trash", "trash")]
+            // Provider-backed mounts have no Trash. Their `vfs.remove` is the
+            // permanent delete, so the menu says exactly that.
+            vec![item("delete", "彻底删除", "trash", "")]
         };
         for item in &mut items {
             item["placement"] = json!("tail");

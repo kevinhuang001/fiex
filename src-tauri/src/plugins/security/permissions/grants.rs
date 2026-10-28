@@ -88,6 +88,19 @@ pub fn activate(
     required: &ActivationConsent,
     consent: &ActivationConsent,
 ) -> Result<(), String> {
+    // Validate before touching persistent grants; consent is also the package
+    // approval for packages installed by copying their directory.
+    validate_consent(required, consent)?;
+    mutate(id, &required.permissions, |current| {
+        apply_consent(current, required, consent)
+    })?;
+    Ok(())
+}
+
+fn validate_consent(
+    required: &ActivationConsent,
+    consent: &ActivationConsent,
+) -> Result<(), String> {
     // The user may deselect declared items, but the selection can never grow
     // beyond what the installed manifest (and its approved snapshot) declares.
     if !consent.is_subset_of(required) {
@@ -96,23 +109,54 @@ pub fn activate(
                 .into(),
         );
     }
-    mutate(id, &required.permissions, |current| {
-        if !current.approved {
-            return Err("install or upgrade approval required before activation".into());
-        }
-        let covered = required.permissions.is_subset(&current.approved_declared);
-        if !covered {
-            return Err("install or upgrade approval required before activation".into());
-        }
-        current.approved = true;
-        // Store only what the user selected. Deselected capabilities stay
-        // ungranted and are requested again if an operation needs them.
-        current.granted = consent.permissions.clone();
-        current.network_domains = consent.domains.clone();
-        current.network_all = consent.network_all;
-        current.commands = consent.commands.clone();
-        current.enabled = true;
-        Ok(())
-    })?;
     Ok(())
+}
+
+fn apply_consent(
+    current: &mut PluginGrant,
+    required: &ActivationConsent,
+    consent: &ActivationConsent,
+) -> Result<(), String> {
+    validate_consent(required, consent)?;
+    // This explicit, manifest-validated consent is also the installation
+    // approval for packages copied directly into the plugin directory.
+    current.approved_declared = required.permissions.clone();
+    current.approved = true;
+    // Store only what the user selected. Deselected capabilities stay
+    // ungranted and are requested again if an operation needs them.
+    current.granted = consent.permissions.clone();
+    current.network_domains = consent.domains.clone();
+    current.network_all = consent.network_all;
+    current.commands = consent.commands.clone();
+    current.enabled = true;
+    Ok(())
+}
+
+#[cfg(test)]
+mod activation_tests {
+    use super::*;
+    #[test]
+    fn copied_packages_require_explicit_valid_consent() {
+        let required = ActivationConsent {
+            permissions: ["files.read".into(), "network".into()].into(),
+            domains: ["example.com".into()].into(),
+            ..Default::default()
+        };
+        let selected = ActivationConsent {
+            permissions: ["files.read".into()].into(),
+            ..Default::default()
+        };
+        let mut current = PluginGrant::default();
+        assert!(!current.approved && !current.enabled);
+        apply_consent(&mut current, &required, &selected).unwrap();
+        assert!(current.approved && current.enabled);
+        assert_eq!(current.granted, selected.permissions);
+        assert!(current.network_domains.is_empty());
+        let invalid = ActivationConsent {
+            permissions: ["files.write".into()].into(),
+            ..Default::default()
+        };
+        assert!(apply_consent(&mut current, &required, &invalid).is_err());
+        assert_eq!(current.granted, selected.permissions);
+    }
 }

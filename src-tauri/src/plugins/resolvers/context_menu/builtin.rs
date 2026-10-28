@@ -35,8 +35,18 @@ impl Context {
         } else {
             entry(directory)?.readonly
         };
-        let capabilities =
-            crate::plugins::resource::file_capabilities::for_selection(paths, &entries);
+        // A blank-canvas menu has no selection: capabilities come from the
+        // directory itself so "new folder/file" follows the same grant.
+        let mut capabilities = if paths.is_empty() {
+            crate::plugins::resource::file_capabilities::for_path(directory)
+        } else {
+            crate::plugins::resource::file_capabilities::for_selection(paths, &entries)
+        };
+        if read_only {
+            capabilities = capabilities.intersect(
+                crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
+            );
+        }
         let all_local = !crate::plugins::mounts::handles(directory)
             && paths
                 .iter()
@@ -153,6 +163,6 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
     };
     Ok(
         json!({"kind":if item_id.starts_with("remote.") { "remoteAction" } else { "coreAction" },
-        "command":item_id,"paths":paths,"path":ctx.paths[0],"directory":ctx.directory}),
+        "command":item_id,"paths":paths,"path":ctx.paths.first().cloned().unwrap_or_default(),"directory":ctx.directory}),
     )
 }

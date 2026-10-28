@@ -10,8 +10,8 @@ import { LoaderCircle, RotateCw } from 'lucide-react'
 import { call, native } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
 
-import { terminalEvents, type SshEvent, type SessionStatus } from './sessionEvents'
-import { attachDemoShell } from './terminalDemoShell'
+import { terminalEvents, type SshEvent, type SessionStatus } from '../ssh/sessionEvents'
+import { attachDemoShell } from '../ssh/terminalDemoShell'
 
 function withAlpha(color: string, alpha: number) {
   const value = color.trim()
@@ -291,5 +291,3 @@ export function TerminalView({
     </div>
   )
 }
-
-// Backwards-compatible name for existing SSH call sites.

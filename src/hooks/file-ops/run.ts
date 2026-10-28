@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
-import { beginActivity, finishActivity } from '@/hooks/useActivity'
+import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import type { Explorer } from '@/hooks/useExplorer'
 import { useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
@@ -24,6 +24,8 @@ export function useRunner({
     activityKind,
     onActivity,
     quiet = false,
+    hold,
+    resume,
   ) => {
     if (running.current) return
     running.current = true
@@ -34,24 +36,27 @@ export function useRunner({
       // the operation we are about to start.
       await call('begin_operation').catch(() => {})
     }
-    const activity = activityKind
-      ? beginActivity(
-          label,
-          detail,
-          cancellable
-            ? () => {
-                void call('cancel_operation').catch(() => {})
-              }
-            : undefined,
-          activityKind,
-          undefined,
-          !quiet,
-        )
-      : undefined
+    const activity =
+      resume ??
+      (activityKind
+        ? beginActivity(
+            label,
+            detail,
+            cancellable
+              ? () => {
+                  void call('cancel_operation').catch(() => {})
+                }
+              : undefined,
+            activityKind,
+            undefined,
+            !quiet,
+          )
+        : undefined)
+    if (resume) updateActivity(resume, { detail, indeterminate: false })
     if (activity) onActivity?.(activity)
     try {
       const result = await fn()
-      if (activity) finishActivity(activity)
+      if (activity && !hold?.value) finishActivity(activity)
       x.reload()
       return result
     } catch (e) {

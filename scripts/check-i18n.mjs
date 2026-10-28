@@ -3,15 +3,34 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 const root = fileURLToPath(new URL('../', import.meta.url))
-const en = JSON.parse(fs.readFileSync(path.join(root, 'src/i18n/messages/en.json')))
-const traditional = JSON.parse(fs.readFileSync(path.join(root, 'src/i18n/messages/zh-TW.json')))
+function catalog(name) {
+  const file = path.join(root, 'src/i18n/messages', name)
+  const text = fs.readFileSync(file, 'utf8')
+  const source = ts.parseJsonText(file, text)
+  const visit = (node) => {
+    if (ts.isObjectLiteralExpression(node)) {
+      const names = new Set()
+      for (const property of node.properties) {
+        const key = property.name?.text
+        if (names.has(key)) throw new Error(`${file}: duplicate translation: ${key}`)
+        names.add(key)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return JSON.parse(text)
+}
+const en = catalog('en.json')
+const traditional = catalog('zh-TW.json')
 const slots = (value) =>
   [...value.matchAll(/\{([\w]*)(?::[^}]*)?\}/g)]
     .map((m) => m[1])
     .sort()
     .join(',')
 const errors = []
-for (const [key, english] of Object.entries(en)) {
+for (const key of new Set([...Object.keys(en), ...Object.keys(traditional)])) {
+  const english = en[key]
   for (const [locale, value] of [
     ['en', english],
     ['zh-TW', traditional[key]],
@@ -34,6 +53,16 @@ function scan(dir) {
         name.endsWith('tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
       )
       const visit = (node) => {
+        if (ts.isJsxText(node) && /[\p{Script=Han}]/u.test(node.text))
+          errors.push(`${file}: hardcoded JSX text: ${node.text.trim()}`)
+        if (
+          ts.isJsxAttribute(node) &&
+          ['title', 'placeholder', 'aria-label'].includes(node.name.getText(source)) &&
+          node.initializer &&
+          ts.isStringLiteral(node.initializer) &&
+          /[\p{Script=Han}]/u.test(node.initializer.text)
+        )
+          errors.push(`${file}: hardcoded UI attribute: ${node.initializer.text}`)
         if (
           ts.isCallExpression(node) &&
           node.expression.getText(source) === 't' &&

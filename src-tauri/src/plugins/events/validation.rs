@@ -52,6 +52,14 @@ pub fn validate_result(method: &str, value: &Value) -> Result<(), String> {
         "contextMenu.resolve" => {
             array("items", 100)?;
         }
+        "connectionContextMenu.resolve" => {
+            array("items", 100)?;
+            for item in value["items"].as_array().into_iter().flatten() {
+                if item.get("parentId").is_some() {
+                    return Err("connection menu items must be flat".into());
+                }
+            }
+        }
         "decorations.resolve" => {
             array("decorations", 100_000)?;
         }

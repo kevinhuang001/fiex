@@ -2,7 +2,7 @@
 //! `plugin.initialize`.
 //!
 //! Core never guesses what a provider can do. A plugin reports the operations
-//! it really implements, Core stores that set per plugin, and every `fs.*`
+//! it really implements, Core stores that set per plugin, and every `vfs.*`
 //! request is checked against it before it leaves the process boundary. A
 //! plugin that supports `rename` for one account can still restrict a single
 //! node through `allowedOps`; user grants and the Operation Scope are checked
@@ -62,14 +62,19 @@ impl FsOperation {
     pub fn from_method(method: &str) -> Option<Self> {
         FsOperation::ALL.into_iter().find(|operation| {
             let methods: &[&str] = match operation {
-                FsOperation::List => &["fs.list"],
-                FsOperation::Stat => &["fs.stat"],
-                FsOperation::Read => &["fs.openRead", "fs.readStream", "fs.closeRead"],
-                FsOperation::Write => &["fs.beginWrite", "fs.writeStream", "fs.commit", "fs.abort"],
-                FsOperation::Mkdir => &["fs.mkdir"],
-                FsOperation::Rename => &["fs.rename"],
-                FsOperation::Remove => &["fs.remove"],
-                FsOperation::Search => &["fs.search"],
+                FsOperation::List => &["vfs.list"],
+                FsOperation::Stat => &["vfs.stat"],
+                FsOperation::Read => &["vfs.openRead", "vfs.readStream", "vfs.closeRead"],
+                FsOperation::Write => &[
+                    "vfs.beginWrite",
+                    "vfs.writeStream",
+                    "vfs.commit",
+                    "vfs.abort",
+                ],
+                FsOperation::Mkdir => &["vfs.mkdir"],
+                FsOperation::Rename => &["vfs.rename"],
+                FsOperation::Remove => &["vfs.remove"],
+                FsOperation::Search => &["vfs.search"],
             };
             methods.contains(&method)
         })
@@ -83,6 +88,7 @@ pub struct RegisteredProvider {
     pub plugin_id: String,
     pub operations: BTreeSet<FsOperation>,
     pub reported: bool,
+    pub discovery: bool,
 }
 
 impl RegisteredProvider {
@@ -100,7 +106,7 @@ fn registry() -> &'static Mutex<HashMap<String, RegisteredProvider>> {
     REGISTRY.get_or_init(Default::default)
 }
 
-/// Record the `fs` block of a `plugin.initialize` reply. Unknown operation
+/// Record the `vfs` block of a `plugin.initialize` reply. Unknown operation
 /// names are ignored so a newer plugin cannot break an older Core.
 pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
     let mut provider = RegisteredProvider {
@@ -108,8 +114,8 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
         ..RegisteredProvider::default()
     };
     if let Some(operations) = reply
-        .get("fs")
-        .and_then(|fs| fs.get("operations"))
+        .get("vfs")
+        .and_then(|vfs| vfs.get("operations"))
         .and_then(Value::as_array)
     {
         provider.reported = true;
@@ -119,6 +125,10 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
             }
         }
     }
+    provider.discovery = reply
+        .pointer("/vfs/discovery")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     if let Ok(mut registry) = registry().lock() {
         registry.insert(plugin_id.to_string(), provider.clone());
     }
@@ -162,6 +172,35 @@ pub fn authorize_method(plugin_id: &str, method: &str) -> Result<(), String> {
     }
 }
 
+/// Discovery is negotiated and only precedes new logical operations. Existing
+/// streams must always be able to release their handles with close/abort.
+pub fn needs_discovery(plugin_id: &str, method: &str) -> bool {
+    !matches!(
+        method,
+        "vfs.readStream" | "vfs.closeRead" | "vfs.writeStream" | "vfs.commit" | "vfs.abort"
+    ) && FsOperation::from_method(method).is_some()
+        && get(plugin_id).is_some_and(|provider| provider.discovery)
+}
+
+pub fn authorize_discovered(method: &str, reply: &Value) -> Result<(), String> {
+    let operation = FsOperation::from_method(method).ok_or("invalid discovered operation")?;
+    let allowed = reply
+        .get("operations")
+        .and_then(Value::as_array)
+        .ok_or("provider discovery is missing operations")?;
+    if allowed
+        .iter()
+        .any(|value| value.as_str() == Some(operation.as_str()))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "server does not permit {} for this resource",
+            operation.as_str()
+        ))
+    }
+}
+
 /// Operations a plugin implements, for UI decisions such as which builtin
 /// menu entries may appear. `None` means the plugin never declared anything.
 pub fn operations(plugin_id: &str) -> Option<Vec<FsOperation>> {
@@ -179,7 +218,7 @@ mod tests {
     fn declaration_follows_the_handshake() {
         let provider = register(
             "org.example.drive",
-            &json!({"pluginId":"org.example.drive","ready":true,"fs":{"operations":["list","stat","read"]}}),
+            &json!({"pluginId":"org.example.drive","ready":true,"vfs":{"operations":["list","stat","read"]}}),
         );
         assert!(provider.reported);
         assert_eq!(provider.operations.len(), 3);
@@ -193,7 +232,7 @@ mod tests {
     fn unknown_operations_are_ignored() {
         let provider = register(
             "org.example.future",
-            &json!({"fs":{"operations":["list","teleport"]}}),
+            &json!({"vfs":{"operations":["list","teleport"]}}),
         );
         assert_eq!(
             provider.operations.into_iter().collect::<Vec<_>>(),
@@ -205,24 +244,49 @@ mod tests {
     #[test]
     fn undeclared_plugins_cannot_receive_file_requests() {
         forget("org.example.legacy");
-        assert!(authorize_method("org.example.legacy", "fs.list").is_err());
+        assert!(authorize_method("org.example.legacy", "vfs.list").is_err());
         register(
             "org.example.legacy",
             &json!({"pluginId":"org.example.legacy"}),
         );
-        assert!(authorize_method("org.example.legacy", "fs.list").is_err());
+        assert!(authorize_method("org.example.legacy", "vfs.list").is_err());
         assert!(authorize_method("org.example.legacy", "connection.open").is_ok());
         forget("org.example.legacy");
     }
 
     #[test]
+    fn discovery_gates_new_operations_without_orphaning_streams() {
+        let plugin = "org.example.discovery";
+        register(
+            plugin,
+            &json!({"vfs":{"operations":["read","write"],"discovery":true}}),
+        );
+        assert!(needs_discovery(plugin, "vfs.openRead"));
+        assert!(needs_discovery(plugin, "vfs.beginWrite"));
+        for method in [
+            "vfs.discover",
+            "vfs.closeRead",
+            "vfs.abort",
+            "vfs.commit",
+            "vfs.readStream",
+        ] {
+            assert!(!needs_discovery(plugin, method));
+        }
+        assert!(authorize_discovered("vfs.beginWrite", &json!({"operations":["read"]})).is_err());
+        assert!(authorize_discovered("vfs.openRead", &json!({"operations":[]})).is_err());
+        assert!(authorize_discovered("vfs.openRead", &json!({"operations":["read"]})).is_ok());
+        assert!(authorize_discovered("vfs.openRead", &Value::Null).is_err());
+        forget(plugin);
+    }
+
+    #[test]
     fn streaming_methods_map_to_their_capability() {
         assert_eq!(
-            FsOperation::from_method("fs.readStream"),
+            FsOperation::from_method("vfs.readStream"),
             Some(FsOperation::Read)
         );
         assert_eq!(
-            FsOperation::from_method("fs.commit"),
+            FsOperation::from_method("vfs.commit"),
             Some(FsOperation::Write)
         );
         assert_eq!(FsOperation::from_method("host.fs.stat"), None);

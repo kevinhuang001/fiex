@@ -16,8 +16,7 @@ export function PluginStoreToolbar({
   children?: ReactNode
 }) {
   return (
-    <div className="plugin-manager-toolbar">
-      {children}
+    <div className="plugin-manager">
       <div className="plugin-toolbar-actions">
         <Button type="button" size="sm" variant="outline" onClick={onImport}>
           <Upload size={15} />
@@ -28,6 +27,7 @@ export function PluginStoreToolbar({
           {t('获取插件')}
         </Button>
       </div>
+      <div className="plugin-manager-toolbar">{children}</div>
     </div>
   )
 }

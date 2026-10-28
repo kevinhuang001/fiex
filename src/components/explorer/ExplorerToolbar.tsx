@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { isWindows } from '@/lib/platform'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
 import { ArrowsClockwiseIcon as RefreshCw } from '@phosphor-icons/react/dist/csr/ArrowsClockwise'
@@ -250,8 +251,8 @@ export function ExplorerToolbar({
           <Button
             variant="ghost"
             size="icon"
-            title={t('清空废纸篓')}
-            aria-label={t('清空废纸篓')}
+            title={t(isWindows() ? '清空回收站' : '清空废纸篓')}
+            aria-label={t(isWindows() ? '清空回收站' : '清空废纸篓')}
             onClick={emptyTrash}
           >
             <Trash2 size={20} />

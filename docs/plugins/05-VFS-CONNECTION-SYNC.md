@@ -53,10 +53,10 @@ Core 分配 `mountId`，插件只使用 Core 传入的节点/资源身份，不�
 
 - `vfs.list`
 - `vfs.stat`
-- `vfs.readSmall`
+- `vfs.openRead` / `vfs.readStream` / `vfs.closeRead`
 - `vfs.search`
 
-独立视图与连接共用 `fs.openRead/readStream/closeRead` 和 `fs.beginWrite/writeStream/commit/abort`；`vfs.*` 已在 protocol 5 删除。
+独立视图与连接共用 `vfs.openRead/readStream/closeRead` 和 `vfs.beginWrite/writeStream/commit/abort`；旧的小文件读取和快照上传接口已删除。
 
 ## 同步与缓存
 

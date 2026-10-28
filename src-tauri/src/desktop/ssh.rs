@@ -5,14 +5,13 @@
 //! keyboard-interactive/MFA, algorithms and known_hosts behavior in the same
 //! trusted implementation the user already uses. The WebView only receives the
 //! byte stream; it never receives credentials.
-use super::shell_profile::login_arg;
+
 use base64::Engine;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use std::{
     collections::{HashMap, VecDeque},
     io::{Read, Write},
-    path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, OnceLock,
@@ -20,59 +19,8 @@ use std::{
 };
 use tauri::ipc::Channel;
 
-#[derive(Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ShellChoice {
-    id: String,
-    name: String,
-    path: String,
-}
-
-fn shell_choices() -> Vec<ShellChoice> {
-    let mut paths = Vec::new();
-    #[cfg(unix)]
-    if let Ok(contents) = std::fs::read_to_string("/etc/shells") {
-        for line in contents.lines() {
-            let path = line.trim();
-            if path.starts_with('/') && Path::new(path).is_file() {
-                paths.push(path.to_string());
-            }
-        }
-    }
-    if let Ok(shell) = std::env::var("SHELL") {
-        if Path::new(&shell).is_file() {
-            paths.push(shell);
-        }
-    }
-    #[cfg(windows)]
-    paths.extend(["powershell.exe".into(), "pwsh.exe".into(), "cmd.exe".into()]);
-    paths.push(if cfg!(windows) {
-        "powershell.exe".into()
-    } else {
-        "/bin/sh".into()
-    });
-    let mut seen = std::collections::HashSet::new();
-    paths
-        .into_iter()
-        .filter(|path| seen.insert(path.clone()))
-        .map(|path| {
-            let name = Path::new(&path)
-                .file_name()
-                .map(|value| value.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.clone());
-            ShellChoice {
-                id: path.clone(),
-                name,
-                path,
-            }
-        })
-        .collect()
-}
-
-#[tauri::command]
-pub(crate) fn detect_shells() -> Vec<ShellChoice> {
-    shell_choices()
-}
+mod plugin_pty;
+pub(crate) use plugin_pty::*;
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -87,202 +35,6 @@ struct Session {
     writer: Box<dyn Write + Send>,
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn Child + Send>,
-}
-
-struct PluginSession {
-    owner: String,
-    input: Arc<Mutex<VecDeque<u8>>>,
-    size: Arc<Mutex<(u16, u16)>>,
-    channel: Channel<SshEvent>,
-    closed: Arc<AtomicBool>,
-}
-
-fn plugin_sessions() -> &'static Mutex<HashMap<String, PluginSession>> {
-    static VALUES: OnceLock<Mutex<HashMap<String, PluginSession>>> = OnceLock::new();
-    VALUES.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-struct PluginParts {
-    input: Arc<Mutex<VecDeque<u8>>>,
-    size: Arc<Mutex<(u16, u16)>>,
-    closed: Arc<AtomicBool>,
-    channel: Channel<SshEvent>,
-}
-
-fn plugin_session(owner: &str, id: &str) -> Result<PluginParts, String> {
-    let values = plugin_sessions()
-        .lock()
-        .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
-    let session = values
-        .get(id)
-        .filter(|session| session.owner == owner)
-        .ok_or("终端会话不存在")?;
-    Ok(PluginParts {
-        input: session.input.clone(),
-        size: session.size.clone(),
-        closed: session.closed.clone(),
-        channel: session.channel.clone(),
-    })
-}
-
-pub(crate) fn plugin_terminal_ready(owner: &str, params: &serde_json::Value) -> Result<(), String> {
-    let id = params
-        .get("sessionId")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing sessionId")?;
-    plugin_session(owner, id)?
-        .channel
-        .send(SshEvent::Ready)
-        .map_err(|error| error.to_string())
-}
-
-pub(crate) fn plugin_terminal_output(
-    owner: &str,
-    params: &serde_json::Value,
-) -> Result<(), String> {
-    let id = params
-        .get("sessionId")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing sessionId")?;
-    let data = params
-        .get("dataBase64")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing dataBase64")?;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(data)
-        .map_err(|error| error.to_string())?;
-    let session = plugin_session(owner, id)?;
-    session
-        .channel
-        .send(SshEvent::Data { data: bytes })
-        .map_err(|error| error.to_string())
-}
-
-pub(crate) fn plugin_terminal_input(
-    owner: &str,
-    params: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let id = params
-        .get("sessionId")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing sessionId")?;
-    let max = params
-        .get("maxBytes")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(8192)
-        .clamp(1, 1024 * 1024) as usize;
-    let session = plugin_session(owner, id)?;
-    let mut queue = session
-        .input
-        .lock()
-        .map_err(|_| crate::i18n::t("终端输入不可用"))?;
-    let size = queue.len().min(max);
-    let bytes = queue.drain(..size).collect::<Vec<_>>();
-    Ok(serde_json::json!({
-        "dataBase64": base64::engine::general_purpose::STANDARD.encode(bytes),
-        "eof": session.closed.load(Ordering::Acquire),
-    }))
-}
-
-pub(crate) fn plugin_terminal_size(
-    owner: &str,
-    params: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let id = params
-        .get("sessionId")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing sessionId")?;
-    let session = plugin_session(owner, id)?;
-    let (cols, rows) = *session
-        .size
-        .lock()
-        .map_err(|_| crate::i18n::t("终端尺寸不可用"))?;
-    Ok(serde_json::json!({"cols": cols, "rows": rows}))
-}
-
-pub(crate) fn plugin_terminal_closed(
-    owner: &str,
-    params: &serde_json::Value,
-) -> Result<serde_json::Value, String> {
-    let id = params
-        .get("sessionId")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing sessionId")?;
-    let session = plugin_session(owner, id)?;
-    Ok(serde_json::json!({"closed": session.closed.load(Ordering::Acquire)}))
-}
-
-pub(crate) fn plugin_terminal_end(owner: &str, params: &serde_json::Value) -> Result<(), String> {
-    let id = params
-        .get("sessionId")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing sessionId")?;
-    let mut values = plugin_sessions()
-        .lock()
-        .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
-    if !values.get(id).is_some_and(|session| session.owner == owner) {
-        return Err(crate::i18n::t("终端会话不存在").into());
-    }
-    let session = values.remove(id).ok_or("终端会话不存在")?;
-    session.closed.store(true, Ordering::Release);
-    if let Some(message) = params.get("error").and_then(serde_json::Value::as_str) {
-        let _ = session.channel.send(SshEvent::Error {
-            message: message.into(),
-        });
-    }
-    let _ = session.channel.send(SshEvent::Exit { code: None });
-    Ok(())
-}
-
-async fn plugin_ssh_open(
-    connection: crate::remote::StoredConnection,
-    cols: u16,
-    rows: u16,
-    on_event: Channel<SshEvent>,
-) -> Result<String, String> {
-    let id = crate::plugins::mounts::new_id()?;
-    let input = Arc::new(Mutex::new(VecDeque::new()));
-    let size = Arc::new(Mutex::new((cols.max(20), rows.max(4))));
-    let closed = Arc::new(AtomicBool::new(false));
-    plugin_sessions()
-        .lock()
-        .map_err(|_| crate::i18n::t("终端会话表不可用"))?
-        .insert(
-            id.clone(),
-            PluginSession {
-                owner: "org.fiex.ssh".into(),
-                input: input.clone(),
-                size: size.clone(),
-                channel: on_event,
-                closed: closed.clone(),
-            },
-        );
-    let plugin_id = "org.fiex.ssh".to_string();
-    let config = crate::remote::provider_config(&connection);
-    let session_id = id.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::host::global().invoke(
-            &plugin_id,
-            "terminal.open",
-            serde_json::json!({
-                "sessionId": session_id,
-                "cols": cols,
-                "rows": rows,
-                "connection": config,
-            }),
-        )
-    })
-    .await
-    .map_err(|error| error.to_string())
-    .and_then(|result| result);
-    if let Err(error) = result {
-        plugin_sessions()
-            .lock()
-            .map_err(|_| crate::i18n::t("终端会话表不可用"))?
-            .remove(&id);
-        return Err(error);
-    }
-    Ok(id)
 }
 
 fn sessions() -> &'static Mutex<HashMap<String, Session>> {
@@ -308,13 +60,13 @@ fn expanded_path(value: &str) -> String {
     value.to_string()
 }
 
-fn home() -> String {
+pub(super) fn home() -> String {
     dirs::home_dir()
         .map(|path| path.to_string_lossy().into_owned())
         .unwrap_or_else(|| ".".into())
 }
 
-fn start_session(
+pub(super) fn start_session(
     command: CommandBuilder,
     cols: u16,
     rows: u16,
@@ -331,10 +83,9 @@ fn start_session(
             pixel_height: 0,
         })
         .map_err(|error| error.to_string())?;
-    let child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(|error| format!("无法启动终端：{error}"))?;
+    let child = pair.slave.spawn_command(command).map_err(|error| {
+        crate::i18n::format("无法启动终端：{error}", &[("error", format!("{}", error))])
+    })?;
     drop(pair.slave);
     let mut reader = pair
         .master
@@ -400,17 +151,9 @@ pub(crate) async fn ssh_open(
     let connection = crate::remote::load_stored()
         .into_iter()
         .find(|connection| connection.id == connection_id)
-        .ok_or("SSH 连接不存在")?;
-    if !matches!(
-        connection.plugin_id.as_str(),
-        "__builtin__" | "org.fiex.ssh"
-    ) || (connection.plugin_id == "__builtin__" && connection.kind != "ssh")
-    {
+        .ok_or(crate::i18n::t("SSH 连接不存在"))?;
+    if connection.plugin_id != "__builtin__" || connection.kind != "ssh" {
         return Err(crate::i18n::t("不是 SSH 连接").into());
-    }
-    if connection.plugin_id == "org.fiex.ssh" {
-        crate::remote::ensure_provider_access(&connection)?;
-        return plugin_ssh_open(connection, cols, rows, on_event).await;
     }
     let host = string_setting(&connection.settings, "host");
     if host.is_empty() {
@@ -456,43 +199,6 @@ pub(crate) async fn ssh_open(
     .map_err(|error| error.to_string())?
 }
 
-/// Local integrated terminal. Reuses the same PTY/session/event pipeline as SSH.
-#[tauri::command]
-pub(crate) async fn local_terminal_open(
-    cwd: Option<String>,
-    shell: Option<String>,
-    cols: u16,
-    rows: u16,
-    on_event: Channel<SshEvent>,
-) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let shell = shell
-            .filter(|value| !value.is_empty() && !value.contains(['\0', '\n', '\r']))
-            .unwrap_or_else(|| {
-                if cfg!(windows) {
-                    "powershell.exe".to_string()
-                } else {
-                    std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into())
-                }
-            });
-        let mut command = CommandBuilder::new(&shell);
-        if cfg!(windows) {
-            command.arg("-NoLogo");
-        } else if let Some(login) = login_arg(&shell) {
-            command.arg(login);
-        }
-        let directory = cwd
-            .filter(|value| !value.contains("://") && Path::new(value).is_dir())
-            .unwrap_or_else(home);
-        command.cwd(directory);
-        command.env("TERM", "xterm-256color");
-        command.env("COLORTERM", "truecolor");
-        start_session(command, cols, rows, on_event)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
 #[tauri::command]
 pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String> {
     if let Ok(mut plugin) = plugin_sessions().lock() {
@@ -508,7 +214,9 @@ pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String>
     let mut values = sessions()
         .lock()
         .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
-    let session = values.get_mut(&session_id).ok_or("终端会话已结束")?;
+    let session = values
+        .get_mut(&session_id)
+        .ok_or(crate::i18n::t("终端会话已结束"))?;
     session.writer.write_all(&data).map_err(|e| e.to_string())?;
     session.writer.flush().map_err(|e| e.to_string())
 }
@@ -527,7 +235,9 @@ pub(crate) fn ssh_resize(session_id: String, cols: u16, rows: u16) -> Result<(),
     let values = sessions()
         .lock()
         .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
-    let session = values.get(&session_id).ok_or("终端会话已结束")?;
+    let session = values
+        .get(&session_id)
+        .ok_or(crate::i18n::t("终端会话已结束"))?;
     session
         .master
         .resize(PtySize {

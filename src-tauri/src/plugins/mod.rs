@@ -1,6 +1,7 @@
 //! Plugin lifecycle, services, resource security and event resolvers.
 pub mod cache;
 pub mod contracts;
+mod credentials;
 pub mod errors;
 pub mod events;
 pub mod host;
@@ -9,6 +10,7 @@ pub mod ipc;
 pub mod match_rules;
 pub mod mounts;
 pub mod net;
+pub(crate) mod oauth;
 pub mod provider_registry;
 pub mod resolvers;
 pub mod resource;

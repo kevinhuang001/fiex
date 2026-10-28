@@ -1,10 +1,14 @@
 import { t } from '@/i18n'
+import { useRef, useState } from 'react'
 import { FileIcon } from '../../FileIcon'
 import { DecoratedValue, NameCell, rowVars } from './shared'
 import { date, kind, size } from '@/lib/files'
+import { LIST_COLUMNS_DEFAULT, listGridTemplate, resizeListColumn } from '@/lib/listColumns'
+import type { ListColumnKey, ListColumns } from '@/lib/listColumns'
 import type { Entry } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { SharedRow } from './shared'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { VirtualItem } from '@tanstack/react-virtual'
 
 export interface FlatRow {
@@ -12,7 +16,7 @@ export interface FlatRow {
   entry: Entry | null
 }
 
-/** Virtualized list with a fixed header row. */
+/** Virtualized list with a fixed header row and draggable column dividers. */
 export function ListView({
   explorer,
   flat,
@@ -20,6 +24,8 @@ export function ListView({
   totalSize,
   selectedPaths,
   shared,
+  columns,
+  onColumnsChange,
 }: {
   explorer: Explorer
   flat: FlatRow[]
@@ -27,14 +33,73 @@ export function ListView({
   totalSize: number
   selectedPaths: Set<string>
   shared: SharedRow
+  columns: ListColumns
+  onColumnsChange: (columns: ListColumns) => void
 }) {
+  // A drag previews locally and commits once on release, so moving the divider
+  // never writes preferences on every pointer event.
+  const [draft, setDraft] = useState<ListColumns | null>(null)
+  const drag = useRef<{ startX: number; columns: ListColumns; key: ListColumnKey } | null>(null)
+  const widths = draft ?? columns
+  const template = listGridTemplate(widths)
+  const beginDrag = (key: ListColumnKey, event: ReactPointerEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    drag.current = { startX: event.clientX, columns: widths, key }
+    document.body.classList.add('col-resizing')
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const moveDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const state = drag.current
+    if (!state) return
+    setDraft(resizeListColumn(state.columns, state.key, event.clientX - state.startX))
+  }
+  const endDrag = () => {
+    if (!drag.current) return
+    drag.current = null
+    document.body.classList.remove('col-resizing')
+    if (
+      draft &&
+      (draft.modified !== columns.modified ||
+        draft.size !== columns.size ||
+        draft.kind !== columns.kind)
+    )
+      onColumnsChange(draft)
+    setDraft(null)
+  }
+  const resetColumn = (key: ListColumnKey) => {
+    setDraft(null)
+    onColumnsChange({ ...widths, [key]: LIST_COLUMNS_DEFAULT[key] })
+  }
+  const resizer = (key: ListColumnKey) => (
+    <i
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={t('拖动调整列宽')}
+      className="col-resizer"
+      onPointerDown={(event) => beginDrag(key, event)}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onDoubleClick={() => resetColumn(key)}
+    />
+  )
   return (
     <>
-      <div className="list-header">
+      <div className="list-header" style={{ gridTemplateColumns: template }}>
         <span>{t('名称')}</span>
-        <span>{t('修改时间')}</span>
-        <span>{t('大小')}</span>
-        <span>{t('种类')}</span>
+        <span className="list-col">
+          {resizer('modified')}
+          {t('修改时间')}
+        </span>
+        <span className="list-col">
+          {resizer('size')}
+          {t('大小')}
+        </span>
+        <span className="list-col">
+          {resizer('kind')}
+          {t('种类')}
+        </span>
       </div>
       <div style={{ height: totalSize, position: 'relative' }}>
         {rows.map((row) => {
@@ -57,7 +122,7 @@ export function ListView({
                 <div
                   role="row"
                   className={`file-row ${selectedPaths.has(item.entry.path) ? 'selected' : ''}${rowDecor.className}`}
-                  style={rowDecor.style}
+                  style={{ ...rowDecor.style, gridTemplateColumns: template }}
                   {...shared(item.entry)}
                 >
                   <span className="file-name">

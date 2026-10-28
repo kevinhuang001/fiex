@@ -32,20 +32,21 @@
 
 所有扩展点都在 `extensions` 下注册，**每插件最多一个贡献**。
 
-| 扩展点         | 形态                                               | Core 固定调用                                 |
-| -------------- | -------------------------------------------------- | --------------------------------------------- |
-| `contextMenus` | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute` |
-| `decorations`  | `{match?, priority?}`                              | `decorations.resolve`                         |
-| `info`         | `{match?, priority?}`                              | `info.resolve`                                |
-| `preview`      | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                |
-| `connections`  | `{title, fields}`                                  | `connection.validate/open/create`             |
-| `vfs`          | `{title, readOnly?}`                               | `vfs.list/stat/read…`                         |
-| `search`       | `{icon?, scope?}`                                  | `search.query`                                |
-| `toolbar`      | `{title, icon?, panel?}`                           | `toolbar.invoke`，有 panel 时打开面板         |
-| `themes`       | `{path}`                                           | 主题资产加载                                  |
-| `settings`     | `[{id,label,type,…}]`                              | 设置字段；字段 id 是存储 key                  |
-| `hooks`        | `{event, priority?, match?}`                       | `hooks.invoke`（`beforeOpen` 可消费打开）     |
-| `ui`           | `{timeoutMs?}`                                     | 面板桥接与单次插件请求的超时预算              |
+| 扩展点                   | 形态                                               | Core 固定调用                                                     |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------- |
+| `contextMenus`           | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute`                     |
+| `connectionContextMenus` | `true` 或 `{priority}`                             | `connectionContextMenu.resolve` / `connectionContextMenu.execute` |
+| `decorations`            | `{match?, priority?}`                              | `decorations.resolve`                                             |
+| `info`                   | `{match?, priority?}`                              | `info.resolve`                                                    |
+| `preview`                | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                                    |
+| `connections`            | `{title, fields}`                                  | `connection.validate/open/create`                                 |
+| `vfs`                    | `{title, readOnly?}`                               | `vfs.list/stat/read…`                                             |
+| `search`                 | `{icon?, scope?}`                                  | `search.query`                                                    |
+| `toolbar`                | `{title, icon?, panel?}`                           | `toolbar.invoke`，有 panel 时打开面板                             |
+| `themes`                 | `{path}`                                           | 主题资产加载                                                      |
+| `settings`               | `[{id,label,type,…}]`                              | 设置字段；字段 id 是存储 key                                      |
+| `hooks`                  | `{event, priority?, match?}`                       | `hooks.invoke`（`beforeOpen` 可消费打开）                         |
+| `ui`                     | `{timeoutMs?}`                                     | 面板桥接与单次插件请求的超时预算                                  |
 
 不再接受：
 
@@ -102,7 +103,19 @@
 }
 ```
 
-字段类型：`text | url | number | checkbox | secret`。`secret` 只进入系统钥匙串，不写入普通 settings。
+字段类型：`text | url | number | checkbox | secret | list | file`。`secret` 只进入系统钥匙串，不写入普通 settings。
+
+文件选择器约定（Core 统一渲染，插件不需要自己实现）：
+
+```json
+{ "id": "privateKey", "label": "私钥文件", "type": "secret", "fromFile": true }
+{ "id": "certificate", "label": "证书文件", "type": "file", "extensions": ["pem", "crt"] }
+```
+
+- `type: "file"`：显示“选择文件”按钮，选中后把**路径**写入该字段（适合需要路径的插件）。
+- `fromFile: true`（可加在 `text` / `secret` 上）：显示“从文件读取”按钮，选中后由 Core 读取文本内容并写入字段（适合私钥、证书内容）；读取大小与普通预览一致（上限 512 KiB）。
+- `extensions`：可选的文件类型过滤，例如 `["asc", "gpg", "pgp", "key"]`。
+- 选择器是 Core 的应用内文件选择器，不经过插件进程；插件只会收到最终路径或文本。
 
 ### VFS
 

@@ -15,7 +15,9 @@ import type { PickerMenuState } from './PickerMenu'
 import {
   dirname,
   join,
+  persistPickerDirectory,
   persistPickerSort,
+  storedDirectory,
   storedGroup,
   storedSort,
   type GroupKey,
@@ -35,10 +37,14 @@ export function usePicker(request: FilePickerRequest) {
   const [entries, setEntries] = useState<Entry[]>([])
   const initialSidebar = pickerSidebarSnapshot()
   const [locations, setLocations] = useState<Location[]>(initialSidebar?.locations || [])
+  const usableConnections = (items: RemoteConnection[]) =>
+    items.filter(
+      (item) =>
+        item.mountPath.startsWith('fiex://mount/') &&
+        (request.mode === 'saveFile' ? item.canWrite === true : item.canRead !== false),
+    )
   const [connections, setConnections] = useState<RemoteConnection[]>(() =>
-    (initialSidebar?.connections || []).filter((item) =>
-      item.mountPath.startsWith('fiex://mount/'),
-    ),
+    usableConnections(initialSidebar?.connections || []),
   )
   const [selected, setSelected] = useState<string[]>([])
   const [history, setHistory] = useState<string[]>([])
@@ -58,6 +64,9 @@ export function usePicker(request: FilePickerRequest) {
   const menuRef = useRef<HTMLDivElement>(null)
   const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
   const dialogInput = useRef<HTMLInputElement>(null)
+  // Read once per mount: the picker should fall back to home only when the
+  // remembered folder has disappeared, not whenever a later navigation fails.
+  const rememberedDirectory = useRef(storedDirectory())
 
   const navigate = (path: string) => {
     if (!path || path === directory) return
@@ -74,11 +83,13 @@ export function usePicker(request: FilePickerRequest) {
       .then(({ locations, connections }) => {
         if (!alive) return
         setLocations(locations)
-        // A picker can only navigate VFS-backed connections.
-        setConnections(connections.filter((item) => item.mountPath.startsWith('fiex://mount/')))
+        // Save targets need a writable provider; open targets need a readable
+        // one. Connections without a capability report stay out of save mode.
+        setConnections(usableConnections(connections))
         if (!directory) {
           const target =
             request.directory ||
+            rememberedDirectory.current ||
             (locations.find((item) => item.kind === 'home') || locations[0])?.path ||
             ''
           if (target) {
@@ -101,14 +112,33 @@ export function usePicker(request: FilePickerRequest) {
       .then((value) => {
         if (!alive) return
         setEntries(value.entries || [])
+        if (rememberedDirectory.current === directory) rememberedDirectory.current = ''
       })
       .catch((cause) => {
-        if (alive) setError(String(cause))
+        if (!alive) return
+        const home = (locations.find((item) => item.kind === 'home') || locations[0])?.path
+        if (
+          !request.directory &&
+          rememberedDirectory.current === directory &&
+          home &&
+          home !== directory
+        ) {
+          rememberedDirectory.current = ''
+          setDirectory(home)
+          setHistory([home])
+          setIndex(0)
+          return
+        }
+        setError(String(cause))
       })
     return () => {
       alive = false
     }
   }, [directory, reload])
+
+  useEffect(() => {
+    if (directory) persistPickerDirectory(directory)
+  }, [directory])
 
   useEffect(() => {
     if (request.mode !== 'saveFile') return
@@ -180,9 +210,17 @@ export function usePicker(request: FilePickerRequest) {
 
   const visible = useMemo(() => {
     const query = filter.trim().toLowerCase()
-    const filtered = query
-      ? entries.filter((entry) => entry.name.toLowerCase().includes(query))
-      : entries
+    const extensions = request.mode === 'saveFile' ? [] : request.extensions || []
+    const matching = (entry: Entry) =>
+      !extensions.length ||
+      entry.isDir ||
+      extensions.some((extension) => {
+        const suffix = extension.startsWith('.') ? extension : `.${extension}`
+        return entry.name.toLowerCase().endsWith(suffix.toLowerCase())
+      })
+    const filtered = (
+      query ? entries.filter((entry) => entry.name.toLowerCase().includes(query)) : entries
+    ).filter(matching)
     const direction = sort.direction === 'asc' ? 1 : -1
     return [...filtered].sort((left, right) => {
       if (group !== 'none') {
@@ -204,7 +242,7 @@ export function usePicker(request: FilePickerRequest) {
       return result * direction
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, filter, sort, group, getLocale()])
+  }, [entries, filter, sort, group, request.mode, request.extensions, getLocale()])
 
   const grouped = useMemo(() => {
     if (group === 'none') return [{ label: null as string | null, entries: visible }]

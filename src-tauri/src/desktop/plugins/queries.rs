@@ -1,0 +1,91 @@
+use super::*;
+
+#[tauri::command]
+pub(crate) async fn file_info_details(
+    path: String,
+) -> Vec<crate::plugins::resolvers::info::InfoSection> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::resolvers::info::file_info_resource(&path).unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+#[tauri::command]
+pub(crate) fn plugin_task(
+    plugin_id: String,
+    task_id: String,
+) -> Option<crate::plugins::host::PluginTaskInfo> {
+    crate::plugins::host::global()
+        .task(&task_id)
+        .filter(|task| task.plugin_id == plugin_id)
+}
+
+#[tauri::command]
+pub(crate) fn plugin_cancel_task(plugin_id: String, task_id: String) -> Result<(), String> {
+    let task = crate::plugins::host::global()
+        .task(&task_id)
+        .filter(|task| task.plugin_id == plugin_id)
+        .ok_or("background task not found")?;
+    crate::plugins::host::global().cancel_task(&task.task_id)
+}
+
+#[tauri::command]
+pub(crate) fn plugin_status() -> Vec<(String, bool)> {
+    crate::plugins::host::catalog()
+        .into_iter()
+        .map(|item| (item.id, item.backend_available))
+        .collect()
+}
+
+#[tauri::command]
+pub(crate) async fn plugin_decorations(
+    directory: String,
+    entries: Vec<crate::plugins::resolvers::decorations::DecorationEntry>,
+    include_plugins: Option<bool>,
+) -> Result<Vec<crate::plugins::resolvers::decorations::Decoration>, String> {
+    if !directory.starts_with('/') && !directory.contains(":\\") && !directory.contains("://") {
+        return Err("invalid decoration directory".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::resolvers::decorations::query_with_plugins(
+            &directory,
+            entries,
+            include_plugins.unwrap_or(true),
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) fn plugin_themes() -> Vec<crate::plugins::themes::Theme> {
+    crate::plugins::host::themes()
+}
+
+#[tauri::command]
+pub(crate) fn plugin_network_domains(plugin_id: String) -> Result<Vec<String>, String> {
+    crate::plugins::host::network_domains(&plugin_id)
+}
+
+#[tauri::command]
+pub(crate) fn plugin_permission_allowed(
+    plugin_id: String,
+    permission: String,
+) -> Result<bool, String> {
+    crate::plugins::host::permission_allowed(&plugin_id, &permission)
+}
+
+#[tauri::command]
+pub(crate) fn plugin_panel_html(plugin_id: String, panel_id: String) -> Result<String, String> {
+    crate::plugins::host::panel_html(&plugin_id, &panel_id).inspect_err(|error| {
+        record_plugin_error(&plugin_id, "panel", &format!("{panel_id}: {error}"))
+    })
+}
+
+#[tauri::command]
+pub(crate) fn plugin_panel_asset(plugin_id: String, panel_id: String) -> Result<String, String> {
+    crate::plugins::host::panel_asset(&plugin_id, &panel_id).inspect_err(|error| {
+        record_plugin_error(&plugin_id, "panel", &format!("{panel_id}: {error}"))
+    })
+}

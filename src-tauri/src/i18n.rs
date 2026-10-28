@@ -51,3 +51,8 @@ pub fn text(source: &str) -> String {
     .unwrap_or(source)
     .to_string()
 }
+
+/// Localize the template before interpolating untrusted filenames or server text.
+pub fn format(source: &'static str, values: &[(&str, String)]) -> String {
+    fiex_plugin_sdk::i18n::format(t(source), values)
+}

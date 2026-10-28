@@ -965,6 +965,17 @@ body.dragging-file * {
 .connection-form label > span {
   font-weight: 600;
 }
+/* Every field row shares one flex line so plain, number and file inputs all
+   stretch to the same width as Connection name. */
+.connection-form label > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connection-form label > div > input:not([type='checkbox']) {
+  flex: 1;
+  min-width: 0;
+}
 .connection-form input:not([type='checkbox']) {
   height: 30px;
   padding: 0 9px;
@@ -1982,4 +1993,20 @@ body.dragging-file * {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
+}
+
+/* Connection fields that open the in-app file chooser. */
+.connection-form .connection-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connection-form .connection-file input {
+  flex: 1;
+  min-width: 0;
+}
+.connection-form .connection-file .button {
+  flex: 0 0 auto;
+  height: 34px;
+  white-space: nowrap;
 }

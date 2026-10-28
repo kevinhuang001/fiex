@@ -15,6 +15,38 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
   switch (command) {
     case 'list_directory': {
       const requested = String(a.path || '')
+      if (requested === 'applications://') {
+        const app = (name: string, path: string, extension: string) => ({
+          path,
+          name,
+          isDir: false,
+          isSymlink: false,
+          size: 0,
+          modified: 0,
+          created: 0,
+          extension,
+          mime: 'application/x-fiex-application',
+          readonly: false,
+          linkTarget: null,
+          tags: [],
+          hasCache: false,
+          pinned: false,
+          uploaded: false,
+          sync: null,
+        })
+        return {
+          path: 'applications://',
+          readOnly: false,
+          canCreate: false,
+          virtualVolume: true,
+          defaultView: 'icons',
+          warnings: [],
+          entries: [
+            app('Fiex', 'applications://ZmlleHQ=', 'app'),
+            app('我的快捷方式', 'applications://user/bXktYXBw', 'app'),
+          ],
+        }
+      }
       if (requested === 'recent:' || requested === 'recent://') {
         const names = [
           'Notes.md',

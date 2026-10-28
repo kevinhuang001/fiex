@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import { Action, Label, Menu } from '@/components/Menus'
 import * as D from '@/components/ui/dropdown-menu'
 import { useMenuPosition } from '@/lib/menuPosition'
+import { MenuLayer } from '@/components/ui/MenuLayer'
 import type { AppController } from '@/hooks/useAppController'
 import type { PluginContribution, PluginInfo } from '@/lib/plugins'
 import type { Ide, Terminal } from '@/lib/types'
@@ -66,34 +67,36 @@ export function ToolbarPickerMenu({
   const items =
     picker.kind === 'ide' ? ides : [{ id: 'builtin', name: t('Fiex 内置终端') }, ...terminals]
   return (
-    <div
-      ref={pickerRef}
-      className="context-menu toolbar-picker"
-      role="menu"
-      aria-label={picker.kind === 'ide' ? t('选择 IDE') : t('选择终端')}
-      style={pickerPosition}
-    >
-      {items.map((item) => (
-        <button
-          role="menuitem"
-          key={item.id}
-          data-active={
-            (picker.kind === 'ide' ? prefs.ide : prefs.terminal) === item.id || undefined
-          }
-          onClick={() => {
-            update(picker.kind === 'ide' ? { ide: item.id } : { terminal: item.id })
-            closePicker()
-          }}
-        >
-          {item.name}
-        </button>
-      ))}
-      {items.length === 0 && (
-        <button role="menuitem" disabled>
-          {t('未检测到可用应用')}
-        </button>
-      )}
-    </div>
+    <MenuLayer>
+      <div
+        ref={pickerRef}
+        className="context-menu toolbar-picker"
+        role="menu"
+        aria-label={picker.kind === 'ide' ? t('选择 IDE') : t('选择终端')}
+        style={pickerPosition}
+      >
+        {items.map((item) => (
+          <button
+            role="menuitem"
+            key={item.id}
+            data-active={
+              (picker.kind === 'ide' ? prefs.ide : prefs.terminal) === item.id || undefined
+            }
+            onClick={() => {
+              update(picker.kind === 'ide' ? { ide: item.id } : { terminal: item.id })
+              closePicker()
+            }}
+          >
+            {item.name}
+          </button>
+        ))}
+        {items.length === 0 && (
+          <button role="menuitem" disabled>
+            {t('未检测到可用应用')}
+          </button>
+        )}
+      </div>
+    </MenuLayer>
   )
 }
 

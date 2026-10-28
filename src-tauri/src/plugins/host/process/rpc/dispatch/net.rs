@@ -20,6 +20,11 @@ fn request_url_host(params: &Value) -> Result<String, String> {
 pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     let owner = ctx.owner();
     match ctx.method {
+        "host.oauth.authorize" => {
+            let host = crate::plugins::oauth::endpoint_host(ctx.params)?;
+            ctx.running.ensure_network_target(&host)?;
+            crate::plugins::oauth::authorize(ctx.params, || ctx.running.actor(ctx.params).is_ok())
+        }
         "host.net.http.open" => {
             let host = request_url_host(ctx.params)?;
             ctx.running.ensure_network_target(&host)?;

@@ -3,12 +3,15 @@
 
 mod cache;
 mod config;
+mod credentials;
 mod files;
 #[cfg(feature = "desktop")]
 mod mutate;
 mod reconcile;
 mod store;
 mod sync;
+#[cfg(feature = "desktop")]
+mod upload;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -45,7 +48,7 @@ pub use files::{
     stat, ProgressFn, TransferOptions,
 };
 #[cfg(feature = "desktop")]
-pub(crate) use mutate::{create, remove, rename};
+pub(crate) use mutate::{create, create_file, remove, rename};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 #[cfg(feature = "desktop")]
 pub(crate) use store::load_stored;
@@ -54,3 +57,5 @@ pub use store::{
     update_connection_session, ConnectionInfo, ConnectionInput, StoredConnection,
 };
 pub use sync::{sync, sync_one, uncache, unpin};
+#[cfg(feature = "desktop")]
+pub(crate) use upload::{upload, Source as UploadSource};

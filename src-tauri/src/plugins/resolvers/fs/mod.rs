@@ -1,4 +1,4 @@
-//! FsResolver: the one Core-side path to a provider's `fs.*` methods.
+//! FsResolver: the one Core-side path to a provider's `vfs.*` methods.
 //!
 //! Connection mounts and standalone views differ only in the identity block
 //! they send; method names, DTO validation, pagination, stream handling and
@@ -70,7 +70,7 @@ impl Mount {
         let mut cursors = std::collections::HashSet::new();
         for _ in 0..MAX_PAGES {
             let page = self.invoke(
-                "fs.list",
+                "vfs.list",
                 json!({
                     "nodeId": node_id,
                     "hidden": hidden,
@@ -117,7 +117,7 @@ impl Mount {
     }
 
     pub fn stat(&self, node_id: &str) -> Result<FsEntry, String> {
-        let value = self.invoke("fs.stat", json!({"nodeId": node_id}))?;
+        let value = self.invoke("vfs.stat", json!({"nodeId": node_id}))?;
         FsEntry::parse(value)
     }
 
@@ -130,7 +130,7 @@ impl Mount {
         limit: usize,
     ) -> Result<(Vec<FsEntry>, bool), String> {
         let value = self.invoke(
-            "fs.search",
+            "vfs.search",
             json!({
                 "nodeId": node_id,
                 "query": query,
@@ -159,7 +159,7 @@ impl Mount {
 
     pub fn mkdir(&self, parent_id: &str, name: &str) -> Result<FsEntry, String> {
         crate::plugins::mounts::segment(name)?;
-        let value = self.invoke("fs.mkdir", json!({"parentId": parent_id, "name": name}))?;
+        let value = self.invoke("vfs.mkdir", json!({"parentId": parent_id, "name": name}))?;
         FsEntry::parse(value)
     }
 
@@ -171,19 +171,19 @@ impl Mount {
     ) -> Result<FsEntry, String> {
         crate::plugins::mounts::segment(name)?;
         let value = self.invoke(
-            "fs.rename",
+            "vfs.rename",
             json!({"nodeId": node_id, "name": name, "parentId": parent_id}),
         )?;
         FsEntry::parse(value)
     }
 
     pub fn remove(&self, node_id: &str) -> Result<(), String> {
-        self.invoke("fs.remove", json!({"nodeId": node_id}))?;
+        self.invoke("vfs.remove", json!({"nodeId": node_id}))?;
         Ok(())
     }
 
     pub fn open_read(&self, node_id: &str) -> Result<FsStream, String> {
-        let value = self.invoke("fs.openRead", json!({"nodeId": node_id}))?;
+        let value = self.invoke("vfs.openRead", json!({"nodeId": node_id}))?;
         let stream_id = value
             .get("streamId")
             .and_then(Value::as_str)
@@ -202,7 +202,7 @@ impl Mount {
             crate::plugins::mounts::segment(name)?;
         }
         let value = self.invoke(
-            "fs.beginWrite",
+            "vfs.beginWrite",
             json!({
                 "nodeId": request.node_id,
                 "parentId": request.parent_id,

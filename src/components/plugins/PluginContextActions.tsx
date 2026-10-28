@@ -12,6 +12,7 @@ import {
 import { OPEN_PLUGIN_PANEL, PLUGIN_RESULT_EVENT } from '@/components/plugins/PluginPanelHost'
 import {
   PluginMenuNode,
+  SubmenuGroupContext,
   validPluginMenuItems,
   type PluginMenu,
   type PluginMenuItem,
@@ -33,6 +34,7 @@ export function PluginContextActions({
   const plugins = usePluginCatalog()
   const [menus, setMenus] = useState<PluginMenu[]>([])
   const [open, setOpen] = useState(false)
+  const [openChild, setOpenChild] = useState<string | null>(null)
   const [flip, setFlip] = useState({ left: false, up: false })
   const requestedSubmenus = useRef(new Set<string>())
   const trigger = useRef<HTMLButtonElement>(null)
@@ -50,6 +52,9 @@ export function PluginContextActions({
     closeTimer.current = window.setTimeout(() => setOpen(false), 500)
   }
   useEffect(() => cancelClose, [])
+  useEffect(() => {
+    if (!open) setOpenChild(null)
+  }, [open])
   useEffect(() => {
     requestedSubmenus.current.clear()
     setMenus(resolvedMenus)
@@ -237,24 +242,26 @@ export function PluginContextActions({
           }}
         >
           {hasItems ? (
-            menus.flatMap((menu) =>
-              menu.items
-                .filter((item) => !item.parentId)
-                .map((item) => (
-                  <PluginMenuNode
-                    key={menu.pluginId + ':' + item.id}
-                    item={item}
-                    items={menu.items}
-                    parentLeft={flip.left}
-                    preferLeft={
-                      flip.left ||
-                      (trigger.current?.getBoundingClientRect().left ?? 0) < window.innerWidth / 2
-                    }
-                    onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
-                    onExpand={(submenuId) => void resolveSubmenu(menu, submenuId)}
-                  />
-                )),
-            )
+            <SubmenuGroupContext.Provider value={{ openId: openChild, setOpenId: setOpenChild }}>
+              {menus.flatMap((menu) =>
+                menu.items
+                  .filter((item) => !item.parentId)
+                  .map((item) => (
+                    <PluginMenuNode
+                      key={menu.pluginId + ':' + item.id}
+                      item={item}
+                      items={menu.items}
+                      parentLeft={flip.left}
+                      preferLeft={
+                        flip.left ||
+                        (trigger.current?.getBoundingClientRect().left ?? 0) < window.innerWidth / 2
+                      }
+                      onAction={(selected, anchor) => void invoke(menu, selected, anchor)}
+                      onExpand={(submenuId) => void resolveSubmenu(menu, submenuId)}
+                    />
+                  )),
+              )}
+            </SubmenuGroupContext.Provider>
           ) : (
             <p className="context-submenu-empty">
               {t('没有可用的插件操作，请确认插件已激活且是新版安装包。')}

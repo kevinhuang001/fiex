@@ -43,6 +43,8 @@ export type ContextMenuProps = Pick<
   | 'terminal'
   | 'notify'
   | 'recycle'
+  | 'create'
+  | 'createFile'
   | 'deletePermanently'
   | 'restoreFromTrash'
   | 'inTrash'

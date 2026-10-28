@@ -5,7 +5,7 @@
 - Core generates and resolves `fiex://mount/<id>/` identities. Standalone trees explicitly declare `contributions.vfs`; connection factories implicitly provide their own instance tree. Toolbar declarations do not confer provider eligibility.
 - Git creates immutable, lightweight per-commit views on demand. There is no startup repository discovery, full-tree snapshot, or connection sync for Git.
 - Connection navigation paths are distinct from cache paths. Metadata listing, offline pins, exact-file snapshot uploads and external materialization retain the existing Core pipeline.
-- Removed manifest/category `capabilities` and the connection `sync` / `writeMode` / `conflictControl` switches. Core and all connection providers use `fs.stat` and the streaming `fs.beginWrite/fs.writeStream/fs.commit` write path. Google Drive keeps resumable HTTP chunking inside its provider.
+- Removed manifest/category `capabilities` and the connection `sync` / `writeMode` / `conflictControl` switches. Core and all connection providers use `vfs.stat` and the streaming `vfs.beginWrite/vfs.writeStream/vfs.commit` write path. Google Drive keeps resumable HTTP chunking inside its provider.
 - IPC invocation checks provider eligibility and rejects public direct provider calls. Owner/contribution/resource scopes, mount-bound entries, URI validation and revocation are enforced in Core.
 
 ## Local validation

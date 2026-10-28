@@ -129,6 +129,9 @@ pub struct Listing {
     pub path: String,
     pub entries: Vec<Entry>,
     pub warnings: Vec<String>,
+    /// Preferred initial view for this folder when no per-folder state exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_view: Option<String>,
 }
 pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, String> {
     crate::plugins::mounts::reject_local(path)?;
@@ -164,6 +167,7 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         path: path.to_string_lossy().into_owned(),
         entries,
         warnings,
+        default_view: None,
     })
 }
 pub fn validate_name(name: &str) -> Result<(), String> {

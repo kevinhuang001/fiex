@@ -58,6 +58,12 @@ fn meta_path(conn: &StoredConnection) -> PathBuf {
     meta_dir().join(format!("{}.json", conn.id))
 }
 
+/// Deleting a connection must not leave the cached tree or its metadata
+/// behind; the next connection that reuses the ID starts clean.
+pub(crate) fn forget_meta(conn: &StoredConnection) {
+    let _ = fs::remove_file(meta_path(conn));
+}
+
 pub(crate) fn load_meta(conn: &StoredConnection) -> RemoteMeta {
     fs::read(meta_path(conn))
         .ok()
@@ -137,7 +143,10 @@ pub async fn sync_one(path: &str, options: &TransferOptions) -> Result<(), Strin
     let _guard = lock(&conn).await;
     let rel = rel_string(&rel);
     let mut meta = load_meta(&conn);
-    let file = meta.files.get_mut(&rel).ok_or("请先刷新远程目录")?;
+    let file = meta
+        .files
+        .get_mut(&rel)
+        .ok_or(crate::i18n::t("请先刷新远程目录"))?;
     file.pinned = true;
     file.excluded = false;
     let is_dir = file.is_dir;

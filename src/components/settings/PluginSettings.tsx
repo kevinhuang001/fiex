@@ -1,328 +1,69 @@
-import { t, getLocale } from '@/i18n'
-import { useEffect, useMemo, useState } from 'react'
-import { call } from '@/lib/api'
-import { asList } from './plugins/listValue'
+import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
+import { t } from '@/i18n'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
-import {
-  PluginImportDialog,
-  PluginMessage,
-  PluginUninstallDialog,
-  type LocalPreview,
-} from './plugins/PluginAlerts'
+import { PluginImportDialog, PluginMessage, PluginUninstallDialog } from './plugins/PluginAlerts'
 import { PluginList } from './plugins/PluginList'
 import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
 import { PluginLogsSheet } from './plugins/PluginLogsSheet'
 import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
 import { PluginStore, PluginStoreToolbar } from './plugins/PluginStore'
 import { PluginCategoryFilter } from './plugins/PluginCategoryFilter'
-import {
-  pluginCategories,
-  refreshPluginCatalog,
-  usePluginCatalog,
-  type PluginInfo,
-} from '@/lib/plugins'
-import { PluginActivationDialog } from './PluginActivationDialog'
+import { refreshPluginCatalog } from '@/lib/plugins'
+import { usePluginSettingsController } from '@/hooks/usePluginSettingsController'
 import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
 
 export function PluginSettings() {
-  const plugins = usePluginCatalog()
-  const [category, setCategory] = useState('all')
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const plugin of plugins) {
-      for (const id of pluginCategories(plugin.extensions, plugin.requestedCommands)) {
-        counts.set(id, (counts.get(id) || 0) + 1)
-      }
-    }
-    return [...counts].map(([id, count]) => ({ id, count }))
-  }, [plugins, getLocale()])
-  const shown = useMemo(
-    () =>
-      category === 'all'
-        ? plugins
-        : plugins.filter((plugin) =>
-            pluginCategories(plugin.extensions, plugin.requestedCommands).includes(category),
-          ),
-    [plugins, category, getLocale()],
-  )
-  const [storeOpen, setStoreOpen] = useState(false)
-  const [storeCategory, setStoreCategory] = useState('all')
-  useEffect(() => {
-    const openStore = (event: Event) => {
-      const detail = (event as CustomEvent<{ category?: string }>).detail
-      const next = detail?.category || 'connections'
-      sessionStorage.removeItem('fiex:open-plugin-store')
-      setCategory(next)
-      setStoreCategory(next)
-      setStoreOpen(true)
-    }
-    const pending = sessionStorage.getItem('fiex:open-plugin-store')
-    if (pending) {
-      sessionStorage.removeItem('fiex:open-plugin-store')
-      setCategory(pending)
-      setStoreCategory(pending)
-      setStoreOpen(true)
-    }
-    window.addEventListener('fiex:open-plugin-store', openStore)
-    return () => window.removeEventListener('fiex:open-plugin-store', openStore)
-  }, [])
-  const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
-  const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
-  const [logsFor, setLogsFor] = useState<PluginInfo | null>(null)
-  const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const [draft, setDraft] = useState<Record<string, string | boolean | string[]>>({})
-  const [permissionToApprove, setPermissionToApprove] = useState<string | null>(null)
-  useEffect(() => {
-    setPermissionsFor((current) =>
-      current ? plugins.find((plugin) => plugin.id === current.id) || null : null,
-    )
-    setSettingsFor((current) =>
-      current ? plugins.find((plugin) => plugin.id === current.id) || null : null,
-    )
-  }, [plugins])
-  const [domainDraft, setDomainDraft] = useState('')
-  const [domainSettingsOpen, setDomainSettingsOpen] = useState(false)
-  const [domainToApprove, setDomainToApprove] = useState<string | null>(null)
-  const [commandDraft, setCommandDraft] = useState('')
-  const [commandSettingsOpen, setCommandSettingsOpen] = useState(false)
-  const [activationFor, setActivationFor] = useState<PluginInfo | null>(null)
-  const [commandToApprove, setCommandToApprove] = useState<string | null>(null)
-  const [confirmRemove, setConfirmRemove] = useState<PluginInfo | null>(null)
-  const chooseLocalPlugin = async () => {
-    setBusy(true)
-    setMessage('')
-    try {
-      const path = await call<string | null>('plugin_file_dialog', {
-        mode: 'openFile',
-        extensions: ['fiexplugin'],
-      })
-      if (!path) return
-      const preview = await call<LocalPreview>('plugin_prepare_local_install', { path })
-      setLocalPreview(preview)
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const installLocal = async () => {
-    if (!localPreview) return
-    setBusy(true)
-    try {
-      await call('plugin_confirm_install', {
-        ticket: localPreview.ticket,
-        allowUntrusted: !localPreview.trusted,
-      })
-      setLocalPreview(null)
-      refreshPluginCatalog()
-      setMessage(t('已导入 {0} {1}', localPreview.name, localPreview.version))
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const cancelLocalImport = () => {
-    if (localPreview) void call('plugin_cancel_install', { ticket: localPreview.ticket })
-    setLocalPreview(null)
-  }
-
-  const fields = settingsFor?.extensions?.settings || []
-  useEffect(() => {
-    if (!settingsFor) return
-    let alive = true
-    setMessage('')
-    void Promise.all(
-      fields.map(async (field) => {
-        if (field.type === 'secret') return [field.id, ''] as const
-        const value = await call<unknown>('plugin_storage_get', {
-          pluginId: settingsFor.id,
-          scope: 'global',
-          key: field.id,
-        })
-        if (field.type === 'list') return [field.id, asList(value, field)] as const
-        return [
-          field.id,
-          (value ?? field.defaultValue ?? (field.type === 'checkbox' ? false : '')) as
-            string | boolean,
-        ] as const
-      }),
-    )
-      .then((entries) => {
-        if (alive) setDraft(Object.fromEntries(entries))
-      })
-      .catch((error) => {
-        if (alive) setMessage(String(error))
-      })
-    return () => {
-      alive = false
-    }
-    // Field definitions are manifest data; refetch when the plugin changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsFor?.id])
-
-  const updateActivation = async (plugin: PluginInfo, enabled: boolean) => {
-    if (enabled) {
-      setActivationFor(plugin)
-      return
-    }
-    setBusy(true)
-    setMessage('')
-    try {
-      await call('plugin_set_enabled', { pluginId: plugin.id, enabled })
-      refreshPluginCatalog()
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const updatePermission = async (plugin: PluginInfo, permission: string, granted: boolean) => {
-    if (granted) {
-      setPermissionToApprove(permission)
-      return
-    }
-    setBusy(true)
-    setMessage('')
-    try {
-      await call('plugin_set_permission', { pluginId: plugin.id, permission, granted })
-      setPermissionToApprove(null)
-      refreshPluginCatalog()
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const grantPermission = async (plugin: PluginInfo) => {
-    if (!permissionToApprove) return
-    setBusy(true)
-    setMessage('')
-    try {
-      await call('plugin_set_permission', {
-        pluginId: plugin.id,
-        permission: permissionToApprove,
-        granted: true,
-      })
-      setPermissionToApprove(null)
-      refreshPluginCatalog()
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const updateDomain = async (plugin: PluginInfo, domain: string, granted: boolean) => {
-    if (granted && domainToApprove !== domain) {
-      setDomainToApprove(domain)
-      return
-    }
-    setBusy(true)
-    setMessage('')
-    try {
-      await call('plugin_set_network_domain', { pluginId: plugin.id, domain, granted })
-      setDomainToApprove(null)
-      setDomainDraft('')
-      refreshPluginCatalog()
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const updateNetworkAll = async (plugin: PluginInfo, all: boolean) => {
-    setBusy(true)
-    setMessage('')
-    try {
-      await call('plugin_set_network_all', { pluginId: plugin.id, all })
-      refreshPluginCatalog()
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const updateCommand = async (plugin: PluginInfo, command: string, granted: boolean) => {
-    if (granted && commandToApprove !== command) {
-      setCommandToApprove(command)
-      return
-    }
-    setBusy(true)
-    setMessage('')
-    try {
-      await call('plugin_set_command', { pluginId: plugin.id, command, granted })
-      setCommandDraft('')
-      setCommandToApprove(null)
-      refreshPluginCatalog()
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const uninstall = async () => {
-    if (!confirmRemove || busy) return
-    setBusy(true)
-    try {
-      await call('plugin_uninstall', { pluginId: confirmRemove.id })
-      setConfirmRemove(null)
-      setPermissionsFor(null)
-      refreshPluginCatalog()
-      setMessage('')
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const saveSettings = async () => {
-    if (!settingsFor || busy) return
-    setBusy(true)
-    setMessage('')
-    try {
-      for (const field of fields) {
-        const value = draft[field.id]
-        if (field.type === 'secret') {
-          if (typeof value === 'string' && value.length)
-            await call('plugin_secret_set', {
-              pluginId: settingsFor.id,
-              scope: 'global',
-              key: field.id,
-              value,
-            })
-        } else {
-          await call('plugin_storage_set', {
-            pluginId: settingsFor.id,
-            scope: 'global',
-            key: field.id,
-            value:
-              field.type === 'number'
-                ? Number(value)
-                : field.type === 'list'
-                  ? (Array.isArray(value) ? value : []).map((item) => item.trim()).filter(Boolean)
-                  : value,
-          })
-        }
-      }
-      setMessage(t('插件设置已保存'))
-      setSettingsFor(null)
-      setDraft((old) =>
-        Object.fromEntries(
-          Object.entries(old).map(([key, value]) =>
-            fields.some((f) => f.id === key && f.type === 'secret') ? [key, ''] : [key, value],
-          ),
-        ),
-      )
-    } catch (error) {
-      setMessage(String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const updateDraft = (fieldId: string, value: string | boolean | string[]) =>
-    setDraft((old) => ({ ...old, [fieldId]: value }))
+  const {
+    plugins,
+    category,
+    setCategory,
+    categories,
+    shown,
+    storeOpen,
+    setStoreOpen,
+    storeCategory,
+    localPreview,
+    setLocalPreview,
+    permissionsFor,
+    setPermissionsFor,
+    logsFor,
+    setLogsFor,
+    settingsFor,
+    setSettingsFor,
+    busy,
+    message,
+    setMessage,
+    draft,
+    permissionToApprove,
+    setPermissionToApprove,
+    domainDraft,
+    setDomainDraft,
+    domainSettingsOpen,
+    setDomainSettingsOpen,
+    domainToApprove,
+    setDomainToApprove,
+    commandDraft,
+    setCommandDraft,
+    commandSettingsOpen,
+    setCommandSettingsOpen,
+    commandToApprove,
+    setCommandToApprove,
+    confirmRemove,
+    setConfirmRemove,
+    chooseLocalPlugin,
+    installLocal,
+    cancelLocalImport,
+    fields,
+    updateActivation,
+    updatePermission,
+    grantPermission,
+    updateDomain,
+    updateNetworkAll,
+    updateCommand,
+    uninstall,
+    saveSettings,
+    updateDraft,
+  } = usePluginSettingsController()
 
   return (
     <>
@@ -369,7 +110,7 @@ export function PluginSettings() {
         onClose={() => setStoreOpen(false)}
         onInstalled={() => {
           refreshPluginCatalog()
-          setMessage(t('插件已安装，尚未激活。点击激活后可逐项选择权限。'))
+          setStoreOpen(false)
         }}
       />
 
@@ -383,7 +124,7 @@ export function PluginSettings() {
           setCommandSettingsOpen(false)
           setMessage('')
         }}
-        onActivate={setActivationFor}
+        onActivate={(plugin) => requestPluginActivation(plugin.id)}
         onTogglePermission={(plugin, permission, granted) =>
           void updatePermission(plugin, permission, granted)
         }
@@ -484,18 +225,6 @@ export function PluginSettings() {
         onCancel={cancelLocalImport}
         onConfirm={() => void installLocal()}
       />
-      {activationFor && (
-        <PluginActivationDialog
-          key={activationFor.id}
-          plugin={activationFor}
-          onClose={() => setActivationFor(null)}
-          onActivated={() => {
-            setActivationFor(null)
-            refreshPluginCatalog()
-            setMessage(t('插件已激活，可随时在插件详情中撤销授权。'))
-          }}
-        />
-      )}
       {permissionsFor && commandToApprove && (
         <PluginPermissionPrompt
           open

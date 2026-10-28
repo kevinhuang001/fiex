@@ -1,14 +1,14 @@
+import { handlePluginInstaller } from './pluginInstaller'
 import { demoBuiltinMenus, executeDemoBuiltin } from '../presentation/menus'
 import { demoDecorations } from '../presentation/decorations'
 import type { Entry, EntryDecoration } from '@/lib/types'
 import { demoGitEntries, demoGpgKeys, demoHistory } from '../data'
-import { demoPlugins, marketplace, officialMode, query } from '../plugins'
+import { demoPlugins, officialMode, query } from '../plugins'
 import { notHandled, state } from './shared'
 import { applyDemoPermissionResponse, requestDemoPermission } from '../permission'
 import { createDemoGpgKey, deleteDemoGpgKey } from '../gpgKeys'
 
 const pluginSettings = new Map<string, unknown>()
-const preparedInstalls = new Map<string, (typeof marketplace)[number]>()
 interface DemoMenuItem {
   id: string
   title: string
@@ -93,6 +93,8 @@ function resolveDemoMenu(a: Record<string, unknown>) {
   return { pluginId, menuSessionId, items: entries.filter((entry) => !('parentId' in entry)) }
 }
 
+const demoPreviewNames = new Map<string, string>()
+
 async function resolveDemoPreview(a: Record<string, unknown>) {
   const path = String(a.path || '')
   const name = path.split(/[\\/]/).pop() || ''
@@ -114,6 +116,7 @@ async function resolveDemoPreview(a: Record<string, unknown>) {
     if (!response.ok) throw new Error(await response.text())
     const html = await response.text()
     const sessionId = crypto.randomUUID()
+    demoPreviewNames.set(sessionId, name)
     // `?slowPreview` keeps the loading page visible long enough to inspect it.
     if (new URLSearchParams(location.search).has('slowPreview')) {
       await new Promise((resolve) => setTimeout(resolve, 900))
@@ -173,6 +176,8 @@ async function resolveDemoPreview(a: Record<string, unknown>) {
 }
 
 export async function handlePlugins(command: string, a: Record<string, unknown>): Promise<unknown> {
+  const installed = handlePluginInstaller(command, a)
+  if (installed !== notHandled) return installed
   switch (command) {
     case 'plugins_list':
       return structuredClone(demoPlugins)
@@ -209,7 +214,54 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           },
         }
       })
-    case 'plugin_context_menu_resolve':
+    case 'plugin_context_menu_resolve': {
+      const directory = String(a.directory || '')
+      const paths = Array.isArray(a.paths) ? (a.paths as string[]) : []
+      if (directory === 'applications://') {
+        const user = paths.some((path) => path.startsWith('applications://user/'))
+        return [
+          {
+            kind: 'builtin',
+            providerId: 'builtin:core:applications',
+            menuSessionId: `virtual:${JSON.stringify(paths)}`,
+            items: [
+              { id: 'open', kind: 'action', title: '打开', icon: 'open' },
+              ...(user
+                ? [
+                    {
+                      id: 'delete',
+                      kind: 'action',
+                      title: '彻底删除',
+                      icon: 'trash',
+                      danger: true,
+                      placement: 'tail',
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      }
+      if (directory === 'recyclebin://') {
+        return [
+          {
+            kind: 'builtin',
+            providerId: 'builtin:core:trash',
+            menuSessionId: `virtual:${JSON.stringify(paths)}`,
+            items: [
+              { id: 'restore', kind: 'action', title: '放回原处', icon: 'restore' },
+              {
+                id: 'delete',
+                kind: 'action',
+                title: '彻底删除',
+                icon: 'trash',
+                danger: true,
+                placement: 'tail',
+              },
+            ],
+          },
+        ]
+      }
       return [
         ...demoBuiltinMenus(a),
         ...demoPlugins
@@ -222,6 +274,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
             }
           }),
       ]
+    }
     case 'plugin_context_menu_children': {
       const session = demoMenuSessions.get(String(a.menuSessionId || ''))
       const parentId = String(a.parentId || '')
@@ -235,6 +288,11 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return { items: children }
     }
     case 'plugin_context_menu_execute': {
+      const virtual = String(a.menuSessionId || '')
+      if (virtual.startsWith('virtual:')) {
+        const paths = JSON.parse(virtual.slice('virtual:'.length)) as string[]
+        return { kind: 'coreAction', command: String(a.itemId || ''), paths }
+      }
       const builtin = await executeDemoBuiltin(a)
       if (builtin) return builtin
       const menuSessionId = String(a.menuSessionId || '')
@@ -290,7 +348,11 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
     }
     case 'plugin_invoke': {
       const method = String(a.method || '')
-      const params = (a.params || {}) as Record<string, unknown>
+      const params = { ...((a.params || {}) as Record<string, unknown>) }
+      if (!params.path && a.previewSessionId) {
+        const name = demoPreviewNames.get(String(a.previewSessionId))
+        if (name) params.path = name
+      }
       if (officialMode) {
         if (method === 'archive.list') {
           return {
@@ -446,152 +508,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
             }
           return content
         }
-        if (method === 'sqlite.open')
-          return {
-            tables: [
-              { name: 'users', type: 'table', sql: 'CREATE TABLE users (...)' },
-              { name: 'orders', type: 'table', sql: 'CREATE TABLE orders (...)' },
-              { name: 'active_users', type: 'view', sql: 'CREATE VIEW active_users AS ...' },
-            ],
-          }
-        if (method === 'sqlite.table') {
-          const name = String(params.table || '')
-          const schema = {
-            users: {
-              columns: [
-                {
-                  cid: 0,
-                  name: 'id',
-                  type: 'INTEGER',
-                  notNull: false,
-                  default: null,
-                  primaryKey: true,
-                },
-                {
-                  cid: 1,
-                  name: 'name',
-                  type: 'TEXT',
-                  notNull: true,
-                  default: null,
-                  primaryKey: false,
-                },
-                {
-                  cid: 2,
-                  name: 'email',
-                  type: 'TEXT',
-                  notNull: false,
-                  default: null,
-                  primaryKey: false,
-                },
-                {
-                  cid: 3,
-                  name: 'created_at',
-                  type: 'TEXT',
-                  notNull: false,
-                  default: 'CURRENT_TIMESTAMP',
-                  primaryKey: false,
-                },
-              ],
-              rows: [
-                [1, 'Ada Lovelace', 'ada@example.com', '2026-01-04 09:12:00'],
-                [2, 'Grace Hopper', 'grace@example.com', '2026-02-11 14:05:00'],
-                [3, 'Alan Turing', null, '2026-03-02 08:30:00'],
-                [4, 'Katherine Johnson', 'katherine@example.com', null],
-              ],
-              indexes: [
-                { name: 'sqlite_autoindex_users_1', unique: true, origin: 'u', columns: ['id'] },
-                { name: 'users_email', unique: true, origin: 'c', columns: ['email'] },
-              ],
-              foreignKeys: [],
-            },
-            orders: {
-              columns: [
-                {
-                  cid: 0,
-                  name: 'id',
-                  type: 'INTEGER',
-                  notNull: false,
-                  default: null,
-                  primaryKey: true,
-                },
-                {
-                  cid: 1,
-                  name: 'user_id',
-                  type: 'INTEGER',
-                  notNull: true,
-                  default: null,
-                  primaryKey: false,
-                },
-                {
-                  cid: 2,
-                  name: 'total',
-                  type: 'REAL',
-                  notNull: true,
-                  default: '0',
-                  primaryKey: false,
-                },
-                {
-                  cid: 3,
-                  name: 'status',
-                  type: 'TEXT',
-                  notNull: false,
-                  default: "'paid'",
-                  primaryKey: false,
-                },
-              ],
-              rows: [
-                [1, 1, 128.5, 'paid'],
-                [2, 1, 42, 'paid'],
-                [3, 2, 999.99, 'refunded'],
-                [4, 3, 7.5, 'pending'],
-                [5, 3, 64, 'paid'],
-              ],
-              indexes: [{ name: 'orders_user', unique: false, origin: 'c', columns: ['user_id'] }],
-              foreignKeys: [{ id: 0, table: 'users', from: 'user_id', to: 'id' }],
-            },
-            active_users: {
-              columns: [
-                {
-                  cid: 0,
-                  name: 'id',
-                  type: 'INTEGER',
-                  notNull: false,
-                  default: null,
-                  primaryKey: false,
-                },
-                {
-                  cid: 1,
-                  name: 'name',
-                  type: 'TEXT',
-                  notNull: true,
-                  default: null,
-                  primaryKey: false,
-                },
-              ],
-              rows: [
-                [1, 'Ada Lovelace'],
-                [2, 'Grace Hopper'],
-              ],
-              indexes: [],
-              foreignKeys: [],
-            },
-          } as Record<
-            string,
-            { columns: unknown[]; rows: unknown[][]; indexes: unknown[]; foreignKeys: unknown[] }
-          >
-          const entry = schema[name] || schema.users
-          return {
-            columns: entry.columns,
-            rows: entry.rows,
-            total: entry.rows.length,
-            limit: Number(params.limit) || 100,
-            offset: Number(params.offset) || 0,
-            order: params.order ?? null,
-            descending: Boolean(params.descending),
-            indexes: entry.indexes,
-            foreignKeys: entry.foreignKeys,
-          }
-        }
         if (method === 'office.render') {
           const path = String(params.path || '')
           const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
@@ -628,12 +544,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           return { head: 'bbbbbbbb', current: 'main', branches: ['main'], tags: [] }
         if (method === 'git.history') return demoHistory
         if (method === 'gpg.info') return { version: 'gpg (GnuPG) 2.4.5' }
-        if (method === 'gpg.deleteKey') {
-          const fingerprint = String(params.fingerprint || '')
-          const index = demoGpgKeys.findIndex((key) => key.fingerprint === fingerprint)
-          if (index >= 0) demoGpgKeys.splice(index, 1)
-          return { ok: true }
-        }
         if (method === 'gpg.createKey') return createDemoGpgKey(params)
         if (method === 'gpg.deleteKey') return deleteDemoGpgKey(params)
         if (method === 'gpg.keys') return demoGpgKeys
@@ -726,88 +636,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       if (a.mode === 'saveFile') return '/Users/kevin/Documents/Archive.zip'
       if (a.mode === 'openFile') return '/Users/kevin/Documents/Archive.zip'
       return '/Users/kevin/Documents'
-    }
-    case 'plugin_prepare_local_install':
-      return {
-        ticket: 'demo-local-install',
-        id: 'org.example.local',
-        name: '本地示例插件',
-        version: '1.2.3',
-        author: { name: 'Example Author' },
-        permissions: ['folders.read', 'files.read'],
-        requestedNetworkDomains: [],
-        commands: [],
-        signed: true,
-        trusted: false,
-        publisher: 'example',
-        publisherName: 'Example Publisher',
-        keyId: 'demo-key',
-        fingerprint: 'AB12 CD34 EF56 7890',
-      }
-    case 'plugin_files_dialog':
-      return ['/Users/kevin/Documents/Notes.md']
-    case 'plugin_network_domains':
-      return ['github.com']
-    case 'plugin_permission_allowed':
-      return new URLSearchParams(location.search).has('pluginFixture')
-    case 'plugin_marketplace':
-      return marketplace
-    case 'plugin_release_assets':
-      return marketplace.map((entry) => entry.asset)
-    case 'plugin_prepare_install': {
-      const entry = marketplace.find((item) => item.asset === a.assetName)
-      if (!entry) throw new Error('插件包不存在')
-      const ticket = entry.id
-      preparedInstalls.set(ticket, entry)
-      return {
-        ticket,
-        id: entry.id,
-        name: entry.name,
-        version: entry.version,
-        author: entry.author,
-        permissions: entry.permissions,
-        requestedNetworkDomains: entry.requestedNetworkDomains,
-        commands: [],
-        repository: entry.repository,
-        signed: true,
-        trusted: true,
-        publisher: 'org.fiex',
-        publisherName: 'Fiex Contributors',
-        keyId: 'demo',
-        fingerprint: 'DEMO OFFICIAL KEY',
-      }
-    }
-    case 'plugin_confirm_install': {
-      const entry = preparedInstalls.get(String(a.ticket))
-      if (!entry) throw new Error('安装预览已过期')
-      preparedInstalls.delete(String(a.ticket))
-      if (!demoPlugins.some((plugin) => plugin.id === entry.id)) {
-        demoPlugins.push({
-          id: entry.id,
-          name: entry.name,
-          version: entry.version,
-          description: entry.description,
-          enabled: false,
-          approved: true,
-          backendAvailable: true,
-
-          declaredPermissions: entry.permissions,
-          grantedPermissions: entry.permissions,
-          requestedNetworkDomains: entry.requestedNetworkDomains,
-          allowedNetworkDomains: entry.requestedNetworkDomains,
-          author: entry.author,
-          extensions: entry.extensions || {},
-        })
-      }
-      return entry.id
-    }
-    case 'plugin_cancel_install':
-      preparedInstalls.delete(String(a.ticket))
-      return null
-    case 'plugin_uninstall': {
-      const index = demoPlugins.findIndex((plugin) => plugin.id === a.pluginId)
-      if (index >= 0) demoPlugins.splice(index, 1)
-      return null
     }
     case 'plugin_activate': {
       const plugin = demoPlugins.find((item) => item.id === a.pluginId)

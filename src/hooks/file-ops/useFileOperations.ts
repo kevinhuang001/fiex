@@ -43,7 +43,7 @@ export function useFileOperations({
     run,
     handleResult,
   }
-  const { create } = createActions(context)
+  const { create, createFile } = createActions(context)
   const { recycle, deletePermanently, emptyTrash } = recycleActions(context)
   const { restoreFromTrash, undo } = restoreActions(context)
   const { transfer, resolveConflict, copy, duplicate } = transferActions(context)
@@ -56,6 +56,7 @@ export function useFileOperations({
     setClipboard,
     run,
     create,
+    createFile,
     recycle,
     deletePermanently,
     restoreFromTrash,

@@ -23,6 +23,7 @@ export function useExplorer(
     directoryReadOnly: listing.directoryReadOnly,
     directoryCanCreate: listing.directoryCanCreate,
     virtualVolume: listing.virtualVolume,
+    defaultView: listing.defaultView,
     setReadOnly: listing.setReadOnly,
     locations: listing.locations,
     refreshLocations: listing.refreshLocations,

@@ -43,20 +43,11 @@ pub(super) fn base_locations() -> Vec<Location> {
             });
         }
     }
-    // macOS has a real Applications folder. Windows and Linux expose installed
-    // applications through shell/desktop services, so those entries only open
-    // the platform UI instead of pretending to be a browsable directory.
-    let applications = if cfg!(target_os = "macos") {
-        let path = PathBuf::from("/Applications");
-        path.exists().then_some(path)
-    } else {
-        None
-    };
+    // Applications are a Core-owned virtual folder on every platform so the
+    // entry never opens Finder, Explorer or a desktop app store.
     out.push(Location {
         name: "应用程序".into(),
-        path: applications
-            .map(|path| path.to_string_lossy().into_owned())
-            .unwrap_or_default(),
+        path: super::applications::URI.into(),
         kind: "applications".into(),
         available: 0,
         total: 0,

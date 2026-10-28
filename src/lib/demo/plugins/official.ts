@@ -107,7 +107,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
           preview: {
             extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'tgz', 'bz2', 'tbz2', 'xz', 'txz'],
             priority: 100,
-            loading: { entry: 'ui/loading.html' },
+            loading: { entry: 'ui/dist/loading.html' },
           },
         },
       },
@@ -133,37 +133,10 @@ export const officialPlugins: DemoPlugin[] = officialMode
           preview: {
             extensions: ['docx', 'xlsx', 'pptx'],
             priority: 100,
-            loading: { entry: 'ui/loading.html' },
+            loading: { entry: 'ui/dist/loading.html' },
             panel: {
-              entry: 'ui/index.html',
+              entry: 'ui/dist/index.html',
               defaultSize: { width: 720, height: 600 },
-            },
-          },
-        },
-      },
-      {
-        id: 'org.fiex.sqlite-preview',
-        name: 'SQLite 查看器',
-        version: '0.2.9',
-        description: '只读浏览 SQLite 数据库：表、字段、索引、外键与表数据。',
-        enabled: true,
-        approved: true,
-        backendAvailable: true,
-
-        declaredPermissions: ['files.read'],
-        grantedPermissions: ['files.read'],
-        requestedCommands: [],
-        allowedCommands: [],
-        requestedNetworkDomains: [],
-        allowedNetworkDomains: [],
-        author: { name: 'Fiex Contributors' },
-        extensions: {
-          preview: {
-            extensions: ['db', 'sqlite', 'sqlite3'],
-            priority: 100,
-            panel: {
-              entry: 'ui/index.html',
-              defaultSize: { width: 720, height: 640 },
             },
           },
         },
@@ -219,9 +192,9 @@ export const officialPlugins: DemoPlugin[] = officialMode
               'avro',
             ],
             priority: 110,
-            loading: { entry: 'ui/loading.html' },
+            loading: { entry: 'ui/dist/loading.html' },
             panel: {
-              entry: 'ui/index.html',
+              entry: 'ui/dist/index.html',
               defaultSize: { width: 720, height: 640 },
             },
           },
@@ -254,6 +227,44 @@ export const officialPlugins: DemoPlugin[] = officialMode
             },
           },
           contextMenus: true,
+        },
+      },
+      {
+        id: 'org.fiex.openlist',
+        name: 'OpenList',
+        version: '0.3.0',
+        description: '通过 OpenList 原生 API 连接服务器，支持目录浏览与文件读取。',
+        enabled: true,
+        approved: true,
+        backendAvailable: true,
+
+        declaredPermissions: ['files.read', 'network', 'metadata'],
+        grantedPermissions: ['files.read', 'network', 'metadata'],
+        requestedNetworkDomains: [],
+        allowedNetworkDomains: [],
+        author: { name: 'Fiex Contributors' },
+        extensions: {
+          connections: {
+            title: 'OpenList',
+            fields: [
+              {
+                id: 'url',
+                label: '服务器地址',
+                type: 'url',
+                required: true,
+                placeholder: 'http://localhost:5244',
+              },
+              { id: 'username', label: '用户名', type: 'text' },
+              { id: 'password', label: '密码', type: 'secret' },
+              {
+                id: 'timeout',
+                label: '连接超时（秒）',
+                type: 'number',
+                defaultValue: '30',
+              },
+            ],
+          },
+          vfs: { title: 'OpenList' },
         },
       },
       {

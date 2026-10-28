@@ -11,6 +11,8 @@ export type ConflictState = {
   destination: string
   moving: boolean
   items: TransferConflict[]
+  /** The still-running activity row that the resolution will complete. */
+  activityId?: string
 } | null
 
 export type Run = <T>(
@@ -22,6 +24,10 @@ export type Run = <T>(
   onActivity?: (id: string) => void,
   /** Record the activity without opening the panel. */
   quiet?: boolean,
+  /** When set, the caller keeps the activity running (for a pending dialog). */
+  hold?: { value: boolean },
+  /** Continue an activity that a conflict dialog left running. */
+  resume?: string,
 ) => Promise<T | undefined>
 
 export type HandleResult = (result: OperationResult) => void

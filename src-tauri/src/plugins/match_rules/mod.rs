@@ -19,7 +19,7 @@ pub struct MatchRules {
     /// Decorations only.
     #[serde(default)]
     pub contains: Vec<String>,
-    /// Context menu selection cardinality: `single`, `multi` or `any`.
+    /// Context menu selection cardinality: `zero`, `single`, `multi` or `any`.
     /// Context menus only.
     #[serde(default)]
     pub selection: Option<String>,
@@ -131,10 +131,12 @@ impl MatchRules {
         })
     }
 
-    /// Context menu selection cardinality.
+    /// Context menu selection cardinality. `zero` is the blank-area menu; a
+    /// manifest that wants both blank and selected menus uses `any`.
     pub fn matches_selection(&self, count: usize) -> bool {
         match self.selection.as_deref().unwrap_or("any") {
             "any" => true,
+            "zero" => count == 0,
             "single" => count == 1,
             "multi" => count >= 2,
             _ => false,
@@ -171,9 +173,9 @@ pub fn validate(
     if let Some(selection) = object.get("selection") {
         let selection = selection
             .as_str()
-            .ok_or("match.selection must be any, single or multi")?;
-        if !matches!(selection, "any" | "single" | "multi") {
-            return Err("match.selection must be any, single or multi".into());
+            .ok_or("match.selection must be any, zero, single or multi")?;
+        if !matches!(selection, "any" | "zero" | "single" | "multi") {
+            return Err("match.selection must be any, zero, single or multi".into());
         }
     }
     serde_json::from_value::<MatchRules>(value.clone()).map_err(|error| error.to_string())?;

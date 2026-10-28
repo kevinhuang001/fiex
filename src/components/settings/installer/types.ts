@@ -3,6 +3,8 @@ export interface InstallPreview {
   id: string
   name: string
   version: string
+  description?: string
+  icon?: string
   author?: { name: string; url?: string }
   permissions: string[]
   requestedNetworkAll: boolean

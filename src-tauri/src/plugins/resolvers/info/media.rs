@@ -122,16 +122,26 @@ fn mp4_section(path: &Path) -> Option<InfoSection> {
                 }
             }
             Ok(TrackType::Audio) if audio.is_none() => {
-                audio = Some(format!(
-                    "{} · {} 声道",
-                    track
-                        .box_type()
-                        .map(|value| value.to_string())
-                        .unwrap_or_default(),
-                    track
-                        .channel_config()
-                        .map(|value| value.to_string())
-                        .unwrap_or_default()
+                audio = Some(crate::i18n::format(
+                    "{0} · {1} 声道",
+                    &[
+                        (
+                            "0",
+                            track
+                                .box_type()
+                                .map(|value| value.to_string())
+                                .unwrap_or_default()
+                                .to_string(),
+                        ),
+                        (
+                            "1",
+                            track
+                                .channel_config()
+                                .map(|value| value.to_string())
+                                .unwrap_or_default()
+                                .to_string(),
+                        ),
+                    ],
                 ));
             }
             _ => {}
@@ -180,14 +190,20 @@ fn matroska_section(path: &Path) -> Option<InfoSection> {
             )),
             Settings::Audio(audio) => rows.push(row(
                 crate::i18n::t("音频"),
-                format!(
-                    "{} · {} Hz · {} 声道",
-                    track
-                        .codec_name
-                        .clone()
-                        .unwrap_or_else(|| track.codec_id.clone()),
-                    audio.sample_rate,
-                    audio.channels
+                crate::i18n::format(
+                    "{0} · {1} Hz · {2} 声道",
+                    &[
+                        (
+                            "0",
+                            track
+                                .codec_name
+                                .clone()
+                                .unwrap_or_else(|| track.codec_id.clone())
+                                .to_string(),
+                        ),
+                        ("1", format!("{}", audio.sample_rate)),
+                        ("2", format!("{}", audio.channels)),
+                    ],
                 ),
             )),
             Settings::None => {}

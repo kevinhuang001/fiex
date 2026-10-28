@@ -27,6 +27,9 @@ pub struct DecorationEntry {
     pub pinned: bool,
     #[serde(default)]
     pub uploaded: bool,
+    /// The real bundle/shortcut a virtual application entry points at.
+    #[serde(default)]
+    pub link_target: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

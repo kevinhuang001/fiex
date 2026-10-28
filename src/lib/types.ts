@@ -1,4 +1,5 @@
 import type { ShortcutMap, ShortcutStyle } from './shortcuts'
+import type { ListColumns } from './listColumns'
 
 export interface Tag {
   name: string
@@ -36,6 +37,8 @@ export interface Listing {
   path: string
   entries: Entry[]
   warnings: string[]
+  /** Preferred initial view when this folder has no remembered state. */
+  defaultView?: View
 }
 export type SidebarSection = 'places' | 'favorites' | 'tags' | 'devices' | 'connections'
 
@@ -160,6 +163,8 @@ export interface Preferences {
   pinnedPluginTools: string[]
   /** Background connection reconciliation cadence, in seconds. */
   syncInterval: number
+  /** List-view column widths; the flexible name column takes the rest. */
+  listColumns: ListColumns
 }
 
 export interface OperationProgress {
@@ -178,4 +183,8 @@ export interface RemoteConnection {
   mountPath: string
   saved?: boolean
   autostart?: boolean
+  /** Provider can enumerate and read this mount. */
+  canRead?: boolean
+  /** Provider can upload/create inside this mount. */
+  canWrite?: boolean
 }

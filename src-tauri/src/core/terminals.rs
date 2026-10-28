@@ -1,78 +1,24 @@
 use serde::Serialize;
 use std::{path::PathBuf, process::Command};
+
+mod ides;
+pub use ides::*;
+
 #[derive(Serialize)]
 pub struct Terminal {
     pub id: String,
     pub name: String,
 }
-pub fn detect() -> Vec<Terminal> {
-    let mut out = vec![Terminal {
-        id: "default".into(),
-        name: crate::i18n::t("系统默认终端").into(),
-    }];
-    #[cfg(target_os = "macos")]
-    for (id, name) in [
-        ("Terminal", "Terminal"),
-        ("iTerm", "iTerm2"),
-        ("Warp", "Warp"),
-        ("Alacritty", "Alacritty"),
-        ("kitty", "kitty"),
-        ("Ghostty", "Ghostty"),
-        ("WezTerm", "WezTerm"),
-        ("Tabby", "Tabby"),
-    ] {
-        if std::path::Path::new(&format!("/Applications/{id}.app")).exists()
-            || std::path::Path::new(&format!("/System/Applications/Utilities/{id}.app")).exists()
-            || dirs::home_dir().is_some_and(|p| p.join(format!("Applications/{id}.app")).exists())
-        {
-            out.push(Terminal {
-                id: id.into(),
-                name: name.into(),
-            });
-        }
-    }
-    #[cfg(target_os = "windows")]
-    for (id, name) in [
-        ("wt.exe", "Windows Terminal"),
-        ("pwsh.exe", "PowerShell 7"),
-        ("powershell.exe", "Windows PowerShell"),
-        ("cmd.exe", "Command Prompt"),
-        ("tabby.exe", "Tabby"),
-    ] {
-        if which::which(id).is_ok() {
-            out.push(Terminal {
-                id: id.into(),
-                name: name.into(),
-            });
-        }
-    }
-    #[cfg(target_os = "linux")]
-    for (id, name) in [
-        ("x-terminal-emulator", crate::i18n::t("系统终端")),
-        ("kgx", "Console"),
-        ("gnome-terminal", "GNOME Terminal"),
-        ("konsole", "Konsole"),
-        ("xfce4-terminal", "Xfce Terminal"),
-        ("alacritty", "Alacritty"),
-        ("kitty", "kitty"),
-        ("ghostty", "Ghostty"),
-        ("wezterm", "WezTerm"),
-        ("tabby", "Tabby"),
-        ("xterm", "XTerm"),
-    ] {
-        if which::which(id).is_ok() {
-            out.push(Terminal {
-                id: id.into(),
-                name: name.into(),
-            });
-        }
-    }
-    out
-}
+
+mod detect;
+
+pub use detect::detect;
+
 #[cfg(target_os = "macos")]
 fn shell_escape(path: &std::path::Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
+
 pub fn launch(path: &str, id: &str) -> Result<(), String> {
     crate::plugins::mounts::reject_local(path)?;
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
@@ -186,7 +132,9 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
         let app = if id == "default" {
             terminals
                 .get(1)
-                .ok_or("未发现可用终端，请安装 GNOME Terminal、Konsole 等终端")?
+                .ok_or(crate::i18n::t(
+                    "未发现可用终端，请安装 GNOME Terminal、Konsole 等终端",
+                ))?
                 .id
                 .as_str()
         } else {
@@ -219,10 +167,12 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
 pub fn open_path(path: &str) -> Result<(), String> {
     crate::plugins::mounts::reject_local(path)?;
     open::that_detached(path).map_err(|e| e.to_string())
 }
+
 pub fn reveal(path: &str) -> Result<(), String> {
     crate::plugins::mounts::reject_local(path)?;
     #[cfg(target_os = "macos")]
@@ -251,6 +201,7 @@ pub fn reveal(path: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
 /// Opens the platform's installed-applications UI. macOS has a real folder and
 /// is handled in-app; Windows/Linux use this command because there is no folder
 /// with the same semantics.
@@ -343,112 +294,6 @@ pub fn open_trash() -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         open::that_detached("trash:///").map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[derive(Serialize)]
-pub struct Ide {
-    pub id: String,
-    pub name: String,
-}
-
-const IDES: &[(&str, &str, &str, &str)] = &[
-    ("vscode", "VS Code", "code", "Visual Studio Code"),
-    (
-        "vscode-insiders",
-        "VS Code Insiders",
-        "code-insiders",
-        "Visual Studio Code - Insiders",
-    ),
-    ("cursor", "Cursor", "cursor", "Cursor"),
-    ("windsurf", "Windsurf", "windsurf", "Windsurf"),
-    ("zed", "Zed", "zed", "Zed"),
-    ("sublime", "Sublime Text", "subl", "Sublime Text"),
-    ("idea", "IntelliJ IDEA", "idea", "IntelliJ IDEA"),
-    ("webstorm", "WebStorm", "webstorm", "WebStorm"),
-    ("pycharm", "PyCharm", "pycharm", "PyCharm"),
-    (
-        "android-studio",
-        "Android Studio",
-        "studio",
-        "Android Studio",
-    ),
-    ("xcode", "Xcode", "xed", "Xcode"),
-];
-
-pub fn detect_ides() -> Vec<Ide> {
-    let mut out = Vec::new();
-    for (id, name, cli, _app) in IDES {
-        #[allow(unused_mut)]
-        let mut installed = which::which(cli).is_ok();
-        #[cfg(target_os = "macos")]
-        {
-            installed = installed
-                || std::path::Path::new(&format!("/Applications/{_app}.app")).exists()
-                || dirs::home_dir()
-                    .is_some_and(|home| home.join(format!("Applications/{_app}.app")).exists());
-        }
-        #[cfg(target_os = "windows")]
-        {
-            installed = installed
-                || which::which(format!("{cli}.cmd")).is_ok()
-                || which::which(format!("{cli}.exe")).is_ok();
-        }
-        if installed {
-            out.push(Ide {
-                id: (*id).into(),
-                name: (*name).into(),
-            });
-        }
-    }
-    out
-}
-
-pub fn launch_ide(path: &str, id: &str) -> Result<(), String> {
-    crate::plugins::mounts::reject_local(path)?;
-    let path = dunce::canonicalize(path).map_err(|error| error.to_string())?;
-    let (id, _app) = IDES
-        .iter()
-        .find(|(candidate, _, _, _)| *candidate == id)
-        .map(|(id, _, _, _app)| (*id, *_app))
-        .unwrap_or(("vscode", "Visual Studio Code"));
-    let (_, _, cli, _) = IDES
-        .iter()
-        .find(|(candidate, _, _, _)| *candidate == id)
-        .copied()
-        .unwrap_or(("vscode", "VS Code", "code", "Visual Studio Code"));
-    #[cfg(target_os = "macos")]
-    {
-        if which::which(cli).is_ok() {
-            Command::new(cli)
-                .arg(&path)
-                .spawn()
-                .map_err(|error| error.to_string())?;
-        } else {
-            Command::new("open")
-                .args(["-a", _app])
-                .arg(&path)
-                .spawn()
-                .map_err(|error| error.to_string())?;
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        Command::new("cmd")
-            .args(["/C", cli])
-            .arg(&path)
-            .creation_flags(0x00000010)
-            .spawn()
-            .map_err(|error| error.to_string())?;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        Command::new(cli)
-            .arg(&path)
-            .spawn()
-            .map_err(|error| error.to_string())?;
     }
     Ok(())
 }

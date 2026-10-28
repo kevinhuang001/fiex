@@ -20,10 +20,12 @@ export function SecondaryPane({
   onOpen,
   onPreview,
   onMenu,
+  onBlankMenu,
   dragPaths,
   displayName,
   width,
   onWidthChange,
+  updatePrefs,
 }: {
   explorer: ReturnType<typeof useExplorer>
   prefs: Preferences
@@ -34,10 +36,12 @@ export function SecondaryPane({
   onOpen: (entry: Entry) => void
   onPreview: (entry: Entry) => void
   onMenu: (entry: Entry, x: number, y: number) => void
+  onBlankMenu: (x: number, y: number) => void
   dragPaths?: string[]
   displayName: (path: string) => string
   width: number
   onWidthChange: (width: number) => void
+  updatePrefs: (patch: Partial<Preferences>) => void
 }) {
   const x = explorer
   const [draft, setDraft] = useState(x.path)
@@ -121,9 +125,11 @@ export function SecondaryPane({
         <FileViews
           explorer={x}
           prefs={prefs}
+          updatePrefs={updatePrefs}
           onOpen={onOpen}
           onPreview={onPreview}
           onMenu={onMenu}
+          onBlankMenu={onBlankMenu}
           onDrop={(paths, destination, moving) => onTransfer(paths, destination, moving)}
           onBookmark={() => {}}
           onWorkspace={() => {}}

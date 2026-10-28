@@ -571,6 +571,33 @@ html.dark .app.has-background .workspace-bar {
   height: 38px;
   font-size: 11px;
 }
+/* Draggable column dividers: the handle sits in the grid gap on the left edge
+   of the column it resizes, so dragging it moves that divider with the pointer. */
+.list-col {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  /* The header centers its cells; the divider needs the full row height so the
+     hairline inside it is not collapsed by the cell's text height. */
+  align-self: stretch;
+}
+/* Column divider: an invisible strip in the grid gap. The only affordance is
+   the resize cursor; dragging updates the widths live, with no extra chrome. */
+.col-resizer {
+  position: absolute;
+  left: -7px;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  cursor: ew-resize;
+  touch-action: none;
+  background: transparent;
+}
+body.col-resizing {
+  cursor: ew-resize;
+  user-select: none;
+}
 .list-header {
   position: sticky;
   top: 0;
@@ -1245,7 +1272,7 @@ body.dragging-toolbar {
   position: relative;
 }
 .connection-session-menu {
-  z-index: 70;
+  z-index: 320;
   display: flex;
   flex-direction: column;
   gap: 2px;

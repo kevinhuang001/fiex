@@ -92,12 +92,11 @@ export function PluginActivationDialog({
   }
 
   const item = group
-    ? { id: `group:${group.id}`, kind: 'permission' as const, title: group.title, hint: group.hint }
+    ? { id: `group:${group.id}`, kind: 'permission' as const, title: group.title }
     : {
         id: 'activate',
         kind: 'activate' as const,
         title: t('运行插件'),
-        hint: t('此插件未申请受控资源，激活后即可运行。'),
       }
 
   return (
@@ -108,7 +107,6 @@ export function PluginActivationDialog({
       item={item}
       step={index + 1}
       total={Math.max(1, groups.length)}
-      stepUnit={t('组')}
       busy={busy}
       error={error}
       allowLabel={last ? t('激活') : t('继续')}
