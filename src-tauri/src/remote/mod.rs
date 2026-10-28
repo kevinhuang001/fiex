@@ -10,8 +10,6 @@ mod mutate;
 mod reconcile;
 mod store;
 mod sync;
-#[cfg(feature = "desktop")]
-mod upload;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -51,12 +49,8 @@ pub use files::{
 #[cfg(feature = "desktop")]
 pub(crate) use mutate::{create, create_file, remove, rename};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
-#[cfg(feature = "desktop")]
-pub(crate) use store::load_stored;
 pub use store::{
     connection_config, list_connections, open_navigation, remove_connection, save_connection,
     update_connection_session, ConnectionInfo, ConnectionInput, StoredConnection,
 };
 pub use sync::{sync, sync_one, uncache, unpin};
-#[cfg(feature = "desktop")]
-pub(crate) use upload::{upload, Source as UploadSource};
