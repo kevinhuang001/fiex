@@ -122,10 +122,15 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
     if crate::core::volumes::virtual_resolvers::resolver_for(path)
         .is_some_and(|p| p.id() == "core:trash")
     {
-        // Permanent deletion is a dedicated, explicit Trash action. Never
-        // advertise ordinary fs.remove: a generic plugin must not turn
-        // "delete" into an irreversible purge of trashed content.
-        return FileCapabilities::default();
+        // Trash supports metadata and root enumeration, not generic
+        // content reads, mutations or permanent deletion.
+        return FileCapabilities {
+            stat: true,
+            list: path == crate::core::volumes::recycle::URI
+                || crate::core::volumes::trash::trash_path()
+                    .is_some_and(|root| root.to_string_lossy() == path),
+            ..FileCapabilities::default()
+        };
     }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         let declared = crate::core::volumes::virtual_resolvers::resolver_for(path)
@@ -178,10 +183,15 @@ pub fn for_path(path: &str) -> FileCapabilities {
     if crate::core::volumes::virtual_resolvers::resolver_for(path)
         .is_some_and(|p| p.id() == "core:trash")
     {
-        // Permanent deletion is a dedicated, explicit Trash action. Never
-        // advertise ordinary fs.remove: a generic plugin must not turn
-        // "delete" into an irreversible purge of trashed content.
-        return FileCapabilities::default();
+        // Trash supports metadata and root enumeration, not generic
+        // content reads, mutations or permanent deletion.
+        return FileCapabilities {
+            stat: true,
+            list: path == crate::core::volumes::recycle::URI
+                || crate::core::volumes::trash::trash_path()
+                    .is_some_and(|root| root.to_string_lossy() == path),
+            ..FileCapabilities::default()
+        };
     }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         return crate::core::volumes::virtual_resolvers::resource_entry(path)
@@ -314,6 +324,8 @@ mod tests {
         let trashed = entry("recyclebin://an-item", &["remove"], false);
         assert!(!for_entry("recyclebin://an-item", &trashed).remove);
         assert!(!for_path("recyclebin://an-item").remove);
+        assert!(for_path("recyclebin://an-item").stat);
+        assert!(for_path("recyclebin://").list);
     }
 
     #[test]
