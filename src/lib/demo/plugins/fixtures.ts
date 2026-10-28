@@ -22,6 +22,7 @@ const fixturePlugin: DemoPlugin = {
         { id: 'port', label: '端口', type: 'number' },
         { id: 'username', label: '用户名', type: 'text' },
         { id: 'terminalType', label: '终端类型', type: 'text' },
+        { id: 'credential', label: '测试凭据', type: 'secret', multiline: true },
       ],
     },
     toolbar: {

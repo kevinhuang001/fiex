@@ -965,7 +965,8 @@ body.dragging-file * {
 .connection-form label > span {
   font-weight: 600;
 }
-.connection-form input:not([type='checkbox']) {
+.connection-form input:not([type='checkbox']),
+.connection-form textarea {
   height: 30px;
   padding: 0 9px;
   border: 1px solid var(--line);
@@ -975,7 +976,8 @@ body.dragging-file * {
   font-size: 11px;
   outline: none;
 }
-.connection-form input:focus {
+.connection-form input:focus,
+.connection-form textarea:focus {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 .connection-kinds {
@@ -1982,4 +1984,12 @@ body.dragging-file * {
   border-color: transparent;
   background: transparent;
   color: var(--muted);
+}
+
+.connection-form textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.connection-form .connection-secret {
+  -webkit-text-security: disc;
 }

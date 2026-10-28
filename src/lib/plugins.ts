@@ -10,6 +10,8 @@ export interface PluginField {
   placeholder?: string
   defaultValue?: string | boolean | string[]
   required?: boolean
+  /** Preserve line breaks for certificates, private keys and structured values. */
+  multiline?: boolean
 }
 interface PluginPanel {
   entry: string

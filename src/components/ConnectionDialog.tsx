@@ -199,27 +199,47 @@ export function ConnectionDialog({
               className={field.type === 'checkbox' ? 'connection-check' : undefined}
             >
               {field.type !== 'checkbox' && <span>{field.label}</span>}
-              <input
-                disabled={loading || busy}
-                type={field.type === 'secret' ? 'password' : field.type}
-                checked={field.type === 'checkbox' ? Boolean(values[field.id]) : undefined}
-                value={field.type === 'checkbox' ? undefined : String(values[field.id] ?? '')}
-                required={field.required && !(connection && field.type === 'secret')}
-                placeholder={
-                  connection && field.type === 'secret'
-                    ? t('留空保留已保存的凭据')
-                    : field.placeholder
-                }
-                min={field.type === 'number' ? 1 : undefined}
-                max={field.type === 'number' ? 65535 : undefined}
-                onChange={(event) =>
-                  setValues((prev) => ({
-                    ...prev,
-                    [field.id]:
-                      field.type === 'checkbox' ? event.target.checked : event.target.value,
-                  }))
-                }
-              />
+              {field.multiline && (field.type === 'text' || field.type === 'secret') ? (
+                <textarea
+                  className={field.type === 'secret' ? 'connection-secret' : undefined}
+                  disabled={loading || busy}
+                  value={String(values[field.id] ?? '')}
+                  required={field.required && !(connection && field.type === 'secret')}
+                  placeholder={
+                    connection && field.type === 'secret'
+                      ? t('留空保留已保存的凭据')
+                      : field.placeholder
+                  }
+                  rows={4}
+                  spellCheck={false}
+                  autoComplete="off"
+                  onChange={(event) =>
+                    setValues((prev) => ({ ...prev, [field.id]: event.target.value }))
+                  }
+                />
+              ) : (
+                <input
+                  disabled={loading || busy}
+                  type={field.type === 'secret' ? 'password' : field.type}
+                  checked={field.type === 'checkbox' ? Boolean(values[field.id]) : undefined}
+                  value={field.type === 'checkbox' ? undefined : String(values[field.id] ?? '')}
+                  required={field.required && !(connection && field.type === 'secret')}
+                  placeholder={
+                    connection && field.type === 'secret'
+                      ? t('留空保留已保存的凭据')
+                      : field.placeholder
+                  }
+                  min={field.type === 'number' ? 1 : undefined}
+                  max={field.type === 'number' ? 65535 : undefined}
+                  onChange={(event) =>
+                    setValues((prev) => ({
+                      ...prev,
+                      [field.id]:
+                        field.type === 'checkbox' ? event.target.checked : event.target.value,
+                    }))
+                  }
+                />
+              )}
               {field.type === 'checkbox' && <span>{field.label}</span>}
             </label>
           ))}

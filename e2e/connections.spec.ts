@@ -14,6 +14,11 @@ test('a saved plugin connection can be edited from its context menu without dupl
   )
   await dialog.getByRole('textbox', { name: '连接名称', exact: true }).fill('Updated Session')
   await dialog.getByRole('textbox', { name: '主机', exact: true }).fill('updated.example.com')
+  const credential = '-----BEGIN KEY-----\nmultiline-data\n-----END KEY-----'
+  await dialog.getByRole('textbox', { name: '测试凭据', exact: true }).fill(credential)
+  await expect(dialog.getByRole('textbox', { name: '测试凭据', exact: true })).toHaveValue(
+    credential,
+  )
   await dialog.getByRole('button', { name: '保存连接', exact: true }).click()
   await expect(dialog).toBeHidden()
   const updated = page.locator('.connection-nav').filter({ hasText: 'Updated Session' })
