@@ -58,7 +58,7 @@ pub fn resolve(
             crate::plugins::events::invoke_resources(
                 plugin,
                 "search.query",
-                json!({"query":request.query,"root":request.root,"hidden":request.hidden,"ignores":request.ignores,"limit":limit}),
+                json!({"query":request.query,"root":resources.first().map(|r| &r.reference),"hidden":request.hidden,"ignores":request.ignores,"limit":limit}),
                 &resources,
                 Some(&request.root),
             )
