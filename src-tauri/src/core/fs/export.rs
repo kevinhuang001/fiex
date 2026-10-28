@@ -72,9 +72,8 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
         }
         // A user-owned application is a virtual source, not a host path.
         // It must pass through the same Broker and export lease as USB/VFS.
-        if crate::core::volumes::applications::is_user(path) {
-            fresh.push(path.clone());
-        } else if crate::plugins::mounts::handles(path)
+        if crate::core::volumes::applications::is_user(path)
+            || crate::plugins::mounts::handles(path)
             || crate::usbfs::route(path).is_some()
             || (path.starts_with("recent://") && path != "recent://")
         {
