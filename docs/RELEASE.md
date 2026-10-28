@@ -2,7 +2,7 @@
 
 - Separate downloaded connection cache from pinned offline copies, with upload indicators, configurable synchronization intervals and activity records.
 - Route builtin context menus and decorations through the shared event pipeline; keep asynchronous menus inside the viewport.
-- Use plugin protocol 6 for unified ref-based filesystem operations and provider-declared operation support. Plugins must use a matching protocol-5 SDK.
+- Use plugin protocol 6 for unified ref-based filesystem operations and provider-declared operation support. Plugins must use a matching protocol-6 SDK.
 - Reorganize native Core into domain modules and grouped resolvers; remove compatibility forwarding modules and unused entry points.
 - Fix large and partial stream writes, cleanup after failed commits, pagination cursor cycles and malformed node permission restrictions.
 - Prevent disabled lazy submenu actions from executing; fix Windows Clippy and static toolbar panel CI coverage.
