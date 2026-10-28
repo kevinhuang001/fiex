@@ -189,6 +189,14 @@ pub fn import(paths: &[String]) -> crate::core::operations::OperationResult {
     }
     for source in paths {
         let source_path = Path::new(source);
+        // Import must not silently follow a shortcut into unrelated host
+        // content, including symlinks encountered in a copied directory.
+        if std::fs::symlink_metadata(source_path)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+        {
+            result.errors.push(format!("{source}: symlink import is unsupported"));
+            continue;
+        }
         let Some(name) = source_path.file_name().and_then(|value| value.to_str()) else {
             result.errors.push(format!("{source}: invalid name"));
             continue;
@@ -290,9 +298,25 @@ fn launch_desktop(path: &Path) -> Result<(), String> {
 }
 
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    // read_dir and Path::is_dir can follow a symlink; the entire import tree
+    // needs one explicit policy before any data is copied.
+    if std::fs::symlink_metadata(from)
+        .map_err(|error| error.to_string())?
+        .file_type()
+        .is_symlink()
+    {
+        return Err("Unsupported: importing symlink trees is not permitted".into());
+    }
     std::fs::create_dir_all(to).map_err(|error| error.to_string())?;
     for item in std::fs::read_dir(from).map_err(|error| error.to_string())? {
         let item = item.map_err(|error| error.to_string())?;
+        if item
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_symlink()
+        {
+            return Err("Unsupported: importing symlink entries is not permitted".into());
+        }
         let target = to.join(item.file_name());
         if item.path().is_dir() {
             copy_tree(&item.path(), &target)?;
