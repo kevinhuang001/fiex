@@ -51,6 +51,11 @@ fn prune_leases() {
     // the global registry mutex or while another export is registering.
     drop(expired);
 }
+fn staging_lock() -> &'static Mutex<()> {
+    static STAGING: OnceLock<Mutex<()>> = OnceLock::new();
+    STAGING.get_or_init(Default::default)
+}
+
 pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     if paths.is_empty() {
         return Err("empty export".into());
@@ -88,9 +93,30 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     if fresh.is_empty() {
         return Ok(result);
     }
+    // Serialize staging reservations so concurrent drags cannot transiently
+    // fill the disk beyond the quota before either lease is registered.
+    let _staging = staging_lock()
+        .lock()
+        .map_err(|_| "export staging unavailable")?;
+    prune_leases();
+    let (active_bytes, active_items) = {
+        let registry = leases().lock().map_err(|_| "export registry unavailable")?;
+        if registry.len() >= 64 {
+            return Err("too many active exports".into());
+        }
+        let used_bytes = registry
+            .values()
+            .try_fold(0u64, |sum, lease| sum.checked_add(lease.bytes))
+            .ok_or("export quota exceeded")?;
+        let used_items = registry
+            .values()
+            .try_fold(0usize, |sum, lease| sum.checked_add(lease.items))
+            .ok_or("export item limit exceeded")?;
+        (used_bytes, used_items)
+    };
     let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
-    let mut bytes = 0u64;
-    let mut count = 0usize;
+    let mut bytes = active_bytes;
+    let mut count = active_items;
     for path in &fresh {
         let broker = super::trusted(path, "core:export")?;
         let info = broker.stat()?;
@@ -103,6 +129,10 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
         export_node(&broker, &target, &mut bytes, &mut count, 0)?;
         result.push(target.to_string_lossy().into_owned());
     }
+    // The recursive walker counted active leases in its quota, but this new
+    // lease must own only the bytes/items it actually staged.
+    let bytes = bytes.checked_sub(active_bytes).ok_or("export quota underflow")?;
+    let count = count.checked_sub(active_items).ok_or("export item underflow")?;
     let id = crate::plugins::mounts::new_id()?;
     let mut registry = leases().lock().map_err(|_| "export registry unavailable")?;
     registry.retain(|_, lease| lease.expires > Instant::now());
