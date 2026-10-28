@@ -149,9 +149,9 @@ pub fn stored_entry(uri: &str) -> Result<Entry, String> {
     // Internal backing paths must not escape through metadata supplied to
     // extension providers. Launch and IO resolve the store URI inside Core.
     item.link_target = None;
-    if !item.is_dir {
-        item.mime = "application/x-fiex-application".into();
-    }
+    // Preserve the real content MIME for user-owned files: Preview, Archive,
+    // Checksum and other Features must match exactly as on local storage.
+    // Launch support is a separate application action, never a MIME override.
     item.allowed_ops = if item.is_dir {
         vec![
             "stat".into(),
