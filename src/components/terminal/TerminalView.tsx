@@ -226,7 +226,6 @@ export function TerminalView({
           return
         }
         sessionId = id
-        setStatus('open')
         resize()
       })
       .catch((cause) => {

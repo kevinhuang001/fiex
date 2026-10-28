@@ -15,6 +15,15 @@ const fixturePlugin: DemoPlugin = {
   allowedNetworkDomains: [],
   author: { name: 'Fiex Fixtures' },
   extensions: {
+    connections: {
+      title: '连接界面测试',
+      fields: [
+        { id: 'host', label: '主机', type: 'text', required: true },
+        { id: 'port', label: '端口', type: 'number' },
+        { id: 'username', label: '用户名', type: 'text' },
+        { id: 'terminalType', label: '终端类型', type: 'text' },
+      ],
+    },
     toolbar: {
       title: '测试工具',
       icon: 'puzzle-piece',

@@ -132,6 +132,7 @@ fn start_session(
                 child,
             },
         );
+    let _ = on_event.send(TerminalEvent::Ready);
     let id = session_id.clone();
     std::thread::spawn(move || {
         let mut buffer = [0u8; 16 * 1024];

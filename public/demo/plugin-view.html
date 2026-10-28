@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Connection fixture</title>
+  </head>
+  <body>
+    <h1>PluginView fixture</h1>
+    <p>Package-owned connection UI.</p>
+    <script>
+      window.addEventListener('message', (event) => {
+        if (event.source !== window.parent) return
+        if (event.data?.type === 'fiex.bridge.probe')
+          window.parent.postMessage({ type: 'fiex.bridge.listening' }, '*')
+        if (event.data?.type !== 'fiex.bridge.init' || !event.ports[0]) return
+        const { sessionId, nonce } = event.data
+        event.ports[0].postMessage({
+          type: 'fiex.bridge.ready',
+          bridgeVersion: '1.0',
+          sessionId,
+          nonce,
+        })
+      })
+      window.parent.postMessage({ type: 'fiex.bridge.listening' }, '*')
+    </script>
+  </body>
+</html>

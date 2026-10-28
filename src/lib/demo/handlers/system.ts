@@ -13,18 +13,18 @@ const demoConnections: RemoteConnection[] = [
     autostart: false,
   },
   {
-    id: 'demo-ssh',
+    id: 'demo-view',
     name: '生产服务器',
-    kind: 'ssh',
-    pluginId: '__builtin__',
-    mountPath: 'fiex-terminal://demo-ssh',
+    kind: 'view',
+    pluginId: 'org.test.fixture',
+    mountPath: 'fiex-plugin-view://demo-view',
     saved: true,
     autostart: false,
   },
 ]
 
 const demoConnectionSettings: Record<string, Record<string, string | number | boolean>> = {
-  'demo-ssh': {
+  'demo-view': {
     host: 'server.example.com',
     port: 22,
     username: 'root',
@@ -159,7 +159,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
         autostart: false,
       }
       connection.name = input.name
-      connection.mountPath ||= 'fiex-terminal://' + connection.id
+      connection.mountPath ||= 'fiex-plugin-view://' + connection.id
       demoConnectionSettings[connection.id] = { ...input.settings }
       if (!existing) demoConnections.push(connection)
       return connection
@@ -167,8 +167,15 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'connection_open': {
       const connection = demoConnections.find((item) => item.id === a.id)
       if (!connection) throw new Error('connection not found')
-      return connection.kind === 'ssh'
-        ? { kind: 'terminal', connectionId: connection.id }
+      return connection.kind === 'view'
+        ? {
+            kind: 'pluginView',
+            pluginId: connection.pluginId,
+            connectionId: connection.id,
+            assetPath: '/demo/plugin-view.html',
+            state: {},
+            tabTitle: connection.name,
+          }
         : { kind: 'vfs', path: connection.mountPath }
     }
     case 'remote_connections':

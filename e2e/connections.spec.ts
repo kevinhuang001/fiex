@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test('a saved SSH connection can be edited from its context menu without duplication', async ({
+test('a saved plugin connection can be edited from its context menu without duplication', async ({
   page,
 }) => {
   await page.goto('/?demo&pluginFixture')
@@ -12,11 +12,11 @@ test('a saved SSH connection can be edited from its context menu without duplica
   await expect(dialog.getByRole('textbox', { name: '主机', exact: true })).toHaveValue(
     'server.example.com',
   )
-  await dialog.getByRole('textbox', { name: '连接名称', exact: true }).fill('Updated SSH')
+  await dialog.getByRole('textbox', { name: '连接名称', exact: true }).fill('Updated Session')
   await dialog.getByRole('textbox', { name: '主机', exact: true }).fill('updated.example.com')
   await dialog.getByRole('button', { name: '保存连接', exact: true }).click()
   await expect(dialog).toBeHidden()
-  const updated = page.locator('.connection-nav').filter({ hasText: 'Updated SSH' })
+  const updated = page.locator('.connection-nav').filter({ hasText: 'Updated Session' })
   await expect(updated).toHaveCount(1)
   await expect(connection).toHaveCount(0)
   await updated.click({ button: 'right' })

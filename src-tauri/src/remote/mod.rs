@@ -47,8 +47,6 @@ pub use files::{
 #[cfg(feature = "desktop")]
 pub(crate) use mutate::{create, remove, rename};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
-#[cfg(feature = "desktop")]
-pub(crate) use store::load_stored;
 pub use store::{
     connection_config, list_connections, open_navigation, remove_connection, save_connection,
     update_connection_session, ConnectionInfo, ConnectionInput, StoredConnection,

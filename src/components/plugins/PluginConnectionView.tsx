@@ -3,7 +3,7 @@ import { getLocale, subscribeLocale } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { LoaderCircle } from 'lucide-react'
-import { call } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
 import { attachFiexPanel } from '../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../sdk/ui/src/index'
@@ -150,7 +150,7 @@ export function PluginConnectionView({
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       className="plugin-connection-frame"
-      src={convertFileSrc(view.assetPath)}
+      src={native ? convertFileSrc(view.assetPath) : view.assetPath}
     />
   )
 }

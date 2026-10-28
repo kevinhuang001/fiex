@@ -1014,17 +1014,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
         },
       }
     }
-    case 'connection_open': {
-      if (String(a.id || '') === 'demo-ssh') {
-        return { kind: 'terminal', connectionId: 'demo-ssh' }
-      }
-      // The browser fixture has one WebDAV connection and it registers a VFS,
-      // so Core's two-branch navigation resolves to the remote Explorer root.
-      if (String(a.id || '') === 'demo-webdav') {
-        return { kind: 'vfs', path: 'fiex://mount/demo-webdav/' }
-      }
-      throw new Error('Unknown demo connection')
-    }
 
     default:
       return notHandled
