@@ -11,7 +11,6 @@ use serde::Serialize;
 use std::{
     collections::{HashMap, VecDeque},
     io::{Read, Write},
-    path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, OnceLock,

@@ -42,8 +42,8 @@ fn fallback_round_trips_sets_and_deletes() {
     assert!(!store.contains_key(&fallback_key("p.two", "connection-a", "password")));
     assert!(!store.contains_key(&fallback_key("p.one", "connection-b", "password")));
     assert!(!store.contains_key(&fallback_key("p.one", "connection-a", "username")));
-    let mut empty = BTreeMap::new();
-    save_fallback(&path, &mut empty).unwrap();
+    let empty = BTreeMap::new();
+    save_fallback(&path, &empty).unwrap();
     assert!(load_fallback(&path).unwrap().is_empty());
 }
 
