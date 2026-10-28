@@ -2,36 +2,58 @@ import { useLayoutEffect, useState, type RefObject } from 'react'
 
 const MARGIN = 8
 
-/** Keeps a fixed-position menu inside the viewport: clamp on the near edges,
- * flip above/left of the pointer when the menu would overflow the far edges. */
-function clampMenu(x: number, y: number, width: number, height: number) {
-  const maxLeft = window.innerWidth - width - MARGIN
-  const maxTop = window.innerHeight - height - MARGIN
-  const left = x + width + MARGIN > window.innerWidth ? x - width : x
-  const top = y + height + MARGIN > window.innerHeight ? y - height : y
+export interface MenuPlacement {
+  left: number
+  top: number
+}
+
+export interface MenuViewport {
+  width: number
+  height: number
+}
+
+/** Places a menu at its anchor and keeps the whole menu on screen.
+ *
+ * The pointer stays the anchor: when the menu does not fit, it moves by the
+ * smallest amount that brings it fully inside the viewport instead of flipping
+ * to the other side of the pointer. The menu is never capped, so every item is
+ * visible and no scrollbar appears. */
+export function placeMenu(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  viewport: MenuViewport,
+): MenuPlacement {
+  const maxLeft = Math.max(MARGIN, viewport.width - width - MARGIN)
+  const maxTop = Math.max(MARGIN, viewport.height - height - MARGIN)
   return {
-    left: Math.max(MARGIN, Math.min(left, Math.max(MARGIN, maxLeft))),
-    top: Math.max(MARGIN, Math.min(top, Math.max(MARGIN, maxTop))),
+    left: Math.max(MARGIN, Math.min(x, maxLeft)),
+    top: Math.max(MARGIN, Math.min(y, maxTop)),
   }
 }
 
-/** Measures the rendered menu and keeps it viewport-safe as provider content
- * arrives asynchronously. Builtin and plugin items are resolved after the menu
- * opens, so a single measurement at mount would leave a grown menu offscreen. */
+/** Measures the rendered menu and keeps it pointer-anchored and fully visible.
+ * Builtin and plugin items are resolved after the menu opens, so the menu grows
+ * while visible; the effect re-runs on that growth and only shifts the menu as
+ * far as the viewport requires. */
 export function useMenuPosition(
   x: number,
   y: number,
   ref: RefObject<HTMLElement | null>,
   open = true,
 ) {
-  const [position, setPosition] = useState({ left: x, top: y })
+  const [placement, setPlacement] = useState<MenuPlacement>({ left: x, top: y })
   useLayoutEffect(() => {
     if (!open || !ref.current) return
     const element = ref.current
     const update = () => {
       const rect = element.getBoundingClientRect()
-      const next = clampMenu(x, y, rect.width, rect.height)
-      setPosition((current) =>
+      const next = placeMenu(x, y, Math.ceil(rect.width), element.scrollHeight, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      })
+      setPlacement((current) =>
         current.left === next.left && current.top === next.top ? current : next,
       )
     }
@@ -41,5 +63,5 @@ export function useMenuPosition(
     observer.observe(element)
     return () => observer.disconnect()
   }, [open, x, y, ref])
-  return position
+  return placement
 }

@@ -17,13 +17,14 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const entries = paths.map((path) => allEntries.find((entry) => entry.path === path))
   const remote = paths.every((path) => path.startsWith(demoRemoteRoot))
   const ro = remote || allEntries.find((entry) => entry.path === directory)?.readonly || false
+  const platform = new URLSearchParams(location.search).get('platform') || ''
+  // Mirrors Core: an unavailable operation is skipped, never emitted disabled.
   const item = (
     id: string,
     title: string,
     icon: string,
     shortcut?: ShortcutAction,
-    disabled = false,
-  ): CoreMenuItem => ({ id, title: t(title), icon, shortcut, disabled, kind: 'action' })
+  ): CoreMenuItem => ({ id, title: t(title), icon, shortcut, disabled: false, kind: 'action' })
   const groups: [string, CoreMenuItem[]][] = [
     [
       'opening',
@@ -37,30 +38,32 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
           : []),
       ],
     ],
-    [
-      'tags',
-      !['windows', 'linux'].includes(new URLSearchParams(location.search).get('platform') || '')
-        ? [item('tags', '标签…', 'tags', undefined, ro)]
-        : [],
-    ],
-    ['connection-cache', []],
-    ['rename', paths.length === 1 ? [item('rename', '重新命名', 'pencil', 'rename', ro)] : []],
-    [
-      'batch-rename',
-      paths.length > 1 ? [item('batchRename', '批量重命名…', 'pencil', undefined, ro)] : [],
-    ],
-    [
-      'clipboard',
-      [
-        item('copy', '复制', 'copy', 'copy'),
-        item('cut', '剪切', 'scissors', 'cut', ro),
-        item('duplicate', '创建副本', 'copy', 'duplicate', ro),
-      ],
-    ],
-    ['terminal', [item('terminal', 'Open in Terminal', 'terminal', undefined, ro)]],
-    ['copy-path', [item('copyPath', '复制路径', 'copy')]],
-    ['trash', []],
   ]
+  // Tags and the terminal are local-only in Core, and both need a writable item.
+  if (!remote && !ro && !['windows', 'linux'].includes(platform))
+    groups.push(['tags', [item('tags', '标签…', 'tags')]])
+  groups.push(['connection-cache', []])
+  if (!ro) {
+    if (paths.length === 1)
+      groups.push(['rename', [item('rename', '重新命名', 'pencil', 'rename')]])
+    if (paths.length > 1)
+      groups.push(['batch-rename', [item('batchRename', '批量重命名…', 'pencil')]])
+  }
+  groups.push([
+    'clipboard',
+    [
+      item('copy', '复制', 'copy', 'copy'),
+      ...(ro
+        ? []
+        : [
+            item('cut', '剪切', 'scissors', 'cut'),
+            item('duplicate', '创建副本', 'copy', 'duplicate'),
+          ]),
+    ],
+  ])
+  if (!remote && !ro) groups.push(['terminal', [item('terminal', 'Open in Terminal', 'terminal')]])
+  groups.push(['copy-path', [item('copyPath', '复制路径', 'copy')]])
+  groups.push(['trash', []])
   if (remote) {
     const pinned = entries.every((entry) => entry?.pinned)
     const cached = entries.every((entry) => entry?.hasCache)
@@ -87,13 +90,21 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
         item('remote.keepLocal', '用本地版本覆盖云端', 'cloud-check'),
         item('remote.keepRemote', '保留本地备份并采用云端版本', 'cloud-check'),
       )
-    groups[2][1] = remoteItems
+    const cacheGroup = groups.find(([id]) => id === 'connection-cache')
+    if (cacheGroup) cacheGroup[1] = remoteItems
   }
-  groups[8][1] = (
-    directory.startsWith(root + '/.Trash')
-      ? [item('restore', '放回原处', 'restore'), item('delete', '彻底删除', 'trash', undefined, ro)]
-      : [item('trash', '移到废纸篓', 'trash', 'trash', ro)]
-  ).map((item) => ({ ...item, placement: 'tail', danger: item.id !== 'restore' }))
+  const trashGroup = groups.find(([id]) => id === 'trash')
+  if (trashGroup)
+    trashGroup[1] = (
+      directory.startsWith(root + '/.Trash')
+        ? [
+            item('restore', '放回原处', 'restore'),
+            ...(ro ? [] : [item('delete', '彻底删除', 'trash')]),
+          ]
+        : ro
+          ? []
+          : [item('trash', '移到废纸篓', 'trash', 'trash')]
+    ).map((item) => ({ ...item, placement: 'tail', danger: item.id !== 'restore' }))
   for (const [id, session] of sessions)
     if (Date.now() - session.created >= 90000) sessions.delete(id)
   return groups
