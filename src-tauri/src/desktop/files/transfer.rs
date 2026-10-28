@@ -15,31 +15,12 @@ pub(crate) async fn transfer(
     on_progress: Channel<OperationProgress>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
-    let applications_destination =
-        destination == volumes::applications::URI || volumes::applications::is_user(&destination);
-    let destination = if applications_destination {
-        volumes::applications::stored_path(&destination)?
-            .to_string_lossy()
-            .into_owned()
-    } else {
-        destination
-    };
-    let paths = paths
-        .into_iter()
-        .map(|path| {
-            if volumes::applications::is_user(&path) {
-                volumes::applications::stored_path(&path)
-                    .map(|path| path.to_string_lossy().into_owned())
-            } else if volumes::virtual_resolvers::opaque(&path) {
-                Err("Unsupported: view entry has no transferable content".into())
-            } else {
-                Ok(path)
-            }
-        })
-        .collect::<Result<Vec<_>, String>>()?;
+    // Keep ResourceRefs in the owning storage adapter. The transfer engine
+    // itself checks source read and destination child/create capabilities.
+    // Materialized OS paths must never become the transfer destination.
     let flag = cancel.flag();
     let emit = progress_emitter(on_progress);
-    let mut result = tauri::async_runtime::spawn_blocking(move || {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         crate::core::fs::transfer(
             &paths,
             &destination,
@@ -55,11 +36,6 @@ pub(crate) async fn transfer(
     .map_err(|error| error.to_string())??;
     if !result.paths.is_empty() {
         let _ = app.emit("directory-changed", ());
-    }
-    if applications_destination {
-        for path in &mut result.paths {
-            *path = volumes::applications::stored_uri(std::path::Path::new(path))?;
-        }
     }
     Ok(result)
 }
