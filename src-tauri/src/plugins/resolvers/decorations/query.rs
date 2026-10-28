@@ -77,19 +77,24 @@ pub fn query_with_plugins(
             let mut response = response;
             if let Some(items) = response["decorations"].as_array_mut() {
                 for item in items {
-                    if let Some(reference) = item.get("ref") {
-                        let resource = resources.iter().find(|resource| {
+                    // Only a Ref bound to this event may identify a target.
+                    // Ignore supplied names and paths, including a same-name
+                    // child on a different mount or an unrelated host path.
+                    let target = item.get("ref").and_then(|reference| {
+                        resources.iter().find(|resource| {
                             serde_json::to_value(&resource.reference).ok().as_ref()
                                 == Some(reference)
-                        });
-                        if let Some(resource) = resource {
-                            item["path"] = json!(resource.display);
-                            if let Some(object) = item.as_object_mut() {
-                                object.remove("name");
-                            }
-                        } else {
-                            *item = json!({});
+                        })
+                    });
+                    if let Some(target) = target {
+                        let path = target.display.clone();
+                        if let Some(object) = item.as_object_mut() {
+                            object.remove("name");
+                            object.remove("path");
                         }
+                        item["path"] = json!(path);
+                    } else {
+                        *item = json!({});
                     }
                 }
             }
