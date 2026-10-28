@@ -17,6 +17,39 @@ struct Lease {
     bytes: u64,
     items: usize,
 }
+
+// Windows cannot remove read-only staged files. Release the attribute before
+// TempDir performs its cleanup, without following links outside the lease.
+#[cfg(windows)]
+fn unlock_staged(path: &Path, depth: usize) {
+    if depth > 128 {
+        return;
+    }
+    let Ok(metadata) = std::fs::symlink_metadata(path) else {
+        return;
+    };
+    if metadata.file_type().is_symlink() {
+        return;
+    }
+    if metadata.is_dir() {
+        if let Ok(children) = std::fs::read_dir(path) {
+            for child in children.flatten() {
+                unlock_staged(&child.path(), depth + 1);
+            }
+        }
+    } else if metadata.permissions().readonly() {
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(false);
+        let _ = std::fs::set_permissions(path, permissions);
+    }
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        unlock_staged(self._directory.path(), 0);
+    }
+}
 fn leases() -> &'static Mutex<HashMap<String, Lease>> {
     static VALUES: OnceLock<Mutex<HashMap<String, Lease>>> = OnceLock::new();
     let registry = VALUES.get_or_init(Default::default);
@@ -244,4 +277,29 @@ fn export_node(
     permissions.set_readonly(true);
     std::fs::set_permissions(target, permissions).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// The export manager may stage read-only data on Windows, where DeleteFile
+// refuses to remove files carrying FILE_ATTRIBUTE_READONLY.
+#[cfg(all(test, windows))]
+mod cleanup_tests {
+    use super::*;
+
+    #[test]
+    fn read_only_staged_files_are_reclaimed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let child = path.join("payload.txt");
+        std::fs::write(&child, "data").unwrap();
+        let mut permissions = std::fs::metadata(&child).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&child, permissions).unwrap();
+        drop(Lease {
+            _directory: dir,
+            expires: Instant::now(),
+            bytes: 4,
+            items: 1,
+        });
+        assert!(!path.exists());
+    }
 }
