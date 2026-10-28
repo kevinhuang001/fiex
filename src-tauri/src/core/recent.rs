@@ -69,10 +69,13 @@ pub fn alias_for(source: &str) -> String {
 }
 pub fn source_for(alias: &str) -> Result<String, String> {
     use base64::Engine;
-    let encoded = alias.strip_prefix("recent://").filter(|s| !s.is_empty())
+    let encoded = alias
+        .strip_prefix("recent://")
+        .filter(|s| !s.is_empty())
         .ok_or("not a recent item")?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(encoded).map_err(|_| "invalid recent alias")?;
+        .decode(encoded)
+        .map_err(|_| "invalid recent alias")?;
     let path = String::from_utf8(bytes).map_err(|_| "invalid recent identity")?;
     if !load().contains(&path) {
         return Err("StaleRef: item is no longer in Recent".into());
@@ -93,16 +96,25 @@ fn source_entry(path: &str) -> Result<Entry, String> {
 pub fn entry_for_alias(alias: &str) -> Result<Entry, String> {
     let source = source_for(alias)?;
     let mut item = source_entry(&source)?;
-    if item.is_dir { return Err("Unsupported: Recent directories are not supported".into()); }
+    if item.is_dir {
+        return Err("Unsupported: Recent directories are not supported".into());
+    }
     let cap = crate::plugins::resource::file_capabilities::for_path(&source);
     item.path = alias.into();
     item.link_target = None;
-    item.allowed_ops = if cap.read { vec!["stat".into(), "read".into()] }
-        else { vec!["stat".into()] };
+    item.allowed_ops = if cap.read {
+        vec!["stat".into(), "read".into()]
+    } else {
+        vec!["stat".into()]
+    };
     Ok(item)
 }
 pub fn entries(state: &Recent) -> Vec<Entry> {
-    state.0.lock().unwrap().iter().filter_map(|path| {
-        entry_for_alias(&alias_for(path)).ok()
-    }).collect()
+    state
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|path| entry_for_alias(&alias_for(path)).ok())
+        .collect()
 }
