@@ -70,23 +70,33 @@ impl DragSessions {
         let Ok(paths) = normalized(paths) else {
             return None;
         };
-        let captured = self.0.lock().ok()?.as_ref()
-            .filter(|session| session.paths == paths
-                && session.started.elapsed() < Duration::from_secs(600))
+        let captured = self
+            .0
+            .lock()
+            .ok()?
+            .as_ref()
+            .filter(|session| {
+                session.paths == paths && session.started.elapsed() < Duration::from_secs(600)
+            })
             .cloned()?;
         // The exported OS paths are never the source of truth. Re-resolve
         // every captured Core identity and fail closed after unmount/revoke.
-        let current = captured.originals.iter().map(|path| {
-            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
-                .map(|snapshot| snapshot.reference)
-        }).collect::<Result<Vec<_>, _>>().ok()?;
+        let current = captured
+            .originals
+            .iter()
+            .map(|path| {
+                crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
+                    .map(|snapshot| snapshot.reference)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
         if current != captured.references {
             return None;
         }
         if consume {
             let mut slot = self.0.lock().ok()?;
-            if !slot.as_ref().is_some_and(|session| {
-                session.paths == captured.paths && session.started == captured.started
+            if slot.as_ref().is_none_or(|session| {
+                session.paths != captured.paths || session.started != captured.started
             }) {
                 return None;
             }
