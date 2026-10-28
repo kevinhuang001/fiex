@@ -242,7 +242,9 @@ test('settings creates tags and the file dialog only applies them', async ({ pag
 })
 test('Applications entry and search control', async ({ page }) => {
   await page.getByRole('button', { name: '应用程序', exact: true }).click()
-  await expect(page.getByText('Fiex.app', { exact: true })).toBeVisible()
+  await expect(
+    page.locator('[data-path="applications://ZmlleHQ="]').getByText('Fiex', { exact: true }),
+  ).toBeVisible()
   await expect(page.getByRole('textbox', { name: '搜索文件' })).toBeVisible()
 })
 test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
