@@ -16,6 +16,7 @@ export function FileViews(props: Props) {
   const {
     explorer: x,
     prefs,
+    updatePrefs,
     onOpen,
     onPreview,
     onMenu,
@@ -204,6 +205,8 @@ export function FileViews(props: Props) {
         <ListView
           explorer={x}
           flat={flat}
+          columns={prefs.listColumns}
+          onColumnsChange={(listColumns) => updatePrefs({ listColumns })}
           rows={virtual.getVirtualItems()}
           totalSize={virtual.getTotalSize()}
           selectedPaths={selectedPaths}

@@ -1,4 +1,5 @@
 import type { ShortcutMap, ShortcutStyle } from './shortcuts'
+import type { ListColumns } from './listColumns'
 
 export interface Tag {
   name: string
@@ -160,6 +161,8 @@ export interface Preferences {
   pinnedPluginTools: string[]
   /** Background connection reconciliation cadence, in seconds. */
   syncInterval: number
+  /** List-view column widths; the flexible name column takes the rest. */
+  listColumns: ListColumns
 }
 
 export interface OperationProgress {

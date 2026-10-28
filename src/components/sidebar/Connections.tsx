@@ -3,6 +3,7 @@ import { Pin, Plus, Server, TerminalSquare } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { useMenuPosition } from '@/lib/menuPosition'
+import { MenuLayer } from '@/components/ui/MenuLayer'
 import type { RemoteConnection } from '@/lib/types'
 import type { SidebarProps } from './types'
 
@@ -110,46 +111,48 @@ export function Connections({
             <Plus size={14} />
           </button>
           {plusOpen && (
-            <div
-              ref={plusMenu}
-              className="connection-session-menu plus"
-              role="menu"
-              style={plusPosition}
-            >
-              {saved.length > 0 ? (
-                saved.map((connection) => (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    key={connection.id}
-                    onClick={() => open(connection)}
-                  >
-                    {isSshConnection(connection) ? (
-                      <TerminalSquare size={14} />
-                    ) : (
-                      <Server size={14} />
-                    )}
-                    <span>
-                      <strong>{connection.name}</strong>
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <p className="sidebar-hint">{t('还没有保存的 Session')}</p>
-              )}
-              <button
-                type="button"
-                role="menuitem"
-                className="connection-session-new"
-                onClick={() => {
-                  setPlusOpen(false)
-                  onAddConnection()
-                }}
+            <MenuLayer>
+              <div
+                ref={plusMenu}
+                className="connection-session-menu plus"
+                role="menu"
+                style={plusPosition}
               >
-                <Plus size={14} />
-                <span>{t('新建连接…')}</span>
-              </button>
-            </div>
+                {saved.length > 0 ? (
+                  saved.map((connection) => (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      key={connection.id}
+                      onClick={() => open(connection)}
+                    >
+                      {isSshConnection(connection) ? (
+                        <TerminalSquare size={14} />
+                      ) : (
+                        <Server size={14} />
+                      )}
+                      <span>
+                        <strong>{connection.name}</strong>
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="sidebar-hint">{t('还没有保存的 Session')}</p>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="connection-session-new"
+                  onClick={() => {
+                    setPlusOpen(false)
+                    onAddConnection()
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>{t('新建连接…')}</span>
+                </button>
+              </div>
+            </MenuLayer>
           )}
         </div>
       </div>
@@ -188,40 +191,42 @@ export function Connections({
         ))
       )}
       {menu && current && (
-        <div
-          ref={menuRef}
-          className="connection-session-menu floating"
-          role="menu"
-          style={contextPosition}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMenu(null)
-              onEditConnection(current)
-            }}
+        <MenuLayer>
+          <div
+            ref={menuRef}
+            className="connection-session-menu floating"
+            role="menu"
+            style={contextPosition}
           >
-            {t('编辑连接…')}
-          </button>
-          <button type="button" role="menuitem" onClick={() => void save(current)}>
-            {t('保存 Session')}
-          </button>
-          <button type="button" role="menuitem" onClick={() => void toggleAutostart(current)}>
-            {current.autostart ? t('取消自启动') : t('设置为自启动')}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="danger"
-            onClick={() => {
-              setMenu(null)
-              onRemoveConnection(current.id)
-            }}
-          >
-            {t('关闭连接')}
-          </button>
-        </div>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenu(null)
+                onEditConnection(current)
+              }}
+            >
+              {t('编辑连接…')}
+            </button>
+            <button type="button" role="menuitem" onClick={() => void save(current)}>
+              {t('保存 Session')}
+            </button>
+            <button type="button" role="menuitem" onClick={() => void toggleAutostart(current)}>
+              {current.autostart ? t('取消自启动') : t('设置为自启动')}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="danger"
+              onClick={() => {
+                setMenu(null)
+                onRemoveConnection(current.id)
+              }}
+            >
+              {t('关闭连接')}
+            </button>
+          </div>
+        </MenuLayer>
       )}
     </Fragment>
   )

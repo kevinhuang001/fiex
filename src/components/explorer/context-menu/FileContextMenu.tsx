@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
+import { MenuLayer } from '@/components/ui/MenuLayer'
 import { useContextMenu } from './useContextMenu'
 import { executeCoreMenu } from './execute'
 import type { CoreMenu, CoreMenuItem } from './useContextMenu'
@@ -71,21 +72,33 @@ export function FileContextMenu(props: ContextMenuProps) {
     )
   }
   return (
-    <div ref={ref} role="menu" aria-label={t('文件操作')} className="context-menu" style={position}>
-      {builtin.flatMap((group) =>
-        group.items.filter((item) => item.placement !== 'tail').map((item) => render(group, item)),
-      )}
-      <PluginContextActions
-        paths={paths}
-        path={x.path}
-        resolvedMenus={plugins}
-        onClose={() => setMenu(null)}
-        onError={x.setError}
-      />
-      {builtin.flatMap((group) =>
-        group.items.filter((item) => item.placement === 'tail').map((item) => render(group, item)),
-      )}
-      {error && <p role="alert">{error}</p>}
-    </div>
+    <MenuLayer>
+      <div
+        ref={ref}
+        role="menu"
+        aria-label={t('文件操作')}
+        className="context-menu"
+        style={position}
+      >
+        {builtin.flatMap((group) =>
+          group.items
+            .filter((item) => item.placement !== 'tail')
+            .map((item) => render(group, item)),
+        )}
+        <PluginContextActions
+          paths={paths}
+          path={x.path}
+          resolvedMenus={plugins}
+          onClose={() => setMenu(null)}
+          onError={x.setError}
+        />
+        {builtin.flatMap((group) =>
+          group.items
+            .filter((item) => item.placement === 'tail')
+            .map((item) => render(group, item)),
+        )}
+        {error && <p role="alert">{error}</p>}
+      </div>
+    </MenuLayer>
   )
 }

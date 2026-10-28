@@ -24,6 +24,7 @@ export function SecondaryPane({
   displayName,
   width,
   onWidthChange,
+  updatePrefs,
 }: {
   explorer: ReturnType<typeof useExplorer>
   prefs: Preferences
@@ -38,6 +39,7 @@ export function SecondaryPane({
   displayName: (path: string) => string
   width: number
   onWidthChange: (width: number) => void
+  updatePrefs: (patch: Partial<Preferences>) => void
 }) {
   const x = explorer
   const [draft, setDraft] = useState(x.path)
@@ -121,6 +123,7 @@ export function SecondaryPane({
         <FileViews
           explorer={x}
           prefs={prefs}
+          updatePrefs={updatePrefs}
           onOpen={onOpen}
           onPreview={onPreview}
           onMenu={onMenu}

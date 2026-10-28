@@ -3,7 +3,9 @@
 }
 .context-menu {
   position: fixed;
-  z-index: 40;
+  /* Portaled to the document root: the sidebar and the terminal panel create
+     their own stacking contexts, so a menu must outrank the whole shell. */
+  z-index: 320;
   width: 210px;
   padding: 6px;
   border-radius: var(--radius-menu);

@@ -199,9 +199,7 @@
 .sidebar-content {
   padding-top: 8px;
 }
-.sidebar .context-menu {
-  z-index: 60;
-}
+
 .sidebar-menu > button:last-child {
   color: var(--danger);
 }
@@ -532,7 +530,7 @@ body.dragging-reorder * {
 
 /* Context menus sit above the workspace dock but below modal sheets. */
 .context-menu {
-  z-index: 55;
+  z-index: 320;
 }
 
 /* Lift settings cards and shortcut pills off the dark canvas. */

@@ -11,6 +11,7 @@ import {
   type ShortcutStyle,
 } from '@/lib/shortcuts'
 import { TAG_PRESETS, normalizeTags } from '@/lib/tags'
+import { LIST_COLUMNS_DEFAULT, normalizeListColumns } from '@/lib/listColumns'
 import type { Preferences, SidebarSection } from '@/lib/types'
 import { useEffect, useState } from 'react'
 
@@ -47,6 +48,7 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     shortcuts: defaultShortcuts(style),
     pinnedPluginTools: [],
     syncInterval: 30,
+    listColumns: { ...LIST_COLUMNS_DEFAULT },
   }
 }
 
@@ -110,6 +112,7 @@ function load(): Preferences {
       ...Object.fromEntries(Object.entries(stored).filter(([key]) => key in fallback)),
       locale: normalizeLocale(stored.locale),
       tags,
+      listColumns: normalizeListColumns(stored.listColumns),
       startPage,
       fontSize,
       terminalFont,

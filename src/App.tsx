@@ -231,6 +231,7 @@ export default function App() {
                 trashPath={app.trashPath}
                 explorer={app.left}
                 prefs={app.prefs}
+                updatePrefs={app.update}
                 onOpen={app.openLeft}
                 onPreview={(entry) => app.previewEntry(entry, app.left)}
                 onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
@@ -257,6 +258,7 @@ export default function App() {
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
             dragPaths={app.selectedAll}
             displayName={app.displayName}
+            updatePrefs={app.update}
             width={app.paneWidth}
             onWidthChange={app.setPaneWidth}
           />
