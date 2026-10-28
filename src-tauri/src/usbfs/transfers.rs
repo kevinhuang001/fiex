@@ -1,5 +1,6 @@
 //! Transfers through raw filesystem drivers use the same conflict choices as
 //! local files. All conflicts are collected before writes begin.
+
 use crate::{
     core::files::{self, Entry},
     core::ignores::IgnoreSet,
@@ -12,116 +13,16 @@ use std::{
     path::Path,
     sync::atomic::{AtomicBool, Ordering},
 };
-fn join(dir: &str, name: &str) -> String {
-    format!(
-        "{}{}{}",
-        dir.trim_end_matches(['/', '\\']),
-        if dir.contains('\\') { "\\" } else { "/" },
-        name
-    )
-}
-fn list(path: &str) -> Result<Vec<Entry>, String> {
-    if let Some(r) = usbfs::route(path) {
-        usbfs::listing(&r)
-    } else {
-        files::list(path, true, &[]).map(|l| l.entries)
-    }
-}
-fn info(path: &str) -> Result<Entry, String> {
-    if let Some(r) = usbfs::route(path) {
-        usbfs::entry(&r)
-    } else {
-        files::entry(Path::new(path))
-    }
-}
-fn parent(path: &str) -> Result<&str, String> {
-    path.rsplit_once(['/', '\\'])
-        .map(|(p, _)| p)
-        .ok_or_else(|| crate::i18n::t("无效路径").into())
-}
-fn read(path: &str) -> Result<Vec<u8>, String> {
-    if let Some(r) = usbfs::route(path) {
-        usbfs::read_path(&r)
-    } else {
-        fs::read(path).map_err(|e| e.to_string())
-    }
-}
-fn writable(path: &str) -> Result<(), String> {
-    if usbfs::route(path).is_some_and(|r| {
-        matches!(
-            r.kind,
-            usbfs::FsKind::Apfs | usbfs::FsKind::Hfs | usbfs::FsKind::Btrfs
-        )
-    }) {
-        return Err(crate::i18n::t("此文件系统只读").into());
-    }
-    Ok(())
-}
-fn create(path: &str, folder: bool) -> Result<(), String> {
-    if let Some(r) = usbfs::route(parent(path)?) {
-        usbfs::create(
-            &r,
-            Path::new(path)
-                .file_name()
-                .ok_or(crate::i18n::t("无效名称"))?
-                .to_string_lossy()
-                .as_ref(),
-            folder,
-        )
-    } else if folder {
-        fs::create_dir(path).map_err(|e| e.to_string())
-    } else {
-        fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(path)
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    }
-}
-fn write(path: &str, data: &[u8]) -> Result<(), String> {
-    if let Some(r) = usbfs::route(path) {
-        usbfs::write_path(&r, data)
-    } else {
-        fs::write(path, data).map_err(|e| e.to_string())
-    }
-}
-fn remove(path: &str) -> Result<(), String> {
-    if info(path)?.is_dir {
-        for child in list(path)? {
-            remove(&child.path)?;
-        }
-    }
-    if let Some(r) = usbfs::route(path) {
-        usbfs::remove(&r)
-    } else if info(path)?.is_dir {
-        fs::remove_dir(path).map_err(|e| e.to_string())
-    } else {
-        fs::remove_file(path).map_err(|e| e.to_string())
-    }
-}
-fn rename(path: &str, name: &str) -> Result<String, String> {
-    let to = join(parent(path)?, name);
-    if let Some(r) = usbfs::route(path) {
-        usbfs::rename(&r, name)?;
-    } else {
-        fs::rename(path, &to).map_err(|e| e.to_string())?;
-    }
-    Ok(to)
-}
-fn version(e: &Entry) -> FileVersion {
-    FileVersion {
-        path: e.path.clone(),
-        size: e.size,
-        modified: e.modified,
-        is_dir: e.is_dir,
-    }
-}
+
+mod io;
+use io::*;
+
 struct Task {
     source: Entry,
     target: String,
     existing: bool,
 }
+
 struct Plan<'a> {
     tasks: Vec<Task>,
     conflicts: Vec<Conflict>,
@@ -134,6 +35,7 @@ struct Plan<'a> {
     moving: bool,
     cancel: &'a AtomicBool,
 }
+
 impl Plan<'_> {
     fn walk(
         &mut self,
@@ -246,6 +148,7 @@ impl Plan<'_> {
         Ok(())
     }
 }
+
 fn copy_node(source: &Entry, target: &str, cancel: &AtomicBool) -> Result<(), String> {
     check_cancelled(cancel)?;
     if source.is_dir {
@@ -264,6 +167,7 @@ fn copy_node(source: &Entry, target: &str, cancel: &AtomicBool) -> Result<(), St
     }
     Ok(())
 }
+
 pub fn transfer(
     sources: &[String],
     destination: &str,
@@ -379,73 +283,4 @@ pub fn transfer(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::core::transfers::NEVER_CANCELLED;
-    #[test]
-    fn image_transfers_conflicts_and_moves_verify_actual_bytes() {
-        use fs_ntfs::block_io::{BlockIo, PathIo};
-        let t = tempfile::tempdir().unwrap();
-        let image = t.path().join("ntfs.img");
-        fs::File::create(&image)
-            .unwrap()
-            .set_len(64 * 1024 * 1024)
-            .unwrap();
-        let mut io = PathIo::open_rw(&image).unwrap();
-        fs_ntfs::mkfs::format_filesystem(
-            &mut io,
-            64 * 1024 * 1024,
-            4096,
-            4096,
-            Some("FIEX"),
-            Some(1),
-        )
-        .unwrap();
-        io.sync().unwrap();
-        drop(io);
-        let root = usbfs::virtual_root(image.to_str().unwrap(), usbfs::FsKind::Ntfs);
-        let local = t.path().join("source.txt");
-        fs::write(&local, "first").unwrap();
-        let paths = vec![local.to_string_lossy().into_owned()];
-        let result = transfer(&paths, &root, false, false, &[], &[], &NEVER_CANCELLED).unwrap();
-        assert!(result.errors.is_empty());
-        let in_image = join(&root, "source.txt");
-        assert_eq!(read(&in_image).unwrap(), b"first");
-        fs::write(&local, "updated").unwrap();
-        let conflict = transfer(&paths, &root, false, false, &[], &[], &NEVER_CANCELLED).unwrap();
-        assert_eq!(conflict.conflicts.len(), 1);
-        assert_eq!(read(&in_image).unwrap(), b"first");
-        let choices = vec![Resolution {
-            key: conflict.conflicts[0].key.clone(),
-            action: Action::Replace,
-        }];
-        transfer(&paths, &root, false, false, &[], &choices, &NEVER_CANCELLED).unwrap();
-        assert_eq!(read(&in_image).unwrap(), b"updated");
-        let export = t.path().join("export");
-        fs::create_dir(&export).unwrap();
-        transfer(
-            std::slice::from_ref(&in_image),
-            export.to_str().unwrap(),
-            true,
-            false,
-            &[],
-            &[],
-            &NEVER_CANCELLED,
-        )
-        .unwrap();
-        assert_eq!(fs::read(export.join("source.txt")).unwrap(), b"updated");
-        assert!(info(&in_image).is_err());
-        assert!(local.exists());
-    }
-    #[test]
-    fn readonly_driver_destinations_are_rejected() {
-        for kind in [
-            usbfs::FsKind::Apfs,
-            usbfs::FsKind::Hfs,
-            usbfs::FsKind::Btrfs,
-        ] {
-            let path = usbfs::virtual_root("/tmp/nonexistent-ci.img", kind);
-            assert!(writable(&path).is_err());
-        }
-    }
-}
+mod tests;

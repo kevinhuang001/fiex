@@ -127,19 +127,19 @@ fn mp4_section(path: &Path) -> Option<InfoSection> {
                     &[
                         (
                             "0",
-                            (track
+                            track
                                 .box_type()
                                 .map(|value| value.to_string())
-                                .unwrap_or_default())
-                            .to_string(),
+                                .unwrap_or_default()
+                                .to_string(),
                         ),
                         (
                             "1",
-                            (track
+                            track
                                 .channel_config()
                                 .map(|value| value.to_string())
-                                .unwrap_or_default())
-                            .to_string(),
+                                .unwrap_or_default()
+                                .to_string(),
                         ),
                     ],
                 ));
@@ -195,14 +195,14 @@ fn matroska_section(path: &Path) -> Option<InfoSection> {
                     &[
                         (
                             "0",
-                            (track
+                            track
                                 .codec_name
                                 .clone()
-                                .unwrap_or_else(|| track.codec_id.clone()))
-                            .to_string(),
+                                .unwrap_or_else(|| track.codec_id.clone())
+                                .to_string(),
                         ),
-                        ("1", (audio.sample_rate).to_string()),
-                        ("2", (audio.channels).to_string()),
+                        ("1", format!("{}", audio.sample_rate)),
+                        ("2", format!("{}", audio.channels)),
                     ],
                 ),
             )),
