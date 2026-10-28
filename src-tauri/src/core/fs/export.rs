@@ -19,7 +19,37 @@ struct Lease {
 }
 fn leases() -> &'static Mutex<HashMap<String, Lease>> {
     static VALUES: OnceLock<Mutex<HashMap<String, Lease>>> = OnceLock::new();
-    VALUES.get_or_init(Default::default)
+    let registry = VALUES.get_or_init(Default::default);
+    // Leases must expire even if the user never starts another drag.
+    // Otherwise the staged data remains on disk until Fiex exits.
+    static CLEANUP: OnceLock<()> = OnceLock::new();
+    CLEANUP.get_or_init(|| {
+        std::thread::spawn(|| loop {
+            std::thread::sleep(Duration::from_secs(60));
+            prune_leases();
+        });
+    });
+    registry
+}
+
+fn prune_leases() {
+    let mut expired = Vec::new();
+    if let Ok(mut registry) = leases().lock() {
+        let now = Instant::now();
+        let ids: Vec<_> = registry
+            .iter()
+            .filter(|(_, lease)| lease.expires <= now)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in ids {
+            if let Some(lease) = registry.remove(&id) {
+                expired.push(lease);
+            }
+        }
+    }
+    // Removing temporary directories can block. Never do it while holding
+    // the global registry mutex or while another export is registering.
+    drop(expired);
 }
 pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     if paths.is_empty() {
