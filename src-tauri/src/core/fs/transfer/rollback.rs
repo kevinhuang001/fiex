@@ -28,20 +28,30 @@ impl UndoLog {
                     return Err("backup stream stalled".into());
                 }
                 copy.write_all(&bytes).map_err(|e| e.to_string())?;
-                offset = offset.checked_add(bytes.len() as u64)
+                offset = offset
+                    .checked_add(bytes.len() as u64)
                     .ok_or("backup size overflow")?;
-                if eof { break; }
+                if eof {
+                    break;
+                }
             }
             if offset != reader.size()
-                || !same_version(&step.target.stat()?, step.target_version.as_ref()
-                    .ok_or("missing target version")?)
+                || !same_version(
+                    &step.target.stat()?,
+                    step.target_version
+                        .as_ref()
+                        .ok_or("missing target version")?,
+                )
             {
                 return Err("Conflict: destination changed before transfer".into());
             }
             copy.as_file().sync_all().map_err(|e| e.to_string())?;
             backups.push(Some(copy));
         }
-        Ok(Self { backups, affected: Vec::new() })
+        Ok(Self {
+            backups,
+            affected: Vec::new(),
+        })
     }
 
     pub fn record(&mut self, index: usize) {
@@ -52,7 +62,9 @@ impl UndoLog {
         let mut errors = Vec::new();
         for index in self.affected.clone().into_iter().rev() {
             let step = &steps[index];
-            if step.existing && step.directory { continue; }
+            if step.existing && step.directory {
+                continue;
+            }
             let result = if step.existing {
                 self.restore(index, &step.target)
             } else {
@@ -70,14 +82,21 @@ impl UndoLog {
     }
 
     fn restore(&mut self, index: usize, target: &ResourceBroker) -> Result<(), String> {
-        let backup = self.backups[index].as_mut().ok_or("missing rollback backup")?;
-        backup.as_file_mut().seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let backup = self.backups[index]
+            .as_mut()
+            .ok_or("missing rollback backup")?;
+        backup
+            .as_file_mut()
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| e.to_string())?;
         target.require(FsOperation::Write, false)?;
         let mut writer = target.adapter()?.begin_write(false)?;
         let mut buffer = vec![0u8; CHUNK];
         loop {
             let read = backup.read(&mut buffer).map_err(|e| e.to_string())?;
-            if read == 0 { break; }
+            if read == 0 {
+                break;
+            }
             writer.write(&buffer[..read])?;
         }
         writer.commit()?;
