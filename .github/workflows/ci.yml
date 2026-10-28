@@ -24,10 +24,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: |
-          npx prettier --write docs/plugins/01-ARCHITECTURE.md docs/plugins/03-IPC-CATALOG.md sdk/docs/ipc-audit.md
-          node -e "const fs=require('fs');for(const p of ['docs/plugins/01-ARCHITECTURE.md','docs/plugins/03-IPC-CATALOG.md','sdk/docs/ipc-audit.md'])console.log('FIEX_FMT|'+p+'|'+fs.readFileSync(p).toString('base64'))"
-          npm run format:check
+      - run: npm run format:check
       - run: npm run check:i18n
       - run: npm test
       - run: npm run build
