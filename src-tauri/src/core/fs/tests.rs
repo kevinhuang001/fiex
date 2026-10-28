@@ -94,3 +94,31 @@ fn resource_identity_is_stable_across_fresh_snapshots() {
         ResourceSnapshot::new(b.to_str().unwrap(), &b).reference
     );
 }
+
+#[test]
+fn application_user_children_use_builtin_broker_and_streamed_writes() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let root = crate::core::volumes::applications::URI;
+    let parent = super::binding::trusted(root, "core:test-app").unwrap();
+    let name = format!("fiex-test-{}.txt", crate::plugins::mounts::new_id().unwrap());
+    let child = super::binding::child(&parent, &name).unwrap();
+    assert!(child.stat().is_err());
+    let handle = child.begin_write(true).unwrap();
+    let request = json!({"handle":handle,"base64":STANDARD.encode(b"broker")});
+    stream_call("core:test-app", "fs.writeChunk", &request).unwrap();
+    stream_call("core:test-app", "fs.commit", &request).unwrap();
+    assert_eq!(child.preview_prefix(32).unwrap(), b"broker");
+    child.remove().unwrap();
+    assert!(child.stat().is_err());
+}
+
+#[test]
+fn trash_view_denies_regular_storage_mutations() {
+    if let Some(path) = crate::core::volumes::trash_path() {
+        if path.is_dir() {
+            let view = super::binding::trusted(&path.to_string_lossy(), "core:test-trash").unwrap();
+            assert!(view.require(FsOperation::Write, false).is_err());
+            assert!(view.require(FsOperation::Remove, false).is_err());
+        }
+    }
+}
