@@ -63,24 +63,22 @@ pub fn record(state: &Recent, path: &str) {
 /// A Recent entry is a non-authorizing view alias. The persisted original
 /// identity is kept inside Core, never exposed as an OS path through the view.
 pub fn alias_for(source: &str) -> String {
-    use base64::Engine;
-    let id = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(source);
-    format!("recent://{id}")
+    // Use Core's keyed, per-process opaque identity, not reversible Base64 of
+    // an absolute path or remote resource URI.
+    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+        source,
+        crate::plugins::contracts::ResourceMetadata::default(),
+    );
+    format!("recent://{}", snapshot.reference.node_id)
 }
 pub fn source_for(alias: &str) -> Result<String, String> {
-    use base64::Engine;
-    let encoded = alias
-        .strip_prefix("recent://")
-        .filter(|s| !s.is_empty())
-        .ok_or("not a recent item")?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(encoded)
-        .map_err(|_| "invalid recent alias")?;
-    let path = String::from_utf8(bytes).map_err(|_| "invalid recent identity")?;
-    if !load().contains(&path) {
-        return Err("StaleRef: item is no longer in Recent".into());
+    if !alias.starts_with("recent://") || alias == "recent://" {
+        return Err("not a recent item".into());
     }
-    Ok(path)
+    load()
+        .into_iter()
+        .find(|path| alias_for(path) == alias)
+        .ok_or_else(|| "StaleRef: item is no longer in Recent".into())
 }
 fn source_entry(path: &str) -> Result<Entry, String> {
     if crate::remote::is_remote(path) {
