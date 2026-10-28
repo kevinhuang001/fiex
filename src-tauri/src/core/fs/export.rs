@@ -70,14 +70,10 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
         {
             return Err("Unsupported: Trash items cannot be exported".into());
         }
-        // Local files already have a native path. A view of a user-owned app
-        // resolves through its confined store before reaching this boundary.
+        // A user-owned application is a virtual source, not a host path.
+        // It must pass through the same Broker and export lease as USB/VFS.
         if crate::core::volumes::applications::is_user(path) {
-            result.push(
-                crate::core::volumes::applications::stored_path(path)?
-                    .to_string_lossy()
-                    .into_owned(),
-            );
+            fresh.push(path.clone());
         } else if crate::plugins::mounts::handles(path)
             || crate::usbfs::route(path).is_some()
             || (path.starts_with("recent://") && path != "recent://")
