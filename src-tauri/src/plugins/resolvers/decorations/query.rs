@@ -60,7 +60,7 @@ pub fn query_with_plugins(
             crate::plugins::events::invoke_resources(
                 plugin,
                 "decorations.resolve",
-                json!({"directory":directory}),
+                json!({}),
                 &resources,
                 Some(directory),
             )
