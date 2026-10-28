@@ -142,6 +142,15 @@ fn plan(
             Some(Action::Replace) => {}
         }
     }
+    // Replacing a file with a directory (or the inverse) would first
+    // destroy the existing target. Reject the type change until the adapter
+    // can guarantee an atomic replacement with rollback.
+    if existing
+        .as_ref()
+        .is_some_and(|entry| (entry["isDir"] == true) != directory)
+    {
+        return Err("Unsupported: replacement changes destination kind".into());
+    }
     let had_target = existing.is_some();
     let directory_source = source.clone_binding();
     steps.push(Step {
@@ -197,22 +206,18 @@ fn execute(
             ));
         }
         if step.directory {
-            if !step.existing || step.target.stat()?["isDir"] != true {
-                step.target.require(FsOperation::Mkdir, true)?;
-            }
             if step.existing {
-                let target = step.target.stat()?;
-                if target["isDir"] != true {
-                    step.target.remove()?;
-                    step.target.mkdir()?;
+                if step.target.stat()?["isDir"] != true {
+                    return Err("Conflict: destination is no longer a directory".into());
                 }
             } else {
+                step.target.require(FsOperation::Mkdir, true)?;
                 step.target.mkdir()?;
             }
         } else {
             step.source.require(FsOperation::Read, false)?;
             if step.existing && step.target.is_dir()? {
-                step.target.remove()?;
+                return Err("Conflict: destination is now a directory".into());
             }
             let create = !step.existing || step.target.stat().is_err();
             step.target.require(FsOperation::Write, create)?;
