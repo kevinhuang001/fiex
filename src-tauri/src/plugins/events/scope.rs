@@ -128,8 +128,7 @@ pub fn resource_scope(
         .filter(|r| {
             !crate::plugins::mounts::handles(&r.display)
                 && crate::usbfs::route(&r.display).is_none()
-                && (!crate::core::volumes::virtual_resolvers::opaque(&r.display)
-                    || crate::core::volumes::applications::is_user(&r.display))
+                && crate::core::volumes::virtual_resolvers::resolver_for(&r.display).is_none()
         })
         .map(|r| crate::plugins::resource::fs_access::canonical_selection(&r.local))
         .collect::<Result<Vec<_>, _>>()?;
@@ -200,8 +199,7 @@ pub fn resource_scope(
     for (resource, target) in resources.iter().zip(params["targets"].as_array().unwrap()) {
         let local = if !crate::plugins::mounts::handles(&resource.display)
             && crate::usbfs::route(&resource.display).is_none()
-            && (!crate::core::volumes::virtual_resolvers::opaque(&resource.display)
-                || crate::core::volumes::applications::is_user(&resource.display))
+            && crate::core::volumes::virtual_resolvers::resolver_for(&resource.display).is_none()
         {
             Some(crate::plugins::resource::fs_access::canonical_selection(
                 &resource.local,
@@ -212,7 +210,9 @@ pub fn resource_scope(
         scope.bind_resource(target, local.as_deref())?;
         if (content || directory_event)
             && (crate::plugins::mounts::handles(&resource.display)
-                || crate::usbfs::route(&resource.display).is_some())
+                || crate::usbfs::route(&resource.display).is_some()
+                || crate::core::volumes::virtual_resolvers::resolver_for(&resource.display)
+                    .is_some())
         {
             scope.bind_remote(target, resource)?;
         }
