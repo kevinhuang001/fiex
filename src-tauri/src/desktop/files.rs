@@ -280,9 +280,6 @@ pub(crate) async fn transfer(
     on_progress: Channel<OperationProgress>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
-    if remote::is_remote(&destination) {
-        return Err(crate::i18n::t("该连接暂不支持写入").into());
-    }
     // Mount sources are materialized into the local engine. The engine copies
     // them, and once every copy succeeds the provider-owned originals are
     // removed here, so a drag that means "move" really deletes from the VFS.
@@ -319,8 +316,68 @@ pub(crate) async fn transfer(
             materialized.push(source.clone());
         }
     }
-    crate::plugins::mounts::reject_local(&destination)?;
+    let destination_remote = remote::is_remote(&destination);
+    if !destination_remote {
+        crate::plugins::mounts::reject_local(&destination)?;
+    }
     let paths = materialized;
+    if destination_remote {
+        crate::plugins::resource::file_capabilities::require(
+            &destination,
+            crate::plugins::provider_registry::FsOperation::Write,
+        )?;
+        if paths.iter().any(|path| std::path::Path::new(path).is_dir()) {
+            crate::plugins::resource::file_capabilities::require(
+                &destination,
+                crate::plugins::provider_registry::FsOperation::Mkdir,
+            )?;
+        }
+        let sources: Vec<remote::UploadSource> = paths
+            .iter()
+            .filter_map(|path| {
+                let local = std::path::Path::new(path);
+                let name = local.file_name()?.to_string_lossy().into_owned();
+                Some(remote::UploadSource {
+                    local: local.to_path_buf(),
+                    name,
+                })
+            })
+            .collect();
+        let events = app.clone();
+        let cancel = cancel.inner().clone();
+        let emit = progress_emitter(on_progress);
+        let progress = move |done: u64, total: u64, step: Option<&str>| emit(done, total, step);
+        let resolutions = resolutions.clone().unwrap_or_default();
+        let mut result = tauri::async_runtime::spawn_blocking(move || {
+            remote::upload(
+                &destination,
+                &sources,
+                keep_both,
+                &ignores,
+                &resolutions,
+                &progress,
+                &cancel.flag(),
+            )
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+        if result.as_ref().is_ok_and(|out| !out.paths.is_empty()) {
+            let _ = events.emit("directory-changed", ());
+        }
+        if requested_moving {
+            if let Ok(out) = &mut result {
+                if out.errors.is_empty() && out.conflicts.is_empty() && out.skipped == 0 {
+                    for original in &originals {
+                        if let Err(error) = remove_moved_source(original).await {
+                            out.errors.push(format!("{original}: {error}"));
+                        }
+                    }
+                    let _ = events.emit("directory-changed", ());
+                }
+            }
+        }
+        return result;
+    }
     // The engine only deletes sources it owns. Provider sources are removed
     // after a fully successful copy because their bytes live in the plugin.
     let engine_moving = requested_moving && !mounted_source;

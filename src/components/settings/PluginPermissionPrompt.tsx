@@ -43,7 +43,6 @@ export function PluginPermissionPrompt({
   note,
   allowLabel = t('允许'),
   denyLabel = t('不允许'),
-  stepUnit = t('项'),
   children,
   onAllow,
   onDeny,
@@ -60,8 +59,6 @@ export function PluginPermissionPrompt({
   note?: string
   allowLabel?: string
   denyLabel?: string
-  /** Unit for the step counter, e.g. groups during activation. */
-  stepUnit?: string
   /** Extra controls (toggles) rendered above the actions. */
   children?: ReactNode
   onAllow: () => void
@@ -104,10 +101,7 @@ export function PluginPermissionPrompt({
         <span className="plugin-permission-prompt-app-name">{pluginName}</span>
         {total > 1 && (
           <span className="plugin-permission-prompt-step">
-            {t('第')}
-            {step} {stepUnit}
-            {t('，共')}
-            {total} {stepUnit}
+            {step}/{total}
           </span>
         )}
         <h3>{question}</h3>

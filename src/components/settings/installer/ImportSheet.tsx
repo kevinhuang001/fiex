@@ -1,13 +1,30 @@
 import { t } from '@/i18n'
-import { Shield } from 'lucide-react'
+import { FileText, FolderOpen, Globe2, Info, ShieldCheck, Terminal, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
-import { permissionLabels as permissionTitles } from '@/lib/pluginPermissions'
-import { TrustNotice } from './TrustNotice'
+import { permissionHints, permissionLabels } from '@/lib/pluginPermissions'
+import { pluginIcon } from './pluginIcon'
 import type { InstallPreview } from './types'
 
-/** The consent sheet: exact permissions, requested commands, network domains
- *  and the trust state, confirmed in one step. */
+const permissionIcons: Record<string, typeof Info> = {
+  metadata: Info,
+  'folders.read': FolderOpen,
+  'folders.create': FolderOpen,
+  'folders.delete': FolderOpen,
+  'folders.rename': FolderOpen,
+  'files.read': FileText,
+  'files.write': FileText,
+  'files.create': FileText,
+  'files.delete': FileText,
+  'files.rename': FileText,
+  network: Globe2,
+  commands: Terminal,
+  hooks: Zap,
+}
+
+/** The install consent sheet: an introduction and the permissions the package
+ *  actually asks for. Trust details stay in the plugin details sheet so this
+ *  decision stays short and readable. */
 export function ImportSheet({
   preview,
   error,
@@ -21,90 +38,91 @@ export function ImportSheet({
   onDiscard: () => void
   onConfirm: () => void
 }) {
+  const permissions = preview?.permissions || []
   return (
     <Modal
       open={Boolean(preview)}
-      title={preview?.isUpdate ? t('确认插件更新及权限') : t('确认插件安装及权限')}
+      title={preview?.isUpdate ? t('更新插件') : t('安装插件')}
       onClose={onDiscard}
+      className="plugin-consent-modal"
     >
-      <div className="plugin-install-review">
-        <div className="plugin-install-review-heading">
-          <Shield size={21} />
-          <div>
-            <strong>{preview?.name}</strong>
-            <small>
-              {preview?.id} · {preview?.isUpdate ? `${preview?.previousVersion} → ` : ''}
-              {preview?.version}
-            </small>
+      <div className="plugin-consent">
+        <div className="plugin-consent-head">
+          <div className="plugin-consent-icon">{pluginIcon(preview?.icon)}</div>
+          <div className="plugin-consent-identity">
+            <div className="plugin-consent-name">
+              <strong>{preview?.name}</strong>
+              <span>
+                {preview?.isUpdate ? (
+                  <>
+                    {preview?.previousVersion} → {preview?.version}
+                  </>
+                ) : (
+                  <>v{preview?.version}</>
+                )}
+              </span>
+            </div>
+            <p>
+              {t('作者：')}
+              {preview?.author?.name || t('未知开发者')}
+            </p>
           </div>
         </div>
-        <div className="plugin-install-meta">
-          <span>
-            {t('作者：')}
-            {preview?.author?.name || t('未知开发者')}
-          </span>
-          <span>
-            {t('来源：GitHub /')}
-            {preview?.repository}
-          </span>
-        </div>
-        <TrustNotice preview={preview} />
-        <strong>{t('请求的权限')}</strong>
-        <div className="plugin-install-permissions">
-          {preview?.permissions.length ? (
-            preview.permissions.map((permission) => (
-              <div key={permission}>
-                <Shield size={14} />
-                {permissionTitles[permission] || permission}
-              </div>
-            ))
-          ) : (
-            <span>{t('无需宿主权限')}</span>
-          )}
-        </div>
-        {!!preview?.commands?.length && (
-          <>
-            <strong>{t('插件申请的命令')}</strong>
-            <div className="plugin-install-domains">
-              {(preview.commands || []).map((command) => (
-                <span key={command}>
-                  <code>{command}</code>
+
+        <p className="plugin-consent-description">{preview?.description || t('没有提供说明。')}</p>
+
+        <section className="plugin-consent-section">
+          <h3>{t('请求的权限')}</h3>
+          <div className="plugin-consent-permissions">
+            {permissions.map((permission) => {
+              const Icon = permissionIcons[permission] || ShieldCheck
+              return (
+                <span
+                  className="plugin-consent-chip"
+                  key={permission}
+                  title={permissionHints[permission] || permissionLabels[permission] || permission}
+                >
+                  <Icon size={13} />
+                  {permissionLabels[permission] || permission}
                 </span>
-              ))}
-            </div>
-            <p className="sidebar-hint">
-              {t('命令由宿主代理执行，插件进程不能直接启动程序；安装后可在插件管理中增删。')}
-            </p>
-          </>
-        )}
-        {preview?.requestedNetworkAll && (
-          <p className="plugin-install-danger" role="alert">
-            {t(
-              '危险：此插件申请访问全部网络，而不只是精确域名。安装后可以在插件管理中切换为白名单。',
+              )
+            })}
+            {preview?.requestedNetworkAll && (
+              <span className="plugin-consent-chip danger">
+                <Globe2 size={13} />
+                {t('全部网络')}
+              </span>
             )}
-          </p>
-        )}
-        {!!preview?.requestedNetworkDomains.length && (
-          <>
-            <strong>{t('插件申请的网络域名')}</strong>
-            <div className="plugin-install-domains">
+            {!permissions.length && !preview?.requestedNetworkAll && (
+              <span className="plugin-consent-empty">
+                <ShieldCheck size={14} /> {t('无需宿主权限')}
+              </span>
+            )}
+          </div>
+          {!!preview?.requestedNetworkDomains.length && (
+            <p className="plugin-consent-detail">
+              {t('网络域名')}：
               {preview.requestedNetworkDomains.map((domain) => (
-                <span key={domain}>{domain}</span>
+                <code key={domain}>{domain}</code>
               ))}
-            </div>
-            <p className="sidebar-hint">{t('确认后将进入授权激活，可逐项选择权限和域名。')}</p>
-          </>
-        )}
-        <p className="sidebar-hint">
-          {t(
-            '所有插件（包括 Fiex 官方发布的插件）使用同样的授权流程。插件为 Native 程序；在系统沙箱完善前，权限控制仅约束宿主代理的操作，不能阻止插件直接进行系统调用。',
+            </p>
           )}
-        </p>
+          {!!preview?.commands?.length && (
+            <p className="plugin-consent-detail">
+              {t('外部命令')}：
+              {preview.commands.map((command) => (
+                <code key={command}>{command}</code>
+              ))}
+            </p>
+          )}
+        </section>
+
         {error && (
           <p role="alert" className="connection-error">
             {error}
           </p>
         )}
+
         <footer className="plugin-consent-actions">
           <Button variant="outline" type="button" disabled={installing} onClick={onDiscard}>
             {t('取消')}

@@ -1404,5 +1404,8 @@
   "新建空文件…": "New Empty File…",
   "新建空文件": "New Empty File",
   "未命名文件": "Untitled File",
-  "正在新建文件…": "Creating file…"
+  "正在新建文件…": "Creating file…",
+  "安装插件": "Install Plugin",
+  "更新插件": "Update Plugin",
+  "全部网络": "All networks"
 }

@@ -10,6 +10,8 @@ mod mutate;
 mod reconcile;
 mod store;
 mod sync;
+#[cfg(feature = "desktop")]
+mod upload;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -55,3 +57,5 @@ pub use store::{
     update_connection_session, ConnectionInfo, ConnectionInput, StoredConnection,
 };
 pub use sync::{sync, sync_one, uncache, unpin};
+#[cfg(feature = "desktop")]
+pub(crate) use upload::{upload, Source as UploadSource};

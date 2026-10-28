@@ -62,6 +62,8 @@ export function handlePluginInstaller(command: string, a: Record<string, unknown
         id: entry.id,
         name: entry.name,
         version: entry.version,
+        description: entry.description,
+        icon: 'puzzle',
         author: entry.author,
         permissions: entry.permissions,
         requestedNetworkDomains: entry.requestedNetworkDomains,

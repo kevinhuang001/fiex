@@ -577,7 +577,7 @@ test('optional archive and checksum features are not preinstalled', async ({ pag
     .filter({ hasText: '校验和' })
     .getByRole('button', { name: '获取' })
     .click()
-  const review = page.getByRole('dialog', { name: '确认插件安装及权限' })
+  const review = page.getByRole('dialog', { name: '安装插件' })
   await expect(review).toContainText('读取文件')
   await review.getByRole('button', { name: '安装并授权激活' }).click()
   await expect(page.locator('.plugin-row').filter({ hasText: '校验和' })).toBeVisible()
