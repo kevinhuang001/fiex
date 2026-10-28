@@ -114,6 +114,9 @@ fn export_node(
     }
     *count += 1;
     let stat = source.stat()?;
+    if stat["symlink"] == true {
+        return Err("Unsupported: exporting symlinks requires an explicit policy".into());
+    }
     if stat["isDir"] == true {
         source.require(FsOperation::List, false)?;
         std::fs::create_dir(target).map_err(|e| e.to_string())?;
@@ -133,9 +136,6 @@ fn export_node(
             export_node(&resource, &target.join(name), bytes, count, depth + 1)?;
         }
         return Ok(());
-    }
-    if stat["symlink"] == true {
-        return Err("Unsupported: exporting symlinks requires an explicit policy".into());
     }
     // Export is a read operation, not merely a metadata lookup. Check the
     // current node capability before opening the provider stream.
