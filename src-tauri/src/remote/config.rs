@@ -96,7 +96,10 @@ pub(crate) fn declared_connection_fields(
         if key.is_empty() || key.len() > 80 || fields.iter().any(|(id, _)| id == key) {
             return Err(crate::i18n::t("连接字段 ID 无效或重复").into());
         }
-        if !matches!(ty, "text" | "url" | "number" | "checkbox" | "secret") {
+        if !matches!(
+            ty,
+            "text" | "url" | "number" | "checkbox" | "secret" | "list" | "file"
+        ) {
             return Err(crate::i18n::t("连接字段类型不支持").into());
         }
         fields.push((key.to_string(), ty.to_string()));

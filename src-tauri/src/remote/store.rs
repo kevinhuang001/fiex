@@ -60,6 +60,10 @@ pub struct ConnectionInfo {
     pub mount_path: String,
     pub saved: bool,
     pub autostart: bool,
+    /// Provider can enumerate and read this mount.
+    pub can_read: bool,
+    /// Provider can create/upload into this mount.
+    pub can_write: bool,
 }
 
 pub(crate) fn fiex_dir() -> PathBuf {

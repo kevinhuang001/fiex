@@ -181,4 +181,8 @@ export interface RemoteConnection {
   mountPath: string
   saved?: boolean
   autostart?: boolean
+  /** Provider can enumerate and read this mount. */
+  canRead?: boolean
+  /** Provider can upload/create inside this mount. */
+  canWrite?: boolean
 }

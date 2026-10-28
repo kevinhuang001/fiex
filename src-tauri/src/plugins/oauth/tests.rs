@@ -98,5 +98,18 @@ fn real_loopback_flow_returns_code_and_closes_listener() {
     assert_eq!(reply["code"], "one-use");
     assert_eq!(reply["codeVerifier"].as_str().unwrap().len(), 43);
     let url = Url::parse(reply["redirectUri"].as_str().unwrap()).unwrap();
-    assert!(TcpStream::connect(("127.0.0.1", url.port().unwrap())).is_err());
+    // The accept loop exits on its own thread; poll briefly instead of
+    // assuming the socket is already gone at this exact instant.
+    let port = url.port().unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        if TcpStream::connect(("127.0.0.1", port)).is_err() {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "loopback listener stayed open after the flow"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
 }

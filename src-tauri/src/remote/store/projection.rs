@@ -7,6 +7,14 @@ pub(super) fn public(conn: &StoredConnection) -> ConnectionInfo {
         let mount = mount_path(conn);
         let _ = fs::create_dir_all(&mount);
     }
+    use crate::plugins::provider_registry::FsOperation;
+    let operations = crate::plugins::provider_registry::operations(&conn.plugin_id);
+    let can_read = operations.as_ref().is_none_or(|operations| {
+        operations.contains(&FsOperation::List) && operations.contains(&FsOperation::Read)
+    });
+    let can_write = operations
+        .as_ref()
+        .is_some_and(|operations| operations.contains(&FsOperation::Write));
     ConnectionInfo {
         id: conn.id.clone(),
         name: conn.name.clone(),
@@ -19,6 +27,8 @@ pub(super) fn public(conn: &StoredConnection) -> ConnectionInfo {
         },
         saved: conn.saved,
         autostart: conn.autostart,
+        can_read,
+        can_write,
     }
 }
 

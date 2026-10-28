@@ -6,10 +6,13 @@ export interface PluginField {
   id: string
   label: string
   /** `list` renders a row editor and stores a JSON array of strings. */
-  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret' | 'list'
+  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret' | 'list' | 'file'
   placeholder?: string
   defaultValue?: string | boolean | string[]
   required?: boolean
+  /** Add a browse button: file stores the path, fromFile loads text content. */
+  fromFile?: boolean
+  extensions?: string[]
 }
 interface PluginPanel {
   entry: string

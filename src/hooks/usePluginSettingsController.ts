@@ -1,8 +1,9 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
-import { call } from '@/lib/api'
+import { call, demo } from '@/lib/api'
 import { usePluginConfiguration } from './usePluginConfiguration'
 import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
+import { openFilePicker } from '@/lib/filePicker'
 import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
 import {
   pluginCategories,
@@ -79,10 +80,13 @@ export function usePluginSettingsController() {
     setBusy(true)
     setMessage('')
     try {
-      const path = await call<string | null>('plugin_file_dialog', {
-        mode: 'openFile',
-        extensions: ['fiexplugin'],
-      })
+      const picked = demo
+        ? '/Users/kevin/Documents/Example.fiexplugin'
+        : await openFilePicker({
+            mode: 'openFile',
+            extensions: ['fiexplugin'],
+          })
+      const path = Array.isArray(picked) ? picked[0] : picked
       if (!path) return
       const preview = await call<LocalPreview>('plugin_prepare_local_install', { path })
       setLocalPreview(preview)

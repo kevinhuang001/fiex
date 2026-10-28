@@ -151,7 +151,7 @@ impl Running {
 }
 
 impl Running {
-    fn ensure_initialized(&self) -> Result<(), RpcFailure> {
+    pub(in crate::plugins::host::process) fn ensure_initialized(&self) -> Result<(), RpcFailure> {
         if self.initialized.load(Ordering::Acquire) {
             return Ok(());
         }

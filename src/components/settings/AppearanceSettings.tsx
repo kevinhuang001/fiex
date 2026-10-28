@@ -2,7 +2,8 @@ import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
-import { call, demo } from '@/lib/api'
+import { demo } from '@/lib/api'
+import { openFilePicker } from '@/lib/filePicker'
 import type { Preferences } from '@/lib/types'
 import { Image as ImageIcon, Languages, Palette, SlidersHorizontal, Sun } from 'lucide-react'
 
@@ -18,10 +19,13 @@ export function AppearanceSettings({
   const pickBackground = async () => {
     setBackgroundError('')
     try {
-      const path = await call<string | null>('plugin_file_dialog', {
-        mode: 'openFile',
-        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
-      })
+      const picked = demo
+        ? '/demo/background.svg'
+        : await openFilePicker({
+            mode: 'openFile',
+            extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif'],
+          })
+      const path = Array.isArray(picked) ? picked[0] : picked
       if (path) {
         localStorage.removeItem('fiex:background-removed')
         update({ backgroundImage: path })

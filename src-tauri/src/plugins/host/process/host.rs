@@ -165,6 +165,9 @@ impl PluginHost {
         // Process creation and signature verification can be slow. Do them
         // outside the host lock so a slow plugin never blocks other providers.
         let instance = Self::spawn_instance(plugin_id, &manifest, &directory, declared)?;
+        // Handshake eagerly so the capability registry is populated before the
+        // first listing or picker asks which operations this provider supports.
+        let _ = instance.running.ensure_initialized();
         self.children
             .lock()
             .map_err(|_| "plugin host lock poisoned")?

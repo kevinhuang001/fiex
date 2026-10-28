@@ -1983,3 +1983,19 @@ body.dragging-file * {
   background: transparent;
   color: var(--muted);
 }
+
+/* Connection fields that open the in-app file chooser. */
+.connection-form .connection-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connection-form .connection-file input {
+  flex: 1;
+  min-width: 0;
+}
+.connection-form .connection-file .button {
+  flex: 0 0 auto;
+  height: 34px;
+  white-space: nowrap;
+}

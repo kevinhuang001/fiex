@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { t } from '@/i18n'
 import { call, native } from '@/lib/api'
 import { SelectField } from '../ui/SelectField'
+import { KeyRound } from 'lucide-react'
 
 export function CredentialSettings() {
   const [backend, setBackend] = useState('local')
@@ -46,14 +47,19 @@ export function CredentialSettings() {
   return (
     <>
       <div className="settings-row" aria-busy={busy}>
-        <div className="settings-row-label">{t('凭据存储')}</div>
+        <div className="settings-row-label">
+          <span className="settings-row-icon" style={{ background: '#f59e0b' }}>
+            <KeyRound size={15} />
+          </span>
+          {t('凭据存储')}
+        </div>
         <div className="settings-row-control">
           <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
             <SelectField
               label={t('凭据存储')}
               value={backend}
               options={[
-                { value: 'local', label: t('本地文件（默认）') },
+                { value: 'local', label: t('本地文件') },
                 { value: 'oskeyring', label: t('系统钥匙串') },
               ]}
               onChange={(next) => void change(next)}

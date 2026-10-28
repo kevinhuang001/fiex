@@ -5,6 +5,7 @@ import { ArrowLeft, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call, demo } from '@/lib/api'
+import { openFilePicker } from '@/lib/filePicker'
 import { usePluginCatalog, type PluginField } from '@/lib/plugins'
 import type { RemoteConnection } from '@/lib/types'
 
@@ -115,6 +116,24 @@ export function ConnectionDialog({
       ),
     )
     setError('')
+  }
+  const browse = async (field: PluginField, read: boolean) => {
+    const picked = await openFilePicker({
+      mode: 'openFile',
+      extensions: field.extensions,
+    })
+    const path = Array.isArray(picked) ? picked[0] : picked
+    if (!path) return
+    if (!read) {
+      setValues((prev) => ({ ...prev, [field.id]: path }))
+      return
+    }
+    try {
+      const text = await call<string>('read_preview', { path })
+      setValues((prev) => ({ ...prev, [field.id]: text }))
+    } catch (cause) {
+      setError(String(cause))
+    }
   }
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -240,27 +259,50 @@ export function ConnectionDialog({
               className={field.type === 'checkbox' ? 'connection-check' : undefined}
             >
               {field.type !== 'checkbox' && <span>{field.label}</span>}
-              <input
-                disabled={loading || busy}
-                type={field.type === 'secret' ? 'password' : field.type}
-                checked={field.type === 'checkbox' ? Boolean(values[field.id]) : undefined}
-                value={field.type === 'checkbox' ? undefined : String(values[field.id] ?? '')}
-                required={field.required && !(connection && field.type === 'secret')}
-                placeholder={
-                  connection && field.type === 'secret'
-                    ? t('留空保留已保存的凭据')
-                    : field.placeholder
-                }
-                min={field.type === 'number' ? 1 : undefined}
-                max={field.type === 'number' ? 65535 : undefined}
-                onChange={(event) =>
-                  setValues((prev) => ({
-                    ...prev,
-                    [field.id]:
-                      field.type === 'checkbox' ? event.target.checked : event.target.value,
-                  }))
-                }
-              />
+              <div
+                className={field.type === 'file' || field.fromFile ? 'connection-file' : undefined}
+              >
+                <input
+                  disabled={loading || busy}
+                  type={
+                    field.type === 'secret'
+                      ? 'password'
+                      : field.type === 'number'
+                        ? 'number'
+                        : field.type === 'checkbox'
+                          ? 'checkbox'
+                          : 'text'
+                  }
+                  checked={field.type === 'checkbox' ? Boolean(values[field.id]) : undefined}
+                  value={field.type === 'checkbox' ? undefined : String(values[field.id] ?? '')}
+                  required={field.required && !(connection && field.type === 'secret')}
+                  placeholder={
+                    connection && field.type === 'secret'
+                      ? t('留空保留已保存的凭据')
+                      : field.placeholder
+                  }
+                  min={field.type === 'number' ? 1 : undefined}
+                  max={field.type === 'number' ? 65535 : undefined}
+                  onChange={(event) =>
+                    setValues((prev) => ({
+                      ...prev,
+                      [field.id]:
+                        field.type === 'checkbox' ? event.target.checked : event.target.value,
+                    }))
+                  }
+                />
+                {(field.type === 'file' || field.fromFile) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || busy}
+                    onClick={() => void browse(field, Boolean(field.fromFile))}
+                  >
+                    {field.fromFile ? t('从文件读取') : t('选择文件')}
+                  </Button>
+                )}
+              </div>
               {field.type === 'checkbox' && <span>{field.label}</span>}
             </label>
           ))}

@@ -1407,5 +1407,8 @@
   "正在新建文件…": "Creating file…",
   "安装插件": "Install Plugin",
   "更新插件": "Update Plugin",
-  "全部网络": "All networks"
+  "全部网络": "All networks",
+  "本地文件": "Local file",
+  "选择文件": "Choose File",
+  "从文件读取": "Load from File"
 }
