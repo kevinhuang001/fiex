@@ -136,8 +136,7 @@ pub fn query_with_plugins(
 mod ref_target_tests {
     use super::*;
     use crate::plugins::{
-        contracts::ResourceMetadata,
-        resource::resource_context::ResourceSnapshot,
+        contracts::ResourceMetadata, resource::resource_context::ResourceSnapshot,
     };
 
     #[test]
