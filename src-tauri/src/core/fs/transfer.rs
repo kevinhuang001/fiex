@@ -7,6 +7,9 @@ use crate::core::{
 };
 use std::sync::atomic::AtomicBool;
 
+mod rollback;
+use rollback::UndoLog;
+
 struct Step {
     source: ResourceBroker,
     target: ResourceBroker,
@@ -22,13 +25,16 @@ fn same_version(a: &serde_json::Value, b: &serde_json::Value) -> bool {
         .all(|key| a[*key] == b[*key])
 }
 
+fn is_missing(error: &str) -> bool {
+    error.starts_with("NotFound:")
+        || error.contains("No such file or directory")
+        || error.contains("os error 2")
+        || error.contains("not found")
+}
 fn optional_stat(resource: &ResourceBroker) -> Result<Option<serde_json::Value>, String> {
     match resource.stat() {
         Ok(stat) => Ok(Some(stat)),
-        Err(error) if error.starts_with("NotFound:")
-            || error.contains("No such file or directory")
-            || error.contains("os error 2")
-            || error.contains("not found") => Ok(None),
+        Err(error) if is_missing(&error) => Ok(None),
         Err(error) => Err(error),
     }
 }
@@ -202,7 +208,11 @@ fn execute(
     progress: &impl Fn(u64, u64, Option<&str>),
 ) -> Result<(), String> {
     let total = steps.len() as u64;
+    // Stage all overwrite backups before touching any destination. If the
+    // backup itself fails, no partial transfer has taken place.
+    let mut undo = UndoLog::prepare(steps, cancel)?;
     for (index, step) in steps.iter().enumerate() {
+        let attempt = (|| -> Result<(), String> {
         check_cancelled(cancel)?;
         if !same_version(&step.source.stat()?, &step.source_version) {
             return Err(format!("Conflict: source changed: {}", step.source.path));
@@ -216,6 +226,7 @@ fn execute(
                 step.target.path
             ));
         }
+        undo.record(index);
         if step.directory {
             if step.existing {
                 if step.target.stat()?["isDir"] != true {
@@ -258,6 +269,15 @@ fn execute(
                 return Err("Conflict: source changed during transfer".into());
             }
             writer.commit()?;
+        }
+        Ok(())
+        })();
+        if let Err(error) = attempt {
+            let failures = undo.rollback(steps);
+            if failures.is_empty() {
+                return Err(error);
+            }
+            return Err(format!("{error}; rollback incomplete: {}", failures.join("; ")));
         }
         progress(index as u64 + 1, total, Some(&step.source.path));
     }
