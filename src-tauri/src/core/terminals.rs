@@ -61,6 +61,12 @@ pub(crate) fn order_shells(login: Option<&str>, listed: Vec<String>) -> Vec<Stri
         ranked.push((rank, ranked.len(), path));
     }
     ranked.sort_by_key(|(rank, order, _)| (*rank, *order));
+    // `/etc/shells` may list multiplexers such as tmux; only offer them when the
+    // machine has no real shell at all.
+    let has_real_shell = ranked.iter().any(|(rank, _, _)| *rank < 3);
+    if has_real_shell {
+        ranked.retain(|(rank, _, _)| *rank < 3);
+    }
     ranked.into_iter().map(|(_, _, path)| path).collect()
 }
 
@@ -82,6 +88,9 @@ mod shell_tests {
         assert_eq!(shell_rank("powershell.exe"), 3);
     }
 
+    // The ordering reads real files (`/bin/sh`, `/bin/bash`), so it only makes
+    // sense where those paths exist.
+    #[cfg(unix)]
     #[test]
     fn a_login_shell_leads_and_duplicates_collapse() {
         let ordered = order_shells(
