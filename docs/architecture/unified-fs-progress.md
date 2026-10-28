@@ -19,3 +19,40 @@ External drag uses a Core export lease for virtual resources and returns ordinar
 - Remove remaining source-specific desktop listing/file-info dispatch, legacy export caches, and old Core path-based commands after all call sites are migrated.
 
 No A01–A25 item is marked complete by this checkpoint. Manual Windows/macOS/Linux drag interoperability and device hot-unplug behavior require platform verification.
+
+
+## Review checkpoint: 2026-10-29
+
+This checkpoint reflects the current protocol-6 PR stack, not a release declaration:
+
+- Core PR #21: `kevinhuang001/fiex` / `refactor/unified-fs-broker`.
+- SDK PR #9: `kevinhuang001/fiex-sdk` / protocol 6.
+- Official plugins PR #19: `kevinhuang001/fiex-official-plugins`.
+
+### Verified improvements
+
+- Resolved scoped selection of not-yet-existing local children. Strict Core tests that previously failed `invalid selected path` now pass on Windows, Linux and macOS in the tested baseline.
+- Restricted file exports to actual read/list capabilities; enforced concurrent lease quotas before staging, lease expiry cleanup, incomplete stream rejection and symlink export rejection.
+- Blocked ordinary read/mutate/export on physical Trash entries. Restore, purge and empty must remain explicit Core actions. Windows recycle actions now reject an indexed object if its name, original location, deletion timestamp or kind changed.
+- Prevented destructive cross-kind transfer replacements. Full rollback of previously committed items in a larger transfer is still outstanding.
+- Protected the Applications private-store importer from following symlink source trees.
+- Removed the superseded Core remote upload engine; corrected protocol-6 documentation and pinned Core/plugins to the same updated SDK gitlink.
+- Updated demonstration fixtures and E2E expectations. A Core CI baseline from before the latest hardening patches passed frontend/E2E and all three desktop platform checks. **The baseline does not validate newer commits.**
+- Added a fast all-crate Rust formatting gate to official plugin CI before long three-platform builds; resolved observed formatting failures in Git, WebDAV, GDrive, SMB and other plugins.
+
+### Release-blocking architectural gaps
+
+| Area | Evidence in current sources | What remains |
+| --- | --- | --- |
+| Built-in virtual storage | `src-tauri/src/core/fs/mod.rs` rejects opaque built-in paths; `core/volumes/virtual_resolvers.rs` still mixes storage and presentation | Put Recent, Applications and Trash behind concrete `FsAdapter` implementations and keep dedicated UI actions separate |
+| Desktop dispatch | `src-tauri/src/desktop/files/listing.rs` still chooses code paths per remote/USB/virtual/local | Dispatch listing, info and operations by resolved resource capability, not origin switches |
+| Transfer transactions | `core/fs/transfer.rs` stages and commits per node but lacks full later-failure rollback | Add rollback or durable recovery for previously committed targets, byte progress, revision checks and cancellation tests |
+| Native interoperability | `desktop/volumes.rs` lacks a macOS/Windows native file-promise bridge | Implement and verify Explorer OLE descriptors/contents, Finder promises/file URLs, and external inbound writes to writable providers |
+| Identity and invalidation | `core/drag_session.rs` keeps path pairs, and virtual roots do not share complete ref/session invalidation | Preserve refs across window drags, invalidate on unmount/revoke/revision, and prevent stale child capabilities |
+| Large-file proof | Bounded read/write chunks exist; no full 10GB simulated transfer/export matrix has been verified | Prove bounded memory, cancellation, progress, external consumer lifetime, and multi-source rollback |
+
+The **A01–A25 acceptance matrix is still unverified end-to-end**. None of the rows is marked fully accepted by this checkpoint. At a minimum A16/A17 (Windows/macOS external drag), A14/A15 (cross-source transaction safety), A19/A20 (external drop and ref-bearing internal drag), and A21 (invalidation) block stable release.
+
+### Release gate
+
+Do **not** merge or publish solely because the SDK CI or an earlier Core run is green. Require the **latest SHA** of each PR to pass every relevant job, the remaining architecture migrations to land, the A01–A25 scenarios to be validated and the three-OS external drag to be manually exercised before tagging.
