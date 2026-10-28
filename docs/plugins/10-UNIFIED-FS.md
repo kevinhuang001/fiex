@@ -102,6 +102,10 @@ Core 保存该集合；未声明的操作用 `method_not_found` 拒绝，不会�
   `abort`、进程退出或句柄失效都会丢弃未提交内容。
 - 插件在 `write` 中返回标准 `Write`；协议特有的收尾（SMB 暂存改名、Drive resumable 完成）
   放在 commit 回调里，`commit` 返回最终 `FsEntry`。
+- Core 只用发起调用的那次请求授权 host 资源，并在请求返回时撤销。读流通常由 HTTP 响应体、
+  TCP 连接或文件句柄支撑，而 `readStream`/`writeStream`/`commit` 都是后续请求，因此 SDK 把
+  每个流放在一个内部后台任务会话里创建：句柄在流关闭前始终有效，关闭时任务结束、句柄回收。
+  插件不需要自己延长授权，也不要跨请求保存 `RequestContext`。
 
 ## 5. 权限与执行
 
