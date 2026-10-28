@@ -28,7 +28,7 @@ impl ResourceSnapshot {
         let is_dir = stat.as_ref().is_some_and(fs::Metadata::is_dir);
         let read_only = stat
             .as_ref()
-            .is_some_and(|s| crate::core::files::metadata_readonly(s));
+            .is_some_and(crate::core::files::metadata_readonly);
         let name = local
             .file_name()
             .map(|value| value.to_string_lossy().into_owned())
@@ -167,7 +167,7 @@ impl ResourceSnapshot {
     /// A native renderer needs a local path. Export through the same bounded,
     /// leased broker as external open/drag; never expose provider caches.
     pub fn export_path(&self) -> Result<PathBuf, String> {
-        let paths = crate::core::fs::export_for_external_drag(&[self.display.clone()])?;
+        let paths = crate::core::fs::export_for_external_drag(std::slice::from_ref(&self.display))?;
         paths
             .into_iter()
             .next()
