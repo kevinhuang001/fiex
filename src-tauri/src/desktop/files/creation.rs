@@ -74,10 +74,9 @@ pub(crate) async fn rename_entry(
     }
     state.rename(&path, &name)
 }
-/// Create an empty file by name. The protocol has no dedicated operation, so
-/// this goes through the provider's write stream with `parentId` + `name`.
-/// Capability is the directory's own `write` grant; local paths are unchecked
-/// here and rely on the OS.
+/// Creating a child file requires the parent's create capability (Mkdir),
+/// then a bounded write stream on that child. Directory nodes do not advertise
+/// ordinary file-content Write, and must never need it to add children.
 #[tauri::command]
 pub(crate) async fn create_file_entry(path: String, name: String) -> Result<String, String> {
     if path == crate::core::volumes::applications::URI
@@ -91,7 +90,7 @@ pub(crate) async fn create_file_entry(path: String, name: String) -> Result<Stri
     crate::plugins::mounts::segment(&name)?;
     crate::plugins::resource::file_capabilities::require(
         &path,
-        crate::plugins::provider_registry::FsOperation::Write,
+        crate::plugins::provider_registry::FsOperation::Mkdir,
     )?;
     if let Some(route) = crate::usbfs::route(&path) {
         crate::usbfs::create(&route, &name, false)?;
