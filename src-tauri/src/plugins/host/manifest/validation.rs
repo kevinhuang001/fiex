@@ -224,4 +224,3 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
     }
     Ok(())
 }
-

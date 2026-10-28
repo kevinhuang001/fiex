@@ -1,16 +1,16 @@
 //! Plugin manifest schema, install-time validation and permission declarations.
 mod connections;
-mod permissions;
-mod validation;
 #[cfg(test)]
 mod contribution_tests;
-pub use permissions::{activation_requirements, declared_permissions};
+mod permissions;
+mod validation;
 pub(crate) use permissions::declared;
-pub use validation::{valid_id, validate_extensions};
-pub(crate) use validation::{preview_loading_entry, valid_package_entry};
+pub use permissions::{activation_requirements, declared_permissions};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
+pub(crate) use validation::{preview_loading_entry, valid_package_entry};
+pub use validation::{valid_id, validate_extensions};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -193,4 +193,3 @@ pub fn request_timeout_ms(extensions: &Value) -> u64 {
         value.max(DEFAULT_REQUEST_TIMEOUT_MS)
     })
 }
-
