@@ -1,7 +1,7 @@
 //! Platform, window, launch, terminal/IDE, tag, clipboard-adjacent and
 //! CI-driver commands plus the per-window start path state.
 
-use crate::{core::recent, core::tags, core::terminals, remote};
+use crate::{core::recent, core::tags, core::terminals};
 use std::{collections::HashMap, sync::Mutex};
 use tauri::Manager;
 
