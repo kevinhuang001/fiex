@@ -14,6 +14,8 @@ const MAX_ITEMS: usize = 100_000;
 struct Lease {
     _directory: tempfile::TempDir,
     expires: Instant,
+    bytes: u64,
+    items: usize,
 }
 fn leases() -> &'static Mutex<HashMap<String, Lease>> {
     static VALUES: OnceLock<Mutex<HashMap<String, Lease>>> = OnceLock::new();
@@ -70,11 +72,32 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     if registry.len() >= 64 {
         return Err("too many active exports".into());
     }
+    // Enforce quota across all live leases, not just within one drag. An
+    // application may start multiple independent drags before leases expire.
+    let active_bytes = registry
+        .values()
+        .try_fold(0u64, |sum, lease| sum.checked_add(lease.bytes))
+        .ok_or("export quota exceeded")?;
+    let active_items = registry
+        .values()
+        .try_fold(0usize, |sum, lease| sum.checked_add(lease.items))
+        .ok_or("export item limit exceeded")?;
+    if active_bytes
+        .checked_add(bytes)
+        .is_none_or(|total| total > MAX_EXPORT_BYTES)
+        || active_items
+            .checked_add(count)
+            .is_none_or(|total| total > MAX_ITEMS)
+    {
+        return Err("active export lease quota exceeded".into());
+    }
     registry.insert(
         id,
         Lease {
             _directory: directory,
             expires: Instant::now() + LEASE_TTL,
+            bytes,
+            items: count,
         },
     );
     Ok(result)
