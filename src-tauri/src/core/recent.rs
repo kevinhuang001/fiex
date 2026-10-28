@@ -116,3 +116,17 @@ pub fn entries(state: &Recent) -> Vec<Entry> {
         .filter_map(|path| entry_for_alias(&alias_for(path)).ok())
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn view_aliases_do_not_reveal_or_authorize_source_paths() {
+        let uri = alias_for("/private/fiex-recent-secret.txt");
+        assert!(uri.starts_with("recent://node:"));
+        assert!(!uri.contains("private"));
+        assert!(!uri.contains("secret"));
+        assert!(source_for("recent://unregistered-identity").is_err());
+    }
+}
