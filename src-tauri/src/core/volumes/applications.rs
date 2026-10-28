@@ -227,7 +227,9 @@ pub fn import(paths: &[String]) -> crate::core::operations::OperationResult {
         if std::fs::symlink_metadata(source_path)
             .is_ok_and(|metadata| metadata.file_type().is_symlink())
         {
-            result.errors.push(format!("{source}: symlink import is unsupported"));
+            result
+                .errors
+                .push(format!("{source}: symlink import is unsupported"));
             continue;
         }
         let Some(name) = source_path.file_name().and_then(|value| value.to_str()) else {
