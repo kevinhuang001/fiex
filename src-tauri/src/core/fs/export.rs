@@ -21,6 +21,7 @@ struct Lease {
 // Windows cannot remove read-only staged files. Release the attribute before
 // TempDir performs its cleanup, without following links outside the lease.
 #[cfg(windows)]
+#[allow(clippy::permissions_set_readonly_false)] // Windows file attribute only; no Unix chmod.
 fn unlock_staged(path: &Path, depth: usize) {
     if depth > 128 {
         return;
