@@ -31,6 +31,31 @@ const fixturePlugin: DemoPlugin = {
 export const fixturePlugins: DemoPlugin[] = [
   fixturePlugin,
   {
+    id: 'org.example.terminal',
+    name: 'SSH',
+    version: '1.0.0',
+    description: 'Demo connection provider for editing saved SSH sessions.',
+    enabled: true,
+    approved: true,
+    backendAvailable: true,
+    declaredPermissions: ['network'],
+    grantedPermissions: ['network'],
+    requestedNetworkDomains: [],
+    allowedNetworkDomains: [],
+    author: { name: 'Fiex Fixtures' },
+    extensions: {
+      connections: {
+        title: 'SSH',
+        fields: [
+          { id: 'host', label: '主机', type: 'text', required: true },
+          { id: 'port', label: '端口', type: 'number', defaultValue: 22 },
+          { id: 'username', label: '用户名', type: 'text' },
+          { id: 'terminalType', label: '终端类型', type: 'text', defaultValue: 'xterm-256color' },
+        ],
+      },
+    },
+  },
+  {
     id: 'org.example.git',
     name: 'Git',
     version: '0.1.0',
