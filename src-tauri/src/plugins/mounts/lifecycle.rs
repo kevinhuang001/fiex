@@ -37,7 +37,7 @@ pub fn open_view(plugin_id: &str, params: &Value, scope: &Scope) -> Result<Value
     }
     let descriptor = Descriptor {
         plugin_id: plugin_id.into(),
-        contribution_id: plugin_id.into(),
+        contribution_id: contribution.into(),
         view_context: context,
         resource_root: canonical.to_string_lossy().into_owned(),
     };
