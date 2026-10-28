@@ -109,7 +109,20 @@ pub fn route(path: &str) -> Option<Route> {
         .join("usbfs")
         .to_string_lossy()
         .into_owned();
-    let relative = path.strip_prefix(&base)?.trim_start_matches(['/', '\\']);
+    let suffix = path.strip_prefix(&base)?;
+    if !suffix.is_empty() && !suffix.starts_with(['/', '\\']) {
+        return None;
+    }
+    let relative = suffix.trim_start_matches(['/', '\\']);
+    // A virtual path must never carry parent traversal, including Windows
+    // backslashes on a non-Windows host. Clamp-free parsing fails closed.
+    if relative
+        .replace('\\', "/")
+        .split('/')
+        .any(|part| part == "." || part == "..")
+    {
+        return None;
+    }
     let (id, rel) = relative
         .split_once('/')
         .or_else(|| relative.split_once('\\'))
@@ -137,4 +150,18 @@ pub fn route(path: &str) -> Option<Route> {
         rel,
         root: Path::new(&base).join(id).to_string_lossy().into_owned(),
     })
+}
+
+#[cfg(test)]
+mod routing_security_tests {
+    use super::*;
+    #[test]
+    fn rejects_virtual_root_prefix_confusion_and_parent_traversal() {
+        let root = virtual_root("/dev/fiex-test-device", FsKind::Ntfs);
+        assert!(route(&root).is_some());
+        assert!(route(&(root.clone() + "/safe.txt")).is_some());
+        assert!(route(&(root.clone() + "/../outside")).is_none());
+        assert!(route(&(root.clone() + "/nested\\..\\outside")).is_none());
+        assert!(route(&(root + "Evil/surprise")).is_none());
+    }
 }
