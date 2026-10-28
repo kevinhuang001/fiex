@@ -26,11 +26,11 @@ export type ResolvedMenu = CoreMenu | (PluginMenu & { kind: 'plugin' })
 
 /** One resolve for all providers. No frontend feature predicates or registry. */
 export function useContextMenu({ menu, x }: Pick<ContextMenuProps, 'menu' | 'x'>) {
-  const paths = menu
+  const paths = menu?.entry
     ? [
         menu.entry.path,
         ...x.selected.filter(
-          (path) => path !== menu.entry.path && x.selected.includes(menu.entry.path),
+          (path) => path !== menu.entry!.path && x.selected.includes(menu.entry!.path),
         ),
       ]
     : []

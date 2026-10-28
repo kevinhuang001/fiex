@@ -77,4 +77,10 @@ impl Running {
     pub(super) fn plugin_id(&self) -> &str {
         &self.plugin_id
     }
+
+    /// A plugin can exit between two requests. Callers must replace this
+    /// instance instead of reporting a stale "not running" failure.
+    pub(super) fn is_closed(&self) -> bool {
+        self.closed.load(std::sync::atomic::Ordering::Acquire)
+    }
 }

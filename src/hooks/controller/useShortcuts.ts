@@ -29,6 +29,7 @@ export function useShortcuts({
   transfer,
   undo,
   create,
+  createFile,
   newWorkspaceTab,
   closeWorkspaceTab,
   duplicate,
@@ -61,6 +62,7 @@ export function useShortcuts({
   transfer: Transfer
   undo: () => void
   create: () => Promise<void>
+  createFile: () => Promise<void>
   newWorkspaceTab: () => void
   closeWorkspaceTab: (index: number) => void
   duplicate: () => void
@@ -71,7 +73,7 @@ export function useShortcuts({
   setSidebar: Dispatch<SetStateAction<boolean>>
   setInfo: Dispatch<SetStateAction<Entry | null>>
   setSettings: Dispatch<SetStateAction<boolean>>
-  setMenu: Dispatch<SetStateAction<{ x: number; y: number; entry: Entry } | null>>
+  setMenu: Dispatch<SetStateAction<{ x: number; y: number; entry: Entry | null } | null>>
 }) {
   const hint = (action: Parameters<typeof shortcutLabel>[1]) =>
     shortcutLabel(prefs.shortcuts, action, prefs.shortcutStyle)
@@ -101,6 +103,9 @@ export function useShortcuts({
       undo,
       newFolder: () => {
         void create()
+      },
+      newFile: () => {
+        void createFile()
       },
       newTab: newWorkspaceTab,
       closeTab: () => closeWorkspaceTab(left.tab),

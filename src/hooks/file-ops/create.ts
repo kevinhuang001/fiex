@@ -5,8 +5,6 @@ import type { FileOpsContext } from './types'
 
 /** Creating the next entry, then handing it straight to the inline rename. */
 export function createActions({ x, writable, run }: FileOpsContext) {
-  /** New entries are folders: the file-system protocol has no "create an
-   * empty file by name" operation, so Core only offers folder creation. */
   const create = async () => {
     if (!writable()) return
     // The toolbar disables its new-folder button from the same flag; a
@@ -26,5 +24,20 @@ export function createActions({ x, writable, run }: FileOpsContext) {
     if (x.query) x.setQuery('')
     x.beginRename(path)
   }
-  return { create }
+  /** An empty file goes through the provider's write stream with a name; the
+   * menu only offers it when the directory declares `write`. */
+  const createFile = async () => {
+    if (!writable()) return
+    const name = uniqueName(
+      x.entries.map((e) => e.name),
+      t('未命名文件'),
+    )
+    const path = await run(t('正在新建文件…'), () =>
+      call<string>('create_file_entry', { path: x.path, name }),
+    )
+    if (!path) return
+    if (x.query) x.setQuery('')
+    x.beginRename(path)
+  }
+  return { create, createFile }
 }

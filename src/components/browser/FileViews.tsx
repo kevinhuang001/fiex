@@ -1,4 +1,5 @@
 import { t, getLocale } from '@/i18n'
+import { isWindows } from '@/lib/platform'
 import { useEffect, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Files, FolderOpen, LoaderCircle, SearchX } from 'lucide-react'
@@ -20,6 +21,7 @@ export function FileViews(props: Props) {
     onOpen,
     onPreview,
     onMenu,
+    onBlankMenu,
     onDrop,
     onBookmark,
     onWorkspace,
@@ -158,6 +160,11 @@ export function FileViews(props: Props) {
       className="file-area"
       ref={container}
       role="grid"
+      onContextMenu={(event) => {
+        if (event.defaultPrevented) return
+        event.preventDefault()
+        onBlankMenu(event.clientX, event.clientY)
+      }}
       aria-label={t('文件')}
       tabIndex={0}
       onKeyDown={onKeyDown}
@@ -194,7 +201,7 @@ export function FileViews(props: Props) {
                   : x.path === 'recent://'
                     ? t('还没有最近打开的文件')
                     : inTrash
-                      ? t('废纸篓是空的')
+                      ? t(isWindows() ? '回收站是空的' : '废纸篓是空的')
                       : t('文件夹是空的')}
               </h3>
             </>

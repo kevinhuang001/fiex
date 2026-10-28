@@ -24,6 +24,7 @@ export interface Props {
   onOpen: (e: Entry) => void
   onPreview: (e: Entry) => void
   onMenu: (e: Entry, x: number, y: number) => void
+  onBlankMenu: (x: number, y: number) => void
   onDrop: (paths: string[], dest: string, moving: boolean) => void
   onBookmark: (paths: string[]) => void
   onWorkspace: (paths: string[]) => void

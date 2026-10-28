@@ -46,7 +46,7 @@ pub use files::{
     stat, ProgressFn, TransferOptions,
 };
 #[cfg(feature = "desktop")]
-pub(crate) use mutate::{create, remove, rename};
+pub(crate) use mutate::{create, create_file, remove, rename};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 #[cfg(feature = "desktop")]
 pub(crate) use store::load_stored;

@@ -1387,5 +1387,22 @@
   "更新并授权激活": "Update and review activation",
   "确认后将进入授权激活，可逐项选择权限和域名。": "Continue to activation to choose individual permissions and domains.",
   "邮件内容会显示在这里。凭据由 Fiex 按设置保存。": "Message contents appear here. Fiex stores credentials according to your settings.",
-  "打开应用控制台": "Open app console"
+  "打开应用控制台": "Open app console",
+  "回收站": "Recycle Bin",
+  "打开回收站": "Open Recycle Bin",
+  "清空回收站": "Empty Recycle Bin",
+  "回收站是空的": "Recycle Bin is empty",
+  "正在移到回收站…": "Moving to Recycle Bin…",
+  "删除来源：\n{0}\n\n目标：\n回收站": "Source:\n{0}\n\nDestination:\nRecycle Bin",
+  "清空回收站？": "Empty Recycle Bin?",
+  "正在清空回收站…": "Emptying the Recycle Bin…",
+  "删除：回收站中的所有项目": "Delete all items in the Recycle Bin",
+  "等待解决冲突…": "Waiting for conflict resolution…",
+  "移到回收站": "Move to Recycle Bin",
+  "该连接暂不支持写入": "This connection does not support writing yet",
+  "新建文件夹…": "New Folder…",
+  "新建空文件…": "New Empty File…",
+  "新建空文件": "New Empty File",
+  "未命名文件": "Untitled File",
+  "正在新建文件…": "Creating file…"
 }

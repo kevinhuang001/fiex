@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { isWindows } from '@/lib/platform'
 import type { Explorer } from '@/hooks/useExplorer'
 import { call } from '@/lib/api'
 import type { DialogState } from '@/lib/dialogs'
@@ -94,7 +95,7 @@ export function useConnectionActions({
   const isRemotePath = (path: string) => Boolean(remoteConnection(path))
   const displayName = (path: string) => {
     if (path === 'recent://') return t('最近使用')
-    if (trashPath && path === trashPath) return t('废纸篓')
+    if (trashPath && path === trashPath) return t(isWindows() ? '回收站' : '废纸篓')
     const volume = left.locations.find((location) => location.usbfs && location.path === path)
     if (volume) return volume.name
     const connection = remoteConnection(path)

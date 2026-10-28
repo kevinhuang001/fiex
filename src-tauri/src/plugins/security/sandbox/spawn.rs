@@ -137,13 +137,18 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         .prefix("fiex-plugin-sandbox-")
         .tempdir()
         .map_err(|e| e.to_string())?;
+    // Several plugins auto-start together. A millisecond-only id can collide,
+    // and arapuca uses it to name the sandbox task/cgroup, so give every launch
+    // a process-wide sequence number as well.
+    static TASK_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let task_id = format!(
-        "plugin-{}-{}",
+        "plugin-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_millis())
-            .unwrap_or_default()
+            .unwrap_or_default(),
+        TASK_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
     let config = Config {
         profile,

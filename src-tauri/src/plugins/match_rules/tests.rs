@@ -77,6 +77,10 @@ fn contains_and_selection_are_scoped_predicates() {
     .unwrap();
     assert!(menu.matches_selection(1));
     assert!(!menu.matches_selection(2));
+    let blank: crate::plugins::match_rules::MatchRules =
+        serde_json::from_value(json!({"selection":"zero"})).unwrap();
+    assert!(blank.matches_selection(0));
+    assert!(!blank.matches_selection(1));
     assert!(menu.matches("zip", "application/zip", false));
 }
 

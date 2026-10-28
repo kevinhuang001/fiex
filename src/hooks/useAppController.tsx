@@ -15,6 +15,7 @@ import { useShortcuts } from './controller/useShortcuts'
 import { useWorkspaceActions } from './controller/useWorkspaceActions'
 import { useDesktopEnvironment } from './useDesktopEnvironment'
 import { useFileOperations } from './useFileOperations'
+import { finishActivity } from '@/hooks/useActivity'
 import { usePaneLayout } from './usePaneLayout'
 import { usePathEditor } from './usePathEditor'
 import { useRemoteActivity } from './useRemoteActivity'
@@ -189,6 +190,7 @@ export function useAppController() {
     setClipboard,
     run,
     create,
+    createFile,
     recycle,
     deletePermanently,
     restoreFromTrash,
@@ -199,6 +201,13 @@ export function useAppController() {
     duplicate,
     undo,
   } = useFileOperations({ x, writable, notify, setDialog, trashPath })
+
+  // Closing the conflict dialog without a choice must not leave the held
+  // status-centre row running forever.
+  const cancelConflict = () => {
+    if (conflict?.activityId) finishActivity(conflict.activityId, t('已取消'))
+    setConflict(null)
+  }
 
   const { ejectDevice, ejectUsb, mountDevice, removeConnection, isRemotePath, displayName } =
     useConnectionActions({ x, left, right, run, notify, setDialog, trashPath })
@@ -274,6 +283,7 @@ export function useAppController() {
     transfer,
     undo,
     create,
+    createFile,
     newWorkspaceTab,
     closeWorkspaceTab,
     duplicate,
@@ -330,6 +340,7 @@ export function useAppController() {
     displayName,
     hint,
     create,
+    createFile,
     ides,
     openIde,
     terminal,
@@ -355,6 +366,7 @@ export function useAppController() {
     busy,
     conflict,
     setConflict,
+    cancelConflict,
     resolveConflict,
     chosen,
     chosenAll,

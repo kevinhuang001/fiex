@@ -18,7 +18,7 @@ import { Fragment, useEffect } from 'react'
 import type { SidebarProps, SetSidebarMenu } from './types'
 
 function iconFor(name: string) {
-  return name === t('废纸篓') ? (
+  return name === t('废纸篓') || name === t('回收站') ? (
     <Trash2 />
   ) : name === t('最近使用') ? (
     <Clock />

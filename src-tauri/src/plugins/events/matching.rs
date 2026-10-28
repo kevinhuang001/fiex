@@ -14,8 +14,18 @@ pub(super) fn matches(
     if !contribution.is_object() && contribution.as_bool() != Some(true) {
         return false;
     }
-    crate::plugins::match_rules::MatchRules::from_contribution(contribution)
-        .is_ok_and(|rules| rules.matches_event(metadata, directory))
+    let Ok(rules) = crate::plugins::match_rules::MatchRules::from_contribution(contribution) else {
+        return false;
+    };
+    // The blank canvas is selection 0. A plugin must opt into it explicitly;
+    // "any" and the default predicate keep meaning a non-empty selection.
+    if method == "contextMenu.resolve"
+        && metadata.is_empty()
+        && rules.selection.as_deref() != Some("zero")
+    {
+        return false;
+    }
+    rules.matches_event(metadata, directory)
 }
 
 pub(super) fn matches_resources(
@@ -118,5 +128,28 @@ mod tests {
             let extensions = json!({feature: {"match": {"extensions": "zip"}}});
             assert!(!matches(method, &extensions, &[], ""), "{method}");
         }
+    }
+
+    #[test]
+    fn blank_context_menus_require_an_explicit_zero_selection() {
+        let directory = "/tmp";
+        assert!(!matches(
+            "contextMenu.resolve",
+            &json!({"contextMenus": true}),
+            &[],
+            directory
+        ));
+        assert!(!matches(
+            "contextMenu.resolve",
+            &json!({"contextMenus": {"match": {"selection": "any"}}}),
+            &[],
+            directory
+        ));
+        assert!(matches(
+            "contextMenu.resolve",
+            &json!({"contextMenus": {"match": {"selection": "zero"}}}),
+            &[],
+            directory
+        ));
     }
 }

@@ -386,6 +386,13 @@ pub fn remove_connection(id: &str) -> Result<(), String> {
             let _ = crate::plugins::storage::secret_delete(&plugin_id, &scope, field);
         }
         let _ = crate::plugins::storage::secret_delete(&plugin_id, &scope, "password");
+        // Drop every cached byte, pin and sync baseline owned by the
+        // connection. A stale cache must never resurface under a new mount.
+        let cache = mount_path(&conn);
+        if cache.exists() {
+            let _ = fs::remove_dir_all(&cache);
+        }
+        super::sync::forget_meta(&conn);
     }
     Ok(())
 }

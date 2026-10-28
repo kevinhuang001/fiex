@@ -7,6 +7,8 @@ import {
   CloudOff,
   Copy,
   ExternalLink,
+  FilePlus,
+  FolderPlus,
   Eye,
   Info,
   Pencil,
@@ -39,6 +41,8 @@ const icons = {
   'cloud-download': CloudDownload,
   'cloud-off': CloudOff,
   'pin-off': PinOff,
+  'file-plus': FilePlus,
+  'folder-plus': FolderPlus,
 }
 
 export function FileContextMenu(props: ContextMenuProps) {

@@ -52,22 +52,17 @@ fn effective_ops(plugin_id: &str, allowed: Option<&[String]>) -> Vec<FsOperation
         .collect()
 }
 
-/// UI projection of a node's capabilities. `readonly` mirrors the protocol:
-/// a node without write/rename/remove/mkdir support cannot be modified.
+/// UI projection of a node's capabilities. `readonly` is only the provider's
+/// explicit node flag; the operation set is the authoritative per-action gate,
+/// so a node that supports just `remove` stays deletable.
 fn entry_capabilities(
     plugin_id: &str,
     allowed: Option<&[String]>,
     explicit_readonly: bool,
 ) -> (bool, Vec<String>) {
     let operations = effective_ops(plugin_id, allowed);
-    let writable = operations.iter().any(|operation| {
-        matches!(
-            operation,
-            FsOperation::Write | FsOperation::Rename | FsOperation::Remove | FsOperation::Mkdir
-        )
-    });
     (
-        explicit_readonly || !writable,
+        explicit_readonly,
         operations
             .into_iter()
             .map(|operation| operation.as_str().to_string())
@@ -300,14 +295,15 @@ pub async fn list_listing(
         });
     }
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
-    let (mount_readonly, _) = entry_capabilities(&plugin_id, None, false);
+    // A mount is not inherently read-only: the provider declaration and each
+    // node's `allowedOps` decide which actions the UI may offer.
     // Creating a folder needs the provider's `mkdir` and the directory node's
     // own stored `allowedOps`/`readonly`. `for_path` is the same rule
     // `create_entry` enforces, so the toolbar's new-folder affordance and the
     // command cannot disagree.
     let can_create = crate::plugins::resource::file_capabilities::for_path(path).create;
     Ok(Some(crate::core::files::Listing {
-        read_only: mount_readonly,
+        read_only: false,
         can_create,
         virtual_volume: true,
         path: super::config::navigation_path(&conn, &rel)?,
@@ -829,22 +825,27 @@ mod tests {
         assert!(cached_listing("other", &recovered).is_empty());
     }
     #[test]
-    fn readonly_intersects_declared_and_node_capabilities() {
+    fn readonly_is_explicit_and_operations_are_per_action() {
         let plugin = "org.example.capability-test";
         crate::plugins::provider_registry::register(
             plugin,
             &serde_json::json!({"fs":{"operations":["list","stat","read","write","remove"]}}),
         );
-        assert!(!entry_capabilities(plugin, None, false).0);
+        let (readonly, operations) = entry_capabilities(plugin, None, false);
+        assert!(!readonly);
+        assert!(operations.iter().any(|op| op == "remove"));
         let read_only = vec!["read".to_string(), "stat".to_string()];
-        assert!(entry_capabilities(plugin, Some(&read_only), false).0);
-        let writable = vec!["read".to_string(), "write".to_string(), "mkdir".to_string()];
-        assert!(!entry_capabilities(plugin, Some(&writable), false).0);
+        let (readonly, operations) = entry_capabilities(plugin, Some(&read_only), false);
+        assert!(!readonly);
+        assert_eq!(operations, vec!["stat", "read"]);
+        assert!(entry_capabilities(plugin, None, true).0);
         // A node cannot expose an operation the plugin never declared.
         let undeclared = vec!["rename".to_string()];
-        assert!(entry_capabilities(plugin, Some(&undeclared), false).0);
+        assert!(entry_capabilities(plugin, Some(&undeclared), false)
+            .1
+            .is_empty());
         crate::plugins::provider_registry::forget(plugin);
-        assert!(entry_capabilities(plugin, None, false).0);
+        assert!(entry_capabilities(plugin, None, false).1.is_empty());
     }
     #[test]
     fn listing_cannot_advance_download_revision() {

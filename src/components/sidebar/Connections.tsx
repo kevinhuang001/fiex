@@ -175,7 +175,6 @@ export function Connections({
               {isSshConnection(connection) ? <TerminalSquare /> : <Server />}
               <span>
                 <span>{connection.name}</span>
-                <small>{connection.pluginId}</small>
               </span>
               {connection.autostart && (
                 <span

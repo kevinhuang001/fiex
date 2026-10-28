@@ -20,6 +20,7 @@ export function SecondaryPane({
   onOpen,
   onPreview,
   onMenu,
+  onBlankMenu,
   dragPaths,
   displayName,
   width,
@@ -35,6 +36,7 @@ export function SecondaryPane({
   onOpen: (entry: Entry) => void
   onPreview: (entry: Entry) => void
   onMenu: (entry: Entry, x: number, y: number) => void
+  onBlankMenu: (x: number, y: number) => void
   dragPaths?: string[]
   displayName: (path: string) => string
   width: number
@@ -127,6 +129,7 @@ export function SecondaryPane({
           onOpen={onOpen}
           onPreview={onPreview}
           onMenu={onMenu}
+          onBlankMenu={onBlankMenu}
           onDrop={(paths, destination, moving) => onTransfer(paths, destination, moving)}
           onBookmark={() => {}}
           onWorkspace={() => {}}

@@ -17,7 +17,7 @@ export interface CoreAction {
 export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
   const { x } = props
   const entry =
-    props.menu?.entry.path === effect.path
+    props.menu?.entry?.path === effect.path
       ? props.menu.entry
       : x.entries.find((entry) => entry.path === effect.path)
   switch (effect.command) {
@@ -50,6 +50,12 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
       break
     case 'trash':
       props.recycle(effect.paths)
+      break
+    case 'newFolder':
+      props.create()
+      break
+    case 'newFile':
+      props.createFile()
       break
     case 'restore':
       props.restoreFromTrash(effect.paths)

@@ -88,7 +88,9 @@ fn register(
     }
 }
 pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
-    if paths.is_empty() || paths.len() > 256 || directory.is_empty() {
+    // An empty selection is the blank canvas. It uses the same provider
+    // pipeline; manifests opt in with `match.selection: "zero"` (or `any`).
+    if paths.len() > 256 || directory.is_empty() {
         return Err("invalid menu selection".into());
     }
     let ctx = builtin::Context::load(directory, paths)?;

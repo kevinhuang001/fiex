@@ -6,7 +6,7 @@
 //! provider eligibility.
 use crate::core::files::{Entry, Listing};
 use crate::plugins::provider_registry::FsOperation;
-use crate::plugins::resolvers::fs::{FsEntry, FsKind, Mount, Source};
+use crate::plugins::resolvers::fs::{FsEntry, FsKind, Mount, Source, WriteRequest};
 use serde_json::Value;
 
 /// Stream reads are chunked so a large export never sits in memory.
@@ -76,17 +76,6 @@ fn mount_for(uri: &crate::plugins::mounts::Uri, view: &crate::plugins::mounts::V
         scope: Some(view.scope.clone()),
     }
 }
-/// Whether the mount declares any operation that changes the tree.
-fn writable(mount: &Mount) -> bool {
-    [
-        FsOperation::Write,
-        FsOperation::Mkdir,
-        FsOperation::Rename,
-        FsOperation::Remove,
-    ]
-    .into_iter()
-    .any(|operation| mount.supports(operation))
-}
 /// Child location of `name`, never trusting a provider-supplied path.
 fn child(relative: &str, name: &str) -> Result<String, String> {
     crate::plugins::mounts::segment(name)?;
@@ -114,15 +103,11 @@ fn project_entry(
         .filter(|operation| mount.supports(*operation) && entry.allows(*operation))
         .map(|operation| operation.as_str().to_string())
         .collect::<Vec<_>>();
-    let readonly = entry.readonly.unwrap_or(false)
-        || ![
-            FsOperation::Write,
-            FsOperation::Mkdir,
-            FsOperation::Rename,
-            FsOperation::Remove,
-        ]
-        .into_iter()
-        .any(|operation| mount.supports(operation) && entry.allows(operation));
+    // Read-only is an explicit provider flag. Per-operation restrictions live
+    // in `allowed_ops`: a provider that supports only `remove` must still be
+    // able to delete, so the absence of the other mutating operations cannot
+    // make the whole node read-only.
+    let readonly = entry.readonly.unwrap_or(false);
     Ok((
         Entry {
             path,
@@ -175,7 +160,9 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
     // so the button can never offer an operation this view cannot perform.
     let can_create = crate::plugins::resource::file_capabilities::for_path(path).create;
     Ok(Listing {
-        read_only: !writable(&mount),
+        // A virtual volume is writable when the provider implements at least
+        // one mutating operation; each entry narrows that through allowedOps.
+        read_only: false,
         can_create,
         virtual_volume: true,
         path: crate::plugins::mounts::uri(&uri.mount_id, &uri.relative)?,
@@ -340,6 +327,29 @@ pub fn create(path: &str, name: &str) -> Result<String, String> {
     }
 }
 
+/// Create an empty file inside `path`, returning its URI. This uses the
+/// provider's write stream with a parent node and name, so it is available
+/// exactly when the provider implements `write` for that directory.
+pub fn create_file(path: &str, name: &str) -> Result<String, String> {
+    crate::plugins::mounts::segment(name)?;
+    let (uri, view, node_id) = node(path)?;
+    let mount = mount_for(&uri, &view);
+    let entry = mount
+        .begin_write(WriteRequest {
+            node_id: None,
+            parent_id: Some(&node_id),
+            name: Some(name),
+            size: Some(0),
+            if_revision: None,
+        })?
+        .commit()?;
+    let relative = child(&uri.relative, name)?;
+    if let Some(entry) = entry {
+        crate::plugins::mounts::bind_node(&uri.mount_id, &relative, &entry.node_id)?;
+    }
+    crate::plugins::mounts::uri(&uri.mount_id, &relative)
+}
+
 /// Rename the node at `path`, returning its new URI.
 pub fn rename(path: &str, name: &str) -> Result<String, String> {
     let (uri, view, node_id) = node(path)?;
@@ -408,7 +418,7 @@ mod tests {
             projected.path,
             "fiex://mount/owner-one/folder/report%20%23%25.txt"
         );
-        assert!(projected.readonly && projected.sync.is_none());
+        assert!(!projected.readonly && projected.sync.is_none());
         assert!(project_entry(
             &mount,
             &location,
@@ -439,7 +449,9 @@ mod tests {
         read_only.allowed_ops = Some(vec![FsOperation::Read]);
         let (projected, _) = project_entry(&mount, &location, "folder/b.txt", read_only).unwrap();
         assert_eq!(projected.allowed_ops, vec!["read"]);
-        assert!(projected.readonly);
+        // The provider did not mark the node read-only; `allowedOps` is what
+        // narrows the operation set.
+        assert!(!projected.readonly);
         crate::plugins::provider_registry::forget(plugin);
     }
 

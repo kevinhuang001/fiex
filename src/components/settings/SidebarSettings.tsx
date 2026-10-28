@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 function placeIcon(name: string) {
   if (name === t('最近使用')) return <Clock size={14} />
-  if (name === t('废纸篓')) return <Trash2 size={14} />
+  if (name === t('废纸篓') || name === t('回收站')) return <Trash2 size={14} />
   if (name === t('个人文件夹')) return <Home size={14} />
   if (name === t('桌面')) return <Monitor size={14} />
   if (name === t('下载')) return <Download size={14} />

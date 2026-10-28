@@ -58,6 +58,12 @@ fn meta_path(conn: &StoredConnection) -> PathBuf {
     meta_dir().join(format!("{}.json", conn.id))
 }
 
+/// Deleting a connection must not leave the cached tree or its metadata
+/// behind; the next connection that reuses the ID starts clean.
+pub(crate) fn forget_meta(conn: &StoredConnection) {
+    let _ = fs::remove_file(meta_path(conn));
+}
+
 pub(crate) fn load_meta(conn: &StoredConnection) -> RemoteMeta {
     fs::read(meta_path(conn))
         .ok()

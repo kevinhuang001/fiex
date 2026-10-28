@@ -273,7 +273,8 @@ fn remove_adds_trash_and_delete_forever() {
     );
     assert!(provider_ids(&ctx).contains(&"builtin:trash".to_string()));
     let trash = super::builtin::resolve("builtin:trash", &ctx).unwrap();
-    assert_eq!(trash["items"][0]["id"], "trash");
+    // Mounts have no Trash: the provider's `remove` is a permanent delete.
+    assert_eq!(trash["items"][0]["id"], "delete");
     assert_eq!(trash["items"][0]["placement"], "tail");
     assert_eq!(trash["items"][0]["danger"], true);
     // Inside the trash both restore and permanent delete are offered.
@@ -392,4 +393,55 @@ fn disabled_actions_are_not_authorized_in_root_or_lazy_menus() {
         .is_empty());
     let invalid = serde_json::json!({"items":[{"id":"delete","kind":"action","title":"Delete","disabled":"yes"}]});
     assert!(root_menu_valid(&invalid).is_err());
+}
+
+#[test]
+fn blank_selection_offers_only_capability_gated_create_actions() {
+    let capabilities = crate::plugins::resource::file_capabilities::FileCapabilities {
+        read: true,
+        write: true,
+        create: true,
+        ..Default::default()
+    };
+    let ctx = super::builtin::Context::for_test_caps(
+        "/tmp/blank",
+        vec![],
+        vec![],
+        false,
+        false,
+        capabilities,
+    );
+    assert_eq!(provider_ids(&ctx), ["builtin:create"]);
+    let menu = super::builtin::resolve("builtin:create", &ctx).unwrap();
+    let items = menu["items"].as_array().unwrap();
+    assert_eq!(items[0]["id"], "newFolder");
+    assert_eq!(items[1]["id"], "newFile");
+    assert_never_disabled(&ctx);
+
+    let files_only = super::builtin::Context::for_test_caps(
+        "/tmp/blank",
+        vec![],
+        vec![],
+        false,
+        false,
+        crate::plugins::resource::file_capabilities::FileCapabilities {
+            read: true,
+            write: true,
+            ..Default::default()
+        },
+    );
+    let only = super::builtin::resolve("builtin:create", &files_only).unwrap();
+    let items = only["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], "newFile");
+
+    let empty = super::builtin::Context::for_test_caps(
+        "/tmp/blank",
+        vec![],
+        vec![],
+        false,
+        false,
+        crate::plugins::resource::file_capabilities::FileCapabilities::default(),
+    );
+    assert!(!provider_ids(&empty).contains(&"builtin:create".to_string()));
 }

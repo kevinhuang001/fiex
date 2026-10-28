@@ -159,6 +159,7 @@ pub fn run() {
             file_info,
             read_preview,
             create_entry,
+            create_file_entry,
             rename_entry,
             transfer,
             recycle,

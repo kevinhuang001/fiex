@@ -179,6 +179,7 @@ export default function App() {
                 onOpen={app.openLeft}
                 onPreview={(entry) => app.previewEntry(entry, app.left)}
                 onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+                onBlankMenu={(mx, my) => app.setMenu({ entry: null, x: mx, y: my })}
                 onDrop={app.transfer}
                 onBookmark={app.bookmarkPaths}
                 onWorkspace={app.addWorkspace}
@@ -200,6 +201,7 @@ export default function App() {
             onOpen={app.openRight}
             onPreview={(entry) => app.previewEntry(entry, app.right)}
             onMenu={(entry, mx, my) => app.setMenu({ entry, x: mx, y: my })}
+            onBlankMenu={(mx, my) => app.setMenu({ entry: null, x: mx, y: my })}
             dragPaths={app.selectedAll}
             displayName={app.displayName}
             updatePrefs={app.update}

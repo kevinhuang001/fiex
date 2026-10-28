@@ -8,7 +8,7 @@
 
 use std::fs;
 
-use crate::plugins::resolvers::fs::{mount_for_path, FsEntry};
+use crate::plugins::resolvers::fs::{mount_for_path, FsEntry, WriteRequest};
 
 use super::{
     config::{check_cache_path, connection_for_path, local_for, navigation_path, rel_string},
@@ -148,6 +148,40 @@ pub async fn rename(path: &str, name: &str) -> Result<String, String> {
     meta.errors.remove(&rel);
     save_meta(&conn, &meta)?;
     navigation_path(&conn, &next)
+}
+
+/// Create an empty file through the provider's write stream. The provider
+/// receives `parentId` and `name`, so a server that only supports overwriting
+/// an existing node rejects this with its own error; Core does not guess.
+pub async fn create_file(path: &str, name: &str) -> Result<String, String> {
+    let (conn, relative) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
+    let _guard = super::sync::lock(&conn).await;
+    let rel = rel_string(&relative);
+    let mount = mount_for_path(path)?;
+    let mut meta = load_meta(&conn);
+    let parent = node_id(&meta, &rel);
+    let created = mount
+        .begin_write(WriteRequest {
+            node_id: None,
+            parent_id: Some(&parent),
+            name: Some(name),
+            size: Some(0),
+            if_revision: None,
+        })?
+        .commit()?;
+    let child = child_path(&rel, name);
+    let mut file = RemoteMetaFile::default();
+    if let Some(entry) = &created {
+        remember(entry, &mut file);
+    }
+    if let Some(entry) = created {
+        file.is_dir = false;
+        file.node_id = entry.node_id;
+    }
+    meta.files.insert(child.clone(), file);
+    meta.errors.remove(&child);
+    save_meta(&conn, &meta)?;
+    navigation_path(&conn, &child)
 }
 
 pub async fn remove(path: &str) -> Result<(), String> {

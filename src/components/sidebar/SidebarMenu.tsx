@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { isWindows } from '@/lib/platform'
 import { Folder, Plug, Trash, Unplug, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import { MenuLayer } from '@/components/ui/MenuLayer'
@@ -35,7 +36,7 @@ export function SidebarMenu({
         role="menu"
         aria-label={
           menu.kind === 'trash'
-            ? t('废纸篓')
+            ? t(isWindows() ? '回收站' : '废纸篓')
             : menu.kind === 'favorite'
               ? t('收藏')
               : menu.name || t('设备')
@@ -52,7 +53,7 @@ export function SidebarMenu({
               }}
             >
               <Folder size={14} />
-              {t('打开废纸篓')}
+              {t(isWindows() ? '打开回收站' : '打开废纸篓')}
             </button>
             <button
               role="menuitem"
@@ -62,7 +63,7 @@ export function SidebarMenu({
               }}
             >
               <Trash size={14} />
-              {t('清空废纸篓')}
+              {t(isWindows() ? '清空回收站' : '清空废纸篓')}
             </button>
           </>
         ) : menu.kind === 'favorite' ? (

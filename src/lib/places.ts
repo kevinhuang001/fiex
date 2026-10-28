@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { isWindows } from './platform'
 import type { Location } from './types'
 
 export function commonPlaces(locations: Location[]): Location[] {
@@ -7,7 +8,7 @@ export function commonPlaces(locations: Location[]): Location[] {
   )
   for (const [kind, name, path] of [
     ['recent', '最近使用', 'recent://'],
-    ['trash', '废纸篓', 'trash://'],
+    ['trash', isWindows() ? '回收站' : '废纸篓', 'trash://'],
   ]) {
     if (!result.some((item) => item.kind === kind))
       result.push({

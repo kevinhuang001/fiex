@@ -349,12 +349,29 @@ impl PluginHost {
                 policy.allowed(crate::plugins::security::policy::Capability::Metadata),
             )?;
         }
-        let existing = self
+        let mut existing = self
             .children
             .lock()
             .map_err(|_| "plugin host lock poisoned")?
             .get(plugin_id)
             .cloned();
+        // A crashed/exited plugin leaves a closed handle in the pool. Drop it
+        // before the request so the next call starts a fresh process instead
+        // of failing once with "plugin process is not running".
+        if existing
+            .as_ref()
+            .is_some_and(|instance| instance.running.is_closed())
+        {
+            if let Ok(mut guard) = self.children.lock() {
+                if guard
+                    .get(plugin_id)
+                    .is_some_and(|current| Arc::ptr_eq(current, existing.as_ref().unwrap()))
+                {
+                    guard.remove(plugin_id);
+                }
+            }
+            existing = None;
+        }
         let instance = if let Some(instance) = existing {
             instance
         } else {

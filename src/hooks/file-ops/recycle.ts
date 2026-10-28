@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { isWindows } from '@/lib/platform'
 import { call } from '@/lib/api'
 import type { OperationResult } from '@/lib/types'
 import { progressChannel } from '@/hooks/useActivity'
@@ -28,9 +29,12 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
     }`
     let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
-      t('正在移到废纸篓…'),
+      t(isWindows() ? '正在移到回收站…' : '正在移到废纸篓…'),
       () => moveToTrash(paths, onProgress),
-      t('删除来源：\n{0}\n\n目标：\n废纸篓', source),
+      t(
+        isWindows() ? '删除来源：\n{0}\n\n目标：\n回收站' : '删除来源：\n{0}\n\n目标：\n废纸篓',
+        source,
+      ),
       true,
       'delete',
       (id) => {
@@ -62,14 +66,14 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
   }
   const emptyTrash = () => {
     setDialog({
-      title: t('清空废纸篓？'),
-      submit: t('清空废纸篓'),
+      title: t(isWindows() ? '清空回收站？' : '清空废纸篓？'),
+      submit: t(isWindows() ? '清空回收站' : '清空废纸篓'),
       danger: true,
       action: async () => {
         const removed = await run(
-          t('正在清空废纸篓…'),
+          t(isWindows() ? '正在清空回收站…' : '正在清空废纸篓…'),
           () => call<number>('empty_trash'),
-          t('删除：废纸篓中的所有项目'),
+          t(isWindows() ? '删除：回收站中的所有项目' : '删除：废纸篓中的所有项目'),
           true,
           'delete',
         )

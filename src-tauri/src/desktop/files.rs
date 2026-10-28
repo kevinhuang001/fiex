@@ -229,6 +229,43 @@ pub(crate) async fn rename_entry(
     }
     state.rename(&path, &name)
 }
+/// Create an empty file by name. The protocol has no dedicated operation, so
+/// this goes through the provider's write stream with `parentId` + `name`.
+/// Capability is the directory's own `write` grant; local paths are unchecked
+/// here and rely on the OS.
+#[tauri::command]
+pub(crate) async fn create_file_entry(path: String, name: String) -> Result<String, String> {
+    if !crate::plugins::vfs::handles(&path) {
+        crate::plugins::mounts::reject_local(&path)?;
+    }
+    crate::plugins::mounts::segment(&name)?;
+    crate::plugins::resource::file_capabilities::require(
+        &path,
+        crate::plugins::provider_registry::FsOperation::Write,
+    )?;
+    if let Some(route) = crate::usbfs::route(&path) {
+        crate::usbfs::create(&route, &name, false)?;
+        return Ok(format!("{}/{}", path.trim_end_matches('/'), name));
+    }
+    if remote::is_remote(&path) {
+        return remote::create_file(&path, &name).await;
+    }
+    if crate::plugins::vfs::handles(&path) {
+        return tauri::async_runtime::spawn_blocking(move || {
+            crate::plugins::vfs::create_file(&path, &name)
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
+    let target = std::path::Path::new(&path).join(&name);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .map_err(|error| error.to_string())?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
 // Tauri commands receive one argument per JS field, so the list is wide.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -244,22 +281,30 @@ pub(crate) async fn transfer(
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
     if remote::is_remote(&destination) {
-        return Err(crate::i18n::t("远程连接只读").into());
+        return Err(crate::i18n::t("该连接暂不支持写入").into());
     }
-    // A mount is read-only as a *destination*: nothing can be deleted from it
-    // here. Copying out is always allowed, so a drag that means "move" degrades
-    // to a copy for mount sources instead of failing the whole transfer.
-    let moving = moving
-        && !paths
-            .iter()
-            .any(|source| remote::is_remote(source) || crate::plugins::vfs::handles(source));
+    // Mount sources are materialized into the local engine. The engine copies
+    // them, and once every copy succeeds the provider-owned originals are
+    // removed here, so a drag that means "move" really deletes from the VFS.
+    let requested_moving = moving;
+    let mut mounted_source = false;
+    let mut originals = Vec::with_capacity(paths.len());
     let transfer_options = remote::TransferOptions {
         cancel: Some(cancel.flag()),
         progress: None,
     };
     let mut materialized = Vec::with_capacity(paths.len());
     for source in &paths {
+        let is_mount = remote::is_remote(source) || crate::plugins::vfs::handles(source);
+        if requested_moving && is_mount {
+            crate::plugins::resource::file_capabilities::require(
+                source,
+                crate::plugins::provider_registry::FsOperation::Remove,
+            )?;
+        }
+        originals.push(source.clone());
         if remote::is_remote(source) {
+            mounted_source = true;
             if remote::stat(source)?.is_dir {
                 remote::download_dir(source, &transfer_options).await?;
             } else {
@@ -267,6 +312,7 @@ pub(crate) async fn transfer(
             }
             materialized.push(remote::cached_path(source)?);
         } else if crate::plugins::vfs::handles(source) {
+            mounted_source = true;
             materialized.push(crate::plugins::vfs::materialize(source)?);
         } else {
             crate::plugins::mounts::reject_local(source)?;
@@ -275,17 +321,20 @@ pub(crate) async fn transfer(
     }
     crate::plugins::mounts::reject_local(&destination)?;
     let paths = materialized;
-    if crate::usbfs::route(&destination).is_some()
+    // The engine only deletes sources it owns. Provider sources are removed
+    // after a fully successful copy because their bytes live in the plugin.
+    let engine_moving = requested_moving && !mounted_source;
+    let events = app.clone();
+    let mut result = if crate::usbfs::route(&destination).is_some()
         || paths.iter().any(|p| crate::usbfs::route(p).is_some())
     {
-        let events = app.clone();
         let cancel = cancel.inner().clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
             let flag = cancel.flag();
             crate::usbfs::transfers::transfer(
                 &paths,
                 &destination,
-                moving,
+                engine_moving,
                 keep_both,
                 &ignores,
                 &resolutions.unwrap_or_default(),
@@ -297,31 +346,68 @@ pub(crate) async fn transfer(
         if result.as_ref().is_ok_and(|r| !r.paths.is_empty()) {
             let _ = events.emit("directory-changed", ());
         }
-        return result;
-    }
-    let events = app.clone();
-    let cancel = cancel.inner().clone();
-    let emit = progress_emitter(on_progress);
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let flag = cancel.flag();
-        app.state::<Operations>().transfer_resolved_with_progress(
-            &paths,
-            &destination,
-            moving,
-            keep_both,
-            &ignores,
-            &resolutions.unwrap_or_default(),
-            &flag,
-            &emit,
-        )
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    if result.as_ref().is_ok_and(|r| !r.paths.is_empty()) {
-        let _ = events.emit("directory-changed", ());
+        result
+    } else {
+        let cancel = cancel.inner().clone();
+        let emit = progress_emitter(on_progress);
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            let flag = cancel.flag();
+            app.state::<Operations>().transfer_resolved_with_progress(
+                &paths,
+                &destination,
+                engine_moving,
+                keep_both,
+                &ignores,
+                &resolutions.unwrap_or_default(),
+                &flag,
+                &emit,
+            )
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        if result.as_ref().is_ok_and(|r| !r.paths.is_empty()) {
+            let _ = events.emit("directory-changed", ());
+        }
+        result
+    };
+    if requested_moving && mounted_source {
+        if let Ok(out) = &mut result {
+            // Do not remove originals after a skipped/conflicted/partial plan:
+            // the copy did not cover every selected item.
+            if out.errors.is_empty() && out.conflicts.is_empty() && out.skipped == 0 {
+                for original in &originals {
+                    if let Err(error) = remove_moved_source(original).await {
+                        out.errors.push(format!("{original}: {error}"));
+                    }
+                }
+                let _ = events.emit("directory-changed", ());
+            }
+        }
     }
     result
 }
+
+/// Delete a source that was only materialized for the engine. Provider paths
+/// go back through their own adapter so caches and provider bytes both go away.
+async fn remove_moved_source(path: &str) -> Result<(), String> {
+    if remote::is_remote(path) {
+        return remote::remove(path).await;
+    }
+    if crate::plugins::vfs::handles(path) {
+        let owned = path.to_string();
+        return tauri::async_runtime::spawn_blocking(move || crate::plugins::vfs::remove(&owned))
+            .await
+            .map_err(|error| error.to_string())?;
+    }
+    let path = std::path::Path::new(path);
+    if path.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    }
+    .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub(crate) async fn recycle(
     app: tauri::AppHandle,
