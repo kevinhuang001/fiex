@@ -12,7 +12,7 @@
   "icon": "puzzle-piece",
   "author": { "name": "Example", "url": "https://example.com" },
   "runtime": {
-    "protocolVersion": "5.0",
+    "protocolVersion": "6.0",
     "entrypoints": {
       "linux-x86_64": "fiex-plugin-example",
       "macos-aarch64": "fiex-plugin-example",

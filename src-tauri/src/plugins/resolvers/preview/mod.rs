@@ -100,7 +100,7 @@ fn resolve_preview(
             let path = if kind == Builtin::Fallback {
                 resource.local.clone()
             } else {
-                resource.materialize()?
+                resource.export_path()?
             };
             builtin_view(kind, &path, &resource.display)
         },

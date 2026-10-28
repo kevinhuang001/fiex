@@ -51,15 +51,15 @@ fn resource_identity_is_not_an_operation_grant() {
     assert!(other.resolve_reference(&value["ref"]).is_err());
     operation.restrict_to_metadata();
     for method in [
-        "host.fs.openRead",
-        "host.fs.beginWrite",
+        "fs.openRead",
+        "fs.beginWrite",
         "host.process.run",
         "host.process.run",
         "host.vfs.openView",
     ] {
         assert!(operation.clone().authorize_method(method).is_err());
     }
-    assert!(operation.authorize_method("host.fs.stat").is_ok());
+    assert!(operation.authorize_method("fs.stat").is_ok());
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn fixed_events_are_core_owned_custom_methods_remain_available() {
         "search.query",
         "toolbar.invoke",
         "hooks.invoke",
-        "host.fs.openRead",
+        "fs.openRead",
     ] {
         assert!(is_protected_method(method), "{method}");
     }

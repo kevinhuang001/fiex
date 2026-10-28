@@ -227,4 +227,3 @@ pub(crate) async fn plugin_describe_resources(
     .await
     .map_err(|error| error.to_string())?
 }
-

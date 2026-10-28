@@ -41,8 +41,12 @@ pub trait VirtualResolver: Send + Sync {
         match self.id() {
             "core:recent" => vec!["list", "stat", "read"],
             "core:trash" => vec!["list", "stat", "remove"],
-            "core:applications" if path == APPLICATIONS_URI => vec!["list", "stat", "write", "mkdir"],
-            "core:applications" if applications::is_user(path) => vec!["list", "stat", "read", "write", "mkdir", "rename", "remove"],
+            "core:applications" if path == APPLICATIONS_URI => {
+                vec!["list", "stat", "write", "mkdir"]
+            }
+            "core:applications" if applications::is_user(path) => {
+                vec!["list", "stat", "read", "write", "mkdir", "rename", "remove"]
+            }
             _ => vec!["stat"],
         }
     }
@@ -120,7 +124,9 @@ impl VirtualResolver for ApplicationResolver {
         applications::list_at(path)
     }
     fn stat(&self, path: &str, _ctx: &VirtualContext<'_>) -> Result<Entry, String> {
-        if applications::is_user(path) { return applications::stored_entry(path); }
+        if applications::is_user(path) {
+            return applications::stored_entry(path);
+        }
         applications::list()?
             .into_iter()
             .find(|entry| entry.path == path)
@@ -290,14 +296,25 @@ pub fn icon_for(path: &str) -> Option<String> {
 
 /// One menu contract for Core-owned and plugin-owned VFS adapters.
 pub fn menu_json(resolver: &dyn VirtualResolver, paths: &[String]) -> serde_json::Value {
-    let items = if paths.is_empty() { vec![] } else {
-        resolver.menu(&paths[0]).into_iter().filter(|item| {
-            paths.iter().all(|path| resolver.menu(path).iter().any(|other| other.id == item.id))
-        }).map(|item| json!({
-            "id": item.id, "kind": "action", "title": item.title,
-            "icon": item.icon, "danger": item.danger,
-            "placement": if item.tail { Some("tail") } else { None },
-        })).collect::<Vec<_>>()
+    let items = if paths.is_empty() {
+        vec![]
+    } else {
+        resolver
+            .menu(&paths[0])
+            .into_iter()
+            .filter(|item| {
+                paths
+                    .iter()
+                    .all(|path| resolver.menu(path).iter().any(|other| other.id == item.id))
+            })
+            .map(|item| {
+                json!({
+                    "id": item.id, "kind": "action", "title": item.title,
+                    "icon": item.icon, "danger": item.danger,
+                    "placement": if item.tail { Some("tail") } else { None },
+                })
+            })
+            .collect::<Vec<_>>()
     };
     json!({"items": items})
 }
@@ -311,9 +328,18 @@ pub fn opaque(path: &str) -> bool {
 pub fn resource_entry(path: &str) -> Result<Entry, String> {
     let provider = resolver_for(path).ok_or("unknown builtin VFS")?;
     if path == RECENT_URI || path == APPLICATIONS_URI || path == recycle::URI {
-        return Ok(Entry { path: path.into(), name: provider.id().into(), is_dir: true,
-            readonly: false, allowed_ops: provider.operations(path).into_iter().map(str::to_owned).collect(), ..Default::default() });
+        return Ok(Entry {
+            path: path.into(),
+            name: provider.id().into(),
+            is_dir: true,
+            readonly: false,
+            allowed_ops: provider
+                .operations(path)
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            ..Default::default()
+        });
     }
     provider.stat(path, &VirtualContext { recent: &[] })
 }
-

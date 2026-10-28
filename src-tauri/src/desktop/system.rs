@@ -141,44 +141,17 @@ pub(crate) async fn open_path(
         if path.starts_with(crate::core::volumes::applications::URI) {
             return provider.open(&path);
         }
-        if crate::core::volumes::recycle::is_virtual(&path) { return provider.open(&path); }
+        if crate::core::volumes::recycle::is_virtual(&path) {
+            return provider.open(&path);
+        }
     }
-    if crate::plugins::vfs::handles(&path) && !remote::is_remote(&path) {
-        let path =
-            tauri::async_runtime::spawn_blocking(move || crate::plugins::vfs::materialize(&path))
-                .await
-                .map_err(|e| e.to_string())??;
-        return terminals::open_path(&path);
-    }
-    if crate::usbfs::route(&path).is_none() {
-        recent::record(&recent, &path);
-    }
-    if let Some(route) = crate::usbfs::route(&path) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let bytes = crate::usbfs::read_path(&route)?;
-            let cache = dirs::home_dir()
-                .ok_or(crate::i18n::t("无法创建缓存目录"))?
-                .join(".fiex")
-                .join("usbfs-cache")
-                .join(
-                    std::path::Path::new(&route.root)
-                        .file_name()
-                        .unwrap_or_default(),
-                )
-                .join(&route.rel);
-            if let Some(parent) = cache.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            std::fs::write(&cache, bytes).map_err(|e| e.to_string())?;
-            terminals::open_path(&cache.to_string_lossy())
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-    let path = remote::ensure_downloaded(&path, &remote::TransferOptions::default()).await?;
-    tauri::async_runtime::spawn_blocking(move || terminals::open_path(&path))
-        .await
-        .map_err(|e| e.to_string())?
+    recent::record(&recent, &path);
+    tauri::async_runtime::spawn_blocking(move || {
+        let exported = crate::core::fs::export_for_external_drag(&[path])?;
+        terminals::open_path(exported.first().ok_or("missing export")?)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub(crate) fn reveal_path(path: String) -> Result<(), String> {

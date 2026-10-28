@@ -97,7 +97,6 @@ pub fn run() {
             plugin_connection_menu_execute,
             connection_open,
             vfs_retain_views,
-            materialize_file,
             plugin_context_directory,
             plugin_task,
             plugin_cancel_task,
@@ -295,4 +294,3 @@ pub fn run() {
             }
         });
 }
-

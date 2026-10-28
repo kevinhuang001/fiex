@@ -1,4 +1,4 @@
-# 10 · 统一文件系统协议（protocol 5）
+# 10 · 统一文件系统协议（protocol 6）
 
 Core 与所有文件系统插件之间只有一套 `vfs.*` 协议。连接（SMB、WebDAV、Drive、OpenList）
 与独立虚拟视图（Git 等）使用相同的方法、相同的 DTO 和相同的流语义；差别只在
@@ -85,7 +85,7 @@ Core 与所有文件系统插件之间只有一套 `vfs.*` 协议。连接（SMB
 
 操作名固定为 `list|stat|read|write|mkdir|rename|remove|search`。
 `read` 覆盖 `openRead/readStream/closeRead`，`write` 覆盖 `beginWrite/writeStream/commit/abort`。
-SDK 的 `FSProvider::operations()` 显式报告实现上限，`discover(ctx)` 按当前连接与资源的服务器权限进一步收窄。
+SDK 的 `VfsProvider::operations()` 显式报告实现上限，`discover(ctx)` 按当前连接与资源的服务器权限进一步收窄。
 Core 保存该集合；未声明的操作用 `method_not_found` 拒绝，不会到达插件。
 
 三层能力求交：
@@ -115,16 +115,16 @@ Core 保存该集合；未声明的操作用 `method_not_found` 拒绝，不会�
 
 ## 6. 迁移状态
 
-连接与独立视图统一使用 protocol 5 的 `vfs.*` 方法和初始化回复的 `vfs` 能力块。
+连接与独立视图统一使用 protocol 6 的 `vfs.*` 方法和初始化回复的 `vfs` 能力块。
 旧 protocol 4 的小文件读取、快照上传接口已删除；先前 `fs.*` 拼写不作为兼容别名保留。
-`host.vfs.openView` 创建导航视图；`host.fs.*` 仍是插件访问 Core 授权资源的宿主服务，名称不变。
+`host.vfs.openView` 创建导航视图；`fs.*` 仍是插件访问 Core 授权资源的宿主服务，名称不变。
 
 新建文件夹使用 `vfs.mkdir`；新建空文件使用 `vfs.beginWrite` 的 `parentId` 和 `name`，
 然后提交空写入。覆盖已有文件使用 `nodeId` 和 `ifRevision`，并通过流式写入完成。
 
 ## 显式发现权限
 
-SDK 使用普通 `FSProvider` trait，不再使用过程宏。`operations()` 必须显式声明实现的
+SDK 使用普通 `VfsProvider` trait，不再使用过程宏。`operations()` 必须显式声明实现的
 操作上限，`discover(ctx)` 按当前连接与资源返回服务器允许的子集。
 初始化回复中的 `vfs.discovery: true` 启用 `vfs.discover`；请求携带与目标操作相同的
 mount、connection/view 和 node/parent 参数，返回 `{operations: [...]}`。

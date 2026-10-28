@@ -17,47 +17,24 @@ pub(crate) async fn register_drag(
     if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
         eprintln!("drag: register {:?} copy={copy_requested}", paths);
     }
-    let mut moving = !copy_requested
-        && !paths
-            .iter()
-            .any(|p| remote::is_remote(p) || crate::plugins::vfs::handles(p));
-    let mut materialized = Vec::new();
-    for path in &paths {
-        if crate::core::volumes::applications::is_user(path) {
-            materialized.push(crate::core::volumes::applications::stored_path(path)?.to_string_lossy().into_owned());
-        } else if crate::core::volumes::virtual_resolvers::opaque(path) {
-            return Err("VFS entry has no transferable content".into());
-        } else if remote::is_remote(path) {
-            if remote::stat(path)?.is_dir {
-                remote::download_dir(path, &remote::TransferOptions::default()).await?;
-            } else {
-                remote::ensure_downloaded(path, &remote::TransferOptions::default()).await?;
-            }
-            materialized.push(remote::cached_path(path)?);
-        } else if crate::plugins::vfs::handles(path) {
-            materialized.push(crate::plugins::vfs::materialize(path)?);
-        } else {
-            crate::plugins::mounts::reject_local(path)?;
-            materialized.push(path.clone());
-        }
-    }
-    let original_paths = paths;
+    let moving = !copy_requested
+        && paths.iter().all(|path| {
+            !remote::is_remote(path)
+                && crate::usbfs::route(path).is_none()
+                && !crate::plugins::vfs::handles(path)
+        });
+    let originals = paths.clone();
+    let materialized = tauri::async_runtime::spawn_blocking(move || {
+        crate::core::fs::export_for_external_drag(&paths)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let original_paths = originals;
     let paths = materialized;
     let label = window.label().to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let mut exported = Vec::new();
-        for path in &paths {
-            if let Some(route) = crate::usbfs::route(path) {
-                let entry = crate::usbfs::entry(&route)?;
-                if entry.is_dir {
-                    return Err(crate::i18n::t("虚拟卷文件夹请使用复制和粘贴").into());
-                }
-                moving &= !entry.readonly;
-                exported.push(crate::usbfs::open_cached(&route)?);
-            } else {
-                exported.push(path.clone());
-            }
-        }
+        exported.extend(paths.iter().cloned());
         app.state::<DragSessions>()
             .begin(&label, &original_paths, &exported, moving)?;
         if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {

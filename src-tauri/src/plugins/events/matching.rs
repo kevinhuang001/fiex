@@ -52,6 +52,9 @@ pub(super) fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
         .iter()
         .map(|resource| {
             json!({
+                "operations": crate::plugins::provider_registry::FsOperation::ALL.into_iter()
+                    .filter(|op| resource.operations.unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(&resource.display)).allows(*op))
+                    .map(|op| op.as_str()).collect::<Vec<_>>(),
                 "extension": resource.ext,
                 "mime": resource.mime,
                 "kind": if resource.is_dir { "directory" } else { "file" },

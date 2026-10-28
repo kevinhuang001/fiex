@@ -14,7 +14,8 @@ pub(crate) async fn list_directory(
         };
         return Ok(files::Listing {
             read_only: resolver.readonly(),
-            can_create: path == crate::core::volumes::applications::URI || crate::core::volumes::applications::is_user(&path),
+            can_create: path == crate::core::volumes::applications::URI
+                || crate::core::volumes::applications::is_user(&path),
             virtual_volume: true,
             path: path.clone(),
             entries: resolver.list(&path, &ctx)?,
@@ -93,34 +94,18 @@ pub(super) fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
 
 #[tauri::command]
 pub(crate) async fn read_preview(path: String) -> Result<String, String> {
-    if crate::core::volumes::applications::is_user(&path) {
-        let path = crate::core::volumes::applications::stored_path(&path)?;
-        return files::text_preview(&path.to_string_lossy());
-    }
-    if remote::is_remote(&path) {
-        let path = remote::ensure_downloaded(&path, &remote::TransferOptions::default()).await?;
-        return tauri::async_runtime::spawn_blocking(move || files::text_preview(&path))
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    if crate::plugins::vfs::handles(&path) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let bytes = crate::plugins::vfs::read_prefix(&path, 512 * 1024)?;
-            Ok(String::from_utf8_lossy(&bytes).into_owned())
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-    if let Some(route) = crate::usbfs::route(&path) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let bytes = crate::usbfs::read_path(&route)?;
-            Ok(String::from_utf8_lossy(&bytes[..bytes.len().min(512 * 1024)]).into_owned())
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-    tauri::async_runtime::spawn_blocking(move || files::text_preview(&path))
-        .await
-        .map_err(|e| e.to_string())?
+    let path = if volumes::applications::is_user(&path) {
+        volumes::applications::stored_path(&path)?
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        path
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let resource = crate::core::fs::trusted(&path, "core:preview")?;
+        let bytes = resource.preview_prefix(512 * 1024)?;
+        Ok(String::from_utf8_lossy(&bytes).into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
-

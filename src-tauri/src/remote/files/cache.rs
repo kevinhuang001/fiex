@@ -140,3 +140,34 @@ pub fn cached_path(path: &str) -> Result<String, String> {
     super::super::config::check_cache_path(&conn, &local)?;
     Ok(local.to_string_lossy().into_owned())
 }
+
+/// Resolve the provider's opaque ID, never a local download-cache path.
+pub(crate) fn adapter_node(
+    path: &str,
+) -> Result<(crate::plugins::resolvers::fs::Mount, String), String> {
+    let (conn, relative) = connection_for_path(path).ok_or("StaleRef: connection removed")?;
+    let plugin_id = ensure_provider_access(&conn)?;
+    let rel = rel_string(&relative);
+    if !rel.is_empty() {
+        stat(path)?;
+    }
+    let meta = load_meta(&conn);
+    let node = if rel.is_empty() {
+        String::new()
+    } else {
+        meta.files
+            .get(&rel)
+            .map(|entry| entry.node_id.clone())
+            .filter(|id| !id.is_empty())
+            .ok_or("StaleRef: provider node is unknown")?
+    };
+    Ok((
+        crate::plugins::resolvers::fs::Mount {
+            mount_id: conn.mount_id.clone(),
+            plugin_id,
+            source: crate::plugins::resolvers::fs::Source::Connection(provider_config(&conn)),
+            scope: None,
+        },
+        node,
+    ))
+}

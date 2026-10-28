@@ -6,7 +6,9 @@ pub(crate) async fn create_entry(
     name: String,
     state: tauri::State<'_, Operations>,
 ) -> Result<String, String> {
-    if path == crate::core::volumes::applications::URI || crate::core::volumes::applications::is_user(&path) {
+    if path == crate::core::volumes::applications::URI
+        || crate::core::volumes::applications::is_user(&path)
+    {
         return crate::core::volumes::applications::create_stored(&path, &name, true);
     }
     if !crate::plugins::vfs::handles(&path) {
@@ -78,7 +80,9 @@ pub(crate) async fn rename_entry(
 /// here and rely on the OS.
 #[tauri::command]
 pub(crate) async fn create_file_entry(path: String, name: String) -> Result<String, String> {
-    if path == crate::core::volumes::applications::URI || crate::core::volumes::applications::is_user(&path) {
+    if path == crate::core::volumes::applications::URI
+        || crate::core::volumes::applications::is_user(&path)
+    {
         return crate::core::volumes::applications::create_stored(&path, &name, false);
     }
     if !crate::plugins::vfs::handles(&path) {

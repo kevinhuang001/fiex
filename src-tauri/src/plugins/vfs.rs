@@ -200,6 +200,11 @@ pub fn stat(path: &str) -> Result<Entry, String> {
     bound_entry(&mount, &uri, &uri.relative, entry)
 }
 
+pub(crate) fn adapter_node(path: &str) -> Result<(Mount, String), String> {
+    let (uri, view, node_id) = node(path)?;
+    Ok((mount_for(&uri, &view), node_id))
+}
+
 /// Read at most `max_bytes` from the start of a file through a provider stream.
 pub fn read_prefix(path: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
     let (uri, view, node_id) = node(path)?;

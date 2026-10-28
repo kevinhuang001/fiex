@@ -74,14 +74,29 @@ impl Scope {
     pub fn restrict_to_metadata(&mut self) {
         self.metadata_only = true;
     }
-    pub fn restrict_to_readonly(&mut self) { self.read_only = true; }
+    pub fn restrict_to_readonly(&mut self) {
+        self.read_only = true;
+    }
     pub fn authorize_method(&self, method: &str) -> Result<(), String> {
-        if self.read_only && matches!(method, "host.fs.mkdir" | "host.fs.beginWrite" | "host.fs.writeChunk" | "host.fs.writeBuffer" | "host.fs.commit" | "host.fs.remove" | "host.fs.rename" | "host.process.run" | "host.vfs.openView") {
+        if self.read_only
+            && matches!(
+                method,
+                "fs.mkdir"
+                    | "fs.seekWrite"
+                    | "fs.beginWrite"
+                    | "fs.writeChunk"
+                    | "fs.writeBuffer"
+                    | "fs.commit"
+                    | "fs.remove"
+                    | "fs.rename"
+                    | "host.process.run"
+                    | "host.vfs.openView"
+            )
+        {
             return Err("PermissionDenied: view does not support writes".into());
         }
         if self.metadata_only
-            && ((method.starts_with("host.fs.")
-                && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
+            && ((method.starts_with("fs.") && !matches!(method, "fs.stat" | "fs.statBatch"))
                 || matches!(method, "host.process.run" | "host.vfs.openView"))
         {
             return Err("discovery scope permits metadata only".into());
@@ -157,11 +172,36 @@ impl Scope {
                     .lock()
                     .ok()?
                     .get(&key)
-                    .filter(|snapshot| crate::plugins::mounts::handles(&snapshot.display))
+                    .filter(|snapshot| {
+                        crate::plugins::mounts::handles(&snapshot.display)
+                            || crate::usbfs::route(&snapshot.display).is_some()
+                    })
                     .cloned()
             }));
         }
         Ok(None)
+    }
+    /// Resolve only identities already bound to this exact operation. A child
+    /// cannot use an arbitrary parent path to acquire a different mount/root.
+    pub fn reference_for_path(&self, path: &str) -> Result<Value, String> {
+        if let Some((key, _)) = self.references.iter().find(|(_, p)| p.as_str() == path) {
+            return serde_json::from_str(key).map_err(|e| e.to_string());
+        }
+        if let Some((key, _)) = self
+            .remote_resources
+            .iter()
+            .find(|(_, r)| r.display == path)
+        {
+            return serde_json::from_str(key).map_err(|e| e.to_string());
+        }
+        let issued = self
+            .issued
+            .lock()
+            .map_err(|_| "reference registry unavailable")?;
+        if let Some((key, _)) = issued.iter().find(|(_, r)| r.display == path) {
+            return serde_json::from_str(key).map_err(|e| e.to_string());
+        }
+        Err("ScopeDenied: parent directory is not bound".into())
     }
     pub fn metadata_reference(&self, reference: &Value) -> Result<Option<&Value>, String> {
         Ok(self.metadata_refs.get(&Self::ref_key(reference)?))
@@ -172,11 +212,13 @@ impl Scope {
             .get(&key)
             .cloned()
             .or_else(|| {
-                self.issued
-                    .lock()
-                    .ok()?
-                    .get(&key)
-                    .map(|snapshot| snapshot.display.clone())
+                self.issued.lock().ok()?.get(&key).map(|snapshot| {
+                    if crate::core::volumes::applications::is_user(&snapshot.display) {
+                        snapshot.local.to_string_lossy().into_owned()
+                    } else {
+                        snapshot.display.clone()
+                    }
+                })
             })
             .ok_or_else(|| "resource not authorized in this operation".into())
     }
@@ -201,6 +243,16 @@ impl Scope {
             {
                 return Err("child outside selected resource".into());
             }
+        } else if let Some(root) = crate::usbfs::route(&parent_path) {
+            let child = crate::usbfs::route(display).ok_or("invalid USB child")?;
+            if root.root != child.root
+                || !Path::new(&child.rel).starts_with(&root.rel)
+                || Path::new(&child.rel)
+                    .components()
+                    .any(|p| !matches!(p, Component::Normal(_)))
+            {
+                return Err("child outside selected USB resource".into());
+            }
         } else {
             self.authorize(display)?;
             if !Path::new(display).starts_with(&parent_path) {
@@ -219,9 +271,21 @@ impl Scope {
                     kind: "file".into(),
                     ..Default::default()
                 });
-        let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-            display, meta,
-        );
+        let mut snapshot =
+            crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                display, meta,
+            );
+        if parent["mountId"] == "core:applications" {
+            let uri = crate::core::volumes::applications::stored_uri(Path::new(display))?;
+            snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                &uri,
+                snapshot
+                    .metadata()
+                    .cloned()
+                    .ok_or("missing child metadata")?,
+            );
+            snapshot.local = PathBuf::from(display);
+        }
         let reference =
             serde_json::to_value(&snapshot.reference).map_err(|error| error.to_string())?;
         self.issued

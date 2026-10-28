@@ -2,9 +2,15 @@ use super::*;
 
 /// A connection without a filesystem contribution opens its plugin-owned view.
 pub(super) fn plugin_view_connection(conn: &StoredConnection) -> bool {
-    !crate::plugins::host::catalog().into_iter()
+    !crate::plugins::host::catalog()
+        .into_iter()
         .find(|plugin| plugin.id == conn.plugin_id)
-        .is_some_and(|plugin| plugin.extensions.get("vfs").is_some_and(serde_json::Value::is_object))
+        .is_some_and(|plugin| {
+            plugin
+                .extensions
+                .get("vfs")
+                .is_some_and(serde_json::Value::is_object)
+        })
 }
 
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
@@ -184,4 +190,3 @@ pub fn remove_connection(id: &str) -> Result<(), String> {
     }
     Ok(())
 }
-

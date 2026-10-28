@@ -15,6 +15,9 @@ use crate::plugins::provider_registry::FsOperation;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FileCapabilities {
+    pub list: bool,
+    pub stat: bool,
+    pub search: bool,
     pub read: bool,
     pub write: bool,
     pub create: bool,
@@ -24,6 +27,9 @@ pub struct FileCapabilities {
 
 impl FileCapabilities {
     pub const ALL: Self = Self {
+        list: true,
+        stat: true,
+        search: true,
         read: true,
         write: true,
         create: true,
@@ -32,6 +38,9 @@ impl FileCapabilities {
     };
 
     pub const READ_ONLY: Self = Self {
+        list: true,
+        stat: true,
+        search: true,
         read: true,
         write: false,
         create: false,
@@ -41,6 +50,9 @@ impl FileCapabilities {
 
     pub fn intersect(self, other: Self) -> Self {
         Self {
+            list: self.list && other.list,
+            stat: self.stat && other.stat,
+            search: self.search && other.search,
             read: self.read && other.read,
             write: self.write && other.write,
             create: self.create && other.create,
@@ -49,12 +61,13 @@ impl FileCapabilities {
         }
     }
 
-    /// Capability behind a protocol operation. Enumeration/read share `read`.
+    /// Each protocol operation has an independent capability.
     pub fn allows(self, operation: FsOperation) -> bool {
         match operation {
-            FsOperation::List | FsOperation::Stat | FsOperation::Read | FsOperation::Search => {
-                self.read
-            }
+            FsOperation::List => self.list,
+            FsOperation::Stat => self.stat,
+            FsOperation::Search => self.search,
+            FsOperation::Read => self.read,
             FsOperation::Write => self.write,
             FsOperation::Mkdir => self.create,
             FsOperation::Rename => self.rename,
@@ -88,38 +101,71 @@ fn node_entry(path: &str) -> Result<Entry, String> {
 fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
     let allows = |operation: FsOperation| {
         declared.contains(&operation)
-            && (entry.allowed_ops.is_empty()
-                || entry
-                    .allowed_ops
-                    .iter()
-                    .any(|value| value == operation.as_str()))
+            && entry
+                .allowed_ops
+                .iter()
+                .any(|value| value == operation.as_str())
     };
-    let readonly = entry.readonly;
     FileCapabilities {
+        list: allows(FsOperation::List),
+        stat: allows(FsOperation::Stat),
+        search: allows(FsOperation::Search),
         read: allows(FsOperation::Read),
-        write: !readonly && allows(FsOperation::Write),
-        create: entry.is_dir && !readonly && allows(FsOperation::Mkdir),
-        rename: !readonly && allows(FsOperation::Rename),
-        remove: !readonly && allows(FsOperation::Remove),
+        write: allows(FsOperation::Write),
+        create: entry.is_dir && allows(FsOperation::Mkdir),
+        rename: allows(FsOperation::Rename),
+        remove: allows(FsOperation::Remove),
     }
 }
 
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         let declared = crate::core::volumes::virtual_resolvers::resolver_for(path)
-            .map(|provider| provider.operations(path).into_iter().filter_map(FsOperation::parse).collect::<Vec<_>>())
+            .map(|provider| {
+                provider
+                    .operations(path)
+                    .into_iter()
+                    .filter_map(FsOperation::parse)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         return from_entry(&declared, entry);
     }
-    if crate::core::volumes::virtual_resolvers::resolver_for(path).is_some_and(|p| p.id() == "core:trash") {
-        return FileCapabilities { remove: true, ..FileCapabilities::default() };
+    if crate::core::volumes::virtual_resolvers::resolver_for(path)
+        .is_some_and(|p| p.id() == "core:trash")
+    {
+        return FileCapabilities {
+            remove: true,
+            ..FileCapabilities::default()
+        };
     }
-    if crate::usbfs::route(path).is_some() {
-        return if entry.readonly { FileCapabilities::READ_ONLY } else { FileCapabilities::ALL };
+    if let Some(route) = crate::usbfs::route(path) {
+        let writable = matches!(
+            route.kind,
+            crate::usbfs::FsKind::Ntfs | crate::usbfs::FsKind::Ext4
+        ) && crate::usbfs::ensure_access(&route).is_ok()
+            && std::fs::OpenOptions::new()
+                .write(true)
+                .open(&route.driver_device)
+                .is_ok();
+        return FileCapabilities {
+            list: entry.is_dir,
+            stat: true,
+            search: entry.is_dir,
+            read: !entry.is_dir,
+            write: writable && !entry.is_dir,
+            create: writable && entry.is_dir,
+            rename: writable && !route.rel.is_empty(),
+            remove: writable && !route.rel.is_empty(),
+        };
     }
     if !crate::plugins::mounts::handles(path) {
-        return FileCapabilities { write: !entry.readonly, create: !entry.readonly,
-            remove: !cfg!(windows) || !entry.readonly, ..FileCapabilities::ALL };
+        return FileCapabilities {
+            write: !entry.readonly,
+            create: !entry.readonly,
+            remove: !cfg!(windows) || !entry.readonly,
+            ..FileCapabilities::ALL
+        };
     }
     declared_operations(path)
         .map(|declared| from_entry(&declared, entry))
@@ -129,19 +175,28 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
 /// Capabilities of a single path. Local paths are unrestricted; a mount is the
 /// provider's declared operations narrowed by the node's entry.
 pub fn for_path(path: &str) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::resolver_for(path).is_some_and(|p| p.id() == "core:trash") {
-        return FileCapabilities { remove: true, ..FileCapabilities::default() };
+    if crate::core::volumes::virtual_resolvers::resolver_for(path)
+        .is_some_and(|p| p.id() == "core:trash")
+    {
+        return FileCapabilities {
+            remove: true,
+            ..FileCapabilities::default()
+        };
     }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         return crate::core::volumes::virtual_resolvers::resource_entry(path)
-            .map(|entry| for_entry(path, &entry)).unwrap_or_default();
+            .map(|entry| for_entry(path, &entry))
+            .unwrap_or_default();
     }
     if let Some(route) = crate::usbfs::route(path) {
-        return crate::usbfs::entry(&route).map(|entry| for_entry(path, &entry)).unwrap_or_default();
+        return crate::usbfs::entry(&route)
+            .map(|entry| for_entry(path, &entry))
+            .unwrap_or_default();
     }
     if !crate::plugins::mounts::handles(path) {
         return crate::core::files::entry(std::path::Path::new(path))
-            .map(|entry| for_entry(path, &entry)).unwrap_or(FileCapabilities::ALL);
+            .map(|entry| for_entry(path, &entry))
+            .unwrap_or_default();
     }
     let Some(declared) = declared_operations(path) else {
         return FileCapabilities::default();
@@ -212,12 +267,20 @@ mod tests {
     }
 
     #[test]
-    fn local_paths_are_unrestricted() {
-        assert_eq!(for_path("/tmp/example"), FileCapabilities::ALL);
+    fn absent_paths_fail_closed() {
+        assert_eq!(
+            for_path("/fiex-absent-capability-test/example"),
+            FileCapabilities::default()
+        );
         let local = entry("/tmp/example", &[], true);
         assert_eq!(
             for_selection(&["/tmp/example".into()], &[local]),
-            FileCapabilities { write: false, create: false, remove: !cfg!(windows), ..FileCapabilities::ALL }
+            FileCapabilities {
+                write: false,
+                create: false,
+                remove: !cfg!(windows),
+                ..FileCapabilities::ALL
+            }
         );
     }
 
@@ -233,17 +296,17 @@ mod tests {
     fn declared_operations_are_narrowed_by_the_node() {
         let declared = [FsOperation::Read, FsOperation::Rename, FsOperation::Remove];
         let narrowed = from_entry(&declared, &entry("/m/a", &["read"], false));
-        assert_eq!(narrowed, FileCapabilities::READ_ONLY);
+        assert!(narrowed.read);
+        assert!(!narrowed.stat && !narrowed.list && !narrowed.search);
         let removable = from_entry(&declared, &entry("/m/a", &["read", "remove"], false));
         assert!(removable.read && removable.remove);
         assert!(!removable.rename && !removable.create);
-        // `readonly` wins over a permissive `allowedOps`.
-        let locked = from_entry(&declared, &entry("/m/a", &[], true));
-        assert!(locked.read);
-        assert!(!locked.remove && !locked.rename && !locked.write && !locked.create);
-        // No `allowedOps` means the node does not narrow the provider.
-        let unrestricted = from_entry(&declared, &entry("/m/a", &[], false));
-        assert!(unrestricted.remove && unrestricted.rename);
+        // Empty explicitly means no operations, even when the provider is broad.
+        let empty = from_entry(&declared, &entry("/m/a", &[], false));
+        assert_eq!(empty, FileCapabilities::default());
+        // READONLY does not replace per-operation parent/server permissions.
+        let readonly = from_entry(&declared, &entry("/m/a", &["remove"], true));
+        assert!(readonly.remove && !readonly.read);
     }
 
     #[test]
@@ -266,8 +329,8 @@ mod tests {
             .allows(FsOperation::Remove));
         // Local paths keep the selection unrestricted when entries are empty.
         assert_eq!(
-            for_selection(&["/tmp/a".into()], &[]),
-            FileCapabilities::ALL
+            for_selection(&["/fiex-absent-capability-test/a".into()], &[]),
+            FileCapabilities::default()
         );
         let error = require_selection(
             &["fiex://mount/test-capability-missing/a".into()],

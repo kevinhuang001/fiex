@@ -24,11 +24,18 @@ pub fn query_with_plugins(
         .iter()
         .map(|e| {
             crate::plugins::resource::resource_context::ResourceSnapshot::from_entry(
-                &e.path, &crate::core::files::Entry {
-                    path: e.path.clone(), name: e.name.clone(), is_dir: e.is_dir,
-                    extension: e.extension.clone(), mime: e.mime.clone(), readonly: e.readonly,
-                    allowed_ops: e.allowed_ops.clone(), ..Default::default()
-                })
+                &e.path,
+                &crate::core::files::Entry {
+                    path: e.path.clone(),
+                    name: e.name.clone(),
+                    is_dir: e.is_dir,
+                    extension: e.extension.clone(),
+                    mime: e.mime.clone(),
+                    readonly: e.readonly,
+                    allowed_ops: e.allowed_ops.clone(),
+                    ..Default::default()
+                },
+            )
         })
         .collect::<Vec<_>>();
     let metadata = resources
@@ -71,10 +78,15 @@ pub fn query_with_plugins(
             if let Some(items) = response["decorations"].as_array_mut() {
                 for item in items {
                     if let Some(reference) = item.get("ref") {
-                        let resource = resources.iter().find(|resource| serde_json::to_value(&resource.reference).ok().as_ref() == Some(reference));
+                        let resource = resources.iter().find(|resource| {
+                            serde_json::to_value(&resource.reference).ok().as_ref()
+                                == Some(reference)
+                        });
                         if let Some(resource) = resource {
                             item["path"] = json!(resource.display);
-                            if let Some(object) = item.as_object_mut() { object.remove("name"); }
+                            if let Some(object) = item.as_object_mut() {
+                                object.remove("name");
+                            }
                         } else {
                             *item = json!({});
                         }

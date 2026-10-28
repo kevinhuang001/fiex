@@ -9,9 +9,11 @@ mod util;
 mod write;
 
 pub use mount::{detect, eject, ensure_access, probe};
-pub use tree::{copy_to_local, entry, list, listing, read, read_path, search};
+pub use tree::{
+    copy_file_to, copy_to_local, entry, list, listing, read, read_at, read_path, search,
+};
 pub use util::{route, virtual_root, FsKind, Route, UsbEntry};
-pub use write::{copy_local_into, create, open_cached, remove, rename, write, write_path};
+pub use write::{commit_staged, create, open_cached, remove, rename, write, write_path};
 
 #[cfg(test)]
 mod tests {
@@ -186,5 +188,3 @@ mod tests {
         remove(&renamed).unwrap();
     }
 }
-
-pub mod transfers;

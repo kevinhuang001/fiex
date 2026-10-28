@@ -20,6 +20,7 @@ pub fn is_protected_method(method: &str) -> bool {
     event(method).is_some()
         || [
             "host.",
+            "fs.",
             "core.",
             "plugin.",
             "contextMenu.",

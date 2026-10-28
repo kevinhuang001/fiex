@@ -24,7 +24,11 @@ fn entry(name: String, path: String, extension: &str, modified: u64, readonly: b
         mime: "application/x-fiex-application".into(),
         readonly: false,
         link_target: None,
-        allowed_ops: if readonly { vec!["stat".into()] } else { vec!["stat".into(), "remove".into()] },
+        allowed_ops: if readonly {
+            vec!["stat".into()]
+        } else {
+            vec!["stat".into(), "remove".into()]
+        },
         tags: vec![],
         has_cache: false,
         pinned: false,
@@ -62,22 +66,38 @@ fn user_dir() -> PathBuf {
 pub fn stored_path(uri: &str) -> Result<PathBuf, String> {
     std::fs::create_dir_all(user_dir()).map_err(|e| e.to_string())?;
     let root = dunce::canonicalize(user_dir()).map_err(|e| e.to_string())?;
-    if uri == URI { return Ok(root); }
-    let relative = decode(uri.strip_prefix(USER_PREFIX).ok_or("not a stored application")?)?;
-    if relative.is_empty() || relative.contains(['\\', ':', '\0']) ||
-        Path::new(&relative).components().any(|part| !matches!(part, std::path::Component::Normal(_))) {
+    if uri == URI {
+        return Ok(root);
+    }
+    let relative = decode(
+        uri.strip_prefix(USER_PREFIX)
+            .ok_or("not a stored application")?,
+    )?;
+    if relative.is_empty()
+        || relative.contains(['\\', ':', '\0'])
+        || Path::new(&relative)
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
         return Err("invalid application store path".into());
     }
     let target = root.join(relative);
     let canonical = dunce::canonicalize(&target).map_err(|e| e.to_string())?;
-    if !canonical.starts_with(&root) || canonical == root { return Err("application store escape".into()); }
+    if !canonical.starts_with(&root) || canonical == root {
+        return Err("application store escape".into());
+    }
     Ok(canonical)
 }
 
 pub fn stored_uri(path: &Path) -> Result<String, String> {
     let root = dunce::canonicalize(user_dir()).map_err(|e| e.to_string())?;
-    let rel = path.strip_prefix(root).map_err(|_| "not in application store")?;
-    Ok(format!("{USER_PREFIX}{}", encode(&rel.to_string_lossy().replace('\\', "/"))))
+    let rel = path
+        .strip_prefix(root)
+        .map_err(|_| "not in application store")?;
+    Ok(format!(
+        "{USER_PREFIX}{}",
+        encode(&rel.to_string_lossy().replace('\\', "/"))
+    ))
 }
 
 pub fn stored_entry(uri: &str) -> Result<Entry, String> {
@@ -85,13 +105,25 @@ pub fn stored_entry(uri: &str) -> Result<Entry, String> {
     let mut item = crate::core::files::entry(&path)?;
     item.path = uri.into();
     item.link_target = Some(path.to_string_lossy().into_owned());
-    if !item.is_dir { item.mime = "application/x-fiex-application".into(); }
-    item.allowed_ops = vec!["stat".into(), "list".into(), "read".into(), "write".into(), "mkdir".into(), "rename".into(), "remove".into()];
+    if !item.is_dir {
+        item.mime = "application/x-fiex-application".into();
+    }
+    item.allowed_ops = vec![
+        "stat".into(),
+        "list".into(),
+        "read".into(),
+        "write".into(),
+        "mkdir".into(),
+        "rename".into(),
+        "remove".into(),
+    ];
     Ok(item)
 }
 
 pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
-    if uri == URI { return list(); }
+    if uri == URI {
+        return list();
+    }
     list_stored(&stored_path(uri)?)
 }
 
@@ -101,20 +133,32 @@ fn list_stored(dir: &Path) -> Result<Vec<Entry>, String> {
         let path = item.map_err(|e| e.to_string())?.path();
         let uri = stored_uri(&path)?;
         // Escaping symlinks are omitted instead of granting host content.
-        if let Ok(item) = stored_entry(&uri) { result.push(item); }
+        if let Ok(item) = stored_entry(&uri) {
+            result.push(item);
+        }
     }
     result.sort_by_key(|item| item.name.to_lowercase());
     Ok(result)
 }
 fn list_user() -> Vec<Entry> {
-    stored_path(URI).ok().and_then(|root| list_stored(&root).ok()).unwrap_or_default()
+    stored_path(URI)
+        .ok()
+        .and_then(|root| list_stored(&root).ok())
+        .unwrap_or_default()
 }
 
 pub fn create_stored(parent: &str, name: &str, folder: bool) -> Result<String, String> {
     crate::core::files::validate_name(name)?;
     let target = stored_path(parent)?.join(name);
-    if folder { std::fs::create_dir(&target).map_err(|e| e.to_string())?; }
-    else { std::fs::OpenOptions::new().write(true).create_new(true).open(&target).map_err(|e| e.to_string())?; }
+    if folder {
+        std::fs::create_dir(&target).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map_err(|e| e.to_string())?;
+    }
     stored_uri(&target)
 }
 
@@ -122,7 +166,9 @@ pub fn rename_stored(uri: &str, name: &str) -> Result<String, String> {
     crate::core::files::validate_name(name)?;
     let source = stored_path(uri)?;
     let target = source.with_file_name(name);
-    if target.exists() { return Err(crate::i18n::t("同名项目已存在，请更换名称").into()); }
+    if target.exists() {
+        return Err(crate::i18n::t("同名项目已存在，请更换名称").into());
+    }
     std::fs::rename(&source, &target).map_err(|e| e.to_string())?;
     stored_uri(&target)
 }
@@ -180,9 +226,16 @@ pub fn import(paths: &[String]) -> crate::core::operations::OperationResult {
 }
 
 pub fn remove_user(uri: &str) -> Result<(), String> {
-    if !is_user(uri) { return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into()); }
+    if !is_user(uri) {
+        return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
+    }
     let target = stored_path(uri)?;
-    if target.is_dir() { std::fs::remove_dir_all(target) } else { std::fs::remove_file(target) }.map_err(|e| e.to_string())
+    if target.is_dir() {
+        std::fs::remove_dir_all(target)
+    } else {
+        std::fs::remove_file(target)
+    }
+    .map_err(|e| e.to_string())
 }
 
 fn open_stored(path: &Path) -> Result<(), String> {
@@ -608,6 +661,7 @@ fn platform_open(_encoded: &str) -> Result<(), String> {
 
 /// Render a real application bundle or shortcut icon into a PNG the asset
 /// protocol can show. Core decorations use this only for system-owned apps.
+#[cfg(feature = "desktop")]
 pub fn cached_icon(source: &str) -> Option<String> {
     let path = Path::new(source);
     if !source.starts_with("shell:AppsFolder\\") && !path.exists() {
@@ -616,8 +670,12 @@ pub fn cached_icon(source: &str) -> Option<String> {
     let cache = dirs::home_dir()?.join(".fiex").join("app-icons");
     std::fs::create_dir_all(&cache).ok()?;
     use sha2::{Digest, Sha256};
-    let stamp = std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|t| t.as_secs()).unwrap_or(0);
+    let stamp = std::fs::metadata(path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|t| t.as_secs())
+        .unwrap_or(0);
     let digest = Sha256::digest(format!("v2:{source}:{stamp}").as_bytes());
     let target = cache.join(format!("{}.png", hex::encode(&digest[..12])));
     if target.exists() {
@@ -642,6 +700,11 @@ pub fn cached_icon(source: &str) -> Option<String> {
     let image = image::RgbaImage::from_raw(icon.width, icon.height, icon.pixels)?;
     image.save(&target).ok()?;
     Some(target.to_string_lossy().into_owned())
+}
+
+#[cfg(not(feature = "desktop"))]
+pub fn cached_icon(_source: &str) -> Option<String> {
+    None
 }
 
 fn encode(value: &str) -> String {
@@ -686,4 +749,3 @@ mod tests {
         assert_eq!(desktop_entry(&file), Some(("Link".into(), false, false)));
     }
 }
-

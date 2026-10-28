@@ -140,8 +140,17 @@ fn expired_sessions_and_disabled_actions_are_rejected() {
 }
 #[test]
 fn trash_group_and_multi_selection_are_provider_owned() {
-    let ctx =
-        super::builtin::Context::for_test("/trash", vec!["/trash/a".into()], vec![], false, true);
+    let ctx = super::builtin::Context::for_test_caps(
+        "/trash",
+        vec!["/trash/a".into()],
+        vec![],
+        false,
+        true,
+        crate::plugins::resource::file_capabilities::FileCapabilities {
+            remove: true,
+            ..Default::default()
+        },
+    );
     let result = super::builtin::resolve("builtin:trash", &ctx).unwrap();
     assert_eq!(result["items"][0]["id"], "restore");
     assert_eq!(result["items"][0]["placement"], "tail");
@@ -310,10 +319,13 @@ fn create_capability_never_adds_a_menu_group() {
     // Folder creation is toolbar-only; the menu must not grow an entry for it.
     let capabilities = crate::plugins::resource::file_capabilities::FileCapabilities {
         read: true,
+        stat: true,
+        list: true,
         write: true,
         create: true,
         rename: true,
         remove: false,
+        ..Default::default()
     };
     let ctx = mount_selection(
         "fiex://mount/gating-mount/a.txt",
@@ -331,7 +343,7 @@ fn create_capability_never_adds_a_menu_group() {
     );
     let clipboard = super::builtin::resolve("builtin:clipboard", &ctx).unwrap();
     let items = clipboard["items"].as_array().unwrap();
-    for id in ["copy", "cut", "duplicate"] {
+    for id in ["copy", "duplicate"] {
         assert!(items.iter().any(|item| item["id"] == id), "{id}");
     }
     assert_never_disabled(&ctx);

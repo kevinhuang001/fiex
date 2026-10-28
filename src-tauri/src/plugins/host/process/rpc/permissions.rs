@@ -134,23 +134,6 @@ impl Running {
         self.refuse(capability, decision)
     }
 
-    pub(super) fn require_writer(&self, owner: &str, handle: &str) -> Result<(), String> {
-        let permission = crate::plugins::resource::fs_access::writer_permission(owner, handle)?;
-        let capability = Capability::from_name(permission)
-            .ok_or_else(|| "unknown write capability".to_string())?;
-        self.require_permission(capability)
-    }
-
-    pub(super) fn ensure_fs(
-        &self,
-        scope: &crate::plugins::resource::fs_access::Scope,
-        capability: crate::plugins::security::policy::Capability,
-        path: &str,
-    ) -> Result<(), String> {
-        scope.authorize(path)?;
-        self.ensure_permission(capability)
-    }
-
     pub(super) fn ensure_network_target(&self, host: &str) -> Result<(), String> {
         use crate::plugins::security::policy::Capability;
         let host = crate::plugins::security::permissions::normalize_domain(host)?;

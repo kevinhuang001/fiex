@@ -1,6 +1,5 @@
 //! Recently opened files, persisted so the sidebar's Recent location survives
-//! restarts. Only local, regular files are tracked: remote downloads and disk
-//! image caches have no meaningful path for the user to return to.
+//! restarts. Store source identities, never downloaded cache paths.
 use crate::core::files::{entry, Entry};
 use std::{
     fs,
@@ -40,10 +39,18 @@ fn save(list: &[String]) {
 }
 
 pub fn record(state: &Recent, path: &str) {
-    if path.starts_with("remote://") || path.contains("://") || path.starts_with("recent://") {
+    if crate::core::volumes::virtual_resolvers::opaque(path) {
         return;
     }
-    if !Path::new(path).is_file() {
+    if crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path).map_or(
+        true,
+        |resource| {
+            resource.is_dir
+                || (!crate::plugins::mounts::handles(path)
+                    && crate::usbfs::route(path).is_none()
+                    && resource.stat.is_none())
+        },
+    ) {
         return;
     }
     let mut list = state.0.lock().unwrap();
@@ -59,7 +66,18 @@ pub fn entries(state: &Recent) -> Vec<Entry> {
         .lock()
         .unwrap()
         .iter()
-        .filter_map(|path| entry(Path::new(path)).ok())
+        .filter_map(|path| {
+            if crate::remote::is_remote(path) {
+                crate::remote::stat(path)
+            } else if crate::plugins::vfs::handles(path) {
+                crate::plugins::vfs::stat(path)
+            } else if let Some(route) = crate::usbfs::route(path) {
+                crate::usbfs::entry(&route)
+            } else {
+                entry(Path::new(path))
+            }
+            .ok()
+        })
         .filter(|entry| !entry.is_dir)
         .collect()
 }

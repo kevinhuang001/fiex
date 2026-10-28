@@ -23,14 +23,27 @@ pub(super) fn relative(root: &Scope, input: &str) -> Result<PathBuf, String> {
         let resolved = match root.dir.canonicalize(&path) {
             Ok(path) => path,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                let parent = path
-                    .parent()
-                    .filter(|p| !p.as_os_str().is_empty())
-                    .unwrap_or(Path::new("."));
-                root.dir
-                    .canonicalize(parent)
-                    .map_err(|e| e.to_string())?
-                    .join(path.file_name().ok_or("invalid selected path")?)
+                // A planned directory copy can authorize descendants before
+                // their parents are created. Resolve the nearest existing
+                // ancestor through the directory capability, then append only
+                // normal path components from the absent tail.
+                let mut ancestor = path.as_path();
+                let mut missing = Vec::new();
+                loop {
+                    match root.dir.canonicalize(ancestor) {
+                        Ok(base) => {
+                            break missing
+                                .into_iter()
+                                .rev()
+                                .fold(base, |base: PathBuf, name| base.join(name))
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                            missing.push(ancestor.file_name().ok_or("invalid selected path")?);
+                            ancestor = ancestor.parent().unwrap_or(Path::new("."));
+                        }
+                        Err(e) => return Err(e.to_string()),
+                    }
+                }
             }
             Err(error) => return Err(error.to_string()),
         };

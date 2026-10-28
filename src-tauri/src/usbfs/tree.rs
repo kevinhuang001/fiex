@@ -6,7 +6,9 @@ use super::write::remove;
 use std::path::{Path, PathBuf};
 
 mod drivers;
+mod stream;
 use drivers::*;
+pub use stream::{copy_file_to, read_at};
 
 pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, String> {
     if !Path::new(device).exists() {
@@ -69,6 +71,16 @@ pub fn listing(route: &Route) -> Result<Vec<crate::core::files::Entry>, String> 
 }
 
 pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
+    if route.rel.is_empty() {
+        ensure_access(route)?;
+        return Ok(crate::core::files::Entry {
+            path: route.root.clone(),
+            name: "USB".into(),
+            is_dir: true,
+            readonly: matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs),
+            ..Default::default()
+        });
+    }
     let (parent, name) = route
         .rel
         .rsplit_once('/')
@@ -156,11 +168,12 @@ fn copy_route(source: &Route, target: &Path) -> Result<(), String> {
                 copy_route(&child_route, &target.join(child.name))?;
             }
         } else {
-            let data = read(&source.driver_device, source.kind, &source.rel)?;
             if let Some(parent) = target.parent() {
                 std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
             }
-            std::fs::write(target, data).map_err(|error| error.to_string())?;
+            let mut output = std::fs::File::create(target).map_err(|e| e.to_string())?;
+            copy_file_to(source, &mut output)?;
+            output.sync_all().map_err(|e| e.to_string())?;
         }
         Ok(())
     } else {

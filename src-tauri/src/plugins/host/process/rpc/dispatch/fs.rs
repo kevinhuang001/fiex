@@ -1,194 +1,132 @@
-//! Filesystem host methods. Every arm validates the operation scope first and
-//! only then asks the permission layer, so an out-of-scope path never prompts.
-use super::Context;
-use crate::plugins::security::policy::Capability;
+//! Ref-only Feature → Core service. Scope is validated before any permission
+//! dialog; every storage operation then goes through the ResourceBroker.
+use super::{refs, Context};
+use crate::{
+    core::fs::{self, ResourceBroker},
+    plugins::{provider_registry::FsOperation, security::policy::Capability},
+};
 use serde_json::{json, Value};
 
 pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     let owner = ctx.owner();
-    match ctx.method {
-        "host.fs.readChunk" => {
-            let path = ctx.arg("path")?;
-            ctx.running
-                .ensure_fs(&ctx.scope()?, Capability::FilesRead, &path)?;
-            crate::plugins::resource::fs_access::read_chunk(
-                &ctx.scope()?,
-                &path,
-                ctx.params
-                    .get("offset")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0),
-                ctx.params
-                    .get("length")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(262144) as usize,
-            )
-        }
-        "host.fs.openRead" => {
-            let path = ctx.arg("path")?;
-            ctx.running
-                .ensure_fs(&ctx.scope()?, Capability::FilesRead, &path)?;
-            crate::plugins::resource::fs_access::open_read(&owner, &ctx.scope()?, &path)
-        }
-        "host.fs.readOpen" => {
-            ctx.running.require_permission(Capability::FilesRead)?;
-            crate::plugins::resource::fs_access::read_open(
-                &owner,
-                &ctx.arg("handle")?,
-                ctx.params
-                    .get("offset")
-                    .and_then(Value::as_u64)
-                    .ok_or("missing offset")?,
-                ctx.params
-                    .get("length")
-                    .and_then(Value::as_u64)
-                    .ok_or("missing length")?
-                    .try_into()
-                    .map_err(|_| "invalid length")?,
-                ctx.params.get("buffer").and_then(Value::as_str),
-            )
-        }
-        "host.fs.closeRead" => {
-            crate::plugins::resource::fs_access::close_read(&owner, &ctx.arg("handle")?)?;
-            Ok(Value::Null)
-        }
-        "host.fs.mkdir" => {
-            let path = ctx.arg("path")?;
-            ctx.running
-                .ensure_fs(&ctx.scope()?, Capability::FoldersCreate, &path)?;
-            crate::plugins::resource::fs_access::mkdir(&ctx.scope()?, &path)
-        }
-        "host.fs.beginWrite" => {
-            let path = ctx.arg("path")?;
-            let create = ctx
-                .params
-                .get("create")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            ctx.running.ensure_fs(
-                &ctx.scope()?,
-                if create {
-                    Capability::FilesCreate
-                } else {
-                    Capability::FilesWrite
-                },
-                &path,
+    if matches!(
+        ctx.method,
+        "fs.readOpen"
+            | "fs.closeRead"
+            | "fs.seekWrite"
+            | "fs.writeChunk"
+            | "fs.writeBuffer"
+            | "fs.commit"
+            | "fs.abort"
+    ) {
+        // Look up the actor-bound handle before inspecting grants. Guessing a
+        // handle owned by another task can never cause an authorization prompt.
+        let permission = fs::stream_permission(&owner, &ctx.arg("handle")?)?;
+        if !matches!(ctx.method, "fs.closeRead" | "fs.abort") {
+            ctx.running.require_permission(
+                Capability::from_name(permission).ok_or("invalid stream permission")?,
             )?;
-            Ok(json!(crate::plugins::resource::fs_access::begin_write(
-                &owner,
-                &ctx.scope()?,
-                &path,
-                create
-            )?))
         }
-        "host.fs.seekWrite" => {
-            let handle = ctx.arg("handle")?;
-            ctx.running.require_writer(&owner, &handle)?;
-            Ok(json!(crate::plugins::resource::fs_access::seek_write(
-                &owner,
-                &handle,
-                &ctx.arg("kind")?,
-                ctx.params
-                    .get("offset")
-                    .and_then(Value::as_i64)
-                    .ok_or("missing seek offset")?
-            )?))
+        return fs::stream_call(&owner, ctx.method, ctx.params);
+    }
+    let scope = ctx.scope()?;
+    let reference = ctx.params.get("ref").ok_or("missing ResourceRef")?;
+    // Metadata-only discovery may project a captured target without exposing
+    // a local path or opening a storage stream.
+    if ctx.method == "fs.stat"
+        && scope.resolve_reference(reference).is_err()
+        && scope.remote_target(&json!({"ref":reference}))?.is_none()
+    {
+        if let Some(metadata) = scope.metadata_reference(reference)? {
+            ctx.running.ensure_permission(Capability::Metadata)?;
+            return Ok(refs::metadata(metadata));
         }
-        "host.fs.writeChunk" => {
-            let handle = ctx.arg("handle")?;
-            ctx.running.require_writer(&owner, &handle)?;
-            crate::plugins::resource::fs_access::write_chunk(&owner, &handle, &ctx.arg("base64")?)?;
-            Ok(Value::Null)
-        }
-        "host.fs.writeBuffer" => {
-            let handle = ctx.arg("handle")?;
-            ctx.running.require_writer(&owner, &handle)?;
-            crate::plugins::resource::fs_access::write_buffer(
-                &owner,
-                &handle,
-                &ctx.arg("buffer")?,
-                ctx.params
-                    .get("size")
-                    .and_then(Value::as_u64)
-                    .ok_or("missing size")?
-                    .try_into()
-                    .map_err(|_| "invalid size")?,
-            )?;
-            Ok(Value::Null)
-        }
-        "host.fs.commit" => {
-            let handle = ctx.arg("handle")?;
-            ctx.running.require_writer(&owner, &handle)?;
-            crate::plugins::resource::fs_access::commit(&owner, &handle)
-        }
-        "host.fs.abort" => {
-            crate::plugins::resource::fs_access::abort(&owner, &ctx.arg("handle")?)?;
-            Ok(Value::Null)
-        }
-        "host.fs.list" => {
-            let path = ctx
-                .params
-                .get("path")
-                .and_then(Value::as_str)
-                .unwrap_or(".");
-            ctx.running
-                .ensure_fs(&ctx.scope()?, Capability::FoldersRead, path)?;
-            crate::plugins::resource::fs_access::list(&ctx.scope()?, path)
-        }
-        "host.fs.stat" => {
-            let path = ctx.arg("path")?;
-            ctx.running
-                .ensure_fs(&ctx.scope()?, Capability::Metadata, &path)?;
-            crate::plugins::resource::fs_access::stat(&ctx.scope()?, &path)
-        }
-        "host.fs.statBatch" => {
-            let paths = ctx
-                .params
-                .get("paths")
-                .and_then(Value::as_array)
-                .ok_or("missing paths")?;
-            let scope = ctx.scope()?;
-            // Scope is checked per entry. A batch that only contains
-            // out-of-scope paths must fail without a permission dialog.
-            let in_scope = paths.iter().any(|value| {
-                value
-                    .as_str()
-                    .is_some_and(|path| scope.authorize(path).is_ok())
-            });
-            if in_scope {
-                ctx.running.ensure_permission(Capability::Metadata)?;
-            }
-            crate::plugins::resource::fs_access::stat_batch(&scope, paths)
-        }
-        "host.fs.remove" => {
-            let path = ctx.arg("path")?;
-            let scope = ctx.scope()?;
-            // Scope first: an out-of-scope path is never shown in a prompt.
-            scope.authorize(&path)?;
-            let capability = if crate::plugins::resource::fs_access::is_directory(&scope, &path)? {
+    }
+    let resource = ResourceBroker::resolve(&scope, &owner, reference)?;
+    let create = ctx.params["create"].as_bool().unwrap_or(false);
+    let (op, permission) = match ctx.method {
+        "fs.stat" => (FsOperation::Stat, Capability::Metadata),
+        "fs.list" => (FsOperation::List, Capability::FoldersRead),
+        "fs.openRead" | "fs.readChunk" => (FsOperation::Read, Capability::FilesRead),
+        "fs.beginWrite" => (
+            FsOperation::Write,
+            if create {
+                Capability::FilesCreate
+            } else {
+                Capability::FilesWrite
+            },
+        ),
+        "fs.mkdir" => (FsOperation::Mkdir, Capability::FoldersCreate),
+        "fs.remove" => (
+            FsOperation::Remove,
+            if resource.is_dir()? {
                 Capability::FoldersDelete
             } else {
                 Capability::FilesDelete
-            };
-            ctx.running.ensure_permission(capability)?;
-            crate::plugins::resource::fs_access::remove(&scope, &path)?;
-            Ok(Value::Null)
-        }
-        "host.fs.rename" => {
-            let from = ctx.arg("from")?;
-            let to = ctx.arg("to")?;
-            let scope = ctx.scope()?;
-            scope.authorize(&from)?;
-            scope.authorize(&to)?;
-            let capability = if crate::plugins::resource::fs_access::is_directory(&scope, &from)? {
+            },
+        ),
+        "fs.rename" => (
+            FsOperation::Rename,
+            if resource.is_dir()? {
                 Capability::FoldersRename
             } else {
                 Capability::FilesRename
-            };
-            ctx.running.ensure_permission(capability)?;
-            crate::plugins::resource::fs_access::rename(&scope, &from, &to)?;
+            },
+        ),
+        _ => return Err("unsupported filesystem method".into()),
+    };
+    // Resolve the destination before asking for source permission too.
+    let destination = if ctx.method == "fs.rename" {
+        Some(ResourceBroker::resolve(
+            &scope,
+            &owner,
+            ctx.params
+                .get("destination")
+                .ok_or("missing destination ref")?,
+        )?)
+    } else {
+        None
+    };
+    ctx.running.ensure_permission(permission)?;
+    resource.require(op, create)?;
+    if let Some(destination) = &destination {
+        if resource.reference.mount_id != destination.reference.mount_id {
+            return Err("Unsupported: cross-mount rename".into());
+        }
+        // Parent creation rights are independent of the source's rename right.
+        destination.require(FsOperation::Write, true)?;
+    }
+    match ctx.method {
+        "fs.stat" => Ok(refs::metadata(&resource.stat()?)),
+        "fs.list" => refs::listing(&scope, reference, resource.list()?),
+        "fs.openRead" => resource.open_read(),
+        "fs.readChunk" => {
+            let opened = resource.open_read()?;
+            let mut params = ctx.params.clone();
+            params["handle"] = opened["handle"].clone();
+            if params["offset"].is_null() {
+                params["offset"] = json!(0);
+            }
+            if params["length"].is_null() {
+                params["length"] = json!(fs::CHUNK);
+            }
+            let result = fs::stream_call(&owner, "fs.readOpen", &params);
+            let _ = fs::stream_call(&owner, "fs.closeRead", &params);
+            result
+        }
+        "fs.beginWrite" => resource.begin_write(create),
+        "fs.mkdir" => {
+            resource.mkdir()?;
             Ok(Value::Null)
         }
-        _ => Err("host method not available or permission denied".into()),
+        "fs.remove" => {
+            resource.remove()?;
+            Ok(Value::Null)
+        }
+        "fs.rename" => {
+            resource.rename(destination.as_ref().ok_or("missing destination")?)?;
+            Ok(Value::Null)
+        }
+        _ => Err("unsupported filesystem method".into()),
     }
 }

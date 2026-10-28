@@ -50,6 +50,109 @@ pub fn write_path(route: &Route, data: &[u8]) -> Result<(), String> {
     write(&route.driver_device, route.kind, &route.rel, data)
 }
 
+/// Commit a host-side staged stream through a sibling on the device. The
+/// device write is bounded, and a failed copy never overwrites the old entry.
+pub fn commit_staged(
+    route: &Route,
+    staged: &mut std::fs::File,
+    replace: bool,
+) -> Result<(), String> {
+    use std::io::{Read, Seek};
+    ensure_access(route)?;
+    if matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs) {
+        return Err("Unsupported: read-only USB filesystem".into());
+    }
+    let (parent_rel, name) = route.rel.rsplit_once('/').unwrap_or(("", &route.rel));
+    if name.is_empty() {
+        return Err("cannot overwrite USB root".into());
+    }
+    let parent = Route {
+        rel: parent_rel.into(),
+        ..route.clone()
+    };
+    let token = crate::plugins::mounts::new_id()?;
+    let staging_name = format!(".fiex-{token}.tmp");
+    let temp = Route {
+        rel: join_rel(parent_rel, &staging_name),
+        ..route.clone()
+    };
+    create(&parent, &staging_name, false)?;
+    let copy = (|| {
+        staged.rewind().map_err(|e| e.to_string())?;
+        let mut offset = 0u64;
+        let mut buffer = vec![0; crate::core::fs::CHUNK];
+        loop {
+            let count = staged.read(&mut buffer).map_err(|e| e.to_string())?;
+            if count == 0 {
+                break;
+            }
+            let path = clean_path(&format!("/{}", temp.rel));
+            let wrote = match temp.kind {
+                FsKind::Ntfs => fs_ntfs::write::write_at(
+                    Path::new(&temp.driver_device),
+                    &path,
+                    offset,
+                    &buffer[..count],
+                )
+                .map_err(|e| e.to_string())?,
+                FsKind::Ext4 => ext4_mount(&temp.driver_device, true)?
+                    .apply_pwrite(&path, offset, &buffer[..count])
+                    .map_err(|e| e.to_string())?,
+                _ => unreachable!(),
+            };
+            if wrote != count as u64 {
+                return Err("short USB write".into());
+            }
+            offset += wrote;
+        }
+        let path = clean_path(&format!("/{}", temp.rel));
+        match temp.kind {
+            FsKind::Ntfs => {
+                fs_ntfs::facade::Filesystem::mount_rw(&temp.driver_device)
+                    .map_err(|e| e.to_string())?
+                    .truncate(&path, offset)
+                    .map_err(|e| e.to_string())?;
+            }
+            FsKind::Ext4 => {
+                let fs = ext4_mount(&temp.driver_device, true)?;
+                let ino = fs
+                    .lookup_path_bytes(path.as_bytes())
+                    .map_err(|e| e.to_string())?;
+                fs.apply_truncate_ino(ino, offset)
+                    .map_err(|e| e.to_string())?;
+            }
+            _ => unreachable!(),
+        }
+        ensure_access(route)?;
+        let existed = entry(route).is_ok();
+        if existed && !replace {
+            return Err("Conflict: destination appeared during write".into());
+        }
+        let backup_name = format!(".fiex-{token}.bak");
+        let backup = Route {
+            rel: join_rel(parent_rel, &backup_name),
+            ..route.clone()
+        };
+        if existed {
+            rename(route, &backup_name)?;
+        }
+        if let Err(error) = rename(&temp, name) {
+            if existed {
+                let _ = rename(&backup, name);
+            }
+            return Err(error);
+        }
+        if existed {
+            remove(&backup)?;
+        }
+        Ok(())
+    })();
+    if copy.is_err() {
+        let _ = remove(&temp);
+    }
+    copy
+}
+
 pub fn create(route: &Route, name: &str, folder: bool) -> Result<(), String> {
     ensure_access(route)?;
     if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
@@ -60,12 +163,13 @@ pub fn create(route: &Route, name: &str, folder: bool) -> Result<(), String> {
         FsKind::Ntfs => {
             use fs_ntfs::facade::Filesystem;
             let fs = Filesystem::mount_rw(&route.driver_device).map_err(|e| e.to_string())?;
+            let parent = clean_path(&format!("/{}", route.rel));
             if folder {
-                fs.mkdir(&clean_path(&format!("/{rel}")), "")
+                fs.mkdir(&parent, name)
                     .map(|_| ())
                     .map_err(|e| e.to_string())
             } else {
-                fs.create_file("/".trim_end_matches('/'), &rel)
+                fs.create_file(&parent, name)
                     .map(|_| ())
                     .map_err(|e| e.to_string())
             }
@@ -142,91 +246,4 @@ pub fn rename(route: &Route, new_name: &str) -> Result<(), String> {
             Err(crate::i18n::t("该文件系统内置驱动为只读").into())
         }
     }
-}
-
-fn exists(route: &Route) -> bool {
-    entry(route).is_ok()
-}
-
-fn unique(route: &Route, name: &str) -> String {
-    if !exists(&Route {
-        rel: join_rel(&route.rel, name),
-        ..route.clone()
-    }) {
-        return name.into();
-    }
-    let path = Path::new(name);
-    let stem = path
-        .file_stem()
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| name.into());
-    let ext = path
-        .extension()
-        .map(|value| format!(".{}", value.to_string_lossy()))
-        .unwrap_or_default();
-    for index in 2.. {
-        let candidate = format!("{stem} ({index}){ext}");
-        if !exists(&Route {
-            rel: join_rel(&route.rel, &candidate),
-            ..route.clone()
-        }) {
-            return candidate;
-        }
-    }
-    unreachable!()
-}
-
-pub fn copy_local_into(
-    directory: &Route,
-    source: &Path,
-    keep_both: bool,
-    moving: bool,
-) -> Result<String, String> {
-    let name = source
-        .file_name()
-        .ok_or(crate::i18n::t("不能复制根目录"))?
-        .to_string_lossy()
-        .into_owned();
-    let name = if keep_both {
-        unique(directory, &name)
-    } else {
-        name
-    };
-    let (copied, path) = copy_one(directory, source, &name)?;
-    if moving && copied {
-        if source.is_dir() {
-            std::fs::remove_dir_all(source).map_err(|error| error.to_string())?;
-        } else {
-            std::fs::remove_file(source).map_err(|error| error.to_string())?;
-        }
-    }
-    Ok(path)
-}
-
-fn copy_one(directory: &Route, source: &Path, name: &str) -> Result<(bool, String), String> {
-    let meta = std::fs::symlink_metadata(source).map_err(|error| error.to_string())?;
-    if meta.file_type().is_symlink() {
-        return Err(crate::i18n::t("不复制符号链接").into());
-    }
-    let child = Route {
-        rel: join_rel(&directory.rel, name),
-        ..directory.clone()
-    };
-    if meta.is_dir() {
-        create(directory, name, true)?;
-        for item in std::fs::read_dir(source).map_err(|error| error.to_string())? {
-            let item = item.map_err(|error| error.to_string())?;
-            let child_name = item.file_name().to_string_lossy().into_owned();
-            copy_one(&child, &item.path(), &child_name)?;
-        }
-    } else if meta.is_file() {
-        let data = std::fs::read(source).map_err(|error| error.to_string())?;
-        write_path(&child, &data)?;
-    } else {
-        return Err(crate::i18n::t("不能复制特殊文件").into());
-    }
-    Ok((
-        true,
-        format!("{}/{}", directory.root.trim_end_matches('/'), child.rel),
-    ))
 }

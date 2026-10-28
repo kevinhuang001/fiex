@@ -52,7 +52,9 @@ fn shortcut_target(path: &Path) -> Option<String> {
 }
 
 pub fn metadata_readonly(meta: &fs::Metadata) -> bool {
-    if cfg!(windows) && meta.is_dir() { return false; }
+    if cfg!(windows) && meta.is_dir() {
+        return false;
+    }
     meta.permissions().readonly()
 }
 
@@ -248,4 +250,3 @@ mod tests {
         assert!(super::entry(&file).unwrap().tags.is_empty());
     }
 }
-

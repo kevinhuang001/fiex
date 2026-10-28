@@ -4,12 +4,9 @@ use serde::Serialize;
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    sync::{
-        Mutex, OnceLock,
-    },
+    sync::{Mutex, OnceLock},
 };
 use tauri::ipc::Channel;
-
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -153,4 +150,3 @@ pub(crate) fn terminal_close(session_id: String) -> Result<(), String> {
     }
     Ok(())
 }
-

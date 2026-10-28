@@ -118,4 +118,3 @@ pub struct Decoration {
     #[serde(default)]
     pub providers: Vec<String>,
 }
-

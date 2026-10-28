@@ -36,65 +36,7 @@ pub(crate) async fn plugin_invoke(
     if crate::plugins::events::is_protected_method(&method) {
         return Err("PermissionDenied: provider and host methods are Core-only".into());
     }
-    let mut bindings = resource_bindings.unwrap_or_default();
-    let mut directory = directory;
-    let mut selected_paths = selected_paths;
-    let mut params = params;
-    // Selected virtual resources become exact Core-owned materializations.
-    // This never grants a feature plugin access to the owner's repository.
-    if let Some(paths) = selected_paths.as_mut() {
-        let mut replacements = std::collections::HashMap::new();
-        for path in paths.iter_mut() {
-            if crate::plugins::mounts::handles(path) {
-                let local = materialize_file(path.clone()).await?;
-                replacements.insert(path.clone(), local.clone());
-                *path = local;
-            }
-        }
-        if !replacements.is_empty() {
-            if let Some(original) = directory
-                .as_ref()
-                .filter(|p| crate::plugins::mounts::handles(p))
-            {
-                let local = std::path::Path::new(&paths[0])
-                    .parent()
-                    .ok_or("invalid materialization path")?
-                    .to_string_lossy()
-                    .into_owned();
-                replacements.insert(original.clone(), local.clone());
-                directory = Some(local);
-            }
-            fn replace(
-                value: &mut serde_json::Value,
-                mappings: &std::collections::HashMap<String, String>,
-            ) {
-                match value {
-                    serde_json::Value::String(text) => {
-                        if let Some(local) = mappings.get(text) {
-                            *text = local.clone();
-                        }
-                    }
-                    serde_json::Value::Array(items) => {
-                        for item in items {
-                            replace(item, mappings);
-                        }
-                    }
-                    serde_json::Value::Object(fields) => {
-                        for item in fields.values_mut() {
-                            replace(item, mappings);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            replace(&mut params, &replacements);
-            for binding in &mut bindings {
-                if let Some(local) = replacements.get(&binding.path) {
-                    binding.path = local.clone();
-                }
-            }
-        }
-    }
+    let bindings = resource_bindings.unwrap_or_default();
     let preview_scope = preview_session_id
         .as_deref()
         .map(|id| crate::plugins::resolvers::preview::session_scope(id, &plugin_id))

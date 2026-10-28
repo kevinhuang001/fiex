@@ -94,4 +94,3 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
         _ => Err("Connection must return vfs or pluginView navigation".into()),
     }
 }
-

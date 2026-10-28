@@ -41,7 +41,7 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
                     resource.stat.as_ref(),
                     resource.metadata(),
                 )],
-                "core.media" => media_sections(&resource.materialize()?),
+                "core.media" => media_sections(&resource.export_path()?),
                 _ => return Err("unknown info builtin".into()),
             };
             Ok(serde_json::json!({"sections":sections}))

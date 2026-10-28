@@ -97,9 +97,7 @@ pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
     let resources = Arc::new(
         ctx.entries
             .iter()
-            .map(|entry| {
-                ResourceSnapshot::from_entry(&entry.path, entry)
-            })
+            .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
             .collect::<Vec<_>>(),
     );
     let metadata = resources

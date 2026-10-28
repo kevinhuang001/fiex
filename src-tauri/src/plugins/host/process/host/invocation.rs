@@ -25,28 +25,33 @@ impl PluginHost {
         paths: &[PathBuf],
         bindings: &[crate::plugins::resource::resource_context::ResourceBinding],
     ) -> Result<Value, String> {
-        if crate::plugins::mounts::handles(directory) {
-            let (uri, source) = crate::plugins::mounts::resolve(directory)?;
-            let crate::plugins::mounts::Source::View(view) = source else {
-                return Err("connection views cannot grant local filesystem access".into());
-            };
-            if view.descriptor.plugin_id != plugin_id {
-                return Err("PermissionDenied: foreign VFS owner".into());
+        // A VFS selection stays virtual. Bind its Core identity in this
+        // invocation instead of substituting a provider's cache path.
+        let local_paths = paths
+            .iter()
+            .filter(|path| {
+                let path = path.to_string_lossy();
+                !crate::plugins::mounts::handles(&path)
+                    && crate::usbfs::route(&path).is_none()
+                    && !crate::core::volumes::virtual_resolvers::opaque(&path)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        for path in paths.iter().filter(|path| {
+            let path = path.to_string_lossy();
+            crate::plugins::mounts::handles(&path) || crate::usbfs::route(&path).is_some()
+        }) {
+            let path = path.to_string_lossy();
+            if !bindings.iter().any(|binding| binding.path == path) {
+                return Err("ScopeDenied: selected VFS resource is not bound".into());
             }
-            for path in paths {
-                let selected = path.to_string_lossy();
-                if crate::plugins::mounts::handles(&selected) {
-                    let selected = crate::plugins::mounts::parse(&selected)?;
-                    if selected.mount_id != uri.mount_id {
-                        return Err("PermissionDenied: foreign mount".into());
-                    }
-                } else {
-                    view.scope.authorize(&selected)?;
-                }
-            }
-            return self.invoke_scoped(plugin_id, method, params, Some(view.scope));
         }
-        let root = if paths.is_empty() {
+        let root = if local_paths.is_empty() && !paths.is_empty() {
+            Some(crate::plugins::resource::fs_access::Scope::selected(
+                &std::env::temp_dir(),
+                &[],
+            )?)
+        } else if paths.is_empty() {
             if directory.contains("://") {
                 None
             } else {
@@ -56,7 +61,7 @@ impl PluginHost {
                 )?)
             }
         } else {
-            let canonical: Vec<PathBuf> = paths
+            let canonical: Vec<PathBuf> = local_paths
                 .iter()
                 .map(|path| crate::plugins::resource::fs_access::canonical_selection(path))
                 .collect::<Result<_, _>>()?;

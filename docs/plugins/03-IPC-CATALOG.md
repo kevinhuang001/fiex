@@ -81,12 +81,12 @@ Decorations 返回直接成员名：
 
 | 方法                                                        | 关键参数             | 许可                              |
 | ----------------------------------------------------------- | -------------------- | --------------------------------- |
-| `host.fs.stat` / `statBatch`                                | refs                 | `metadata` + Scope                |
-| `host.fs.list`                                              | directory ref        | `folders.read` + Scope            |
-| `host.fs.openRead` / `readChunk` / `readOpen` / `closeRead` | ref / read handle    | `files.read` + Scope              |
-| `host.fs.beginWrite/writeChunk/commit/abort`                | 目标 ref/缓冲区/句柄 | `files.write` 或 `files.create`   |
-| `host.fs.mkdir`                                             | parent,name          | `folders.create`                  |
-| `host.fs.remove` / `rename`                                 | 目标/源+目标         | 按真实对象类型检查对应权限        |
+| `fs.stat` / `statBatch`                                | refs                 | `metadata` + Scope                |
+| `fs.list`                                              | directory ref        | `folders.read` + Scope            |
+| `fs.openRead` / `readChunk` / `readOpen` / `closeRead` | ref / read handle    | `files.read` + Scope              |
+| `fs.beginWrite/writeChunk/commit/abort`                | 目标 ref/缓冲区/句柄 | `files.write` 或 `files.create`   |
+| `fs.mkdir`                                             | parent,name          | `folders.create`                  |
+| `fs.remove` / `rename`                                 | 目标/源+目标         | 按真实对象类型检查对应权限        |
 | `host.net.http.*`                                           | URL/headers/body     | 已批准 Network host               |
 | `host.net.tcp.open/readBytes/writeBytes/shutdown/close`     | host/port/stream     | 已批准 Network host，读写独立推进 |
 | `host.process.run`                                          | 已声明命令           | `commands`                        |

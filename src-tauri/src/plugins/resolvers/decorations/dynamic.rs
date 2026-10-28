@@ -207,9 +207,12 @@ pub(super) fn decode(
         // directory. Legacy `path` is accepted only when it names an entry.
         let path = match item.get("name").and_then(Value::as_str) {
             Some(name) => {
-                let matches = entries.values().filter(|entry| entry.name == name).collect::<Vec<_>>();
+                let matches = entries
+                    .values()
+                    .filter(|entry| entry.name == name)
+                    .collect::<Vec<_>>();
                 (matches.len() == 1).then(|| matches[0].path.clone())
-            },
+            }
             None => item
                 .get("path")
                 .and_then(Value::as_str)
@@ -274,4 +277,3 @@ pub(super) fn decode(
 
 #[cfg(test)]
 mod tests;
-

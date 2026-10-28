@@ -15,10 +15,8 @@ pub struct MatchRules {
     pub mime_types: Vec<String>,
     #[serde(default)]
     pub kinds: Vec<String>,
-    /// Directory contains one of these names (`.git`, `package.json`, ...).
-    /// Decorations only.
     #[serde(default)]
-    pub contains: Vec<String>,
+    pub required_ops: Vec<crate::plugin_sdk::filesystem::FsOperation>,
     /// Context menu selection cardinality: `zero`, `single`, `multi` or `any`.
     /// Context menus only.
     #[serde(default)]
@@ -34,39 +32,47 @@ impl MatchRules {
             .unwrap_or_else(|| Ok(Self::default()))
     }
 
-    pub fn matches_event(&self, metadata: &[Value], directory: &str) -> bool {
+    pub fn matches_event(&self, metadata: &[Value], _directory: &str) -> bool {
         if !self.matches_selection(metadata.len()) {
             return false;
         }
         let unrestricted =
             self.extensions.is_empty() && self.mime_types.is_empty() && self.kinds.is_empty();
         let targets_match = unrestricted
-            || metadata.iter().any(|m| {
-                let kind = match m["kind"].as_str() {
-                    Some("directory") => Some(true),
-                    Some("file") => Some(false),
-                    _ => m["isDir"].as_bool(),
-                };
-                m.is_object()
-                    && (self.extensions.is_empty() || m["extension"].is_string())
-                    && (self.mime_types.is_empty() || m["mime"].is_string())
-                    && (self.kinds.is_empty() || kind.is_some())
-                    && self.matches(
-                        m["extension"].as_str().unwrap_or(""),
-                        m["mime"].as_str().unwrap_or(""),
-                        kind.unwrap_or(false),
-                    )
-            });
-        // Cheap metadata predicates precede ancestor filesystem probes.
-        targets_match && self.matches_contains(directory)
+            || (!metadata.is_empty()
+                && metadata.iter().all(|m| {
+                    let kind = match m["kind"].as_str() {
+                        Some("directory") => Some(true),
+                        Some("file") => Some(false),
+                        _ => m["isDir"].as_bool(),
+                    };
+                    m.is_object()
+                        && (self.extensions.is_empty() || m["extension"].is_string())
+                        && (self.mime_types.is_empty() || m["mime"].is_string())
+                        && (self.kinds.is_empty() || kind.is_some())
+                        && self.matches(
+                            m["extension"].as_str().unwrap_or(""),
+                            m["mime"].as_str().unwrap_or(""),
+                            kind.unwrap_or(false),
+                        )
+                }));
+        // Every selected target must satisfy content and capability predicates.
+        targets_match
+            && metadata.iter().all(|m| {
+                self.required_ops.iter().all(|op| {
+                    m["operations"]
+                        .as_array()
+                        .is_some_and(|ops| ops.iter().any(|v| v.as_str() == Some(op.as_str())))
+                })
+            })
     }
 
     pub fn is_empty(&self) -> bool {
         self.extensions.is_empty()
             && self.mime_types.is_empty()
             && self.kinds.is_empty()
-            && self.contains.is_empty()
             && self.selection.is_none()
+            && self.required_ops.is_empty()
     }
 
     pub fn matches(&self, ext: &str, mime: &str, is_dir: bool) -> bool {
@@ -104,33 +110,6 @@ impl MatchRules {
         extension_ok && mime_ok && kind_ok
     }
 
-    /// Directory `contains` names can be in the directory or any ancestor.
-    pub fn matches_contains(&self, directory: &str) -> bool {
-        if self.contains.is_empty() {
-            return true;
-        }
-        // Never probe the host working directory for absent/virtual context.
-        if !std::path::Path::new(directory).is_absolute() {
-            return false;
-        }
-        self.contains.iter().any(|marker| {
-            let marker = marker.trim();
-            if marker.is_empty() || marker.contains(['/', '\\']) {
-                return false;
-            }
-            let mut current = std::path::Path::new(directory);
-            loop {
-                if current.join(marker).exists() {
-                    return true;
-                }
-                let Some(parent) = current.parent() else {
-                    return false;
-                };
-                current = parent;
-            }
-        })
-    }
-
     /// Context menu selection cardinality. `zero` is the blank-area menu; a
     /// manifest that wants both blank and selected menus uses `any`.
     pub fn matches_selection(&self, count: usize) -> bool {
@@ -146,20 +125,20 @@ impl MatchRules {
 
 pub fn validate(
     value: Option<&Value>,
-    allow_contains: bool,
+    _allow_contains: bool,
     allow_selection: bool,
 ) -> Result<(), String> {
     let Some(value) = value else {
         return Ok(());
     };
     let object = value.as_object().ok_or("match must be an object")?;
-    if !allow_contains && object.contains_key("contains") {
-        return Err("match.contains is only valid for decorations".into());
+    if object.contains_key("contains") {
+        return Err("Feature matching cannot depend on a host directory".into());
     }
     if !allow_selection && object.contains_key("selection") {
         return Err("match.selection is only valid for contextMenus".into());
     }
-    for key in ["extensions", "mimeTypes", "kinds", "contains"] {
+    for key in ["extensions", "mimeTypes", "kinds"] {
         let Some(items) = object.get(key) else {
             continue;
         };

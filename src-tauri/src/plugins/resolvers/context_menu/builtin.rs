@@ -37,16 +37,29 @@ impl Context {
         let provider = crate::core::volumes::virtual_resolvers::resolver_for(directory);
         // Recent is a projection of original resources. Its container cannot
         // create files, but selected files retain their own permissions.
-        let virtual_provider = provider.filter(|p| p.id() != "core:recent" &&
-            !(p.id() == "core:applications" && (paths.is_empty() || paths.iter().all(|p| crate::core::volumes::applications::is_user(p)))));
+        let virtual_provider = provider.filter(|p| {
+            p.id() != "core:recent"
+                && !(p.id() == "core:applications"
+                    && (paths.is_empty()
+                        || paths
+                            .iter()
+                            .all(|p| crate::core::volumes::applications::is_user(p))))
+        });
         if let Some(owner) = virtual_provider {
-            if owner.id() == "core:trash" && paths.iter().any(|path| crate::core::volumes::virtual_resolvers::resolver_for(path).is_none_or(|p| p.id() != owner.id())) {
+            if owner.id() == "core:trash"
+                && paths.iter().any(|path| {
+                    crate::core::volumes::virtual_resolvers::resolver_for(path)
+                        .is_none_or(|p| p.id() != owner.id())
+                })
+            {
                 return Err("selection outside VFS".into());
             }
         }
         let read_only = if let Some(provider) = provider {
             provider.readonly()
-        } else { entry(directory)?.readonly };
+        } else {
+            entry(directory)?.readonly
+        };
         // A blank-canvas menu has no selection: capabilities come from the
         // directory itself so "new folder/file" follows the same grant.
         let mut capabilities = if paths.is_empty() {
@@ -59,10 +72,14 @@ impl Context {
                 crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
             );
         }
-        let all_local = crate::usbfs::route(directory).is_none() && !crate::core::volumes::virtual_resolvers::opaque(directory) && !crate::plugins::mounts::handles(directory)
-            && paths
-                .iter()
-                .all(|path| !crate::plugins::mounts::handles(path) && crate::usbfs::route(path).is_none() && !crate::core::volumes::virtual_resolvers::opaque(path));
+        let all_local = crate::usbfs::route(directory).is_none()
+            && !crate::core::volumes::virtual_resolvers::opaque(directory)
+            && !crate::plugins::mounts::handles(directory)
+            && paths.iter().all(|path| {
+                !crate::plugins::mounts::handles(path)
+                    && crate::usbfs::route(path).is_none()
+                    && !crate::core::volumes::virtual_resolvers::opaque(path)
+            });
         let in_trash = !crate::plugins::mounts::handles(directory)
             && crate::core::volumes::trash_path()
                 .is_some_and(|trash| std::path::Path::new(directory).starts_with(trash));
@@ -122,10 +139,14 @@ impl Context {
         in_trash: bool,
         capabilities: FileCapabilities,
     ) -> Self {
-        let all_local = crate::usbfs::route(directory).is_none() && !crate::core::volumes::virtual_resolvers::opaque(directory) && !crate::plugins::mounts::handles(directory)
-            && paths
-                .iter()
-                .all(|path| !crate::plugins::mounts::handles(path) && crate::usbfs::route(path).is_none() && !crate::core::volumes::virtual_resolvers::opaque(path));
+        let all_local = crate::usbfs::route(directory).is_none()
+            && !crate::core::volumes::virtual_resolvers::opaque(directory)
+            && !crate::plugins::mounts::handles(directory)
+            && paths.iter().all(|path| {
+                !crate::plugins::mounts::handles(path)
+                    && crate::usbfs::route(path).is_none()
+                    && !crate::core::volumes::virtual_resolvers::opaque(path)
+            });
         Self {
             directory: directory.into(),
             paths,
@@ -153,7 +174,9 @@ pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
     if id == "builtin:vfs-menu" {
         let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
-        return Ok(crate::core::volumes::virtual_resolvers::menu_json(provider, &ctx.paths));
+        return Ok(crate::core::volumes::virtual_resolvers::menu_json(
+            provider, &ctx.paths,
+        ));
     }
     let resolver = ctx
         .resolvers()
@@ -176,7 +199,9 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
     if id == "builtin:vfs-menu" {
         let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
         let action = provider.execute(item_id, &ctx.paths)?;
-        return Ok(json!({"kind":"coreAction", "command":action.command, "paths":action.paths, "directory":ctx.directory}));
+        return Ok(
+            json!({"kind":"coreAction", "command":action.command, "paths":action.paths, "directory":ctx.directory}),
+        );
     }
     let paths = if matches!(item_id, "remote.keepLocal" | "remote.keepRemote") {
         ctx.entries
