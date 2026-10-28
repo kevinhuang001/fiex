@@ -52,7 +52,9 @@ export function useOpenActions({
     const remote = isRemotePath(e.path)
     let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
-      remote ? t('正在下载…') : t('正在打开…'),
+      // Opening a connection file caches it locally on the way to the system
+      // app; the activity says so instead of claiming a download.
+      remote ? t('正在缓存…') : t('正在打开…'),
       async () => {
         const outcome = await runBeforeOpenHooks(e)
         if (outcome.preview) {
@@ -81,7 +83,7 @@ export function useOpenActions({
       setPreview(entry)
       return
     }
-    void run(t('正在下载…'), async () => {
+    void run(t('正在缓存…'), async () => {
       await call('remote_download', { path: entry.path })
       setPreview(entry)
       pane.reload()
