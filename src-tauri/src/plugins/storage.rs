@@ -381,7 +381,10 @@ mod secret_fallback_tests {
         let path = temp.path().join("secrets.json");
         let mut items = load_fallback(&path).unwrap();
         assert!(items.is_empty());
-        items.insert(fallback_key("p.one", "connection-a", "password"), "s3cret".into());
+        items.insert(
+            fallback_key("p.one", "connection-a", "password"),
+            "s3cret".into(),
+        );
         save_fallback(&path, &items).unwrap();
         assert_eq!(
             load_fallback(&path)

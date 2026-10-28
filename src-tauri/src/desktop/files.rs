@@ -246,6 +246,13 @@ pub(crate) async fn transfer(
     if remote::is_remote(&destination) {
         return Err(crate::i18n::t("远程连接只读").into());
     }
+    // A mount is read-only as a *destination*: nothing can be deleted from it
+    // here. Copying out is always allowed, so a drag that means "move" degrades
+    // to a copy for mount sources instead of failing the whole transfer.
+    let moving = moving
+        && !paths
+            .iter()
+            .any(|source| remote::is_remote(source) || crate::plugins::vfs::handles(source));
     let transfer_options = remote::TransferOptions {
         cancel: Some(cancel.flag()),
         progress: None,
@@ -253,9 +260,6 @@ pub(crate) async fn transfer(
     let mut materialized = Vec::with_capacity(paths.len());
     for source in &paths {
         if remote::is_remote(source) {
-            if moving {
-                return Err(crate::i18n::t("远程连接只读，请复制文件").into());
-            }
             if remote::stat(source)?.is_dir {
                 remote::download_dir(source, &transfer_options).await?;
             } else {
@@ -263,9 +267,6 @@ pub(crate) async fn transfer(
             }
             materialized.push(remote::cached_path(source)?);
         } else if crate::plugins::vfs::handles(source) {
-            if moving {
-                return Err("VFS view is read-only".into());
-            }
             materialized.push(crate::plugins::vfs::materialize(source)?);
         } else {
             crate::plugins::mounts::reject_local(source)?;

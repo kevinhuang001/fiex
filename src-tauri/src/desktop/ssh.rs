@@ -6,6 +6,7 @@
 //! trusted implementation the user already uses. The WebView only receives the
 //! byte stream; it never receives credentials.
 use super::shell_profile::login_arg;
+use crate::core::terminals::{order_shells, shell_name};
 use base64::Engine;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
@@ -29,37 +30,32 @@ pub struct ShellChoice {
 }
 
 fn shell_choices() -> Vec<ShellChoice> {
-    let mut paths = Vec::new();
+    let login = std::env::var("SHELL").ok();
+    let mut listed = Vec::new();
     #[cfg(unix)]
     if let Ok(contents) = std::fs::read_to_string("/etc/shells") {
-        for line in contents.lines() {
-            let path = line.trim();
-            if path.starts_with('/') && Path::new(path).is_file() {
-                paths.push(path.to_string());
-            }
-        }
+        listed.extend(
+            contents
+                .lines()
+                .map(str::trim)
+                .filter(|line| line.starts_with('/') && !line.contains('#'))
+                .map(str::to_string),
+        );
     }
-    if let Ok(shell) = std::env::var("SHELL") {
-        if Path::new(&shell).is_file() {
-            paths.push(shell);
-        }
-    }
+    let mut paths = order_shells(login.as_deref(), listed);
     #[cfg(windows)]
-    paths.extend(["powershell.exe".into(), "pwsh.exe".into(), "cmd.exe".into()]);
-    paths.push(if cfg!(windows) {
-        "powershell.exe".into()
-    } else {
-        "/bin/sh".into()
-    });
-    let mut seen = std::collections::HashSet::new();
+    paths.splice(
+        0..0,
+        ["powershell.exe".into(), "pwsh.exe".into(), "cmd.exe".into()],
+    );
+    #[cfg(not(windows))]
+    if paths.is_empty() {
+        paths.push("/bin/sh".into());
+    }
     paths
         .into_iter()
-        .filter(|path| seen.insert(path.clone()))
         .map(|path| {
-            let name = Path::new(&path)
-                .file_name()
-                .map(|value| value.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.clone());
+            let name = shell_name(&path);
             ShellChoice {
                 id: path.clone(),
                 name,
