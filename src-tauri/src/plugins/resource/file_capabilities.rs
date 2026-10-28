@@ -166,10 +166,16 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
     }
     if !crate::plugins::mounts::handles(path) {
         return FileCapabilities {
-            write: !entry.readonly,
-            create: !entry.readonly,
+            list: entry.is_dir,
+            stat: true,
+            search: entry.is_dir,
+            read: !entry.is_dir,
+            write: !entry.is_dir && !entry.readonly,
+            create: entry.is_dir && !entry.readonly,
+            rename: true,
+            // On Unix deletion is governed by the parent directory, not the
+            // file's read-only metadata. The OS remains the final authority.
             remove: !cfg!(windows) || !entry.readonly,
-            ..FileCapabilities::ALL
         };
     }
     declared_operations(path)
@@ -286,12 +292,27 @@ mod tests {
         assert_eq!(
             for_selection(&["/tmp/example".into()], &[local]),
             FileCapabilities {
-                write: false,
-                create: false,
+                stat: true,
+                read: true,
+                rename: true,
                 remove: !cfg!(windows),
-                ..FileCapabilities::ALL
+                ..FileCapabilities::default()
             }
         );
+    }
+
+    #[test]
+    fn local_node_capabilities_respect_file_vs_directory_kind() {
+        let file = entry("/tmp/document.txt", &[], false);
+        let file_caps = for_entry(&file.path, &file);
+        assert!(file_caps.read && file_caps.write && file_caps.rename);
+        assert!(!file_caps.list && !file_caps.search && !file_caps.create);
+
+        let mut folder = entry("/tmp/folder", &[], false);
+        folder.is_dir = true;
+        let folder_caps = for_entry(&folder.path, &folder);
+        assert!(folder_caps.list && folder_caps.search && folder_caps.create);
+        assert!(!folder_caps.read && !folder_caps.write);
     }
 
     #[test]
