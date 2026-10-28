@@ -151,8 +151,10 @@ pub fn resource_scope(
         }
     }
     params["location"] = json!({
-        "kind": if directory.is_some_and(crate::core::volumes::virtual_resolvers::opaque) { "vfs" }
-                else if directory.is_some_and(crate::plugins::mounts::handles) { "vfs" } else { "fs" },
+        "kind": if directory.is_some_and(|location| {
+            crate::core::volumes::virtual_resolvers::opaque(location)
+                || crate::plugins::mounts::handles(location)
+        }) { "vfs" } else { "fs" },
         "providerId": directory.and_then(|d| crate::core::volumes::virtual_resolvers::resolver_for(d).map(|p| p.id().to_owned())
             .or_else(|| crate::plugins::resolvers::fs::mount_plugin_id(d).ok())),
         "selectionCount": resources.len(),
