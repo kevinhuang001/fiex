@@ -8,17 +8,20 @@ use std::{
 };
 #[derive(Default)]
 pub struct DragSessions(Mutex<Option<Session>>);
+#[derive(Clone)]
 struct Session {
     window: String,
     paths: Vec<PathBuf>,
     started: Instant,
     moving: bool,
     originals: Vec<String>,
+    references: Vec<crate::plugins::contracts::ResourceRef>,
 }
 #[derive(Clone, Serialize)]
 pub struct DropPlan {
     pub paths: Vec<String>,
     pub moving: bool,
+    pub references: Vec<crate::plugins::contracts::ResourceRef>,
 }
 fn normalized(paths: &[String]) -> Result<Vec<PathBuf>, String> {
     let mut result = paths
@@ -40,12 +43,20 @@ impl DragSessions {
         if paths.is_empty() {
             return Err(crate::i18n::t("请选择文件").into());
         }
+        let references = originals
+            .iter()
+            .map(|path| {
+                crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
+                    .map(|snapshot| snapshot.reference)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         *self.0.lock().unwrap() = Some(Session {
             window: window.into(),
             paths: normalized(paths)?,
             started: Instant::now(),
             moving,
             originals: originals.to_vec(),
+            references,
         });
         Ok(())
     }
@@ -59,21 +70,33 @@ impl DragSessions {
         let Ok(paths) = normalized(paths) else {
             return None;
         };
-        let mut slot = self.0.lock().unwrap();
-        let internal = slot
-            .as_ref()
-            .is_some_and(|s| s.paths == paths && s.started.elapsed() < Duration::from_secs(600));
-        if !internal {
+        let captured = self.0.lock().ok()?.as_ref()
+            .filter(|session| session.paths == paths
+                && session.started.elapsed() < Duration::from_secs(600))
+            .cloned()?;
+        // The exported OS paths are never the source of truth. Re-resolve
+        // every captured Core identity and fail closed after unmount/revoke.
+        let current = captured.originals.iter().map(|path| {
+            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
+                .map(|snapshot| snapshot.reference)
+        }).collect::<Result<Vec<_>, _>>().ok()?;
+        if current != captured.references {
             return None;
         }
-        let result = slot.as_ref().map(|s| DropPlan {
-            paths: s.originals.clone(),
-            moving: s.moving,
-        });
         if consume {
+            let mut slot = self.0.lock().ok()?;
+            if !slot.as_ref().is_some_and(|session| {
+                session.paths == captured.paths && session.started == captured.started
+            }) {
+                return None;
+            }
             slot.take();
         }
-        result
+        Some(DropPlan {
+            paths: captured.originals,
+            moving: captured.moving,
+            references: captured.references,
+        })
     }
 }
 #[cfg(test)]
