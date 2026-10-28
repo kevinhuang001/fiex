@@ -17,11 +17,12 @@ pub(crate) async fn register_drag(
     if std::env::var_os("FIEX_DRAG_DIAGNOSTICS").is_some() {
         eprintln!("drag: register {:?} copy={copy_requested}", paths);
     }
+    // Internal move is a node capability, not an assumption about which
+    // backend owns the resource. Recent/Trash and launch-only items fail
+    // the remove check and remain copy-only.
     let moving = !copy_requested
         && paths.iter().all(|path| {
-            !remote::is_remote(path)
-                && crate::usbfs::route(path).is_none()
-                && !crate::plugins::vfs::handles(path)
+            crate::plugins::resource::file_capabilities::for_path(path).remove
         });
     let originals = paths.clone();
     let materialized = tauri::async_runtime::spawn_blocking(move || {
