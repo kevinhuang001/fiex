@@ -240,6 +240,8 @@ impl Scope {
             {
                 return Err("child outside selected resource".into());
             }
+        } else if parent_path == crate::core::volumes::virtual_resolvers::RECENT_URI {
+            let _ = crate::core::recent::source_for(display)?;
         } else if parent_path == crate::core::volumes::applications::URI
             || crate::core::volumes::applications::is_user(&parent_path)
         {

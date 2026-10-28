@@ -74,15 +74,12 @@ impl VirtualResolver for RecentResolver {
         let _ = path;
         Ok(ctx.recent.to_vec())
     }
-    fn stat(&self, path: &str, ctx: &VirtualContext<'_>) -> Result<Entry, String> {
-        ctx.recent
-            .iter()
-            .find(|entry| entry.path == path)
-            .cloned()
-            .ok_or_else(|| crate::i18n::t("最近使用中没有该项目").into())
+    fn stat(&self, path: &str, _ctx: &VirtualContext<'_>) -> Result<Entry, String> {
+        crate::core::recent::entry_for_alias(path)
     }
     fn open(&self, path: &str) -> Result<(), String> {
-        crate::core::terminals::open_path(path)
+        let original = crate::core::recent::source_for(path)?;
+        crate::core::terminals::open_path(&original)
     }
     fn remove(&self, _paths: &[String]) -> Result<usize, String> {
         Err(crate::i18n::t("最近使用项目不能在 Fiex 中删除").into())
@@ -102,7 +99,10 @@ impl VirtualResolver for RecentResolver {
         }
         Ok(VirtualAction {
             command: "open",
-            paths: paths.to_vec(),
+            paths: paths
+                .iter()
+                .map(|path| crate::core::recent::source_for(path))
+                .collect::<Result<Vec<_>, _>>()?,
         })
     }
     fn icon(&self, _path: &str) -> Option<String> {
@@ -271,7 +271,7 @@ static APPLICATIONS: ApplicationResolver = ApplicationResolver;
 static TRASH: TrashResolver = TrashResolver;
 
 pub fn resolver_for(path: &str) -> Option<&'static dyn VirtualResolver> {
-    if path == RECENT_URI {
+    if path.starts_with(RECENT_URI) {
         return Some(&RECENT);
     }
     if path == APPLICATIONS_URI || path.starts_with(applications::URI) {
@@ -322,7 +322,7 @@ pub fn menu_json(resolver: &dyn VirtualResolver, paths: &[String]) -> serde_json
 /// URI-backed resources have no host path. Never canonicalize or materialize
 /// these identifiers as files, even for metadata-only extension calls.
 pub fn opaque(path: &str) -> bool {
-    path == RECENT_URI || path.starts_with(APPLICATIONS_URI) || recycle::is_virtual(path)
+    path.starts_with(RECENT_URI) || path.starts_with(APPLICATIONS_URI) || recycle::is_virtual(path)
 }
 
 pub fn resource_entry(path: &str) -> Result<Entry, String> {

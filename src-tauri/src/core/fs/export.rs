@@ -78,7 +78,10 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
                     .to_string_lossy()
                     .into_owned(),
             );
-        } else if crate::plugins::mounts::handles(path) || crate::usbfs::route(path).is_some() {
+        } else if crate::plugins::mounts::handles(path)
+            || crate::usbfs::route(path).is_some()
+            || (path.starts_with("recent://") && path != "recent://")
+        {
             fresh.push(path.clone());
         } else if crate::core::volumes::virtual_resolvers::opaque(path) {
             return Err("Unsupported: this view cannot export content".into());

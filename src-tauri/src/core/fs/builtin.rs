@@ -80,10 +80,25 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         }
         if self.path() == virtual_resolvers::RECENT_URI
             && matches!(op, FsOperation::List | FsOperation::Stat) { return Ok(()); }
+        if self.path().starts_with(virtual_resolvers::RECENT_URI) {
+            let source = recent::source_for(self.path())?;
+            if op == FsOperation::Stat { return Ok(()); }
+            if op == FsOperation::Read {
+                let original = super::binding::trusted(&source, &self.0.owner)?;
+                return original.require(FsOperation::Read, false);
+            }
+            return Err("PermissionDenied: Recent is a read-only view".into());
+        }
         Err(format!("Unsupported: {}", op.as_str()))
     }
     fn open_read(&self) -> Result<Box<dyn ReadHandle>, String> {
         self.require(FsOperation::Read, false)?;
+        if self.path().starts_with(virtual_resolvers::RECENT_URI) {
+            let source = recent::source_for(self.path())?;
+            let original = super::binding::trusted(&source, &self.0.owner)?;
+            original.require(FsOperation::Read, false)?;
+            return original.adapter()?.open_read();
+        }
         let file = fs::File::open(self.application_file()?).map_err(|e| e.to_string())?;
         let size = file.metadata().map_err(|e| e.to_string())?.len();
         Ok(Box::new(AppRead { file, size }))
