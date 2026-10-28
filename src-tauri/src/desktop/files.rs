@@ -18,32 +18,26 @@ use std::{collections::HashMap, sync::Mutex};
 use tauri::{ipc::Channel, Emitter, Manager};
 
 #[macro_use]
-
 mod listing;
 pub(crate) use listing::*;
 
 #[macro_use]
-
 mod creation;
 pub(crate) use creation::*;
 
 #[macro_use]
-
 mod transfer;
 pub(crate) use transfer::*;
 
 #[macro_use]
-
 mod recycle;
 pub(crate) use recycle::*;
 
 #[macro_use]
-
 mod search;
 pub(crate) use search::*;
 
 #[macro_use]
-
 mod watch;
 pub(crate) use watch::*;
 

@@ -2,10 +2,10 @@ use super::*;
 
 pub(super) struct PluginSession {
     owner: String,
-    input: Arc<Mutex<VecDeque<u8>>>,
-    size: Arc<Mutex<(u16, u16)>>,
-    channel: Channel<SshEvent>,
-    closed: Arc<AtomicBool>,
+    pub(super) input: Arc<Mutex<VecDeque<u8>>>,
+    pub(super) size: Arc<Mutex<(u16, u16)>>,
+    pub(super) channel: Channel<SshEvent>,
+    pub(super) closed: Arc<AtomicBool>,
 }
 
 pub(super) fn plugin_sessions() -> &'static Mutex<HashMap<String, PluginSession>> {

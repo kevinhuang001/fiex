@@ -28,13 +28,14 @@ use std::{
 };
 
 mod planning;
-pub use planning::*;
+use planning::walk;
 
 mod execution;
-pub use execution::*;
+use execution::copy_children;
+pub(crate) use execution::upload;
 
 mod streams;
-pub use streams::*;
+use streams::{remember, upload_file};
 
 const CHUNK: usize = 256 * 1024;
 

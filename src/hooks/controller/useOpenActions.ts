@@ -90,18 +90,21 @@ export function useOpenActions({
     })
   }
   const openTrash = async () => {
-    if (!trashPath) {
-      void run(t('正在打开废纸篓…'), () => call('open_trash'))
-      return
-    }
     try {
+      // A sidebar click can precede the environment effect's initial response.
+      // Resolve the destination on demand before choosing the external fallback.
+      const destination = trashPath ?? (await call<string | null>('trash_path'))
+      if (!destination) {
+        void run(t('正在打开废纸篓…'), () => call('open_trash'))
+        return
+      }
       await call('list_directory', {
-        path: trashPath,
+        path: destination,
         hidden: prefs.hidden,
         ignores: prefs.displayIgnore,
       })
       setPreview(null)
-      x.navigate(trashPath)
+      x.navigate(destination)
     } catch (error) {
       const message = String(error)
       if (/permitted|permission|权限/i.test(message)) setTrashIssue(true)

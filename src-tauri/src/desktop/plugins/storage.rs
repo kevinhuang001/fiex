@@ -1,5 +1,3 @@
-use super::*;
-
 #[tauri::command]
 pub(crate) fn plugins_list() -> Vec<crate::plugins::host::PluginInfo> {
     crate::plugins::host::catalog()
