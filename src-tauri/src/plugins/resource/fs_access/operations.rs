@@ -38,8 +38,15 @@ pub(super) fn relative(root: &Scope, input: &str) -> Result<PathBuf, String> {
                                 .fold(base, |base: PathBuf, name| base.join(name))
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                            // A one-component relative path has an empty
+                            // parent (""). Canonicalize the captured root
+                            // instead of treating that empty path as another
+                            // missing filename.
                             missing.push(ancestor.file_name().ok_or("invalid selected path")?);
-                            ancestor = ancestor.parent().unwrap_or(Path::new("."));
+                            ancestor = ancestor
+                                .parent()
+                                .filter(|parent| !parent.as_os_str().is_empty())
+                                .unwrap_or(Path::new("."));
                         }
                         Err(e) => return Err(e.to_string()),
                     }
