@@ -669,6 +669,7 @@
   "应用已关闭": "App closed",
   "已重命名 {0} 个项目": "Renamed {0} items",
   "此文件系统只读": "This filesystem is read only",
+  "此位置不支持新建文件夹": "This location does not support new folders",
   "无效地址": "Invalid address",
   "插件后台任务": "Plugin background task",
   "正在取消…": "Cancelling…",

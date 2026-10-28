@@ -1,8 +1,8 @@
 //! Capability-gated builtin context-menu providers.
 //!
 //! The menu is a list of small resolvers. A group exists only when its
-//! capability exists, so an unsupported rename/delete/new-folder group is
-//! absent from the resolver list instead of appearing with an empty item array.
+//! capability exists, so an unsupported rename/delete group is absent from the
+//! resolver list instead of appearing with an empty item array.
 //! The capability matrix is:
 //!
 //! - `opening`: always; `open` is disabled for a file entry without `read`
@@ -11,13 +11,16 @@
 //! - `rename` / `batch-rename`: require `rename` in a writable directory.
 //! - `clipboard`: `copy` requires `read`, `cut` requires `rename` in a writable
 //!   directory, `duplicate` requires `read && write` in a writable directory.
-//! - `new-folder`: requires `create` and a writable directory.
 //! - `trash`: requires `remove` in a writable directory; `restore`/`delete`
 //!   keep today's in-trash behaviour.
 //! - `terminal` / `tags`: local selections only, because Core has no remote
 //!   terminal or tag path.
 //! - `copy-path`: always; it only uses the location Core already knows.
 //! - `connection-cache`: remote selections only, unchanged otherwise.
+//!
+//! Folder creation is not a menu group: the toolbar owns the single
+//! "new folder" affordance and disables it from the listing's `canCreate`
+//! (provider `mkdir` ∩ the directory node's own restrictions).
 //!
 //! Presence decides availability: an unsupported operation is absent from the
 //! menu, never emitted as a disabled item. [`crate::plugins::resource::file_capabilities`]
@@ -50,11 +53,10 @@ pub(super) trait BuiltinResolver {
 }
 
 /// Canonical order; a filtered-out group keeps every later group's priority.
-const GROUPS: [&dyn BuiltinResolver; 10] = [
+const GROUPS: [&dyn BuiltinResolver; 9] = [
     &Opening,
     &Tags,
     &ConnectionCache,
-    &NewFolder,
     &Rename,
     &BatchRename,
     &Clipboard,
@@ -115,23 +117,6 @@ impl BuiltinResolver for Tags {
         } else {
             Vec::new()
         }
-    }
-}
-
-struct NewFolder;
-impl BuiltinResolver for NewFolder {
-    fn id(&self) -> &'static str {
-        "builtin:new-folder"
-    }
-    fn priority(&self) -> i64 {
-        97
-    }
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.create && !selection.read_only
-    }
-    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
-        // Offered items stay actionable; Core re-checks `mkdir` on execute.
-        vec![item("newFolder", "新建文件夹", "folder-plus", "newFolder")]
     }
 }
 

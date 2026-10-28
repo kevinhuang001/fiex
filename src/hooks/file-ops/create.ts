@@ -9,6 +9,12 @@ export function createActions({ x, writable, run }: FileOpsContext) {
    * empty file by name" operation, so Core only offers folder creation. */
   const create = async () => {
     if (!writable()) return
+    // The toolbar disables its new-folder button from the same flag; a
+    // keyboard shortcut must not bypass the provider's `mkdir` capability.
+    if (!x.directoryCanCreate) {
+      x.setError(t('此位置不支持新建文件夹'))
+      return
+    }
     const name = uniqueName(
       x.entries.map((e) => e.name),
       t('未命名文件夹'),

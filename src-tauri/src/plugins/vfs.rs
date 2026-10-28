@@ -169,12 +169,11 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         let relative = child(&uri.relative, &item.name)?;
         entries.push(bound_entry(&mount, &uri, &relative, item)?);
     }
-    // Creating inside a directory needs both the provider operation and the
-    // directory node's own `allowedOps`. An unreadable node offers no creation.
-    let can_create = mount.supports(FsOperation::Mkdir)
-        && mount
-            .stat(&node_id)
-            .is_ok_and(|entry| entry.allows(FsOperation::Mkdir) && entry.readonly != Some(true));
+    // Creating a folder needs the provider's `mkdir` and the directory node's
+    // own `allowedOps`/`readonly`. The toolbar reads this flag to enable its
+    // single new-folder affordance, and `create_entry` re-checks the same rule,
+    // so the button can never offer an operation this view cannot perform.
+    let can_create = crate::plugins::resource::file_capabilities::for_path(path).create;
     Ok(Listing {
         read_only: !writable(&mount),
         can_create,

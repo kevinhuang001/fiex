@@ -301,16 +301,11 @@ pub async fn list_listing(
     }
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
     let (mount_readonly, _) = entry_capabilities(&plugin_id, None, false);
-    // Creating inside this directory needs the provider's `mkdir` and the
-    // directory node's own stored `allowedOps`/`readonly`.
-    let directory = metadata.files.get(&rel);
-    let can_create = crate::plugins::provider_registry::supports(&plugin_id, FsOperation::Mkdir)
-        && directory.is_none_or(|file| {
-            !file.readonly
-                && file.allowed_ops.as_deref().is_none_or(|ops| {
-                    ops.is_empty() || ops.iter().any(|op| op == FsOperation::Mkdir.as_str())
-                })
-        });
+    // Creating a folder needs the provider's `mkdir` and the directory node's
+    // own stored `allowedOps`/`readonly`. `for_path` is the same rule
+    // `create_entry` enforces, so the toolbar's new-folder affordance and the
+    // command cannot disagree.
+    let can_create = crate::plugins::resource::file_capabilities::for_path(path).create;
     Ok(Some(crate::core::files::Listing {
         read_only: mount_readonly,
         can_create,
