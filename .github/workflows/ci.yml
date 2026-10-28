@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# Give every commit its own concurrency group. A stalled artifact upload in
-# one run must not leave newer runs pending behind it forever.
+# Keep only the latest PR commit in CI. Old builds and uploads should not
+# exhaust the macOS/Windows runner queue or masquerade as the current result.
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.sha }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   checks:
     name: Frontend and UI tests
