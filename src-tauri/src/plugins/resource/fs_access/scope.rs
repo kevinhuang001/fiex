@@ -3,16 +3,26 @@
 use super::*;
 
 pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
-    match dunce::canonicalize(path) {
-        Ok(path) => Ok(path),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let parent = path.parent().ok_or("selection has no parent")?;
-            let name = path.file_name().ok_or("selection has no name")?;
-            Ok(dunce::canonicalize(parent)
-                .map_err(|e| e.to_string())?
-                .join(name))
+    if path.components().any(|part| matches!(part, Component::ParentDir)) {
+        return Err("selection must not contain parent traversal".into());
+    }
+    let mut ancestor = path;
+    let mut missing = Vec::new();
+    loop {
+        match dunce::canonicalize(ancestor) {
+            Ok(base) => {
+                return Ok(missing.into_iter().rev().fold(base, |base: PathBuf, name| {
+                    base.join(name)
+                }));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(
+                    ancestor.file_name().ok_or("selection has no name")?.to_os_string(),
+                );
+                ancestor = ancestor.parent().ok_or("selection has no parent")?;
+            }
+            Err(error) => return Err(error.to_string()),
         }
-        Err(error) => Err(error.to_string()),
     }
 }
 
