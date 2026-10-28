@@ -22,6 +22,17 @@ fn same_version(a: &serde_json::Value, b: &serde_json::Value) -> bool {
         .all(|key| a[*key] == b[*key])
 }
 
+fn optional_stat(resource: &ResourceBroker) -> Result<Option<serde_json::Value>, String> {
+    match resource.stat() {
+        Ok(stat) => Ok(Some(stat)),
+        Err(error) if error.starts_with("NotFound:")
+            || error.contains("No such file or directory")
+            || error.contains("os error 2")
+            || error.contains("not found") => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 fn version(path: &str, stat: &serde_json::Value) -> FileVersion {
     FileVersion {
         path: path.into(),
@@ -79,7 +90,7 @@ fn unique(parent: &ResourceBroker, name: &str, directory: bool) -> Result<Resour
     };
     for index in 2..=10_000 {
         let target = binding::child(parent, &format!("{stem} ({index}){extension}"))?;
-        if target.stat().is_err() {
+        if optional_stat(&target)?.is_none() {
             return Ok(target);
         }
     }
@@ -127,7 +138,7 @@ fn plan(
     {
         return Err("destination is inside the source".into());
     }
-    let mut existing = target.stat().ok();
+    let mut existing = optional_stat(&target)?;
     if let Some(dst) = &existing {
         match collision(&source, &target, &src, dst, choices, keep_both, result) {
             None => return Ok(()),
@@ -196,7 +207,7 @@ fn execute(
         if !same_version(&step.source.stat()?, &step.source_version) {
             return Err(format!("Conflict: source changed: {}", step.source.path));
         }
-        let latest = step.target.stat().ok();
+        let latest = optional_stat(&step.target)?;
         if !matches!((&step.target_version, &latest), (None, None))
             && !matches!((&step.target_version, &latest), (Some(expected), Some(actual)) if same_version(expected, actual))
         {
@@ -219,7 +230,7 @@ fn execute(
             if step.existing && step.target.is_dir()? {
                 return Err("Conflict: destination is now a directory".into());
             }
-            let create = !step.existing || step.target.stat().is_err();
+            let create = !step.existing || optional_stat(&step.target)?.is_none();
             step.target.require(FsOperation::Write, create)?;
             let mut reader = step.source.adapter()?.open_read()?;
             let mut writer = step.target.adapter()?.begin_write(create)?;
