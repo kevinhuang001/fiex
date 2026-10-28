@@ -86,6 +86,8 @@ export interface PluginExtensions {
   connections?: { title: string; fields: PluginField[]; description?: string; setupUrl?: string }
   toolbar?: PluginContribution
   contextMenus?: boolean
+  /** Flat actions for a saved connection's sidebar menu. */
+  connectionContextMenus?: boolean | { priority?: number }
   search?: { icon?: string; scope?: string }
   settings?: PluginField[]
   hooks?: {
@@ -155,6 +157,9 @@ export const PLUGIN_CATEGORIES = [
 export function pluginCategories(extensions?: PluginExtensions, commands: string[] = []): string[] {
   const present = PLUGIN_CATEGORIES.filter(({ id }) => {
     if (id === 'commands') return false
+    // A plugin that only decorates connection menus still belongs to the
+    // connection family.
+    if (id === 'connections' && extensions?.connectionContextMenus) return true
     const value = extensions?.[id as keyof PluginExtensions]
     return Boolean(value) && (Array.isArray(value) ? value.length > 0 : true)
   }).map(({ id }) => id)

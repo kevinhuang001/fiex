@@ -93,6 +93,8 @@ pub fn run() {
             plugin_context_menu_resolve,
             plugin_context_menu_children,
             plugin_context_menu_execute,
+            plugin_connection_menu_resolve,
+            plugin_connection_menu_execute,
             connection_open,
             vfs_retain_views,
             materialize_file,

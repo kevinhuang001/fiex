@@ -15,7 +15,9 @@ import type { PickerMenuState } from './PickerMenu'
 import {
   dirname,
   join,
+  persistPickerDirectory,
   persistPickerSort,
+  storedDirectory,
   storedGroup,
   storedSort,
   type GroupKey,
@@ -62,6 +64,9 @@ export function usePicker(request: FilePickerRequest) {
   const menuRef = useRef<HTMLDivElement>(null)
   const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
   const dialogInput = useRef<HTMLInputElement>(null)
+  // Read once per mount: the picker should fall back to home only when the
+  // remembered folder has disappeared, not whenever a later navigation fails.
+  const rememberedDirectory = useRef(storedDirectory())
 
   const navigate = (path: string) => {
     if (!path || path === directory) return
@@ -84,6 +89,7 @@ export function usePicker(request: FilePickerRequest) {
         if (!directory) {
           const target =
             request.directory ||
+            rememberedDirectory.current ||
             (locations.find((item) => item.kind === 'home') || locations[0])?.path ||
             ''
           if (target) {
@@ -106,14 +112,33 @@ export function usePicker(request: FilePickerRequest) {
       .then((value) => {
         if (!alive) return
         setEntries(value.entries || [])
+        if (rememberedDirectory.current === directory) rememberedDirectory.current = ''
       })
       .catch((cause) => {
-        if (alive) setError(String(cause))
+        if (!alive) return
+        const home = (locations.find((item) => item.kind === 'home') || locations[0])?.path
+        if (
+          !request.directory &&
+          rememberedDirectory.current === directory &&
+          home &&
+          home !== directory
+        ) {
+          rememberedDirectory.current = ''
+          setDirectory(home)
+          setHistory([home])
+          setIndex(0)
+          return
+        }
+        setError(String(cause))
       })
     return () => {
       alive = false
     }
   }, [directory, reload])
+
+  useEffect(() => {
+    if (directory) persistPickerDirectory(directory)
+  }, [directory])
 
   useEffect(() => {
     if (request.mode !== 'saveFile') return

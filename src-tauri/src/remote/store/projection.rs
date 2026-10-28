@@ -2,8 +2,9 @@
 use super::*;
 
 pub(super) fn public(conn: &StoredConnection) -> ConnectionInfo {
-    let builtin = terminal_connection(conn);
-    if !builtin {
+    let terminal = terminal_connection(conn);
+    let plugin_view = plugin_view_connection(conn);
+    if !terminal && !plugin_view {
         let mount = mount_path(conn);
         let _ = fs::create_dir_all(&mount);
     }
@@ -20,8 +21,10 @@ pub(super) fn public(conn: &StoredConnection) -> ConnectionInfo {
         name: conn.name.clone(),
         kind: conn.kind.clone(),
         plugin_id: connection_plugin_id(conn),
-        mount_path: if builtin {
+        mount_path: if terminal {
             format!("fiex-terminal://{}", conn.id)
+        } else if plugin_view {
+            format!("fiex-plugin-view://{}", conn.id)
         } else {
             super::super::config::navigation_path(conn, "").unwrap_or_default()
         },

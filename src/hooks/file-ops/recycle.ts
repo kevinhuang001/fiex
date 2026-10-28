@@ -61,6 +61,7 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
           'delete',
         )
         x.setSelected([])
+        x.reload()
       },
     })
   }

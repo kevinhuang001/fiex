@@ -71,7 +71,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
         })),
         {
           name: '应用程序',
-          path: root + '/Applications',
+          path: 'applications://',
           kind: 'applications',
           available: 0,
           total: 0,
@@ -179,6 +179,66 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
       if (typeof a.saved === 'boolean') connection.saved = a.saved
       if (typeof a.autostart === 'boolean') connection.autostart = a.autostart
       return connection
+    }
+    case 'plugin_connection_menu_resolve': {
+      const connection = demoConnections.find((item) => item.id === String(a.connectionId || ''))
+      if (!connection) throw new Error('connection not found')
+      const terminal = connection.pluginId === '__builtin__' && connection.kind === 'ssh'
+      const pluginView = connection.pluginId === 'org.fiex.ssh'
+      const vfs = !terminal && !pluginView && connection.mountPath.startsWith('fiex://mount/')
+      const session = crypto.randomUUID()
+      const group = (providerId: string, items: unknown[]) => ({
+        kind: 'builtin',
+        providerId,
+        menuSessionId: session,
+        items,
+      })
+      const menu = [
+        group('builtin:connection-edit', [
+          { id: 'connection.edit', kind: 'action', title: '编辑连接…', icon: 'pencil' },
+        ]),
+      ]
+      const sessionItems: unknown[] = [
+        { id: 'connection.saveSession', kind: 'action', title: '保存 Session', icon: 'pin' },
+      ]
+      sessionItems.push({
+        id: 'connection.toggleAutostart',
+        kind: 'action',
+        title: connection.autostart ? '取消自启动' : '设置为自启动',
+        icon: 'pin',
+      })
+      menu.push(group('builtin:connection-session', sessionItems))
+      if (vfs)
+        menu.push(
+          group('builtin:connection-sync', [
+            { id: 'connection.syncNow', kind: 'action', title: '立即同步', icon: 'sync' },
+          ]),
+        )
+      menu.push(
+        group('builtin:connection-close', [
+          {
+            id: 'connection.close',
+            kind: 'action',
+            title: '关闭连接',
+            icon: 'trash',
+            danger: true,
+            placement: 'tail',
+          },
+        ]),
+      )
+      return menu
+    }
+    case 'plugin_connection_menu_execute': {
+      const connection = demoConnections.find((item) => item.id === String(a.connectionId || ''))
+      if (!connection) throw new Error('connection not found')
+      const command = String(a.itemId || '')
+      if (command === 'connection.edit')
+        return { kind: 'coreAction', command: 'editConnection', connectionId: connection.id }
+      if (command === 'connection.close')
+        return { kind: 'coreAction', command: 'closeConnection', connectionId: connection.id }
+      if (command === 'connection.saveSession') connection.saved = true
+      if (command === 'connection.toggleAutostart') connection.autostart = !connection.autostart
+      return { kind: 'handled' }
     }
 
     default:

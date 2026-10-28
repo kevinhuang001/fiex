@@ -1,9 +1,13 @@
 use super::*;
 
 pub(super) fn terminal_connection(conn: &StoredConnection) -> bool {
-    let plugin = connection_plugin_id(conn);
-    (conn.kind == "ssh" && plugin == super::super::config::BUILTIN_PLUGIN_ID)
-        || plugin == "org.fiex.ssh"
+    conn.kind == "ssh" && connection_plugin_id(conn) == super::super::config::BUILTIN_PLUGIN_ID
+}
+
+/// The SSH plugin owns its terminal in a PluginView; only the built-in system
+/// OpenSSH connection is a Core-managed terminal.
+pub(super) fn plugin_view_connection(conn: &StoredConnection) -> bool {
+    connection_plugin_id(conn) == "org.fiex.ssh"
 }
 
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
@@ -179,7 +183,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     for field in &record.secret_keys {
         record.settings.remove(field);
     }
-    if !terminal_connection(&record) {
+    if !terminal_connection(&record) && !plugin_view_connection(&record) {
         fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
     }
     if let Some(index) = existing {

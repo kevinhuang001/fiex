@@ -35,6 +35,7 @@
 | 扩展点         | 形态                                               | Core 固定调用                                 |
 | -------------- | -------------------------------------------------- | --------------------------------------------- |
 | `contextMenus` | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute` |
+| `connectionContextMenus` | `true` 或 `{priority}`                    | `connectionContextMenu.resolve` / `connectionContextMenu.execute` |
 | `decorations`  | `{match?, priority?}`                              | `decorations.resolve`                         |
 | `info`         | `{match?, priority?}`                              | `info.resolve`                                |
 | `preview`      | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                |

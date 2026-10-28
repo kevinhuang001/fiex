@@ -230,6 +230,44 @@ export const officialPlugins: DemoPlugin[] = officialMode
         },
       },
       {
+        id: 'org.fiex.openlist',
+        name: 'OpenList',
+        version: '0.3.0',
+        description: '通过 OpenList 原生 API 连接服务器，支持目录浏览与文件读取。',
+        enabled: true,
+        approved: true,
+        backendAvailable: true,
+
+        declaredPermissions: ['files.read', 'network', 'metadata'],
+        grantedPermissions: ['files.read', 'network', 'metadata'],
+        requestedNetworkDomains: [],
+        allowedNetworkDomains: [],
+        author: { name: 'Fiex Contributors' },
+        extensions: {
+          connections: {
+            title: 'OpenList',
+            fields: [
+              {
+                id: 'url',
+                label: '服务器地址',
+                type: 'url',
+                required: true,
+                placeholder: 'http://localhost:5244',
+              },
+              { id: 'username', label: '用户名', type: 'text' },
+              { id: 'password', label: '密码', type: 'secret' },
+              {
+                id: 'timeout',
+                label: '连接超时（秒）',
+                type: 'number',
+                defaultValue: '30',
+              },
+            ],
+          },
+          vfs: { title: 'OpenList' },
+        },
+      },
+      {
         id: 'org.fiex.checksum',
         name: '校验和',
         version: '0.2.7',

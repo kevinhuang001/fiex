@@ -99,6 +99,7 @@ rfd = { version = "0.15", optional = true, default-features = false }
 objc2 = { version = "0.6", optional = true }
 plist = "1"
 xattr = "1"
+ds_store = "0.3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 rfd = { version = "0.15", optional = true, default-features = false }

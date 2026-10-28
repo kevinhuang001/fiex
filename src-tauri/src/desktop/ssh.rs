@@ -152,16 +152,8 @@ pub(crate) async fn ssh_open(
         .into_iter()
         .find(|connection| connection.id == connection_id)
         .ok_or(crate::i18n::t("SSH 连接不存在"))?;
-    if !matches!(
-        connection.plugin_id.as_str(),
-        "__builtin__" | "org.fiex.ssh"
-    ) || (connection.plugin_id == "__builtin__" && connection.kind != "ssh")
-    {
+    if connection.plugin_id != "__builtin__" || connection.kind != "ssh" {
         return Err(crate::i18n::t("不是 SSH 连接").into());
-    }
-    if connection.plugin_id == "org.fiex.ssh" {
-        crate::remote::ensure_provider_access(&connection)?;
-        return plugin_ssh_open(connection, cols, rows, on_event).await;
     }
     let host = string_setting(&connection.settings, "host");
     if host.is_empty() {

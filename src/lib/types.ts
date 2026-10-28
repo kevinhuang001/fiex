@@ -37,6 +37,8 @@ export interface Listing {
   path: string
   entries: Entry[]
   warnings: string[]
+  /** Preferred initial view when this folder has no remembered state. */
+  defaultView?: View
 }
 export type SidebarSection = 'places' | 'favorites' | 'tags' | 'devices' | 'connections'
 

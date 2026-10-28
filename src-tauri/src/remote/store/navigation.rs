@@ -16,12 +16,6 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
         return Err(crate::i18n::t("内置连接类型不支持").into());
     }
     let plugin_id = ensure_provider_access(&connection)?;
-    if terminal_connection(&connection) {
-        return Ok(serde_json::json!({
-            "kind": "terminal",
-            "connectionId": connection.id,
-        }));
-    }
     let target = crate::plugins::events::invoke(
         &plugin_id,
         "connection.open",

@@ -121,6 +121,11 @@ pub(crate) async fn plugin_context_menu_resolve(
     directory: String,
     paths: Vec<String>,
 ) -> Result<Vec<serde_json::Value>, String> {
+    if let Some(menu) =
+        crate::core::volumes::virtual_resolvers::resolve_menu(&directory, &paths)
+    {
+        return Ok(vec![menu]);
+    }
     tauri::async_runtime::spawn_blocking(move || {
         crate::plugins::resolvers::context_menu::query(&directory, &paths)
     })
@@ -147,6 +152,9 @@ pub(crate) async fn plugin_context_menu_execute(
     on_progress: tauri::ipc::Channel<super::super::files::OperationProgress>,
     cancel: tauri::State<'_, crate::core::operations::OperationCancel>,
 ) -> Result<serde_json::Value, String> {
+    if menu_session_id.starts_with("virtual:") {
+        return crate::core::volumes::virtual_resolvers::execute_menu(&menu_session_id, &item_id);
+    }
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::plugins::resolvers::context_menu::execute(&menu_session_id, &item_id)
     })
@@ -165,6 +173,33 @@ pub(crate) async fn plugin_context_menu_execute(
         return Ok(serde_json::json!({"handled":true}));
     }
     Ok(result)
+}
+
+#[tauri::command]
+pub(crate) async fn plugin_connection_menu_resolve(
+    connection_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::resolvers::connection_menu::query(&connection_id)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn plugin_connection_menu_execute(
+    connection_id: String,
+    provider_id: String,
+    item_id: String,
+    menu_session_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    crate::plugins::resolvers::connection_menu::execute(
+        &connection_id,
+        &provider_id,
+        &item_id,
+        menu_session_id.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]

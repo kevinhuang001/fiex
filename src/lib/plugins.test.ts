@@ -14,11 +14,12 @@ describe('plugin catalog helpers', () => {
       {
         info: { match: { extensions: ['txt'] } },
         contextMenus: true,
+        connectionContextMenus: true,
         preview: undefined,
       },
       ['make'],
     )
-    expect(categories).toEqual(['info', 'contextMenus'])
+    expect(categories).toEqual(['info', 'contextMenus', 'connections'])
   })
 
   it('falls back to commands when no contribution category exists', () => {

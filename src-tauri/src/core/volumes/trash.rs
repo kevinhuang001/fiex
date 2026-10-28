@@ -27,7 +27,11 @@ pub fn trash_path() -> Option<PathBuf> {
             .map(|data| data.join("Trash/files"))
             .filter(|path| path.is_dir())
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    {
+        Some(PathBuf::from(super::recycle::URI))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         None
     }
@@ -40,12 +44,16 @@ struct TrashOrigin {
 }
 
 pub fn restore_needs_folder(paths: &[String]) -> bool {
-    paths
-        .iter()
-        .any(|path| original_location(Path::new(path)).is_none())
+    paths.iter().any(|path| {
+        !path.starts_with(super::recycle::URI) && original_location(Path::new(path)).is_none()
+    })
 }
 
 fn original_location(trashed: &Path) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    if let Some(original) = macos_put_back(trashed) {
+        return Some(original);
+    }
     let name = trashed.file_name()?.to_string_lossy().into_owned();
     // The freedesktop spec stores the original path next to the payload.
     if let Some(trash) = trashed.parent().and_then(|files| files.parent()) {
@@ -121,6 +129,24 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Finder records the previous location of a trashed item in `.Trash/.DS_Store`
+/// (`ptbL`). Read it so Finder-trashed items can be put back from Fiex too.
+#[cfg(target_os = "macos")]
+fn macos_put_back(trashed: &Path) -> Option<String> {
+    let name = trashed.file_name()?.to_string_lossy().into_owned();
+    let bytes = std::fs::read(trashed.parent()?.join(".DS_Store")).ok()?;
+    let store = ds_store::DsStore::new(&bytes).ok()?;
+    let records = store.contents().get(&name)?;
+    for key in ["ptbL", "ptbN"] {
+        if let Some(ds_store::RecordValue::String(value)) = records.get(key) {
+            if !value.is_empty() && Path::new(value).is_absolute() {
+                return Some(value.clone());
+            }
+        }
+    }
+    None
+}
+
 /// Put trashed items back where they came from, like the system file manager.
 pub fn restore_from_trash(
     paths: &[String],
@@ -130,6 +156,11 @@ pub fn restore_from_trash(
     let mut restored = 0;
     for path in paths {
         check_cancelled(cancel)?;
+        if let Some(encoded) = path.strip_prefix(super::recycle::URI) {
+            super::recycle::restore(encoded)?;
+            restored += 1;
+            continue;
+        }
         let source = Path::new(path);
         if !source.exists() {
             continue;
@@ -185,12 +216,23 @@ fn remove_entry(path: &Path) -> Result<(), String> {
 /// Permanently remove items. Used inside the Trash, where "move to Trash" has
 /// no meaning and the user explicitly asks for the item to be gone.
 pub fn delete_permanently(paths: &[String], cancel: &AtomicBool) -> Result<usize, String> {
-    for path in paths {
-        crate::plugins::mounts::reject_local(path)?;
-    }
     let mut removed = 0;
     for path in paths {
         check_cancelled(cancel)?;
+        if let Some(encoded) = path.strip_prefix(super::recycle::URI) {
+            super::recycle::purge(encoded)?;
+            removed += 1;
+            continue;
+        }
+        if path.starts_with(super::applications::USER_PREFIX) {
+            super::applications::remove_user(path)?;
+            removed += 1;
+            continue;
+        }
+        if path.starts_with(super::applications::URI) {
+            return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
+        }
+        crate::plugins::mounts::reject_local(path)?;
         remove_entry(Path::new(path))?;
         removed += 1;
     }
@@ -239,21 +281,7 @@ pub fn empty_trash(cancel: &AtomicBool) -> Result<usize, String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let mut command = std::process::Command::new("powershell.exe");
-        command.args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Clear-RecycleBin -Force -ErrorAction SilentlyContinue",
-        ]);
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-        let status = command.status().map_err(|e| e.to_string())?;
-        if status.success() {
-            Ok(0)
-        } else {
-            Err(crate::i18n::t("无法清空回收站").into())
-        }
+        super::recycle::empty()
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {

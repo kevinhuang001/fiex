@@ -3,6 +3,7 @@ export type GroupKey = 'none' | 'kind' | 'modified' | 'size'
 
 const SORT_KEY = 'fiex.picker.sort'
 const GROUP_KEY = 'fiex.picker.group'
+const DIRECTORY_KEY = 'fiex.picker.directory'
 
 export function storedSort(): { key: SortKey; direction: 'asc' | 'desc' } {
   try {
@@ -32,6 +33,24 @@ export function persistPickerSort(
   try {
     localStorage.setItem(SORT_KEY, JSON.stringify(sort))
     localStorage.setItem(GROUP_KEY, group)
+  } catch {
+    // Preferences are best effort.
+  }
+}
+
+/** The last folder the chooser showed, so it reopens where the user left off. */
+export function storedDirectory(): string {
+  try {
+    return localStorage.getItem(DIRECTORY_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function persistPickerDirectory(path: string) {
+  if (!path) return
+  try {
+    localStorage.setItem(DIRECTORY_KEY, path)
   } catch {
     // Preferences are best effort.
   }

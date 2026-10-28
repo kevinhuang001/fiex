@@ -289,5 +289,6 @@ pub async fn list_listing(
         path: super::super::config::navigation_path(&conn, &rel)?,
         entries,
         warnings,
+        default_view: None,
     }))
 }

@@ -115,18 +115,18 @@
   padding: 0;
 }
 .plugin-switch {
-  width: 30px;
-  height: 18px;
+  width: 44px;
+  height: 26px;
   margin-right: 4px;
 }
 .plugin-switch > span {
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
 }
 .plugin-switch.on > span {
-  transform: translateX(12px);
+  transform: translateX(18px);
 }
 .plugin-pill {
   padding: 0 6px;
@@ -422,15 +422,17 @@
   font-size: 9px;
 }
 .plugin-switch {
-  width: 28px;
-  height: 17px;
+  width: 44px;
+  height: 26px;
 }
 .plugin-switch > span {
-  width: 11px;
-  height: 11px;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
 }
 .plugin-switch.on > span {
-  transform: translateX(11px);
+  transform: translateX(18px);
 }
 .plugin-empty {
   padding: 30px 18px;

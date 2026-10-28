@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { Download, Puzzle, ScrollText, Settings2, ShieldCheck, Trash2 } from 'lucide-react'
-import { PLUGIN_CATEGORIES, pluginCategories, type PluginInfo } from '@/lib/plugins'
+import type { PluginInfo } from '@/lib/plugins'
 import { Button } from '@/components/ui/button'
 import { pluginIcon } from '../PluginInstaller'
 
@@ -32,10 +32,8 @@ export function PluginList({
   return (
     <div className="plugin-list">
       {plugins.map((plugin) => {
-        const declared = plugin.declaredPermissions || []
         const enabled = plugin.enabled && plugin.approved
         const hasSettings = (plugin.extensions?.settings || []).length > 0
-        const categories = pluginCategories(plugin.extensions, plugin.requestedCommands)
         return (
           <article className="plugin-row" key={plugin.id}>
             <div className={`plugin-row-icon ${enabled ? 'enabled' : ''}`}>
@@ -54,24 +52,6 @@ export function PluginList({
                 )}
               </div>
               <p>{plugin.description || t('第三方插件')}</p>
-              <div className="plugin-row-meta">
-                {categories.slice(0, 3).map((category) => (
-                  <span className="plugin-category-pill" key={category}>
-                    {PLUGIN_CATEGORIES.find((entry) => entry.id === category)?.label || category}
-                  </span>
-                ))}
-                <span>{plugin.author?.name || t('未知开发者')}</span>
-                <span aria-hidden>·</span>
-                <span>
-                  {declared.length ? t('{0} 项权限', declared.length) : t('无需宿主权限')}
-                </span>
-                {plugin.extensions?.connections ? (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span>{t('连接提供者')}</span>
-                  </>
-                ) : null}
-              </div>
             </div>
             <div className="plugin-row-actions">
               <div className="plugin-row-buttons">

@@ -44,12 +44,18 @@ export function useAppEnvironment(app: ReturnType<typeof useAppController>) {
       (connection) =>
         (connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh') &&
         connection.autostart &&
-        connection.saved !== false &&
-        !app.left.tabs.includes(`fiex-terminal://${connection.id}`),
+        connection.saved !== false,
     )
     for (const session of sessions) {
+      // The SSH plugin owns its terminal in a PluginView; only the built-in
+      // OpenSSH connection is a Core terminal tab.
+      const path =
+        session.pluginId === 'org.fiex.ssh'
+          ? `fiex-plugin-view://${session.id}`
+          : `fiex-terminal://${session.id}`
+      if (app.left.tabs.includes(path)) continue
       app.newWorkspaceTab()
-      app.left.navigate(`fiex-terminal://${session.id}`)
+      app.left.navigate(path)
     }
   }, [app.left.hasListing, app.left.connections, app.left.tabs])
 

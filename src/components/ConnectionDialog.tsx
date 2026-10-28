@@ -239,10 +239,9 @@ export function ConnectionDialog({
               <ArrowLeft size={15} /> {t('选择其他类型')}
             </button>
           )}
-          <p className="sidebar-hint">
-            {current.factory.title}
-            {current.plugin.id === '__builtin__' && t(' · 密码/私钥口令会在终端中提示输入')}
-          </p>
+          {current.plugin.id === '__builtin__' && (
+            <p className="sidebar-hint">{t('密码/私钥口令会在终端中提示输入')}</p>
+          )}
           <ConnectionSetupHelp factory={current.factory} busy={busy} onError={setError} />
           <label>
             <span>{t('连接名称')}</span>

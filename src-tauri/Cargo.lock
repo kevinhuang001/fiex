@@ -1313,6 +1313,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ds_store"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21766c545427b07c58b9de770c0afe8ba4848be1ec683772ab13b04a6ff71da2"
+dependencies = [
+ "byteorder",
+ "chrono",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1504,6 +1514,7 @@ dependencies = [
  "base64 0.22.1",
  "cap-std",
  "dirs 6.0.0",
+ "ds_store",
  "dunce",
  "ed25519-dalek",
  "fiex-plugin-sdk",

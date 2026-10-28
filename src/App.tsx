@@ -167,7 +167,10 @@ export default function App() {
               className={`pane-main ${app.split && app.active === 'left' ? 'pane-active' : ''}`}
               onPointerDownCapture={() => app.setActive('left')}
               data-drop-folder={
-                /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) ? undefined : app.left.path
+                /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) &&
+                app.left.path !== 'applications://'
+                  ? undefined
+                  : app.left.path
               }
             >
               <FileViews

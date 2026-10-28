@@ -93,6 +93,8 @@ function resolveDemoMenu(a: Record<string, unknown>) {
   return { pluginId, menuSessionId, items: entries.filter((entry) => !('parentId' in entry)) }
 }
 
+const demoPreviewNames = new Map<string, string>()
+
 async function resolveDemoPreview(a: Record<string, unknown>) {
   const path = String(a.path || '')
   const name = path.split(/[\\/]/).pop() || ''
@@ -114,6 +116,7 @@ async function resolveDemoPreview(a: Record<string, unknown>) {
     if (!response.ok) throw new Error(await response.text())
     const html = await response.text()
     const sessionId = crypto.randomUUID()
+    demoPreviewNames.set(sessionId, name)
     // `?slowPreview` keeps the loading page visible long enough to inspect it.
     if (new URLSearchParams(location.search).has('slowPreview')) {
       await new Promise((resolve) => setTimeout(resolve, 900))
@@ -211,7 +214,54 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           },
         }
       })
-    case 'plugin_context_menu_resolve':
+    case 'plugin_context_menu_resolve': {
+      const directory = String(a.directory || '')
+      const paths = Array.isArray(a.paths) ? (a.paths as string[]) : []
+      if (directory === 'applications://') {
+        const user = paths.some((path) => path.startsWith('applications://user/'))
+        return [
+          {
+            kind: 'builtin',
+            providerId: 'builtin:core:applications',
+            menuSessionId: `virtual:${JSON.stringify(paths)}`,
+            items: [
+              { id: 'open', kind: 'action', title: '打开', icon: 'open' },
+              ...(user
+                ? [
+                    {
+                      id: 'delete',
+                      kind: 'action',
+                      title: '彻底删除',
+                      icon: 'trash',
+                      danger: true,
+                      placement: 'tail',
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      }
+      if (directory === 'recyclebin://') {
+        return [
+          {
+            kind: 'builtin',
+            providerId: 'builtin:core:trash',
+            menuSessionId: `virtual:${JSON.stringify(paths)}`,
+            items: [
+              { id: 'restore', kind: 'action', title: '放回原处', icon: 'restore' },
+              {
+                id: 'delete',
+                kind: 'action',
+                title: '彻底删除',
+                icon: 'trash',
+                danger: true,
+                placement: 'tail',
+              },
+            ],
+          },
+        ]
+      }
       return [
         ...demoBuiltinMenus(a),
         ...demoPlugins
@@ -224,6 +274,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
             }
           }),
       ]
+    }
     case 'plugin_context_menu_children': {
       const session = demoMenuSessions.get(String(a.menuSessionId || ''))
       const parentId = String(a.parentId || '')
@@ -237,6 +288,11 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return { items: children }
     }
     case 'plugin_context_menu_execute': {
+      const virtual = String(a.menuSessionId || '')
+      if (virtual.startsWith('virtual:')) {
+        const paths = JSON.parse(virtual.slice('virtual:'.length)) as string[]
+        return { kind: 'coreAction', command: String(a.itemId || ''), paths }
+      }
       const builtin = await executeDemoBuiltin(a)
       if (builtin) return builtin
       const menuSessionId = String(a.menuSessionId || '')
@@ -292,7 +348,11 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
     }
     case 'plugin_invoke': {
       const method = String(a.method || '')
-      const params = (a.params || {}) as Record<string, unknown>
+      const params = { ...((a.params || {}) as Record<string, unknown>) }
+      if (!params.path && a.previewSessionId) {
+        const name = demoPreviewNames.get(String(a.previewSessionId))
+        if (name) params.path = name
+      }
       if (officialMode) {
         if (method === 'archive.list') {
           return {

@@ -1,4 +1,4 @@
-import { t, getLocale } from '@/i18n'
+import { getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { call, demo } from '@/lib/api'
 import { usePluginConfiguration } from './usePluginConfiguration'
@@ -107,7 +107,6 @@ export function usePluginSettingsController() {
       await requestPluginActivation(pluginId)
       setLocalPreview(null)
       refreshPluginCatalog()
-      setMessage(t('已导入 {0} {1}', localPreview.name, localPreview.version))
     } catch (error) {
       setMessage(String(error))
     } finally {

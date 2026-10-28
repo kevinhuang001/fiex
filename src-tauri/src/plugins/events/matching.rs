@@ -14,6 +14,11 @@ pub(super) fn matches(
     if !contribution.is_object() && contribution.as_bool() != Some(true) {
         return false;
     }
+    // Connection menus describe a connection, not file targets; the plugin
+    // receives the connection summary and decides which items fit it.
+    if method.starts_with("connectionContextMenu.") {
+        return true;
+    }
     let Ok(rules) = crate::plugins::match_rules::MatchRules::from_contribution(contribution) else {
         return false;
     };

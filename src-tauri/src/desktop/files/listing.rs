@@ -7,14 +7,19 @@ pub(crate) async fn list_directory(
     ignores: Vec<String>,
     recent: tauri::State<'_, recent::Recent>,
 ) -> Result<files::Listing, String> {
-    if path == "recent://" {
+    if let Some(resolver) = crate::core::volumes::virtual_resolvers::resolver_for(&path) {
+        let recent_entries = recent::entries(&recent);
+        let ctx = crate::core::volumes::virtual_resolvers::VirtualContext {
+            recent: &recent_entries,
+        };
         return Ok(files::Listing {
-            read_only: true,
+            read_only: resolver.readonly(),
             can_create: false,
             virtual_volume: true,
             path,
-            entries: recent::entries(&recent),
+            entries: resolver.list(&ctx)?,
             warnings: vec![],
+            default_view: resolver.default_view().map(str::to_owned),
         });
     }
     if remote::is_remote(&path) {
@@ -52,6 +57,7 @@ pub(crate) async fn list_directory(
                 path: listing_path,
                 entries,
                 warnings: vec![],
+                default_view: None,
             })
         })
         .await

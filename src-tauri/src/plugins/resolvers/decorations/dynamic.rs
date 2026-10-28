@@ -149,6 +149,7 @@ pub(super) fn merge(
         && label.is_none()
         && description.is_none()
         && value.icon.is_none()
+        && value.icon_path.is_none()
     {
         return;
     }
@@ -182,7 +183,7 @@ pub(super) fn merge(
         if let Some(description) = description {
             pending.value.description = Some(description);
         }
-        if value.icon.is_some() {
+        if value.icon.is_some() || value.icon_path.is_some() {
             pending.value.icon = value.icon;
             pending.value.icon_path = value.icon_path;
         }

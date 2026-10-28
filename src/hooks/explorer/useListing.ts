@@ -24,6 +24,9 @@ export function useListing(
   const [directoryReadOnly, setDirectoryReadOnly] = useState(false)
   const [directoryCanCreate, setDirectoryCanCreate] = useState(true)
   const [virtualVolume, setVirtualVolume] = useState(false)
+  const [defaultView, setDefaultView] = useState<'list' | 'icons' | 'gallery' | 'columns' | null>(
+    null,
+  )
   const [readOnly, setReadOnly] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
@@ -140,6 +143,7 @@ export function useListing(
           setDirectoryReadOnly(Boolean(l.readOnly))
           setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
           setVirtualVolume(Boolean(l.virtualVolume))
+          setDefaultView(l.defaultView || null)
           setListedPath(path)
           setEntries(l.entries)
           setWarnings(l.warnings)
@@ -313,6 +317,7 @@ export function useListing(
     directoryReadOnly,
     directoryCanCreate,
     virtualVolume,
+    defaultView,
     setReadOnly,
     locations,
     refreshLocations,

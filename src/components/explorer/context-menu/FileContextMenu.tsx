@@ -50,6 +50,7 @@ export function FileContextMenu(props: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
   const position = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, ref, Boolean(menu))
   const { paths, menus, error } = useContextMenu(props)
+  const virtual = props.x.path === 'applications://' || props.x.path === 'recyclebin://'
   const builtin = useMemo(
     () => menus.filter((menu): menu is CoreMenu => menu.kind === 'builtin'),
     [menus],
@@ -89,13 +90,15 @@ export function FileContextMenu(props: ContextMenuProps) {
             .filter((item) => item.placement !== 'tail')
             .map((item) => render(group, item)),
         )}
-        <PluginContextActions
-          paths={paths}
-          path={x.path}
-          resolvedMenus={plugins}
-          onClose={() => setMenu(null)}
-          onError={x.setError}
-        />
+        {!virtual && (
+          <PluginContextActions
+            paths={paths}
+            path={x.path}
+            resolvedMenus={plugins}
+            onClose={() => setMenu(null)}
+            onError={x.setError}
+          />
+        )}
         {builtin.flatMap((group) =>
           group.items
             .filter((item) => item.placement === 'tail')

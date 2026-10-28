@@ -23,6 +23,8 @@ pub(super) fn event(method: &str) -> Option<Event> {
         "toolbar.invoke" => ("toolbar", Owner),
         "hooks.invoke" => ("hooks", FirstSupported),
         "connection.open" | "connection.create" | "connection.validate" => ("connections", Owner),
+        "connectionContextMenu.resolve" => ("connectionContextMenus", Merge),
+        "connectionContextMenu.execute" => ("connectionContextMenus", Owner),
         _ => return None,
     };
     Some(Event {

@@ -1,5 +1,14 @@
 import { t } from '@/i18n'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import { ChevronRight, Puzzle } from 'lucide-react'
 
 export interface PluginMenuItem {
@@ -14,6 +23,13 @@ export interface PluginMenu {
   menuSessionId: string
   items: PluginMenuItem[]
 }
+
+/** Sibling submenus share one open id so moving to the next level closes the
+ *  previous panel immediately instead of leaving two panels side by side. */
+export const SubmenuGroupContext = createContext<{
+  openId: string | null
+  setOpenId: Dispatch<SetStateAction<string | null>>
+} | null>(null)
 
 /** Validates the untrusted tree a plugin returns before rendering it. */
 export function validPluginMenuItems(items: unknown): items is PluginMenuItem[] {
@@ -69,7 +85,10 @@ export function PluginMenuNode({
   onAction: (item: PluginMenuItem, anchor?: { x: number; y: number }) => void
   onExpand: (submenuId: string) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const group = useContext(SubmenuGroupContext)
+  const [localExpanded, setLocalExpanded] = useState(false)
+  const [childOpen, setChildOpen] = useState<string | null>(null)
+  const expanded = group ? group.openId === item.id : localExpanded
   const [openUp, setOpenUp] = useState(false)
   const [openLeft, setOpenLeft] = useState(parentLeft)
   const submenu = useRef<HTMLDivElement>(null)
@@ -78,13 +97,24 @@ export function PluginMenuNode({
     if (timer.current !== null) window.clearTimeout(timer.current)
     timer.current = null
   }
+  const setExpanded = (value: boolean) => {
+    if (group)
+      group.setOpenId((current) => (value ? item.id : current === item.id ? null : current))
+    else setLocalExpanded(value)
+  }
   // Give the pointer time to cross the gap between a submenu trigger and its
   // panel before collapsing the panel.
   const scheduleClose = () => {
     cancel()
-    timer.current = window.setTimeout(() => setExpanded(false), 500)
+    timer.current = window.setTimeout(() => {
+      if (group) group.setOpenId((current) => (current === item.id ? null : current))
+      else setLocalExpanded(false)
+    }, 500)
   }
   useEffect(() => cancel, [])
+  useEffect(() => {
+    if (!expanded) setChildOpen(null)
+  }, [expanded])
   useLayoutEffect(() => {
     if (expanded && submenu.current) {
       const rect = submenu.current.getBoundingClientRect()
@@ -93,7 +123,14 @@ export function PluginMenuNode({
       setOpenLeft(parentLeft || (preferLeft && roomLeft) || rect.right > window.innerWidth - 8)
     }
   }, [expanded, parentLeft, preferLeft])
-  if (item.kind === 'separator') return <div role="separator" className="context-divider" />
+  if (item.kind === 'separator')
+    return (
+      <div
+        role="separator"
+        className="context-divider"
+        onMouseEnter={() => group?.setOpenId(null)}
+      />
+    )
   if (item.kind === 'submenu') {
     const descendants = items.filter((candidate) => candidate.parentId === item.id)
     const expand = () => {
@@ -129,17 +166,19 @@ export function PluginMenuNode({
             onMouseEnter={cancel}
           >
             {descendants.length ? (
-              descendants.map((entry) => (
-                <PluginMenuNode
-                  key={entry.id}
-                  item={entry}
-                  items={items}
-                  parentLeft={openLeft}
-                  preferLeft={preferLeft}
-                  onAction={onAction}
-                  onExpand={onExpand}
-                />
-              ))
+              <SubmenuGroupContext.Provider value={{ openId: childOpen, setOpenId: setChildOpen }}>
+                {descendants.map((entry) => (
+                  <PluginMenuNode
+                    key={entry.id}
+                    item={entry}
+                    items={items}
+                    parentLeft={openLeft}
+                    preferLeft={preferLeft}
+                    onAction={onAction}
+                    onExpand={onExpand}
+                  />
+                ))}
+              </SubmenuGroupContext.Provider>
             ) : (
               <div className="context-submenu-empty">{t('暂无可用操作')}</div>
             )}
@@ -151,6 +190,7 @@ export function PluginMenuNode({
   return (
     <button
       role="menuitem"
+      onMouseEnter={() => group?.setOpenId(null)}
       onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
     >
       <Puzzle size={15} />

@@ -965,6 +965,17 @@ body.dragging-file * {
 .connection-form label > span {
   font-weight: 600;
 }
+/* Every field row shares one flex line so plain, number and file inputs all
+   stretch to the same width as Connection name. */
+.connection-form label > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.connection-form label > div > input:not([type='checkbox']) {
+  flex: 1;
+  min-width: 0;
+}
 .connection-form input:not([type='checkbox']) {
   height: 30px;
   padding: 0 9px;

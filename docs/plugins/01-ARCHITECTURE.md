@@ -32,6 +32,7 @@ Core 负责 Resolve，SDK 负责 Provide：
 | Info        | `InfoResolver`（`plugin_info`）                   | `InfoProvider`        |
 | Preview     | `PreviewResolver`（`plugin_preview`）             | `PreviewProvider`     |
 | 右键菜单    | `ContextMenuResolver`（`plugin_context_menu`）    | `ContextMenuProvider` |
+| 连接菜单    | `ConnectionMenuResolver`（`connection_menu`）     | `ConnectionContextMenuProvider` |
 | Decorations | `DecorationResolver`（`plugin_decorations`）      | `DecorationProvider`  |
 | Search      | `SearchResolver`（`plugin_search`）               | `SearchProvider`      |
 | Toolbar     | `ToolbarResolver`                                 | `ToolbarProvider`     |

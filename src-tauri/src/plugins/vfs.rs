@@ -189,6 +189,7 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         path: crate::plugins::mounts::uri(&uri.mount_id, &uri.relative)?,
         entries,
         warnings: listing.warnings,
+        default_view: None,
     })
 }
 

@@ -67,6 +67,9 @@ export function transferActions({
     }
     setConflict(null)
     if (moving) setClipboard(null)
+    // Virtual destinations (Applications) have no filesystem watcher; reload
+    // the current pane so imported shortcuts appear immediately.
+    if (destination === x.path) x.reload()
     if (result.errors.length)
       x.setError(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
   }
