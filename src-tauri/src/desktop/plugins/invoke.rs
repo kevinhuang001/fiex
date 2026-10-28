@@ -1,4 +1,3 @@
-use super::*;
 /// Generic plugin process bridge. Deliberately runs on the blocking pool:
 /// stdout/IPC must never block the WebView or Tauri's async scheduler.
 /// Errors that are normal before activation must not flood the diagnostic log.
