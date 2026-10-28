@@ -60,7 +60,7 @@ fn plugin_session(owner: &str, id: &str) -> Result<PluginParts, String> {
     let session = values
         .get(id)
         .filter(|session| session.owner == owner)
-        .ok_or("终端会话不存在")?;
+        .ok_or(crate::i18n::t("终端会话不存在"))?;
     Ok(PluginParts {
         input: session.input.clone(),
         size: session.size.clone(),
@@ -167,7 +167,7 @@ pub(crate) fn plugin_terminal_end(owner: &str, params: &serde_json::Value) -> Re
     if !values.get(id).is_some_and(|session| session.owner == owner) {
         return Err(crate::i18n::t("终端会话不存在").into());
     }
-    let session = values.remove(id).ok_or("终端会话不存在")?;
+    let session = values.remove(id).ok_or(crate::i18n::t("终端会话不存在"))?;
     session.closed.store(true, Ordering::Release);
     if let Some(message) = params.get("error").and_then(serde_json::Value::as_str) {
         let _ = session.channel.send(SshEvent::Error {
@@ -275,10 +275,9 @@ pub(super) fn start_session(
             pixel_height: 0,
         })
         .map_err(|error| error.to_string())?;
-    let child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(|error| format!("无法启动终端：{error}"))?;
+    let child = pair.slave.spawn_command(command).map_err(|error| {
+        crate::i18n::format("无法启动终端：{error}", &[("error", (error).to_string())])
+    })?;
     drop(pair.slave);
     let mut reader = pair
         .master
@@ -344,7 +343,7 @@ pub(crate) async fn ssh_open(
     let connection = crate::remote::load_stored()
         .into_iter()
         .find(|connection| connection.id == connection_id)
-        .ok_or("SSH 连接不存在")?;
+        .ok_or(crate::i18n::t("SSH 连接不存在"))?;
     if !matches!(
         connection.plugin_id.as_str(),
         "__builtin__" | "org.fiex.ssh"
@@ -415,7 +414,9 @@ pub(crate) fn ssh_write(session_id: String, data: Vec<u8>) -> Result<(), String>
     let mut values = sessions()
         .lock()
         .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
-    let session = values.get_mut(&session_id).ok_or("终端会话已结束")?;
+    let session = values
+        .get_mut(&session_id)
+        .ok_or(crate::i18n::t("终端会话已结束"))?;
     session.writer.write_all(&data).map_err(|e| e.to_string())?;
     session.writer.flush().map_err(|e| e.to_string())
 }
@@ -434,7 +435,9 @@ pub(crate) fn ssh_resize(session_id: String, cols: u16, rows: u16) -> Result<(),
     let values = sessions()
         .lock()
         .map_err(|_| crate::i18n::t("终端会话表不可用"))?;
-    let session = values.get(&session_id).ok_or("终端会话已结束")?;
+    let session = values
+        .get(&session_id)
+        .ok_or(crate::i18n::t("终端会话已结束"))?;
     session
         .master
         .resize(PtySize {

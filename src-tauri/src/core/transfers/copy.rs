@@ -354,9 +354,10 @@ pub(crate) fn execute(
         } = task;
         // Re-check immediately before mutation: a new target must get a fresh dialog.
         if exists(&dest) && !replace {
-            result
-                .errors
-                .push(format!("{}: 目标已改变，请重试", dest.display()));
+            result.errors.push(crate::i18n::format(
+                "{0}: 目标已改变，请重试",
+                &[("0", (dest.display()).to_string())],
+            ));
             continue;
         }
         let backup = if replace {
@@ -405,9 +406,10 @@ pub(crate) fn execute(
                                 .map_err(|e| e.to_string())?;
                         } else {
                             let saved = backup.keep();
-                            result
-                                .errors
-                                .push(format!("目标已改变，原文件保存在 {}", saved.display()));
+                            result.errors.push(crate::i18n::format(
+                                "目标已改变，原文件保存在 {0}",
+                                &[("0", (saved.display()).to_string())],
+                            ));
                         }
                     } else {
                         fs::rename(backup.path().join("original"), &dest)

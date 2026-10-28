@@ -142,7 +142,12 @@ fn bound_entry(
     Ok(entry)
 }
 pub fn entry_from(value: Value) -> Result<Entry, String> {
-    serde_json::from_value(value).map_err(|error| format!("插件返回了无效的目录项：{error}"))
+    serde_json::from_value(value).map_err(|error| {
+        crate::i18n::format(
+            "插件返回了无效的目录项：{error}",
+            &[("error", (error).to_string())],
+        )
+    })
 }
 
 pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, String> {

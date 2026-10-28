@@ -428,7 +428,7 @@ mod description_tests {
         );
         assert_eq!(
             map.get("org.fiex.git").map(String::as_str),
-            Some("源代码管理")
+            Some(crate::i18n::t("源代码管理"))
         );
         assert!(!map.contains_key("bad id"));
     }

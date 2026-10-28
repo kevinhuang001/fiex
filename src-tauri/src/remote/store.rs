@@ -203,14 +203,19 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .iter()
             .find(|(id, _)| id == key)
             .map(|(_, ty)| ty.as_str())
-            .ok_or_else(|| format!("连接插件未声明字段：{key}"))?;
+            .ok_or_else(|| {
+                crate::i18n::format("连接插件未声明字段：{key}", &[("key", (key).to_string())])
+            })?;
         let valid = match field_type {
             "checkbox" => value.is_boolean(),
             "number" => value.is_number(),
             _ => value.is_string(),
         };
         if !valid {
-            return Err(format!("连接字段数据类型无效：{key}"));
+            return Err(crate::i18n::format(
+                "连接字段数据类型无效：{key}",
+                &[("key", (key).to_string())],
+            ));
         }
     }
     if builtin {
@@ -220,7 +225,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .ok_or("请输入 SSH 主机")?;
+            .ok_or(crate::i18n::t("请输入 SSH 主机"))?;
         if host.starts_with('-')
             || host
                 .chars()

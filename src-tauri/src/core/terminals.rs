@@ -126,7 +126,9 @@ pub fn launch(path: &str, id: &str) -> Result<(), String> {
         let app = if id == "default" {
             terminals
                 .get(1)
-                .ok_or("未发现可用终端，请安装 GNOME Terminal、Konsole 等终端")?
+                .ok_or(crate::i18n::t(
+                    "未发现可用终端，请安装 GNOME Terminal、Konsole 等终端",
+                ))?
                 .id
                 .as_str()
         } else {

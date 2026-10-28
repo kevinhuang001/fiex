@@ -186,7 +186,9 @@ pub fn restore_from_trash(
                 fallback
                     .and_then(|folder| source.file_name().map(|name| Path::new(folder).join(name)))
             })
-            .ok_or_else(|| format!("{path}: 请选择恢复位置"))?;
+            .ok_or_else(|| {
+                crate::i18n::format("{path}: 请选择恢复位置", &[("path", (path).to_string())])
+            })?;
         if !destination.is_absolute() {
             return Err(crate::i18n::t("恢复位置必须为绝对路径").into());
         }

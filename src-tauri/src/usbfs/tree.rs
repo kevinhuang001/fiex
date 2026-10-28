@@ -253,7 +253,7 @@ pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
     entries
         .into_iter()
         .find(|entry| entry.name == name)
-        .ok_or_else(|| "文件不存在".to_string())
+        .ok_or_else(|| crate::i18n::t("文件不存在").to_string())
 }
 
 pub fn search(

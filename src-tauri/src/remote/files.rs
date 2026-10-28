@@ -211,7 +211,10 @@ pub async fn list_listing(
             if !metadata.listed.contains(&rel) {
                 return Err(error);
             }
-            warnings.push(format!("离线目录：{error}"));
+            warnings.push(crate::i18n::format(
+                "离线目录：{error}",
+                &[("error", (error).to_string())],
+            ));
             cached_listing(&rel, &metadata)
         }
     };
@@ -537,7 +540,11 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
                 info["revision"].as_str().unwrap_or("").into();
         }
     }
-    let entry = meta.files.get(&rel).ok_or("远程文件不存在")?.clone();
+    let entry = meta
+        .files
+        .get(&rel)
+        .ok_or(crate::i18n::t("远程文件不存在"))?
+        .clone();
     if entry.is_dir {
         return Err(crate::i18n::t("不能作为文件打开文件夹").into());
     }
