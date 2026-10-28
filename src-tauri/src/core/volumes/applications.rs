@@ -94,7 +94,9 @@ pub fn stored_path(uri: &str) -> Result<PathBuf, String> {
 /// every existing ancestor is canonicalized to reject symlink escapes.
 pub fn candidate_path(uri: &str) -> Result<PathBuf, String> {
     let root = stored_path(URI)?;
-    let encoded = uri.strip_prefix(USER_PREFIX).ok_or("not a user application")?;
+    let encoded = uri
+        .strip_prefix(USER_PREFIX)
+        .ok_or("not a user application")?;
     let relative = decode(encoded)?;
     if relative.is_empty()
         || relative.contains(['\\', ':', '\0'])
@@ -109,18 +111,23 @@ pub fn candidate_path(uri: &str) -> Result<PathBuf, String> {
     let mut missing = Vec::new();
     while !ancestor.exists() {
         missing.push(
-            ancestor.file_name()
+            ancestor
+                .file_name()
                 .ok_or("invalid application child path")?
                 .to_os_string(),
         );
         ancestor = ancestor.parent().ok_or("missing application ancestor")?;
     }
     let mut resolved = dunce::canonicalize(ancestor).map_err(|e| e.to_string())?;
-    if !resolved.starts_with(&root) { return Err("application store escape".into()); }
+    if !resolved.starts_with(&root) {
+        return Err("application store escape".into());
+    }
     for child in missing.iter().rev() {
         resolved.push(child);
     }
-    if resolved == root { return Err("invalid application child path".into()); }
+    if resolved == root {
+        return Err("invalid application child path".into());
+    }
     Ok(resolved)
 }
 
@@ -146,9 +153,21 @@ pub fn stored_entry(uri: &str) -> Result<Entry, String> {
         item.mime = "application/x-fiex-application".into();
     }
     item.allowed_ops = if item.is_dir {
-        vec!["stat".into(), "list".into(), "mkdir".into(), "rename".into(), "remove".into()]
+        vec![
+            "stat".into(),
+            "list".into(),
+            "mkdir".into(),
+            "rename".into(),
+            "remove".into(),
+        ]
     } else {
-        vec!["stat".into(), "read".into(), "write".into(), "rename".into(), "remove".into()]
+        vec![
+            "stat".into(),
+            "read".into(),
+            "write".into(),
+            "rename".into(),
+            "remove".into(),
+        ]
     };
     Ok(item)
 }
