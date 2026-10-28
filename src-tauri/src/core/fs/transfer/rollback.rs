@@ -50,7 +50,7 @@ impl UndoLog {
 
     pub fn rollback(&mut self, steps: &[Step]) -> Vec<String> {
         let mut errors = Vec::new();
-        for index in self.affected.iter().rev().copied() {
+        for index in self.affected.clone().into_iter().rev() {
             let step = &steps[index];
             if step.existing && step.directory { continue; }
             let result = if step.existing {
