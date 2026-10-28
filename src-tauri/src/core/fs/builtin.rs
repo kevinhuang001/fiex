@@ -54,6 +54,9 @@ impl BuiltinFsAdapter<'_> {
 }
 impl FsAdapter for BuiltinFsAdapter<'_> {
     fn stat(&self) -> Result<Value, String> {
+        if applications::is_user(self.path()) && !self.application_file()?.exists() {
+            return Err("NotFound: application item absent".into());
+        }
         to_value(virtual_resolvers::resource_entry(self.path())?).map_err(|e| e.to_string())
     }
     fn list(&self) -> Result<Value, String> {
