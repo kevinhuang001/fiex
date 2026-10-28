@@ -22,8 +22,8 @@
 
 `vfs.list` 的每个条目返回 `nodeId`、`name`、`kind`、`size`、`modified` 和不透明字符串 `revision`。Core 保存逻辑路径到稳定节点 ID 的映射。目录分页成功后保存离线元数据，失败时读取上次完整快照。
 
-| 方法            | 参数（另含 connection）      | 返回                                    |
-| --------------- | ---------------------------- | --------------------------------------- |
+| 方法             | 参数（另含 connection）      | 返回                                    |
+| ---------------- | ---------------------------- | --------------------------------------- |
 | `vfs.stat`       | `nodeId`                     | `{revision, size}`；删除/无权限返回错误 |
 | `vfs.openRead`   | `nodeId`                     | `{streamId, size?}`                     |
 | `vfs.readStream` | `streamId, offset, maxBytes` | `{base64, eof}`                         |

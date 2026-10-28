@@ -27,16 +27,16 @@ Fiex Desktop / Sidebar / TabHost
 
 Core 负责 Resolve，SDK 负责 Provide：
 
-| 功能        | Core                                              | SDK                   |
-| ----------- | ------------------------------------------------- | --------------------- |
-| Info        | `InfoResolver`（`plugin_info`）                   | `InfoProvider`        |
-| Preview     | `PreviewResolver`（`plugin_preview`）             | `PreviewProvider`     |
-| 右键菜单    | `ContextMenuResolver`（`plugin_context_menu`）    | `ContextMenuProvider` |
+| 功能        | Core                                              | SDK                             |
+| ----------- | ------------------------------------------------- | ------------------------------- |
+| Info        | `InfoResolver`（`plugin_info`）                   | `InfoProvider`                  |
+| Preview     | `PreviewResolver`（`plugin_preview`）             | `PreviewProvider`               |
+| 右键菜单    | `ContextMenuResolver`（`plugin_context_menu`）    | `ContextMenuProvider`           |
 | 连接菜单    | `ConnectionMenuResolver`（`connection_menu`）     | `ConnectionContextMenuProvider` |
-| Decorations | `DecorationResolver`（`plugin_decorations`）      | `DecorationProvider`  |
-| Search      | `SearchResolver`（`plugin_search`）               | `SearchProvider`      |
-| Toolbar     | `ToolbarResolver`                                 | `ToolbarProvider`     |
-| 文件系统    | `FsResolver`（`fs_resolver`）+ `ProviderRegistry` | `FSProvider`          |
+| Decorations | `DecorationResolver`（`plugin_decorations`）      | `DecorationProvider`            |
+| Search      | `SearchResolver`（`plugin_search`）               | `SearchProvider`                |
+| Toolbar     | `ToolbarResolver`                                 | `ToolbarProvider`               |
+| 文件系统    | `FsResolver`（`fs_resolver`）+ `ProviderRegistry` | `FSProvider`                    |
 
 - Resolver 负责匹配、协调、调用、校验和结果聚合；Provider 是插件实现。
 - `ResourceBroker`（`fs_access` / `net` / `process` / `resources`）

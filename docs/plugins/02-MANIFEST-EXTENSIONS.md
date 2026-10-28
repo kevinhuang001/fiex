@@ -32,21 +32,21 @@
 
 所有扩展点都在 `extensions` 下注册，**每插件最多一个贡献**。
 
-| 扩展点         | 形态                                               | Core 固定调用                                 |
-| -------------- | -------------------------------------------------- | --------------------------------------------- |
-| `contextMenus` | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute` |
-| `connectionContextMenus` | `true` 或 `{priority}`                    | `connectionContextMenu.resolve` / `connectionContextMenu.execute` |
-| `decorations`  | `{match?, priority?}`                              | `decorations.resolve`                         |
-| `info`         | `{match?, priority?}`                              | `info.resolve`                                |
-| `preview`      | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                |
-| `connections`  | `{title, fields}`                                  | `connection.validate/open/create`             |
-| `vfs`          | `{title, readOnly?}`                               | `vfs.list/stat/read…`                         |
-| `search`       | `{icon?, scope?}`                                  | `search.query`                                |
-| `toolbar`      | `{title, icon?, panel?}`                           | `toolbar.invoke`，有 panel 时打开面板         |
-| `themes`       | `{path}`                                           | 主题资产加载                                  |
-| `settings`     | `[{id,label,type,…}]`                              | 设置字段；字段 id 是存储 key                  |
-| `hooks`        | `{event, priority?, match?}`                       | `hooks.invoke`（`beforeOpen` 可消费打开）     |
-| `ui`           | `{timeoutMs?}`                                     | 面板桥接与单次插件请求的超时预算              |
+| 扩展点                   | 形态                                               | Core 固定调用                                                     |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------- |
+| `contextMenus`           | `true` 或 `{match}`                                | `contextMenu.resolve` / `contextMenu.execute`                     |
+| `connectionContextMenus` | `true` 或 `{priority}`                             | `connectionContextMenu.resolve` / `connectionContextMenu.execute` |
+| `decorations`            | `{match?, priority?}`                              | `decorations.resolve`                                             |
+| `info`                   | `{match?, priority?}`                              | `info.resolve`                                                    |
+| `preview`                | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                                    |
+| `connections`            | `{title, fields}`                                  | `connection.validate/open/create`                                 |
+| `vfs`                    | `{title, readOnly?}`                               | `vfs.list/stat/read…`                                             |
+| `search`                 | `{icon?, scope?}`                                  | `search.query`                                                    |
+| `toolbar`                | `{title, icon?, panel?}`                           | `toolbar.invoke`，有 panel 时打开面板                             |
+| `themes`                 | `{path}`                                           | 主题资产加载                                                      |
+| `settings`               | `[{id,label,type,…}]`                              | 设置字段；字段 id 是存储 key                                      |
+| `hooks`                  | `{event, priority?, match?}`                       | `hooks.invoke`（`beforeOpen` 可消费打开）                         |
+| `ui`                     | `{timeoutMs?}`                                     | 面板桥接与单次插件请求的超时预算                                  |
 
 不再接受：
 

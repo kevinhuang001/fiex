@@ -30,8 +30,8 @@ Core 与所有文件系统插件之间只有一套 `vfs.*` 协议。连接（SMB
 
 ## 2. 方法
 
-| 方法             | 参数                                                | 返回                                             |
-| ---------------- | --------------------------------------------------- | ------------------------------------------------ |
+| 方法              | 参数                                                | 返回                                             |
+| ----------------- | --------------------------------------------------- | ------------------------------------------------ |
 | `vfs.list`        | `mountId,nodeId,cursor?,limit,hidden?,ignores?`     | `{entries:[FsEntry],nextCursor?,warnings?}`      |
 | `vfs.stat`        | `mountId,nodeId`                                    | `FsEntry`                                        |
 | `vfs.search`      | `mountId,nodeId,query,limit,hidden?,ignores?`       | `{entries:[FsEntry 含 relativePath],truncated?}` |
