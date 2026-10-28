@@ -1,5 +1,4 @@
 use super::Running;
-use crate::plugins::security::policy::Capability;
 use std::sync::atomic::Ordering;
 
 impl Running {
