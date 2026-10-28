@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --lib 2>&1 | tee core-test.log
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --lib 2>&1 | tee core-test.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             {
@@ -131,17 +131,17 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then executable=mock_plugin.exe; fi
           cp "sdk/rust/target/${{ matrix.target }}/debug/examples/$executable" "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"
           if [ "$RUNNER_OS" != Windows ]; then chmod +x "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"; fi
-          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_smoke -- org.fiex.mock
-          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_concurrency
-          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_search_e2e
-          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_locale
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_smoke -- org.fiex.mock
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_concurrency
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_search_e2e
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_locale
       - name: Windows plugin IPC without console standard handles
         if: runner.os == 'Windows'
         shell: bash
         env:
           FIEX_PLUGIN_DIR: ${{ runner.temp }}/fiex-plugin-host-test/plugins
           XDG_DATA_HOME: ${{ runner.temp }}/fiex-plugin-host-test/user-data
-        run: cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_windows_stdio
+        run: cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_windows_stdio
       - name: Static toolbar panel resolution
         shell: bash
         env:
@@ -169,7 +169,7 @@ jobs:
           cat > "$fixture/ui/dist/index.html" <<'HTML'
           <!doctype html><html><head><title>fixture</title></head><body>panel</body></html>
           HTML
-          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --example plugin_panels -- org.fiex.panels
+          cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_panels -- org.fiex.panels
       - name: macOS sandbox startup diagnostics
         if: failure() && runner.os == 'macOS'
         run: sudo log show --last 5m --style compact --predicate 'process == "sandboxd" OR eventMessage CONTAINS "mock_plugin"' | tail -200
