@@ -131,8 +131,12 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     }
     // The recursive walker counted active leases in its quota, but this new
     // lease must own only the bytes/items it actually staged.
-    let bytes = bytes.checked_sub(active_bytes).ok_or("export quota underflow")?;
-    let count = count.checked_sub(active_items).ok_or("export item underflow")?;
+    let bytes = bytes
+        .checked_sub(active_bytes)
+        .ok_or("export quota underflow")?;
+    let count = count
+        .checked_sub(active_items)
+        .ok_or("export item underflow")?;
     let id = crate::plugins::mounts::new_id()?;
     let mut registry = leases().lock().map_err(|_| "export registry unavailable")?;
     registry.retain(|_, lease| lease.expires > Instant::now());
