@@ -5,7 +5,7 @@
 //! resolver list instead of appearing with an empty item array.
 //! The capability matrix is:
 //!
-//! - `opening`: always; `open` is disabled for a file entry without `read`
+//! - `opening`: always; `open` is omitted for a file entry without `read`
 //!   (a directory opens by navigation and needs no read), `preview` requires
 //!   `read`, `info` only reads Core metadata.
 //! - `rename` / `batch-rename`: require `rename` in a writable directory.
