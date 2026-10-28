@@ -12,25 +12,6 @@ concurrency:
   group: ci-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 jobs:
-  format-diagnostics:
-    name: Format Rust source and emit changed-file diagnostics
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml
-      - name: Emit exact formatted Rust contents
-        run: |
-          python3 - <<'PY'
-          import base64, subprocess
-          from pathlib import Path
-          files = subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines()
-          for path in files:
-              if path.endswith('.rs'):
-                  print('FIEX_FMT|' + path + '|' + base64.b64encode(Path(path).read_bytes()).decode('ascii'))
-          PY
   checks:
     name: Frontend and UI tests
     runs-on: ubuntu-latest
