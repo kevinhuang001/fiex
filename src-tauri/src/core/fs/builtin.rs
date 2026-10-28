@@ -94,7 +94,7 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         {
             return if op == FsOperation::Stat
                 || (op == FsOperation::List
-                    && crate::core::volumes::trash::trash_path()
+                    && crate::core::volumes::trash_path()
                         .is_some_and(|root| root.to_string_lossy() == self.path()))
                 || (op == FsOperation::List && self.path() == crate::core::volumes::recycle::URI)
             {
