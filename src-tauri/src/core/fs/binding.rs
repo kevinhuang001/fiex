@@ -41,7 +41,7 @@ pub(crate) fn child(parent: &ResourceBroker, name: &str) -> Result<ResourceBroke
         let uri = crate::plugins::mounts::parse(&parent.path)?;
         crate::plugins::mounts::uri(
             &uri.mount_id,
-            &format!("{}/{}", uri.relative.trim_matches('/'), name).trim_start_matches('/'),
+            format!("{}/{}", uri.relative.trim_matches('/'), name).trim_start_matches('/'),
         )?
     } else if crate::usbfs::route(&parent.path).is_some() {
         format!("{}/{}", parent.path.trim_end_matches('/'), name)
