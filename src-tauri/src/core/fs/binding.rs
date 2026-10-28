@@ -12,10 +12,7 @@ pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String>
         Scope::selected(&std::env::temp_dir(), &[])?
     } else {
         let local = Path::new(path);
-        Scope::selected(
-            local.parent().ok_or("invalid selection")?,
-            &[local.to_path_buf()],
-        )?
+        Scope::selected(local.parent().unwrap_or(local), &[local.to_path_buf()])?
     };
     let target = serde_json::json!({"ref":snapshot.reference,"metadata":snapshot.metadata()});
     if virtual_storage {

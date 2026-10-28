@@ -16,7 +16,7 @@ pub struct Entry {
     pub mime: String,
     pub readonly: bool,
     pub link_target: Option<String>,
-    /// Provider operations this entry allows. Empty means unrestricted.
+    /// Provider operations this entry allows. Empty grants no provider operations.
     #[serde(default)]
     pub allowed_ops: Vec<String>,
     pub tags: Vec<Tag>,

@@ -84,7 +84,7 @@ impl ResourceSnapshot {
                 if let Some(route) = crate::usbfs::route(display) {
                     return format!(
                         "core:usb:{}",
-                        hex::encode(Sha256::digest(route.root.as_bytes()))
+                        crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into())
                     );
                 }
                 crate::core::volumes::virtual_resolvers::resolver_for(display)
@@ -234,6 +234,7 @@ pub fn bind_selected(
     for binding in bindings {
         if crate::plugins::mounts::handles(&binding.path)
             || crate::usbfs::route(&binding.path).is_some()
+            || crate::core::volumes::virtual_resolvers::opaque(&binding.path)
         {
             let snapshot = ResourceSnapshot::resolve(&binding.path)?;
             if snapshot.reference != binding.reference {

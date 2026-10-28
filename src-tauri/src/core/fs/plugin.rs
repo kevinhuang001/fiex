@@ -40,6 +40,26 @@ impl<'a> PluginFsAdapter<'a> {
     }
 }
 impl FsAdapter for PluginFsAdapter<'_> {
+    fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
+        if crate::remote::is_remote(&self.resource.path) {
+            crate::remote::stat(&self.resource.path)
+        } else {
+            crate::plugins::vfs::stat(&self.resource.path)
+        }
+    }
+    fn desktop_listing(
+        &self,
+        path: &str,
+        hidden: bool,
+        ignores: &[String],
+    ) -> Result<crate::core::files::Listing, String> {
+        if crate::remote::is_remote(path) {
+            futures::executor::block_on(crate::remote::list_listing(path, hidden, ignores))?
+                .ok_or_else(|| "MountNotFound: connection removed".into())
+        } else {
+            crate::plugins::vfs::list(path, hidden, ignores)
+        }
+    }
     fn stat(&self) -> Result<Value, String> {
         let (mount, node) = self.node()?;
         Ok(self.project(mount.stat(&node)?, &self.resource.path))
@@ -65,7 +85,7 @@ impl FsAdapter for PluginFsAdapter<'_> {
         Ok(json!(out))
     }
     fn require(&self, op: FsOperation, create: bool) -> Result<(), String> {
-        let (mount, node) = if create || op == FsOperation::Mkdir {
+        let (mount, node) = if create {
             let (mount, parent, _) = self.parent()?;
             (mount, parent)
         } else {

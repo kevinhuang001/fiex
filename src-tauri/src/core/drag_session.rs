@@ -1,6 +1,6 @@
 //! An OS copy drag can be handled as a move only by another Fiex window in
 //! this process. External destinations always receive a copy-only URI drag.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
     sync::Mutex,
@@ -17,11 +17,31 @@ struct Session {
     originals: Vec<String>,
     references: Vec<crate::plugins::contracts::ResourceRef>,
 }
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct DropPlan {
     pub paths: Vec<String>,
     pub moving: bool,
     pub references: Vec<crate::plugins::contracts::ResourceRef>,
+}
+impl DropPlan {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.paths.len() != self.references.len() || self.paths.is_empty() {
+            return Err("StaleRef: invalid drag selection".into());
+        }
+        for (path, reference) in self.paths.iter().zip(&self.references) {
+            let resource = crate::core::fs::trusted(path, "core:drop")?;
+            if &resource.reference != reference {
+                return Err("StaleRef: drag source changed".into());
+            }
+            if self.moving {
+                resource.require(
+                    crate::plugins::provider_registry::FsOperation::Remove,
+                    false,
+                )?;
+            }
+        }
+        Ok(())
+    }
 }
 fn normalized(paths: &[String]) -> Result<Vec<PathBuf>, String> {
     let mut result = paths

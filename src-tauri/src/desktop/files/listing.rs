@@ -7,66 +7,12 @@ pub(crate) async fn list_directory(
     ignores: Vec<String>,
     recent: tauri::State<'_, recent::Recent>,
 ) -> Result<files::Listing, String> {
-    if let Some(resolver) = crate::core::volumes::virtual_resolvers::resolver_for(&path) {
-        let recent_entries = recent::entries(&recent);
-        let ctx = crate::core::volumes::virtual_resolvers::VirtualContext {
-            recent: &recent_entries,
-        };
-        return Ok(files::Listing {
-            read_only: resolver.readonly(),
-            can_create: path == crate::core::volumes::applications::URI
-                || crate::core::volumes::applications::is_user(&path),
-            virtual_volume: true,
-            path: path.clone(),
-            entries: resolver.list(&path, &ctx)?,
-            warnings: vec![],
-            default_view: resolver.default_view().map(str::to_owned),
-        });
-    }
-    if remote::is_remote(&path) {
-        return remote::list_listing(&path, hidden, &ignores)
-            .await?
-            .ok_or_else(|| "MountNotFound: connection removed".into());
-    }
-    if crate::plugins::vfs::handles(&path) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            crate::plugins::vfs::list(&path, hidden, &ignores)
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-
-    if let Some(route) = crate::usbfs::route(&path) {
-        let listing_path = path.clone();
-        return tauri::async_runtime::spawn_blocking(move || {
-            let mut entries = crate::usbfs::listing(&route)?;
-            let filter = crate::core::ignores::IgnoreSet::new(&ignores);
-            entries.retain(|entry| {
-                (hidden || !entry.name.starts_with('.'))
-                    && !filter.is_ignored(std::path::Path::new(&entry.name))
-            });
-            let read_only = matches!(
-                route.kind,
-                crate::usbfs::FsKind::Apfs
-                    | crate::usbfs::FsKind::Hfs
-                    | crate::usbfs::FsKind::Btrfs
-            );
-            Ok(files::Listing {
-                read_only,
-                can_create: !read_only,
-                virtual_volume: true,
-                path: listing_path,
-                entries,
-                warnings: vec![],
-                default_view: None,
-            })
-        })
-        .await
-        .map_err(|error| error.to_string())?;
-    }
-    tauri::async_runtime::spawn_blocking(move || files::list(&path, hidden, &ignores))
-        .await
-        .map_err(|e| e.to_string())?
+    let _ = recent; // Recent storage is read by its in-process adapter.
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::core::fs::trusted(&path, "core:list")?.desktop_listing(hidden, &ignores)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -77,19 +23,7 @@ pub(crate) async fn file_info(path: String) -> Result<files::Entry, String> {
 }
 
 pub(super) fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
-    if crate::core::volumes::virtual_resolvers::opaque(path) {
-        return crate::core::volumes::virtual_resolvers::resource_entry(path);
-    }
-    if remote::is_remote(path) {
-        return remote::stat(path);
-    }
-    if crate::plugins::vfs::handles(path) {
-        return crate::plugins::vfs::stat(path);
-    }
-    if let Some(route) = crate::usbfs::route(path) {
-        return crate::usbfs::entry(&route);
-    }
-    files::entry(std::path::Path::new(path))
+    crate::core::fs::trusted(path, "core:stat")?.desktop_entry()
 }
 
 #[tauri::command]

@@ -92,6 +92,9 @@ pub fn ensure_access(route: &Route) -> Result<(), String> {
 }
 
 pub fn eject(device: &str) -> Result<(), String> {
+    // Revoke before asking the OS to eject, including failed ejection: an
+    // in-flight operation must not resume with the old device generation.
+    super::identity::invalidate(device);
     #[cfg(target_os = "macos")]
     {
         let output = std::process::Command::new("diskutil")

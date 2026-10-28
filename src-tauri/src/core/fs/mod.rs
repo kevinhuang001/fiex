@@ -3,6 +3,7 @@
 mod binding;
 mod builtin;
 mod export;
+mod presentation;
 mod transfer;
 pub(crate) use binding::trusted;
 pub use transfer::transfer;
@@ -29,6 +30,17 @@ pub trait WriteHandle: Send {
 /// Storage only: presentation, menus and launch/restore actions stay outside.
 pub trait FsAdapter: Send {
     fn stat(&self) -> Result<Value, String>;
+    fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
+        presentation::entry(self.stat()?)
+    }
+    fn desktop_listing(
+        &self,
+        path: &str,
+        hidden: bool,
+        ignores: &[String],
+    ) -> Result<crate::core::files::Listing, String> {
+        presentation::listing(self, path, hidden, ignores)
+    }
     fn list(&self) -> Result<Value, String>;
     fn require(&self, operation: FsOperation, create: bool) -> Result<(), String>;
     fn open_read(&self) -> Result<Box<dyn ReadHandle>, String>;
@@ -98,6 +110,16 @@ impl ResourceBroker {
         Ok(Box::new(local::LocalFsAdapter(self)))
     }
     pub fn require(&self, operation: FsOperation, create: bool) -> Result<(), String> {
+        if crate::usbfs::route(&self.path).is_some() {
+            let current =
+                crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                    &self.path,
+                    Default::default(),
+                );
+            if current.reference != self.reference {
+                return Err("StaleRef: USB mount generation changed".into());
+            }
+        }
         // Unix Trash is a physical directory, not an opaque URI. Do not let
         // its local filesystem adapter bypass the view policy: restore and
         // permanent deletion must remain explicit Core-only actions.
@@ -112,7 +134,12 @@ impl ResourceBroker {
     pub fn stat(&self) -> Result<Value, String> {
         self.scope.authorize_method("fs.stat")?;
         self.require(FsOperation::Stat, false)?;
-        self.adapter()?.stat()
+        let mut value = self.adapter()?.stat()?;
+        // Internal stream/transfer DTOs use one symlink field across adapters.
+        if let Some(symlink) = value.get("isSymlink").cloned() {
+            value["symlink"] = symlink;
+        }
+        Ok(value)
     }
     pub fn list(&self) -> Result<Value, String> {
         self.scope.authorize_method("fs.list")?;
@@ -163,3 +190,6 @@ impl ResourceBroker {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod migration_tests;

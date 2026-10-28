@@ -1,7 +1,6 @@
 //! Raw-driver resources use the same bounded read handles as other storage.
 use super::*;
 use crate::usbfs::{self, Route};
-use serde_json::json;
 use std::io::{Seek, Write};
 pub(super) struct UsbFsAdapter {
     route: Route,
@@ -13,21 +12,27 @@ impl UsbFsAdapter {
 }
 impl FsAdapter for UsbFsAdapter {
     fn stat(&self) -> Result<Value, String> {
-        let entry = usbfs::entry(&self.route)?;
-        Ok(
-            json!({"path":entry.path,"name":entry.name,"isDir":entry.is_dir,"size":entry.size,
-            "modified":entry.modified,"extension":entry.extension,"mime":entry.mime,"symlink":false}),
-        )
+        serde_json::to_value(usbfs::entry(&self.route)?).map_err(|e| e.to_string())
     }
     fn list(&self) -> Result<Value, String> {
-        let items = usbfs::listing(&self.route)?;
-        Ok(json!(items.into_iter().map(|entry| json!({"path":entry.path,"name":entry.name,"isDir":entry.is_dir,"size":entry.size,"modified":entry.modified,"extension":entry.extension,"mime":entry.mime,"symlink":false})).collect::<Vec<_>>()))
+        serde_json::to_value(usbfs::listing(&self.route)?).map_err(|e| e.to_string())
     }
     fn require(&self, op: FsOperation, _create: bool) -> Result<(), String> {
         usbfs::ensure_access(&self.route)?;
+        if !_create {
+            let entry = usbfs::entry(&self.route)?;
+            if (op == FsOperation::Read && entry.is_dir)
+                || (matches!(
+                    op,
+                    FsOperation::List | FsOperation::Search | FsOperation::Mkdir
+                ) && !entry.is_dir)
+            {
+                return Err("Unsupported: operation does not apply to node kind".into());
+            }
+        }
         if matches!(
             op,
-            FsOperation::List | FsOperation::Stat | FsOperation::Read
+            FsOperation::List | FsOperation::Stat | FsOperation::Read | FsOperation::Search
         ) {
             return Ok(());
         }
@@ -72,6 +77,7 @@ impl FsAdapter for UsbFsAdapter {
             route: self.route.clone(),
             staged,
             replace: !create,
+            generation: usbfs::generation(&self.route)?,
         }))
     }
     fn mkdir(&self) -> Result<Value, String> {
@@ -136,9 +142,13 @@ struct UsbWrite {
     route: Route,
     staged: std::fs::File,
     replace: bool,
+    generation: String,
 }
 impl WriteHandle for UsbWrite {
     fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
+        if usbfs::generation(&self.route)? != self.generation {
+            return Err("StaleRef: USB device replaced".into());
+        }
         self.staged.write_all(bytes).map_err(|e| e.to_string())
     }
     fn seek(&mut self, kind: &str, offset: i64) -> Result<u64, String> {
@@ -153,6 +163,10 @@ impl WriteHandle for UsbWrite {
         self.staged.seek(position).map_err(|e| e.to_string())
     }
     fn commit(mut self: Box<Self>) -> Result<Value, String> {
+        if usbfs::generation(&self.route)? != self.generation {
+            return Err("StaleRef: USB device replaced".into());
+        }
+        usbfs::ensure_access(&self.route)?;
         self.staged.sync_all().map_err(|e| e.to_string())?;
         usbfs::commit_staged(&self.route, &mut self.staged, self.replace)?;
         Ok(Value::Null)

@@ -53,6 +53,19 @@ impl BuiltinFsAdapter<'_> {
     }
 }
 impl FsAdapter for BuiltinFsAdapter<'_> {
+    fn desktop_listing(
+        &self,
+        path: &str,
+        hidden: bool,
+        ignores: &[String],
+    ) -> Result<crate::core::files::Listing, String> {
+        let mut listing = super::presentation::listing(self, path, hidden, ignores)?;
+        if let Some(resolver) = virtual_resolvers::resolver_for(path) {
+            listing.read_only = resolver.readonly();
+            listing.default_view = resolver.default_view().map(str::to_owned);
+        }
+        Ok(listing)
+    }
     fn stat(&self) -> Result<Value, String> {
         if applications::is_user(self.path()) && !self.application_file()?.exists() {
             return Err("NotFound: application item absent".into());
@@ -74,7 +87,11 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
     }
     fn require(&self, op: FsOperation, create: bool) -> Result<(), String> {
         if self.path() == applications::URI {
-            return if matches!(op, FsOperation::Stat | FsOperation::List) {
+            return if matches!(
+                op,
+                FsOperation::Stat | FsOperation::List | FsOperation::Mkdir
+            ) && !create
+            {
                 Ok(())
             } else {
                 Err("Unsupported: applications root has no file stream".into())

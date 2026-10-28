@@ -55,12 +55,20 @@ pub(crate) async fn internal_drop(
     app: tauri::AppHandle,
     paths: Vec<String>,
     consume: bool,
+    captured: Option<DropPlan>,
 ) -> Result<Option<DropPlan>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<DragSessions>().resolve(&paths, consume)
+        let plan = app
+            .state::<DragSessions>()
+            .resolve(&paths, consume)
+            .or(captured);
+        if let Some(plan) = &plan {
+            plan.validate()?;
+        }
+        Ok(plan)
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub(crate) async fn drag_files(

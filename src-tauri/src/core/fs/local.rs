@@ -5,6 +5,19 @@ use serde_json::json;
 
 pub(super) struct LocalFsAdapter<'a>(pub &'a ResourceBroker);
 impl FsAdapter for LocalFsAdapter<'_> {
+    fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
+        self.0.scope.authorize(&self.0.path)?;
+        crate::core::files::entry(std::path::Path::new(&self.0.path))
+    }
+    fn desktop_listing(
+        &self,
+        path: &str,
+        hidden: bool,
+        ignores: &[String],
+    ) -> Result<crate::core::files::Listing, String> {
+        self.0.scope.authorize(path)?;
+        crate::core::files::list(path, hidden, ignores)
+    }
     fn stat(&self) -> Result<Value, String> {
         fs_access::stat(&self.0.scope, &self.0.path)
     }
