@@ -89,6 +89,41 @@ pub fn stored_path(uri: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+/// Validate an Applications user URI without requiring the final node to
+/// exist. A newly created child is confined to the canonical private root;
+/// every existing ancestor is canonicalized to reject symlink escapes.
+pub fn candidate_path(uri: &str) -> Result<PathBuf, String> {
+    let root = stored_path(URI)?;
+    let encoded = uri.strip_prefix(USER_PREFIX).ok_or("not a user application")?;
+    let relative = decode(encoded)?;
+    if relative.is_empty()
+        || relative.contains(['\\', ':', '\0'])
+        || Path::new(&relative)
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err("invalid application store path".into());
+    }
+    let target = root.join(relative);
+    let mut ancestor = target.as_path();
+    let mut missing = Vec::new();
+    while !ancestor.exists() {
+        missing.push(
+            ancestor.file_name()
+                .ok_or("invalid application child path")?
+                .to_os_string(),
+        );
+        ancestor = ancestor.parent().ok_or("missing application ancestor")?;
+    }
+    let mut resolved = dunce::canonicalize(ancestor).map_err(|e| e.to_string())?;
+    if !resolved.starts_with(&root) { return Err("application store escape".into()); }
+    for child in missing.iter().rev() {
+        resolved.push(child);
+    }
+    if resolved == root { return Err("invalid application child path".into()); }
+    Ok(resolved)
+}
+
 pub fn stored_uri(path: &Path) -> Result<String, String> {
     let root = dunce::canonicalize(user_dir()).map_err(|e| e.to_string())?;
     let rel = path
@@ -104,19 +139,17 @@ pub fn stored_entry(uri: &str) -> Result<Entry, String> {
     let path = stored_path(uri)?;
     let mut item = crate::core::files::entry(&path)?;
     item.path = uri.into();
-    item.link_target = Some(path.to_string_lossy().into_owned());
+    // Internal backing paths must not escape through metadata supplied to
+    // extension providers. Launch and IO resolve the store URI inside Core.
+    item.link_target = None;
     if !item.is_dir {
         item.mime = "application/x-fiex-application".into();
     }
-    item.allowed_ops = vec![
-        "stat".into(),
-        "list".into(),
-        "read".into(),
-        "write".into(),
-        "mkdir".into(),
-        "rename".into(),
-        "remove".into(),
-    ];
+    item.allowed_ops = if item.is_dir {
+        vec!["stat".into(), "list".into(), "mkdir".into(), "rename".into(), "remove".into()]
+    } else {
+        vec!["stat".into(), "read".into(), "write".into(), "rename".into(), "remove".into()]
+    };
     Ok(item)
 }
 
