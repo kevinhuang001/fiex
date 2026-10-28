@@ -191,3 +191,25 @@ fn cancelled_multi_file_copy_rolls_back_committed_destinations() {
     assert_eq!(std::fs::read(a).unwrap(), b"a");
     assert_eq!(std::fs::read(b).unwrap(), b"b");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn ten_gib_sparse_source_uses_bounded_stream_and_64bit_offsets() {
+    // Sparse metadata simulates a 10 GiB input without allocating its bytes.
+    // This proves that reads and offsets do not materialize the whole file.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("ten-gib.sparse");
+    let file = std::fs::File::create(&path).unwrap();
+    let length = 10u64 * 1024 * 1024 * 1024;
+    file.set_len(length).unwrap();
+    drop(file);
+    let broker = super::binding::trusted(&path.to_string_lossy(), "core:test-large").unwrap();
+    let mut stream = broker.adapter().unwrap().open_read().unwrap();
+    assert_eq!(stream.size(), length);
+    let (prefix, eof) = stream.read_at(0, 1024 * 1024).unwrap();
+    assert_eq!(prefix.len(), CHUNK);
+    assert!(!eof);
+    let (tail, eof) = stream.read_at(length - 7, 1024 * 1024).unwrap();
+    assert_eq!(tail.len(), 7);
+    assert!(eof);
+}
