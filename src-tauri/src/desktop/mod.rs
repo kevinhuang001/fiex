@@ -20,7 +20,7 @@ mod scheduler;
 #[macro_use]
 mod plugins;
 pub(crate) mod shell_profile;
-pub(crate) mod ssh;
+pub(crate) mod terminal;
 #[macro_use]
 mod remote;
 #[macro_use]
@@ -105,12 +105,11 @@ pub fn run() {
             preview_candidates,
             preview_loading,
             preview_loading_asset,
-            ssh::ssh_open,
-            ssh::local_terminal_open,
-            ssh::detect_shells,
-            ssh::ssh_write,
-            ssh::ssh_resize,
-            ssh::ssh_close,
+            terminal::local_terminal_open,
+            terminal::detect_shells,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_close,
             plugin_panel_asset,
             plugin_permission_allowed,
             plugin_network_domains,

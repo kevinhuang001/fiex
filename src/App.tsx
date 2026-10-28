@@ -13,15 +13,15 @@ import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
 import { PluginPermissionHost } from '@/components/plugins/PluginPermissionHost'
-import { TerminalView } from '@/components/ssh/SshTerminalView'
 import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
 import { warmFilePickerData } from '@/lib/filePickerData'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
+import { useConnectionAutostart } from '@/hooks/useConnectionAutostart'
 import { asset, call, native } from '@/lib/api'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   useLocale()
@@ -34,16 +34,12 @@ export default function App() {
   }, [])
   const pluginViewOf = (path: string) =>
     /^fiex-plugin-view:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
-  const terminalOf = (path: string) => /^fiex-terminal:\/\/([A-Za-z0-9-]{1,128})$/.exec(path)?.[1]
   const pluginViewId = pluginViewOf(app.left.path)
-  const terminalId = terminalOf(app.left.path)
-  const fullView = Boolean(pluginViewId || terminalId)
+  const fullView = Boolean(pluginViewId)
   const fullViews = app.left.tabs.flatMap((path, index) => {
-    const terminal = terminalOf(path)
     const plugin = pluginViewOf(path)
-    return terminal || plugin ? [{ path, index, terminal, plugin }] : []
+    return plugin ? [{ path, index, plugin }] : []
   })
-  const autostarted = useRef(false)
   const [viewTitles, setViewTitles] = useState<Record<string, string>>({})
   const tabName = (path: string) => viewTitles[path] || app.displayName(path)
   // Browser demo has no native webview zoom; scale the app shell instead so
@@ -85,21 +81,7 @@ export default function App() {
     return () => window.removeEventListener('fiex:open-plugin-store', openStore)
   }, [app.setPluginManager])
 
-  useEffect(() => {
-    if (!native || autostarted.current || !app.left.hasListing) return
-    autostarted.current = true
-    const sessions = app.left.connections.filter(
-      (connection) =>
-        (connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh') &&
-        connection.autostart &&
-        connection.saved !== false &&
-        !app.left.tabs.includes(`fiex-terminal://${connection.id}`),
-    )
-    for (const session of sessions) {
-      app.newWorkspaceTab()
-      app.left.navigate(`fiex-terminal://${session.id}`)
-    }
-  }, [app.left.hasListing, app.left.connections, app.left.tabs])
+  useConnectionAutostart(app)
 
   // The label size is the reference size: every window is zoomed by the same
   // ratio so the preference scales the sidebar, toolbar, dialogs and file list
@@ -192,18 +174,7 @@ export default function App() {
             key={`${view.path}:${view.index}`}
             hidden={view.index !== app.left.tab}
           >
-            {view.terminal ? (
-              <TerminalView
-                connectionId={view.terminal}
-                terminalFont={app.prefs.terminalFont}
-                terminalFontSize={app.prefs.terminalFontSize}
-                terminalColor={app.prefs.terminalColor}
-                name={
-                  app.left.connections.find((connection) => connection.id === view.terminal)
-                    ?.name || 'SSH'
-                }
-              />
-            ) : view.plugin ? (
+            {view.plugin ? (
               <PluginConnectionView
                 connectionId={view.plugin}
                 onNavigate={app.left.navigate}

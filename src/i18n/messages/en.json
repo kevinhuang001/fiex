@@ -1377,5 +1377,6 @@
   "{0} 触发同步": "{0} sync triggered",
   "触发同步": "Sync triggered",
   "{0} 同步失败": "{0} sync failed",
-  "同步失败": "Sync failed"
+  "同步失败": "Sync failed",
+  "终端会话失败": "Terminal session failed"
 }

@@ -1,9 +1,9 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
+import { ArrowLeft, Plug, Puzzle, Server } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
-import { call, demo } from '@/lib/api'
+import { call } from '@/lib/api'
 import { usePluginCatalog, type PluginField } from '@/lib/plugins'
 import type { RemoteConnection } from '@/lib/types'
 
@@ -20,40 +20,11 @@ export function ConnectionDialog({
 }) {
   const plugins = usePluginCatalog()
   const choices = useMemo(() => {
-    const builtin = {
-      plugin: { id: '__builtin__', name: t('Fiex 内置'), version: '' },
-      factory: {
-        title: t('SSH 终端'),
-        fields: [
-          {
-            id: 'host',
-            label: t('主机'),
-            type: 'text',
-            required: true,
-            placeholder: 'server.example.com',
-          },
-          { id: 'port', label: t('端口'), type: 'number', defaultValue: 22 },
-          { id: 'username', label: t('用户名'), type: 'text', placeholder: 'root' },
-          {
-            id: 'identityFile',
-            label: t('私钥文件（可选）'),
-            type: 'text',
-            placeholder: '~/.ssh/id_ed25519',
-          },
-          {
-            id: 'terminalType',
-            label: t('终端类型'),
-            type: 'text',
-            defaultValue: 'xterm-256color',
-          },
-        ] as PluginField[],
-      },
-    }
     const remote = plugins.flatMap((plugin) => {
       const factory = plugin.extensions?.connections
       return plugin.enabled && factory ? [{ plugin, factory }] : []
     })
-    return demo || connection?.pluginId === '__builtin__' ? [builtin, ...remote] : remote
+    return remote
   }, [plugins, connection?.pluginId, getLocale()])
   const [selected, setSelected] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -134,8 +105,7 @@ export function ConnectionDialog({
           id: connection?.id,
           name,
           pluginId: current.plugin.id,
-          kind:
-            connection?.kind ?? (current.plugin.id === '__builtin__' ? 'ssh' : current.plugin.id),
+          kind: connection?.kind ?? current.plugin.id,
           settings,
         },
       })
@@ -184,14 +154,10 @@ export function ConnectionDialog({
                 className="connection-plugin-choice"
                 onClick={() => choose(choiceKey(plugin.id), factory.fields)}
               >
-                {plugin.id === '__builtin__' ? <TerminalSquare size={20} /> : <Plug size={20} />}
+                <Plug size={20} />
                 <span>
                   <strong>{factory.title || plugin.name}</strong>
-                  <small>
-                    {plugin.id === '__builtin__'
-                      ? t('内置 · 使用系统 OpenSSH')
-                      : `${plugin.name} · ${plugin.version}`}
-                  </small>
+                  <small>{`${plugin.name} · ${plugin.version}`}</small>
                 </span>
                 <Server size={14} />
               </button>
@@ -217,10 +183,7 @@ export function ConnectionDialog({
               <ArrowLeft size={15} /> {t('选择其他类型')}
             </button>
           )}
-          <p className="sidebar-hint">
-            {current.factory.title}
-            {current.plugin.id === '__builtin__' && t(' · 密码/私钥口令会在终端中提示输入')}
-          </p>
+          <p className="sidebar-hint">{current.factory.title}</p>
           <label>
             <span>{t('连接名称')}</span>
             <input

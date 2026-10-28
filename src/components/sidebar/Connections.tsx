@@ -1,19 +1,14 @@
 import { t } from '@/i18n'
-import { Pin, Plus, Server, TerminalSquare } from 'lucide-react'
+import { Pin, Plus, Server } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { useMenuPosition } from '@/lib/menuPosition'
 import type { RemoteConnection } from '@/lib/types'
 import type { SidebarProps } from './types'
 
-type Destination =
-  | { kind: 'vfs'; path: string }
-  | { kind: 'pluginView' }
-  | { kind: 'terminal'; connectionId: string }
+type Destination = { kind: 'vfs'; path: string } | { kind: 'pluginView' }
 
-/** Remote connections and saved SSH sessions, with add/session menus. */
-const isSshConnection = (connection: { kind: string; pluginId: string }) =>
-  connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh'
+/** Saved connections navigate through their owning provider. */
 export function Connections({
   x,
   onAddConnection,
@@ -54,13 +49,7 @@ export function Connections({
     setMenu(null)
     void call<Destination>('connection_open', { id: connection.id })
       .then((target) =>
-        x.navigate(
-          target.kind === 'vfs'
-            ? target.path
-            : target.kind === 'pluginView'
-              ? 'fiex-plugin-view://' + connection.id
-              : 'fiex-terminal://' + target.connectionId,
-        ),
+        x.navigate(target.kind === 'vfs' ? target.path : 'fiex-plugin-view://' + connection.id),
       )
       .catch((error) => x.setError(String(error)))
   }
@@ -124,11 +113,7 @@ export function Connections({
                     key={connection.id}
                     onClick={() => open(connection)}
                   >
-                    {isSshConnection(connection) ? (
-                      <TerminalSquare size={14} />
-                    ) : (
-                      <Server size={14} />
-                    )}
+                    <Server size={14} />
                     <span>
                       <strong>{connection.name}</strong>
                     </span>
@@ -169,7 +154,7 @@ export function Connections({
               className={`nav-item connection-nav ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
               onClick={() => open(connection)}
             >
-              {isSshConnection(connection) ? <TerminalSquare /> : <Server />}
+              <Server />
               <span>
                 <span>{connection.name}</span>
                 <small>{connection.pluginId}</small>

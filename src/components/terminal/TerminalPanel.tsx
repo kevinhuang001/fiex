@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, Plus, Settings2 } from 'lucide-react'
-import { TerminalView } from '@/components/ssh/SshTerminalView'
+import { TerminalView } from './TerminalView'
 import { TerminalTabs } from './TerminalTabs'
 import { call } from '@/lib/api'
 import type { Preferences } from '@/lib/types'

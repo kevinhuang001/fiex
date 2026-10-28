@@ -240,7 +240,7 @@ export function ExplorerDialogs({
           // the destination first; the stored mountPath is not a VFS URI for
           // pluginView connections such as Email.
           void call<{
-            kind: 'vfs' | 'pluginView' | 'terminal'
+            kind: 'vfs' | 'pluginView'
             path?: string
             connectionId?: string
           }>('connection_open', { id: connection.id })
@@ -248,9 +248,7 @@ export function ExplorerDialogs({
               x.navigate(
                 target.kind === 'vfs'
                   ? target.path || connection.mountPath
-                  : target.kind === 'pluginView'
-                    ? 'fiex-plugin-view://' + connection.id
-                    : 'fiex-terminal://' + (target.connectionId || connection.id),
+                  : 'fiex-plugin-view://' + connection.id,
               )
             })
             .catch((error) => x.setError(String(error)))
