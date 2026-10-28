@@ -79,20 +79,20 @@ Decorations 返回直接成员名：
 
 ## 插件 → Core
 
-| 方法                                                        | 关键参数             | 许可                              |
-| ----------------------------------------------------------- | -------------------- | --------------------------------- |
-| `fs.stat` / `statBatch`                                | refs                 | `metadata` + Scope                |
-| `fs.list`                                              | directory ref        | `folders.read` + Scope            |
-| `fs.openRead` / `readChunk` / `readOpen` / `closeRead` | ref / read handle    | `files.read` + Scope              |
-| `fs.beginWrite/writeChunk/commit/abort`                | 目标 ref/缓冲区/句柄 | `files.write` 或 `files.create`   |
-| `fs.mkdir`                                             | parent,name          | `folders.create`                  |
-| `fs.remove` / `rename`                                 | 目标/源+目标         | 按真实对象类型检查对应权限        |
-| `host.net.http.*`                                           | URL/headers/body     | 已批准 Network host               |
-| `host.net.tcp.open/readBytes/writeBytes/shutdown/close`     | host/port/stream     | 已批准 Network host，读写独立推进 |
-| `host.process.run`                                          | 已声明命令           | `commands`                        |
-| `host.storage.*` / `host.secret.*`                          | 插件命名空间键       | 插件进程身份                      |
-| `host.vfs.openView`                                         | VFS 资源             | 已注册 `vfs` + MountRegistry      |
-| `host.task.*`                                               | 任务/进度/取消       | 当前 operation/task 授权          |
+| 方法                                                    | 关键参数             | 许可                              |
+| ------------------------------------------------------- | -------------------- | --------------------------------- |
+| `fs.stat` / `statBatch`                                 | refs                 | `metadata` + Scope                |
+| `fs.list`                                               | directory ref        | `folders.read` + Scope            |
+| `fs.openRead` / `readChunk` / `readOpen` / `closeRead`  | ref / read handle    | `files.read` + Scope              |
+| `fs.beginWrite/writeChunk/commit/abort`                 | 目标 ref/缓冲区/句柄 | `files.write` 或 `files.create`   |
+| `fs.mkdir`                                              | parent,name          | `folders.create`                  |
+| `fs.remove` / `rename`                                  | 目标/源+目标         | 按真实对象类型检查对应权限        |
+| `host.net.http.*`                                       | URL/headers/body     | 已批准 Network host               |
+| `host.net.tcp.open/readBytes/writeBytes/shutdown/close` | host/port/stream     | 已批准 Network host，读写独立推进 |
+| `host.process.run`                                      | 已声明命令           | `commands`                        |
+| `host.storage.*` / `host.secret.*`                      | 插件命名空间键       | 插件进程身份                      |
+| `host.vfs.openView`                                     | VFS 资源             | 已注册 `vfs` + MountRegistry      |
+| `host.task.*`                                           | 任务/进度/取消       | 当前 operation/task 授权          |
 
 权限被用户关闭时，`host.*` 调用会等待 Core 统一弹出的授权请求（同一插件/权限/目标合并为一个弹窗）。允许后 Core 先持久化授权再继续；拒绝、超时或插件停止会返回 `permission_denied`，调用方不会收到部分结果。Manifest 未声明或超出已批准声明快照的权限不会触发弹窗，直接拒绝。
 
