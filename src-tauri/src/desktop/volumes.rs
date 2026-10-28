@@ -21,9 +21,9 @@ pub(crate) async fn register_drag(
     // backend owns the resource. Recent/Trash and launch-only items fail
     // the remove check and remain copy-only.
     let moving = !copy_requested
-        && paths.iter().all(|path| {
-            crate::plugins::resource::file_capabilities::for_path(path).remove
-        });
+        && paths
+            .iter()
+            .all(|path| crate::plugins::resource::file_capabilities::for_path(path).remove);
     let originals = paths.clone();
     let materialized = tauri::async_runtime::spawn_blocking(move || {
         crate::core::fs::export_for_external_drag(&paths)
