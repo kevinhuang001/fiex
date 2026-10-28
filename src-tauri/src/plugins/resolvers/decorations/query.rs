@@ -1,8 +1,33 @@
 use super::dynamic::{decode, merge};
 use super::types::{Decoration, DecorationEntry};
 use crate::plugins::host as plugin_host;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::HashMap;
+
+fn bind_targets(
+    response: &mut Value,
+    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
+) {
+    if let Some(items) = response["decorations"].as_array_mut() {
+        for item in items {
+            let target = item.get("ref").and_then(|reference| {
+                resources.iter().find(|resource| {
+                    serde_json::to_value(&resource.reference).ok().as_ref() == Some(reference)
+                })
+            });
+            if let Some(target) = target {
+                let path = target.display.clone();
+                if let Some(object) = item.as_object_mut() {
+                    object.remove("name");
+                    object.remove("path");
+                }
+                item["path"] = json!(path);
+            } else {
+                *item = json!({});
+            }
+        }
+    }
+}
 
 pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> {
     query_with_plugins(directory, entries, true)
@@ -75,29 +100,7 @@ pub fn query_with_plugins(
             };
             let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
             let mut response = response;
-            if let Some(items) = response["decorations"].as_array_mut() {
-                for item in items {
-                    // Only a Ref bound to this event may identify a target.
-                    // Ignore supplied names and paths, including a same-name
-                    // child on a different mount or an unrelated host path.
-                    let target = item.get("ref").and_then(|reference| {
-                        resources.iter().find(|resource| {
-                            serde_json::to_value(&resource.reference).ok().as_ref()
-                                == Some(reference)
-                        })
-                    });
-                    if let Some(target) = target {
-                        let path = target.display.clone();
-                        if let Some(object) = item.as_object_mut() {
-                            object.remove("name");
-                            object.remove("path");
-                        }
-                        item["path"] = json!(path);
-                    } else {
-                        *item = json!({});
-                    }
-                }
-            }
+            bind_targets(&mut response, &resources);
             decode(&entries, manifest, folder, response)
         },
         |_| true,
@@ -127,4 +130,35 @@ pub fn query_with_plugins(
         .collect::<Vec<_>>();
     values.sort_by(|a, b| a.path.cmp(&b.path));
     values
+}
+
+#[cfg(test)]
+mod ref_target_tests {
+    use super::*;
+    use crate::plugins::{
+        contracts::ResourceMetadata,
+        resource::resource_context::ResourceSnapshot,
+    };
+
+    #[test]
+    fn plugin_names_and_paths_never_select_decoration_targets() {
+        let target = ResourceSnapshot::from_metadata(
+            "/authorized/matching-name",
+            ResourceMetadata::default(),
+        );
+        let reference = serde_json::to_value(&target.reference).unwrap();
+        let mut payload = json!({"decorations":[
+            {"name":"matching-name","path":"/authorized/matching-name","badge":{"text":"X"}},
+            {"ref":{"mountId":"forged","nodeId":"forged"},"badge":{"text":"X"}},
+            {"ref":reference,"name":"different-name","path":"/forged/other","badge":{"text":"Y"}}
+        ]});
+        bind_targets(&mut payload, &[target]);
+        assert_eq!(payload["decorations"][0], json!({}));
+        assert_eq!(payload["decorations"][1], json!({}));
+        assert_eq!(
+            payload["decorations"][2]["path"],
+            json!("/authorized/matching-name")
+        );
+        assert!(payload["decorations"][2].get("name").is_none());
+    }
 }
