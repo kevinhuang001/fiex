@@ -127,7 +127,7 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
         return FileCapabilities {
             stat: true,
             list: path == crate::core::volumes::recycle::URI
-                || crate::core::volumes::trash::trash_path()
+                || crate::core::volumes::trash_path()
                     .is_some_and(|root| root.to_string_lossy() == path),
             ..FileCapabilities::default()
         };
@@ -188,7 +188,7 @@ pub fn for_path(path: &str) -> FileCapabilities {
         return FileCapabilities {
             stat: true,
             list: path == crate::core::volumes::recycle::URI
-                || crate::core::volumes::trash::trash_path()
+                || crate::core::volumes::trash_path()
                     .is_some_and(|root| root.to_string_lossy() == path),
             ..FileCapabilities::default()
         };
