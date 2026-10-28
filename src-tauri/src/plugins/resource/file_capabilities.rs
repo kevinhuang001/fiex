@@ -119,6 +119,14 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
 }
 
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
+    if crate::core::volumes::virtual_resolvers::resolver_for(path)
+        .is_some_and(|p| p.id() == "core:trash")
+    {
+        // Permanent deletion is a dedicated, explicit Trash action. Never
+        // advertise ordinary fs.remove: a generic plugin must not turn
+        // "delete" into an irreversible purge of trashed content.
+        return FileCapabilities::default();
+    }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         let declared = crate::core::volumes::virtual_resolvers::resolver_for(path)
             .map(|provider| {
@@ -130,14 +138,6 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
             })
             .unwrap_or_default();
         return from_entry(&declared, entry);
-    }
-    if crate::core::volumes::virtual_resolvers::resolver_for(path)
-        .is_some_and(|p| p.id() == "core:trash")
-    {
-        // Permanent deletion is a dedicated, explicit Trash action. Never
-        // advertise ordinary fs.remove: a generic plugin must not turn
-        // "delete" into an irreversible purge of trashed content.
-        return FileCapabilities::default();
     }
     if let Some(route) = crate::usbfs::route(path) {
         let writable = matches!(
