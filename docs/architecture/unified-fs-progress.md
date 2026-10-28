@@ -20,7 +20,6 @@ External drag uses a Core export lease for virtual resources and returns ordinar
 
 No A01–A25 item is marked complete by this checkpoint. Manual Windows/macOS/Linux drag interoperability and device hot-unplug behavior require platform verification.
 
-
 ## Review checkpoint: 2026-10-29
 
 This checkpoint reflects the current protocol-6 PR stack, not a release declaration:
