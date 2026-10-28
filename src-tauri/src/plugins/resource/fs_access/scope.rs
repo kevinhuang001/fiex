@@ -177,7 +177,8 @@ impl Scope {
                             || crate::usbfs::route(&snapshot.display).is_some()
                             || crate::core::volumes::virtual_resolvers::resolver_for(
                                 &snapshot.display,
-                            ).is_some()
+                            )
+                            .is_some()
                     })
                     .cloned()
             }));
@@ -215,7 +216,11 @@ impl Scope {
             .get(&key)
             .cloned()
             .or_else(|| {
-                self.issued.lock().ok()?.get(&key).map(|snapshot| snapshot.display.clone())
+                self.issued
+                    .lock()
+                    .ok()?
+                    .get(&key)
+                    .map(|snapshot| snapshot.display.clone())
             })
             .ok_or_else(|| "resource not authorized in this operation".into())
     }
