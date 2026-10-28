@@ -217,7 +217,7 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
             ),
             _ => Ok(result),
         }
-    } else if method.starts_with("host.net.") {
+    } else if method.starts_with("host.net.") || method == "host.oauth.authorize" {
         net::dispatch(&mut ctx)
     } else {
         other::dispatch(&mut ctx)

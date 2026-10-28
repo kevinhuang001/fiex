@@ -92,7 +92,7 @@ export function ImportSheet({
                 <span key={domain}>{domain}</span>
               ))}
             </div>
-            <p className="sidebar-hint">{t('安装确认会同时授权这些精确域名，之后可以增删。')}</p>
+            <p className="sidebar-hint">{t('确认后将进入授权激活，可逐项选择权限和域名。')}</p>
           </>
         )}
         <p className="sidebar-hint">
@@ -115,8 +115,8 @@ export function ImportSheet({
                 ? t('更新中…')
                 : t('安装中…')
               : preview?.isUpdate
-                ? t('更新（权限变更需重新激活）')
-                : t('安装（权限默认关闭）')}
+                ? t('更新并授权激活')
+                : t('安装并授权激活')}
           </Button>
         </footer>
       </div>

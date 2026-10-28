@@ -85,7 +85,7 @@ Core 与所有文件系统插件之间只有一套 `fs.*` 协议。连接（SMB�
 
 操作名固定为 `list|stat|read|write|mkdir|rename|remove|search`。
 `read` 覆盖 `openRead/readStream/closeRead`，`write` 覆盖 `beginWrite/writeStream/commit/abort`。
-SDK 的过程宏只把真正写进 `impl` 的方法计入能力，默认的 `unsupported` 实现不会上报。
+SDK 的 `FSProvider::operations()` 显式报告实现上限，`discover(ctx)` 按当前连接与资源的服务器权限进一步收窄。
 Core 保存该集合；未声明的操作用 `method_not_found` 拒绝，不会到达插件。
 
 三层能力求交：
@@ -121,3 +121,12 @@ protocol 4 的 `vfs.list/stat/readSmall/search` 与 `fs.writeFile` 均已删除�
 Core 只提供**新建文件夹**（`fs.mkdir`）。按名称新建空文件没有协议操作：
 `fs.beginWrite` 只针对已存在的 node，因此快捷键/菜单不提供“新建文件”，
 本地目录也同样只新建文件夹。
+
+## 显式发现权限
+
+SDK 使用普通 `FSProvider` trait，不再使用过程宏。`operations()` 必须显式声明实现的
+操作上限，`discover(ctx)` 按当前连接与资源返回服务器允许的子集。
+初始化回复中的 `fs.discovery: true` 启用 `fs.discover`；请求携带与目标操作相同的
+mount、connection/view 和 node/parent 参数，返回 `{operations: [...]}`。
+Core 与 SDK 均检查此集合；未报告 discovery 的旧协议 5 插件保留静态能力行为。
+完整接口规范见 SDK 的 `docs/fs-provider-discovery.md`。

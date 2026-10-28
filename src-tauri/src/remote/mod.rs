@@ -3,6 +3,7 @@
 
 mod cache;
 mod config;
+mod credentials;
 mod files;
 #[cfg(feature = "desktop")]
 mod mutate;

@@ -10,6 +10,10 @@
 //! `generate_handler!` to resolve them.
 
 #[macro_use]
+mod credentials;
+#[macro_use]
+mod local_terminal;
+#[macro_use]
 mod files;
 #[macro_use]
 mod locale;
@@ -28,7 +32,9 @@ mod system;
 #[macro_use]
 mod volumes;
 
+pub(crate) use credentials::*;
 pub(crate) use files::*;
+pub(crate) use local_terminal::*;
 pub(crate) use plugins::*;
 pub(crate) use remote::*;
 pub(crate) use system::*;
@@ -106,8 +112,8 @@ pub fn run() {
             preview_loading,
             preview_loading_asset,
             ssh::ssh_open,
-            ssh::local_terminal_open,
-            ssh::detect_shells,
+            local_terminal_open,
+            detect_shells,
             ssh::ssh_write,
             ssh::ssh_resize,
             ssh::ssh_close,
@@ -137,6 +143,8 @@ pub fn run() {
             plugin_storage_delete,
             plugin_secret_set,
             plugin_secret_available,
+            credential_backend,
+            credential_backend_set,
             ci_reply,
             ci_log,
             register_drag,

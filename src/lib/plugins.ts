@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { call, demo, native } from '@/lib/api'
 
 export interface PluginField {
@@ -80,7 +80,7 @@ export interface PluginInfo {
 export interface PluginExtensions {
   /** Explicit UI/backend request budget for slow providers. */
   ui?: { timeoutMs?: number }
-  connections?: { title: string; fields: PluginField[] }
+  connections?: { title: string; fields: PluginField[]; description?: string; setupUrl?: string }
   toolbar?: PluginContribution
   contextMenus?: boolean
   search?: { icon?: string; scope?: string }
@@ -172,26 +172,66 @@ async function pluginCatalog(): Promise<PluginInfo[]> {
   if (!native && !demo) return []
   return call<PluginInfo[]>('plugins_list')
 }
-export function usePluginCatalog(): PluginInfo[] {
-  const [items, setItems] = useState<PluginInfo[]>([])
-  useEffect(() => {
-    let mounted = true
-    const refresh = () =>
-      void pluginCatalog()
-        .then((plugins) => {
-          if (mounted) setItems(plugins)
-        })
-        .catch(() => {})
-    refresh()
-    window.addEventListener('fiex:plugins-changed', refresh)
-    return () => {
-      mounted = false
-      window.removeEventListener('fiex:plugins-changed', refresh)
-    }
-  }, [])
-  return items
-}
+let catalogSnapshot: PluginInfo[] = []
+const catalogListeners = new Set<() => void>()
+let stopCatalog: (() => void) | undefined
+let catalogRequest: Promise<void> | undefined
+let refreshAgain = false
 
+function reloadCatalog() {
+  if (catalogRequest) {
+    refreshAgain = true
+    return catalogRequest
+  }
+  catalogRequest = pluginCatalog()
+    .then((plugins) => {
+      // Stable snapshots avoid rendering every consumer for unchanged scans.
+      if (JSON.stringify(plugins) === JSON.stringify(catalogSnapshot)) return
+      catalogSnapshot = plugins
+      catalogListeners.forEach((notify) => notify())
+    })
+    .catch(() => {})
+    .finally(() => {
+      catalogRequest = undefined
+      if (refreshAgain) {
+        refreshAgain = false
+        reloadCatalog()
+      }
+    })
+  return catalogRequest
+}
+function subscribeCatalog(notify: () => void) {
+  catalogListeners.add(notify)
+  if (!stopCatalog) {
+    const refresh = () => reloadCatalog()
+    const poll = window.setInterval(() => {
+      if (document.visibilityState !== 'hidden') reloadCatalog()
+    }, 3000)
+    window.addEventListener('fiex:plugins-changed', refresh)
+    window.addEventListener('focus', refresh)
+    stopCatalog = () => {
+      clearInterval(poll)
+      window.removeEventListener('fiex:plugins-changed', refresh)
+      window.removeEventListener('focus', refresh)
+    }
+    reloadCatalog()
+  }
+  return () => {
+    catalogListeners.delete(notify)
+    if (!catalogListeners.size) {
+      stopCatalog?.()
+      stopCatalog = undefined
+    }
+  }
+}
+/** One shared catalog and one discovery subscription for the whole UI. */
+export function usePluginCatalog(): PluginInfo[] {
+  return useSyncExternalStore(subscribeCatalog, () => catalogSnapshot)
+}
+export async function syncPluginCatalog() {
+  if (catalogRequest) await catalogRequest
+  await reloadCatalog()
+}
 export function refreshPluginCatalog() {
   window.dispatchEvent(new Event('fiex:plugins-changed'))
 }

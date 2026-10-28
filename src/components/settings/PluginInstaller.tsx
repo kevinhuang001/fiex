@@ -1,3 +1,4 @@
+import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
 import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { call } from '@/lib/api'
@@ -82,21 +83,16 @@ export function PluginInstaller({
     setInstalling(true)
     setError('')
     try {
-      await call('plugin_confirm_install', {
+      const pluginId = await call<string>('plugin_confirm_install', {
         ticket: preview.ticket,
         allowUntrusted: !preview.trusted,
       })
+      await requestPluginActivation(pluginId)
       const installed = preview
       setPreview(null)
       setMessage(
         installed.isUpdate
-          ? installed.permissionsChanged
-            ? t(
-                '{0} 已更新到 {1}；权限有变化，请重新激活并逐项授权。',
-                installed.name,
-                installed.version,
-              )
-            : t('{0} 已更新到 {1}', installed.name, installed.version)
+          ? t('{0} 已更新到 {1}', installed.name, installed.version)
           : t('{0} 已安装', installed.name),
       )
       onInstalled()

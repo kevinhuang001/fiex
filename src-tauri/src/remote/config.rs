@@ -101,6 +101,7 @@ pub(crate) fn declared_connection_fields(
         }
         fields.push((key.to_string(), ty.to_string()));
     }
+    super::credentials::append_private_fields(factory, &mut fields)?;
     Ok(fields)
 }
 
@@ -138,6 +139,14 @@ pub(crate) fn provider_config(conn: &StoredConnection) -> serde_json::Value {
     config.extend(conn.settings.clone());
     let scope = format!("connection-{}", conn.id);
     for field in &conn.secret_keys {
+        // A newly entered secret takes precedence over the previously saved value.
+        if config
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|v| !v.is_empty())
+        {
+            continue;
+        }
         if let Ok(value) =
             crate::plugins::storage::secret_get(&connection_plugin_id(conn), &scope, field)
         {

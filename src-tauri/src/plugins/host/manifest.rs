@@ -1,4 +1,5 @@
 //! Plugin manifest schema, install-time validation and permission declarations.
+mod connections;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -481,6 +482,10 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
         if key == "connections" && !object.get("fields").is_some_and(Value::is_array) {
             return Err("extensions.connections.fields must be an array".into());
         }
+        if key == "connections" {
+            connections::validate(object)?;
+        }
+
         if object.get("readOnly").is_some_and(|v| !v.is_boolean()) {
             return Err(format!("extensions.{key}.readOnly must be a boolean"));
         }

@@ -1379,5 +1379,13 @@
   "触发同步": "Sync triggered",
   "{0} 同步失败": "{0} sync failed",
   "同步失败": "Sync failed",
-  "拖动调整列宽": "Drag to resize column"
+  "拖动调整列宽": "Drag to resize column",
+  "凭据存储": "Credential storage",
+  "本地文件（默认）": "Local file (default)",
+  "系统钥匙串": "OS keyring",
+  "安装并授权激活": "Install and review activation",
+  "更新并授权激活": "Update and review activation",
+  "确认后将进入授权激活，可逐项选择权限和域名。": "Continue to activation to choose individual permissions and domains.",
+  "邮件内容会显示在这里。凭据由 Fiex 按设置保存。": "Message contents appear here. Fiex stores credentials according to your settings.",
+  "打开应用控制台": "Open app console"
 }

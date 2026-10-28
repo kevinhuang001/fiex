@@ -192,7 +192,8 @@ pub(crate) fn catalog_matching(predicate: impl Fn(&PluginManifest) -> bool) -> V
                                       // `enabled` means the package may run. Individual capabilities may
                                       // be switched off; their operations ask again instead of
                                       // deactivating the whole plugin.
-            let active = state.approved && state.enabled;
+            let approved = state.approved && declared.is_subset(&state.approved_declared);
+            let active = approved && state.enabled;
             let requested = activation_requirements(&manifest).unwrap_or_default();
             let missing_commands = missing_commands(&requested.commands);
             let ui_timeout_ms = super::manifest::ui_timeout_ms(&manifest.extensions);
@@ -208,7 +209,7 @@ pub(crate) fn catalog_matching(predicate: impl Fn(&PluginManifest) -> bool) -> V
                 backend_available: backend,
                 enabled: active,
                 author: manifest.author,
-                approved: state.approved,
+                approved,
                 declared_permissions: declared.into_iter().collect(),
                 granted_permissions: state.granted.into_iter().collect(),
                 requested_network_all: requested.network_all,

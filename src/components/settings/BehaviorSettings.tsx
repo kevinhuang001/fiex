@@ -1,3 +1,4 @@
+import { CredentialSettings } from './CredentialSettings'
 import { t } from '@/i18n'
 import { Eye, History, Home, RefreshCw } from 'lucide-react'
 import { SelectField } from '../ui/SelectField'
@@ -12,6 +13,7 @@ export function BehaviorSettings({
 }) {
   return (
     <div className="settings-card">
+      <CredentialSettings />
       <div className="settings-row">
         <div className="settings-row-label">
           <span className="settings-row-icon" style={{ background: '#64748b' }}>

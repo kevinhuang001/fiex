@@ -1,3 +1,4 @@
+import { ConnectionSetupHelp } from './connections/ConnectionSetupHelp'
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Plug, Puzzle, Server, TerminalSquare } from 'lucide-react'
@@ -24,6 +25,8 @@ export function ConnectionDialog({
       plugin: { id: '__builtin__', name: t('Fiex 内置'), version: '' },
       factory: {
         title: t('SSH 终端'),
+        description: '',
+        setupUrl: '',
         fields: [
           {
             id: 'host',
@@ -221,6 +224,7 @@ export function ConnectionDialog({
             {current.factory.title}
             {current.plugin.id === '__builtin__' && t(' · 密码/私钥口令会在终端中提示输入')}
           </p>
+          <ConnectionSetupHelp factory={current.factory} busy={busy} onError={setError} />
           <label>
             <span>{t('连接名称')}</span>
             <input

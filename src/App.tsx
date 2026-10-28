@@ -1,3 +1,4 @@
+import { useAppEnvironment } from '@/hooks/useAppEnvironment'
 import { t, useLocale } from '@/i18n'
 import { FileViews } from '@/components/browser/FileViews'
 import { BatchRenameDialog } from '@/components/BatchRenameDialog'
@@ -12,16 +13,15 @@ import { ExplorerToolbar } from '@/components/explorer/ExplorerToolbar'
 import { FileContextMenu } from '@/components/explorer/FileContextMenu'
 import { Sidebar } from '@/components/Sidebar'
 import { PluginConnectionView } from '@/components/plugins/PluginConnectionView'
-import { PluginPermissionHost } from '@/components/plugins/PluginPermissionHost'
+import { PluginServices } from '@/components/plugins/PluginServices'
 import { TerminalView } from '@/components/ssh/SshTerminalView'
 import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
 import { warmFilePickerData } from '@/lib/filePickerData'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
 import { asset, call, native } from '@/lib/api'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { Download, Info, LoaderCircle, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
   useLocale()
@@ -43,24 +43,9 @@ export default function App() {
     const plugin = pluginViewOf(path)
     return terminal || plugin ? [{ path, index, terminal, plugin }] : []
   })
-  const autostarted = useRef(false)
   const [viewTitles, setViewTitles] = useState<Record<string, string>>({})
   const tabName = (path: string) => viewTitles[path] || app.displayName(path)
-  // Browser demo has no native webview zoom; scale the app shell instead so
-  // the preference still resizes text, icons, menus and dialogs together.
-  const uiScale = native ? 1 : app.prefs.fontSize / 11
-  useEffect(() => {
-    if (native) return
-    const root = document.documentElement
-    root.style.setProperty('--ui-scale', String(uiScale))
-    root.style.setProperty('--ui-vw', `calc(100vw / ${uiScale})`)
-    root.style.setProperty('--ui-vh', `calc(100vh / ${uiScale})`)
-    return () => {
-      root.style.removeProperty('--ui-scale')
-      root.style.removeProperty('--ui-vw')
-      root.style.removeProperty('--ui-vh')
-    }
-  }, [uiScale])
+  const uiScale = useAppEnvironment(app)
   const backgroundPath = app.prefs.backgroundImage
   const backgroundUrl = backgroundPath
     ? native && !backgroundPath.includes('://')
@@ -69,47 +54,6 @@ export default function App() {
     : ''
   const backgroundImage = backgroundUrl ? `url("${backgroundUrl.replace(/"/g, '%22')}")` : undefined
 
-  useEffect(() => {
-    const navigate = (event: Event) => {
-      const detail = (event as CustomEvent<{ path?: string; pane?: string }>).detail
-      if (!detail?.path) return
-      app.left.navigate(detail.path)
-    }
-    window.addEventListener('fiex:navigate', navigate)
-    return () => window.removeEventListener('fiex:navigate', navigate)
-  }, [app.left])
-
-  useEffect(() => {
-    const openStore = () => app.setPluginManager(true)
-    window.addEventListener('fiex:open-plugin-store', openStore)
-    return () => window.removeEventListener('fiex:open-plugin-store', openStore)
-  }, [app.setPluginManager])
-
-  useEffect(() => {
-    if (!native || autostarted.current || !app.left.hasListing) return
-    autostarted.current = true
-    const sessions = app.left.connections.filter(
-      (connection) =>
-        (connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh') &&
-        connection.autostart &&
-        connection.saved !== false &&
-        !app.left.tabs.includes(`fiex-terminal://${connection.id}`),
-    )
-    for (const session of sessions) {
-      app.newWorkspaceTab()
-      app.left.navigate(`fiex-terminal://${session.id}`)
-    }
-  }, [app.left.hasListing, app.left.connections, app.left.tabs])
-
-  // The label size is the reference size: every window is zoomed by the same
-  // ratio so the preference scales the sidebar, toolbar, dialogs and file list
-  // together instead of only enlarging file names.
-  useEffect(() => {
-    if (!native) return
-    void getCurrentWebviewWindow()
-      .setZoom(app.prefs.fontSize / 11)
-      .catch(() => {})
-  }, [app.prefs.fontSize])
   return (
     <div
       className={`app ${app.sidebar ? '' : 'sidebar-hidden'} ${app.dragging ? 'dragging' : ''} ${backgroundUrl ? 'has-background' : ''}`}
@@ -306,7 +250,7 @@ export default function App() {
         onApply={app.applyBatchRename}
       />
       <ExplorerDialogs {...app} />
-      <PluginPermissionHost />
+      <PluginServices />
     </div>
   )
 }

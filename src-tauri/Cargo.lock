@@ -1510,6 +1510,7 @@ dependencies = [
  "file_icon_provider",
  "fontdb",
  "futures",
+ "getrandom 0.2.17",
  "globset",
  "gtk",
  "hex",
@@ -1555,22 +1556,12 @@ dependencies = [
 
 [[package]]
 name = "fiex-plugin-sdk"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
- "fiex-plugin-sdk-macros",
  "serde",
  "serde_json",
  "shared_memory",
-]
-
-[[package]]
-name = "fiex-plugin-sdk-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]

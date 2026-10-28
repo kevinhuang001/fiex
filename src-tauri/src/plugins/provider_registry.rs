@@ -83,6 +83,7 @@ pub struct RegisteredProvider {
     pub plugin_id: String,
     pub operations: BTreeSet<FsOperation>,
     pub reported: bool,
+    pub discovery: bool,
 }
 
 impl RegisteredProvider {
@@ -119,6 +120,10 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
             }
         }
     }
+    provider.discovery = reply
+        .pointer("/fs/discovery")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     if let Ok(mut registry) = registry().lock() {
         registry.insert(plugin_id.to_string(), provider.clone());
     }
@@ -159,6 +164,35 @@ pub fn authorize_method(plugin_id: &str, method: &str) -> Result<(), String> {
             operation.as_str()
         )),
         Some(_) => Ok(()),
+    }
+}
+
+/// Discovery is negotiated and only precedes new logical operations. Existing
+/// streams must always be able to release their handles with close/abort.
+pub fn needs_discovery(plugin_id: &str, method: &str) -> bool {
+    !matches!(
+        method,
+        "fs.readStream" | "fs.closeRead" | "fs.writeStream" | "fs.commit" | "fs.abort"
+    ) && FsOperation::from_method(method).is_some()
+        && get(plugin_id).is_some_and(|provider| provider.discovery)
+}
+
+pub fn authorize_discovered(method: &str, reply: &Value) -> Result<(), String> {
+    let operation = FsOperation::from_method(method).ok_or("invalid discovered operation")?;
+    let allowed = reply
+        .get("operations")
+        .and_then(Value::as_array)
+        .ok_or("provider discovery is missing operations")?;
+    if allowed
+        .iter()
+        .any(|value| value.as_str() == Some(operation.as_str()))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "server does not permit {} for this resource",
+            operation.as_str()
+        ))
     }
 }
 
@@ -213,6 +247,31 @@ mod tests {
         assert!(authorize_method("org.example.legacy", "fs.list").is_err());
         assert!(authorize_method("org.example.legacy", "connection.open").is_ok());
         forget("org.example.legacy");
+    }
+
+    #[test]
+    fn discovery_gates_new_operations_without_orphaning_streams() {
+        let plugin = "org.example.discovery";
+        register(
+            plugin,
+            &json!({"fs":{"operations":["read","write"],"discovery":true}}),
+        );
+        assert!(needs_discovery(plugin, "fs.openRead"));
+        assert!(needs_discovery(plugin, "fs.beginWrite"));
+        for method in [
+            "fs.discover",
+            "fs.closeRead",
+            "fs.abort",
+            "fs.commit",
+            "fs.readStream",
+        ] {
+            assert!(!needs_discovery(plugin, method));
+        }
+        assert!(authorize_discovered("fs.beginWrite", &json!({"operations":["read"]})).is_err());
+        assert!(authorize_discovered("fs.openRead", &json!({"operations":[]})).is_err());
+        assert!(authorize_discovered("fs.openRead", &json!({"operations":["read"]})).is_ok());
+        assert!(authorize_discovered("fs.openRead", &Value::Null).is_err());
+        forget(plugin);
     }
 
     #[test]

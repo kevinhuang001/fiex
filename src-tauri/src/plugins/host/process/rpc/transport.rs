@@ -193,6 +193,11 @@ impl Running {
             self.ensure_initialized()?;
             crate::plugins::provider_registry::authorize_method(&self.plugin_id, method)
                 .map_err(RpcFailure::business)?;
+            if crate::plugins::provider_registry::needs_discovery(&self.plugin_id, method) {
+                let reply = self.rpc("fs.discover", params.clone(), scope.clone())?;
+                crate::plugins::provider_registry::authorize_discovered(method, &reply)
+                    .map_err(RpcFailure::business)?;
+            }
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let owner = format!("{}:op:{id}", self.base_owner);

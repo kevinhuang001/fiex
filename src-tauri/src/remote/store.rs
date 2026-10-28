@@ -173,52 +173,6 @@ fn terminal_connection(conn: &StoredConnection) -> bool {
     (conn.kind == "ssh" && plugin == super::config::BUILTIN_PLUGIN_ID) || plugin == "org.fiex.ssh"
 }
 
-fn public(conn: &StoredConnection) -> ConnectionInfo {
-    let builtin = terminal_connection(conn);
-    if !builtin {
-        let mount = mount_path(conn);
-        let _ = fs::create_dir_all(&mount);
-    }
-    ConnectionInfo {
-        id: conn.id.clone(),
-        name: conn.name.clone(),
-        kind: conn.kind.clone(),
-        plugin_id: connection_plugin_id(conn),
-        mount_path: if builtin {
-            format!("fiex-terminal://{}", conn.id)
-        } else {
-            super::config::navigation_path(conn, "").unwrap_or_default()
-        },
-        saved: conn.saved,
-        autostart: conn.autostart,
-    }
-}
-
-pub fn list_connections() -> Vec<ConnectionInfo> {
-    load_stored().iter().map(public).collect()
-}
-
-fn editable_config(mut connection: StoredConnection) -> ConnectionInput {
-    for key in &connection.secret_keys {
-        connection.settings.remove(key);
-    }
-    ConnectionInput {
-        id: Some(connection.id),
-        name: connection.name,
-        kind: connection.kind,
-        plugin_id: Some(connection.plugin_id),
-        settings: connection.settings,
-    }
-}
-
-pub fn connection_config(id: &str) -> Result<ConnectionInput, String> {
-    load_stored()
-        .into_iter()
-        .find(|connection| connection.id == id)
-        .map(editable_config)
-        .ok_or_else(|| "connection not found".into())
-}
-
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
     let name = input.name.trim();
     if name.is_empty() {
@@ -361,10 +315,15 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         if let Some(domain) = connection_domain(&record.settings) {
             crate::plugins::host::set_network_domain(&plugin_id, &domain, true)?;
         }
-        crate::plugins::host::global().invoke(
+        let validation = crate::plugins::host::global().invoke(
             &plugin_id,
             "connection.validate",
-            serde_json::json!({"connection": provider_config(&record)}),
+            serde_json::json!({"connection": provider_config(&record), "connectionId":id}),
+        )?;
+        super::credentials::apply_validation(
+            &mut record.settings,
+            &record.secret_keys,
+            validation,
         )?;
     }
     let scope = format!("connection-{id}");
@@ -542,20 +501,6 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
     }
 }
 
-#[cfg(test)]
-mod edit_tests {
-    use super::*;
-    #[test]
-    fn editing_exposes_configuration_but_never_credentials() {
-        let connection: StoredConnection = serde_json::from_value(serde_json::json!({
-            "id":"saved-ssh", "mountId":"stable", "name":"SSH", "kind":"org.fiex.ssh", "pluginId":"org.fiex.ssh",
-            "settings":{"host":"example.com", "port":2222, "password":"private-value"},
-            "secretKeys":["password"], "saved":true, "autostart":true
-        })).unwrap();
-        let config = serde_json::to_value(editable_config(connection)).unwrap();
-        assert_eq!(config["id"], "saved-ssh");
-        assert_eq!(config["settings"]["port"], 2222);
-        assert!(config["settings"].get("password").is_none());
-        assert!(!config.to_string().contains("private-value"));
-    }
-}
+mod projection;
+use projection::public;
+pub use projection::{connection_config, list_connections};

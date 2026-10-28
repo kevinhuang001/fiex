@@ -1,3 +1,4 @@
+import { RenamePreview } from './rename/RenamePreview'
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Hash, CaseSensitive, Replace, RotateCcw, Wand2 } from 'lucide-react'
@@ -259,24 +260,7 @@ export function BatchRenameDialog({
               <RotateCcw size={13} /> {t('重置')}
             </button>
           </header>
-          <div className="batch-rename-list">
-            {(entries || []).map((entry, index) => {
-              const name = built.names[index] || t('（空）')
-              const problem = validation.get(entry.path)
-              const changedRow = name !== entry.name
-              return (
-                <div
-                  className={`batch-rename-row ${problem ? 'invalid' : ''} ${changedRow ? 'changed' : ''}`}
-                  key={entry.path}
-                >
-                  <span title={entry.name}>{entry.name}</span>
-                  <b>→</b>
-                  <span title={name}>{name}</span>
-                  {problem && <em>{problem}</em>}
-                </div>
-              )
-            })}
-          </div>
+          <RenamePreview entries={entries || []} names={built.names} validation={validation} />
           {error && (
             <p className="batch-rename-error" role="alert">
               {error}
