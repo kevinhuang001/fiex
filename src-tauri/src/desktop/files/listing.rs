@@ -94,13 +94,7 @@ pub(super) fn file_info_blocking(path: &str) -> Result<files::Entry, String> {
 
 #[tauri::command]
 pub(crate) async fn read_preview(path: String) -> Result<String, String> {
-    let path = if volumes::applications::is_user(&path) {
-        volumes::applications::stored_path(&path)?
-            .to_string_lossy()
-            .into_owned()
-    } else {
-        path
-    };
+    // Keep the view identity bound to Core; the adapter resolves its bytes.
     tauri::async_runtime::spawn_blocking(move || {
         let resource = crate::core::fs::trusted(&path, "core:preview")?;
         let bytes = resource.preview_prefix(512 * 1024)?;
