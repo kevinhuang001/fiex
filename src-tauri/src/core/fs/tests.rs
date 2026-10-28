@@ -100,7 +100,10 @@ fn application_user_children_use_builtin_broker_and_streamed_writes() {
     use base64::{engine::general_purpose::STANDARD, Engine};
     let root = crate::core::volumes::applications::URI;
     let parent = super::binding::trusted(root, "core:test-app").unwrap();
-    let name = format!("fiex-test-{}.txt", crate::plugins::mounts::new_id().unwrap());
+    let name = format!(
+        "fiex-test-{}.txt",
+        crate::plugins::mounts::new_id().unwrap()
+    );
     let child = super::binding::child(&parent, &name).unwrap();
     assert!(child.stat().is_err());
     let handle = child.begin_write(true).unwrap();
@@ -134,10 +137,22 @@ fn nested_directory_transfer_creates_children_via_scoped_refs() {
     let source_path = source.path().join("album").to_string_lossy().into_owned();
     let target_path = target.path().to_string_lossy().into_owned();
     let cancel = std::sync::atomic::AtomicBool::new(false);
-    let result = transfer(&[source_path], &target_path, false, false, &[], &[],
-        &cancel, &|_, _, _| {}).unwrap();
+    let result = transfer(
+        &[source_path],
+        &target_path,
+        false,
+        false,
+        &[],
+        &[],
+        &cancel,
+        &|_, _, _| {},
+    )
+    .unwrap();
     assert!(result.errors.is_empty(), "{:?}", result.errors);
-    assert_eq!(std::fs::read(target.path().join("album/nested/large.bin")).unwrap(), payload);
+    assert_eq!(
+        std::fs::read(target.path().join("album/nested/large.bin")).unwrap(),
+        payload
+    );
 }
 
 #[test]
@@ -149,13 +164,27 @@ fn cancelled_multi_file_copy_rolls_back_committed_destinations() {
     let b = source.path().join("b.txt");
     std::fs::write(&a, b"a").unwrap();
     std::fs::write(&b, b"b").unwrap();
-    let files = [a.to_string_lossy().into_owned(), b.to_string_lossy().into_owned()];
+    let files = [
+        a.to_string_lossy().into_owned(),
+        b.to_string_lossy().into_owned(),
+    ];
     let destination = target.path().to_string_lossy().into_owned();
     let cancel = AtomicBool::new(false);
-    let result = transfer(&files, &destination, true, false, &[], &[],
-        &cancel, &|done, _, _| {
-            if done == 1 { cancel.store(true, Ordering::SeqCst); }
-        }).unwrap();
+    let result = transfer(
+        &files,
+        &destination,
+        true,
+        false,
+        &[],
+        &[],
+        &cancel,
+        &|done, _, _| {
+            if done == 1 {
+                cancel.store(true, Ordering::SeqCst);
+            }
+        },
+    )
+    .unwrap();
     assert!(!result.errors.is_empty());
     assert!(!target.path().join("a.txt").exists());
     assert!(!target.path().join("b.txt").exists());
