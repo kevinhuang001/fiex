@@ -76,7 +76,7 @@ impl FSProvider for GoogleDrive {
 ```
 
 `operations()` 主动声明实现上限；`discover(ctx)` 按服务器权限缩小能力。
-`plugin.initialize` 自动上报 `fs.operations` 和 `fs.discovery: true`；Core 据此决定是否下发 `fs.*`。协议的完整定义见
+`plugin.initialize` 自动上报 `vfs.operations` 和 `vfs.discovery: true`；Core 据此决定是否下发 `vfs.*`。协议的完整定义见
 [10-UNIFIED-FS](10-UNIFIED-FS.md)。
 
 ### 其他 Host API

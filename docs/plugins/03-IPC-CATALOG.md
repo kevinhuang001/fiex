@@ -15,7 +15,7 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 
 | 方法                                                          | 参数                                                  | 返回                                                      |
 | ------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
-| `plugin.initialize`                                           | `protocolVersion, hostVersion?`                       | `pluginId, ready, fs.operations[]`                        |
+| `plugin.initialize`                                           | `protocolVersion, hostVersion?`                       | `pluginId, ready, vfs.operations[]`                        |
 | `plugin.ping` / `plugin.shutdown`                             | 空                                                    | `alive` / `null`                                          |
 | `connection.validate`                                         | `connection`                                          | `valid`                                                   |
 | `connection.open` / `connection.create`                       | `connectionId/factoryId/connection…`                  | `NavigationTarget`                                        |
@@ -25,19 +25,19 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 | `contextMenu.resolve`                                         | `menuSessionId,targets,parentId?`                     | `{items:[...]}`                                           |
 | `contextMenu.execute`                                         | `menuSessionId,itemId,interactionId`                  | 操作结果                                                  |
 | `search.query`                                                | `query, root(ref), hidden, ignores, limit`            | `{entries:[...]}`                                         |
-| `fs.list`                                                     | `mountId,nodeId,cursor?,limit,hidden?,ignores?`       | `{entries:[FsEntry],nextCursor?,warnings?}`               |
-| `fs.stat`                                                     | `mountId,nodeId`                                      | `FsEntry`                                                 |
-| `fs.search`                                                   | `mountId,nodeId,query,limit,hidden?,ignores?`         | `{entries:[FsEntry],truncated?}`                          |
-| `fs.openRead` / `fs.readStream` / `fs.closeRead`              | `nodeId` / `streamId,offset,maxBytes` / `streamId`    | `{streamId,size?}` / `{base64,eof}` / `null`              |
-| `fs.beginWrite` / `fs.writeStream` / `fs.commit` / `fs.abort` | `nodeId                                               | parentId+name,size?,ifRevision?`/`streamId,offset,base64` | `{streamId}` / `{written}` / `FsEntry` / `null` |
-| `fs.mkdir` / `fs.rename` / `fs.remove`                        | `parentId,name` / `nodeId,name?,parentId?` / `nodeId` | `FsEntry` / `FsEntry` / `null`                            |
+| `vfs.list`                                                     | `mountId,nodeId,cursor?,limit,hidden?,ignores?`       | `{entries:[FsEntry],nextCursor?,warnings?}`               |
+| `vfs.stat`                                                     | `mountId,nodeId`                                      | `FsEntry`                                                 |
+| `vfs.search`                                                   | `mountId,nodeId,query,limit,hidden?,ignores?`         | `{entries:[FsEntry],truncated?}`                          |
+| `vfs.openRead` / `vfs.readStream` / `vfs.closeRead`              | `nodeId` / `streamId,offset,maxBytes` / `streamId`    | `{streamId,size?}` / `{base64,eof}` / `null`              |
+| `vfs.beginWrite` / `vfs.writeStream` / `vfs.commit` / `vfs.abort` | `nodeId                                               | parentId+name,size?,ifRevision?`/`streamId,offset,base64` | `{streamId}` / `{written}` / `FsEntry` / `null` |
+| `vfs.mkdir` / `vfs.rename` / `vfs.remove`                        | `parentId,name` / `nodeId,name?,parentId?` / `nodeId` | `FsEntry` / `FsEntry` / `null`                            |
 | `toolbar.invoke`                                              | `EventContext.targets`                                | 业务结果                                                  |
 | `hooks.invoke`                                                | `event, targets`                                      | `HookResponse`（beforeOpen 已接线）                       |
 | `terminal.open`                                               | `sessionId, cols, rows, connection`                   | `{started:true}`（SSH 插件）                              |
 
 Root `contextMenu.resolve` 返回的 `items` 只包含顶层 action、submenu、separator，不能提供子菜单静态项。用户打开 submenu 时，Core 使用原来的菜单 Session 再次调用 `contextMenu.resolve`，附带 `parentId`；插件只返回该 submenu 的直接子项（不得指定 `parentId`）。Core 校验 ID、层级和会话归属后补充 `parentId` 并展示。菜单解析仅投影允许的元数据，不授予文件内容访问；`contextMenu.execute` 才会附上本次选中资源的操作 Scope。
 
-连接与独立视图共用上表的 `fs.*`，差别只在请求携带 `connection` 还是
+连接与独立视图共用上表的 `vfs.*`，差别只在请求携带 `connection` 还是
 `contributionId`/`viewContext`。完整字段见 [10-UNIFIED-FS](10-UNIFIED-FS.md)。
 
 ## 标准事件上下文

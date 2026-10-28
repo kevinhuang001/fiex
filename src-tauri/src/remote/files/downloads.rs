@@ -33,7 +33,7 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
         let file = &meta.files[&rel];
         if let Ok(info) = crate::plugins::host::global().invoke(
             &ensure_provider_access(&conn)?,
-            "fs.stat",
+            "vfs.stat",
             serde_json::json!({
                 "mountId": conn.mount_id,
                 "connection": provider_config(&conn),

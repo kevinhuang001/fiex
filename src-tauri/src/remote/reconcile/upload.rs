@@ -1,6 +1,6 @@
 use super::*;
 
-/// Push one immutable snapshot through `fs.writeStream` in protocol-sized
+/// Push one immutable snapshot through `vfs.writeStream` in protocol-sized
 /// chunks. `offset` is always the number of bytes already accepted by the
 /// provider.
 pub(super) fn stream_snapshot(
@@ -25,7 +25,7 @@ pub(super) fn stream_snapshot(
         let base64 = base64::engine::general_purpose::STANDARD.encode(&buffer[..read]);
         let response = crate::plugins::host::global().invoke(
             plugin,
-            "fs.writeStream",
+            "vfs.writeStream",
             json!({
                 "mountId": mount_id,
                 "streamId": stream,
@@ -47,7 +47,7 @@ pub(super) fn stream_snapshot(
     }
     crate::plugins::host::global().invoke(
         plugin,
-        "fs.commit",
+        "vfs.commit",
         json!({"mountId": mount_id, "streamId": stream}),
     )
 }
@@ -88,7 +88,7 @@ pub(super) fn upload(
     // no Operation Scope for uploads.
     let started = invoke(
         conn,
-        "fs.beginWrite",
+        "vfs.beginWrite",
         json!({
             "nodeId": node,
             "size": size,

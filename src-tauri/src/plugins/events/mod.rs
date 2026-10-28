@@ -24,7 +24,6 @@ pub fn is_protected_method(method: &str) -> bool {
             "plugin.",
             "contextMenu.",
             "vfs.",
-            "fs.",
             "connection.",
         ]
         .iter()

@@ -33,7 +33,7 @@ fn readonly_is_explicit_and_operations_are_per_action() {
     let plugin = "org.example.capability-test";
     crate::plugins::provider_registry::register(
         plugin,
-        &serde_json::json!({"fs":{"operations":["list","stat","read","write","remove"]}}),
+        &serde_json::json!({"vfs":{"operations":["list","stat","read","write","remove"]}}),
     );
     let (readonly, operations) = entry_capabilities(plugin, None, false);
     assert!(!readonly);

@@ -32,3 +32,9 @@ The final edits have not been tested. Cross-platform desktop compilation, live l
 | `src/hooks/explorer/useListing.ts`                      |   329 | Existing module; further responsibility-based extraction remains. |
 | `src/hooks/useAppController.tsx`                        |   438 | Existing module; further responsibility-based extraction remains. |
 | `src/lib/demo/handlers/plugins.ts`                      |   800 | Existing module; further responsibility-based extraction remains. |
+
+## Follow-up: one CI repair round and VFS naming
+
+The reported desktop CI errors were repaired: macro-use attribute spacing, the unused storage import, private PTY session fields needed by the parent module, and upload helper re-export visibility. Opening Trash resolves its path on demand if environment initialization is still pending. The Windows Everything branch no longer formats an existing String. The WebDAV process fixture now explicitly advertises the privileges its writable account models; production permission checks remain conservative.
+
+Native provider wire methods and initialization metadata now use the canonical `vfs.*` / `vfs` namespace across Core, SDK and official plugins. `host.fs.*` remains the separate host file-service contract. The final changes were not locally tested and the new CI result is not asserted.

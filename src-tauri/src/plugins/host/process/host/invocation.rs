@@ -90,7 +90,7 @@ impl PluginHost {
         self.invoke_scoped(plugin_id, method, params, root)
     }
 
-    /// Unified file-system entry point. Connections and views share `fs.*`;
+    /// Unified file-system entry point. Connections and views share `vfs.*`;
     /// the caller decides whether an Operation Scope is attached.
     pub fn invoke_fs(
         &self,
@@ -99,7 +99,7 @@ impl PluginHost {
         params: Value,
         scope: Option<crate::plugins::resource::fs_access::Scope>,
     ) -> Result<Value, String> {
-        if !method.starts_with("fs.") {
+        if !method.starts_with("vfs.") {
             return Err("invalid file-system method".into());
         }
         self.invoke_scoped(plugin_id, method, params, scope)
@@ -124,7 +124,7 @@ impl PluginHost {
         {
             return Err("PermissionDenied: connection factory declaration required".into());
         }
-        if method.starts_with("fs.")
+        if method.starts_with("vfs.")
             && manifest
                 .extensions
                 .get("connections")

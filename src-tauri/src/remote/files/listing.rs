@@ -82,7 +82,7 @@ pub(crate) fn list_remote(conn: &StoredConnection, rel: &str) -> Result<Vec<Remo
         }
         let page = crate::plugins::host::global().invoke(
             &plugin_id,
-            "fs.list",
+            "vfs.list",
             serde_json::json!({
                 "mountId": conn.mount_id,
                 "connection": config,

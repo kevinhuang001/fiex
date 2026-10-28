@@ -21,7 +21,7 @@ pub(crate) fn fetch_remote(
     let mut staging = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
     let opened = crate::plugins::host::global().invoke(
         &plugin_id,
-        "fs.openRead",
+        "vfs.openRead",
         serde_json::json!({
             "mountId": conn.mount_id,
             "connection": provider_config(conn),
@@ -47,7 +47,7 @@ pub(crate) fn fetch_remote(
         fn drop(&mut self) {
             let _ = crate::plugins::host::global().invoke(
                 self.plugin,
-                "fs.closeRead",
+                "vfs.closeRead",
                 serde_json::json!({"mountId": self.mount_id, "streamId": self.stream}),
             );
         }
@@ -66,7 +66,7 @@ pub(crate) fn fetch_remote(
         }
         let response = match crate::plugins::host::global().invoke(
             &plugin_id,
-            "fs.readStream",
+            "vfs.readStream",
             serde_json::json!({
                 "mountId": conn.mount_id,
                 "streamId": &stream_id,
@@ -144,7 +144,7 @@ pub async fn provider_list(
         .unwrap_or(relative);
     crate::plugins::host::global().invoke(
         &plugin_id,
-        "fs.list",
+        "vfs.list",
         serde_json::json!({
             "mountId": conn.mount_id,
             "connection": config,

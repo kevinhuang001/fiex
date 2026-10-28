@@ -2,7 +2,7 @@
 //!
 //! Connection mounts are virtual: Core owns the metadata/cache bookkeeping and
 //! the provider owns the bytes. Each mutation goes through [`Mount`] (so the
-//! protocol and capability checks are the same as any other `fs.*` call), then
+//! protocol and capability checks are the same as any other `vfs.*` call), then
 //! updates the local snapshot so the explorer reflects it without waiting for a
 //! full re-list.
 
@@ -58,7 +58,7 @@ fn move_cache(old: &std::path::Path, new: &std::path::Path) -> Result<(), String
     fs::rename(old, new).map_err(|e| e.to_string())
 }
 
-/// New entries are folders: `fs.*` has no create-empty-file operation.
+/// New entries are folders: `vfs.*` has no create-empty-file operation.
 pub async fn create(path: &str, name: &str) -> Result<String, String> {
     let (conn, relative) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
     let _guard = super::sync::lock(&conn).await;

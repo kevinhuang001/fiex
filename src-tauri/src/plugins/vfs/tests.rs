@@ -61,7 +61,7 @@ fn capabilities_narrow_the_provider_and_mark_entries_readonly() {
     let plugin = "test.vfs.capabilities";
     crate::plugins::provider_registry::register(
         plugin,
-        &json!({"fs":{"operations":["list","stat","read","write","rename","remove"]}}),
+        &json!({"vfs":{"operations":["list","stat","read","write","rename","remove"]}}),
     );
     let location = crate::plugins::mounts::parse("fiex://mount/owner-one/folder").unwrap();
     let mount = mount(plugin);

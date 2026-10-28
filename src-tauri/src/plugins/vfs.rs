@@ -1,7 +1,7 @@
 //! Generic plugin-owned virtual filesystems.
 //!
 //! Explicit VFS extensions are routed through Core-owned view identities and the
-//! shared [`crate::plugins::resolvers::fs`], so views use the same `fs.*` protocol as
+//! shared [`crate::plugins::resolvers::fs`], so views use the same `vfs.*` protocol as
 //! connections. Views remain navigation identities; UI extensions never confer
 //! provider eligibility.
 
@@ -76,7 +76,7 @@ fn node(
     Ok((uri, view, id))
 }
 
-/// The provider identity a view sends with every `fs.*` request.
+/// The provider identity a view sends with every `vfs.*` request.
 fn mount_for(uri: &crate::plugins::mounts::Uri, view: &crate::plugins::mounts::View) -> Mount {
     Mount {
         mount_id: uri.mount_id.clone(),

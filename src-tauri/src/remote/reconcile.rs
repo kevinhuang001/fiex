@@ -18,13 +18,13 @@ fn invoke(conn: &StoredConnection, method: &str, mut params: Value) -> Result<Va
 fn stat(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -> Result<Value, String> {
     invoke(
         conn,
-        "fs.stat",
+        "vfs.stat",
         json!({"nodeId": if file.node_id.is_empty() { rel } else { &file.node_id }}),
     )
 }
 
 /// A provider write stream that has not committed yet. Dropping it (any error
-/// on the way to `fs.commit`) aborts the stream so unpublished bytes vanish and
+/// on the way to `vfs.commit`) aborts the stream so unpublished bytes vanish and
 /// the local snapshot/baseline stay untouched for a retry.
 struct WriteLease<'a> {
     plugin: &'a str,
@@ -38,7 +38,7 @@ impl Drop for WriteLease<'_> {
         if !self.finished {
             let _ = crate::plugins::host::global().invoke(
                 self.plugin,
-                "fs.abort",
+                "vfs.abort",
                 json!({"mountId": self.mount_id, "streamId": self.stream}),
             );
         }

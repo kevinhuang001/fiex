@@ -173,7 +173,7 @@ impl Running {
             return Err(RpcFailure::fatal("plugin identity mismatch"));
         }
         // The declaration is part of the handshake: Core stores what the
-        // provider says it implements and gates `fs.*` on it.
+        // provider says it implements and gates `vfs.*` on it.
         crate::plugins::provider_registry::register(&self.plugin_id, &result);
         self.initialized.store(true, Ordering::Release);
         Ok(())
@@ -194,7 +194,7 @@ impl Running {
             crate::plugins::provider_registry::authorize_method(&self.plugin_id, method)
                 .map_err(RpcFailure::business)?;
             if crate::plugins::provider_registry::needs_discovery(&self.plugin_id, method) {
-                let reply = self.rpc("fs.discover", params.clone(), scope.clone())?;
+                let reply = self.rpc("vfs.discover", params.clone(), scope.clone())?;
                 crate::plugins::provider_registry::authorize_discovered(method, &reply)
                     .map_err(RpcFailure::business)?;
             }

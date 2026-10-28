@@ -1,6 +1,6 @@
 //! Uploading local (or materialized) trees into a provider-backed connection.
 //!
-//! The provider receives ordinary `fs.beginWrite` calls: `parentId` + `name`
+//! The provider receives ordinary `vfs.beginWrite` calls: `parentId` + `name`
 //! for new nodes and `nodeId` + `ifRevision` for replacements. Core keeps the
 //! metadata snapshot in step so the explorer shows the new entries without a
 //! full re-list.

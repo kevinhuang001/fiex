@@ -46,11 +46,11 @@
 
 ### 统一文件系统（protocol 5）
 
-- 连接与独立视图共用 `fs.list/stat/search/openRead/readStream/closeRead/beginWrite/writeStream/commit/abort/mkdir/rename/remove`；
+- 连接与独立视图共用 `vfs.list/stat/search/openRead/readStream/closeRead/beginWrite/writeStream/commit/abort/mkdir/rename/remove`；
 - SDK 的 `FSProvider::operations()` 显式声明能力上限，普通 SDK 分发器调用方法，`discover(ctx)` 按服务器权限收窄能力；
-- `plugin.initialize` 上报 `fs.operations`，Core 的 ProviderRegistry 保存并在下发前拒绝未声明的操作；
+- `plugin.initialize` 上报 `vfs.operations`，Core 的 ProviderRegistry 保存并在下发前拒绝未声明的操作；
 - 节点可用 `allowedOps` 收窄自身能力，右键菜单同时参考 Provider 能力、节点能力与授权；
-- `vfs.*` 与 `fs.writeFile` 已删除，独立视图的读取改为流式，导出不再受 1 MiB 限制。
+- 连接和独立视图统一使用 `vfs.*`；旧的小文件读取和快照上传已删除，导出不再受 1 MiB 限制。
 
 ### 统一事件调用架构
 

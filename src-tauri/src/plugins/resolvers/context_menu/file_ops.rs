@@ -273,7 +273,7 @@ impl BuiltinResolver for Trash {
             };
             vec![item("trash", title, "trash", "trash")]
         } else {
-            // Provider-backed mounts have no Trash. Their `fs.remove` is the
+            // Provider-backed mounts have no Trash. Their `vfs.remove` is the
             // permanent delete, so the menu says exactly that.
             vec![item("delete", "彻底删除", "trash", "")]
         };

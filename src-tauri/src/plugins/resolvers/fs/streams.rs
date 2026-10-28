@@ -23,7 +23,7 @@ impl FsStream {
         }
         let max_bytes = max_bytes.min(MAX_CHUNK);
         let value = self.mount.invoke(
-            "fs.readStream",
+            "vfs.readStream",
             json!({
                 "streamId": self.stream_id,
                 "offset": offset,
@@ -58,7 +58,7 @@ impl FsStream {
         self.closed = true;
         let _ = self
             .mount
-            .invoke("fs.closeRead", json!({"streamId": self.stream_id}));
+            .invoke("vfs.closeRead", json!({"streamId": self.stream_id}));
     }
 }
 
@@ -81,7 +81,7 @@ impl FsWriteStream {
         use base64::{engine::general_purpose::STANDARD, Engine};
         write_chunks(bytes, &mut self.offset, |offset, chunk| {
             let value = self.mount.invoke(
-                "fs.writeStream",
+                "vfs.writeStream",
                 json!({
                     "streamId": self.stream_id,
                     "offset": offset,
@@ -98,7 +98,7 @@ impl FsWriteStream {
     pub fn commit(mut self) -> Result<Option<FsEntry>, String> {
         let value = self
             .mount
-            .invoke("fs.commit", json!({"streamId": self.stream_id}))?;
+            .invoke("vfs.commit", json!({"streamId": self.stream_id}))?;
         self.finished = true;
         if value.is_null() || value.as_object().is_some_and(|object| object.is_empty()) {
             return Ok(None);
@@ -108,7 +108,7 @@ impl FsWriteStream {
 
     pub fn abort(mut self) -> Result<(), String> {
         self.mount
-            .invoke("fs.abort", json!({"streamId": self.stream_id}))?;
+            .invoke("vfs.abort", json!({"streamId": self.stream_id}))?;
         self.finished = true;
         Ok(())
     }
@@ -119,7 +119,7 @@ impl Drop for FsWriteStream {
         if !self.finished {
             let _ = self
                 .mount
-                .invoke("fs.abort", json!({"streamId": self.stream_id}));
+                .invoke("vfs.abort", json!({"streamId": self.stream_id}));
             self.finished = true;
         }
     }

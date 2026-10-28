@@ -1,5 +1,5 @@
 //! Host-method routing. Scope and reference resolution happen here once; the
-//! concrete method groups live in `fs`, `net` and `other` so each family stays
+//! concrete method groups live in `vfs`, `net` and `other` so each family stays
 //! small and every permission decision is next to the operation it guards.
 use super::{actor::Actor, Running};
 use crate::plugins::security::policy::{Capability, PermissionPolicy};
