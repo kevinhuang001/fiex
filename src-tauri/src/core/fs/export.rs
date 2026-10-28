@@ -92,6 +92,7 @@ fn export_node(
     *count += 1;
     let stat = source.stat()?;
     if stat["isDir"] == true {
+        source.require(FsOperation::List, false)?;
         std::fs::create_dir(target).map_err(|e| e.to_string())?;
         let listing = source.list()?;
         let children = listing.as_array().ok_or("invalid listing")?;
@@ -113,6 +114,9 @@ fn export_node(
     if stat["symlink"] == true {
         return Err("Unsupported: exporting symlinks requires an explicit policy".into());
     }
+    // Export is a read operation, not merely a metadata lookup. Check the
+    // current node capability before opening the provider stream.
+    source.require(FsOperation::Read, false)?;
     let mut read = source.adapter()?.open_read()?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -123,6 +127,9 @@ fn export_node(
     loop {
         let (part, eof) = read.read_at(offset, CHUNK)?;
         if part.is_empty() {
+            if !eof {
+                return Err("export stream ended unexpectedly".into());
+            }
             break;
         }
         offset = offset
