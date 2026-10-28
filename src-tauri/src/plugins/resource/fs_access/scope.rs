@@ -175,6 +175,9 @@ impl Scope {
                     .filter(|snapshot| {
                         crate::plugins::mounts::handles(&snapshot.display)
                             || crate::usbfs::route(&snapshot.display).is_some()
+                            || crate::core::volumes::virtual_resolvers::resolver_for(
+                                &snapshot.display,
+                            ).is_some()
                     })
                     .cloned()
             }));
@@ -212,13 +215,7 @@ impl Scope {
             .get(&key)
             .cloned()
             .or_else(|| {
-                self.issued.lock().ok()?.get(&key).map(|snapshot| {
-                    if crate::core::volumes::applications::is_user(&snapshot.display) {
-                        snapshot.local.to_string_lossy().into_owned()
-                    } else {
-                        snapshot.display.clone()
-                    }
-                })
+                self.issued.lock().ok()?.get(&key).map(|snapshot| snapshot.display.clone())
             })
             .ok_or_else(|| "resource not authorized in this operation".into())
     }
@@ -242,6 +239,18 @@ impl Scope {
                 || !Path::new(&child.relative).starts_with(&root.relative)
             {
                 return Err("child outside selected resource".into());
+            }
+        } else if parent_path == crate::core::volumes::applications::URI
+            || crate::core::volumes::applications::is_user(&parent_path)
+        {
+            let parent_local = if parent_path == crate::core::volumes::applications::URI {
+                crate::core::volumes::applications::stored_path(&parent_path)?
+            } else {
+                crate::core::volumes::applications::candidate_path(&parent_path)?
+            };
+            let child_local = crate::core::volumes::applications::candidate_path(display)?;
+            if child_local.parent() != Some(parent_local.as_path()) {
+                return Err("ScopeDenied: child outside selected application directory".into());
             }
         } else if let Some(root) = crate::usbfs::route(&parent_path) {
             let child = crate::usbfs::route(display).ok_or("invalid USB child")?;
@@ -276,15 +285,7 @@ impl Scope {
                 display, meta,
             );
         if parent["mountId"] == "core:applications" {
-            let uri = crate::core::volumes::applications::stored_uri(Path::new(display))?;
-            snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-                &uri,
-                snapshot
-                    .metadata()
-                    .cloned()
-                    .ok_or("missing child metadata")?,
-            );
-            snapshot.local = PathBuf::from(display);
+            snapshot.local = crate::core::volumes::applications::candidate_path(display)?;
         }
         let reference =
             serde_json::to_value(&snapshot.reference).map_err(|error| error.to_string())?;

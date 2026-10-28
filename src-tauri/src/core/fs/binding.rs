@@ -5,8 +5,9 @@ use std::path::Path;
 
 pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String> {
     let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)?;
-    let virtual_storage =
-        crate::plugins::mounts::handles(path) || crate::usbfs::route(path).is_some();
+    let virtual_storage = crate::plugins::mounts::handles(path)
+        || crate::usbfs::route(path).is_some()
+        || crate::core::volumes::virtual_resolvers::resolver_for(path).is_some();
     let mut scope = if virtual_storage {
         Scope::selected(&std::env::temp_dir(), &[])?
     } else {
@@ -45,6 +46,15 @@ pub(crate) fn child(parent: &ResourceBroker, name: &str) -> Result<ResourceBroke
         )?
     } else if crate::usbfs::route(&parent.path).is_some() {
         format!("{}/{}", parent.path.trim_end_matches('/'), name)
+    } else if parent.path == crate::core::volumes::applications::URI
+        || crate::core::volumes::applications::is_user(&parent.path)
+    {
+        let backing = if parent.path == crate::core::volumes::applications::URI {
+            crate::core::volumes::applications::stored_path(&parent.path)?
+        } else {
+            crate::core::volumes::applications::candidate_path(&parent.path)?
+        };
+        crate::core::volumes::applications::stored_uri(&backing.join(name))?
     } else {
         Path::new(&parent.path)
             .join(name)

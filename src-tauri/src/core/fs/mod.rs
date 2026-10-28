@@ -1,6 +1,7 @@
 //! Core-owned file access. Resource identities are resolved only inside an
 //! operation scope; adapters never receive plugin-supplied filesystem paths.
 mod binding;
+mod builtin;
 mod export;
 mod transfer;
 pub(crate) use binding::trusted;
@@ -89,9 +90,9 @@ impl ResourceBroker {
         if let Some(route) = crate::usbfs::route(&self.path) {
             return Ok(Box::new(usb::UsbFsAdapter::new(route)));
         }
-        // Virtual identifiers must never fall through to host file APIs.
-        if crate::core::volumes::virtual_resolvers::opaque(&self.path) {
-            return Err("Unsupported: builtin adapter is not migrated to the broker yet".into());
+        // Core-owned views are in-process storage adapters, never host paths.
+        if crate::core::volumes::virtual_resolvers::resolver_for(&self.path).is_some() {
+            return Ok(Box::new(builtin::BuiltinFsAdapter(self)));
         }
         self.scope.authorize(&self.path)?;
         Ok(Box::new(local::LocalFsAdapter(self)))
