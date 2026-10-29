@@ -78,6 +78,12 @@ pub(crate) fn state_set(key: String, value: serde_json::Value) -> Result<(), Str
     crate::infrastructure::state::set(&key, value)
 }
 #[tauri::command]
+pub(crate) fn core_error_report(
+    code: String, operation: String, source: String, message: String,
+) {
+    crate::infrastructure::errors::report(&code, &operation, &source, &message, false);
+}
+#[tauri::command]
 pub(crate) fn error_poll() -> Vec<crate::infrastructure::errors::AppError> {
     crate::infrastructure::errors::drain()
 }
