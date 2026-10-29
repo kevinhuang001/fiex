@@ -1373,5 +1373,6 @@
   "日志级别": "Log level",
   "搜索日志": "Search logs",
   "暂停": "Pause",
-  "导出": "Export"
+  "导出": "Export",
+  "Core 运行日志": "Core runtime logs"
 }
