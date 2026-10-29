@@ -34,12 +34,17 @@ impl WriteHandle for DeferredWrite {
         }
         let end = position + bytes.len() as u64;
         let additional = end.saturating_sub(self.reserved);
-        RESERVED
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |used| {
-                used.checked_add(additional)
-                    .filter(|total| *total <= MAX_SPOOL)
-            })
-            .map_err(|_| "aggregate write spool quota exceeded")?;
+        let mut used = RESERVED.load(Ordering::Relaxed);
+        loop {
+            let next = used
+                .checked_add(additional)
+                .filter(|total| *total <= MAX_SPOOL)
+                .ok_or("aggregate write spool quota exceeded")?;
+            match RESERVED.compare_exchange_weak(used, next, Ordering::SeqCst, Ordering::Relaxed) {
+                Ok(_) => break,
+                Err(current) => used = current,
+            }
+        }
         self.reserved += additional;
         self.file.write_all(bytes).map_err(|e| e.to_string())
     }

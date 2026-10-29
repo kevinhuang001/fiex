@@ -79,6 +79,7 @@ pub(super) fn action_folders(
     let mut folders = Vec::new();
     if let Some(folder) = directory.filter(|value| {
         !crate::plugins::mounts::handles(value)
+            && crate::usbfs::route(value).is_none()
             && !crate::core::volumes::virtual_resolvers::opaque(value)
     }) {
         folders.push(crate::plugins::resource::fs_access::canonical_selection(
@@ -168,6 +169,14 @@ pub fn resource_scope(
             let mut caps = resource.operations.unwrap_or_else(|| {
                 crate::plugins::resource::file_capabilities::for_path(&resource.display)
             });
+            super::directory_scope::bind(
+                &mut params,
+                &mut scope,
+                &policy,
+                method,
+                resources,
+                directory,
+            )?;
             if directory == Some("recent://") {
                 caps = caps.intersect(
                     crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
@@ -221,6 +230,7 @@ pub fn resource_scope(
     if matches!(method, "decorations.resolve" | "search.query") {
         if let Some(dir) = directory.filter(|d| {
             !crate::plugins::mounts::handles(d)
+                && crate::usbfs::route(d).is_none()
                 && !crate::core::volumes::virtual_resolvers::opaque(d)
         }) {
             scope = crate::plugins::resource::fs_access::Scope::new(Path::new(dir))?;

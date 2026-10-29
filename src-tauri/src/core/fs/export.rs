@@ -39,7 +39,8 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
             },
             false,
         )?;
-        if let Some(local) = resource.adapter()?.native_export_path() {
+        let native = resource.adapter()?.native_export_path();
+        if let Some(local) = native {
             result[index] = local.to_string_lossy().into_owned();
         } else {
             fresh.push((index, resource));

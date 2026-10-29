@@ -50,24 +50,8 @@ pub(super) fn intercept(
         if !resource.is_dir()? {
             return Err("parent ref must be a directory".into());
         }
-        let parent = scope
-            .remote_target(&json!({"ref":reference}))?
-            .map(|r| r.display)
-            .map(Ok)
-            .unwrap_or_else(|| scope.resolve_reference(reference))?;
-        let child = if crate::plugins::mounts::handles(&parent) {
-            let uri = crate::plugins::mounts::parse(&parent)?;
-            crate::plugins::mounts::uri(
-                &uri.mount_id,
-                format!("{}/{}", uri.relative.trim_end_matches('/'), name).trim_start_matches('/'),
-            )?
-        } else {
-            std::path::Path::new(&parent)
-                .join(name)
-                .to_string_lossy()
-                .into_owned()
-        };
-        return scope.issue_child(reference, &child, None).map(Some);
+        let child = crate::core::fs::child(&resource, name)?;
+        return Ok(Some(json!({"ref":child.reference})));
     }
     const TARGET_METHODS: &[&str] = &[
         "fs.openRead",

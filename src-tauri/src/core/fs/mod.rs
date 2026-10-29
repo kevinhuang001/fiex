@@ -5,7 +5,7 @@ mod builtin;
 mod export;
 mod presentation;
 mod transfer;
-pub(crate) use binding::trusted;
+pub(crate) use binding::{child, parent_path, trusted};
 pub use transfer::transfer;
 mod local;
 pub use export::{export as export_for_external_drag, initialize as initialize_exports};

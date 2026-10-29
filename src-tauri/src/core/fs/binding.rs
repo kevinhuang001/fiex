@@ -62,3 +62,39 @@ pub(crate) fn child(parent: &ResourceBroker, name: &str) -> Result<ResourceBroke
     let issued = parent.scope.issue_child(&parent_ref, &path, None)?;
     ResourceBroker::resolve(&parent.scope, &parent.owner, &issued["ref"])
 }
+
+/// Navigation-to-parent resolution stays in Core. Features receive only the
+/// selected directory ref and do not inspect schemes or provider identities.
+pub(crate) fn parent_path(path: &str) -> Result<String, String> {
+    if crate::plugins::mounts::handles(path) {
+        let uri = crate::plugins::mounts::parse(path)?;
+        if uri.relative.is_empty() {
+            return Err("mount root has no parent".into());
+        }
+        let parent = uri
+            .relative
+            .rsplit_once('/')
+            .map(|(parent, _)| parent)
+            .unwrap_or("");
+        return crate::plugins::mounts::uri(&uri.mount_id, parent);
+    }
+    if crate::core::volumes::applications::is_user(path) {
+        let local = crate::core::volumes::applications::candidate_path(path)?;
+        let parent = local.parent().ok_or("item has no parent")?;
+        if parent
+            == crate::core::volumes::applications::stored_path(
+                crate::core::volumes::applications::URI,
+            )?
+        {
+            return Ok(crate::core::volumes::applications::URI.into());
+        }
+        return crate::core::volumes::applications::stored_uri(parent);
+    }
+    if crate::core::volumes::virtual_resolvers::opaque(path) {
+        return Err("view has no writable parent".into());
+    }
+    Path::new(path)
+        .parent()
+        .map(|path| path.to_string_lossy().into_owned())
+        .ok_or_else(|| "item has no parent".into())
+}
