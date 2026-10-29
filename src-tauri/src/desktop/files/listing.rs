@@ -82,38 +82,61 @@ pub(crate) async fn directory_open(
         let cached = directory_cache::read(&path, hidden, &ignores)?;
         let before = if let Some(listing) = cached.as_ref() {
             let decoration = directory_cache::presentations(&path)?;
-            let mut decorations = listing.entries.iter().filter_map(|entry|
-                decoration.get(&entry.path).cloned()).collect::<Vec<_>>();
+            let mut decorations = listing
+                .entries
+                .iter()
+                .filter_map(|entry| decoration.get(&entry.path).cloned())
+                .collect::<Vec<_>>();
             decorations.sort_by(|a, b| a.path.cmp(&b.path));
             let _ = on_snapshot.send(DirectoryFrame {
-                listing: listing.clone(), decorations, done: false, warning: None,
+                listing: listing.clone(),
+                decorations,
+                done: false,
+                warning: None,
             });
             Some(listing.clone())
-        } else { None };
+        } else {
+            None
+        };
         let fresh = match resource.desktop_listing(hidden, &ignores) {
             Ok(listing) => listing,
             Err(error) => {
                 if let Some(listing) = before {
                     let decoration = directory_cache::presentations(&path)?;
                     let _ = on_snapshot.send(DirectoryFrame {
-                        decorations: listing.entries.iter().filter_map(|entry|
-                            decoration.get(&entry.path).cloned()).collect(),
-                        listing, done: true, warning: Some(error.to_string()),
+                        decorations: listing
+                            .entries
+                            .iter()
+                            .filter_map(|entry| decoration.get(&entry.path).cloned())
+                            .collect(),
+                        listing,
+                        done: true,
+                        warning: Some(error.to_string()),
                     });
                     return Ok(());
                 }
                 return Err(error.to_string());
             }
         };
-        let candidates: Vec<DecorationEntry> = fresh.entries.iter().filter_map(|entry|
-            serde_json::to_value(entry).ok()
-                .and_then(|value| serde_json::from_value(value).ok())
-        ).collect();
+        let candidates: Vec<DecorationEntry> = fresh
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                serde_json::to_value(entry)
+                    .ok()
+                    .and_then(|value| serde_json::from_value(value).ok())
+            })
+            .collect();
         let decorations = decorations::query_with_plugins(&path, candidates, true);
         directory_cache::store_decorations(&path, &fresh.entries, decorations.clone());
         let _ = on_snapshot.send(DirectoryFrame {
-            listing: fresh, decorations, done: true, warning: None,
+            listing: fresh,
+            decorations,
+            done: true,
+            warning: None,
         });
         Ok(())
-    }).await.map_err(|error| error.to_string())?
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
