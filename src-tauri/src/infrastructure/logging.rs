@@ -74,7 +74,7 @@ fn load(owner: &str) -> VecDeque<LogRecord> {
 fn writer() -> &'static mpsc::SyncSender<(String, LogRecord)> {
     static WRITER: OnceLock<mpsc::SyncSender<(String, LogRecord)>> = OnceLock::new();
     WRITER.get_or_init(|| {
-        let (tx, rx) = mpsc::sync_channel(2048);
+        let (tx, rx) = mpsc::sync_channel::<(String, LogRecord)>(2048);
         std::thread::Builder::new()
             .name("fiex-log-writer".into())
             .spawn(move || {
