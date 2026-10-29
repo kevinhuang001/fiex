@@ -43,22 +43,22 @@ pub fn set(key: &str, value: Value) -> Result<(), String> {
         return Err("state value too large".into());
     }
     let mut entries = state().lock().map_err(|_| "state store unavailable")?;
-    let previous = entries.insert(key.into(), value);
-    let bytes = serde_json::to_vec(&serde_json::json!({"version":1,"values":&*entries}))
+    // Commit memory only after the new disk snapshot is safely persisted.
+    let mut candidate = entries.clone();
+    candidate.insert(key.into(), value);
+    let bytes = serde_json::to_vec(&serde_json::json!({"version":1,"values":&candidate}))
         .map_err(|e| e.to_string())?;
     if bytes.len() > MAX_STORE {
-        if let Some(previous) = previous {
-            entries.insert(key.into(), previous);
-        } else {
-            entries.remove(key);
-        }
         return Err("state store full".into());
     }
     let target = path().ok_or("configuration directory unavailable")?;
     let parent = target.parent().ok_or("configuration parent unavailable")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let temp = target.with_extension("tmp");
-    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
-    fs::rename(&temp, &target).map_err(|e| e.to_string())?;
+    use std::io::Write;
+    let mut tempfile = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+    tempfile.write_all(&bytes).map_err(|e| e.to_string())?;
+    tempfile.as_file().sync_all().map_err(|e| e.to_string())?;
+    tempfile.persist(&target).map_err(|e| e.error.to_string())?;
+    *entries = candidate;
     Ok(())
 }
