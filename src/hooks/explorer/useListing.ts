@@ -68,8 +68,16 @@ export function useListing(
   const [searchStats, setSearchStats] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
-  const searchDecorations = useEntryDecorations({ entries, path, enabled: enabled && Boolean(query), query, refresh })
-  const [directoryDecorations, setDirectoryDecorations] = useState<Record<string, import('@/lib/types').EntryDecoration>>({})
+  const searchDecorations = useEntryDecorations({
+    entries,
+    path,
+    enabled: enabled && Boolean(query),
+    query,
+    refresh,
+  })
+  const [directoryDecorations, setDirectoryDecorations] = useState<
+    Record<string, import('@/lib/types').EntryDecoration>
+  >({})
   const decorations = query ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
@@ -156,7 +164,8 @@ export function useListing(
       if (cancelled) return
       let start: string | null = startOverride || launched || null
       if (!start && prefs.startPage === 'recent') start = 'recent://'
-      else if (!start && prefs.startPage === 'last') start = stateSnapshot<string>('navigation.lastPath', 'fiex:lastPath')
+      else if (!start && prefs.startPage === 'last')
+        start = stateSnapshot<string>('navigation.lastPath', 'fiex:lastPath')
       if (!start) {
         const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
         if (cancelled) return
@@ -214,8 +223,12 @@ export function useListing(
       const paths = new Set(listing.entries.map((entry) => entry.path))
       setSelected((current) => current.filter((item) => paths.has(item)))
       setLoading(false)
-      if (frame.done && path === 'recent://' &&
-          listing.entries.length === 0 && history.length <= 1) {
+      if (
+        frame.done &&
+        path === 'recent://' &&
+        listing.entries.length === 0 &&
+        history.length <= 1
+      ) {
         const home = locations.find((item) => item.name === '个人文件夹')?.path
         if (home) navigate(home)
       }
@@ -225,7 +238,10 @@ export function useListing(
         setLoading(false)
       }
     })
-    return () => { active = false; ++request.current }
+    return () => {
+      active = false
+      ++request.current
+    }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
     if (
