@@ -3,7 +3,7 @@ import { t, useLocale } from '@/i18n'
 import { FileViews } from '@/components/browser/FileViews'
 import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
-import { ExplorerErrorDialog } from '@/components/ExplorerErrorDialog'
+import { ErrorDialogHost } from '@/components/ErrorDialogHost'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
 import { ActivityCenter } from '@/components/ActivityCenter'
@@ -218,11 +218,7 @@ export default function App() {
         onApply={app.applyBatchRename}
       />
       <ExplorerDialogs {...app} />
-      <ExplorerErrorDialog
-        error={app.x.error}
-        onClose={() => app.x.setError('')}
-        onError={app.x.setError}
-      />
+      <ErrorDialogHost legacyError={app.x.error} clearLegacy={() => app.x.setError('')} />
       <PluginServices />
     </div>
   )
