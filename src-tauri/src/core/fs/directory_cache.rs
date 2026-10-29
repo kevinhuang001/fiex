@@ -1,5 +1,6 @@
 //! Navigation snapshots shared by every storage adapter. No provider sees this
 //! cache. Internal list/search/transfer calls never enroll new directories.
+use crate::infrastructure::cache::disk;
 use crate::core::{
     files::{Entry, Listing},
     ignores::IgnoreSet,
@@ -17,6 +18,20 @@ fn cache() -> &'static Mutex<BTreeMap<String, Listing>> {
     CACHE.get_or_init(Default::default)
 }
 fn key(path: &str) -> String {
+    // A URI's mount ID alone is not sufficient when a saved connection changes
+    // accounts, settings or provider. Include its current authorized identity.
+    if crate::plugins::mounts::handles(path) {
+        use sha2::{Digest, Sha256};
+        if let Ok((_, source)) = crate::plugins::mounts::resolve(path) {
+            let identity = match source {
+                crate::plugins::mounts::Source::Connection(connection) =>
+                    serde_json::to_vec(&connection).unwrap_or_default(),
+                crate::plugins::mounts::Source::View(view) =>
+                    serde_json::to_vec(&view.descriptor).unwrap_or_default(),
+            };
+            return format!("mount:{}:{}", hex::encode(Sha256::digest(&identity)), path);
+        }
+    }
     if let Some(route) = crate::usbfs::route(path) {
         return format!(
             "usb:{}\0{}",
@@ -34,18 +49,26 @@ fn validate_mount(path: &str) -> Result<(), String> {
     Ok(())
 }
 pub(crate) fn store(path: &str, listing: &Listing) {
-    let mut values = cache().lock().unwrap_or_else(|e| e.into_inner());
     let key = key(path);
-    let other_entries: usize = values
-        .iter()
-        .filter(|(path, _)| **path != key)
-        .map(|(_, value)| value.entries.len())
-        .sum();
-    if (values.contains_key(&key) || values.len() < MAX_DIRECTORIES)
-        && other_entries.saturating_add(listing.entries.len()) <= MAX_ENTRIES
     {
-        values.insert(key, listing.clone());
+        let mut values = cache().lock().unwrap_or_else(|e| e.into_inner());
+        let mut total: usize = values.values().map(|v| v.entries.len()).sum();
+        total = total.saturating_sub(values.get(&key).map_or(0, |v| v.entries.len()));
+        // Evict older snapshots rather than silently declining to cache new
+        // directories after an extended navigation session.
+        while (values.len() >= MAX_DIRECTORIES || total.saturating_add(listing.entries.len()) > MAX_ENTRIES)
+            && !values.is_empty()
+        {
+            let Some(victim) = values.keys().find(|item| *item != &key).cloned() else { break };
+            if let Some(value) = values.remove(&victim) {
+                total = total.saturating_sub(value.entries.len());
+            }
+        }
+        if listing.entries.len() <= MAX_ENTRIES {
+            values.insert(key.clone(), listing.clone());
+        }
     }
+    disk::store(&key, listing);
 }
 pub(crate) fn filtered(mut listing: Listing, hidden: bool, ignores: &[String]) -> Listing {
     let filter = IgnoreSet::new(ignores);
@@ -64,20 +87,15 @@ pub(crate) fn read(
 ) -> Result<Option<Listing>, String> {
     // Resolve the current mount/scope before exposing metadata from memory.
     validate_mount(path)?;
-    Ok(cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(&key(path))
-        .cloned()
-        .map(|listing| filtered(listing, hidden, ignores)))
+    let key = key(path);
+    let listing = cache().lock().unwrap_or_else(|e| e.into_inner())
+        .get(&key).cloned()
+        .or_else(|| disk::load::<Listing>(&key));
+    Ok(listing.map(|listing| filtered(listing, hidden, ignores)))
 }
 /// Refresh only an already visited directory. Search never enrolls a cold one.
 pub(crate) fn refresh(path: &str) -> Result<(), String> {
-    if !cache()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .contains_key(&key(path))
-    {
+    if read(path, true, &[])?.is_none() {
         return Ok(());
     }
     let broker = super::trusted(path, "core:cache-refresh")?;
@@ -98,15 +116,11 @@ pub(crate) fn refresh_tree(root: &str, cancelled: &dyn Fn() -> bool) -> Result<(
             continue;
         }
         refresh(&path)?;
-        let listing = cache()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(&key(&path))
-            .cloned();
+        let listing = read(&path, true, &[])?;
         if let Some(listing) = listing {
-            let values = cache().lock().unwrap_or_else(|e| e.into_inner());
             for entry in listing.entries {
-                if entry.is_dir && !entry.is_symlink && values.contains_key(&key(&entry.path)) {
+                if entry.is_dir && !entry.is_symlink
+                    && read(&entry.path, true, &[])?.is_some() {
                     queue.push_back(entry.path);
                 }
             }
@@ -142,7 +156,8 @@ pub(crate) fn search(
         if !visited.insert(path.clone()) {
             continue;
         }
-        let Some(listing) = snapshots.get(&path) else {
+        let Some(listing) = snapshots.get(&path).cloned()
+            .or_else(|| disk::load::<Listing>(&path)) else {
             continue;
         };
         for entry in &listing.entries {
@@ -166,6 +181,7 @@ pub(crate) fn search(
     Ok(())
 }
 pub(crate) fn remove_entry(path: &str, entry_path: &str) {
+    disk::remove(&key(path));
     if let Some(listing) = cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -175,6 +191,7 @@ pub(crate) fn remove_entry(path: &str, entry_path: &str) {
     }
 }
 pub(crate) fn add_entry(path: &str, entry: Entry) {
+    disk::remove(&key(path));
     if let Some(listing) = cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -187,6 +204,20 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
 }
 pub(crate) fn drop_subtree(path: &str) {
     let root = key(path);
+    // Remove the previously visited disk graph, without enumerating cold FS/VFS
+    // directories or relying on URI string prefix matching.
+    let mut pending = VecDeque::from([path.to_string()]);
+    let mut removed = HashSet::new();
+    while let Some(current) = pending.pop_front() {
+        let identity = key(&current);
+        if !removed.insert(identity.clone()) { continue; }
+        if let Some(listing) = disk::load::<Listing>(&identity) {
+            for entry in listing.entries {
+                if entry.is_dir && !entry.is_symlink { pending.push_back(entry.path); }
+            }
+        }
+        disk::remove(&identity);
+    }
     cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -198,6 +229,7 @@ pub(crate) fn drop_subtree(path: &str) {
         });
 }
 pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
+    disk::remove(&key(path));
     if let Some(listing) = cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
