@@ -100,10 +100,7 @@ pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
             .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
             .collect::<Vec<_>>(),
     );
-    let metadata = resources
-        .iter()
-        .map(|resource| serde_json::to_value(resource.metadata()).unwrap_or_default())
-        .collect::<Vec<_>>();
+    let metadata = crate::plugins::events::resource_metadata(&resources);
     let providers = EventRouter::providers(
         "contextMenu.resolve",
         &metadata,

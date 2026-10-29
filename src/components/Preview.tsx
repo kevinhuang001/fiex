@@ -68,12 +68,22 @@ export function Preview({
     if (!entry) return
     setLoading(true)
     void candidateCache
-      .get(JSON.stringify([entry.extension, entry.mime, entry.isDir]), () =>
-        call<PreviewCandidate[]>('preview_candidates', {
-          extension: entry.extension,
-          mime: entry.mime,
-          isDir: entry.isDir,
-        }),
+      .get(
+        JSON.stringify([
+          entry.path,
+          entry.modified,
+          entry.allowedOps,
+          entry.extension,
+          entry.mime,
+          entry.isDir,
+        ]),
+        () =>
+          call<PreviewCandidate[]>('preview_candidates', {
+            path: entry.path,
+            extension: entry.extension,
+            mime: entry.mime,
+            isDir: entry.isDir,
+          }),
       )
       .then((values) => {
         if (!active) return

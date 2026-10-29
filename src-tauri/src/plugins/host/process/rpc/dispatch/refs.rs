@@ -97,7 +97,7 @@ pub(super) fn intercept(
 }
 
 pub(super) fn metadata(value: &Value) -> Value {
-    json!({"name":value["name"],"kind":if value["isDir"]==true || value["kind"]=="directory" {"directory"}else if value["symlink"]==true {"symlink"}else{"file"},
+    json!({"name":value["name"],"kind":if value["symlink"]==true || value["isSymlink"]==true || value["kind"]=="symlink" {"symlink"}else if value["isDir"]==true || value["kind"]=="directory" {"directory"}else{"file"},
         "extension":value["extension"],"mime":value["mime"],"size":value["size"],"modified":value["modified"]})
 }
 pub(super) fn listing(

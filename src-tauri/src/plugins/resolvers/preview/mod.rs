@@ -31,12 +31,24 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     )
 }
 
-/// Ordered provider list for the source switcher. User ordering and the
-/// disabled list remain presentation preferences. A plugin that declares a
-/// loading page advertises it here so the UI can resolve the document before
-/// invoking `preview.open`.
-pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
-    candidates(ext, mime, is_dir)
+fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
+    let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(resource));
+    let readable = metadata[0]["operations"]
+        .as_array()
+        .is_some_and(|ops| ops.iter().any(|op| op == "read"));
+    let builtin = builtin_candidates(&resource.ext, &resource.mime, resource.is_dir)
+        .into_iter()
+        .filter(|kind| readable || *kind == Builtin::Fallback)
+        .map(|kind| Resolver::builtin(kind.id(), kind.priority()))
+        .collect();
+    EventRouter::providers("preview.open", &metadata, "", builtin)
+}
+pub fn resource_candidates_json(display: &str) -> Result<Vec<Value>, String> {
+    let resource = ResourceSnapshot::resolve(display)?;
+    Ok(project_candidates(resource_candidates(&resource)))
+}
+fn project_candidates(providers: Vec<Resolver>) -> Vec<Value> {
+    providers
         .iter()
         .map(|provider| {
             let mut value = provider.json();
@@ -48,6 +60,14 @@ pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
             value
         })
         .collect()
+}
+
+/// Ordered provider list for the source switcher. User ordering and the
+/// disabled list remain presentation preferences. A plugin that declares a
+/// loading page advertises it here so the UI can resolve the document before
+/// invoking `preview.open`.
+pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
+    project_candidates(candidates(ext, mime, is_dir))
 }
 
 pub fn open_resource(
@@ -62,7 +82,7 @@ fn resolve_preview(
     preferred: Option<&str>,
     order: Option<&[String]>,
 ) -> Result<Value, String> {
-    let mut providers = candidates(&resource.ext, &resource.mime, resource.is_dir);
+    let mut providers = resource_candidates(&resource);
     if let Some(order) = order {
         providers.retain(|p| order.contains(&p.id));
         providers.sort_by_key(|p| {

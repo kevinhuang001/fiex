@@ -47,18 +47,26 @@ pub(super) fn matches_resources(
     )
 }
 
-pub(super) fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
+pub fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
     resources
         .iter()
         .map(|resource| {
-            json!({
-                "operations": crate::plugins::provider_registry::FsOperation::ALL.into_iter()
-                    .filter(|op| resource.operations.unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(&resource.display)).allows(*op))
-                    .map(|op| op.as_str()).collect::<Vec<_>>(),
-                "extension": resource.ext,
-                "mime": resource.mime,
-                "kind": if resource.is_dir { "directory" } else { "file" },
-            })
+            let mut metadata =
+                serde_json::to_value(resource.metadata()).unwrap_or_else(|_| json!({}));
+            if !metadata.is_object() {
+                metadata = json!({});
+            }
+            metadata["operations"] = json!(crate::plugins::provider_registry::FsOperation::ALL
+                .into_iter()
+                .filter(|op| resource
+                    .operations
+                    .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(
+                        &resource.display
+                    ))
+                    .allows(*op))
+                .map(|op| op.as_str())
+                .collect::<Vec<_>>());
+            metadata
         })
         .collect()
 }

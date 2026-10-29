@@ -112,3 +112,46 @@ fn cancelling_after_the_last_commit_does_not_delete_the_source() {
     assert!(!result.errors.is_empty());
     assert!(file.exists());
 }
+
+#[test]
+fn feature_discovery_receives_independent_operation_capabilities() {
+    use crate::plugins::resource::{
+        file_capabilities::FileCapabilities, resource_context::ResourceSnapshot,
+    };
+    let mut resource = ResourceSnapshot::from_metadata(
+        "example",
+        crate::plugins::contracts::ResourceMetadata {
+            name: "example.txt".into(),
+            kind: "file".into(),
+            ..Default::default()
+        },
+    );
+    resource.operations = Some(FileCapabilities {
+        stat: true,
+        ..Default::default()
+    });
+    let rules: crate::plugins::match_rules::MatchRules =
+        serde_json::from_value(json!({"requiredOps":["read"]})).unwrap();
+    assert!(!rules.matches_event(
+        &crate::plugins::events::resource_metadata(&[resource.clone()]),
+        ""
+    ));
+    resource.operations.as_mut().unwrap().read = true;
+    assert!(rules.matches_event(&crate::plugins::events::resource_metadata(&[resource]), ""));
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_kind_survives_event_metadata_projection() {
+    use crate::plugins::resource::resource_context::ResourceSnapshot;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("file");
+    let link = dir.path().join("link");
+    std::fs::write(&file, b"bytes").unwrap();
+    std::os::unix::fs::symlink(&file, &link).unwrap();
+    let resource = ResourceSnapshot::resolve(&link.to_string_lossy()).unwrap();
+    assert_eq!(
+        crate::plugins::events::resource_metadata(&[resource])[0]["kind"],
+        "symlink"
+    );
+}

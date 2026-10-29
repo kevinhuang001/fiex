@@ -42,7 +42,14 @@ impl ResourceSnapshot {
         let reference = Self::reference_for(display);
         let metadata = stat.as_ref().map(|stat| ResourceMetadata {
             name: name.clone(),
-            kind: if is_dir { "directory" } else { "file" }.into(),
+            kind: if stat.file_type().is_symlink() {
+                "symlink"
+            } else if is_dir {
+                "directory"
+            } else {
+                "file"
+            }
+            .into(),
             extension: (!ext.is_empty()).then(|| ext.clone()),
             mime: (!ext.is_empty()).then(|| mime.clone()),
             size: (!is_dir).then_some(stat.len()),
@@ -141,7 +148,14 @@ impl ResourceSnapshot {
     pub fn entry_metadata(entry: &crate::core::files::Entry) -> ResourceMetadata {
         ResourceMetadata {
             name: entry.name.clone(),
-            kind: if entry.is_dir { "directory" } else { "file" }.into(),
+            kind: if entry.is_symlink {
+                "symlink"
+            } else if entry.is_dir {
+                "directory"
+            } else {
+                "file"
+            }
+            .into(),
             extension: Some(entry.extension.clone()),
             mime: Some(entry.mime.clone()),
             size: (!entry.is_dir).then_some(entry.size),

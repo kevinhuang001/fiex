@@ -24,7 +24,6 @@ pub(super) fn execute(
                     step.target.path
                 ));
             }
-            undo.record(index);
             if step.directory {
                 if step.existing {
                     if step.target.stat()?["isDir"] != true {
@@ -68,6 +67,11 @@ pub(super) fn execute(
                 }
                 writer.commit()?;
             }
+            // Only successful mutations belong to the undo log. A rejected
+            // create must never cause rollback to delete somebody else's file.
+            if !step.directory || !step.existing {
+                undo.record(index, step.target.stat().ok());
+            }
             Ok(())
         })();
         if let Err(error) = attempt {
@@ -75,8 +79,12 @@ pub(super) fn execute(
             if failures.is_empty() {
                 return Err(error);
             }
+            let recovery = match undo.preserve(steps) {
+                Ok(path) => format!("recovery retained at {}", path.display()),
+                Err(error) => format!("recovery metadata failed: {error}"),
+            };
             return Err(format!(
-                "{error}; rollback incomplete: {}",
+                "{error}; rollback incomplete: {}; {recovery}",
                 failures.join("; ")
             ));
         }

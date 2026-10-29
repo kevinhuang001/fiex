@@ -31,10 +31,7 @@ pub fn resolve(
         crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&request.root)
             .map(|r| vec![r])
             .unwrap_or_default();
-    let metadata = resources
-        .iter()
-        .map(|r| serde_json::to_value(r.metadata()).unwrap_or_default())
-        .collect::<Vec<_>>();
+    let metadata = crate::plugins::events::resource_metadata(&resources);
     let providers = EventRouter::providers(
         "search.query",
         &metadata,

@@ -173,7 +173,7 @@ pub fn resource_scope(
                     crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
                 );
             }
-            target["metadata"]["operations"] = json!({"read":caps.read,"write":caps.write,"mkdir":caps.create,"rename":caps.rename,"remove":caps.remove});
+            target["metadata"]["operations"] = json!({"stat":caps.stat,"list":caps.list,"search":caps.search,"read":caps.read,"write":caps.write,"mkdir":caps.create,"rename":caps.rename,"remove":caps.remove});
         }
     }
     // Use exact files for content actions. Metadata-only remote targets are

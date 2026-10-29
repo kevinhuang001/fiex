@@ -63,10 +63,7 @@ pub fn query_with_plugins(
             )
         })
         .collect::<Vec<_>>();
-    let metadata = resources
-        .iter()
-        .map(|r| serde_json::to_value(r.metadata()).unwrap_or_default())
-        .collect::<Vec<_>>();
+    let metadata = crate::plugins::events::resource_metadata(&resources);
     let builtins = super::builtin::providers();
     let providers = if include_plugins {
         EventRouter::providers("decorations.resolve", &metadata, directory, builtins)
