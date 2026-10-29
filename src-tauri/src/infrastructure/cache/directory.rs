@@ -19,6 +19,7 @@ use std::{
 };
 const MAX_MEMORY_DIRECTORIES: usize = 512;
 const MAX_DISK_FILES: usize = 4096;
+const MAX_DISK_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_SNAPSHOT_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_MEMORY_ENTRIES: usize = 300_000;
 
@@ -93,14 +94,13 @@ fn persist(snapshot: &DirectorySnapshot) {
     if fs::create_dir_all(parent).is_err() {
         return;
     }
-    let tmp = path.with_extension("tmp");
-    if fs::write(&tmp, bytes).is_ok() {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
+    // NamedTempFile supports cross-platform replacement and prevents colliding
+    // snapshot writers from sharing a fixed ".tmp" path.
+    use std::io::Write;
+    if let Ok(mut temp) = tempfile::NamedTempFile::new_in(parent) {
+        if temp.write_all(&bytes).is_ok() && temp.as_file().sync_all().is_ok() {
+            let _ = temp.persist(&path);
         }
-        let _ = fs::rename(&tmp, &path);
     }
     static WRITES: AtomicUsize = AtomicUsize::new(0);
     if WRITES.fetch_add(1, Ordering::Relaxed) % 128 == 0 {
@@ -115,18 +115,20 @@ fn prune_disk() {
     let mut files = files
         .filter_map(Result::ok)
         .filter(|f| f.path().extension().is_some_and(|x| x == "json"))
-        .map(|f| {
-            let modified = f.metadata().ok().and_then(|m| m.modified().ok());
-            (modified, f.path())
+        .filter_map(|f| {
+            let metadata = f.metadata().ok()?;
+            Some((metadata.modified().ok(), f.path(), metadata.len()))
         })
         .collect::<Vec<_>>();
-    if files.len() <= MAX_DISK_FILES {
-        return;
-    }
-    files.sort_by_key(|(when, _)| *when);
-    let remove = files.len() - MAX_DISK_FILES;
-    for (_, path) in files.into_iter().take(remove) {
-        let _ = fs::remove_file(path);
+    files.sort_by_key(|(when, _, _)| *when);
+    let mut total: u64 = files.iter().map(|(_, _, size)| *size).sum();
+    let mut count = files.len();
+    for (_, path, size) in files {
+        if count <= MAX_DISK_FILES && total <= MAX_DISK_BYTES { break; }
+        if fs::remove_file(&path).is_ok() {
+            count -= 1;
+            total = total.saturating_sub(size);
+        }
     }
 }
 pub fn contains(key: &str) -> bool {
