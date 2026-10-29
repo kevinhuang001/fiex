@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { parent } from '@/lib/files'
+import { stateSnapshot, saveState } from '@/lib/stateStore'
 
 /** Path, history, tab state and the transient per-pane view state every
  *  navigation resets: selection, rename target and the last error. The listing
@@ -18,11 +19,11 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   // The search mode is a pane preference, not query state: switching modes
   // cancels the old session and re-runs the query with the other capability.
   const [searchMode, setSearchModeState] = useState<'name' | 'content'>(() =>
-    localStorage.getItem('fiex:search-mode') === 'content' ? 'content' : 'name',
+    stateSnapshot('navigation.searchMode', 'fiex:search-mode') === 'content' ? 'content' : 'name',
   )
   const setSearchMode = useCallback((mode: 'name' | 'content') => {
     setSearchModeState(mode)
-    localStorage.setItem('fiex:search-mode', mode)
+    saveState('navigation.searchMode', mode)
   }, [])
   const [history, setHistory] = useState<string[]>(initialPath ? [initialPath] : [])
   const [cursor, setCursor] = useState(initialPath ? 0 : -1)
