@@ -10,7 +10,7 @@ use crate::plugins::resolvers::decorations::{Decoration, DecorationEntry};
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
     path::Path,
-    sync::{Mutex, OnceLock},
+    sync::{Mutex, OnceLock, atomic::{AtomicU64, Ordering}},
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -21,11 +21,17 @@ pub(crate) struct DirectorySnapshot {
     pub decorations: Vec<Decoration>,
     #[serde(default)]
     presentation_stamp: String,
+    #[serde(skip)]
+    last_access: u64,
 }
 
 fn stamp() -> String {
     use sha2::{Digest, Sha256};
-    let providers = serde_json::to_vec(&crate::plugins::host::catalog()).unwrap_or_default();
+    let catalog = crate::plugins::host::catalog();
+    let versions = catalog.iter().map(|p|
+        (&p.id, &p.version, p.enabled, p.approved, &p.granted_permissions)
+    ).collect::<Vec<_>>();
+    let providers = serde_json::to_vec(&versions).unwrap_or_default();
     let prefs = serde_json::to_vec(&crate::plugins::preferences::snapshot()).unwrap_or_default();
     let mut hash = Sha256::new();
     hash.update(crate::i18n::locale().as_bytes());
@@ -33,10 +39,17 @@ fn stamp() -> String {
     hash.update(&prefs);
     hex::encode(hash.finalize())
 }
+static ACCESS_CLOCK: AtomicU64 = AtomicU64::new(1);
+fn next_access() -> u64 { ACCESS_CLOCK.fetch_add(1, Ordering::Relaxed) }
 fn snapshot(key: &str) -> Option<DirectorySnapshot> {
-    cache().lock().unwrap_or_else(|e| e.into_inner())
-        .get(key).cloned()
-        .or_else(|| disk::load::<DirectorySnapshot>(key))
+    let memory = {
+        let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache.get_mut(key).map(|entry| {
+            entry.last_access = next_access();
+            entry.clone()
+        })
+    };
+    memory.or_else(|| disk::load::<DirectorySnapshot>(key))
         .map(|mut data| {
             if !data.decorations.is_empty() && data.presentation_stamp != stamp() {
                 data.decorations.clear();
@@ -72,6 +85,7 @@ pub(crate) fn store_decorations(
     data.decorations.retain(|d| !targets.contains(d.path.as_str()));
     data.decorations.extend(decorations.iter().cloned());
     data.presentation_stamp = stamp();
+    data.last_access = next_access();
     {
         let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
         cache.insert(identity.clone(), data.clone());
@@ -133,6 +147,7 @@ pub(crate) fn store(path: &str, listing: &Listing) {
                      else { Vec::new() },
         presentation_stamp: if unchanged { previous.map(|v| v.presentation_stamp).unwrap_or_default() }
                             else { String::new() },
+        last_access: next_access(),
     };
     {
         let mut values = cache().lock().unwrap_or_else(|e| e.into_inner());
@@ -141,7 +156,8 @@ pub(crate) fn store(path: &str, listing: &Listing) {
         while (values.len() >= MAX_DIRECTORIES || total.saturating_add(listing.entries.len()) > MAX_ENTRIES)
             && !values.is_empty()
         {
-            let Some(victim) = values.keys().find(|item| *item != &identity).cloned() else { break };
+            let Some(victim) = values.iter().filter(|(key,_)| *key != &identity)
+                .min_by_key(|(_,record)| record.last_access).map(|(key,_)| key.clone()) else { break };
             if let Some(value) = values.remove(&victim) {
                 total = total.saturating_sub(value.listing.entries.len());
             }
