@@ -105,7 +105,7 @@ fn writer() -> &'static mpsc::SyncSender<(String, LogRecord)> {
                     }
                 }
             })
-            .expect("log writer thread");
+            .ok();
         tx
     })
 }
@@ -176,6 +176,22 @@ pub fn core(level: &str, operation: &str, message: &str) {
 fn allowed_level(level: &str) -> bool {
     matches!(level, "trace" | "debug" | "info" | "warn" | "error")
 }
+// Plugin processes cannot exhaust the host log queue or saturate disk I/O.
+fn plugin_within_budget(id: &str) -> bool {
+    static RATELIMIT: OnceLock<Mutex<HashMap<String, (u64, u32)>>> = OnceLock::new();
+    const MAX_REPORTS_PER_MINUTE: u32 = 600;
+    let rates = RATELIMIT.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut rates) = rates.lock() else { return false; };
+    let now = timestamp();
+    let counter = rates.entry(id.to_owned()).or_insert((now, 0));
+    if now.saturating_sub(counter.0) >= 60_000 {
+        *counter = (now, 0);
+    }
+    if counter.1 >= MAX_REPORTS_PER_MINUTE { return false; }
+    counter.1 += 1;
+    true
+}
+
 pub fn plugin(
     id: &str,
     level: &str,
@@ -184,7 +200,7 @@ pub fn plugin(
     message: &str,
     fields: Value,
 ) {
-    if !valid_id(id) || !allowed_level(level) || message.trim().is_empty() {
+    if !valid_id(id) || !allowed_level(level) || message.trim().is_empty() || !plugin_within_budget(id) {
         return;
     }
     let name = format!("plugin-{id}");
