@@ -34,7 +34,9 @@ describe('normalizeListColumns', () => {
   })
 
   it('rounds fractional widths', () => {
-    expect(normalizeListColumns({ name: 280.8, modified: 200.6, size: 90.2, kind: 120.5 })).toEqual({
+    expect(
+      normalizeListColumns({ name: 280.8, modified: 200.6, size: 90.2, kind: 120.5 }),
+    ).toEqual({
       name: 281,
       modified: 201,
       size: 90,
@@ -90,11 +92,7 @@ describe('resizeListColumn', () => {
   })
 
   it('stops the neighbour from collapsing', () => {
-    const dragged = resizeListColumn(
-      { ...widths, modified: 110 },
-      'size',
-      -500,
-    )
+    const dragged = resizeListColumn({ ...widths, modified: 110 }, 'size', -500)
     expect(dragged.modified).toBe(LIST_COLUMNS_MIN.modified)
     expect(dragged.size).toBe(75)
   })
