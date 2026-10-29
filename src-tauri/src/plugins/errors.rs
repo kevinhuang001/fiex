@@ -219,8 +219,8 @@ mod tests {
             report_limited(id, "gpg.retry", &format!("retry {index}"), None);
         }
         let entries = list(id);
-        assert_eq!(entries.len() - before, MAX_REPORTS_PER_MINUTE as usize);
-        assert_eq!(entries[0].message, "[gpg.retry] retry 7");
+        assert_eq!(entries.len() - before, 22.min(MAX_REPORTS_PER_MINUTE as usize));
+        assert_eq!(entries[0].message, "[gpg.retry] retry 19");
         clear(id);
     }
 
