@@ -56,6 +56,26 @@ impl BuiltinFsAdapter<'_> {
     }
 }
 impl FsAdapter for BuiltinFsAdapter<'_> {
+    fn preflight(
+        &self,
+        request: &crate::plugin_sdk::filesystem::TransferPreflight,
+    ) -> Result<(), FsError> {
+        use crate::plugin_sdk::filesystem::TransferDirection;
+        if !self.path().starts_with(applications::URI) {
+            return Ok(());
+        }
+        match request.direction {
+            TransferDirection::Export if request.metadata.system && !request.same_mount => Err(
+                "PermissionDenied: system applications cannot leave the Applications view".into(),
+            ),
+            TransferDirection::Import
+                if !request.same_mount && request.metadata.executable_shortcut != Some(true) =>
+            {
+                Err("PermissionDenied: Applications accepts only executable shortcuts".into())
+            }
+            _ => Ok(()),
+        }
+    }
     fn desktop_listing(
         &self,
         path: &str,
@@ -86,19 +106,70 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         limit: usize,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
-        if !virtual_storage::is_virtual_tree_path(self.path()) {
-            return Err(FsError::new(
-                FsErrorKind::Unsupported,
-                "Unsupported: virtual adapter search is limited to the Applications and Trash views",
-            ));
-        }
-        // The adapter only delegates: cache policy and subtree traversal stay
-        // inside the virtual storage module.
-        let result =
-            virtual_storage::search_view(self.path(), query, hidden, ignores, limit, cancelled)
-                .map_err(FsError::from)?;
-        Ok((result.entries, result.truncated, result.skipped))
+        let mut entries = Vec::new();
+        let (truncated, skipped) =
+            self.search_stream(query, hidden, ignores, limit, cancelled, &mut |entry| {
+                entries.push(entry)
+            })?;
+        Ok((entries, truncated, skipped))
     }
+    #[allow(clippy::too_many_arguments)]
+    fn search_stream(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(crate::core::files::Entry),
+    ) -> Result<(bool, usize), FsError> {
+        let mut pending = vec![self.path().to_string()];
+        let mut visited = std::collections::HashSet::new();
+        let mut count = 0usize;
+        let filter = crate::core::ignores::IgnoreSet::new(ignores);
+        let mut truncated = false;
+        while let Some(path) = pending.pop() {
+            if cancelled() {
+                break;
+            }
+            if !visited.insert(path.clone()) {
+                continue;
+            }
+            if visited.len() > 1000 {
+                truncated = true;
+                break;
+            }
+            for entry in virtual_storage::list(&path)? {
+                if cancelled() {
+                    break;
+                }
+                if (!hidden && entry.name.starts_with('.'))
+                    || filter.is_ignored(std::path::Path::new(&entry.name))
+                {
+                    continue;
+                }
+                if entry.is_dir
+                    && !entry.is_symlink
+                    && virtual_storage::is_virtual_tree_path(&entry.path)
+                {
+                    pending.push(entry.path.clone());
+                }
+                if entry.name.to_lowercase().contains(&query.to_lowercase()) {
+                    if count == limit {
+                        truncated = true;
+                        break;
+                    }
+                    count += 1;
+                    emit(entry);
+                }
+            }
+            if truncated {
+                break;
+            }
+        }
+        Ok((truncated, 0))
+    }
+
     fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         if self.path() == applications::URI {
             return if matches!(

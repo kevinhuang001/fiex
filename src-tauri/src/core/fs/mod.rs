@@ -2,8 +2,10 @@
 //! operation scope; adapters never receive plugin-supplied filesystem paths.
 mod binding;
 mod builtin;
+pub(crate) mod directory_cache;
 mod error;
 mod export;
+mod preflight;
 mod presentation;
 mod transfer;
 pub(crate) use binding::{child, parent_path, trusted};
@@ -37,6 +39,12 @@ pub trait FsAdapter: Send {
     /// including views of local bytes, keep their own export policy.
     fn native_export_path(&self) -> Option<std::path::PathBuf> {
         None
+    }
+    fn preflight(
+        &self,
+        _request: &crate::plugin_sdk::filesystem::TransferPreflight,
+    ) -> Result<(), FsError> {
+        Ok(())
     }
     fn stat(&self) -> Result<Value, FsError>;
     fn desktop_entry(&self) -> Result<crate::core::files::Entry, FsError> {
@@ -74,6 +82,26 @@ pub trait FsAdapter: Send {
             FsErrorKind::Unsupported,
             "search is not implemented by this adapter",
         ))
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn search_stream(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(crate::core::files::Entry),
+    ) -> Result<(bool, usize), FsError> {
+        let (entries, truncated, skipped) =
+            self.search(query, hidden, ignores, limit, cancelled)?;
+        for entry in entries {
+            if cancelled() {
+                break;
+            }
+            emit(entry);
+        }
+        Ok((truncated, skipped))
     }
     fn remove(&self) -> Result<(), FsError>;
     /// Removing a node through the desktop action keeps its storage semantics.
@@ -198,6 +226,27 @@ impl ResourceBroker {
         self.adapter()?
             .search(query, hidden, ignores, limit, cancelled)
     }
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn search_stream(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(crate::core::files::Entry),
+    ) -> Result<(bool, usize), FsError> {
+        self.scope.authorize_method("fs.search")?;
+        match self.require(FsOperation::Search, false) {
+            Ok(()) => {}
+            Err(error) if error.kind == FsErrorKind::Unsupported => {
+                self.require(FsOperation::List, false)?
+            }
+            Err(error) => return Err(error),
+        }
+        self.adapter()?
+            .search_stream(query, hidden, ignores, limit, cancelled, emit)
+    }
     pub fn open_read(&self) -> Result<Value, FsError> {
         self.scope.authorize_method("fs.openRead")?;
         self.require(FsOperation::Read, false)?;
@@ -253,6 +302,28 @@ impl ResourceBroker {
         if self.reference.mount_id != destination.reference.mount_id {
             return Err("Unsupported: cross-mount rename requires TransferEngine".into());
         }
+        let metadata = self.transfer_metadata()?;
+        let parent = binding::trusted(&binding::parent_path(&destination.path)?, &self.owner)?;
+        use crate::plugin_sdk::filesystem::{TransferAction, TransferDirection};
+        let name = destination
+            .path
+            .rsplit(['/', '\\'])
+            .next()
+            .ok_or("missing destination name")?;
+        self.review_transfer(
+            TransferDirection::Export,
+            TransferAction::Move,
+            name,
+            &metadata,
+            true,
+        )?;
+        parent.review_transfer(
+            TransferDirection::Import,
+            TransferAction::Move,
+            name,
+            &metadata,
+            true,
+        )?;
         self.adapter()?.rename(destination)
     }
     pub(crate) fn clone_binding(&self) -> Self {

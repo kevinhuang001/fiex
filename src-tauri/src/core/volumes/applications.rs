@@ -2,8 +2,8 @@
 //! itself so opening the entry never has to launch Finder or Explorer.
 
 use super::application_folders;
-use super::virtual_storage;
 use crate::core::files::Entry;
+use crate::core::fs::directory_cache;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -137,14 +137,14 @@ pub fn move_system_apps(paths: &[String], destination: &str) -> Result<(), Strin
     }
     application_folders::move_apps(paths, destination)?;
     for ((app, entry), previous) in paths.iter().zip(entries).zip(previous) {
-        virtual_storage::remove_cached_entry(URI, app);
+        directory_cache::remove_entry(URI, app);
         if let Some(folder) = previous {
-            virtual_storage::remove_cached_entry(&folder, app);
+            directory_cache::remove_entry(&folder, app);
         }
         if destination == URI {
-            virtual_storage::add_cached_entry(URI, entry);
+            directory_cache::add_entry(URI, entry);
         } else {
-            virtual_storage::add_cached_entry(destination, entry);
+            directory_cache::add_entry(destination, entry);
         }
     }
     Ok(())
@@ -160,9 +160,9 @@ pub fn remove_entries(paths: &[String]) -> Result<(), String> {
             let folder = application_folders::folder_for(path)
                 .ok_or_else(|| crate::i18n::t("应用不存在").to_string())?;
             application_folders::unmap(std::slice::from_ref(path))?;
-            virtual_storage::remove_cached_entry(&folder, path);
+            directory_cache::remove_entry(&folder, path);
             if let Ok(entry) = system_entry(path) {
-                virtual_storage::add_cached_entry(URI, entry);
+                directory_cache::add_entry(URI, entry);
             }
         } else {
             return Err(crate::i18n::t("应用不存在").to_string());
@@ -181,9 +181,9 @@ pub fn trash_entries(paths: &[String]) -> Result<(), String> {
             let folder = application_folders::folder_for(path)
                 .ok_or_else(|| crate::i18n::t("应用不存在").to_string())?;
             application_folders::unmap(std::slice::from_ref(path))?;
-            virtual_storage::remove_cached_entry(&folder, path);
+            directory_cache::remove_entry(&folder, path);
             if let Ok(entry) = system_entry(path) {
-                virtual_storage::add_cached_entry(URI, entry);
+                directory_cache::add_entry(URI, entry);
             }
         } else {
             return Err(crate::i18n::t("应用不存在").to_string());
@@ -207,20 +207,19 @@ fn trash_user(uri: &str) -> Result<(), String> {
     if let Some(error) = result.errors.into_iter().next() {
         return Err(error);
     }
-    virtual_storage::remove_cached_entry(&parent_uri, uri);
-    virtual_storage::remove_cached_entry(URI, uri);
+    directory_cache::remove_entry(&parent_uri, uri);
+    directory_cache::remove_entry(URI, uri);
     if directory {
         let returned = application_folders::forget_folder(uri)?;
-        virtual_storage::drop_cached_subtree(uri);
+        directory_cache::drop_subtree(uri);
         for app in returned {
             if let Ok(entry) = system_entry(&app) {
-                virtual_storage::add_cached_entry(URI, entry);
+                directory_cache::add_entry(URI, entry);
             }
         }
     }
     Ok(())
 }
-
 
 pub fn open(encoded: &str) -> Result<(), String> {
     if encoded.starts_with("user/") {
@@ -409,7 +408,7 @@ pub fn create_stored(parent: &str, name: &str, folder: bool) -> Result<String, S
     }
     let uri = stored_uri(&target)?;
     if let Ok(entry) = stored_entry(&uri) {
-        virtual_storage::add_cached_entry(parent, entry);
+        directory_cache::add_entry(parent, entry);
     }
     Ok(uri)
 }
@@ -434,7 +433,7 @@ pub fn rename_stored(uri: &str, name: &str) -> Result<String, String> {
 pub fn after_rename(old_uri: &str, new_uri: &str, directory: bool) -> Result<(), String> {
     if directory {
         application_folders::rename_folder(old_uri, new_uri)?;
-        virtual_storage::drop_cached_subtree(old_uri);
+        directory_cache::drop_subtree(old_uri);
     }
     let renamed = stored_path(new_uri)?;
     let parent = renamed.parent().ok_or("application item has no parent")?;
@@ -445,71 +444,9 @@ pub fn after_rename(old_uri: &str, new_uri: &str, directory: bool) -> Result<(),
         stored_uri(parent)?
     };
     if let Ok(entry) = stored_entry(new_uri) {
-        virtual_storage::rename_cached_entry(&parent_uri, old_uri, entry);
+        directory_cache::rename_entry(&parent_uri, old_uri, entry);
     }
     Ok(())
-}
-
-/// Copy dragged shortcuts/app bundles into the user store. Dragging a system
-/// application never removes the original; only Fiex-owned items are copied.
-pub fn import(paths: &[String]) -> crate::core::operations::OperationResult {
-    let dir = user_dir();
-    let mut result = crate::core::operations::OperationResult {
-        paths: Vec::new(),
-        errors: Vec::new(),
-        skipped: 0,
-        conflicts: Vec::new(),
-    };
-    if let Err(error) = std::fs::create_dir_all(&dir) {
-        result.errors.push(error.to_string());
-        return result;
-    }
-    for source in paths {
-        let source_path = Path::new(source);
-        // Import must not silently follow a shortcut into unrelated host
-        // content, including symlinks encountered in a copied directory.
-        if std::fs::symlink_metadata(source_path)
-            .is_ok_and(|metadata| metadata.file_type().is_symlink())
-        {
-            result
-                .errors
-                .push(format!("{source}: symlink import is unsupported"));
-            continue;
-        }
-        let Some(name) = source_path.file_name().and_then(|value| value.to_str()) else {
-            result.errors.push(format!("{source}: invalid name"));
-            continue;
-        };
-        let mut destination = dir.join(name);
-        let mut index = 2;
-        while destination.exists() {
-            let stem = source_path
-                .file_stem()
-                .and_then(|value| value.to_str())
-                .unwrap_or("item");
-            let extension = source_path
-                .extension()
-                .and_then(|value| value.to_str())
-                .map(|value| format!(".{value}"))
-                .unwrap_or_default();
-            destination = dir.join(format!("{stem} ({index}){extension}"));
-            index += 1;
-        }
-        let copied = if source_path.is_dir() {
-            copy_tree(source_path, &destination)
-        } else {
-            std::fs::copy(source_path, &destination)
-                .map(|_| ())
-                .map_err(|error| error.to_string())
-        };
-        match copied {
-            Ok(()) => result
-                .paths
-                .push(destination.to_string_lossy().into_owned()),
-            Err(error) => result.errors.push(format!("{source}: {error}")),
-        }
-    }
-    result
 }
 
 pub fn remove_user(uri: &str) -> Result<(), String> {
@@ -543,22 +480,22 @@ pub fn remove_user(uri: &str) -> Result<(), String> {
         }
         let returned = application_folders::forget_folder(uri)?;
         std::fs::remove_dir(&target).map_err(|error| error.to_string())?;
-        virtual_storage::drop_cached_subtree(uri);
-        virtual_storage::remove_cached_entry(&parent_uri, uri);
-        virtual_storage::remove_cached_entry(URI, uri);
+        directory_cache::drop_subtree(uri);
+        directory_cache::remove_entry(&parent_uri, uri);
+        directory_cache::remove_entry(URI, uri);
         for entry in moved {
-            virtual_storage::add_cached_entry(URI, entry);
+            directory_cache::add_entry(URI, entry);
         }
         for app in returned {
             if let Ok(entry) = system_entry(&app) {
-                virtual_storage::add_cached_entry(URI, entry);
+                directory_cache::add_entry(URI, entry);
             }
         }
         Ok(())
     } else {
         std::fs::remove_file(target).map_err(|error| error.to_string())?;
-        virtual_storage::remove_cached_entry(&parent_uri, uri);
-        virtual_storage::remove_cached_entry(URI, uri);
+        directory_cache::remove_entry(&parent_uri, uri);
+        directory_cache::remove_entry(URI, uri);
         Ok(())
     }
 }
@@ -631,36 +568,6 @@ fn launch_desktop(path: &Path) -> Result<(), String> {
         }
     }
     Err(crate::i18n::t("无法启动应用").into())
-}
-
-fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
-    // read_dir and Path::is_dir can follow a symlink; the entire import tree
-    // needs one explicit policy before any data is copied.
-    if std::fs::symlink_metadata(from)
-        .map_err(|error| error.to_string())?
-        .file_type()
-        .is_symlink()
-    {
-        return Err("Unsupported: importing symlink trees is not permitted".into());
-    }
-    std::fs::create_dir_all(to).map_err(|error| error.to_string())?;
-    for item in std::fs::read_dir(from).map_err(|error| error.to_string())? {
-        let item = item.map_err(|error| error.to_string())?;
-        if item
-            .file_type()
-            .map_err(|error| error.to_string())?
-            .is_symlink()
-        {
-            return Err("Unsupported: importing symlink entries is not permitted".into());
-        }
-        let target = to.join(item.file_name());
-        if item.path().is_dir() {
-            copy_tree(&item.path(), &target)?;
-        } else {
-            std::fs::copy(item.path(), &target).map_err(|error| error.to_string())?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -901,7 +808,7 @@ fn looks_like_path(value: &str) -> bool {
 /// Documents and website shortcuts share the Start Menu namespace, so the
 /// enumeration has to reject them explicitly.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn is_executable_target(value: &str) -> bool {
+pub(crate) fn is_executable_target(value: &str) -> bool {
     if value.contains("://") {
         return false;
     }
@@ -1193,7 +1100,11 @@ mod folder_listing_tests {
         assert!(root.iter().any(|entry| entry.path == folder.path));
         assert!(!root.iter().any(|entry| entry.path == app.path));
 
-        let children = folder_listing(vec![folder], std::slice::from_ref(&app), &[app.path.clone()]);
+        let children = folder_listing(
+            vec![folder],
+            std::slice::from_ref(&app),
+            &[app.path.clone()],
+        );
         assert_eq!(
             children
                 .iter()
@@ -1206,7 +1117,11 @@ mod folder_listing_tests {
     #[test]
     fn duplicate_real_and_mapped_entries_are_collapsed() {
         let app = item("Editor", "applications://YXBw", false);
-        let entries = folder_listing(vec![app.clone()], std::slice::from_ref(&app), &[app.path.clone()]);
+        let entries = folder_listing(
+            vec![app.clone()],
+            std::slice::from_ref(&app),
+            &[app.path.clone()],
+        );
         assert_eq!(entries.len(), 1);
     }
 }

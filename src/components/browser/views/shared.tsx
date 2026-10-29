@@ -160,7 +160,7 @@ export function NameCell({
 
 export function Thumbnail({ entry: e, size: s }: { entry: Entry; size: number }) {
   const [failed, setFailed] = useState(false)
-  const decorationIcon = useDecorationIcon(e.path)
+  const decorationIcon = useDecorationIcon(e)
   useEffect(() => setFailed(false), [e.path])
   if (decorationIcon)
     return (

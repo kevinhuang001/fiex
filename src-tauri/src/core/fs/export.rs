@@ -28,6 +28,14 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     for (index, path) in paths.iter().enumerate() {
         let resource = super::trusted(path, "core:export")?;
         let info = resource.stat()?;
+        let metadata = resource.transfer_metadata()?;
+        resource.review_transfer(
+            crate::plugin_sdk::filesystem::TransferDirection::Export,
+            crate::plugin_sdk::filesystem::TransferAction::Export,
+            &metadata.name,
+            &metadata,
+            false,
+        )?;
         if info["symlink"] == true {
             return Err("Unsupported: exporting symlinks requires an explicit policy".into());
         }
@@ -152,6 +160,14 @@ fn export_node(
     }
     *count += 1;
     let stat = source.stat()?;
+    let metadata = source.transfer_metadata()?;
+    source.review_transfer(
+        crate::plugin_sdk::filesystem::TransferDirection::Export,
+        crate::plugin_sdk::filesystem::TransferAction::Export,
+        &metadata.name,
+        &metadata,
+        false,
+    )?;
     if stat["symlink"] == true {
         return Err("Unsupported: exporting symlinks requires an explicit policy".into());
     }

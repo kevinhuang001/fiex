@@ -53,6 +53,10 @@ impl ResourceBroker {
     pub fn desktop_listing(&self, hidden: bool, ignores: &[String]) -> Result<Listing, FsError> {
         self.scope.authorize_method("fs.list")?;
         self.require(FsOperation::List, false)?;
-        self.adapter()?.desktop_listing(&self.path, hidden, ignores)
+        // Only this navigation boundary enrolls a directory in the cache.
+        // Adapter list calls used by search, transfer and stat never enroll it.
+        let listing = self.adapter()?.desktop_listing(&self.path, true, &[])?;
+        directory_cache::store(&self.path, &listing);
+        Ok(directory_cache::filtered(listing, hidden, ignores))
     }
 }

@@ -17,17 +17,6 @@ pub(crate) async fn list_directory(
     .map_err(|e| e.to_string())?
 }
 
-/// Read the last listing of a virtual path without enumerating. The UI paints
-/// this immediately; the normal list then refreshes the snapshot.
-#[tauri::command]
-pub(crate) async fn virtual_cache(path: String) -> Result<Vec<files::Entry>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::core::volumes::virtual_storage::virtual_cache(&path)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
 #[tauri::command]
 pub(crate) async fn file_info(path: String) -> Result<files::Entry, String> {
     tauri::async_runtime::spawn_blocking(move || file_info_blocking(&path))
@@ -51,4 +40,18 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Cache lookup never enumerates a provider or opens file contents.
+#[tauri::command]
+pub(crate) async fn directory_cache(
+    path: String,
+    hidden: bool,
+    ignores: Vec<String>,
+) -> Result<Option<files::Listing>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::core::fs::directory_cache::read(&path, hidden, &ignores)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
