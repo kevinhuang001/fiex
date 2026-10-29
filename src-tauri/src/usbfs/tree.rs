@@ -11,6 +11,7 @@ use drivers::*;
 pub use stream::{copy_file_to, read_at};
 
 pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, String> {
+    let _guard = super::access::lock(device)?;
     if !Path::new(device).exists() {
         return Err(crate::i18n::t("设备不存在").into());
     }
@@ -24,6 +25,7 @@ pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, Str
 }
 
 pub fn read(device: &str, kind: FsKind, path: &str) -> Result<Vec<u8>, String> {
+    let _guard = super::access::lock(device)?;
     match kind {
         FsKind::Ntfs => ntfs_read(device, path),
         FsKind::Ext4 => ext4_read(device, path),

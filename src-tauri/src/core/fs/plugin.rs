@@ -5,6 +5,8 @@ use crate::plugins::resolvers::fs::{
     FsEntry, FsKind, FsStream, FsWriteStream, Mount, WriteRequest,
 };
 use serde_json::json;
+mod writing;
+use writing::{DeferredWrite, PluginWrite};
 
 pub(super) struct PluginFsAdapter<'a> {
     resource: &'a ResourceBroker,
@@ -32,6 +34,14 @@ impl<'a> PluginFsAdapter<'a> {
         let adapter = PluginFsAdapter { resource: &parent };
         let (mount, node) = adapter.node()?;
         Ok((mount, node, name.into()))
+    }
+    fn remember(&self, entry: &FsEntry) -> Result<(), String> {
+        if crate::remote::is_remote(&self.resource.path) {
+            crate::remote::remember_adapter_entry(&self.resource.path, entry)
+        } else {
+            let uri = crate::plugins::mounts::parse(&self.resource.path)?;
+            crate::plugins::mounts::bind_node(&uri.mount_id, &uri.relative, &entry.node_id)
+        }
     }
     fn project(&self, entry: FsEntry, path: &str) -> Value {
         json!({"path":path,"name":entry.name,"isDir":entry.kind == FsKind::Directory,
@@ -118,13 +128,20 @@ impl FsAdapter for PluginFsAdapter<'_> {
         }))
     }
     fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, String> {
+        Ok(Box::new(DeferredWrite::new(self.resource, create)?))
+    }
+    fn begin_write_sized(
+        &self,
+        create: bool,
+        size: Option<u64>,
+    ) -> Result<Box<dyn WriteHandle>, String> {
         let stream = if create {
             let (mount, parent, name) = self.parent()?;
             mount.begin_write(WriteRequest {
                 node_id: None,
                 parent_id: Some(&parent),
                 name: Some(&name),
-                size: None,
+                size,
                 if_revision: None,
             })?
         } else {
@@ -134,19 +151,17 @@ impl FsAdapter for PluginFsAdapter<'_> {
                 node_id: Some(&node),
                 parent_id: None,
                 name: None,
-                size: None,
+                size,
                 if_revision: entry.revision.as_deref(),
             })?
         };
-        Ok(Box::new(PluginWrite {
-            stream: Some(stream),
-            offset: 0,
-        }))
+        Ok(Box::new(PluginWrite::new(self.resource, stream)))
     }
     fn mkdir(&self) -> Result<Value, String> {
         let (mount, parent, name) = self.parent()?;
-        mount.mkdir(&parent, &name)?;
-        Ok(Value::Null)
+        let entry = mount.mkdir(&parent, &name)?;
+        self.remember(&entry)?;
+        self.stat()
     }
     fn remove(&self) -> Result<(), String> {
         let (mount, node) = self.node()?;
@@ -196,34 +211,5 @@ impl ReadHandle for PluginRead {
             .checked_add(result.0.len() as u64)
             .ok_or("read offset overflow")?;
         Ok(result)
-    }
-}
-struct PluginWrite {
-    stream: Option<FsWriteStream>,
-    offset: u64,
-}
-impl WriteHandle for PluginWrite {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.stream
-            .as_mut()
-            .ok_or("write handle closed")?
-            .write(bytes)?;
-        self.offset = self
-            .offset
-            .checked_add(bytes.len() as u64)
-            .ok_or("write offset overflow")?;
-        Ok(())
-    }
-    fn seek(&mut self, kind: &str, offset: i64) -> Result<u64, String> {
-        if (kind == "current" && offset == 0)
-            || (kind == "start" && u64::try_from(offset).ok() == Some(self.offset))
-        {
-            return Ok(self.offset);
-        }
-        Err("Unsupported: provider writes are sequential".into())
-    }
-    fn commit(mut self: Box<Self>) -> Result<Value, String> {
-        self.stream.take().ok_or("write handle closed")?.commit()?;
-        Ok(Value::Null)
     }
 }

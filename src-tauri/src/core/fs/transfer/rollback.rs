@@ -158,7 +158,12 @@ impl UndoLog {
             .seek(SeekFrom::Start(0))
             .map_err(|e| e.to_string())?;
         target.require(FsOperation::Write, false)?;
-        let mut writer = target.adapter()?.begin_write(false)?;
+        let size = backup
+            .as_file()
+            .metadata()
+            .map_err(|e| e.to_string())?
+            .len();
+        let mut writer = target.adapter()?.begin_write_sized(false, Some(size))?;
         let mut buffer = vec![0u8; CHUNK];
         loop {
             let read = backup.read(&mut buffer).map_err(|e| e.to_string())?;

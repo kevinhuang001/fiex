@@ -171,3 +171,32 @@ pub(crate) fn adapter_node(
         node,
     ))
 }
+
+/// Bind a committed opaque provider ID to the exact scoped destination. This
+/// is also needed for newly created directories before their first listing.
+pub(crate) fn remember_adapter_entry(
+    path: &str,
+    entry: &crate::plugins::resolvers::fs::FsEntry,
+) -> Result<(), String> {
+    let (connection, relative) = connection_for_path(path).ok_or("StaleRef: connection removed")?;
+    ensure_provider_access(&connection)?;
+    let mut metadata = load_meta(&connection);
+    let file = metadata.files.entry(rel_string(&relative)).or_default();
+    // Preserve an existing local snapshot. A separate direct remote write
+    // must not silently rebaseline or destroy possibly edited cached bytes.
+    if file.downloaded {
+        file.conflict = true;
+    } else {
+        file.size = entry.size.unwrap_or(0);
+        file.modified = entry.modified.unwrap_or(0).max(0) as u64;
+        file.revision = entry.revision.clone().unwrap_or_default();
+    }
+    file.node_id = entry.node_id.clone();
+    file.is_dir = entry.is_dir();
+    file.readonly = entry.readonly.unwrap_or(false);
+    file.allowed_ops = entry
+        .allowed_ops
+        .as_ref()
+        .map(|ops| ops.iter().map(|op| op.as_str().to_owned()).collect());
+    save_meta(&connection, &metadata)
+}

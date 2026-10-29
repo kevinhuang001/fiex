@@ -3,6 +3,7 @@
 use super::*;
 pub fn read_at(route: &Route, offset: u64, output: &mut [u8]) -> Result<usize, String> {
     use std::io::{Read, Seek, SeekFrom};
+    let _guard = super::super::access::lock(&route.driver_device)?;
     ensure_access(route)?;
     let path = clean_path(&route.rel);
     match route.kind {

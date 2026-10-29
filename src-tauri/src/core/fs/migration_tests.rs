@@ -155,3 +155,42 @@ fn symlink_kind_survives_event_metadata_projection() {
         "symlink"
     );
 }
+
+#[test]
+fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
+    use crate::core::volumes::applications;
+    let local = tempfile::tempdir().unwrap();
+    let native = local.path().join("same.txt");
+    std::fs::write(&native, b"local").unwrap();
+    let token = crate::plugins::mounts::new_id().unwrap();
+    let mut directories = Vec::new();
+    let mut inputs = vec![native.to_string_lossy().into_owned()];
+    for index in 0..2 {
+        let dir = applications::create_stored(
+            applications::URI,
+            &format!("export-{token}-{index}"),
+            true,
+        )
+        .unwrap();
+        let item = applications::create_stored(&dir, "same.txt", false).unwrap();
+        std::fs::write(
+            applications::candidate_path(&item).unwrap(),
+            index.to_string(),
+        )
+        .unwrap();
+        inputs.push(item);
+        directories.push(dir);
+    }
+    let output = export_for_external_drag(&inputs).unwrap();
+    assert_eq!(output.len(), 3);
+    assert_eq!(std::fs::read(&output[0]).unwrap(), b"local");
+    assert_eq!(std::fs::read(&output[1]).unwrap(), b"0");
+    assert_eq!(std::fs::read(&output[2]).unwrap(), b"1");
+    assert_ne!(output[1], output[2]);
+    for path in &output {
+        assert_eq!(std::path::Path::new(path).file_name().unwrap(), "same.txt");
+    }
+    for directory in directories {
+        applications::remove_user(&directory).unwrap();
+    }
+}

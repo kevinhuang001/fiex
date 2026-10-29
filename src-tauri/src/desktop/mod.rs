@@ -260,6 +260,7 @@ pub fn run() {
                 crate::platform::macos_material::configure(&window);
             }
             setup_tray(app.handle())?;
+            std::thread::spawn(crate::core::fs::initialize_exports);
             std::thread::spawn(|| {
                 crate::plugins::host::global().start_enabled();
             });

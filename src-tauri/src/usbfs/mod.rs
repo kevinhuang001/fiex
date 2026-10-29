@@ -3,6 +3,7 @@
 //! The drivers operate on a block device or disk image directly; no OS mount
 //! and no FUSE are involved. APFS, HFS+ and btrfs remain read-only elsewhere.
 
+mod access;
 mod identity;
 mod mount;
 pub use identity::generation;

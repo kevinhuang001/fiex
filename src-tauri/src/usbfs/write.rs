@@ -36,6 +36,7 @@ fn ext4_write(device: &str, path: &str, data: &[u8]) -> Result<(), String> {
 }
 
 pub fn write(device: &str, kind: FsKind, path: &str, data: &[u8]) -> Result<(), String> {
+    let _guard = super::access::lock(device)?;
     match kind {
         FsKind::Ntfs => ntfs_write(device, path, data),
         FsKind::Ext4 => ext4_write(device, path, data),
@@ -58,6 +59,7 @@ pub fn commit_staged(
     replace: bool,
 ) -> Result<(), String> {
     use std::io::{Read, Seek};
+    let _guard = super::access::lock(&route.driver_device)?;
     ensure_access(route)?;
     if matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs) {
         return Err("Unsupported: read-only USB filesystem".into());
@@ -154,6 +156,7 @@ pub fn commit_staged(
 }
 
 pub fn create(route: &Route, name: &str, folder: bool) -> Result<(), String> {
+    let _guard = super::access::lock(&route.driver_device)?;
     ensure_access(route)?;
     if name.contains('/') || name.contains('\\') || name == "." || name == ".." {
         return Err(crate::i18n::t("无效文件名").into());
@@ -194,6 +197,7 @@ pub fn create(route: &Route, name: &str, folder: bool) -> Result<(), String> {
 }
 
 pub fn remove(route: &Route) -> Result<(), String> {
+    let _guard = super::access::lock(&route.driver_device)?;
     ensure_access(route)?;
     let path = clean_path(&format!("/{}", route.rel));
     match route.kind {
@@ -224,6 +228,7 @@ pub fn remove(route: &Route) -> Result<(), String> {
 }
 
 pub fn rename(route: &Route, new_name: &str) -> Result<(), String> {
+    let _guard = super::access::lock(&route.driver_device)?;
     ensure_access(route)?;
     if new_name.contains('/') || new_name.contains('\\') || new_name == "." || new_name == ".." {
         return Err(crate::i18n::t("无效文件名").into());

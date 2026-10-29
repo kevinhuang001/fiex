@@ -260,9 +260,19 @@ pub fn transfer(
             result.errors.push(error);
             return Ok(result);
         }
-        for source in sources {
-            if let Err(error) = source.remove() {
-                result.errors.push(format!("{}: {error}", source.path));
+        // Delete leaves before directories. Providers can safely implement
+        // remove as an empty-directory operation without a second tree engine.
+        for step in steps.iter().rev() {
+            if step.directory && !step.source.list()?.as_array().is_some_and(Vec::is_empty) {
+                result.errors.push(format!(
+                    "Conflict: source directory gained children: {}",
+                    step.source.path
+                ));
+                break;
+            }
+            if let Err(error) = step.source.remove() {
+                result.errors.push(format!("{}: {error}", step.source.path));
+                break;
             }
         }
     }

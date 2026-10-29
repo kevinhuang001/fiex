@@ -8,7 +8,7 @@ mod transfer;
 pub(crate) use binding::trusted;
 pub use transfer::transfer;
 mod local;
-pub use export::export as export_for_external_drag;
+pub use export::{export as export_for_external_drag, initialize as initialize_exports};
 mod plugin;
 mod streams;
 mod usb;
@@ -29,6 +29,11 @@ pub trait WriteHandle: Send {
 }
 /// Storage only: presentation, menus and launch/restore actions stay outside.
 pub trait FsAdapter: Send {
+    /// Only an adapter with a real OS file may bypass staging. Virtual views,
+    /// including views of local bytes, keep their own export policy.
+    fn native_export_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
     fn stat(&self) -> Result<Value, String>;
     fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
         presentation::entry(self.stat()?)
@@ -45,6 +50,13 @@ pub trait FsAdapter: Send {
     fn require(&self, operation: FsOperation, create: bool) -> Result<(), String>;
     fn open_read(&self) -> Result<Box<dyn ReadHandle>, String>;
     fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, String>;
+    fn begin_write_sized(
+        &self,
+        create: bool,
+        _size: Option<u64>,
+    ) -> Result<Box<dyn WriteHandle>, String> {
+        self.begin_write(create)
+    }
     fn mkdir(&self) -> Result<Value, String>;
     fn remove(&self) -> Result<(), String>;
     fn rename(&self, destination: &ResourceBroker) -> Result<(), String>;

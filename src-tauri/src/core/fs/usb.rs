@@ -62,11 +62,11 @@ impl FsAdapter for UsbFsAdapter {
             return Err("expected a file".into());
         }
         let device = std::fs::File::open(&self.route.driver_device).map_err(|e| e.to_string())?;
-        let stamp = device.metadata().map_err(|e| e.to_string())?;
+        let generation = usbfs::generation(&self.route)?;
         Ok(Box::new(UsbRead {
             route: self.route.clone(),
             size: entry.size,
-            stamp,
+            generation,
             _device: device,
         }))
     }
@@ -175,7 +175,7 @@ impl WriteHandle for UsbWrite {
 struct UsbRead {
     route: Route,
     size: u64,
-    stamp: std::fs::Metadata,
+    generation: String,
     _device: std::fs::File,
 }
 impl ReadHandle for UsbRead {
@@ -183,22 +183,8 @@ impl ReadHandle for UsbRead {
         self.size
     }
     fn read_at(&mut self, offset: u64, length: usize) -> Result<(Vec<u8>, bool), String> {
-        let current = std::fs::metadata(&self.route.driver_device)
-            .map_err(|_| "StaleRef: USB device disconnected")?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            if current.dev() != self.stamp.dev()
-                || current.ino() != self.stamp.ino()
-                || current.rdev() != self.stamp.rdev()
-            {
-                return Err("StaleRef: USB device replaced".into());
-            }
-        }
-        #[cfg(not(unix))]
-        if current.len() != self.stamp.len() || current.created().ok() != self.stamp.created().ok()
-        {
-            return Err("StaleRef: USB device replaced".into());
+        if usbfs::generation(&self.route)? != self.generation {
+            return Err("StaleRef: USB device replaced or ejected".into());
         }
         let mut bytes = vec![
             0;

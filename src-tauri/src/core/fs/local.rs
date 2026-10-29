@@ -5,6 +5,9 @@ use serde_json::json;
 
 pub(super) struct LocalFsAdapter<'a>(pub &'a ResourceBroker);
 impl FsAdapter for LocalFsAdapter<'_> {
+    fn native_export_path(&self) -> Option<std::path::PathBuf> {
+        Some(std::path::PathBuf::from(&self.0.path))
+    }
     fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
         self.0.scope.authorize(&self.0.path)?;
         crate::core::files::entry(std::path::Path::new(&self.0.path))
