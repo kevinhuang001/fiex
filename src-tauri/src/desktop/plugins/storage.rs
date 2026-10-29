@@ -36,7 +36,7 @@ pub(crate) fn plugins_list() -> Vec<crate::plugins::host::PluginInfo> {
 }
 
 #[tauri::command]
-pub(crate) fn plugin_errors(plugin_id: String) -> Vec<crate::plugins::errors::PluginError> {
+pub(crate) fn plugin_logs(plugin_id: String) -> Vec<crate::plugins::errors::PluginError> {
     crate::plugins::errors::list(&plugin_id)
 }
 
@@ -51,7 +51,7 @@ pub(crate) fn plugin_error_report(
 }
 
 #[tauri::command]
-pub(crate) fn plugin_error_clear(plugin_id: String) {
+pub(crate) fn plugin_logs_clear(plugin_id: String) {
     crate::plugins::errors::clear(&plugin_id);
 }
 
