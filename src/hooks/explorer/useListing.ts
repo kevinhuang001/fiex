@@ -6,6 +6,7 @@ import { call, native, search } from '@/lib/api'
 import { openDirectory } from '@/lib/listing'
 import { cachePresentations } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
+import { stateSnapshot, saveState } from '@/lib/stateStore'
 import type { Entry, Listing, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
@@ -155,7 +156,7 @@ export function useListing(
       if (cancelled) return
       let start: string | null = startOverride || launched || null
       if (!start && prefs.startPage === 'recent') start = 'recent://'
-      else if (!start && prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
+      else if (!start && prefs.startPage === 'last') start = stateSnapshot<string>('navigation.lastPath', 'fiex:lastPath')
       if (!start) {
         const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
         if (cancelled) return
@@ -168,7 +169,7 @@ export function useListing(
             : (pick('文稿') ?? initial ?? locations[0]?.path ?? null)
       }
       if (start) {
-        if (start !== 'recent://') localStorage.setItem('fiex:lastPath', start)
+        if (start !== 'recent://') saveState('navigation.lastPath', start)
         nav.startAt(start)
       }
     })()
