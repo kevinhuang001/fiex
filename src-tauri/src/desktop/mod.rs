@@ -17,6 +17,8 @@ mod local_terminal;
 mod files;
 #[macro_use]
 mod locale;
+#[macro_use]
+mod state;
 mod tray;
 use locale::locale_set;
 use tray::{setup_tray, QUITTING};
@@ -34,6 +36,7 @@ mod volumes;
 
 pub(crate) use credentials::*;
 pub(crate) use files::*;
+pub(crate) use state::*;
 pub(crate) use local_terminal::*;
 pub(crate) use plugins::*;
 pub(crate) use remote::*;
@@ -86,6 +89,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             locale_set,
+            state_get,
+            state_put,
+            state_remove,
             plugin_invoke,
             plugin_describe_resources,
             plugin_before_open,
