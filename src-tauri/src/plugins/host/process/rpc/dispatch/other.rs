@@ -117,6 +117,19 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             crate::plugins::errors::report_limited(&plugin_id, code, message, detail);
             Ok(Value::Null)
         }
+        "host.log.report" => {
+            let level = ctx.params.get("level").and_then(Value::as_str)
+                .ok_or("missing log level")?;
+            let message = ctx.params.get("message").and_then(Value::as_str)
+                .ok_or("missing log message")?;
+            let fields = ctx.params.get("fields").cloned().unwrap_or(Value::Null);
+            // Identity is derived from the authenticated Running instance,
+            // never from a caller-supplied pluginId field.
+            crate::infrastructure::logging::plugin(
+                &plugin_id, level, "sdk", Some(ctx.method), message, fields,
+            );
+            Ok(Value::Null)
+        }
         "host.process.run" => {
             ctx.running.ensure_command(&ctx.arg("command")?)?;
             let scope = ctx.scope()?;
