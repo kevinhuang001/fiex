@@ -1,4 +1,6 @@
 import { t } from '@/i18n'
+import { useEffect, useState } from 'react'
+import { stateSnapshot, loadState, saveState } from '@/lib/stateStore'
 import { Folder, HardDrive, Server } from 'lucide-react'
 import type { Location, RemoteConnection } from '@/lib/types'
 
@@ -17,10 +19,35 @@ export function PickerSidebar({
   disks: Location[]
   navigate(path: string): void
 }) {
+  const [collapsed, setCollapsed] = useState<string[]>(
+    () => stateSnapshot<string[]>('picker.sidebarCollapsed') ?? [],
+  )
+  useEffect(() => {
+    let active = true
+    void loadState<string[]>('picker.sidebarCollapsed')
+      .then((saved) => { if (active && Array.isArray(saved)) setCollapsed(saved) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
+  const toggle = (section: string) => {
+    setCollapsed((previous) => {
+      const next = previous.includes(section)
+        ? previous.filter((item) => item !== section)
+        : [...previous, section]
+      saveState('picker.sidebarCollapsed', next)
+      return next
+    })
+  }
+  const heading = (section: string, label: string) => (
+    <button type="button" className="file-picker-section"
+      aria-expanded={!collapsed.includes(section)} onClick={() => toggle(section)}>
+      {t(label)}
+    </button>
+  )
   return (
     <aside className="file-picker-sidebar">
-      {places.length > 0 && <p className="file-picker-section">{t('常用位置')}</p>}
-      {places.map((item) => (
+      {places.length > 0 && heading('places', '常用位置')}
+      {!collapsed.includes('places') && places.map((item) => (
         <button
           key={`place:${item.kind}:${item.path || item.name}`}
           type="button"
@@ -31,9 +58,9 @@ export function PickerSidebar({
           <span>{item.name}</span>
         </button>
       ))}
-      <p className="file-picker-section">{t('收藏')}</p>
+      {heading('favorites', '收藏')}
       {!favorites.length && <p className="file-picker-empty">{t('还没有收藏')}</p>}
-      {favorites.map((item) => (
+      {!collapsed.includes('favorites') && favorites.map((item) => (
         <button
           key={`favorite:${item.path}`}
           type="button"
@@ -44,9 +71,9 @@ export function PickerSidebar({
           <span>{item.name}</span>
         </button>
       ))}
-      <p className="file-picker-section">{t('连接')}</p>
+      {heading('connections', '连接')}
       {!connections.length && <p className="file-picker-empty">{t('没有连接')}</p>}
-      {connections.map((item) => (
+      {!collapsed.includes('connections') && connections.map((item) => (
         <button
           key={`connection:${item.id}`}
           type="button"
@@ -57,9 +84,9 @@ export function PickerSidebar({
           <span>{item.name}</span>
         </button>
       ))}
-      <p className="file-picker-section">{t('设备')}</p>
+      {heading('disks', '设备')}
       {!disks.length && <p className="file-picker-empty">{t('没有设备')}</p>}
-      {disks.map((item) => (
+      {!collapsed.includes('disks') && disks.map((item) => (
         <button
           key={`disk:${item.path || item.device}`}
           type="button"
