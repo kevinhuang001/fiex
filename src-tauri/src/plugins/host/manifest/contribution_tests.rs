@@ -86,7 +86,7 @@ fn match_predicates_are_scoped_by_extension_point() {
     assert!(validate_extensions(&serde_json::json!({
         "decorations": {"match": {"contains": [".git"]}}
     }))
-    .is_ok());
+    .is_err());
     assert!(validate_extensions(&serde_json::json!({
         "contextMenus": {"match": {"selection": "single"}}
     }))

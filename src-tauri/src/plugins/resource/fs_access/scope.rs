@@ -3,16 +3,33 @@
 use super::*;
 
 pub fn canonical_selection(path: &Path) -> Result<PathBuf, String> {
-    match dunce::canonicalize(path) {
-        Ok(path) => Ok(path),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let parent = path.parent().ok_or("selection has no parent")?;
-            let name = path.file_name().ok_or("selection has no name")?;
-            Ok(dunce::canonicalize(parent)
-                .map_err(|e| e.to_string())?
-                .join(name))
+    if path
+        .components()
+        .any(|part| matches!(part, Component::ParentDir))
+    {
+        return Err("selection must not contain parent traversal".into());
+    }
+    let mut ancestor = path;
+    let mut missing = Vec::new();
+    loop {
+        match dunce::canonicalize(ancestor) {
+            Ok(base) => {
+                return Ok(missing
+                    .into_iter()
+                    .rev()
+                    .fold(base, |base: PathBuf, name| base.join(name)));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(
+                    ancestor
+                        .file_name()
+                        .ok_or("selection has no name")?
+                        .to_os_string(),
+                );
+                ancestor = ancestor.parent().ok_or("selection has no parent")?;
+            }
+            Err(error) => return Err(error.to_string()),
         }
-        Err(error) => Err(error.to_string()),
     }
 }
 
@@ -25,6 +42,7 @@ pub struct Scope {
     pub(super) references: std::sync::Arc<HashMap<String, String>>,
     pub(super) metadata_refs: std::sync::Arc<HashMap<String, Value>>,
     pub(super) metadata_only: bool,
+    pub(super) read_only: bool,
     pub(super) issued: std::sync::Arc<
         Mutex<HashMap<String, crate::plugins::resource::resource_context::ResourceSnapshot>>,
     >,
@@ -43,6 +61,7 @@ impl Scope {
             references: Default::default(),
             metadata_refs: Default::default(),
             metadata_only: false,
+            read_only: false,
             issued: Default::default(),
             remote_resources: Default::default(),
         })
@@ -72,10 +91,29 @@ impl Scope {
     pub fn restrict_to_metadata(&mut self) {
         self.metadata_only = true;
     }
+    pub fn restrict_to_readonly(&mut self) {
+        self.read_only = true;
+    }
     pub fn authorize_method(&self, method: &str) -> Result<(), String> {
+        if self.read_only
+            && matches!(
+                method,
+                "fs.mkdir"
+                    | "fs.seekWrite"
+                    | "fs.beginWrite"
+                    | "fs.writeChunk"
+                    | "fs.writeBuffer"
+                    | "fs.commit"
+                    | "fs.remove"
+                    | "fs.rename"
+                    | "host.process.run"
+                    | "host.vfs.openView"
+            )
+        {
+            return Err("PermissionDenied: view does not support writes".into());
+        }
         if self.metadata_only
-            && ((method.starts_with("host.fs.")
-                && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
+            && ((method.starts_with("fs.") && !matches!(method, "fs.stat" | "fs.statBatch"))
                 || matches!(method, "host.process.run" | "host.vfs.openView"))
         {
             return Err("discovery scope permits metadata only".into());
@@ -151,11 +189,38 @@ impl Scope {
                     .lock()
                     .ok()?
                     .get(&key)
-                    .filter(|snapshot| crate::plugins::mounts::handles(&snapshot.display))
+                    .filter(|snapshot| {
+                        crate::plugins::mounts::handles(&snapshot.display)
+                            || crate::usbfs::route(&snapshot.display).is_some()
+                            || crate::core::volumes::virtual_resolvers::view_for(&snapshot.display)
+                                .is_some()
+                    })
                     .cloned()
             }));
         }
         Ok(None)
+    }
+    /// Resolve only identities already bound to this exact operation. A child
+    /// cannot use an arbitrary parent path to acquire a different mount/root.
+    pub fn reference_for_path(&self, path: &str) -> Result<Value, String> {
+        if let Some((key, _)) = self.references.iter().find(|(_, p)| p.as_str() == path) {
+            return serde_json::from_str(key).map_err(|e| e.to_string());
+        }
+        if let Some((key, _)) = self
+            .remote_resources
+            .iter()
+            .find(|(_, r)| r.display == path)
+        {
+            return serde_json::from_str(key).map_err(|e| e.to_string());
+        }
+        let issued = self
+            .issued
+            .lock()
+            .map_err(|_| "reference registry unavailable")?;
+        if let Some((key, _)) = issued.iter().find(|(_, r)| r.display == path) {
+            return serde_json::from_str(key).map_err(|e| e.to_string());
+        }
+        Err("ScopeDenied: parent directory is not bound".into())
     }
     pub fn metadata_reference(&self, reference: &Value) -> Result<Option<&Value>, String> {
         Ok(self.metadata_refs.get(&Self::ref_key(reference)?))
@@ -195,6 +260,30 @@ impl Scope {
             {
                 return Err("child outside selected resource".into());
             }
+        } else if parent_path == crate::core::volumes::virtual_resolvers::RECENT_URI {
+            let _ = crate::core::recent::source_for(display)?;
+        } else if parent_path == crate::core::volumes::applications::URI
+            || crate::core::volumes::applications::is_user(&parent_path)
+        {
+            let parent_local = if parent_path == crate::core::volumes::applications::URI {
+                crate::core::volumes::applications::stored_path(&parent_path)?
+            } else {
+                crate::core::volumes::applications::candidate_path(&parent_path)?
+            };
+            let child_local = crate::core::volumes::applications::candidate_path(display)?;
+            if child_local.parent() != Some(parent_local.as_path()) {
+                return Err("ScopeDenied: child outside selected application directory".into());
+            }
+        } else if let Some(root) = crate::usbfs::route(&parent_path) {
+            let child = crate::usbfs::route(display).ok_or("invalid USB child")?;
+            if root.root != child.root
+                || !Path::new(&child.rel).starts_with(&root.rel)
+                || Path::new(&child.rel)
+                    .components()
+                    .any(|p| !matches!(p, Component::Normal(_)))
+            {
+                return Err("child outside selected USB resource".into());
+            }
         } else {
             self.authorize(display)?;
             if !Path::new(display).starts_with(&parent_path) {
@@ -213,9 +302,13 @@ impl Scope {
                     kind: "file".into(),
                     ..Default::default()
                 });
-        let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-            display, meta,
-        );
+        let mut snapshot =
+            crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                display, meta,
+            );
+        if parent["mountId"] == "core:applications" {
+            snapshot.local = crate::core::volumes::applications::candidate_path(display)?;
+        }
         let reference =
             serde_json::to_value(&snapshot.reference).map_err(|error| error.to_string())?;
         self.issued

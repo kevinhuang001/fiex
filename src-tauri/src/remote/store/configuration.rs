@@ -1,13 +1,16 @@
 use super::*;
 
-pub(super) fn terminal_connection(conn: &StoredConnection) -> bool {
-    conn.kind == "ssh" && connection_plugin_id(conn) == super::super::config::BUILTIN_PLUGIN_ID
-}
-
-/// The SSH plugin owns its terminal in a PluginView; only the built-in system
-/// OpenSSH connection is a Core-managed terminal.
+/// A connection without a filesystem contribution opens its plugin-owned view.
 pub(super) fn plugin_view_connection(conn: &StoredConnection) -> bool {
-    connection_plugin_id(conn) == "org.fiex.ssh"
+    !crate::plugins::host::catalog()
+        .into_iter()
+        .find(|plugin| plugin.id == conn.plugin_id)
+        .is_some_and(|plugin| {
+            plugin
+                .extensions
+                .get("vfs")
+                .is_some_and(serde_json::Value::is_object)
+        })
 }
 
 pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String> {
@@ -23,12 +26,8 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         .plugin_id
         .clone()
         .ok_or("connection plugin ID is required")?;
-    let builtin = plugin_id == super::super::config::BUILTIN_PLUGIN_ID;
-    if !builtin && !crate::plugins::host::valid_id(&plugin_id) {
+    if !crate::plugins::host::valid_id(&plugin_id) {
         return Err(crate::i18n::t("连接插件 ID 无效").into());
-    }
-    if builtin && kind != super::super::config::BUILTIN_SSH {
-        return Err(crate::i18n::t("内置连接类型不支持").into());
     }
     let declared_fields = declared_connection_fields(&plugin_id, kind)?;
     for (key, value) in &input.settings {
@@ -49,53 +48,6 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
                 "连接字段数据类型无效：{key}",
                 &[("key", key.to_string())],
             ));
-        }
-    }
-    if builtin {
-        let host = input
-            .settings
-            .get("host")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(crate::i18n::t("请输入 SSH 主机"))?;
-        if host.starts_with('-')
-            || host
-                .chars()
-                .any(|ch| ch.is_whitespace() || ch == '\0' || ch == '@')
-        {
-            return Err(crate::i18n::t("SSH 主机格式无效").into());
-        }
-        if let Some(username) = input
-            .settings
-            .get("username")
-            .and_then(serde_json::Value::as_str)
-        {
-            if !username.is_empty()
-                && (username.starts_with('-')
-                    || !username
-                        .chars()
-                        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-')))
-            {
-                return Err(crate::i18n::t("SSH 用户名格式无效").into());
-            }
-        }
-        let port = input
-            .settings
-            .get("port")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(22);
-        if !(1..=65535).contains(&port) {
-            return Err(crate::i18n::t("SSH 端口无效").into());
-        }
-        if let Some(path) = input
-            .settings
-            .get("identityFile")
-            .and_then(serde_json::Value::as_str)
-        {
-            if path.contains('\0') {
-                return Err(crate::i18n::t("SSH 私钥路径无效").into());
-            }
         }
     }
     let secret_keys = declared_fields
@@ -150,7 +102,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         saved: previous.as_ref().map(|conn| conn.saved).unwrap_or(true),
         autostart: previous.as_ref().is_some_and(|conn| conn.autostart),
     };
-    if !builtin {
+    {
         ensure_provider_access(&record)?;
         // Saving a connection is explicit user intent to reach this host. The
         // exact hostname is added to the plugin's own allowlist before validation.
@@ -183,7 +135,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     for field in &record.secret_keys {
         record.settings.remove(field);
     }
-    if !terminal_connection(&record) && !plugin_view_connection(&record) {
+    if !plugin_view_connection(&record) {
         fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
     }
     if let Some(index) = existing {

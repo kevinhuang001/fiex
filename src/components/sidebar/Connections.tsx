@@ -8,10 +8,7 @@ import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivi
 import type { RemoteConnection } from '@/lib/types'
 import type { SidebarProps } from './types'
 
-type Destination =
-  | { kind: 'vfs'; path: string }
-  | { kind: 'pluginView' }
-  | { kind: 'terminal'; connectionId: string }
+type Destination = { kind: 'vfs'; path: string } | { kind: 'pluginView' }
 
 interface ConnectionMenuItem {
   id: string
@@ -40,8 +37,8 @@ const menuIcons = {
 } as const
 
 /** Remote connections and saved SSH sessions, with add/session menus. */
-const isSshConnection = (connection: { kind: string; pluginId: string }) =>
-  connection.kind === 'ssh' || connection.pluginId === 'org.fiex.ssh'
+const isPluginViewConnection = (connection: RemoteConnection) =>
+  connection.mountPath.startsWith('fiex-plugin-view://')
 
 /** A connection is open when a folder tab targets its mount, or when its
  *  terminal/plugin view is the tab's target. Open sessions stay in the sidebar,
@@ -50,7 +47,6 @@ const isOpen = (connection: RemoteConnection, tabs: string[]) => {
   const mount = connection.mountPath.replace(/\/$/, '')
   return tabs.some(
     (path) =>
-      path === `fiex-terminal://${connection.id}` ||
       path === `fiex-plugin-view://${connection.id}` ||
       (mount && (path === mount || path.startsWith(mount + '/'))),
   )
@@ -126,13 +122,7 @@ export function Connections({
     setMenu(null)
     void call<Destination>('connection_open', { id: connection.id })
       .then((target) =>
-        x.navigate(
-          target.kind === 'vfs'
-            ? target.path
-            : target.kind === 'pluginView'
-              ? 'fiex-plugin-view://' + connection.id
-              : 'fiex-terminal://' + target.connectionId,
-        ),
+        x.navigate(target.kind === 'vfs' ? target.path : 'fiex-plugin-view://' + connection.id),
       )
       .catch((error) => x.setError(String(error)))
   }
@@ -237,7 +227,7 @@ export function Connections({
                       key={connection.id}
                       onClick={() => open(connection)}
                     >
-                      {isSshConnection(connection) ? (
+                      {isPluginViewConnection(connection) ? (
                         <TerminalSquare size={14} />
                       ) : (
                         <Server size={14} />
@@ -283,7 +273,7 @@ export function Connections({
               className={`nav-item connection-nav ${x.path === connection.mountPath || x.path.startsWith(connection.mountPath.replace(/\/$/, '') + '/') ? 'active' : ''}`}
               onClick={() => open(connection)}
             >
-              {isSshConnection(connection) ? <TerminalSquare /> : <Server />}
+              {isPluginViewConnection(connection) ? <TerminalSquare /> : <Server />}
               <span>
                 <span>{connection.name}</span>
               </span>

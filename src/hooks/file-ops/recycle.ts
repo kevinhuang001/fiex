@@ -19,7 +19,7 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
     if (!writable()) return
     if (!selection.length) return
     const paths = [...selection]
-    if (inTrash) {
+    if (inTrash || paths.some((path) => path.startsWith('applications://'))) {
       deletePermanently(paths)
       return
     }

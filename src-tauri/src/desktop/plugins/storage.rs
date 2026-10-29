@@ -1,3 +1,35 @@
+/// Current manifest-declared non-secret settings for one plugin. Panels and
+/// PluginViews receive this through `context.get`, so a static UI can react to
+/// settings without adding a custom backend RPC. Secrets never leave the
+/// keyring through this command.
+#[tauri::command]
+pub(crate) fn plugin_settings(plugin_id: String) -> Result<serde_json::Value, String> {
+    let (manifest, _) = crate::plugins::host::installed_manifests()
+        .into_iter()
+        .find(|(manifest, _)| manifest.id == plugin_id)
+        .ok_or("plugin is not installed")?;
+    let Some(fields) = manifest
+        .extensions
+        .get("settings")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Ok(serde_json::json!({}));
+    };
+    let mut values = serde_json::Map::new();
+    for field in fields {
+        let Some(id) = field.get("id").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        if field.get("type").and_then(serde_json::Value::as_str) == Some("secret") {
+            continue;
+        }
+        if let Ok(Some(value)) = crate::plugins::storage::get(&plugin_id, "global", id) {
+            values.insert(id.to_string(), value);
+        }
+    }
+    Ok(serde_json::Value::Object(values))
+}
+
 #[tauri::command]
 pub(crate) fn plugins_list() -> Vec<crate::plugins::host::PluginInfo> {
     crate::plugins::host::catalog()

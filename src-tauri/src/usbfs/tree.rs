@@ -6,9 +6,12 @@ use super::write::remove;
 use std::path::{Path, PathBuf};
 
 mod drivers;
+mod stream;
 use drivers::*;
+pub use stream::{copy_file_to, read_at};
 
 pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, String> {
+    let _guard = super::access::lock(device)?;
     if !Path::new(device).exists() {
         return Err(crate::i18n::t("设备不存在").into());
     }
@@ -22,6 +25,7 @@ pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, Str
 }
 
 pub fn read(device: &str, kind: FsKind, path: &str) -> Result<Vec<u8>, String> {
+    let _guard = super::access::lock(device)?;
     match kind {
         FsKind::Ntfs => ntfs_read(device, path),
         FsKind::Ext4 => ext4_read(device, path),
@@ -69,6 +73,16 @@ pub fn listing(route: &Route) -> Result<Vec<crate::core::files::Entry>, String> 
 }
 
 pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
+    if route.rel.is_empty() {
+        ensure_access(route)?;
+        return Ok(crate::core::files::Entry {
+            path: route.root.clone(),
+            name: "USB".into(),
+            is_dir: true,
+            readonly: matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs),
+            ..Default::default()
+        });
+    }
     let (parent, name) = route
         .rel
         .rsplit_once('/')
@@ -88,16 +102,20 @@ pub fn search(
     route: &Route,
     query: &str,
     limit: usize,
-) -> Result<Vec<crate::core::files::Entry>, String> {
+    cancelled: &dyn Fn() -> bool,
+) -> Result<(Vec<crate::core::files::Entry>, bool), String> {
     let needle = query.to_lowercase();
     let mut out = Vec::new();
     let mut pending = vec![route.clone()];
     while let Some(directory) = pending.pop() {
+        if cancelled() {
+            return Ok((Vec::new(), false));
+        }
         for entry in listing(&directory)? {
             if entry.name.to_lowercase().contains(&needle) {
                 out.push(entry.clone());
                 if out.len() >= limit {
-                    return Ok(out);
+                    return Ok((out, true));
                 }
             }
             if entry.is_dir {
@@ -108,7 +126,7 @@ pub fn search(
             }
         }
     }
-    Ok(out)
+    Ok((out, false))
 }
 
 fn local_unique(path: &Path) -> PathBuf {
@@ -156,11 +174,12 @@ fn copy_route(source: &Route, target: &Path) -> Result<(), String> {
                 copy_route(&child_route, &target.join(child.name))?;
             }
         } else {
-            let data = read(&source.driver_device, source.kind, &source.rel)?;
             if let Some(parent) = target.parent() {
                 std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
             }
-            std::fs::write(target, data).map_err(|error| error.to_string())?;
+            let mut output = std::fs::File::create(target).map_err(|e| e.to_string())?;
+            copy_file_to(source, &mut output)?;
+            output.sync_all().map_err(|e| e.to_string())?;
         }
         Ok(())
     } else {

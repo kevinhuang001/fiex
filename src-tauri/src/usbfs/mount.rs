@@ -56,84 +56,45 @@ pub(crate) fn btrfs_fs(device: &str) -> Result<fs_btrfs::Filesystem, String> {
     fs_btrfs::Filesystem::mount(std::sync::Arc::new(device)).map_err(|error| error.to_string())
 }
 
-fn authorized() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
-        std::sync::OnceLock::new();
-    SET.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
-}
-
-fn can_open(device: &str) -> bool {
-    std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(device)
-        .is_ok()
-}
-
-#[cfg(target_os = "macos")]
-fn run_privileged(script: &str) -> Result<(), String> {
-    let output = std::process::Command::new("osascript")
-        .args(["-e", script])
-        .output()
-        .map_err(|error| error.to_string())?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().into())
-    }
-}
-
-/// Unmount a volume and grant this process raw read/write access through the
-/// native administrator / polkit prompt. Runs once per device per session.
+/// Never change device-node permissions. Raw access requires an existing OS
+/// grant and an unmounted device; disk images remain usable for driver tests.
 pub fn ensure_access(route: &Route) -> Result<(), String> {
-    if authorized().lock().unwrap().contains(&route.device) {
-        return Ok(());
-    }
-    if can_open(&route.driver_device) {
-        authorized().lock().unwrap().insert(route.device.clone());
-        return Ok(());
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("diskutil")
-            .args(["unmount", &route.device])
-            .output();
-        let script = format!(
-            "do shell script \"chmod 666 {}\" with administrator privileges",
-            route.driver_device
-        );
-        run_privileged(&script)?;
-    }
+    let metadata = std::fs::metadata(&route.driver_device).map_err(|e| e.to_string())?;
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("udisksctl")
-            .args(["unmount", "-b", &route.device])
-            .output();
-        let output = std::process::Command::new("pkexec")
-            .args(["chmod", "a+rw", &route.driver_device])
-            .output()
-            .map_err(|error| error.to_string())?;
-        if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).trim().into());
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
+        if metadata.file_type().is_block_device() {
+            let device = format!(
+                "{}:{}",
+                libc::major(metadata.rdev()),
+                libc::minor(metadata.rdev())
+            );
+            let mounts =
+                std::fs::read_to_string("/proc/self/mountinfo").map_err(|e| e.to_string())?;
+            if mounts
+                .lines()
+                .any(|line| line.split_whitespace().nth(2) == Some(device.as_str()))
+            {
+                return Err(
+                    "PermissionDenied: unmount the device before raw filesystem access".into(),
+                );
+            }
         }
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = route;
-        Err(crate::i18n::t("当前系统需要通过管理员权限访问原始设备").into())
+    #[cfg(not(target_os = "linux"))]
+    if !metadata.is_file() {
+        return Err("PermissionDenied: raw devices require a scoped platform device broker".into());
     }
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        if !can_open(&route.driver_device) {
-            return Err(crate::i18n::t("无法获得设备读写权限").into());
-        }
-        authorized().lock().unwrap().insert(route.device.clone());
-        Ok(())
-    }
+    std::fs::File::open(&route.driver_device).map_err(|_| {
+        "PermissionDenied: raw device access has not been granted by the OS".to_string()
+    })?;
+    Ok(())
 }
 
 pub fn eject(device: &str) -> Result<(), String> {
-    authorized().lock().unwrap().remove(device);
+    // Revoke before asking the OS to eject, including failed ejection: an
+    // in-flight operation must not resume with the old device generation.
+    super::identity::invalidate(device);
     #[cfg(target_os = "macos")]
     {
         let output = std::process::Command::new("diskutil")

@@ -75,13 +75,14 @@ pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value
 }
 
 #[tauri::command]
-pub(crate) fn preview_candidates(
-    extension: String,
-    mime: String,
-    is_dir: bool,
-) -> Vec<serde_json::Value> {
-    crate::plugins::resolvers::preview::candidates_json(&extension, &mime, is_dir)
+pub(crate) async fn preview_candidates(path: String) -> Result<Vec<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::resolvers::preview::resource_candidates_json(&path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
+
 /// Optional package-local loading document for a plugin preview. It contains
 /// no preview session and grants no resource access; the frontend renders it in
 /// the same sandboxed Core-owned iframe while `preview.open` runs.
@@ -121,11 +122,6 @@ pub(crate) async fn plugin_context_menu_resolve(
     directory: String,
     paths: Vec<String>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    if let Some(menu) =
-        crate::core::volumes::virtual_resolvers::resolve_menu(&directory, &paths)
-    {
-        return Ok(vec![menu]);
-    }
     tauri::async_runtime::spawn_blocking(move || {
         crate::plugins::resolvers::context_menu::query(&directory, &paths)
     })
@@ -152,9 +148,6 @@ pub(crate) async fn plugin_context_menu_execute(
     on_progress: tauri::ipc::Channel<super::super::files::OperationProgress>,
     cancel: tauri::State<'_, crate::core::operations::OperationCancel>,
 ) -> Result<serde_json::Value, String> {
-    if menu_session_id.starts_with("virtual:") {
-        return crate::core::volumes::virtual_resolvers::execute_menu(&menu_session_id, &item_id);
-    }
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::plugins::resolvers::context_menu::execute(&menu_session_id, &item_id)
     })

@@ -91,12 +91,16 @@ export function PluginPreviewFrame({
         },
         dispatch: async (method, params): Promise<JsonValue> => {
           if (method === 'context.get') {
+            const settings = await call<Record<string, JsonValue>>('plugin_settings', {
+              pluginId,
+            }).catch(() => ({}))
             return {
               ...(loading ? {} : ((context || {}) as Record<string, JsonValue>)),
               // Compatibility alias for panel code that only needs the name.
               preview: { name, extension },
               locale: getLocale(),
               uiTimeoutMs: timeoutMs ?? 15000,
+              settings,
             } as JsonValue
           }
           if (method === 'theme.get') return themeSnapshot()

@@ -6,15 +6,6 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
         .into_iter()
         .find(|connection| connection.id == id)
         .ok_or("connection not found")?;
-    if connection_plugin_id(&connection) == super::super::config::BUILTIN_PLUGIN_ID {
-        if connection.kind == super::super::config::BUILTIN_SSH {
-            return Ok(serde_json::json!({
-                "kind": "terminal",
-                "connectionId": connection.id,
-            }));
-        }
-        return Err(crate::i18n::t("内置连接类型不支持").into());
-    }
     let plugin_id = ensure_provider_access(&connection)?;
     let target = crate::plugins::events::invoke(
         &plugin_id,

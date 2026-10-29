@@ -65,15 +65,6 @@ Core 分配 `mountId`，插件只使用 Core 传入的节点/资源身份，不�
 - Metadata 缓存不携带授权；权限仍按插件和当前 Scope 判断；
 - 远端 revision 变化、连接关闭或插件撤权后，旧引用失效。
 
-## SSH 特例
+## 插件连接视图
 
-`org.fiex.ssh` 是连接插件，但导航目标是终端：
-
-```text
-connection.open
-  → Core 识别 org.fiex.ssh
-  → kind = terminal
-  → xterm.js full-view tab
-```
-
-TCP 由 `host.net.tcp.open` 建立，SSH 握手和 PTY 由官方 SSH 插件完成，终端字节通过 `host.terminal.*` 与 Core 的 xterm 会话交换。
+任意连接插件均通过 `connection.open` 返回 `vfs` 或包内 `pluginView`。Core 按返回的类型处理导航、验证资源归属和面板路径，不识别官方插件 ID。SSH 协议、远端 PTY、终端 UI 和远端会话生命周期归插件所有；Core 只提供通用网络、任务和面板服务。

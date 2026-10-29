@@ -16,12 +16,6 @@ pub(crate) fn mount_path(conn: &StoredConnection) -> PathBuf {
 /// Core owns caches and upload snapshots; providers receive scoped read access.
 pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, String> {
     let plugin_id = connection_plugin_id(conn);
-    if plugin_id == BUILTIN_PLUGIN_ID {
-        if conn.kind == BUILTIN_SSH {
-            return Ok(plugin_id);
-        }
-        return Err(crate::i18n::t("内置连接类型不支持").into());
-    }
     let plugin = crate::plugins::host::catalog()
         .into_iter()
         .find(|plugin| {
@@ -36,37 +30,12 @@ pub(crate) fn ensure_provider_access(conn: &StoredConnection) -> Result<String, 
     Ok(plugin_id)
 }
 
-pub(crate) const BUILTIN_PLUGIN_ID: &str = "__builtin__";
-pub(crate) const BUILTIN_SSH: &str = "ssh";
-
-pub(crate) fn builtin_connection_fields(kind: &str) -> Option<Vec<(String, String)>> {
-    if kind != BUILTIN_SSH {
-        return None;
-    }
-    Some(
-        [
-            ("host", "text"),
-            ("port", "number"),
-            ("username", "text"),
-            ("identityFile", "text"),
-            ("terminalType", "text"),
-        ]
-        .into_iter()
-        .map(|(id, ty)| (id.to_string(), ty.to_string()))
-        .collect(),
-    )
-}
-
 /// Find the user-installed and approved provider that declares this factory.
 /// No official or trusted-publisher shortcut is permitted.
 pub(crate) fn declared_connection_fields(
     plugin_id: &str,
     kind: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    if plugin_id == BUILTIN_PLUGIN_ID {
-        return builtin_connection_fields(kind)
-            .ok_or_else(|| crate::i18n::t("内置连接类型不支持").to_string());
-    }
     let plugin = crate::plugins::host::catalog()
         .into_iter()
         .find(|plugin| {

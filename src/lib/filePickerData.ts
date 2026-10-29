@@ -13,7 +13,7 @@ let pending: Promise<PickerSidebarData> | null = null
 /** Locations and connections are stable enough to share between picker
  *  instances; fetching them once avoids the blank sidebar on every open. */
 export function loadPickerSidebarData(): Promise<PickerSidebarData> {
-  if (snapshot && Date.now() - snapshot.loadedAt < 5000) return Promise.resolve(snapshot)
+  if (snapshot && Date.now() - snapshot.loadedAt < 30_000) return Promise.resolve(snapshot)
   if (pending) return pending
   pending = Promise.all([
     call<Location[]>('locations').catch(() => [] as Location[]),

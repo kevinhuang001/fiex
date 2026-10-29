@@ -2,28 +2,27 @@
 use super::*;
 
 pub(super) fn public(conn: &StoredConnection) -> ConnectionInfo {
-    let terminal = terminal_connection(conn);
     let plugin_view = plugin_view_connection(conn);
-    if !terminal && !plugin_view {
+    if !plugin_view {
         let mount = mount_path(conn);
         let _ = fs::create_dir_all(&mount);
     }
     use crate::plugins::provider_registry::FsOperation;
     let operations = crate::plugins::provider_registry::operations(&conn.plugin_id);
-    let can_read = operations.as_ref().is_none_or(|operations| {
-        operations.contains(&FsOperation::List) && operations.contains(&FsOperation::Read)
-    });
-    let can_write = operations
-        .as_ref()
-        .is_some_and(|operations| operations.contains(&FsOperation::Write));
+    let can_read = !plugin_view
+        && operations.as_ref().is_none_or(|operations| {
+            operations.contains(&FsOperation::List) && operations.contains(&FsOperation::Read)
+        });
+    let can_write = !plugin_view
+        && operations
+            .as_ref()
+            .is_some_and(|operations| operations.contains(&FsOperation::Write));
     ConnectionInfo {
         id: conn.id.clone(),
         name: conn.name.clone(),
         kind: conn.kind.clone(),
         plugin_id: connection_plugin_id(conn),
-        mount_path: if terminal {
-            format!("fiex-terminal://{}", conn.id)
-        } else if plugin_view {
+        mount_path: if plugin_view {
             format!("fiex-plugin-view://{}", conn.id)
         } else {
             super::super::config::navigation_path(conn, "").unwrap_or_default()
@@ -36,7 +35,7 @@ pub(super) fn public(conn: &StoredConnection) -> ConnectionInfo {
 }
 
 pub fn list_connections() -> Vec<ConnectionInfo> {
-    load_stored().iter().map(public).collect()
+    load_stored_public().iter().map(public).collect()
 }
 
 fn editable_config(mut connection: StoredConnection) -> ConnectionInput {
@@ -53,7 +52,7 @@ fn editable_config(mut connection: StoredConnection) -> ConnectionInput {
 }
 
 pub fn connection_config(id: &str) -> Result<ConnectionInput, String> {
-    load_stored()
+    load_stored_public()
         .into_iter()
         .find(|connection| connection.id == id)
         .map(editable_config)
@@ -66,7 +65,7 @@ mod edit_tests {
     #[test]
     fn editing_exposes_configuration_but_never_credentials() {
         let connection: StoredConnection = serde_json::from_value(serde_json::json!({
-            "id":"saved-ssh", "mountId":"stable", "name":"SSH", "kind":"org.fiex.ssh", "pluginId":"org.fiex.ssh",
+            "id":"saved-ssh", "mountId":"stable", "name":"SSH", "kind":"org.example.connection", "pluginId":"org.example.connection",
             "settings":{"host":"example.com", "port":2222, "password":"private-value"},
             "secretKeys":["password"], "saved":true, "autostart":true
         })).unwrap();

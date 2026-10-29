@@ -172,6 +172,11 @@ impl Running {
         if result.get("pluginId").and_then(Value::as_str) != Some(self.plugin_id.as_str()) {
             return Err(RpcFailure::fatal("plugin identity mismatch"));
         }
+        if result.get("protocolVersion").and_then(Value::as_str)
+            != Some(plugin_sdk::PROTOCOL_VERSION)
+        {
+            return Err(RpcFailure::fatal("incompatible plugin protocol version"));
+        }
         // The declaration is part of the handshake: Core stores what the
         // provider says it implements and gates `vfs.*` on it.
         crate::plugins::provider_registry::register(&self.plugin_id, &result);

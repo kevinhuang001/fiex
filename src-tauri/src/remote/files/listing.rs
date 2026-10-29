@@ -175,9 +175,16 @@ pub async fn list_listing(
     // async runtime while preserving the per-connection metadata lock.
     let listing_conn = conn.clone();
     let listing_rel = rel.clone();
-    let listed = tokio::task::spawn_blocking(move || list_remote(&listing_conn, &listing_rel))
-        .await
-        .map_err(|error| error.to_string())?;
+    let listed = if tokio::runtime::Handle::try_current().is_ok() {
+        tokio::task::spawn_blocking(move || list_remote(&listing_conn, &listing_rel))
+            .await
+            .map_err(|error| error.to_string())?
+    } else {
+        // Headless integration clients can drive this async API with a plain
+        // executor. They have no Tokio reactor; never panic by spawning onto
+        // a runtime that does not exist.
+        list_remote(&listing_conn, &listing_rel)
+    };
     let files = match listed {
         Ok(files) => {
             remember_listing(&rel, &files, &mut metadata);

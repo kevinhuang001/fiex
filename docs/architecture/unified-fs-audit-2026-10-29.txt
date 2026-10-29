@@ -1,0 +1,45 @@
+FS/VFS review against Agent_Plan(2), 2026-10-29
+
+Scope: Core PR #21, SDK PR #9, official plugins PR #19, actual latest branch heads.
+Protocol: 6.0. Rust SDK: 0.3.0. Browser SDK: 0.1.1.
+
+Current implemented paths and remaining release gates are maintained in
+unified-fs-progress.md. Earlier statements in this file that builtin storage or
+ref-bearing drags were entirely absent have been superseded by source review.
+
+Acceptance evidence (code coverage is not end-to-end acceptance):
+A01: ref-only Checksum/Preview and read-capability matching implemented; CI fixtures.
+A02: plugin read streams/permission gates implemented; WebDAV/SMB and Drive fixtures.
+A03/A04: bounded USB driver IO implemented; real devices and non-Linux broker incomplete.
+A05: recursive staged directory export implemented; OS consumer verification pending.
+A06: Recent private aliases/read-only view policy implemented; all physical sources pending.
+A07: Applications user storage/streams implemented; platform UI checks pending.
+A08: launch-only system application policy implemented; physical OS catalog checks pending.
+A09: dedicated Trash actions and ordinary IO denial implemented; platform restore checks pending.
+A10: Feature source predicates rejected; one capability projection shared by discovery/invoke.
+A11/A12/A13: manifest/scope/node gates implemented; physical revoke and ACL matrix incomplete.
+A14: broker transfer, provider-created node rebinding and size propagation implemented;
+     all source pairs and rollback recovery under disconnection remain incomplete.
+A15: no source deletion after skip/failure/cancel; fresh source-tree check before cleanup;
+     concurrent remote mutation and crash-recovery matrix remain incomplete.
+A16/A17/A18: native/staged-file fallback exists; promise bridges and physical app matrix pending.
+A19/A20: drop routes into TransferEngine; internal drag refs revalidated at drop;
+     writable USB/provider/OS-promise inputs and multiple-process windows need verification.
+A21: USB generation, ejection and stream checks implemented; complete mount/session lifecycle pending.
+A22: Ref-based selection and duplicate-name export isolation implemented; physical mixed apps pending.
+A23: bounded chunks and sparse 10 GiB offsets covered; complete simulated transfer/export pending.
+A24: ref scope, child confinement, source predicate and protected badge checks exist;
+     Applications symlinks and complete malicious-provider matrix need continued review.
+A25: protocol mismatch fails closed; complete discovery/version matrix requires latest CI.
+
+Conclusion: substantial protocol-6 implementation exists and several real correctness
+issues have been fixed. The document is NOT fully implemented or fully accepted.
+Stable merge/release remains conditional on the outstanding implementation and
+platform verification described in unified-fs-progress.md.
+
+Post-audit branch state: desktop creation, rename, trash/permanent removal and
+filename search now call ResourceBroker/FsAdapter instead of source branches;
+VirtualResolver's storage methods were split into virtual_storage and the
+presentation/action VirtualView trait; FsError is now typed at the adapter and
+broker boundary. Mount registration/generation and connection invalidation
+remain open, as recorded in unified-fs-progress.md.

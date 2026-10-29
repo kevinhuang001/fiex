@@ -3,6 +3,8 @@ use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::{json, Value};
 mod contract;
 mod matching;
+pub use matching::metadata as resource_metadata;
+mod directory_scope;
 mod registry;
 mod router;
 mod scope;
@@ -20,6 +22,7 @@ pub fn is_protected_method(method: &str) -> bool {
     event(method).is_some()
         || [
             "host.",
+            "fs.",
             "core.",
             "plugin.",
             "contextMenu.",

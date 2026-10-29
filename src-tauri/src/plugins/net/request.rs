@@ -136,7 +136,7 @@ pub fn http_open(
     let mut file_body = params
         .get("bodyReadHandle")
         .and_then(Value::as_str)
-        .map(|id| crate::plugins::resource::fs_access::http_body(owner, id))
+        .map(|id| crate::core::fs::http_body(owner, id))
         .transpose()?;
     if file_body.is_some() && body.as_ref().is_some_and(|b| !b.is_empty()) {
         return Err("ambiguous HTTP body".into());
@@ -210,13 +210,8 @@ pub fn http_open(
             )
             .headers(headers.clone());
         if let Some(file) = &mut file_body {
-            use std::io::{Seek, SeekFrom};
-            file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-            let size = file.metadata().map_err(|e| e.to_string())?.len();
-            request = request.body(reqwest::blocking::Body::sized(
-                file.try_clone().map_err(|e| e.to_string())?,
-                size,
-            ));
+            let size = file.size();
+            request = request.body(reqwest::blocking::Body::sized(file.restart()?, size));
         } else if let Some(bytes) = &body {
             request = request.body(bytes.clone());
         }

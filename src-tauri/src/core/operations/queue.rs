@@ -27,14 +27,18 @@ impl Operations {
         Ok(path.to_string_lossy().into_owned())
     }
 
+    pub fn record_rename(&self, source: PathBuf, destination: PathBuf) {
+        self.undo
+            .lock()
+            .unwrap()
+            .push(vec![Undo::Rename(destination, source)]);
+    }
+
     pub fn rename(&self, source: &str, name: &str) -> Result<String, String> {
         let Some(dest) = fs_ops::rename_entry(source, name)? else {
             return Ok(source.into());
         };
-        self.undo
-            .lock()
-            .unwrap()
-            .push(vec![Undo::Rename(dest.clone(), source.into())]);
+        self.record_rename(source.into(), dest.clone());
         Ok(dest.to_string_lossy().into_owned())
     }
 

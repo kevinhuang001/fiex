@@ -37,7 +37,7 @@ fn entry(name: String, path: String, is_dir: bool, original: &str, deleted: &str
 }
 
 #[cfg(target_os = "windows")]
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct WindowsRecycleItem {
     index: u64,
     name: String,
@@ -76,7 +76,10 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
         if item.name.trim().is_empty() {
             continue;
         }
-        let encoded = encode(&format!("{}|{}", item.index, item.name));
+        // The index is only a shell-enumeration position, not a stable item
+        // identity. Capture the metadata too and reject a reordered/stale
+        // selection when executing destructive verbs.
+        let encoded = encode(&serde_json::to_string(&item).map_err(|e| e.to_string())?);
         entries.push(entry(
             item.name,
             format!("{URI}{encoded}"),
@@ -90,26 +93,42 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
 
 #[cfg(target_os = "windows")]
 fn verb_script(encoded: &str, verbs: &[&str]) -> Result<(), String> {
-    let id = decode(encoded)?;
-    let (index, _) = id
-        .split_once('|')
-        .ok_or_else(|| crate::i18n::t("回收站项目无效").to_string())?;
-    let index = index
-        .parse::<u64>()
+    let item: WindowsRecycleItem = serde_json::from_str(&decode(encoded)?)
         .map_err(|_| crate::i18n::t("回收站项目无效").to_string())?;
     let names: Vec<String> = verbs.iter().map(|value| ps_quote(value)).collect();
+    let index = item.index;
+    let expected_name = ps_quote(&item.name);
+    let expected_origin = ps_quote(&item.original);
+    let expected_deleted = ps_quote(&item.deleted);
+    let expected_folder = if item.folder { "$true" } else { "$false" };
     let script = format!(
         r#"$ErrorActionPreference='Stop'
 $bin=(New-Object -ComObject Shell.Application).Namespace(10)
 $target=$null
 $index=0
-foreach($item in $bin.Items()){{ if($index -eq {index}){{ $target=$item; break }}; $index++ }}
+foreach($item in $bin.Items()){{
+  if($index -eq {index}){{
+    if($item.Name -cne {expected_name} -or
+       [string]$item.ExtendedProperty('System.Recycle.DeletedFrom') -cne {expected_origin} -or
+       [string]$item.ExtendedProperty('System.Recycle.DateDeleted') -cne {expected_deleted} -or
+       [bool]$item.IsFolder -ne {expected_folder}){{
+      throw 'StaleRef: recycle item changed since enumeration'
+    }}
+    $target=$item
+    break
+  }}
+  $index++
+}}
 if($null -eq $target){{ throw 'recycle item not found' }}
 $names=@({names})
 $verb=$target.Verbs() | Where-Object {{ $name=($_.Name -replace '&',''); ($names | Where-Object {{ $name -match $_ }}) }} | Select-Object -First 1
 if($null -eq $verb){{ throw 'recycle action unavailable' }}
 $verb.DoIt()"#,
-        names = names.join(",")
+        names = names.join(","),
+        expected_name = expected_name,
+        expected_origin = expected_origin,
+        expected_deleted = expected_deleted,
+        expected_folder = expected_folder,
     );
     super::windows_shell::run(&script).map(|_| ())
 }

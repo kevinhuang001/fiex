@@ -22,7 +22,8 @@ use metadata::metadata_section;
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
     use crate::plugins::events::{EventRouter, Handler, Resolver};
-    let metadata = serde_json::to_value(resource.metadata()).unwrap_or_default();
+    let metadata =
+        crate::plugins::events::resource_metadata(std::slice::from_ref(&resource)).remove(0);
     let mut builtin = vec![Resolver::builtin("core.metadata", 1000)];
     if !resource.is_dir
         && (resource.mime.starts_with("audio/") || resource.mime.starts_with("video/"))
@@ -41,7 +42,7 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
                     resource.stat.as_ref(),
                     resource.metadata(),
                 )],
-                "core.media" => media_sections(&resource.materialize()?),
+                "core.media" => media_sections(&resource.export_path()?),
                 _ => return Err("unknown info builtin".into()),
             };
             Ok(serde_json::json!({"sections":sections}))

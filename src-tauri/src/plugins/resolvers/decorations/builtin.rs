@@ -51,25 +51,29 @@ fn connection(entry: &DecorationEntry) -> Vec<NativeBadge> {
     }
     badges
 }
-pub(super) fn resolve(
+pub(super) fn resolve_in(
     id: &str,
+    directory: &str,
     entries: &HashMap<String, DecorationEntry>,
 ) -> Result<Value, String> {
     let mut decorations = Vec::new();
     for entry in entries.values() {
         if id == "builtin:application-icon" {
-            // Only real application entries get the recognized badge; ordinary
-            // files in Recent or a folder never inherit it.
-            let recognized = entry
-                .path
-                .starts_with(crate::core::volumes::applications::URI)
-                || entry.extension.eq_ignore_ascii_case("app");
-            if !recognized || crate::core::volumes::applications::is_user(&entry.path) {
+            let recognized = directory == crate::core::volumes::applications::URI
+                && entry.mime == "application/x-fiex-application"
+                && !crate::core::volumes::applications::is_user(&entry.path);
+            if directory != crate::core::volumes::applications::URI
+                && !crate::core::volumes::applications::is_user(&entry.path)
+            {
                 continue;
             }
             let mut decoration = Decoration {
                 path: entry.path.clone(),
-                native_badges: vec![badge("已识别", "blue", None, None)],
+                native_badges: if recognized {
+                    vec![badge("系统", "blue", None, None)]
+                } else {
+                    vec![]
+                },
                 ..Default::default()
             };
             decoration.icon_path = application_icon(entry);
@@ -125,17 +129,15 @@ pub(super) fn resolve(
 fn application_icon(entry: &DecorationEntry) -> Option<String> {
     use crate::core::volumes::applications;
     if applications::is_user(&entry.path) {
-        return None;
+        let path = applications::stored_path(&entry.path).ok()?;
+        return applications::cached_icon(&path.to_string_lossy());
     }
-    let source = if entry.path.starts_with(applications::URI) {
+    let source = if entry.mime == "application/x-fiex-application" {
         entry.link_target.as_deref()?
     } else if entry.extension.eq_ignore_ascii_case("app") {
         entry.path.as_str()
     } else {
         return None;
     };
-    if source.starts_with("aumid:") {
-        return None;
-    }
     applications::cached_icon(source)
 }

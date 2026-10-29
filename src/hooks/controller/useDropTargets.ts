@@ -25,7 +25,7 @@ export function useDropTargets({
     if (!native) return
     let active = true
     let dispose: (() => void) | undefined
-    type DropPlan = { paths: string[]; moving: boolean }
+    type DropPlan = { paths: string[]; moving: boolean; references: unknown[] }
     let origin: { key: string; pending: Promise<DropPlan | null> } | null = null
     const key = (paths: string[]) => [...paths].sort().join('\0')
     void getCurrentWebviewWindow()
@@ -53,8 +53,12 @@ export function useDropTargets({
           const captured = origin?.key === key(paths) ? origin.pending : null
           origin = null
           void (async () => {
-            const current = await call<DropPlan | null>('internal_drop', { paths, consume: true })
-            const drop = (await captured) || current || { paths, moving: false }
+            const current = await call<DropPlan | null>('internal_drop', {
+              paths,
+              consume: true,
+              captured: await captured,
+            })
+            const drop = current || { paths, moving: false }
             const scale = await getCurrentWindow().scaleFactor()
             const element = document.elementFromPoint(position.x / scale, position.y / scale)
             if (element?.closest('[data-bookmark-drop]')) {

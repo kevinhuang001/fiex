@@ -10,6 +10,7 @@ pub(super) struct Context {
     pub entries: Vec<crate::core::files::Entry>,
     pub read_only: bool,
     pub in_trash: bool,
+    virtual_provider: Option<&'static dyn crate::core::volumes::virtual_resolvers::VirtualView>,
     all_local: bool,
     capabilities: FileCapabilities,
 }
@@ -17,7 +18,11 @@ pub(super) struct Context {
 impl Context {
     pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
         fn entry(path: &str) -> Result<crate::core::files::Entry, String> {
-            if crate::remote::is_remote(path) {
+            if crate::core::volumes::virtual_resolvers::opaque(path) {
+                crate::core::volumes::virtual_resolvers::resource_entry(path)
+            } else if let Some(route) = crate::usbfs::route(path) {
+                crate::usbfs::entry(&route)
+            } else if crate::remote::is_remote(path) {
                 crate::remote::stat(path)
             } else if crate::plugins::mounts::handles(path) {
                 crate::plugins::vfs::stat(path)
@@ -29,9 +34,29 @@ impl Context {
             .iter()
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
-        // `recent://` is a Core-owned view, not a directory on disk.
-        let read_only = if directory == "recent://" {
-            true
+        let provider = crate::core::volumes::virtual_resolvers::view_for(directory);
+        // Recent is a projection of original resources. Its container cannot
+        // create files, but selected files retain their own permissions.
+        let virtual_provider = provider.filter(|p| {
+            p.id() != "core:recent"
+                && !(p.id() == "core:applications"
+                    && (paths.is_empty()
+                        || paths
+                            .iter()
+                            .all(|p| crate::core::volumes::applications::is_user(p))))
+        });
+        if let Some(owner) = virtual_provider {
+            if owner.id() == "core:trash"
+                && paths.iter().any(|path| {
+                    crate::core::volumes::virtual_resolvers::view_for(path)
+                        .is_none_or(|p| p.id() != owner.id())
+                })
+            {
+                return Err("selection outside VFS".into());
+            }
+        }
+        let read_only = if let Some(provider) = provider {
+            provider.readonly()
         } else {
             entry(directory)?.readonly
         };
@@ -42,15 +67,19 @@ impl Context {
         } else {
             crate::plugins::resource::file_capabilities::for_selection(paths, &entries)
         };
-        if read_only {
+        if read_only || (directory == "recent://" && paths.is_empty()) {
             capabilities = capabilities.intersect(
                 crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
             );
         }
-        let all_local = !crate::plugins::mounts::handles(directory)
-            && paths
-                .iter()
-                .all(|path| !crate::plugins::mounts::handles(path));
+        let all_local = crate::usbfs::route(directory).is_none()
+            && !crate::core::volumes::virtual_resolvers::opaque(directory)
+            && !crate::plugins::mounts::handles(directory)
+            && paths.iter().all(|path| {
+                !crate::plugins::mounts::handles(path)
+                    && crate::usbfs::route(path).is_none()
+                    && !crate::core::volumes::virtual_resolvers::opaque(path)
+            });
         let in_trash = !crate::plugins::mounts::handles(directory)
             && crate::core::volumes::trash_path()
                 .is_some_and(|trash| std::path::Path::new(directory).starts_with(trash));
@@ -60,6 +89,7 @@ impl Context {
             entries,
             read_only,
             in_trash,
+            virtual_provider,
             all_local,
             capabilities,
         })
@@ -109,16 +139,21 @@ impl Context {
         in_trash: bool,
         capabilities: FileCapabilities,
     ) -> Self {
-        let all_local = !crate::plugins::mounts::handles(directory)
-            && paths
-                .iter()
-                .all(|path| !crate::plugins::mounts::handles(path));
+        let all_local = crate::usbfs::route(directory).is_none()
+            && !crate::core::volumes::virtual_resolvers::opaque(directory)
+            && !crate::plugins::mounts::handles(directory)
+            && paths.iter().all(|path| {
+                !crate::plugins::mounts::handles(path)
+                    && crate::usbfs::route(path).is_none()
+                    && !crate::core::volumes::virtual_resolvers::opaque(path)
+            });
         Self {
             directory: directory.into(),
             paths,
             entries,
             read_only,
             in_trash,
+            virtual_provider: None,
             all_local,
             capabilities,
         }
@@ -127,6 +162,9 @@ impl Context {
 
 /// Only groups this selection can actually use become menu providers.
 pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
+    if ctx.virtual_provider.is_some() {
+        return vec![Resolver::builtin("builtin:vfs-menu", 100)];
+    }
     ctx.resolvers()
         .into_iter()
         .map(|resolver| Resolver::builtin(resolver.id(), resolver.priority()))
@@ -134,6 +172,12 @@ pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
 }
 
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
+    if id == "builtin:vfs-menu" {
+        let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
+        return Ok(crate::core::volumes::virtual_resolvers::menu_json(
+            provider, &ctx.paths,
+        ));
+    }
     let resolver = ctx
         .resolvers()
         .into_iter()
@@ -151,6 +195,13 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
             .any(|item| item["id"] == item_id && item["disabled"] != true)
     }) {
         return Err("menu action is no longer available".into());
+    }
+    if id == "builtin:vfs-menu" {
+        let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
+        let action = provider.execute(item_id, &ctx.paths)?;
+        return Ok(
+            json!({"kind":"coreAction", "command":action.command, "paths":action.paths, "directory":ctx.directory}),
+        );
     }
     let paths = if matches!(item_id, "remote.keepLocal" | "remote.keepRemote") {
         ctx.entries

@@ -10,8 +10,8 @@ import { LoaderCircle, RotateCw } from 'lucide-react'
 import { call, native } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
 
-import { terminalEvents, type SshEvent, type SessionStatus } from '../ssh/sessionEvents'
-import { attachDemoShell } from '../ssh/terminalDemoShell'
+import { terminalEvents, type TerminalEvent, type SessionStatus } from './sessionEvents'
+import { attachDemoShell } from './terminalDemoShell'
 
 function withAlpha(color: string, alpha: number) {
   const value = color.trim()
@@ -79,9 +79,8 @@ function terminalFontFamily(terminalFont?: string) {
     .join(', ')
 }
 
-/** Built-in SSH terminal; uses the system OpenSSH client through a real PTY. */
+/** Local shell terminal. Remote connections render their own plugin views. */
 export function TerminalView({
-  connectionId,
   cwd,
   shell,
   name,
@@ -89,7 +88,6 @@ export function TerminalView({
   terminalFontSize,
   terminalColor,
 }: {
-  connectionId?: string
   cwd?: string
   shell?: string
   name: string
@@ -146,10 +144,10 @@ export function TerminalView({
     }
     window.addEventListener('fiex:theme-changed', applyTheme)
 
-    let channel: Channel<SshEvent> | null = null
+    let channel: Channel<TerminalEvent> | null = null
     terminal.onData((data) => {
       if (sessionId)
-        void call('ssh_write', {
+        void call('terminal_write', {
           sessionId,
           data: Array.from(new TextEncoder().encode(data)),
         }).catch((cause) => {
@@ -165,7 +163,7 @@ export function TerminalView({
       if (element.clientWidth < 2 || element.clientHeight < 2) return
       fit.fit()
       if (sessionId)
-        void call('ssh_resize', { sessionId, cols: terminal.cols, rows: terminal.rows }).catch(
+        void call('terminal_resize', { sessionId, cols: terminal.cols, rows: terminal.rows }).catch(
           () => {},
         )
     }
@@ -205,38 +203,30 @@ export function TerminalView({
         terminal.dispose()
       }
     }
-    channel = new Channel<SshEvent>()
+    channel = new Channel<TerminalEvent>()
     const events = terminalEvents(
       (data) => terminal.write(data),
       setStatus,
-      (message) => setError(message || t('SSH 会话失败')),
+      (message) => setError(message || t('终端会话表不可用')),
     )
     channel.onmessage = (event) => {
       if (!disposed) events.receive(event)
     }
-    const opening = connectionId
-      ? call<string>('ssh_open', {
-          connectionId,
-          cols: terminal.cols,
-          rows: terminal.rows,
-          onEvent: channel,
-        })
-      : call<string>('local_terminal_open', {
-          cwd: cwd || null,
-          shell: shell || null,
-          cols: terminal.cols,
-          rows: terminal.rows,
-          onEvent: channel,
-        })
+    const opening = call<string>('local_terminal_open', {
+      cwd: cwd || null,
+      shell: shell || null,
+      cols: terminal.cols,
+      rows: terminal.rows,
+      onEvent: channel,
+    })
     opening
       .then((id) => {
         if (disposed) {
-          void call('ssh_close', { sessionId: id })
+          void call('terminal_close', { sessionId: id })
           return
         }
         sessionId = id
-        // The ID only acknowledges startup. SSH becomes ready after the
-        // server accepts authentication and starts its shell.
+        // The local shell has started after the PTY is created.
         resize()
       })
       .catch((cause) => {
@@ -248,12 +238,12 @@ export function TerminalView({
       disposed = true
       observer.disconnect()
       window.removeEventListener('fiex:theme-changed', applyTheme)
-      if (sessionId) void call('ssh_close', { sessionId }).catch(() => {})
+      if (sessionId) void call('terminal_close', { sessionId }).catch(() => {})
       terminalRef.current = null
       resizeRef.current = null
       terminal.dispose()
     }
-  }, [connectionId, cwd, shell, attempt])
+  }, [cwd, shell, attempt])
 
   useEffect(() => {
     const terminal = terminalRef.current
@@ -266,10 +256,10 @@ export function TerminalView({
   }, [terminalFont, terminalFontSize, terminalColor])
 
   return (
-    <div className="ssh-terminal-view" data-connection={connectionId}>
-      <div className="ssh-terminal-host" ref={host} />
+    <div className="local-terminal-view">
+      <div className="local-terminal-host" ref={host} />
       {(status === 'connecting' || status === 'closed' || status === 'error') && (
-        <div className="ssh-terminal-status">
+        <div className="local-terminal-status">
           {status === 'connecting' ? (
             <>
               <LoaderCircle size={14} className="spin" />

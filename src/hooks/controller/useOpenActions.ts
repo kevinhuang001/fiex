@@ -44,6 +44,13 @@ export function useOpenActions({
   trashPath: string | null
 }) {
   const open = (e: Entry, pane = x) => {
+    if (
+      pane.path.startsWith('recyclebin://') ||
+      (trashPath && (pane.path === trashPath || pane.path.startsWith(trashPath + '/')))
+    ) {
+      pane.setError(t('回收站项目请使用“放回原处”或“彻底删除”'))
+      return
+    }
     if (e.isDir && e.extension !== 'app') {
       setPreview(null)
       pane.navigate(e.path)

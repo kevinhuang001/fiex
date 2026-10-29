@@ -94,26 +94,6 @@ pub(crate) fn vfs_retain_views(
     crate::plugins::mounts::retain(window.label(), &paths, &durable)
 }
 
-#[tauri::command]
-pub(crate) async fn materialize_file(path: String) -> Result<String, String> {
-    if crate::remote::is_remote(&path) {
-        if crate::remote::stat(&path)?.is_dir {
-            crate::remote::download_dir(&path, &crate::remote::TransferOptions::default()).await?;
-            return crate::remote::cached_path(&path);
-        }
-        return crate::remote::ensure_downloaded(&path, &crate::remote::TransferOptions::default())
-            .await;
-    }
-    if crate::plugins::vfs::handles(&path) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            crate::plugins::vfs::materialize(&path)
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-    crate::plugins::mounts::reject_local(&path)?;
-    Ok(path)
-}
 /// Only the owner of an existing view may recover its already authorized
 /// resource context. Other plugins see the URI, never the backing local root.
 #[tauri::command]

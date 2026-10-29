@@ -65,18 +65,16 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             Value::Object(object) => {
                 if let Some(priority) = object.get("priority") {
                     if !priority.is_i64() && !priority.is_u64() {
-                        return Err("extensions.connectionContextMenus.priority must be an integer".into());
+                        return Err(
+                            "extensions.connectionContextMenus.priority must be an integer".into(),
+                        );
                     }
                 }
                 if object.keys().any(|key| key != "priority") {
                     return Err("extensions.connectionContextMenus accepts only priority".into());
                 }
             }
-            _ => {
-                return Err(
-                    "extensions.connectionContextMenus must be true or {priority}".into(),
-                )
-            }
+            _ => return Err("extensions.connectionContextMenus must be true or {priority}".into()),
         }
     }
     if let Some(decorations) = value.get("decorations") {

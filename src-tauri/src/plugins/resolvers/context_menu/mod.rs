@@ -97,20 +97,10 @@ pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
     let resources = Arc::new(
         ctx.entries
             .iter()
-            .map(|entry| {
-                let mut snapshot = ResourceSnapshot::from_metadata(
-                    &entry.path,
-                    ResourceSnapshot::entry_metadata(entry),
-                );
-                snapshot.read_only = entry.readonly;
-                snapshot
-            })
+            .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
             .collect::<Vec<_>>(),
     );
-    let metadata = resources
-        .iter()
-        .map(|resource| serde_json::to_value(resource.metadata()).unwrap_or_default())
-        .collect::<Vec<_>>();
+    let metadata = crate::plugins::events::resource_metadata(&resources);
     let providers = EventRouter::providers(
         "contextMenu.resolve",
         &metadata,

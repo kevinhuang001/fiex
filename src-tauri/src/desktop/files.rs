@@ -10,7 +10,6 @@ use crate::{
     core::terminals,
     core::transfers::Resolution,
     core::volumes,
-    remote,
 };
 use notify::Watcher;
 use serde::{Deserialize, Serialize};

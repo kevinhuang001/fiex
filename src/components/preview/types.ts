@@ -5,9 +5,11 @@ export interface ResolvedPreview {
   view: {
     kind: 'html' | 'text' | 'image' | 'media' | 'pdf' | 'fallback'
     html?: string
+    entry?: string
     text?: string
     truncated?: boolean
     path?: string
+    maxPages?: number
     name?: string
     mime?: string
     media?: 'video' | 'audio'

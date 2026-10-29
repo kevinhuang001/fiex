@@ -12,6 +12,7 @@ pub mod recycle;
 mod roots;
 mod trash;
 pub mod virtual_resolvers;
+pub mod virtual_storage;
 #[cfg(target_os = "windows")]
 mod windows_shell;
 

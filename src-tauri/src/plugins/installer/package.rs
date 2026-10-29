@@ -78,11 +78,30 @@ pub(super) fn read_manifest(root: &Path) -> Result<(Vec<u8>, plugin_host::Plugin
     }
     let manifest: plugin_host::PluginManifest =
         serde_json::from_slice(&manifest_bytes).map_err(|e| format!("manifest invalid: {e}"))?;
-    if manifest.schema_version != 2
-        || (!crate::plugins::themes::is_theme(&manifest)
-            && manifest.runtime.protocol_version != crate::plugin_sdk::PROTOCOL_VERSION)
-    {
-        return Err("unsupported manifest or protocol version".into());
+    if manifest.schema_version != 2 {
+        return Err(format!(
+            "unsupported plugin manifest schema {}; this Core requires schema 2",
+            manifest.schema_version
+        ));
+    }
+    if !crate::plugins::themes::is_theme(&manifest) {
+        let declared = manifest.runtime.protocol_version.trim();
+        // Accept "6" as the same series as "6.0"; reject older major series
+        // explicitly rather than reporting a generic parse failure.
+        let same_series = declared.trim_end_matches(".0")
+            == crate::plugin_sdk::PROTOCOL_VERSION.trim_end_matches(".0");
+        if declared.is_empty() || !same_series {
+            let declared = if declared.is_empty() {
+                "missing"
+            } else {
+                declared
+            };
+            return Err(format!(
+                "plugin protocol {declared} is incompatible with Core {}; install a plugin built for protocol {}",
+                crate::plugin_sdk::PROTOCOL_VERSION,
+                crate::plugin_sdk::PROTOCOL_VERSION
+            ));
+        }
     }
     if !plugin_host::valid_id(&manifest.id) {
         return Err("invalid plugin id".into());
@@ -93,9 +112,48 @@ pub(super) fn read_manifest(root: &Path) -> Result<(Vec<u8>, plugin_host::Plugin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
     #[test]
     fn zip_slip_is_not_accepted() {
         assert!(!normal_relative(Path::new("../outside")));
         assert!(!normal_relative(Path::new("/etc/passwd")));
+    }
+
+    fn manifest(protocol: &str) -> serde_json::Value {
+        json!({
+            "schemaVersion": 2,
+            "id": "org.example.test",
+            "name": "Test",
+            "version": "1.0.0",
+            "runtime": {"protocolVersion": protocol}
+        })
+    }
+
+    #[test]
+    fn import_reports_the_declared_protocol_instead_of_a_generic_error() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("manifest.json"),
+            serde_json::to_vec(&manifest("5.0")).unwrap(),
+        )
+        .unwrap();
+        let error = read_manifest(dir.path()).unwrap_err();
+        assert!(error.contains("5.0"), "{error}");
+        assert!(
+            error.contains(crate::plugin_sdk::PROTOCOL_VERSION),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn import_accepts_the_same_protocol_series() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("manifest.json"),
+            serde_json::to_vec(&manifest("6")).unwrap(),
+        )
+        .unwrap();
+        assert!(read_manifest(dir.path()).is_ok());
     }
 }
