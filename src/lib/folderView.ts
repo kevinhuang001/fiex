@@ -22,8 +22,13 @@ function read(): Record<string, FolderViewState> {
 }
 export function loadFolderView(path: string): FolderViewState | null {
   const value = read()[path]
-  if (!value || !views.includes(value.view) || !sorts.includes(value.sort)
-      || !groups.includes(value.group)) return null
+  if (
+    !value ||
+    !views.includes(value.view) ||
+    !sorts.includes(value.sort) ||
+    !groups.includes(value.group)
+  )
+    return null
   return {
     view: value.view,
     sort: value.sort,
