@@ -4,6 +4,8 @@
  * trailing columns keep explicit pixel widths so dragging a divider moves just
  * that divider. Widths are persisted with the other preferences. */
 export interface ListColumns {
+  /** User's minimum width; grows to fill a wide pane. */
+  name?: number
   modified: number
   size: number
   kind: number
@@ -11,8 +13,8 @@ export interface ListColumns {
 
 export type ListColumnKey = keyof ListColumns
 
-export const LIST_COLUMNS_DEFAULT: ListColumns = { modified: 155, size: 75, kind: 108 }
-export const LIST_COLUMNS_MIN: ListColumns = { modified: 110, size: 60, kind: 70 }
+export const LIST_COLUMNS_DEFAULT: ListColumns = { name: 260, modified: 155, size: 75, kind: 108 }
+export const LIST_COLUMNS_MIN: ListColumns = { name: 140, modified: 110, size: 60, kind: 70 }
 /** No column may swallow the whole window by accident. */
 export const LIST_COLUMNS_MAX = 640
 /** The flexible name column never shrinks below this. */
@@ -30,16 +32,16 @@ export function normalizeListColumns(value: unknown): ListColumns {
   const read = (key: ListColumnKey) => {
     const raw = source[key]
     return typeof raw === 'number' && Number.isFinite(raw)
-      ? clamp(raw, LIST_COLUMNS_MIN[key])
+      ? clamp(raw, LIST_COLUMNS_MIN[key] ?? LIST_NAME_MIN)
       : LIST_COLUMNS_DEFAULT[key]
   }
-  return { modified: read('modified'), size: read('size'), kind: read('kind') }
+  return { name: read('name'), modified: read('modified'), size: read('size'), kind: read('kind') }
 }
 
 /** CSS grid template shared by the header and every row: the name column takes
  * the rest, the trailing columns use their stored widths. */
 export function listGridTemplate(columns: ListColumns): string {
-  return `minmax(${LIST_NAME_MIN}px, 1fr) ${columns.modified}px ${columns.size}px ${columns.kind}px`
+  return `minmax(${columns.name ?? LIST_COLUMNS_DEFAULT.name}px, 1fr) ${columns.modified}px ${columns.size}px ${columns.kind}px`
 }
 
 /** Applies one divider drag. `dx` is the pointer movement in pixels and the
@@ -53,19 +55,23 @@ export function resizeListColumn(
   dx: number,
 ): ListColumns {
   const next = { ...columns }
+  if (column === 'name') {
+    next.name = clamp((columns.name ?? LIST_COLUMNS_DEFAULT.name ?? LIST_NAME_MIN) + dx, LIST_NAME_MIN)
+    return next
+  }
   const neighbour: ListColumnKey | null =
     column === 'size' ? 'modified' : column === 'kind' ? 'size' : null
-  const wanted = Math.round(columns[column] - dx)
+  const wanted = Math.round((columns[column] ?? LIST_COLUMNS_MIN[column] ?? LIST_NAME_MIN) - dx)
   if (!neighbour) {
     // The name column is flexible, so its divider only moves this column.
-    next[column] = clamp(wanted, LIST_COLUMNS_MIN[column])
+    next[column] = clamp(wanted, LIST_COLUMNS_MIN[column] ?? LIST_NAME_MIN)
     return next
   }
   // The pair keeps its combined width: one column only grows by what the other
   // gives up, so the divider stays under the pointer.
-  const total = columns[column] + columns[neighbour]
-  const max = Math.min(LIST_COLUMNS_MAX, total - LIST_COLUMNS_MIN[neighbour])
-  next[column] = Math.max(LIST_COLUMNS_MIN[column], Math.min(wanted, max))
+  const total = (columns[column] ?? 0) + (columns[neighbour] ?? 0)
+  const max = Math.min(LIST_COLUMNS_MAX, total - (LIST_COLUMNS_MIN[neighbour] ?? LIST_NAME_MIN))
+  next[column] = Math.max(LIST_COLUMNS_MIN[column] ?? LIST_NAME_MIN, Math.min(wanted, max))
   next[neighbour] = total - next[column]
   return next
 }
