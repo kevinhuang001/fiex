@@ -84,19 +84,24 @@ export function usePicker(request: FilePickerRequest) {
       loadState<string>('picker.lastDirectory', 'fiex.picker.directory'),
       loadState<ReturnType<typeof storedSort>>('picker.sort', 'fiex.picker.sort'),
       loadState<GroupKey>('picker.group', 'fiex.picker.group'),
-    ]).then(([last, savedSort, savedGroup]) => {
-      if (!active) return
-      if (!request.directory && last && !rememberedDirectory.current && !directory) {
-        setDirectory(last)
-        setHistory([last])
-        setIndex(0)
-      }
-      if (savedSort) setSort(savedSort)
-      if (savedGroup) setGroup(savedGroup)
-    }).catch(() => {}).finally(() => {
-      if (active) setPickerHydrated(true)
-    })
-    return () => { active = false }
+    ])
+      .then(([last, savedSort, savedGroup]) => {
+        if (!active) return
+        if (!request.directory && last && !rememberedDirectory.current && !directory) {
+          setDirectory(last)
+          setHistory([last])
+          setIndex(0)
+        }
+        if (savedSort) setSort(savedSort)
+        if (savedGroup) setGroup(savedGroup)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setPickerHydrated(true)
+      })
+    return () => {
+      active = false
+    }
   }, [])
 
   const navigate = (path: string) => {
