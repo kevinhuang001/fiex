@@ -67,7 +67,8 @@ export function ListView({
     document.body.classList.remove('col-resizing')
     if (
       draft &&
-      (draft.modified !== columns.modified ||
+      (draft.name !== columns.name ||
+        draft.modified !== columns.modified ||
         draft.size !== columns.size ||
         draft.kind !== columns.kind)
     )
