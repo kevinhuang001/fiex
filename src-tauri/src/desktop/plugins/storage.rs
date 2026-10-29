@@ -56,6 +56,33 @@ pub(crate) fn plugin_error_clear(plugin_id: String) {
 }
 
 #[tauri::command]
+pub(crate) fn plugin_logs(plugin_id: String, level: Option<String>, limit: Option<usize>)
+    -> Vec<crate::infrastructure::logging::LogRecord> {
+    crate::infrastructure::logging::list(Some(&plugin_id), level.as_deref(), limit.unwrap_or(300))
+}
+#[tauri::command]
+pub(crate) fn core_logs(level: Option<String>, limit: Option<usize>)
+    -> Vec<crate::infrastructure::logging::LogRecord> {
+    crate::infrastructure::logging::list(None, level.as_deref(), limit.unwrap_or(300))
+}
+#[tauri::command]
+pub(crate) fn plugin_logs_clear(plugin_id: String) {
+    crate::infrastructure::logging::clear(Some(&plugin_id));
+}
+#[tauri::command]
+pub(crate) fn state_get(key: String) -> Option<serde_json::Value> {
+    crate::infrastructure::state::get(&key)
+}
+#[tauri::command]
+pub(crate) fn state_set(key: String, value: serde_json::Value) -> Result<(), String> {
+    crate::infrastructure::state::set(&key, value)
+}
+#[tauri::command]
+pub(crate) fn error_poll() -> Vec<crate::infrastructure::errors::AppError> {
+    crate::infrastructure::errors::drain()
+}
+
+#[tauri::command]
 pub(crate) fn plugin_storage_get(
     plugin_id: String,
     scope: String,
