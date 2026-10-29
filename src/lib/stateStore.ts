@@ -4,7 +4,11 @@ import { call, native } from './api'
  * synchronous first-paint snapshot; callers never address localStorage. */
 const prefix = 'fiex:state:'
 function readJson<T>(raw: string | null): T | null {
-  try { return raw === null ? null : JSON.parse(raw) as T } catch { return null }
+  try {
+    return raw === null ? null : (JSON.parse(raw) as T)
+  } catch {
+    return null
+  }
 }
 export function stateSnapshot<T>(key: string, legacyKey?: string): T | null {
   const cached = readJson<T>(localStorage.getItem(prefix + key))
