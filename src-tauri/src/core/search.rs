@@ -26,6 +26,20 @@ pub struct SearchState {
     generations: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
 }
 
+/// A single search invocation. Cancelling or superseding the scope advances
+/// the generation and invalidates every cloned ticket.
+#[derive(Clone)]
+pub struct SearchTicket {
+    generation: Arc<AtomicU64>,
+    ticket: u64,
+}
+
+impl SearchTicket {
+    pub fn cancelled(&self) -> bool {
+        self.generation.load(Ordering::Relaxed) != self.ticket
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchBatch {
@@ -48,6 +62,12 @@ impl SearchState {
 
     pub fn cancel(&self, scope: &str) {
         self.generation(scope).fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn begin(&self, scope: &str) -> SearchTicket {
+        let generation = self.generation(scope);
+        let ticket = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        SearchTicket { generation, ticket }
     }
 
     pub fn run_global(
@@ -168,6 +188,21 @@ fn search_root(
     ticket: u64,
     limit: usize,
 ) -> (Vec<Entry>, bool, usize) {
+    search_directory(root, query, hidden, ignores, limit, &|| {
+        generation.load(Ordering::Relaxed) != ticket
+    })
+}
+
+/// Adapter-neutral filename search. The caller owns cancellation and receives
+/// bounded results plus the number of unreadable/ignored entries.
+pub(crate) fn search_directory(
+    root: &Path,
+    query: &str,
+    hidden: bool,
+    ignores: &[String],
+    limit: usize,
+    cancelled: &dyn Fn() -> bool,
+) -> (Vec<Entry>, bool, usize) {
     if limit == 0 || !root.is_dir() {
         return (Vec::new(), false, 0);
     }
@@ -204,7 +239,7 @@ fn search_root(
     let mut skipped = 0usize;
     let mut truncated = false;
     for item in walker {
-        if generation.load(Ordering::Relaxed) != ticket {
+        if cancelled() {
             return (Vec::new(), false, 0);
         }
         match item {

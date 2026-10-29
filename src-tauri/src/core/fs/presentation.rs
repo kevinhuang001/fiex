@@ -43,14 +43,14 @@ pub(super) fn listing<A: FsAdapter + ?Sized>(
     })
 }
 impl ResourceBroker {
-    pub fn desktop_entry(&self) -> Result<Entry, String> {
+    pub fn desktop_entry(&self) -> Result<Entry, FsError> {
         self.scope.authorize_method("fs.stat")?;
         self.require(FsOperation::Stat, false)?;
         let mut entry = self.adapter()?.desktop_entry()?;
         entry.path = self.path.clone();
         Ok(entry)
     }
-    pub fn desktop_listing(&self, hidden: bool, ignores: &[String]) -> Result<Listing, String> {
+    pub fn desktop_listing(&self, hidden: bool, ignores: &[String]) -> Result<Listing, FsError> {
         self.scope.authorize_method("fs.list")?;
         self.require(FsOperation::List, false)?;
         self.adapter()?.desktop_listing(&self.path, hidden, ignores)

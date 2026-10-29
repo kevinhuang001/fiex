@@ -50,11 +50,11 @@ impl<'a> PluginFsAdapter<'a> {
     }
 }
 impl FsAdapter for PluginFsAdapter<'_> {
-    fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
+    fn desktop_entry(&self) -> Result<crate::core::files::Entry, FsError> {
         if crate::remote::is_remote(&self.resource.path) {
-            crate::remote::stat(&self.resource.path)
+            crate::remote::stat(&self.resource.path).map_err(FsError::from)
         } else {
-            crate::plugins::vfs::stat(&self.resource.path)
+            crate::plugins::vfs::stat(&self.resource.path).map_err(FsError::from)
         }
     }
     fn desktop_listing(
@@ -62,19 +62,19 @@ impl FsAdapter for PluginFsAdapter<'_> {
         path: &str,
         hidden: bool,
         ignores: &[String],
-    ) -> Result<crate::core::files::Listing, String> {
+    ) -> Result<crate::core::files::Listing, FsError> {
         if crate::remote::is_remote(path) {
             futures::executor::block_on(crate::remote::list_listing(path, hidden, ignores))?
                 .ok_or_else(|| "MountNotFound: connection removed".into())
         } else {
-            crate::plugins::vfs::list(path, hidden, ignores)
+            crate::plugins::vfs::list(path, hidden, ignores).map_err(FsError::from)
         }
     }
-    fn stat(&self) -> Result<Value, String> {
+    fn stat(&self) -> Result<Value, FsError> {
         let (mount, node) = self.node()?;
         Ok(self.project(mount.stat(&node)?, &self.resource.path))
     }
-    fn list(&self) -> Result<Value, String> {
+    fn list(&self) -> Result<Value, FsError> {
         let (mount, node) = self.node()?;
         let uri = crate::plugins::mounts::parse(&self.resource.path)?;
         let mut out = Vec::new();
@@ -94,7 +94,56 @@ impl FsAdapter for PluginFsAdapter<'_> {
         }
         Ok(json!(out))
     }
-    fn require(&self, op: FsOperation, create: bool) -> Result<(), String> {
+    fn search(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
+        if !crate::remote::is_remote(&self.resource.path) {
+            let (entries, truncated) =
+                crate::plugins::vfs::search(&self.resource.path, query, hidden, ignores, limit)?;
+            return Ok((entries, truncated, 0));
+        }
+        let mut pending = vec![self.resource.path.clone()];
+        let mut entries = Vec::new();
+        let mut visited = 0usize;
+        while let Some(path) = pending.pop() {
+            if cancelled() || visited >= 1000 || entries.len() >= limit {
+                break;
+            }
+            visited += 1;
+            let Some(listing) =
+                futures::executor::block_on(crate::remote::list_listing(&path, hidden, ignores))?
+            else {
+                break;
+            };
+            for entry in listing.entries {
+                if cancelled() || entries.len() >= limit {
+                    break;
+                }
+                if entry.is_dir {
+                    pending.push(entry.path.clone());
+                }
+                if entry.name.to_lowercase().contains(&query.to_lowercase()) {
+                    entries.push(entry);
+                }
+            }
+        }
+        let truncated = !pending.is_empty() || visited >= 1000 || entries.len() >= limit;
+        Ok((entries, truncated, 0))
+    }
+    fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
+        // Connection search is a Core-side bounded walk over `vfs.list`; it
+        // must not require a provider `vfs.search` capability that older
+        // connection providers do not advertise.
+        let op = if op == FsOperation::Search && crate::remote::is_remote(&self.resource.path) {
+            FsOperation::List
+        } else {
+            op
+        };
         let (mount, node) = if create {
             let (mount, parent, _) = self.parent()?;
             (mount, parent)
@@ -102,17 +151,30 @@ impl FsAdapter for PluginFsAdapter<'_> {
             self.node()?
         };
         if !mount.supports(op) {
-            return Err(format!("Unsupported: {}", op.as_str()));
+            return Err(FsError::new(
+                FsErrorKind::Unsupported,
+                format!("Unsupported: {}", op.as_str()),
+            ));
         }
         let entry = mount.stat(&node)?;
-        if !entry.allows(op) {
-            return Err(format!("Unsupported: node does not permit {}", op.as_str()));
+        // Creating a child file needs the parent's child-create capability,
+        // not the directory's own file-content Write capability.
+        let required = if create && op == FsOperation::Write {
+            FsOperation::Mkdir
+        } else {
+            op
+        };
+        if !entry.allows(required) {
+            return Err(FsError::new(
+                FsErrorKind::Unsupported,
+                format!("Unsupported: node does not permit {}", required.as_str()),
+            ));
         }
         // readonly is presentation metadata. The owning provider enforces real
         // server ACLs through Discovery and again when executing the operation.
         Ok(())
     }
-    fn open_read(&self) -> Result<Box<dyn ReadHandle>, String> {
+    fn open_read(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         let (mount, node) = self.node()?;
         let stream = mount.open_read(&node)?;
         let size = stream
@@ -127,14 +189,14 @@ impl FsAdapter for PluginFsAdapter<'_> {
             offset: 0,
         }))
     }
-    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, String> {
+    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError> {
         Ok(Box::new(DeferredWrite::new(self.resource, create)?))
     }
     fn begin_write_sized(
         &self,
         create: bool,
         size: Option<u64>,
-    ) -> Result<Box<dyn WriteHandle>, String> {
+    ) -> Result<Box<dyn WriteHandle>, FsError> {
         let stream = if create {
             let (mount, parent, name) = self.parent()?;
             mount.begin_write(WriteRequest {
@@ -157,20 +219,31 @@ impl FsAdapter for PluginFsAdapter<'_> {
         };
         Ok(Box::new(PluginWrite::new(self.resource, stream)))
     }
-    fn mkdir(&self) -> Result<Value, String> {
+    fn mkdir(&self) -> Result<Value, FsError> {
         let (mount, parent, name) = self.parent()?;
         let entry = mount.mkdir(&parent, &name)?;
         self.remember(&entry)?;
         self.stat()
     }
-    fn remove(&self) -> Result<(), String> {
+    fn remove(&self) -> Result<(), FsError> {
+        #[cfg(feature = "desktop")]
+        if crate::remote::is_remote(&self.resource.path) {
+            return futures::executor::block_on(crate::remote::remove(&self.resource.path))
+                .map_err(FsError::from);
+        }
         let (mount, node) = self.node()?;
-        mount.remove(&node)
+        mount.remove(&node).map_err(FsError::from)
     }
-    fn rename(&self, destination: &ResourceBroker) -> Result<(), String> {
-        let (mount, node) = self.node()?;
+    fn rename(&self, destination: &ResourceBroker) -> Result<(), FsError> {
         let target = PluginFsAdapter::new(destination)?;
-        let (_, parent, name) = target.parent()?;
+        let (_, _, name) = target.parent()?;
+        #[cfg(feature = "desktop")]
+        if crate::remote::is_remote(&self.resource.path) {
+            futures::executor::block_on(crate::remote::rename(&self.resource.path, &name))?;
+            return Ok(());
+        }
+        let (mount, node) = self.node()?;
+        let (_, parent, _) = target.parent()?;
         mount.rename(&node, &name, Some(&parent))?;
         Ok(())
     }

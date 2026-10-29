@@ -36,8 +36,8 @@ fn is_missing(error: &str) -> bool {
 fn optional_stat(resource: &ResourceBroker) -> Result<Option<serde_json::Value>, String> {
     match resource.stat() {
         Ok(stat) => Ok(Some(stat)),
-        Err(error) if is_missing(&error) => Ok(None),
-        Err(error) => Err(error),
+        Err(error) if is_missing(&error.to_string()) => Ok(None),
+        Err(error) => Err(error.to_string()),
     }
 }
 

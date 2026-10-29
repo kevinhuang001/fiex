@@ -8,26 +8,26 @@ impl FsAdapter for LocalFsAdapter<'_> {
     fn native_export_path(&self) -> Option<std::path::PathBuf> {
         Some(std::path::PathBuf::from(&self.0.path))
     }
-    fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
+    fn desktop_entry(&self) -> Result<crate::core::files::Entry, FsError> {
         self.0.scope.authorize(&self.0.path)?;
-        crate::core::files::entry(std::path::Path::new(&self.0.path))
+        crate::core::files::entry(std::path::Path::new(&self.0.path)).map_err(FsError::from)
     }
     fn desktop_listing(
         &self,
         path: &str,
         hidden: bool,
         ignores: &[String],
-    ) -> Result<crate::core::files::Listing, String> {
+    ) -> Result<crate::core::files::Listing, FsError> {
         self.0.scope.authorize(path)?;
-        crate::core::files::list(path, hidden, ignores)
+        crate::core::files::list(path, hidden, ignores).map_err(FsError::from)
     }
-    fn stat(&self) -> Result<Value, String> {
-        fs_access::stat(&self.0.scope, &self.0.path)
+    fn stat(&self) -> Result<Value, FsError> {
+        fs_access::stat(&self.0.scope, &self.0.path).map_err(FsError::from)
     }
-    fn list(&self) -> Result<Value, String> {
-        fs_access::list(&self.0.scope, &self.0.path)
+    fn list(&self) -> Result<Value, FsError> {
+        fs_access::list(&self.0.scope, &self.0.path).map_err(FsError::from)
     }
-    fn require(&self, op: FsOperation, create: bool) -> Result<(), String> {
+    fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         self.0.scope.authorize(&self.0.path)?;
         // Creation targets may not exist. Validate their scoped parent instead.
         if create || op == FsOperation::Mkdir {
@@ -39,7 +39,7 @@ impl FsAdapter for LocalFsAdapter<'_> {
         self.stat()?;
         Ok(()) // File READONLY is a display attribute, not rename/delete permission.
     }
-    fn open_read(&self) -> Result<Box<dyn ReadHandle>, String> {
+    fn open_read(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         let v = fs_access::open_read(&self.0.owner, &self.0.scope, &self.0.path)?;
         Ok(Box::new(LocalRead {
             owner: self.0.owner.clone(),
@@ -47,7 +47,7 @@ impl FsAdapter for LocalFsAdapter<'_> {
             size: v["size"].as_u64().ok_or("missing size")?,
         }))
     }
-    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, String> {
+    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError> {
         let handle = fs_access::begin_write(&self.0.owner, &self.0.scope, &self.0.path, create)?;
         Ok(Box::new(LocalWrite {
             owner: self.0.owner.clone(),
@@ -55,14 +55,41 @@ impl FsAdapter for LocalFsAdapter<'_> {
             finished: false,
         }))
     }
-    fn mkdir(&self) -> Result<Value, String> {
-        fs_access::mkdir(&self.0.scope, &self.0.path)
+    fn mkdir(&self) -> Result<Value, FsError> {
+        fs_access::mkdir(&self.0.scope, &self.0.path).map_err(FsError::from)
     }
-    fn remove(&self) -> Result<(), String> {
-        fs_access::remove(&self.0.scope, &self.0.path)
+    fn search(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
+        if !self.0.is_dir()? {
+            return Err("Unsupported: search requires a directory".into());
+        }
+        Ok(crate::core::search::search_directory(
+            std::path::Path::new(&self.0.path),
+            query,
+            hidden,
+            ignores,
+            limit,
+            cancelled,
+        ))
     }
-    fn rename(&self, destination: &ResourceBroker) -> Result<(), String> {
-        fs_access::rename(&self.0.scope, &self.0.path, &destination.path)
+    fn remove(&self) -> Result<(), FsError> {
+        fs_access::remove(&self.0.scope, &self.0.path).map_err(FsError::from)
+    }
+    fn move_to_trash(&self) -> Result<(), FsError> {
+        let mut result = crate::core::operations::recycle(std::slice::from_ref(&self.0.path))?;
+        if let Some(error) = result.errors.pop() {
+            return Err(error.into());
+        }
+        Ok(())
+    }
+    fn rename(&self, destination: &ResourceBroker) -> Result<(), FsError> {
+        fs_access::rename(&self.0.scope, &self.0.path, &destination.path).map_err(FsError::from)
     }
 }
 struct LocalRead {

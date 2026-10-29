@@ -120,8 +120,10 @@ fn trash_view_denies_regular_storage_mutations() {
     if let Some(path) = crate::core::volumes::trash_path() {
         if path.is_dir() {
             let view = super::binding::trusted(&path.to_string_lossy(), "core:test-trash").unwrap();
-            assert!(view.require(FsOperation::Write, false).is_err());
-            assert!(view.require(FsOperation::Remove, false).is_err());
+            let write = view.require(FsOperation::Write, false).unwrap_err();
+            assert_eq!(write.kind, FsErrorKind::PermissionDenied);
+            let remove = view.require(FsOperation::Remove, false).unwrap_err();
+            assert_eq!(remove.kind, FsErrorKind::PermissionDenied);
         }
     }
 }

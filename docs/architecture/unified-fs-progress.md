@@ -8,8 +8,19 @@ report, not a declaration that all A01–A25 scenarios have passed.
 
 - Core ResourceBroker captures scoped opaque refs and routes local, plugin,
   USB and builtin storage through FsAdapter. Desktop listing, file information,
-  preview prefixes, transfers and external export use the broker. Feature calls
-  use `fs.*`; storage-provider calls use `vfs.*`; protocol 6 rejects old peers.
+  preview prefixes, creation, rename, trash/permanent removal, filename search,
+  transfers and external export use the broker. Feature calls use `fs.*`;
+  storage-provider calls use `vfs.*`; protocol 6 rejects old peers.
+- The old VirtualResolver storage surface is split: `virtual_storage` owns
+  Recent/Applications/Trash list/stat reads, `FsAdapter` owns their mutations,
+  and `VirtualView` contributes only menus, icons, defaults and dedicated
+  launch/restore/delete actions. Desktop commands no longer dispatch on
+  local/remote/USB/plugin/builtin source branches.
+- Core filesystem failures are `FsError { kind, message }` at the adapter and
+  broker boundary (Unsupported/PermissionDenied/ScopeDenied/NotFound/Offline/
+  Conflict/StaleRef/Cancelled/MountNotFound/InvalidVfsUri), with a compatibility
+  conversion for remaining string-based helpers. Adapter methods and command
+  guards use the typed contract rather than prefix parsing.
 - All Feature discovery paths now use one semantic/capability projection.
   requiredOps is evaluated during discovery and again before invocation. Info,
   Preview, menus, decorations and search do not receive empty capability sets by
@@ -43,12 +54,15 @@ report, not a declaration that all A01–A25 scenarios have passed.
 
 ## Remaining architectural work / release gate
 
-1. Desktop create/rename/delete/search and the old VirtualResolver storage/action
-   interface still have parallel source dispatch. FsAdapter is not yet the only
-   operation implementation. Old local/USB transfer helpers retain callers.
-2. FsError is still represented by strings. Explicit uniform mount registration,
-   provider-node replacement generations, connection reconfiguration invalidation
-   and fully independent capability snapshots need completion.
+1. A few legacy helpers still have non-desktop callers: the installer/undo copy
+   engine, remote download/cache synchronization and USB image tooling. They do
+   not provide a second user-facing transfer route, but they should now build on
+   the same adapter contracts where practical.
+2. Explicit uniform mount registration, provider-node replacement generations,
+   connection reconfiguration invalidation and fully independent capability
+   snapshots still need completion. Typed `FsError` now exists at the adapter
+   and broker boundary; some lower-level helpers still construct legacy strings
+   that are parsed once at that boundary.
 3. Unknown-length spool quotas are implemented, but the transfer API still reports
    item progress; export preparation has no complete user cancellation/progress
    protocol. Rollback retention is not a full crash-replay transaction journal.

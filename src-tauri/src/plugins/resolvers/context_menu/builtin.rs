@@ -10,7 +10,7 @@ pub(super) struct Context {
     pub entries: Vec<crate::core::files::Entry>,
     pub read_only: bool,
     pub in_trash: bool,
-    virtual_provider: Option<&'static dyn crate::core::volumes::virtual_resolvers::VirtualResolver>,
+    virtual_provider: Option<&'static dyn crate::core::volumes::virtual_resolvers::VirtualView>,
     all_local: bool,
     capabilities: FileCapabilities,
 }
@@ -34,7 +34,7 @@ impl Context {
             .iter()
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
-        let provider = crate::core::volumes::virtual_resolvers::resolver_for(directory);
+        let provider = crate::core::volumes::virtual_resolvers::view_for(directory);
         // Recent is a projection of original resources. Its container cannot
         // create files, but selected files retain their own permissions.
         let virtual_provider = provider.filter(|p| {
@@ -48,7 +48,7 @@ impl Context {
         if let Some(owner) = virtual_provider {
             if owner.id() == "core:trash"
                 && paths.iter().any(|path| {
-                    crate::core::volumes::virtual_resolvers::resolver_for(path)
+                    crate::core::volumes::virtual_resolvers::view_for(path)
                         .is_none_or(|p| p.id() != owner.id())
                 })
             {

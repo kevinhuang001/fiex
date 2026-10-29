@@ -119,7 +119,7 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
 }
 
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::resolver_for(path)
+    if crate::core::volumes::virtual_resolvers::view_for(path)
         .is_some_and(|p| p.id() == "core:trash")
     {
         // Trash supports metadata and root enumeration, not generic
@@ -133,7 +133,7 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
         };
     }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
-        let declared = crate::core::volumes::virtual_resolvers::resolver_for(path)
+        let declared = crate::core::volumes::virtual_resolvers::view_for(path)
             .map(|provider| {
                 provider
                     .operations(path)
@@ -186,7 +186,7 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
 /// Capabilities of a single path. Local paths are unrestricted; a mount is the
 /// provider's declared operations narrowed by the node's entry.
 pub fn for_path(path: &str) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::resolver_for(path)
+    if crate::core::volumes::virtual_resolvers::view_for(path)
         .is_some_and(|p| p.id() == "core:trash")
     {
         // Trash supports metadata and root enumeration, not generic

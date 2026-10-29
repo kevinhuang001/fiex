@@ -137,12 +137,12 @@ pub(crate) async fn open_path(
     path: String,
     recent: tauri::State<'_, recent::Recent>,
 ) -> Result<(), String> {
-    if let Some(provider) = crate::core::volumes::virtual_resolvers::resolver_for(&path) {
+    if let Some(provider) = crate::core::volumes::virtual_resolvers::view_for(&path) {
         if path.starts_with(crate::core::volumes::applications::URI) {
-            return provider.open(&path);
+            return provider.launch(&path);
         }
         if crate::core::volumes::recycle::is_virtual(&path) {
-            return provider.open(&path);
+            return provider.launch(&path);
         }
     }
     recent::record(&recent, &path);

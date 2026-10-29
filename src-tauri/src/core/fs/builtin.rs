@@ -2,7 +2,7 @@
 use super::*;
 use crate::core::{
     recent,
-    volumes::{applications, virtual_resolvers},
+    volumes::{applications, virtual_resolvers, virtual_storage},
 };
 use serde_json::{json, to_value};
 use std::{
@@ -22,7 +22,7 @@ impl BuiltinFsAdapter<'_> {
         }
         applications::candidate_path(self.path())
     }
-    fn application_capability(&self, op: FsOperation, create: bool) -> Result<(), String> {
+    fn application_capability(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         let path = self.application_file()?;
         let exists = path.exists();
         let directory = path.is_dir();
@@ -48,7 +48,10 @@ impl BuiltinFsAdapter<'_> {
         if allowed {
             Ok(())
         } else {
-            Err(format!("Unsupported: {}", op.as_str()))
+            Err(FsError::new(
+                FsErrorKind::Unsupported,
+                format!("Unsupported: {}", op.as_str()),
+            ))
         }
     }
 }
@@ -58,40 +61,29 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         path: &str,
         hidden: bool,
         ignores: &[String],
-    ) -> Result<crate::core::files::Listing, String> {
+    ) -> Result<crate::core::files::Listing, FsError> {
         let mut listing = super::presentation::listing(self, path, hidden, ignores)?;
-        if let Some(resolver) = virtual_resolvers::resolver_for(path) {
+        if let Some(resolver) = virtual_resolvers::view_for(path) {
             listing.read_only = resolver.readonly();
             listing.default_view = resolver.default_view().map(str::to_owned);
         }
         Ok(listing)
     }
-    fn stat(&self) -> Result<Value, String> {
+    fn stat(&self) -> Result<Value, FsError> {
         if applications::is_user(self.path()) && !self.application_file()?.exists() {
             return Err("NotFound: application item absent".into());
         }
-        to_value(virtual_resolvers::resource_entry(self.path())?).map_err(|e| e.to_string())
+        to_value(virtual_storage::entry(self.path())?).map_err(|e| FsError::internal(e.to_string()))
     }
-    fn list(&self) -> Result<Value, String> {
-        let items = if self.path() == virtual_resolvers::RECENT_URI {
-            recent::entries(&recent::Recent::default())
-        } else {
-            let resolver = virtual_resolvers::resolver_for(self.path())
-                .ok_or("NotFound: builtin view missing")?;
-            resolver.list(
-                self.path(),
-                &virtual_resolvers::VirtualContext { recent: &[] },
-            )?
-        };
-        to_value(items).map_err(|e| e.to_string())
+    fn list(&self) -> Result<Value, FsError> {
+        to_value(virtual_storage::list(self.path())?).map_err(|e| FsError::internal(e.to_string()))
     }
-    fn require(&self, op: FsOperation, create: bool) -> Result<(), String> {
+    fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         if self.path() == applications::URI {
             return if matches!(
                 op,
                 FsOperation::Stat | FsOperation::List | FsOperation::Mkdir
-            ) && !create
-            {
+            ) {
                 Ok(())
             } else {
                 Err("Unsupported: applications root has no file stream".into())
@@ -100,7 +92,7 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         if applications::is_user(self.path()) {
             return self.application_capability(op, create);
         }
-        if virtual_resolvers::resolver_for(self.path())
+        if virtual_resolvers::view_for(self.path())
             .is_some_and(|resolver| resolver.id() == "core:applications")
         {
             return if op == FsOperation::Stat {
@@ -109,7 +101,7 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
                 Err("Unsupported: system application is launch-only".into())
             };
         }
-        if virtual_resolvers::resolver_for(self.path())
+        if virtual_resolvers::view_for(self.path())
             .is_some_and(|resolver| resolver.id() == "core:trash")
         {
             return if op == FsOperation::Stat
@@ -139,9 +131,12 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
             }
             return Err("PermissionDenied: Recent is a read-only view".into());
         }
-        Err(format!("Unsupported: {}", op.as_str()))
+        Err(FsError::new(
+            FsErrorKind::Unsupported,
+            format!("Unsupported: {}", op.as_str()),
+        ))
     }
-    fn open_read(&self) -> Result<Box<dyn ReadHandle>, String> {
+    fn open_read(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         self.require(FsOperation::Read, false)?;
         if self.path().starts_with(virtual_resolvers::RECENT_URI) {
             let source = recent::source_for(self.path())?;
@@ -149,31 +144,35 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
             original.require(FsOperation::Read, false)?;
             return original.adapter()?.open_read();
         }
-        let file = fs::File::open(self.application_file()?).map_err(|e| e.to_string())?;
-        let size = file.metadata().map_err(|e| e.to_string())?.len();
+        let file = fs::File::open(self.application_file()?)
+            .map_err(|e| FsError::internal(e.to_string()))?;
+        let size = file
+            .metadata()
+            .map_err(|e| FsError::internal(e.to_string()))?
+            .len();
         Ok(Box::new(AppRead { file, size }))
     }
-    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, String> {
+    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError> {
         self.require(FsOperation::Write, create)?;
         let path = self.application_file()?;
         let temporary = tempfile::NamedTempFile::new_in(path.parent().ok_or("missing parent")?)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| FsError::internal(e.to_string()))?;
         Ok(Box::new(AppWrite {
             temporary: Some(temporary),
             target: path,
             create,
         }))
     }
-    fn mkdir(&self) -> Result<Value, String> {
+    fn mkdir(&self) -> Result<Value, FsError> {
         self.require(FsOperation::Mkdir, true)?;
-        fs::create_dir(self.application_file()?).map_err(|e| e.to_string())?;
+        fs::create_dir(self.application_file()?).map_err(|e| FsError::internal(e.to_string()))?;
         self.stat()
     }
-    fn remove(&self) -> Result<(), String> {
+    fn remove(&self) -> Result<(), FsError> {
         self.require(FsOperation::Remove, false)?;
-        applications::remove_user(self.path())
+        applications::remove_user(self.path()).map_err(FsError::from)
     }
-    fn rename(&self, destination: &ResourceBroker) -> Result<(), String> {
+    fn rename(&self, destination: &ResourceBroker) -> Result<(), FsError> {
         self.require(FsOperation::Rename, false)?;
         if !applications::is_user(&destination.path) {
             return Err("ScopeDenied: cannot rename into another view".into());
@@ -186,7 +185,7 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         if to.exists() {
             return Err("Conflict: application destination exists".into());
         }
-        fs::rename(from, to).map_err(|e| e.to_string())
+        fs::rename(from, to).map_err(|e| FsError::internal(e.to_string()))
     }
 }
 struct AppRead {

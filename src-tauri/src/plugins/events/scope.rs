@@ -129,7 +129,7 @@ pub fn resource_scope(
         .filter(|r| {
             !crate::plugins::mounts::handles(&r.display)
                 && crate::usbfs::route(&r.display).is_none()
-                && crate::core::volumes::virtual_resolvers::resolver_for(&r.display).is_none()
+                && crate::core::volumes::virtual_resolvers::view_for(&r.display).is_none()
         })
         .map(|r| crate::plugins::resource::fs_access::canonical_selection(&r.local))
         .collect::<Result<Vec<_>, _>>()?;
@@ -155,7 +155,7 @@ pub fn resource_scope(
             crate::core::volumes::virtual_resolvers::opaque(location)
                 || crate::plugins::mounts::handles(location)
         }) { "vfs" } else { "fs" },
-        "providerId": directory.and_then(|d| crate::core::volumes::virtual_resolvers::resolver_for(d).map(|p| p.id().to_owned())
+        "providerId": directory.and_then(|d| crate::core::volumes::virtual_resolvers::view_for(d).map(|p| p.id().to_owned())
             .or_else(|| crate::plugins::resolvers::fs::mount_plugin_id(d).ok())),
         "selectionCount": resources.len(),
     });
@@ -200,7 +200,7 @@ pub fn resource_scope(
     for (resource, target) in resources.iter().zip(params["targets"].as_array().unwrap()) {
         let local = if !crate::plugins::mounts::handles(&resource.display)
             && crate::usbfs::route(&resource.display).is_none()
-            && crate::core::volumes::virtual_resolvers::resolver_for(&resource.display).is_none()
+            && crate::core::volumes::virtual_resolvers::view_for(&resource.display).is_none()
         {
             Some(crate::plugins::resource::fs_access::canonical_selection(
                 &resource.local,
@@ -212,8 +212,7 @@ pub fn resource_scope(
         if (content || directory_event)
             && (crate::plugins::mounts::handles(&resource.display)
                 || crate::usbfs::route(&resource.display).is_some()
-                || crate::core::volumes::virtual_resolvers::resolver_for(&resource.display)
-                    .is_some())
+                || crate::core::volumes::virtual_resolvers::view_for(&resource.display).is_some())
         {
             scope.bind_remote(target, resource)?;
         }
@@ -243,7 +242,7 @@ pub fn resource_scope(
         scope.restrict_to_readonly();
     }
     if directory
-        .and_then(crate::core::volumes::virtual_resolvers::resolver_for)
+        .and_then(crate::core::volumes::virtual_resolvers::view_for)
         .is_some_and(|p| p.id() == "core:trash")
     {
         scope.restrict_to_metadata();

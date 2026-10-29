@@ -50,7 +50,8 @@ fn usb_replacement_revokes_existing_broker_before_driver_access() {
     std::fs::rename(&image, dir.path().join("detached.img")).unwrap();
     std::fs::write(&image, b"second device").unwrap();
     let error = broker.require(FsOperation::Read, false).unwrap_err();
-    assert!(error.starts_with("StaleRef:"), "{error}");
+    assert_eq!(error.kind, FsErrorKind::StaleRef, "{error}");
+    assert!(error.to_string().starts_with("StaleRef:"), "{error}");
     assert_ne!(
         snapshot.reference,
         ResourceSnapshot::from_metadata(&root, Default::default()).reference
@@ -214,4 +215,68 @@ fn selected_local_path_cannot_be_relabelled_with_a_forged_reference() {
         }]
     )
     .is_err());
+}
+
+#[test]
+fn desktop_create_rename_and_delete_use_the_owning_adapter() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_string_lossy().into_owned();
+    let folder = super::binding::create(&root, "folder", true, "core:test-create").unwrap();
+    assert!(std::path::Path::new(&folder).is_dir());
+    let file = super::binding::create(&folder, "note.txt", false, "core:test-create").unwrap();
+    assert_eq!(std::fs::read(&file).unwrap(), b"");
+    let renamed = super::binding::rename_path(&file, "renamed.txt", "core:test-rename").unwrap();
+    assert!(!std::path::Path::new(&file).exists());
+    assert!(std::path::Path::new(&renamed).is_file());
+    super::binding::remove_path(&renamed, "core:test-delete").unwrap();
+    assert!(!std::path::Path::new(&renamed).exists());
+}
+
+#[test]
+fn applications_root_creation_uses_the_same_broker_contract() {
+    use crate::core::volumes::applications;
+    let name = format!(
+        "fiex-broker-{}.txt",
+        crate::plugins::mounts::new_id().unwrap()
+    );
+    let item =
+        super::binding::create(applications::URI, &name, false, "core:test-app-create").unwrap();
+    assert!(applications::is_user(&item));
+    let renamed =
+        super::binding::rename_path(&item, &format!("{name}.moved"), "core:test-app-rename")
+            .unwrap();
+    assert!(applications::is_user(&renamed));
+    super::binding::remove_path(&renamed, "core:test-app-delete").unwrap();
+    assert!(applications::stored_entry(&renamed).is_err());
+}
+
+#[test]
+fn desktop_search_runs_through_the_same_adapter_and_honors_cancellation() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("nested")).unwrap();
+    std::fs::write(dir.path().join("nested").join("needle.txt"), b"x").unwrap();
+    let root = super::binding::trusted(&dir.path().to_string_lossy(), "core:test-search").unwrap();
+    let (entries, truncated, skipped) = root.search("needle", false, &[], 50, &|| false).unwrap();
+    assert!(!truncated);
+    assert_eq!(skipped, 0);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "needle.txt");
+    let (entries, _, _) = root.search("needle", false, &[], 50, &|| true).unwrap();
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn builtin_view_storage_and_presentation_are_separate() {
+    use crate::core::volumes::{applications, virtual_resolvers, virtual_storage};
+    let root = virtual_storage::entry(applications::URI).unwrap();
+    assert!(root.is_dir);
+    assert_eq!(root.name, "core:applications");
+    assert!(root.allowed_ops.iter().any(|op| op == "mkdir"));
+    assert_eq!(
+        virtual_resolvers::view_for(applications::URI)
+            .map(|view| view.id())
+            .unwrap(),
+        "core:applications"
+    );
+    assert!(virtual_storage::list(virtual_resolvers::RECENT_URI).is_ok());
 }

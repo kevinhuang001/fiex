@@ -94,8 +94,8 @@ impl UndoLog {
             } else {
                 match step.target.remove() {
                     Ok(()) => Ok(()),
-                    Err(error) if is_missing(&error) => Ok(()),
-                    Err(error) => Err(error),
+                    Err(error) if is_missing(&error.to_string()) => Ok(()),
+                    Err(error) => Err(error.to_string()),
                 }
             };
             if let Err(error) = result {

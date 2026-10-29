@@ -99,7 +99,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
     match ctx.method {
         "fs.stat" => Ok(refs::metadata(&resource.stat()?)),
         "fs.list" => refs::listing(&scope, reference, resource.list()?),
-        "fs.openRead" => resource.open_read(),
+        "fs.openRead" => resource.open_read().map_err(String::from),
         "fs.readChunk" => {
             let opened = resource.open_read()?;
             let mut params = ctx.params.clone();
@@ -114,7 +114,7 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             let _ = fs::stream_call(&owner, "fs.closeRead", &params);
             result
         }
-        "fs.beginWrite" => resource.begin_write(create),
+        "fs.beginWrite" => resource.begin_write(create).map_err(String::from),
         "fs.mkdir" => {
             resource.mkdir()?;
             Ok(Value::Null)

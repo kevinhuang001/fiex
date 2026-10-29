@@ -94,7 +94,7 @@ impl ResourceSnapshot {
                         crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into())
                     );
                 }
-                crate::core::volumes::virtual_resolvers::resolver_for(display)
+                crate::core::volumes::virtual_resolvers::view_for(display)
                     .map(|provider| provider.id().to_owned())
                     .unwrap_or_else(|| "local".into())
             });

@@ -36,3 +36,10 @@ Conclusion: substantial protocol-6 implementation exists and several real correc
 issues have been fixed. The document is NOT fully implemented or fully accepted.
 Stable merge/release remains conditional on the outstanding implementation and
 platform verification described in unified-fs-progress.md.
+
+Post-audit branch state: desktop creation, rename, trash/permanent removal and
+filename search now call ResourceBroker/FsAdapter instead of source branches;
+VirtualResolver's storage methods were split into virtual_storage and the
+presentation/action VirtualView trait; FsError is now typed at the adapter and
+broker boundary. Mount registration/generation and connection invalidation
+remain open, as recorded in unified-fs-progress.md.

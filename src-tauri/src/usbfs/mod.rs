@@ -89,8 +89,9 @@ mod tests {
         assert_eq!(read_path(&file_route).unwrap(), b"virtual usb");
         let entries = listing(&root_route).unwrap();
         assert!(entries.iter().any(|entry| entry.path == file_path));
-        assert!(search(&root_route, "notes", 10)
+        assert!(search(&root_route, "notes", 10, &|| false)
             .unwrap()
+            .0
             .iter()
             .any(|entry| entry.name == "notes.txt"));
         let local = temp.path().join("local");

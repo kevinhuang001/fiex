@@ -192,10 +192,8 @@ impl Scope {
                     .filter(|snapshot| {
                         crate::plugins::mounts::handles(&snapshot.display)
                             || crate::usbfs::route(&snapshot.display).is_some()
-                            || crate::core::volumes::virtual_resolvers::resolver_for(
-                                &snapshot.display,
-                            )
-                            .is_some()
+                            || crate::core::volumes::virtual_resolvers::view_for(&snapshot.display)
+                                .is_some()
                     })
                     .cloned()
             }));

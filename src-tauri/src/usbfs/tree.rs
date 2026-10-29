@@ -102,16 +102,20 @@ pub fn search(
     route: &Route,
     query: &str,
     limit: usize,
-) -> Result<Vec<crate::core::files::Entry>, String> {
+    cancelled: &dyn Fn() -> bool,
+) -> Result<(Vec<crate::core::files::Entry>, bool), String> {
     let needle = query.to_lowercase();
     let mut out = Vec::new();
     let mut pending = vec![route.clone()];
     while let Some(directory) = pending.pop() {
+        if cancelled() {
+            return Ok((Vec::new(), false));
+        }
         for entry in listing(&directory)? {
             if entry.name.to_lowercase().contains(&needle) {
                 out.push(entry.clone());
                 if out.len() >= limit {
-                    return Ok(out);
+                    return Ok((out, true));
                 }
             }
             if entry.is_dir {
@@ -122,7 +126,7 @@ pub fn search(
             }
         }
     }
-    Ok(out)
+    Ok((out, false))
 }
 
 fn local_unique(path: &Path) -> PathBuf {

@@ -7,15 +7,6 @@ pub(crate) async fn recycle(
     on_progress: Channel<OperationProgress>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<OperationResult, String> {
-    for path in &paths {
-        if !crate::plugins::vfs::handles(path) {
-            crate::plugins::mounts::reject_local(path)?;
-        }
-        crate::plugins::resource::file_capabilities::require(
-            path,
-            crate::plugins::provider_registry::FsOperation::Remove,
-        )?;
-    }
     let cancel = cancel.inner().clone();
     let emit = progress_emitter(on_progress);
     let total = paths.len() as u64;
@@ -38,29 +29,9 @@ pub(crate) async fn recycle(
                 .file_name()
                 .and_then(|name| name.to_str());
             emit(index as u64 + 1, total, step);
-            if remote::is_remote(&path) {
-                match futures::executor::block_on(remote::remove(&path)) {
-                    Ok(()) => result.paths.push(path),
-                    Err(error) => result.errors.push(format!("{path}: {error}")),
-                }
-            } else if let Some(route) = crate::usbfs::route(&path) {
-                match crate::usbfs::remove(&route) {
-                    Ok(()) => result.paths.push(path),
-                    Err(error) => result.errors.push(format!("{path}: {error}")),
-                }
-            } else if crate::plugins::vfs::handles(&path) {
-                match crate::plugins::vfs::remove(&path) {
-                    Ok(()) => result.paths.push(path),
-                    Err(error) => result.errors.push(format!("{path}: {error}")),
-                }
-            } else {
-                match operations::recycle(std::slice::from_ref(&path)) {
-                    Ok(mut single) => {
-                        result.paths.append(&mut single.paths);
-                        result.errors.append(&mut single.errors);
-                    }
-                    Err(error) => result.errors.push(format!("{path}: {error}")),
-                }
+            match crate::core::fs::move_to_trash(&path, "core:trash") {
+                Ok(()) => result.paths.push(path),
+                Err(error) => result.errors.push(format!("{path}: {error}")),
             }
         }
         if total > 0 {
@@ -137,31 +108,21 @@ pub(crate) async fn delete_permanently(
     paths: Vec<String>,
     cancel: tauri::State<'_, OperationCancel>,
 ) -> Result<usize, String> {
-    for path in &paths {
-        if !crate::plugins::vfs::handles(path) {
-            crate::plugins::mounts::reject_local(path)?;
-        }
-        crate::plugins::resource::file_capabilities::require(
-            path,
-            crate::plugins::provider_registry::FsOperation::Remove,
-        )?;
-    }
     let flag = cancel.flag();
     tauri::async_runtime::spawn_blocking(move || {
         let mut removed = 0;
-        let mut local = Vec::new();
+        let mut trash = Vec::new();
         for path in paths {
-            if remote::is_remote(&path) {
-                futures::executor::block_on(remote::remove(&path))?;
-                removed += 1;
-            } else if crate::plugins::vfs::handles(&path) {
-                crate::plugins::vfs::remove(&path)?;
-                removed += 1;
-            } else {
-                local.push(path);
+            if crate::core::volumes::virtual_resolvers::view_for(&path)
+                .is_some_and(|view| view.id() == "core:trash")
+            {
+                trash.push(path);
+                continue;
             }
+            crate::core::fs::remove_path(&path, "core:delete")?;
+            removed += 1;
         }
-        removed += volumes::delete_permanently(&local, &flag)?;
+        removed += volumes::delete_permanently(&trash, &flag)?;
         Ok(removed)
     })
     .await

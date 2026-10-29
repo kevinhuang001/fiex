@@ -11,13 +11,26 @@ impl UsbFsAdapter {
     }
 }
 impl FsAdapter for UsbFsAdapter {
-    fn stat(&self) -> Result<Value, String> {
-        serde_json::to_value(usbfs::entry(&self.route)?).map_err(|e| e.to_string())
+    fn stat(&self) -> Result<Value, FsError> {
+        serde_json::to_value(usbfs::entry(&self.route)?)
+            .map_err(|e| FsError::internal(e.to_string()))
     }
-    fn list(&self) -> Result<Value, String> {
-        serde_json::to_value(usbfs::listing(&self.route)?).map_err(|e| e.to_string())
+    fn list(&self) -> Result<Value, FsError> {
+        serde_json::to_value(usbfs::listing(&self.route)?)
+            .map_err(|e| FsError::internal(e.to_string()))
     }
-    fn require(&self, op: FsOperation, _create: bool) -> Result<(), String> {
+    fn search(
+        &self,
+        query: &str,
+        _hidden: bool,
+        _ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
+        let (entries, truncated) = usbfs::search(&self.route, query, limit, cancelled)?;
+        Ok((entries, truncated, 0))
+    }
+    fn require(&self, op: FsOperation, _create: bool) -> Result<(), FsError> {
         usbfs::ensure_access(&self.route)?;
         if !_create {
             let entry = usbfs::entry(&self.route)?;
@@ -56,7 +69,7 @@ impl FsAdapter for UsbFsAdapter {
         }
         Ok(())
     }
-    fn open_read(&self) -> Result<Box<dyn ReadHandle>, String> {
+    fn open_read(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         let entry = usbfs::entry(&self.route)?;
         if entry.is_dir {
             return Err("expected a file".into());
@@ -70,7 +83,7 @@ impl FsAdapter for UsbFsAdapter {
             _device: device,
         }))
     }
-    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, String> {
+    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError> {
         self.require(FsOperation::Write, create)?;
         let staged = tempfile::tempfile().map_err(|e| e.to_string())?;
         Ok(Box::new(UsbWrite {
@@ -80,7 +93,7 @@ impl FsAdapter for UsbFsAdapter {
             generation: usbfs::generation(&self.route)?,
         }))
     }
-    fn mkdir(&self) -> Result<Value, String> {
+    fn mkdir(&self) -> Result<Value, FsError> {
         self.require(FsOperation::Mkdir, true)?;
         let (parent, name) = self
             .route
@@ -100,11 +113,11 @@ impl FsAdapter for UsbFsAdapter {
         )?;
         self.stat()
     }
-    fn remove(&self) -> Result<(), String> {
+    fn remove(&self) -> Result<(), FsError> {
         self.require(FsOperation::Remove, false)?;
-        remove_tree(&self.route, 0)
+        remove_tree(&self.route, 0).map_err(FsError::from)
     }
-    fn rename(&self, destination: &ResourceBroker) -> Result<(), String> {
+    fn rename(&self, destination: &ResourceBroker) -> Result<(), FsError> {
         self.require(FsOperation::Rename, false)?;
         let other = usbfs::route(&destination.path).ok_or("invalid USB destination")?;
         let (parent, name) = other.rel.rsplit_once('/').unwrap_or(("", &other.rel));
@@ -120,7 +133,7 @@ impl FsAdapter for UsbFsAdapter {
         if usbfs::entry(&other).is_ok() {
             return Err("destination already exists".into());
         }
-        usbfs::rename(&self.route, name)
+        usbfs::rename(&self.route, name).map_err(FsError::from)
     }
 }
 fn remove_tree(route: &Route, depth: usize) -> Result<(), String> {

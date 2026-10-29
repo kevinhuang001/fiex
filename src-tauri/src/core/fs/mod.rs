@@ -2,10 +2,14 @@
 //! operation scope; adapters never receive plugin-supplied filesystem paths.
 mod binding;
 mod builtin;
+mod error;
 mod export;
 mod presentation;
 mod transfer;
 pub(crate) use binding::{child, parent_path, trusted};
+#[cfg(feature = "desktop")]
+pub(crate) use binding::{create, move_to_trash, remove_path, rename_path};
+pub use error::{FsError, FsErrorKind};
 pub use transfer::transfer;
 mod local;
 pub use export::{export as export_for_external_drag, initialize as initialize_exports};
@@ -34,32 +38,51 @@ pub trait FsAdapter: Send {
     fn native_export_path(&self) -> Option<std::path::PathBuf> {
         None
     }
-    fn stat(&self) -> Result<Value, String>;
-    fn desktop_entry(&self) -> Result<crate::core::files::Entry, String> {
-        presentation::entry(self.stat()?)
+    fn stat(&self) -> Result<Value, FsError>;
+    fn desktop_entry(&self) -> Result<crate::core::files::Entry, FsError> {
+        presentation::entry(self.stat()?).map_err(FsError::from)
     }
     fn desktop_listing(
         &self,
         path: &str,
         hidden: bool,
         ignores: &[String],
-    ) -> Result<crate::core::files::Listing, String> {
-        presentation::listing(self, path, hidden, ignores)
+    ) -> Result<crate::core::files::Listing, FsError> {
+        presentation::listing(self, path, hidden, ignores).map_err(FsError::from)
     }
-    fn list(&self) -> Result<Value, String>;
-    fn require(&self, operation: FsOperation, create: bool) -> Result<(), String>;
-    fn open_read(&self) -> Result<Box<dyn ReadHandle>, String>;
-    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, String>;
+    fn list(&self) -> Result<Value, FsError>;
+    fn require(&self, operation: FsOperation, create: bool) -> Result<(), FsError>;
+    fn open_read(&self) -> Result<Box<dyn ReadHandle>, FsError>;
+    fn begin_write(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError>;
     fn begin_write_sized(
         &self,
         create: bool,
         _size: Option<u64>,
-    ) -> Result<Box<dyn WriteHandle>, String> {
+    ) -> Result<Box<dyn WriteHandle>, FsError> {
         self.begin_write(create)
     }
-    fn mkdir(&self) -> Result<Value, String>;
-    fn remove(&self) -> Result<(), String>;
-    fn rename(&self, destination: &ResourceBroker) -> Result<(), String>;
+    fn mkdir(&self) -> Result<Value, FsError>;
+    fn search(
+        &self,
+        _query: &str,
+        _hidden: bool,
+        _ignores: &[String],
+        _limit: usize,
+        _cancelled: &dyn Fn() -> bool,
+    ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
+        Err(FsError::new(
+            FsErrorKind::Unsupported,
+            "search is not implemented by this adapter",
+        ))
+    }
+    fn remove(&self) -> Result<(), FsError>;
+    /// Removing a node through the desktop action keeps its storage semantics.
+    /// Only the local adapter may hand the node to the OS Trash; every other
+    /// adapter performs the same remove its `remove` operation already owns.
+    fn move_to_trash(&self) -> Result<(), FsError> {
+        self.remove()
+    }
+    fn rename(&self, destination: &ResourceBroker) -> Result<(), FsError>;
 }
 
 /// This value can only be constructed from a ref captured by Core's Scope.
@@ -72,7 +95,7 @@ pub struct ResourceBroker {
 impl ResourceBroker {
     /// Desktop preview reads only the requested prefix, regardless of which
     /// storage adapter owns the resource.
-    pub fn preview_prefix(&self, limit: usize) -> Result<Vec<u8>, String> {
+    pub fn preview_prefix(&self, limit: usize) -> Result<Vec<u8>, FsError> {
         self.require(FsOperation::Read, false)?;
         let mut handle = self.adapter()?.open_read()?;
         let mut result = Vec::with_capacity(limit.min(CHUNK));
@@ -89,7 +112,7 @@ impl ResourceBroker {
         }
         Ok(result)
     }
-    pub fn resolve(scope: &Scope, owner: &str, reference: &Value) -> Result<Self, String> {
+    pub fn resolve(scope: &Scope, owner: &str, reference: &Value) -> Result<Self, FsError> {
         if !scope.resource_bound(reference)? {
             return Err("ScopeDenied: resource not authorized in this operation".into());
         }
@@ -107,7 +130,7 @@ impl ResourceBroker {
             owner: owner.into(),
         })
     }
-    fn adapter(&self) -> Result<Box<dyn FsAdapter + '_>, String> {
+    fn adapter(&self) -> Result<Box<dyn FsAdapter + '_>, FsError> {
         if crate::plugins::mounts::handles(&self.path) {
             return Ok(Box::new(plugin::PluginFsAdapter::new(self)?));
         }
@@ -115,13 +138,13 @@ impl ResourceBroker {
             return Ok(Box::new(usb::UsbFsAdapter::new(route)));
         }
         // Core-owned views are in-process storage adapters, never host paths.
-        if crate::core::volumes::virtual_resolvers::resolver_for(&self.path).is_some() {
+        if crate::core::volumes::virtual_resolvers::view_for(&self.path).is_some() {
             return Ok(Box::new(builtin::BuiltinFsAdapter(self)));
         }
         self.scope.authorize(&self.path)?;
         Ok(Box::new(local::LocalFsAdapter(self)))
     }
-    pub fn require(&self, operation: FsOperation, create: bool) -> Result<(), String> {
+    pub fn require(&self, operation: FsOperation, create: bool) -> Result<(), FsError> {
         if crate::usbfs::route(&self.path).is_some() {
             let current =
                 crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
@@ -135,7 +158,7 @@ impl ResourceBroker {
         // Unix Trash is a physical directory, not an opaque URI. Do not let
         // its local filesystem adapter bypass the view policy: restore and
         // permanent deletion must remain explicit Core-only actions.
-        if crate::core::volumes::virtual_resolvers::resolver_for(&self.path)
+        if crate::core::volumes::virtual_resolvers::view_for(&self.path)
             .is_some_and(|resolver| resolver.id() == "core:trash")
             && !matches!(operation, FsOperation::Stat | FsOperation::List)
         {
@@ -143,7 +166,7 @@ impl ResourceBroker {
         }
         self.adapter()?.require(operation, create)
     }
-    pub fn stat(&self) -> Result<Value, String> {
+    pub fn stat(&self) -> Result<Value, FsError> {
         self.scope.authorize_method("fs.stat")?;
         self.require(FsOperation::Stat, false)?;
         let mut value = self.adapter()?.stat()?;
@@ -153,35 +176,77 @@ impl ResourceBroker {
         }
         Ok(value)
     }
-    pub fn list(&self) -> Result<Value, String> {
+    pub fn list(&self) -> Result<Value, FsError> {
         self.scope.authorize_method("fs.list")?;
         self.require(FsOperation::List, false)?;
         self.adapter()?.list()
     }
-    pub fn is_dir(&self) -> Result<bool, String> {
+    pub fn is_dir(&self) -> Result<bool, FsError> {
         Ok(self.stat()?["isDir"] == true)
     }
-    pub fn open_read(&self) -> Result<Value, String> {
+    /// Run a bounded filename search in the node's own storage adapter.
+    pub fn search(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
+        self.scope.authorize_method("fs.search")?;
+        self.require(FsOperation::Search, false)?;
+        self.adapter()?
+            .search(query, hidden, ignores, limit, cancelled)
+    }
+    pub fn open_read(&self) -> Result<Value, FsError> {
         self.scope.authorize_method("fs.openRead")?;
         self.require(FsOperation::Read, false)?;
-        streams::open_read(self, self.adapter()?.open_read()?)
+        streams::open_read(self, self.adapter()?.open_read()?).map_err(FsError::from)
     }
-    pub fn begin_write(&self, create: bool) -> Result<Value, String> {
+    pub fn begin_write(&self, create: bool) -> Result<Value, FsError> {
         self.scope.authorize_method("fs.beginWrite")?;
         self.require(FsOperation::Write, create)?;
         streams::begin_write(self, self.adapter()?.begin_write(create)?, create)
+            .map_err(FsError::from)
     }
-    pub fn mkdir(&self) -> Result<Value, String> {
+    /// Create one child in this directory through its owning adapter. The
+    /// parent's child-create capability is checked once, then the child uses
+    /// the same scoped stream/mkdir path as any other storage write.
+    pub fn create(&self, name: &str, directory: bool) -> Result<String, FsError> {
+        self.scope.authorize_method(if directory {
+            "fs.mkdir"
+        } else {
+            "fs.beginWrite"
+        })?;
+        let child = binding::child(self, name)?;
+        if directory {
+            child.mkdir()?;
+        } else {
+            // The child's create-write check binds the parent's child-create
+            // capability; checking this broker's parent would grant from the
+            // grandparent instead.
+            child.require(FsOperation::Write, true)?;
+            child.adapter()?.begin_write(true)?.commit()?;
+        }
+        Ok(child.path)
+    }
+    /// Move this node to the platform Trash when its adapter supports it.
+    pub fn move_to_trash(&self) -> Result<(), FsError> {
+        self.scope.authorize_method("fs.remove")?;
+        self.require(FsOperation::Remove, false)?;
+        self.adapter()?.move_to_trash()
+    }
+    pub fn mkdir(&self) -> Result<Value, FsError> {
         self.scope.authorize_method("fs.mkdir")?;
         self.require(FsOperation::Mkdir, true)?;
         self.adapter()?.mkdir()
     }
-    pub fn remove(&self) -> Result<(), String> {
+    pub fn remove(&self) -> Result<(), FsError> {
         self.scope.authorize_method("fs.remove")?;
         self.require(FsOperation::Remove, false)?;
         self.adapter()?.remove()
     }
-    pub fn rename(&self, destination: &Self) -> Result<(), String> {
+    pub fn rename(&self, destination: &Self) -> Result<(), FsError> {
         self.scope.authorize_method("fs.rename")?;
         self.require(FsOperation::Rename, false)?;
         destination.require(FsOperation::Write, true)?;

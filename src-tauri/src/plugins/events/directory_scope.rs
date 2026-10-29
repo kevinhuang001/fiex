@@ -37,7 +37,7 @@ pub(super) fn bind(
     let directory = json!(snapshot.project("", "", policy.allowed(Capability::Metadata), false));
     if crate::plugins::mounts::handles(path)
         || crate::usbfs::route(path).is_some()
-        || crate::core::volumes::virtual_resolvers::resolver_for(path).is_some()
+        || crate::core::volumes::virtual_resolvers::view_for(path).is_some()
     {
         scope.bind_remote(&directory, &snapshot)?;
     } else {
