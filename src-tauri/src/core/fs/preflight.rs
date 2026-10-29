@@ -140,7 +140,9 @@ mod tests {
             &std::sync::atomic::AtomicBool::new(false),
             &|_, _, _| {},
         );
-        assert!(result.err().is_some_and(|error| error.contains("executable shortcuts")));
+        assert!(result
+            .err()
+            .is_some_and(|error| error.contains("executable shortcuts")));
         assert_eq!(std::fs::read(&file).unwrap(), b"keep source");
     }
     #[test]
