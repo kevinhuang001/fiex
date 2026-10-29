@@ -38,24 +38,36 @@ fn quote(value: &str) -> String {
 }
 
 #[cfg(windows)]
+#[cfg(windows)]
 fn run_script(script: &str) -> Result<(), String> {
-    let output = Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-WindowStyle",
-            "Hidden",
-            "-Command",
-            script,
-        ])
-        .output()
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let mut child = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|error| format!("Office converter unavailable: {error}"))?;
-    if output.status.success() {
+    let deadline = Instant::now() + Duration::from_secs(90);
+    let status = loop {
+        match child.try_wait().map_err(|error| error.to_string())? {
+            Some(status) => break status,
+            None if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Office conversion timed out".into());
+            }
+            None => std::thread::sleep(Duration::from_millis(50)),
+        }
+    };
+    if status.success() {
         return Ok(());
     }
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let detail = format!("{stderr}\n{stdout}");
+    let mut detail = String::new();
+    if let Some(mut stderr) = child.stderr.take() {
+        let _ = stderr.read_to_string(&mut detail);
+    }
     Err(if detail.trim().is_empty() {
         "Office conversion failed".into()
     } else {
@@ -71,34 +83,31 @@ pub fn convert(source: &Path, extension: &str) -> Result<PathBuf, String> {
     #[cfg(not(windows))]
     {
         let _ = extension;
-        return Err(
-            "Office PDF conversion is only available with a desktop Office installation".into(),
-        );
+        Err("Office PDF conversion is only available with a desktop Office installation".into())
     }
     #[cfg(windows)]
     {
         let source = quote(&source.to_string_lossy());
         let target = quote(&output.to_string_lossy());
-        let office = if extension.eq_ignore_ascii_case("pptx") {
-            "PowerPoint.Application"
-        } else {
-            "Word.Application"
-        };
         let script = if extension.eq_ignore_ascii_case("pptx") {
             format!(
                 "$ErrorActionPreference='Stop'; \
-                 $app=New-Object -ComObject {office}; \
+                 try {{ $app=New-Object -ComObject PowerPoint.Application }} \
+                 catch {{ $app=New-Object -ComObject KWPP.Application }}; \
+                 $app.DisplayAlerts=0; \
                  try {{ $doc=$app.Presentations.Open({source},$true,$false,$false); \
-                 $doc.SaveAs({target},32); $doc.Close() }} finally {{ $app.Quit() }}"
+                 $doc.SaveAs({target},32); try {{ $doc.Close() }} catch {{}} }} \
+                 finally {{ try {{ $app.Quit() }} catch {{}} }}; exit 0"
             )
         } else {
             format!(
                 "$ErrorActionPreference='Stop'; \
-                 $app=New-Object -ComObject {office}; \
-                 $app.Visible=$false; \
+                 try {{ $app=New-Object -ComObject KWPS.Application }} \
+                 catch {{ $app=New-Object -ComObject Word.Application }}; \
+                 $app.Visible=$false; $app.DisplayAlerts=0; \
                  try {{ $doc=$app.Documents.Open({source},$false,$true); \
-                 $doc.ExportAsFixedFormat({target},17); $doc.Close(0) }} \
-                 finally {{ $app.Quit() }}"
+                 $doc.ExportAsFixedFormat({target},17); try {{ $doc.Close(0) }} catch {{}} }} \
+                 finally {{ try {{ $app.Quit() }} catch {{}} }}; exit 0"
             )
         };
         run_script(&script)?;

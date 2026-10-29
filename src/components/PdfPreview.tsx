@@ -82,7 +82,9 @@ export default function PdfPreview({ url, maxPages }: { url: string; maxPages?: 
       cancel?.()
     }
   }, [document, page, width])
-  const lastPage = maxPages ? Math.min(document?.numPages || maxPages, maxPages) : document?.numPages || 1
+  const lastPage = maxPages
+    ? Math.min(document?.numPages || maxPages, maxPages)
+    : document?.numPages || 1
   return (
     <div className="pdf-preview" ref={container}>
       <div className="pdf-controls">

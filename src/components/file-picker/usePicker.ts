@@ -42,8 +42,8 @@ export function usePicker(request: FilePickerRequest) {
   const initialDirectory =
     request.directory ||
     rememberedDirectory.current ||
-    (initialSidebar?.locations.find((item) => item.kind === 'home') ||
-      initialSidebar?.locations[0])?.path ||
+    (initialSidebar?.locations.find((item) => item.kind === 'home') || initialSidebar?.locations[0])
+      ?.path ||
     ''
   const [directory, setDirectory] = useState(initialDirectory)
   const [entries, setEntries] = useState<Entry[]>([])
