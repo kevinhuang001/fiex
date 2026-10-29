@@ -41,8 +41,12 @@ pub(crate) async fn plugin_invoke(
         .map(|id| crate::plugins::resolvers::preview::session_scope(id, &plugin_id))
         .transpose()?;
     crate::infrastructure::logging::plugin(
-        &plugin_id, "debug", "host", Some(&method),
-        "Plugin request dispatched", serde_json::Value::Null,
+        &plugin_id,
+        "debug",
+        "host",
+        Some(&method),
+        "Plugin request dispatched",
+        serde_json::Value::Null,
     );
     let id = plugin_id.clone();
     let call = method.clone();
