@@ -40,7 +40,7 @@ export function normalizeListColumns(value: unknown): ListColumns {
 /** CSS grid template shared by the header and every row: the name column takes
  * the rest, the trailing columns use their stored widths. */
 export function listGridTemplate(columns: ListColumns): string {
-  return `${columns.name}px ${columns.modified}px ${columns.size}px ${columns.kind}px minmax(0, 1fr)`
+  return `minmax(${columns.name}px, 1fr) ${columns.modified}px ${columns.size}px ${columns.kind}px`
 }
 
 /** Applies one divider drag. `dx` is the pointer movement in pixels and the
