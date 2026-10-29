@@ -37,7 +37,11 @@ export function useAppController() {
   const update = (patch: Partial<Preferences>) => {
     if (
       left.path &&
-      ('view' in patch || 'sort' in patch || 'descending' in patch || 'group' in patch || 'listColumns' in patch)
+      ('view' in patch ||
+        'sort' in patch ||
+        'descending' in patch ||
+        'group' in patch ||
+        'listColumns' in patch)
     ) {
       saveFolderView(left.path, {
         view: patch.view ?? prefs.view,
