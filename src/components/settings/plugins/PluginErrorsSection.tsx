@@ -20,19 +20,25 @@ export function PluginErrorsSection({ pluginId }: { pluginId: string }) {
   const [level, setLevel] = useState('all')
   useEffect(() => {
     let alive = true
-    setLoading(true)
-    void call<PluginError[]>('plugin_errors', { pluginId })
-      .then((items) => {
+    const load = async () => {
+      try {
+        const items = await call<PluginError[]>('plugin_errors', { pluginId })
         if (alive) setErrors(items || [])
-      })
-      .catch(() => {})
-      .finally(() => {
+      } catch {
+        // A temporary diagnostics failure must not disrupt plugin settings.
+      } finally {
         if (alive) setLoading(false)
-      })
+      }
+    }
+    setLoading(true)
+    void load()
+    const interval = window.setInterval(() => void load(), 2_000)
     return () => {
       alive = false
+      window.clearInterval(interval)
     }
   }, [pluginId])
+
   const clear = () => {
     void call('plugin_error_clear', { pluginId })
       .then(() => setErrors([]))
