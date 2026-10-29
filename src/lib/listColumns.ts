@@ -55,7 +55,13 @@ export function resizeListColumn(
 ): ListColumns {
   const next = { ...columns }
   const neighbour: ListColumnKey | null =
-    column === 'modified' ? 'name' : column === 'size' ? 'modified' : column === 'kind' ? 'size' : null
+    column === 'modified'
+      ? 'name'
+      : column === 'size'
+        ? 'modified'
+        : column === 'kind'
+          ? 'size'
+          : null
   const wanted = Math.round(columns[column] - dx)
   if (!neighbour) {
     // The name column is flexible, so its divider only moves this column.
