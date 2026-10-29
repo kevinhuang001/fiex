@@ -86,7 +86,7 @@ pub fn report(
 
 /// Backend-reported diagnostics are fire-and-forget: a plugin must never fail
 /// because the log is unavailable or because it is being throttled.
-const MAX_REPORTS_PER_MINUTE: u32 = 10;
+const MAX_REPORTS_PER_MINUTE: u32 = 120;
 static RATE: OnceLock<Mutex<HashMap<String, (u64, u32)>>> = OnceLock::new();
 
 fn rate() -> &'static Mutex<HashMap<String, (u64, u32)>> {
