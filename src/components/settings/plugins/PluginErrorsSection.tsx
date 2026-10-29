@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 export type PluginError = {
   at: number
   source: string
+  level: string
   message: string
   detail?: string
 }
@@ -16,6 +17,7 @@ export type PluginError = {
 export function PluginErrorsSection({ pluginId }: { pluginId: string }) {
   const [errors, setErrors] = useState<PluginError[]>([])
   const [loading, setLoading] = useState(false)
+  const [level, setLevel] = useState('all')
   useEffect(() => {
     let alive = true
     setLoading(true)
@@ -40,19 +42,28 @@ export function PluginErrorsSection({ pluginId }: { pluginId: string }) {
     <section className="plugin-permission-section">
       <div className="plugin-section-title">
         <strong>
-          <AlertTriangle size={15} /> {t('最近错误')}
+          <AlertTriangle size={15} /> {t('插件日志')}
         </strong>
         <small>
           {loading ? t('读取中…') : errors.length ? t('{0} 条', errors.length) : t('没有记录')}
         </small>
       </div>
+      <select aria-label="日志级别" value={level} onChange={(event) => setLevel(event.target.value)}>
+        <option value="all">All</option>
+        <option value="trace">Trace</option>
+        <option value="debug">Debug</option>
+        <option value="info">Info</option>
+        <option value="warn">Warn</option>
+        <option value="error">Error</option>
+      </select>
       {errors.length ? (
         <>
           <ul className="plugin-error-list">
-            {errors.map((entry, index) => (
+            {errors.filter((entry) => level === 'all' || (entry.level || 'error') === level).map((entry, index) => (
               <li key={`${entry.at}-${index}`}>
-                <span className={`plugin-error-source ${entry.source}`}>{entry.source}</span>
+                <span className={`plugin-error-source ${entry.level || "error"}`}>{(entry.level || "error").toUpperCase()}</span>
                 <div>
+                  <small>{entry.source}</small>
                   <p>{entry.message}</p>
                   {entry.detail && <pre>{entry.detail}</pre>}
                   <time>{new Date(entry.at).toLocaleString(getLocale())}</time>
