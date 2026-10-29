@@ -1,57 +1,45 @@
 import type { Group, Sort, View } from './types'
+import type { ListColumns } from './listColumns'
+import { normalizeListColumns } from './listColumns'
+import { stateSnapshot, saveState } from './stateStore'
 
-/** Per-folder presentation remembered across sessions. */
 export interface FolderViewState {
   view: View
   sort: Sort
   descending: boolean
   group: Group
+  listColumns?: ListColumns
 }
-
-const KEY = 'fiex:folder-views'
-const LIMIT = 2000
-
+const KEY = 'folder.views'
+const LIMIT = 200
 const views: View[] = ['list', 'icons', 'gallery', 'columns']
 const sorts: Sort[] = ['name', 'modified', 'size', 'kind']
 const groups: Group[] = ['none', 'kind', 'modified', 'size']
 
 function read(): Record<string, FolderViewState> {
-  try {
-    const value = JSON.parse(localStorage.getItem(KEY) || '{}')
-    return value && typeof value === 'object' ? value : {}
-  } catch {
-    return {}
-  }
+  const saved = stateSnapshot<Record<string, FolderViewState>>(KEY, 'fiex:folder-views')
+  return saved && !Array.isArray(saved) && typeof saved === 'object' ? saved : {}
 }
-
-function write(values: Record<string, FolderViewState>) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(values))
-  } catch {
-    // Presentation state is best effort.
-  }
-}
-
 export function loadFolderView(path: string): FolderViewState | null {
   const value = read()[path]
-  if (!value || typeof value !== 'object') return null
-  if (!views.includes(value.view) || !sorts.includes(value.sort) || !groups.includes(value.group))
-    return null
+  if (!value || !views.includes(value.view) || !sorts.includes(value.sort)
+      || !groups.includes(value.group)) return null
   return {
     view: value.view,
     sort: value.sort,
     descending: Boolean(value.descending),
     group: value.group,
+    ...(value.listColumns ? { listColumns: normalizeListColumns(value.listColumns) } : {}),
   }
 }
-
 export function saveFolderView(path: string, state: FolderViewState) {
   if (!path) return
   const values = read()
+  delete values[path]
   values[path] = state
   const keys = Object.keys(values)
-  if (keys.length > LIMIT) {
-    for (const key of keys.slice(0, keys.length - LIMIT)) delete values[key]
+  while (keys.length > LIMIT) {
+    delete values[keys.shift()!]
   }
-  write(values)
+  saveState(KEY, values)
 }
