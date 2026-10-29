@@ -5,7 +5,8 @@ export type GroupKey = 'none' | 'kind' | 'modified' | 'size'
 
 export function storedSort(): { key: SortKey; direction: 'asc' | 'desc' } {
   const value = stateSnapshot<{ key: SortKey; direction: 'asc' | 'desc' }>(
-    'picker.sort', 'fiex.picker.sort',
+    'picker.sort',
+    'fiex.picker.sort',
   )
   if (value && ['name', 'modified', 'size', 'kind'].includes(value.key))
     return { key: value.key, direction: value.direction === 'desc' ? 'desc' : 'asc' }
