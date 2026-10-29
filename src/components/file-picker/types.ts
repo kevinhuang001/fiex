@@ -1,59 +1,32 @@
+import { stateSnapshot, saveState } from '@/lib/stateStore'
+
 export type SortKey = 'name' | 'modified' | 'size' | 'kind'
 export type GroupKey = 'none' | 'kind' | 'modified' | 'size'
 
-const SORT_KEY = 'fiex.picker.sort'
-const GROUP_KEY = 'fiex.picker.group'
-const DIRECTORY_KEY = 'fiex.picker.directory'
-
 export function storedSort(): { key: SortKey; direction: 'asc' | 'desc' } {
-  try {
-    const value = JSON.parse(localStorage.getItem(SORT_KEY) || 'null')
-    if (value && ['name', 'modified', 'size', 'kind'].includes(value.key))
-      return { key: value.key, direction: value.direction === 'desc' ? 'desc' : 'asc' }
-  } catch {
-    // fall through
-  }
+  const value = stateSnapshot<{ key: SortKey; direction: 'asc' | 'desc' }>(
+    'picker.sort', 'fiex.picker.sort',
+  )
+  if (value && ['name', 'modified', 'size', 'kind'].includes(value.key))
+    return { key: value.key, direction: value.direction === 'desc' ? 'desc' : 'asc' }
   return { key: 'name', direction: 'asc' }
 }
-
 export function storedGroup(): GroupKey {
-  try {
-    const value = localStorage.getItem(GROUP_KEY)
-    if (value && ['none', 'kind', 'modified', 'size'].includes(value)) return value as GroupKey
-  } catch {
-    // fall through
-  }
-  return 'none'
+  const value = stateSnapshot<GroupKey>('picker.group', 'fiex.picker.group')
+  return value && ['none', 'kind', 'modified', 'size'].includes(value) ? value : 'none'
 }
-
 export function persistPickerSort(
   sort: { key: SortKey; direction: 'asc' | 'desc' },
   group: GroupKey,
 ) {
-  try {
-    localStorage.setItem(SORT_KEY, JSON.stringify(sort))
-    localStorage.setItem(GROUP_KEY, group)
-  } catch {
-    // Preferences are best effort.
-  }
+  saveState('picker.sort', sort)
+  saveState('picker.group', group)
 }
-
-/** The last folder the chooser showed, so it reopens where the user left off. */
 export function storedDirectory(): string {
-  try {
-    return localStorage.getItem(DIRECTORY_KEY) || ''
-  } catch {
-    return ''
-  }
+  return stateSnapshot<string>('picker.lastDirectory', 'fiex.picker.directory') || ''
 }
-
 export function persistPickerDirectory(path: string) {
-  if (!path) return
-  try {
-    localStorage.setItem(DIRECTORY_KEY, path)
-  } catch {
-    // Preferences are best effort.
-  }
+  if (path) saveState('picker.lastDirectory', path)
 }
 
 export const dirname = (path: string) => {
