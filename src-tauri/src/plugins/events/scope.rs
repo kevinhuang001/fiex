@@ -169,14 +169,6 @@ pub fn resource_scope(
             let mut caps = resource.operations.unwrap_or_else(|| {
                 crate::plugins::resource::file_capabilities::for_path(&resource.display)
             });
-            super::directory_scope::bind(
-                &mut params,
-                &mut scope,
-                &policy,
-                method,
-                resources,
-                directory,
-            )?;
             if directory == Some("recent://") {
                 caps = caps.intersect(
                     crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
@@ -239,6 +231,14 @@ pub fn resource_scope(
             }
         }
     }
+    super::directory_scope::bind(
+        &mut params,
+        &mut scope,
+        &policy,
+        method,
+        resources,
+        directory,
+    )?;
     if directory == Some("recent://") {
         scope.restrict_to_readonly();
     }
