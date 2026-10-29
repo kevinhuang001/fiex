@@ -14,6 +14,7 @@ import { TAG_PRESETS, normalizeTags } from '@/lib/tags'
 import { LIST_COLUMNS_DEFAULT, normalizeListColumns } from '@/lib/listColumns'
 import type { Preferences, SidebarSection } from '@/lib/types'
 import { useEffect, useState } from 'react'
+import { stateSnapshot, loadState, saveState } from '@/lib/stateStore'
 
 function defaultsFor(style: ShortcutStyle): Preferences {
   return {
@@ -55,13 +56,11 @@ function isStyle(value: unknown): value is ShortcutStyle {
   return value === 'mac' || value === 'win' || value === 'linux'
 }
 
-function load(): Preferences {
+function load(source?: Partial<Preferences>): Preferences {
   const systemStyle = inferShortcutStyle()
   const fallback = defaultsFor(systemStyle)
   try {
-    const stored = JSON.parse(
-      localStorage.getItem('fiex:preferences') || '{}',
-    ) as Partial<Preferences>
+    const stored = source ?? stateSnapshot<Partial<Preferences>>('explorer.preferences', 'fiex:preferences') ?? {}
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
@@ -177,9 +176,18 @@ export function usePreferences() {
       .catch(() => {})
       .then(() => window.dispatchEvent(new Event('fiex:plugins-changed')))
   }, [prefs.locale])
+  const [hydrated, setHydrated] = useState(false)
   useEffect(() => {
-    localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
-  }, [prefs])
+    let active = true
+    void loadState<Partial<Preferences>>('explorer.preferences', 'fiex:preferences')
+      .then((stored) => { if (active && stored) setPrefs(load(stored)) })
+      .catch(() => {})
+      .finally(() => { if (active) setHydrated(true) })
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (hydrated) saveState('explorer.preferences', prefs)
+  }, [prefs, hydrated])
   useEffect(() => {
     // The desktop scheduler owns the timer; keep it in step with settings.
     void call('remote_set_sync_interval', { seconds: prefs.syncInterval }).catch(() => {})
