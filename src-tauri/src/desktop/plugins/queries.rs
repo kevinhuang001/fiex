@@ -11,17 +11,21 @@ pub(crate) async fn file_info_details(
     static INFO: OnceLock<MemoryCache<Vec<InfoSection>>> = OnceLock::new();
     tauri::async_runtime::spawn_blocking(move || {
         let cache = INFO.get_or_init(|| MemoryCache::new(256, Duration::from_secs(90)));
-        // No metadata read may bypass the currently authorized storage owner.
+        // A cache lookup must still validate the current resource identity.
+        // An InfoProvider can work without vfs.stat, so missing stat only
+        // disables caching rather than disabling the Info feature.
         let resource = crate::core::fs::trusted(&path, "core:info")?;
-        resource.require(crate::plugins::provider_registry::FsOperation::Stat, false)?;
-        let metadata = resource.desktop_entry().map_err(String::from)?;
-        let key = serde_json::to_string(&(
-            &path, metadata.modified, metadata.size, metadata.mime.as_str(),
-            crate::i18n::locale(), crate::plugins::preferences::snapshot(),
-        )).map_err(|e| e.to_string())?;
-        if let Some(value) = cache.get(&key) { return Ok::<_, String>(value); }
+        let key = resource.desktop_entry().ok().and_then(|metadata| {
+            serde_json::to_string(&(
+                &path, metadata.modified, metadata.size, metadata.mime.as_str(),
+                crate::i18n::locale(), crate::plugins::preferences::snapshot(),
+            )).ok()
+        });
+        if let Some(value) = key.as_ref().and_then(|key| cache.get(key)) {
+            return Ok::<_, String>(value);
+        }
         let result = crate::plugins::resolvers::info::file_info_resource(&path)?;
-        cache.insert(key, result.clone());
+        if let Some(key) = key { cache.insert(key, result.clone()); }
         Ok(result)
     })
     .await
