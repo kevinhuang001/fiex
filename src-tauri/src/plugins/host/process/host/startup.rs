@@ -98,8 +98,12 @@ impl PluginHost {
         // outside the host lock so a slow plugin never blocks other providers.
         let instance = Self::spawn_instance(plugin_id, &manifest, &directory, declared)?;
         crate::infrastructure::logging::plugin(
-            plugin_id, "info", "host", Some("plugin.start"),
-            "Plugin process started", serde_json::Value::Null,
+            plugin_id,
+            "info",
+            "host",
+            Some("plugin.start"),
+            "Plugin process started",
+            serde_json::Value::Null,
         );
         // Handshake eagerly so the capability registry is populated before the
         // first listing or picker asks which operations this provider supports.
