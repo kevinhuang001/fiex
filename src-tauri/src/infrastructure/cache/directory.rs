@@ -121,11 +121,16 @@ pub fn get(key: &str) -> Option<DirectorySnapshot> {
 }
 pub fn store(key: &str, listing: &Listing) {
     let previous = get(key);
-    let mut decorations = previous.map(|p| p.decorations).unwrap_or_default();
-    decorations.retain(|path, _| listing.entries.iter().any(|entry| {
-        entry.path == *path
-            && get_entry_key(entry) == cached_entry_identity(entry, key, path)
-    }));
+    let mut decorations = previous.as_ref().map(|p| p.decorations.clone()).unwrap_or_default();
+    decorations.retain(|path, _| {
+        let before = previous.as_ref().and_then(|p|
+            p.listing.entries.iter().find(|entry| entry.path == *path));
+        let after = listing.entries.iter().find(|entry| entry.path == *path);
+        match (before, after) {
+            (Some(left), Some(right)) => get_entry_key(left) == get_entry_key(right),
+            _ => false,
+        }
+    });
     // Only stable metadata identities are preserved. The resource service may
     // explicitly replace decorations after its current resolver pass.
     let snapshot = DirectorySnapshot {
@@ -138,9 +143,6 @@ pub fn store(key: &str, listing: &Listing) {
 // Decoration entries are tied to their exact metadata revision when published.
 fn get_entry_key(entry: &Entry) -> String {
     serde_json::to_string(entry).unwrap_or_default()
-}
-fn cached_entry_identity(entry: &Entry, _key: &str, _path: &str) -> String {
-    get_entry_key(entry)
 }
 pub fn set_decorations(key: &str, presented: &[Entry], values: Vec<Decoration>) {
     let Some(mut snapshot) = get(key) else { return };
