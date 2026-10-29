@@ -11,3 +11,8 @@ pub(crate) fn state_put(namespace: String, key: String, value: Value) -> Result<
 pub(crate) fn state_remove(namespace: String, key: String) -> Result<(), String> {
     crate::infrastructure::state::remove(&namespace, &key)
 }
+
+#[tauri::command]
+pub(crate) fn errors_pending() -> Vec<crate::infrastructure::errors::AppError> {
+    crate::infrastructure::errors::drain()
+}
