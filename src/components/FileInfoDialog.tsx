@@ -6,6 +6,7 @@ import { FileIcon } from './FileIcon'
 import { date, parent, kind, size } from '@/lib/files'
 import { tagHex } from '@/lib/tags'
 import { call } from '@/lib/api'
+import { MemoryCache } from '@/lib/cache'
 import type { Entry } from '@/lib/types'
 
 interface InfoRow {
@@ -21,6 +22,10 @@ interface InfoSection {
   provider: string
   rows: InfoRow[]
 }
+
+// Extended resolver output is cached; the basic metadata always comes from Entry.
+const infoCache = new MemoryCache<InfoSection[]>(96, 90_000)
+window.addEventListener('fiex:plugins-changed', () => infoCache.clear())
 
 export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose: () => void }) {
   const [sections, setSections] = useState<InfoSection[]>([])
@@ -39,16 +44,18 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   useEffect(() => {
     if (!info) return
     let alive = true
-    setSections([])
+    const cacheKey = JSON.stringify([info.path, info.size, info.modified, info.created, info.mime, info.allowedOps])
+    const warm = infoCache.peek(cacheKey)
+    setSections(warm ?? [])
     setError('')
-    setLoading(true)
+    setLoading(!warm)
     const timeout = new Promise<InfoSection[]>((_, reject) =>
       window.setTimeout(
         () => reject(new Error(t('读取插件信息超时，请检查插件是否正常运行。'))),
         15_000,
       ),
     )
-    void Promise.race([call<InfoSection[]>('file_info_details', { path: info.path }), timeout])
+    void Promise.race([infoCache.get(cacheKey, () => call<InfoSection[]>('file_info_details', { path: info.path })), timeout])
       .then((value) => {
         if (alive) setSections(Array.isArray(value) ? value : [])
       })
