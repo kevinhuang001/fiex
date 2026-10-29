@@ -1,4 +1,7 @@
 import { useEntryDecorations } from './useEntryDecorations'
+import { cachePresentations } from '@/lib/entryPresentation'
+import { publishPresentationIcons } from '@/lib/decorationIcons'
+import type { EntryDecoration } from '@/lib/types'
 import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
@@ -185,13 +188,23 @@ export function useListing(
       // Attach immediately: a fast provider failure must not become unhandled.
       void fresh.catch(() => {})
       try {
-        const cached = await call<Listing | null>('directory_cache', {
+        const cachedSnapshot = await call<{
+          listing: Listing
+          decorations: EntryDecoration[]
+        } | null>('directory_snapshot', {
           path,
           hidden: prefs.hidden,
           ignores: prefs.displayIgnore,
         })
         if (!active || id !== request.current) return
+        const cached = cachedSnapshot?.listing
         if (cached) {
+          // Seed the presentation before React receives the cached entries, so
+          // a warm directory does not flash generic icons or lose badges.
+          if (cachedSnapshot?.decorations?.length) {
+            cachePresentations(cached.entries, cachedSnapshot.decorations)
+            publishPresentationIcons(cached.entries)
+          }
           paintedKey = listingKey(cached.entries)
           setEntries(cached.entries)
           setListedPath(path)
