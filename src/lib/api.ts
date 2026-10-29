@@ -25,16 +25,28 @@ export function search(
   pane: string,
   root: string,
   query: string,
+  mode: 'name' | 'content',
+  engine: string,
+  remoteContentApproved: boolean,
   hidden: boolean,
   ignores: string[],
   onBatch: (b: Batch) => void,
 ): Promise<void> {
   if (!native)
-    return call<Batch>('search_files', { root, query, hidden, ignores, pane }).then(onBatch)
+    return call<Batch>('search_files', {
+      root,
+      query,
+      mode,
+      engine,
+      remoteContentApproved,
+      hidden,
+      ignores,
+      pane,
+    }).then(onBatch)
   const onBatchChannel = new Channel<Batch>()
   onBatchChannel.onmessage = onBatch
   return invoke('search_files', {
-    request: { root, query, hidden, ignores, pane },
+    request: { root, query, mode, engine, remoteContentApproved, hidden, ignores, pane },
     onBatch: onBatchChannel,
   })
 }

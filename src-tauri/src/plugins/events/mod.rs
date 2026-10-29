@@ -3,6 +3,7 @@ use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::{json, Value};
 mod contract;
 mod matching;
+pub mod preferences;
 pub use matching::metadata as resource_metadata;
 mod directory_scope;
 mod registry;

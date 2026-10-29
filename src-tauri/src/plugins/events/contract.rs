@@ -19,7 +19,7 @@ pub(super) fn event(method: &str) -> Option<Event> {
         "decorations.resolve" => ("decorations", Merge),
         "contextMenu.resolve" => ("contextMenus", Merge),
         "contextMenu.execute" => ("contextMenus", Owner),
-        "search.query" => ("search", Merge),
+        "search.query" => ("search", FirstSupported),
         "toolbar.invoke" => ("toolbar", Owner),
         "hooks.invoke" => ("hooks", FirstSupported),
         "connection.open" | "connection.create" | "connection.validate" => ("connections", Owner),

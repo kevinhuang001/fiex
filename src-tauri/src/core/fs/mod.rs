@@ -181,6 +181,13 @@ impl ResourceBroker {
         self.require(FsOperation::List, false)?;
         self.adapter()?.list()
     }
+    pub fn desktop_listing(
+        &self, hidden: bool, ignores: &[String],
+    ) -> Result<crate::core::files::Listing, FsError> {
+        self.scope.authorize_method("fs.list")?;
+        self.require(FsOperation::List, false)?;
+        self.adapter()?.desktop_listing(&self.path, hidden, ignores)
+    }
     pub fn is_dir(&self) -> Result<bool, FsError> {
         Ok(self.stat()?["isDir"] == true)
     }

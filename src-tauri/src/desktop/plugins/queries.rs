@@ -1,6 +1,20 @@
 use super::*;
 
 #[tauri::command]
+pub(crate) fn provider_preferences() -> Result<std::collections::BTreeMap<String,
+    crate::plugins::events::preferences::ProviderPreference>, String> {
+    crate::plugins::events::preferences::all()
+}
+
+#[tauri::command]
+pub(crate) fn provider_preferences_set(
+    feature: String,
+    preference: crate::plugins::events::preferences::ProviderPreference,
+) -> Result<(), String> {
+    crate::plugins::events::preferences::set(&feature, preference)
+}
+
+#[tauri::command]
 pub(crate) async fn file_info_details(
     path: String,
 ) -> Vec<crate::plugins::resolvers::info::InfoSection> {

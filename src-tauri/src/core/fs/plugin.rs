@@ -102,7 +102,9 @@ impl FsAdapter for PluginFsAdapter<'_> {
         limit: usize,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
-        if !crate::remote::is_remote(&self.resource.path) {
+        let (mount, node) = self.node()?;
+        if !crate::remote::is_remote(&self.resource.path)
+            && mount.supports_search_mode(&node, "name")? {
             let (entries, truncated) =
                 crate::plugins::vfs::search(&self.resource.path, query, hidden, ignores, limit)?;
             return Ok((entries, truncated, 0));
@@ -110,15 +112,18 @@ impl FsAdapter for PluginFsAdapter<'_> {
         let mut pending = vec![self.resource.path.clone()];
         let mut entries = Vec::new();
         let mut visited = 0usize;
+        let mut seen = std::collections::HashSet::new();
         while let Some(path) = pending.pop() {
             if cancelled() || visited >= 1000 || entries.len() >= limit {
                 break;
             }
+            if !seen.insert(path.clone()) { continue; }
             visited += 1;
-            let Some(listing) =
+            let listing = if crate::remote::is_remote(&path) {
                 futures::executor::block_on(crate::remote::list_listing(&path, hidden, ignores))?
-            else {
-                break;
+                    .ok_or("MountNotFound: connection removed")?
+            } else {
+                crate::plugins::vfs::list(&path, hidden, ignores)?
             };
             for entry in listing.entries {
                 if cancelled() || entries.len() >= limit {
@@ -136,20 +141,15 @@ impl FsAdapter for PluginFsAdapter<'_> {
         Ok((entries, truncated, 0))
     }
     fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
-        // Connection search is a Core-side bounded walk over `vfs.list`; it
-        // must not require a provider `vfs.search` capability that older
-        // connection providers do not advertise.
-        let op = if op == FsOperation::Search && crate::remote::is_remote(&self.resource.path) {
-            FsOperation::List
-        } else {
-            op
-        };
         let (mount, node) = if create {
             let (mount, parent, _) = self.parent()?;
             (mount, parent)
         } else {
             self.node()?
         };
+        let op = if op == FsOperation::Search && !mount.supports_search_mode(&node, "name")? {
+            FsOperation::List
+        } else { op };
         if !mount.supports(op) {
             return Err(FsError::new(
                 FsErrorKind::Unsupported,

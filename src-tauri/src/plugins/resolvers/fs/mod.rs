@@ -33,6 +33,13 @@ pub struct Mount {
 }
 
 impl Mount {
+    /// A search operation ceiling does not imply either search mode.
+    pub fn supports_search_mode(&self, node_id: &str, mode: &str) -> Result<bool, String> {
+        if !self.supports(FsOperation::Search) { return Ok(false); }
+        let discovery = self.invoke("vfs.discover", json!({"nodeId":node_id}))?;
+        Ok(discovery["operations"].as_array().is_some_and(|ops| ops.iter().any(|op| op.as_str() == Some("search")))
+            && discovery["search"][mode].as_bool() == Some(true))
+    }
     fn invoke(&self, method: &str, mut params: Value) -> Result<Value, String> {
         let object = params
             .as_object_mut()
@@ -134,6 +141,7 @@ impl Mount {
             json!({
                 "nodeId": node_id,
                 "query": query,
+                "mode": "name",
                 "hidden": hidden,
                 "ignores": ignores,
                 "limit": limit,

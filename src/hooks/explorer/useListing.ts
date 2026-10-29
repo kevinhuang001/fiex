@@ -17,7 +17,18 @@ export function useListing(
   pane = 'left',
   startOverride?: string,
 ) {
-  const { path, query, globalSearch, history, navigate, setSelected, setRenaming, setError } = nav
+  const {
+    path,
+    query,
+    searchMode,
+    searchEngine,
+    globalSearch,
+    history,
+    navigate,
+    setSelected,
+    setRenaming,
+    setError,
+  } = nav
   const [locations, setLocations] = useState<Location[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
@@ -39,6 +50,7 @@ export function useListing(
   const request = useRef(0)
   const locationsRequest = useRef(0)
   const searchRequest = useRef(0)
+  const approvedContentRoots = useRef(new Set<string>())
   const cancelQueue = useRef<Promise<unknown>>(Promise.resolve())
   const reload = useCallback(() => setRefresh((v) => v + 1), [getLocale()])
   useEffect(() => {
@@ -224,10 +236,31 @@ export function useListing(
       void cancelled
         .then(() => {
           if (generation !== searchRequest.current) return
+          let remoteContentApproved = false
+          if (searchMode === 'content' && path.includes('://')) {
+            const root = path.split('://')[0] + '://' + path.split('://')[1].split('/')[0]
+            if (!approvedContentRoots.current.has(root)) {
+              if (
+                !window.confirm(
+                  t(
+                    '将读取此虚拟文件系统中的文件内容进行搜索，最多读取 100 个文件、16 MiB。继续吗？',
+                  ),
+                )
+              ) {
+                setSearching(false)
+                return
+              }
+              approvedContentRoots.current.add(root)
+            }
+            remoteContentApproved = true
+          }
           return search(
             pane,
             globalSearch ? 'everywhere://' : path,
             query,
+            searchMode,
+            searchEngine,
+            remoteContentApproved,
             prefs.hidden,
             prefs.displayIgnore,
             (b) => {
@@ -254,7 +287,18 @@ export function useListing(
       ++searchRequest.current
       void cancel()
     }
-  }, [enabled, pane, query, globalSearch, path, prefs.hidden, prefs.displayIgnore, refresh])
+  }, [
+    enabled,
+    pane,
+    query,
+    searchMode,
+    searchEngine,
+    globalSearch,
+    path,
+    prefs.hidden,
+    prefs.displayIgnore,
+    refresh,
+  ])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])

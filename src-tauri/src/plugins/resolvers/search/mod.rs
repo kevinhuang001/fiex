@@ -8,6 +8,10 @@ use serde::Deserialize;
 #[serde(rename_all = "camelCase")]
 pub struct PluginSearchInput {
     pub query: String,
+    #[serde(default = "default_mode")]
+    pub mode: String,
+    #[serde(default = "default_engine")]
+    pub engine: String,
     pub root: String,
     pub hidden: bool,
     #[serde(default)]
@@ -16,14 +20,16 @@ pub struct PluginSearchInput {
     pub limit: Option<usize>,
 }
 
-/// Search policy: validate each source, confine results to the requested root,
-/// then merge/deduplicate in Core before returning a single result to the UI.
+fn default_mode() -> String { "name".into() }
+fn default_engine() -> String { "auto".into() }
+
+/// Search policy: select one available engine, validate and confine its results.
 pub fn resolve(
     request: &PluginSearchInput,
     mut builtin: impl FnMut() -> Result<serde_json::Value, String>,
     cancelled: impl Fn() -> bool,
 ) -> Vec<Entry> {
-    use crate::plugins::events::{EventRouter, Handler, Resolver};
+    use crate::plugins::events::{EventRouter, Handler};
     use serde_json::json;
     let limit = request.limit.unwrap_or(500).clamp(1, 500);
     let ignores = crate::core::ignores::IgnoreSet::new(&request.ignores);
@@ -31,13 +37,7 @@ pub fn resolve(
         crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&request.root)
             .map(|r| vec![r])
             .unwrap_or_default();
-    let metadata = crate::plugins::events::resource_metadata(&resources);
-    let providers = EventRouter::providers(
-        "search.query",
-        &metadata,
-        &request.root,
-        vec![Resolver::builtin("core.search", 1000)],
-    );
+    let providers = candidates(request, &resources);
     EventRouter::resolve(
         "search.query",
         providers,
@@ -55,7 +55,7 @@ pub fn resolve(
             crate::plugins::events::invoke_resources(
                 plugin,
                 "search.query",
-                json!({"query":request.query,"root":resources.first().map(|r| &r.reference),"hidden":request.hidden,"ignores":request.ignores,"limit":limit}),
+                json!({"query":request.query,"mode":request.mode,"root":resources.first().map(|r| &r.reference),"hidden":request.hidden,"ignores":request.ignores,"limit":limit}),
                 &resources,
                 Some(&request.root),
             )
@@ -118,7 +118,7 @@ pub fn resolve(
         |outcomes| {
             let mut seen = std::collections::HashSet::new();
             let mut entries = Vec::new();
-            for (_, result) in outcomes {
+            for (_, result) in outcomes.into_iter().filter(|(_, result)| result.is_ok()).take(1) {
                 if cancelled() {
                     return Vec::new();
                 }
@@ -150,6 +150,41 @@ pub fn resolve(
             entries
         },
     )
+}
+fn candidates(request: &PluginSearchInput, resources: &[crate::plugins::resource::resource_context::ResourceSnapshot]) -> Vec<crate::plugins::events::Resolver> {
+    use crate::plugins::events::{EventRouter, Handler, Resolver};
+    let metadata = crate::plugins::events::resource_metadata(resources);
+    let mut providers = EventRouter::providers(
+        "search.query", &metadata, &request.root,
+        vec![Resolver::builtin("core.search", -1000)],
+    );
+    providers.retain(|provider| match &provider.handler {
+        Handler::Builtin(_) => true,
+        Handler::Plugin(plugin) => {
+            if crate::plugins::mounts::handles(&request.root)
+                || crate::remote::is_remote(&request.root) { return false; }
+            let search = &plugin.extensions["search"];
+            let scope = search["scope"].as_str().unwrap_or("local");
+            (scope == "local" || scope == "global")
+                && search["modes"].as_array()
+                    .map(|modes| modes.iter().any(|mode| mode == &request.mode))
+                    .unwrap_or(request.mode == "name")
+        }
+    });
+    if request.engine == "builtin" {
+        providers.retain(|provider| matches!(&provider.handler, Handler::Builtin(_)));
+    } else if request.engine.starts_with("plugin:") {
+        providers.retain(|provider| provider.id == request.engine
+            || matches!(&provider.handler, Handler::Builtin(_)));
+    }
+    providers
+}
+
+pub fn has_plugin(request: &PluginSearchInput) -> bool {
+    let resources = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&request.root)
+        .map(|resource| vec![resource]).unwrap_or_default();
+    candidates(request, &resources).iter().any(|provider|
+        matches!(&provider.handler, crate::plugins::events::Handler::Plugin(_)))
 }
 pub fn query(request: &PluginSearchInput) -> Vec<Entry> {
     resolve(request, || Ok(serde_json::json!({"entries":[]})), || false)

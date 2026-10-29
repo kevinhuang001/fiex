@@ -71,6 +71,7 @@ impl EventRouter {
             });
         }
         providers.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.id.cmp(&b.id)));
+        super::preferences::apply(event.extension, &mut providers);
         providers
     }
 }

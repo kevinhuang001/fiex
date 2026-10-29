@@ -21,6 +21,7 @@ import {
   orderCandidates,
   pluginPreviewId,
   previewDisabled,
+  migratePreviewPreferences,
   type PreviewCandidate,
 } from '@/lib/preview'
 import { PluginPreviewFrame } from '@/components/plugins/PluginPreviewFrame'
@@ -54,6 +55,10 @@ export function Preview({
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const sourceRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (native) void migratePreviewPreferences().catch(() => {})
+  }, [])
 
   useEffect(() => {
     let active = true

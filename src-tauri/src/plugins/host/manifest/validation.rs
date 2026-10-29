@@ -153,6 +153,27 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                 "extensions.search.title/command are removed; search.query is fixed".into(),
             );
         }
+        if key == "search" {
+            if object.get("scope").and_then(Value::as_str)
+                .is_some_and(|scope| scope != "local" && scope != "global") {
+                return Err("extensions.search.scope must be local".into());
+            }
+            if let Some(priority) = object.get("priority") {
+                if priority.as_i64().is_none() {
+                    return Err("extensions.search.priority must be an integer".into());
+                }
+            }
+            if let Some(modes) = object.get("modes") {
+                let modes = modes.as_array().ok_or("extensions.search.modes must be an array")?;
+                if modes.is_empty() || modes.len() > 2 || modes.iter().any(|mode|
+                    !matches!(mode.as_str(), Some("name" | "content"))) {
+                    return Err("extensions.search.modes must contain name and/or content".into());
+                }
+                if modes.len() == 2 && modes[0] == modes[1] {
+                    return Err("extensions.search.modes contains a duplicate".into());
+                }
+            }
+        }
         crate::plugins::match_rules::validate(object.get("match"), false, false)?;
         if key == "hooks" && object.contains_key("method") {
             return Err("extensions.hooks.method is removed; hooks.invoke is fixed".into());

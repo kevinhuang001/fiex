@@ -14,6 +14,8 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   const [renaming, setRenaming] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [searchMode, setSearchMode] = useState<'name' | 'content'>('name')
+  const [searchEngine, setSearchEngine] = useState('auto')
   const [globalSearch, setGlobalSearch] = useState(false)
   const [history, setHistory] = useState<string[]>(initialPath ? [initialPath] : [])
   const [cursor, setCursor] = useState(initialPath ? 0 : -1)
@@ -159,6 +161,10 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setError,
     query,
     setQuery,
+    searchMode,
+    setSearchMode,
+    searchEngine,
+    setSearchEngine,
     globalSearch,
     setGlobalSearch,
     history,

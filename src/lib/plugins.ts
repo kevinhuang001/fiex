@@ -88,7 +88,12 @@ export interface PluginExtensions {
   contextMenus?: boolean
   /** Flat actions for a saved connection's sidebar menu. */
   connectionContextMenus?: boolean | { priority?: number }
-  search?: { icon?: string; scope?: string }
+  search?: {
+    icon?: string
+    scope?: 'local' | 'global'
+    priority?: number
+    modes?: ('name' | 'content')[]
+  }
   settings?: PluginField[]
   hooks?: {
     event: 'beforeOpen'

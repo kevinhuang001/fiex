@@ -1,5 +1,6 @@
 /** A preview provider returned by Core. Matching, priority and built-in
  * capability checks live in Core; the browser only applies user preferences. */
+import { call } from './api'
 export interface PreviewCandidate {
   id: string
   provider: string
@@ -29,10 +30,25 @@ function readList(key: string): string[] {
   }
 }
 
-const previewOrder = () => readList(ORDER_KEY)
-export const previewDisabled = () => readList(DISABLED_KEY)
+const migrated = () => Boolean(localStorage.getItem('fiex.provider.preview.migrated'))
+const previewOrder = () => (migrated() ? [] : readList(ORDER_KEY))
+export const previewDisabled = () => (migrated() ? [] : readList(DISABLED_KEY))
+
+/** Preserve existing preview choices when upgrading to the shared Core store. */
+export async function migratePreviewPreferences(): Promise<void> {
+  if (localStorage.getItem('fiex.provider.preview.migrated')) return
+  const order = readList(ORDER_KEY)
+  const disabled = readList(DISABLED_KEY)
+  const current =
+    await call<Record<string, { order: string[]; disabled: string[] }>>('provider_preferences')
+  if (!current.preview && (order.length || disabled.length)) {
+    await call('provider_preferences_set', { feature: 'preview', preference: { order, disabled } })
+  }
+  localStorage.setItem('fiex.provider.preview.migrated', '1')
+}
 
 export function orderCandidates(candidates: PreviewCandidate[]): PreviewCandidate[] {
+  if (migrated()) return candidates
   const order = previewOrder()
   const rank = (id: string) => {
     const index = order.indexOf(id)

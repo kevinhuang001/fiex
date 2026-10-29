@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import type { Explorer } from '@/hooks/useExplorer'
+import { usePluginCatalog } from '@/lib/plugins'
 import { ArrowUp, ChevronRight, LoaderCircle, Search, X } from 'lucide-react'
 import type { FormEvent, RefObject } from 'react'
 
@@ -41,6 +42,18 @@ export function PathToolbar({
   close?: { label: string; title: string; className: string; onClose: () => void }
   showGlobalSearch?: boolean
 }) {
+  const plugins = usePluginCatalog()
+  const localSearch = !x.path.includes('://') && !x.globalSearch
+  const searchEngines = localSearch
+    ? plugins.filter(
+        (plugin) =>
+          plugin.enabled &&
+          plugin.approved &&
+          plugin.backendAvailable &&
+          plugin.extensions?.search &&
+          (plugin.extensions.search.modes?.includes(x.searchMode) ?? x.searchMode === 'name'),
+      )
+    : []
   const dropFolder = /^[a-z][a-z0-9+.-]*:\/\//i.test(x.path) ? undefined : x.path
   return (
     <div className="path-toolbar" data-drop-folder={dropFolder}>
@@ -112,12 +125,46 @@ export function PathToolbar({
         )}
       </nav>
       <div className="search-box">
+        <select
+          aria-label={t('搜索模式')}
+          title={t('搜索模式')}
+          value={x.searchMode}
+          onChange={(event) => {
+            const mode = event.target.value as 'name' | 'content'
+            if (mode === 'content') x.setGlobalSearch(false)
+            x.setSearchMode(mode)
+          }}
+        >
+          <option value="name">{t('文件名')}</option>
+          <option value="content">{t('文件内容')}</option>
+        </select>
+        <select
+          aria-label={t('搜索引擎')}
+          value={
+            localSearch &&
+            (x.searchEngine === 'auto' ||
+              x.searchEngine === 'builtin' ||
+              searchEngines.some((plugin) => x.searchEngine === `plugin:${plugin.id}`))
+              ? x.searchEngine
+              : 'auto'
+          }
+          onChange={(event) => x.setSearchEngine(event.target.value)}
+        >
+          <option value="auto">{t('自动')}</option>
+          <option value="builtin">{t('内置搜索')}</option>
+          {searchEngines.map((plugin) => (
+            <option key={plugin.id} value={`plugin:${plugin.id}`}>
+              {plugin.name}
+            </option>
+          ))}
+        </select>
         {showGlobalSearch && (
           <button
             className="search-scope"
             title={x.globalSearch ? t('切换为当前文件夹搜索') : t('搜索所有可访问的文件')}
             aria-label={t('全局搜索')}
             aria-pressed={x.globalSearch}
+            disabled={x.searchMode === 'content'}
             onClick={() => x.setGlobalSearch(!x.globalSearch)}
           >
             <Search size={15} />

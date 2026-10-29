@@ -3,6 +3,7 @@ import { t } from '@/i18n'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
 import { PluginImportDialog, PluginMessage, PluginUninstallDialog } from './plugins/PluginAlerts'
 import { PluginList } from './plugins/PluginList'
+import { ProviderPrioritySettings } from './plugins/ProviderPrioritySettings'
 import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
 import { PluginLogsSheet } from './plugins/PluginLogsSheet'
 import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
@@ -100,6 +101,7 @@ export function PluginSettings() {
           onToggleActivation={(plugin, enabled) => void updateActivation(plugin, enabled)}
           onBrowseStore={() => setStoreOpen(true)}
         />
+        <ProviderPrioritySettings plugins={plugins} />
         <PluginMessage message={message} />
       </div>
 

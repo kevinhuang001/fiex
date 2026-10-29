@@ -174,6 +174,8 @@ pub fn run() {
             plugin_file_dialog,
             plugin_files_dialog,
             plugin_search,
+            provider_preferences,
+            provider_preferences_set,
             detect_terminals,
             detect_ides,
             open_in_ide,

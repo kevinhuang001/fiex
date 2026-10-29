@@ -90,3 +90,19 @@ fn stops_at_the_result_limit() {
     assert_eq!(count, RESULT_LIMIT);
     assert!(truncated);
 }
+
+#[test]
+fn local_stream_emits_hits_before_completion() {
+    let folder = tempfile::tempdir().unwrap();
+    for index in 0..55 {
+        std::fs::write(folder.path().join(format!("needle-{index}.txt")), "body").unwrap();
+    }
+    let batches = Mutex::new(Vec::new());
+    search_local_stream(folder.path(), "needle", "name", false, &[], &|| false,
+        |batch| batches.lock().unwrap().push((batch.entries.len(), batch.done))).unwrap();
+    let batches = batches.into_inner().unwrap();
+    assert!(batches.len() >= 2);
+    assert_eq!(batches[0], (50, false));
+    assert_eq!(batches.last().unwrap().1, true);
+    assert_eq!(batches.iter().map(|(count, _)| count).sum::<usize>(), 55);
+}

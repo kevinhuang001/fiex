@@ -50,6 +50,154 @@ pub struct SearchBatch {
     pub skipped: usize,
 }
 
+/// Emit bounded batches during the walk. The callback must not retain a whole
+/// search's results; the UI owns accumulated hits for its current pane.
+pub(crate) fn search_local_stream(
+    root: &Path,
+    query: &str,
+    mode: &str,
+    hidden: bool,
+    ignores: &[String],
+    cancelled: &dyn Fn() -> bool,
+    emit: impl Fn(SearchBatch),
+) -> Result<(), String> {
+    if !matches!(mode, "name" | "content") { return Err("invalid search mode".into()); }
+    if query.trim().is_empty() { return Ok(()); }
+    let started = Instant::now();
+    let mut batch = Vec::new();
+    let mut total = 0;
+    let mut skipped = 0;
+    let mut bytes_read = 0usize;
+    let mut truncated = false;
+    let ignore = Arc::new(IgnoreSet::new(ignores));
+    let filter_root = root.to_path_buf();
+    let walker = WalkBuilder::new(root)
+        .hidden(!hidden).ignore(false).git_ignore(false).git_global(false)
+        .git_exclude(false).parents(false).follow_links(false).same_file_system(true)
+        .filter_entry(move |item| item.depth() == 0 ||
+            (!inside_bundle(item.path()) && !ignore.is_ignored(
+                item.path().strip_prefix(&filter_root).unwrap_or(item.path()))))
+        .build();
+    let needle = query.to_lowercase();
+    for item in walker {
+        if cancelled() { return Ok(()); }
+        let item = match item {
+            Ok(item) if item.depth() > 0 => item,
+            Ok(_) => continue,
+            Err(_) => { skipped += 1; continue; }
+        };
+        let matched = if mode == "name" {
+            item.file_name().to_string_lossy().to_lowercase().contains(&needle)
+        } else {
+            if item.file_type().is_some_and(|kind| kind.is_symlink()) { continue; }
+            let Ok(meta) = item.metadata() else { skipped += 1; continue; };
+            if !meta.is_file() { continue; }
+            if meta.len() > 2 * 1024 * 1024 { truncated = true; continue; }
+            if bytes_read + meta.len() as usize > 32 * 1024 * 1024 {
+                truncated = true;
+                break;
+            }
+            // Read only local regular files under the already authorized root.
+            let Ok(bytes) = std::fs::read(item.path()) else { skipped += 1; continue; };
+            bytes_read += bytes.len();
+            !bytes.contains(&0) && String::from_utf8(bytes)
+                .is_ok_and(|text| text.to_lowercase().contains(&needle))
+        };
+        if !matched { continue; }
+        match entry(item.path()) {
+            Ok(found) => { batch.push(found); total += 1; },
+            Err(_) => { skipped += 1; continue; }
+        }
+        if batch.len() >= 50 {
+            emit(SearchBatch { entries: std::mem::take(&mut batch), done: false,
+                elapsed_ms: started.elapsed().as_millis(), truncated: false, skipped: 0 });
+        }
+        if total >= RESULT_LIMIT { truncated = true; break; }
+    }
+    if !cancelled() {
+        emit(SearchBatch { entries: batch, done: true,
+            elapsed_ms: started.elapsed().as_millis(), truncated, skipped });
+    }
+    Ok(())
+}
+
+/// Explicitly budgeted content fallback for plugin mounts. Every directory
+/// and file is resolved through the same Core broker as ordinary FS actions.
+pub(crate) fn search_vfs_content_stream(
+    root: &str,
+    query: &str,
+    hidden: bool,
+    ignores: &[String],
+    cancelled: &dyn Fn() -> bool,
+    emit: impl Fn(SearchBatch),
+) -> Result<(), String> {
+    const MAX_DIRS: usize = 100;
+    const MAX_FILES: usize = 100;
+    const MAX_BYTES: usize = 16 * 1024 * 1024;
+    const PER_FILE: usize = 1024 * 1024;
+    let started = Instant::now();
+    let mut pending = vec![root.to_string()];
+    let mut seen = HashSet::new();
+    let mut batch = Vec::new();
+    let mut scanned = 0;
+    let mut dirs = 0;
+    let mut bytes_read = 0;
+    let mut skipped = 0;
+    let mut truncated = false;
+    let needle = query.to_lowercase();
+    let ignore = IgnoreSet::new(ignores);
+    while let Some(directory) = pending.pop() {
+        if cancelled() { return Ok(()); }
+        if !seen.insert(directory.clone()) { continue; }
+        if dirs >= MAX_DIRS { truncated = true; break; }
+        dirs += 1;
+        let parent = crate::plugins::mounts::parse(&directory)?;
+        let broker = crate::core::fs::trusted(&directory, "core:search")?;
+        let listing = broker.desktop_listing(hidden, ignores)?;
+        for item in listing.entries {
+            if cancelled() { return Ok(()); }
+            let name = &item.name;
+            crate::plugins::mounts::segment(name)?;
+            if !hidden && name.starts_with('.') { continue; }
+            let relative = if parent.relative.is_empty() { name.to_owned() }
+                else { format!("{}/{}", parent.relative, name) };
+            if ignore.is_ignored(Path::new(&relative)) { continue; }
+            let path = crate::plugins::mounts::uri(&parent.mount_id, &relative)?;
+            if item.path != path {
+                return Err("VFS listing returned a child outside its directory".into());
+            }
+            if item.is_dir { pending.push(path); continue; }
+            if item.is_symlink { continue; }
+            if item.size > PER_FILE as u64 { truncated = true; continue; }
+            if scanned >= MAX_FILES || bytes_read >= MAX_BYTES {
+                truncated = true;
+                break;
+            }
+            scanned += 1;
+            let file = crate::core::fs::trusted(&path, "core:search")?;
+            let bytes = match file.preview_prefix(PER_FILE.min(MAX_BYTES - bytes_read)) {
+                Ok(bytes) => bytes,
+                Err(_) => { skipped += 1; continue; }
+            };
+            bytes_read += bytes.len();
+            if bytes.contains(&0) { continue; }
+            if String::from_utf8(bytes).is_ok_and(|text| text.to_lowercase().contains(&needle)) {
+                batch.push(item);
+                if batch.len() >= 50 {
+                    emit(SearchBatch { entries: std::mem::take(&mut batch), done: false,
+                        elapsed_ms: started.elapsed().as_millis(), truncated: false, skipped: 0 });
+                }
+            }
+        }
+        if truncated { break; }
+    }
+    if !cancelled() {
+        emit(SearchBatch { entries: batch, done: true,
+            elapsed_ms: started.elapsed().as_millis(), truncated, skipped });
+    }
+    Ok(())
+}
+
 impl SearchState {
     fn generation(&self, scope: &str) -> Arc<AtomicU64> {
         self.generations
@@ -103,6 +251,8 @@ impl SearchState {
             let found = crate::plugins::resolvers::search::resolve(
                 &crate::plugins::resolvers::search::PluginSearchInput {
                     query: query.into(),
+                    mode: "name".into(),
+                    engine: "auto".into(),
                     root: root.clone(),
                     hidden,
                     ignores: ignores.to_vec(),
@@ -156,6 +306,8 @@ impl SearchState {
         let entries = crate::plugins::resolvers::search::resolve(
             &crate::plugins::resolvers::search::PluginSearchInput {
                 query: query.into(),
+                mode: "name".into(),
+                engine: "auto".into(),
                 root: root.into(),
                 hidden,
                 ignores: ignores.to_vec(),
