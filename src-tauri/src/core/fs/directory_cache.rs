@@ -82,7 +82,7 @@ pub(crate) fn store_decorations(
 const MAX_DIRECTORIES: usize = 10_000;
 const MAX_ENTRIES: usize = 500_000;
 fn cache() -> &'static Mutex<BTreeMap<String, DirectorySnapshot>> {
-    static CACHE: OnceLock<Mutex<BTreeMap<String, Listing>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<BTreeMap<String, DirectorySnapshot>>> = OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 fn key(path: &str) -> String {
@@ -271,7 +271,7 @@ pub(crate) fn remove_entry(path: &str, entry_path: &str) {
 }
 pub(crate) fn add_entry(path: &str, entry: Entry) {
     disk::remove(&key(path));
-    if let Some(listing) = cache()
+    if let Some(data) = cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
@@ -310,7 +310,7 @@ pub(crate) fn drop_subtree(path: &str) {
 }
 pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
     disk::remove(&key(path));
-    if let Some(listing) = cache()
+    if let Some(data) = cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
