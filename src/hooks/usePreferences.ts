@@ -60,7 +60,10 @@ function load(source?: Partial<Preferences>): Preferences {
   const systemStyle = inferShortcutStyle()
   const fallback = defaultsFor(systemStyle)
   try {
-    const stored = source ?? stateSnapshot<Partial<Preferences>>('explorer.preferences', 'fiex:preferences') ?? {}
+    const stored =
+      source ??
+      stateSnapshot<Partial<Preferences>>('explorer.preferences', 'fiex:preferences') ??
+      {}
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
@@ -180,10 +183,16 @@ export function usePreferences() {
   useEffect(() => {
     let active = true
     void loadState<Partial<Preferences>>('explorer.preferences', 'fiex:preferences')
-      .then((stored) => { if (active && stored) setPrefs(load(stored)) })
+      .then((stored) => {
+        if (active && stored) setPrefs(load(stored))
+      })
       .catch(() => {})
-      .finally(() => { if (active) setHydrated(true) })
-    return () => { active = false }
+      .finally(() => {
+        if (active) setHydrated(true)
+      })
+    return () => {
+      active = false
+    }
   }, [])
   useEffect(() => {
     if (hydrated) saveState('explorer.preferences', prefs)
