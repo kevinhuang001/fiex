@@ -6,8 +6,8 @@ import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
-import { listDirectory } from '@/lib/listing'
-import type { Entry, Listing, Location, Preferences, RemoteConnection } from '@/lib/types'
+import { openDirectoryStream } from '@/lib/listing'
+import type { Entry, EntryDecoration, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
 /** True for every path owned by the three Core virtual views, including their
@@ -68,7 +68,11 @@ export function useListing(
   const [searchStats, setSearchStats] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
-  const decorations = useEntryDecorations({ entries, path, enabled, query, refresh })
+  const [directoryDecorations, setDirectoryDecorations] = useState<Record<string, EntryDecoration>>({})
+  const searchDecorations = useEntryDecorations({
+    entries, path, enabled: enabled && (Boolean(query) || !native), query, refresh,
+  })
+  const decorations = query || !native ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
@@ -195,51 +199,24 @@ export function useListing(
     let paintedKey: string | null = null
     setLoading(true)
     setError('')
-    void (async () => {
-      // Start the live enumeration while reading the navigation snapshot.
-      const fresh = listDirectory(path, prefs.hidden, prefs.displayIgnore)
-      // Attach immediately: a fast provider failure must not become unhandled.
-      void fresh.catch(() => {})
-      try {
-        const cachedSnapshot = await call<{
-          listing: Listing
-          decorations: EntryDecoration[]
-        } | null>('directory_snapshot', {
-          path,
-          hidden: prefs.hidden,
-          ignores: prefs.displayIgnore,
-        })
-        if (!active || id !== request.current) return
-        const cached = cachedSnapshot?.listing
-        if (cached) {
-          // Seed the presentation before React receives the cached entries, so
-          // a warm directory does not flash generic icons or lose badges.
-          if (cachedSnapshot?.decorations?.length) {
-            cachePresentations(cached.entries, cachedSnapshot.decorations)
-            publishPresentationIcons(cached.entries)
-          }
-          paintedKey = listingKey(cached.entries)
-          setEntries(cached.entries)
-          setListedPath(path)
-          setVirtualVolume(Boolean(cached.virtualVolume))
-          setDirectoryReadOnly(Boolean(cached.readOnly))
-          setDirectoryCanCreate(cached.canCreate !== false && !cached.readOnly)
-          setDefaultView(cached.defaultView || null)
-          setLoading(false)
-        }
-      } catch {
-        // Cache miss/failure must never prevent live enumeration.
-      }
-      const l = await fresh
+    void openDirectoryStream(path, prefs.hidden, prefs.displayIgnore, (snapshot) => {
       if (!active || id !== request.current) return
+      const l = snapshot.listing
       if (l.path !== path) {
         navigate(l.path)
         return
       }
-      // The cache is only a placeholder. If the fresh listing has the same
-      // order and visible fields, keep the current array (and selection) so
-      // the pane does not flicker, lose selection or jump its scroll.
-      const unchanged = paintedKey !== null && listingKey(l.entries) === paintedKey
+      const nextKey = listingKey(l.entries)
+      if (snapshot.decorations.length) {
+        cachePresentations(l.entries, snapshot.decorations)
+        publishPresentationIcons(l.entries)
+      }
+      const presentation = Object.fromEntries(
+        snapshot.decorations.map((value) => [value.path, value]),
+      )
+      setDirectoryDecorations((previous) =>
+        JSON.stringify(previous) === JSON.stringify(presentation) ? previous : presentation,
+      )
       setDirectoryReadOnly(Boolean(l.readOnly))
       setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
       setVirtualVolume(Boolean(l.virtualVolume))
@@ -250,32 +227,33 @@ export function useListing(
           ? previous
           : l.warnings,
       )
-      if (paintedKey === null) setListedPath(path)
-      if (!unchanged) {
+      if (paintedKey !== nextKey) {
+        paintedKey = nextKey
         setEntries(l.entries)
         const paths = new Set(l.entries.map((entry) => entry.path))
         setSelected((selected) => selected.filter((p) => paths.has(p)))
       }
-      // A fresh install has nothing recent yet; do not greet the user with an
-      // empty list.
-      if (path === 'recent://' && l.entries.length === 0 && history.length <= 1) {
+      setListedPath(path)
+      setLoading(false)
+      if (snapshot.complete && path === 'recent://' &&
+          l.entries.length === 0 && history.length <= 1) {
         const home = locations.find((item) => item.name === '个人文件夹')?.path
         if (home) navigate(home)
       }
-    })()
-      .catch((e) => {
-        if (active) {
-          setError(String(e))
-          // Keep the painted cache visible when only the refresh failed.
-          if (paintedKey === null) setEntries([])
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
+    }).catch((error) => {
+      if (!active || id !== request.current) return
+      if (paintedKey === null) {
+        setEntries([])
+        setDirectoryDecorations({})
+        setError(String(error))
+      } else {
+        // An offline refresh must not remove a correctly authorized snapshot.
+        setWarnings([String(error)])
+      }
+    }).finally(() => {
+      if (active && id === request.current) setLoading(false)
+    })
+    return () => { active = false }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
     if (
