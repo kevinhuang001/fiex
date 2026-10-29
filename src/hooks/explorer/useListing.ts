@@ -3,7 +3,9 @@ import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
-import { listDirectory } from '@/lib/listing'
+import { openDirectory } from '@/lib/listing'
+import { cachePresentations } from '@/lib/entryPresentation'
+import { publishPresentationIcons } from '@/lib/decorationIcons'
 import type { Entry, Listing, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
@@ -65,7 +67,9 @@ export function useListing(
   const [searchStats, setSearchStats] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
-  const decorations = useEntryDecorations({ entries, path, enabled, query, refresh })
+  const searchDecorations = useEntryDecorations({ entries, path, enabled: enabled && Boolean(query), query, refresh })
+  const [directoryDecorations, setDirectoryDecorations] = useState<Record<string, import('@/lib/types').EntryDecoration>>({})
+  const decorations = query ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
@@ -176,80 +180,51 @@ export function useListing(
     if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
-    let paintedKey: string | null = null
     setLoading(true)
     setError('')
-    void (async () => {
-      // Start the live enumeration while reading the navigation snapshot.
-      const fresh = listDirectory(path, prefs.hidden, prefs.displayIgnore)
-      // Attach immediately: a fast provider failure must not become unhandled.
-      void fresh.catch(() => {})
-      try {
-        const cached = await call<Listing | null>('directory_cache', {
-          path,
-          hidden: prefs.hidden,
-          ignores: prefs.displayIgnore,
-        })
-        if (!active || id !== request.current) return
-        if (cached) {
-          paintedKey = listingKey(cached.entries)
-          setEntries(cached.entries)
-          setListedPath(path)
-          setVirtualVolume(Boolean(cached.virtualVolume))
-          setDirectoryReadOnly(Boolean(cached.readOnly))
-          setDirectoryCanCreate(cached.canCreate !== false && !cached.readOnly)
-          setDefaultView(cached.defaultView || null)
-          setLoading(false)
-        }
-      } catch {
-        // Cache miss/failure must never prevent live enumeration.
-      }
-      const l = await fresh
+    void openDirectory(path, prefs.hidden, prefs.displayIgnore, (frame) => {
       if (!active || id !== request.current) return
-      if (l.path !== path) {
-        navigate(l.path)
+      const listing = frame.listing
+      if (listing.path !== path) {
+        navigate(listing.path)
         return
       }
-      // The cache is only a placeholder. If the fresh listing has the same
-      // order and visible fields, keep the current array (and selection) so
-      // the pane does not flicker, lose selection or jump its scroll.
-      const unchanged = paintedKey !== null && listingKey(l.entries) === paintedKey
-      setDirectoryReadOnly(Boolean(l.readOnly))
-      setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
-      setVirtualVolume(Boolean(l.virtualVolume))
-      setDefaultView(l.defaultView || null)
-      setWarnings((previous) =>
-        previous.length === l.warnings.length &&
-        previous.every((warning, index) => warning === l.warnings[index])
-          ? previous
-          : l.warnings,
+      const nextDecorations = Object.fromEntries(
+        frame.decorations.map((value) => [value.path, value]),
       )
-      if (paintedKey === null) setListedPath(path)
-      if (!unchanged) {
-        setEntries(l.entries)
-        const paths = new Set(l.entries.map((entry) => entry.path))
-        setSelected((selected) => selected.filter((p) => paths.has(p)))
-      }
-      // A fresh install has nothing recent yet; do not greet the user with an
-      // empty list.
-      if (path === 'recent://' && l.entries.length === 0 && history.length <= 1) {
+      // Icon and metadata are applied together to avoid generic-icon flashing.
+      cachePresentations(listing.entries, frame.decorations)
+      publishPresentationIcons(listing.entries)
+      setDirectoryDecorations((previous) =>
+        JSON.stringify(previous) === JSON.stringify(nextDecorations) ? previous : nextDecorations,
+      )
+      setEntries((previous) =>
+        listingKey(previous) === listingKey(listing.entries) ? previous : listing.entries,
+      )
+      setListedPath(path)
+      setVirtualVolume(Boolean(listing.virtualVolume))
+      setDirectoryReadOnly(Boolean(listing.readOnly))
+      setDirectoryCanCreate(listing.canCreate !== false && !listing.readOnly)
+      setDefaultView(listing.defaultView || null)
+      setWarnings((previous) => {
+        const warnings = [...listing.warnings, ...(frame.warning ? [frame.warning] : [])]
+        return JSON.stringify(previous) === JSON.stringify(warnings) ? previous : warnings
+      })
+      const paths = new Set(listing.entries.map((entry) => entry.path))
+      setSelected((current) => current.filter((item) => paths.has(item)))
+      setLoading(false)
+      if (frame.done && path === 'recent://' &&
+          listing.entries.length === 0 && history.length <= 1) {
         const home = locations.find((item) => item.name === '个人文件夹')?.path
         if (home) navigate(home)
       }
-    })()
-      .catch((e) => {
-        if (active) {
-          setError(String(e))
-          // Keep the painted cache visible when only the refresh failed.
-          if (paintedKey === null) setEntries([])
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
+    }).catch((error) => {
+      if (active && id === request.current) {
+        setError(String(error))
+        setLoading(false)
+      }
+    })
+    return () => { active = false; ++request.current }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
     if (
