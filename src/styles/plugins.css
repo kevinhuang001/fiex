@@ -105,7 +105,10 @@
 .context-submenu.plugin-context-menu {
   top: 0;
   bottom: auto;
-  width: 200px;
+  /* Keep the plugin panel compact; long item labels ellipsize instead of
+     widening the menu. */
+  width: 168px;
+  max-width: min(180px, calc(var(--ui-vw, 100vw) - 16px));
 }
 .context-submenu.plugin-context-menu.plugin-context-menu-up {
   top: auto;

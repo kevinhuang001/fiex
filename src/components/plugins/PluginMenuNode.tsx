@@ -9,7 +9,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import { ChevronRight, Puzzle } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 
 export interface PluginMenuItem {
   id: string
@@ -142,6 +142,7 @@ export function PluginMenuNode({
       <div className="context-submenu-wrap" onMouseEnter={expand} onMouseLeave={scheduleClose}>
         <button
           role="menuitem"
+          title={item.title}
           aria-haspopup="menu"
           aria-expanded={expanded}
           onClick={(event) => {
@@ -151,8 +152,7 @@ export function PluginMenuNode({
             else setExpanded(false)
           }}
         >
-          <Puzzle size={15} />
-          {item.title}
+          <span className="context-submenu-label">{item.title}</span>
           <ChevronRight size={13} className="submenu-arrow" />
         </button>
         {expanded && (
@@ -190,11 +190,11 @@ export function PluginMenuNode({
   return (
     <button
       role="menuitem"
+      title={item.title}
       onMouseEnter={() => group?.setOpenId(null)}
       onClick={(event) => onAction(item, { x: event.clientX, y: event.clientY })}
     >
-      <Puzzle size={15} />
-      {item.title}
+      <span className="context-submenu-label">{item.title}</span>
     </button>
   )
 }

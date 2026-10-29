@@ -215,6 +215,56 @@ pub fn transfer(
     cancel: &AtomicBool,
     progress: &impl Fn(u64, u64, Option<&str>),
 ) -> Result<OperationResult, String> {
+    // Installed applications are not host files. Moving them into/out of an
+    // Applications folder only rewrites the persisted mapping; user-store
+    // entries in the same selection still go through the regular engine.
+    if moving {
+        let system: Vec<String> = paths
+            .iter()
+            .filter(|path| {
+                crate::core::volumes::applications::is_system_app(path)
+                    && crate::core::volumes::applications::system_entry(path).is_ok()
+            })
+            .cloned()
+            .collect();
+        if !system.is_empty() {
+            if destination != crate::core::volumes::applications::URI
+                && !crate::core::volumes::applications::is_user(destination)
+            {
+                return Err(
+                    "system applications can only be moved inside the Applications view".into(),
+                );
+            }
+            let rest: Vec<String> = paths
+                .iter()
+                .filter(|path| !system.iter().any(|candidate| candidate == *path))
+                .cloned()
+                .collect();
+            crate::core::volumes::applications::move_system_apps(&system, destination)?;
+            let mut result = OperationResult {
+                paths: system,
+                ..Default::default()
+            };
+            if rest.is_empty() {
+                return Ok(result);
+            }
+            let mut other = transfer(
+                &rest,
+                destination,
+                moving,
+                keep_both,
+                ignores,
+                resolutions,
+                cancel,
+                progress,
+            )?;
+            result.paths.append(&mut other.paths);
+            result.errors.append(&mut other.errors);
+            result.skipped += other.skipped;
+            result.conflicts.append(&mut other.conflicts);
+            return Ok(result);
+        }
+    }
     let parent = binding::destination(destination, "core:transfer")?;
     let mut result = OperationResult::default();
     let mut steps = Vec::new();

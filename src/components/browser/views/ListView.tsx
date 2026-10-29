@@ -1,11 +1,12 @@
 import { t } from '@/i18n'
 import { useRef, useState } from 'react'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import { FileIcon } from '../../FileIcon'
 import { DecoratedValue, NameCell, rowVars } from './shared'
 import { date, kind, size } from '@/lib/files'
 import { LIST_COLUMNS_DEFAULT, listGridTemplate, resizeListColumn } from '@/lib/listColumns'
 import type { ListColumnKey, ListColumns } from '@/lib/listColumns'
-import type { Entry } from '@/lib/types'
+import type { Entry, Sort } from '@/lib/types'
 import type { Explorer } from '@/hooks/useExplorer'
 import type { SharedRow } from './shared'
 import type { PointerEvent as ReactPointerEvent } from 'react'
@@ -26,6 +27,9 @@ export function ListView({
   shared,
   columns,
   onColumnsChange,
+  sort,
+  descending,
+  onSort,
 }: {
   explorer: Explorer
   flat: FlatRow[]
@@ -35,6 +39,9 @@ export function ListView({
   shared: SharedRow
   columns: ListColumns
   onColumnsChange: (columns: ListColumns) => void
+  sort: Sort
+  descending: boolean
+  onSort: (sort: Sort) => void
 }) {
   // A drag previews locally and commits once on release, so moving the divider
   // never writes preferences on every pointer event.
@@ -84,21 +91,49 @@ export function ListView({
       onDoubleClick={() => resetColumn(key)}
     />
   )
+  // The header and the rows share one sort state: FileViews sorts the entries
+  // with the same `sort`/`descending` pair this header paints its indicator
+  // from. A new column starts ascending; clicking the active column flips it.
+  const ariaSort = (key: Sort) =>
+    sort === key ? (descending ? 'descending' : 'ascending') : 'none'
+  const sortButton = (key: Sort, label: string) => {
+    const active = sort === key
+    const hint = t('按{0}排序', label)
+    return (
+      <button
+        type="button"
+        className="list-sort"
+        onClick={() => onSort(key)}
+        aria-label={hint}
+        title={hint}
+      >
+        {label}
+        {active &&
+          (descending ? (
+            <ArrowDown size={11} aria-hidden="true" />
+          ) : (
+            <ArrowUp size={11} aria-hidden="true" />
+          ))}
+      </button>
+    )
+  }
   return (
     <>
-      <div className="list-header" style={{ gridTemplateColumns: template }}>
-        <span>{t('名称')}</span>
-        <span className="list-col">
+      <div className="list-header" style={{ gridTemplateColumns: template }} role="row">
+        <span role="columnheader" aria-sort={ariaSort('name')}>
+          {sortButton('name', t('名称'))}
+        </span>
+        <span className="list-col" role="columnheader" aria-sort={ariaSort('modified')}>
           {resizer('modified')}
-          {t('修改时间')}
+          {sortButton('modified', t('修改时间'))}
         </span>
-        <span className="list-col">
+        <span className="list-col" role="columnheader" aria-sort={ariaSort('size')}>
           {resizer('size')}
-          {t('大小')}
+          {sortButton('size', t('大小'))}
         </span>
-        <span className="list-col">
+        <span className="list-col" role="columnheader" aria-sort={ariaSort('kind')}>
           {resizer('kind')}
-          {t('种类')}
+          {sortButton('kind', t('种类'))}
         </span>
       </div>
       <div style={{ height: totalSize, position: 'relative' }}>

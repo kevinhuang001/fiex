@@ -27,12 +27,10 @@ interface ShellChoice {
 export function TerminalPanel({
   terminalFont,
   terminalFontSize,
-  terminalColor,
   onSettingsChange,
 }: {
   terminalFont?: string
   terminalFontSize?: number
-  terminalColor?: string
   onSettingsChange: (patch: Partial<Preferences>) => void
 }) {
   const [tabs, setTabs] = useState<TerminalTab[]>([])
@@ -243,7 +241,6 @@ export function TerminalPanel({
               <TerminalAppearanceMenu
                 terminalFont={terminalFont}
                 terminalFontSize={terminalFontSize}
-                terminalColor={terminalColor}
                 fonts={fonts}
                 onSettingsChange={onSettingsChange}
               />
@@ -270,7 +267,6 @@ export function TerminalPanel({
               shell={tab.shell}
               terminalFont={terminalFont}
               terminalFontSize={terminalFontSize}
-              terminalColor={terminalColor}
               name={t('终端 {0}{1}', tab.number, tab.shellName ? ` · ${tab.shellName}` : '')}
             />
           </div>

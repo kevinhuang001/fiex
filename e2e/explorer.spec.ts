@@ -275,7 +275,6 @@ test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
   await page.getByRole('button', { name: '终端设置' }).click()
   const settings = page.getByRole('group', { name: '终端设置' })
   await settings.getByRole('slider').fill('17')
-  await settings.getByLabel('字体颜色').fill('#55aaff')
   await expect
     .poll(() =>
       page.evaluate(
@@ -283,14 +282,13 @@ test('built-in terminal opens an integrated bottom panel', async ({ page }) => {
       ),
     )
     .toBe(17)
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => JSON.parse(localStorage.getItem('fiex:preferences') || '{}').terminalColor,
-      ),
-    )
-    .toBe('#55aaff')
-  await settings.getByRole('button', { name: '跟随主题' }).click()
+  // Terminal colors are not user settings: they follow the active theme.
+  await expect(settings.getByLabel('字体颜色')).toHaveCount(0)
+  expect(
+    await page.evaluate(
+      () => JSON.parse(localStorage.getItem('fiex:preferences') || '{}').terminalColor,
+    ),
+  ).toBeUndefined()
   await page.getByRole('button', { name: '终端设置' }).click()
   await page.getByRole('button', { name: '新建终端' }).click()
   await page.getByRole('menuitem', { name: 'bash' }).click()

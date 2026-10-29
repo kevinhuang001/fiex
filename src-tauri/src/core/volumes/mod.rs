@@ -6,6 +6,7 @@
 //! - `mounts`: mounted disks, unmounted removable media and mounting,
 //! - `trash`: browsing, restoring and emptying the Trash.
 
+pub mod application_folders;
 pub mod applications;
 mod mounts;
 pub mod recycle;

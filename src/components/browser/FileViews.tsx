@@ -7,8 +7,8 @@ import { ColumnsView } from './views/ColumnsView'
 import { GridView } from './views/GridView'
 import { ListView } from './views/ListView'
 import { useFileDrag, useSelectionBand } from './views/useSelectionBand'
-import { groups, sortEntries } from '@/lib/files'
-import type { Entry } from '@/lib/types'
+import { groups, nextSort, sortEntries } from '@/lib/files'
+import type { Entry, Sort } from '@/lib/types'
 import type { FlatRow } from './views/ListView'
 import type { Props, SharedRow } from './views/shared'
 import type { MouseEvent } from 'react'
@@ -34,6 +34,10 @@ export function FileViews(props: Props) {
     [x.entries, prefs.sort, prefs.descending, getLocale()],
   )
   const selectedPaths = useMemo(() => new Set(x.selected), [x.selected, getLocale()])
+  // Header clicks reuse the preference the toolbar sort menu and every view
+  // already read, so the header indicator, the list rows and search results
+  // cannot drift apart. A fresh column starts ascending, the active one flips.
+  const sortBy = (sort: Sort) => updatePrefs(nextSort(prefs.sort, prefs.descending, sort))
   // The window is zoomed from the font-size preference, so the tile geometry
   // stays at the reference size and scales with the rest of the interface.
   const iconSize = 64
@@ -214,6 +218,9 @@ export function FileViews(props: Props) {
           flat={flat}
           columns={prefs.listColumns}
           onColumnsChange={(listColumns) => updatePrefs({ listColumns })}
+          sort={prefs.sort}
+          descending={prefs.descending}
+          onSort={sortBy}
           rows={virtual.getVirtualItems()}
           totalSize={virtual.getTotalSize()}
           selectedPaths={selectedPaths}

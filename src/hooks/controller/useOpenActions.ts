@@ -98,20 +98,17 @@ export function useOpenActions({
   }
   const openTrash = async () => {
     try {
-      // A sidebar click can precede the environment effect's initial response.
-      // Resolve the destination on demand before choosing the external fallback.
+      // Navigate immediately: the pane paints its cached Trash snapshot and
+      // the normal listing fills it in on a worker thread. No synchronous
+      // permission/list preflight is allowed on the click path.
       const destination = trashPath ?? (await call<string | null>('trash_path'))
       if (!destination) {
         void run(t('正在打开废纸篓…'), () => call('open_trash'))
         return
       }
-      await call('list_directory', {
-        path: destination,
-        hidden: prefs.hidden,
-        ignores: prefs.displayIgnore,
-      })
       setPreview(null)
-      x.navigate(destination)
+      if (x.path === destination) x.reload()
+      else x.navigate(destination)
     } catch (error) {
       const message = String(error)
       if (/permitted|permission|权限/i.test(message)) setTrashIssue(true)

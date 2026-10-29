@@ -125,3 +125,115 @@ fn explicit_engine_names_are_parsed_for_the_ui() {
     assert_eq!(SearchEngine::default(), SearchEngine::Auto);
     assert_eq!(SearchMode::default(), SearchMode::Name);
 }
+
+fn virtual_entry(name: &str) -> Entry {
+    Entry {
+        path: format!("recent://{name}"),
+        name: name.into(),
+        ..Default::default()
+    }
+}
+
+fn filter_virtual(
+    entries: Vec<Entry>,
+    query: &str,
+    limit: usize,
+) -> crate::core::volumes::virtual_storage::CachedSearch {
+    crate::core::volumes::virtual_storage::filter_entries(entries, query, limit, &|| false)
+}
+
+#[test]
+fn virtual_roots_are_recognized_without_host_paths() {
+    assert!(virtual_search_root("recent://"));
+    assert!(virtual_search_root("applications://"));
+    assert!(virtual_search_root("recyclebin://"));
+    assert!(virtual_search_root("trash://"));
+    assert!(virtual_search_root("applications://user/QnV6ei50eHQ"));
+    assert!(!virtual_search_root("/tmp"));
+    assert!(!virtual_search_root("fiex-plugin-view://example"));
+    if let Some(root) = crate::core::volumes::trash_path() {
+        assert!(virtual_search_root(&root.to_string_lossy()));
+    }
+}
+
+#[test]
+fn virtual_filter_matches_names_case_insensitively() {
+    let found = filter_virtual(
+        vec![
+            virtual_entry("Needle One"),
+            virtual_entry("needle-two"),
+            virtual_entry("other"),
+        ],
+        "NEEDLE",
+        RESULT_LIMIT,
+    );
+    let names: Vec<_> = found
+        .entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect();
+    assert_eq!(names, ["Needle One", "needle-two"]);
+    // Name mode never reads file contents; a body-only match stays absent.
+    assert!(!found.truncated);
+    assert_eq!(found.skipped, 0);
+    assert_eq!(found.scanned, 3);
+}
+
+#[test]
+fn virtual_filter_respects_the_result_limit() {
+    let found = filter_virtual(
+        vec![
+            virtual_entry("needle-1"),
+            virtual_entry("needle-2"),
+            virtual_entry("needle-3"),
+        ],
+        "needle",
+        2,
+    );
+    assert_eq!(found.entries.len(), 2);
+    assert!(found.truncated);
+}
+
+#[test]
+fn virtual_content_mode_warns_instead_of_returning_empty() {
+    let mut request = SearchRequest::new("recent://", "needle");
+    request.mode = SearchMode::Content;
+    let (entries, batches) = run(&request);
+    assert!(entries.is_empty());
+    let last = batches.last().unwrap();
+    assert!(last.done);
+    assert!(last.incomplete);
+    assert_eq!(last.engine.as_deref(), Some("builtin"));
+    assert!(
+        last.warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("暂不支持")),
+        "{last:?}"
+    );
+}
+
+#[test]
+fn virtual_search_emits_a_cache_snapshot_then_a_terminal_batch() {
+    let request = SearchRequest::new("recent://", "__fiex_virtual_search_probe__");
+    let (_entries, batches) = run(&request);
+    assert_eq!(batches.len(), 2, "{batches:?}");
+    assert!(batches[0].replace);
+    assert!(!batches[0].done);
+    let last = batches.last().unwrap();
+    assert!(last.done);
+    // Identical refresh results confirm with an empty batch; changed results
+    // arrive as one replacement snapshot.
+    assert!(last.replace || last.entries.is_empty(), "{last:?}");
+}
+
+#[test]
+fn virtual_filter_stops_when_cancelled() {
+    let found = crate::core::volumes::virtual_storage::filter_entries(
+        vec![virtual_entry("needle-1"), virtual_entry("needle-2")],
+        "needle",
+        RESULT_LIMIT,
+        &|| true,
+    );
+    assert!(found.entries.is_empty());
+    assert_eq!(found.scanned, 0);
+}

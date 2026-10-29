@@ -58,6 +58,10 @@ function whenVisible(element: Element, callback: () => void) {
  */
 export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number }) {
   const isApplication = kind(e) === t('应用程序')
+  // Virtual entries already carry their application icon through the decoration
+  // response (built from the cached listing). native_icon would stat a URI that
+  // has no host file, so keep it for real host paths only.
+  const canNativeIcon = isApplication && !e.path.includes('://')
   const [native, setNative] = useState<string | null>(null)
   const decorationIcon = useDecorationIcon(e.path)
   const ref = useRef<HTMLSpanElement>(null)
@@ -67,7 +71,7 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
   )
   useEffect(() => {
     setNative(null)
-    if (!isApplication || !ref.current) return
+    if (!canNativeIcon || !ref.current) return
     let active = true
     const stop = whenVisible(ref.current, () => {
       const key = `${e.path}:${e.modified}:${pixels}`
@@ -81,7 +85,7 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
       active = false
       stop()
     }
-  }, [e.path, e.modified, isApplication, pixels])
+  }, [e.path, e.modified, canNativeIcon, pixels])
 
   const visual = fileVisual(e)
   const generic = visual.generic ? (visual.folder ? 'generic-folder' : 'generic-file') : ''

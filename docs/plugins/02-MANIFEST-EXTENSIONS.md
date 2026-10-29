@@ -88,7 +88,7 @@
 - 加载页是自包含 HTML，不携带预览 Session，不能调用 `plugin.invoke`、文件、网络或命令；只能通过面板桥读取 `context.get`（文件展示名/扩展名）、`theme.get`/`theme.changed` 以及 `plugin.error`。
 - 没有 `loading` 的旧声明保持原行为：Core 显示内置加载态，直到 `preview.open` 返回。
 - 声明了 `loading` 时，Core 会先显示加载页，再在后台加载真正的预览 iframe；插件在首次数据渲染完成后调用桥接方法 `preview.ready`，Core 才移除加载页。这样不会出现“插件自己的 spinner/空壳”阶段。
-- `preview.ready` 只能由真正的预览会话调用，加载页没有预览 Session，不能调用；30 秒未收到时 Core 会兜底显示预览，避免第三方插件不实现时永久卡住。
+- `preview.ready` 只能由真正的预览会话调用，加载页没有预览 Session，不能调用。声明了加载页的插件必须在首次渲染完成后调用它；Core 不设固定兜底超时，大文件转换（如 149MB 的 Office 文档）期间加载页始终保留，用户可随时关闭预览。
 
 ### Connections
 

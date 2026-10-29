@@ -32,7 +32,6 @@ function defaultsFor(style: ShortcutStyle): Preferences {
     fontSize: 11,
     terminalFont: '',
     terminalFontSize: 13,
-    terminalColor: '',
     startPage: 'recent',
     displayIgnore: defaultDisplayIgnore(),
     sidebarOrder: ['places', 'favorites', 'tags', 'devices', 'connections'],
@@ -75,10 +74,6 @@ function load(): Preferences {
       typeof stored.terminalFontSize === 'number'
         ? Math.min(24, Math.max(9, stored.terminalFontSize))
         : fallback.terminalFontSize
-    const terminalColor =
-      typeof stored.terminalColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(stored.terminalColor)
-        ? stored.terminalColor
-        : ''
     const shortcuts: ShortcutMap = defaultShortcuts(style)
     if (stored.shortcuts && typeof stored.shortcuts === 'object') {
       for (const action of SHORTCUT_ACTIONS) {
@@ -117,7 +112,6 @@ function load(): Preferences {
       fontSize,
       terminalFont,
       terminalFontSize,
-      terminalColor,
       backgroundImage:
         typeof stored.backgroundImage === 'string' && stored.backgroundImage
           ? stored.backgroundImage

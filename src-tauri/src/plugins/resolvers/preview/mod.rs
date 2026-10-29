@@ -10,10 +10,10 @@ use std::fs;
 
 mod builtin;
 mod session;
-use crate::plugins::events::{EventRouter, Resolver};
+use crate::plugins::events::{EventRouter, Handler, Resolver};
 use builtin::{builtin_candidates, builtin_view, Builtin};
-use session::open_plugin_resource;
 pub use session::session_scope;
+use session::{open_plugin_resource, UNSUPPORTED};
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
@@ -115,6 +115,7 @@ fn resolve_preview(
         let first = providers.remove(index);
         providers.insert(0, first);
     }
+    let preferred_id = preferred.map(str::to_owned);
     // The final fallback is a label-only renderer; it never reads/downloads content.
     providers.retain(|p| p.id != "builtin:fallback");
     providers.push(Resolver::builtin("builtin:fallback", i64::MIN));
@@ -164,7 +165,36 @@ fn resolve_preview(
             Ok(view)
         },
         |_| true,
-        |outcomes| {
+        move |outcomes| {
+            // Every plugin failure is worth keeping: the in-memory error log is
+            // shown in Settings, where a bare "no preview provider succeeded"
+            // message would hide crashes, handshake and sandbox failures.
+            for (provider, result) in &outcomes {
+                let (Handler::Plugin(plugin), Err(error)) = (&provider.handler, result) else {
+                    continue;
+                };
+                if error != UNSUPPORTED {
+                    let _ = crate::plugins::errors::report(
+                        &plugin.id,
+                        "host",
+                        &format!("{}: {error}", provider.name),
+                        Some(error.as_str()),
+                    );
+                }
+            }
+            // Keep the provider the user selected. Only an explicit
+            // "unsupported" answer may fall through to the next provider (the
+            // label-only builtin included); a crash or transport failure is
+            // surfaced as an error so the UI never silently swaps providers.
+            if let Some(id) = preferred_id.as_deref() {
+                if let Some((provider, Err(error))) =
+                    outcomes.iter().find(|(provider, _)| provider.id == id)
+                {
+                    if matches!(&provider.handler, Handler::Plugin(_)) && error != UNSUPPORTED {
+                        return Err(format!("{} preview failed: {error}", provider.name));
+                    }
+                }
+            }
             outcomes.into_iter().find_map(|(provider,result)|result.ok().map(|view|serde_json::json!({"providerId":provider.id,"provider":provider.name,"priority":provider.priority,"view":view}))).ok_or_else(||"no preview provider succeeded".into())
         },
     )

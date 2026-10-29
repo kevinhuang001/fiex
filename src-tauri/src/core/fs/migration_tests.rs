@@ -266,6 +266,21 @@ fn desktop_search_runs_through_the_same_adapter_and_honors_cancellation() {
 }
 
 #[test]
+fn virtual_adapter_search_reads_the_cached_view() {
+    let root = super::binding::trusted(
+        crate::core::volumes::virtual_resolvers::RECENT_URI,
+        "core:test-virtual-search",
+    )
+    .unwrap();
+    let (entries, truncated, skipped) = root
+        .search("__fiex_virtual_cache_probe__", false, &[], 10, &|| false)
+        .unwrap();
+    assert!(entries.is_empty());
+    assert!(!truncated);
+    assert_eq!(skipped, 0);
+}
+
+#[test]
 fn builtin_view_storage_and_presentation_are_separate() {
     use crate::core::volumes::{applications, virtual_resolvers, virtual_storage};
     let root = virtual_storage::entry(applications::URI).unwrap();

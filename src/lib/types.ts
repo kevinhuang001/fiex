@@ -70,6 +70,11 @@ export interface Batch {
   elapsedMs: number
   truncated: boolean
   skipped: number
+  scanned?: number
+  incomplete?: boolean
+  warning?: string
+  engine?: string
+  replace?: boolean
 }
 export interface OperationResult {
   paths: string[]
@@ -149,7 +154,6 @@ export interface Preferences {
   fontSize: number
   terminalFont: string
   terminalFontSize: number
-  terminalColor: string
   startPage: StartPage
   displayIgnore: string[]
   sidebarOrder: SidebarSection[]

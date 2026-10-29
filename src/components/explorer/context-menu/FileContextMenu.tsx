@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { useMenuPosition } from '@/lib/menuPosition'
-import { useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   CloudCheck,
   CloudDownload,
@@ -8,6 +8,7 @@ import {
   Copy,
   ExternalLink,
   FilePlus,
+  FolderOpen,
   FolderPlus,
   Eye,
   Info,
@@ -20,6 +21,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
+import { usePluginCatalog } from '@/lib/plugins'
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import { useContextMenu } from './useContextMenu'
 import { executeCoreMenu } from './execute'
@@ -28,6 +30,7 @@ import type { ContextMenuProps } from './types'
 
 const icons = {
   open: ExternalLink,
+  reveal: FolderOpen,
   eye: Eye,
   info: Info,
   pencil: Pencil,
@@ -48,15 +51,33 @@ const icons = {
 export function FileContextMenu(props: ContextMenuProps) {
   const { menu, x, setMenu } = props
   const ref = useRef<HTMLDivElement>(null)
-  const position = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, ref, Boolean(menu))
-  const { paths, menus, error } = useContextMenu(props)
+  // Hooks run in a stable order, but the menu element only exists after the
+  // Core snapshot is ready. Keep `open` false until then so the measuring
+  // effect runs again when the real node mounts (otherwise the stale initial
+  // 0,0 placement would survive).
+  const { paths, menus, error, ready } = useContextMenu(props)
+  const plugins = usePluginCatalog()
+  const setError = x.setError
+  useEffect(() => {
+    // Menu resolution errors use the one modal error channel, never an inline
+    // row that would resize the popup.
+    if (error) setError(error)
+  }, [error, setError])
+  const position = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, ref, Boolean(menu) && ready)
   const virtual = props.x.path === 'applications://' || props.x.path === 'recyclebin://'
-  const builtin = useMemo(
-    () => menus.filter((menu): menu is CoreMenu => menu.kind === 'builtin'),
-    [menus],
-  )
-  const plugins = useMemo(() => menus.filter((menu) => menu.kind === 'plugin'), [menus])
+  const pluginEntry =
+    !virtual &&
+    paths.length > 0 &&
+    plugins.some((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+  const populated = menus.some((group) => group.items.length > 0) || pluginEntry
   if (!menu) return null
+  // Wait for the Core-only snapshot: the menu must appear with its final
+  // top-level height instead of growing as providers answer.
+  if (!ready) return null
+  if (error) return null
+  // Never leave an empty white popup when every provider declined and the
+  // plugin entry is not applicable (for example a blank canvas).
+  if (!populated) return null
   const render = (group: CoreMenu, item: CoreMenuItem) => {
     const Icon = icons[item.icon as keyof typeof icons]
     return (
@@ -85,26 +106,24 @@ export function FileContextMenu(props: ContextMenuProps) {
         className="context-menu"
         style={position}
       >
-        {builtin.flatMap((group) =>
+        {menus.flatMap((group) =>
           group.items
             .filter((item) => item.placement !== 'tail')
             .map((item) => render(group, item)),
         )}
-        {!virtual && (
+        {!virtual && pluginEntry && (
           <PluginContextActions
             paths={paths}
             path={x.path}
-            resolvedMenus={plugins}
             onClose={() => setMenu(null)}
             onError={x.setError}
           />
         )}
-        {builtin.flatMap((group) =>
+        {menus.flatMap((group) =>
           group.items
             .filter((item) => item.placement === 'tail')
             .map((item) => render(group, item)),
         )}
-        {error && <p role="alert">{error}</p>}
       </div>
     </MenuLayer>
   )

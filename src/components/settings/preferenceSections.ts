@@ -4,13 +4,14 @@ import {
   Keyboard,
   Palette,
   PanelLeft,
+  SlidersHorizontal,
   Tags,
   TerminalSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { t } from '@/i18n'
 export type SectionId =
-  'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'terminal' | 'about'
+  'appearance' | 'shortcuts' | 'ignore' | 'sidebar' | 'tags' | 'providers' | 'terminal' | 'about'
 
 interface Section {
   id: SectionId
@@ -80,6 +81,15 @@ export const sections: Section[] = [
     icon: Filter,
     color: '#f59e0b',
     keywords: ['ignore', '忽略', 'node_modules', '.ds_store', '压缩', '复制'],
+  },
+  {
+    id: 'providers',
+    get label() {
+      return t('提供程序')
+    },
+    icon: SlidersHorizontal,
+    color: '#0ea5e9',
+    keywords: ['provider', 'priority', 'order', '提供程序', '优先级', '排序', '插件'],
   },
   {
     id: 'terminal',
@@ -210,6 +220,13 @@ export const searchEntries: SearchEntry[] = [
     keywords: ['terminal', 'shell', '命令行'],
   },
   { section: 'terminal', label: 'IDE', keywords: ['editor', '编辑器', '代码'] },
+  {
+    section: 'providers',
+    get label() {
+      return t('提供程序优先级')
+    },
+    keywords: ['provider', 'priority', '提供程序', '优先级', '排序'],
+  },
   {
     section: 'about',
     get label() {

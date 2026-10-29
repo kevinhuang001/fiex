@@ -3,6 +3,7 @@ import { t, useLocale } from '@/i18n'
 import { FileViews } from '@/components/browser/FileViews'
 import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
+import { ExplorerErrorDialog } from '@/components/ExplorerErrorDialog'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
 import { ActivityCenter } from '@/components/ActivityCenter'
@@ -18,8 +19,8 @@ import { TerminalPanel } from '@/components/terminal/TerminalPanel'
 import { useAppController } from '@/hooks/useAppController'
 import { warmFilePickerData } from '@/lib/filePickerData'
 import { usePluginTasks } from '@/hooks/usePluginTasks'
-import { asset, call, native } from '@/lib/api'
-import { Download, Info, LoaderCircle, X } from 'lucide-react'
+import { asset, native } from '@/lib/api'
+import { Download, LoaderCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 export default function App() {
@@ -103,29 +104,6 @@ export default function App() {
           />
         )}
         {!fullView && <ExplorerPathBar {...app} x={app.left} />}
-        {!fullView && app.x.error && (
-          <div className="error-banner" role="alert">
-            <Info size={16} />
-            <span>{app.x.error}</span>
-            {navigator.userAgent.includes('Windows') && /管理员/.test(app.x.error) && (
-              <button
-                className="error-action"
-                onClick={() =>
-                  void call('relaunch_elevated').catch((error) => app.x.setError(String(error)))
-                }
-              >
-                {t('以管理员身份重启')}
-              </button>
-            )}
-            <button
-              className="icon-button"
-              title={t('关闭提示')}
-              onClick={() => app.x.setError('')}
-            >
-              <X size={15} />
-            </button>
-          </div>
-        )}
         {fullViews.map((view) => (
           <div
             className="full-view-pane"
@@ -201,7 +179,6 @@ export default function App() {
         <TerminalPanel
           terminalFont={app.prefs.terminalFont}
           terminalFontSize={app.prefs.terminalFontSize}
-          terminalColor={app.prefs.terminalColor}
           onSettingsChange={app.update}
         />
         {!fullView && (
@@ -241,6 +218,11 @@ export default function App() {
         onApply={app.applyBatchRename}
       />
       <ExplorerDialogs {...app} />
+      <ExplorerErrorDialog
+        error={app.x.error}
+        onClose={() => app.x.setError('')}
+        onError={app.x.setError}
+      />
       <PluginServices />
     </div>
   )

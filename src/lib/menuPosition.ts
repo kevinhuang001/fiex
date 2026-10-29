@@ -34,9 +34,8 @@ export function placeMenu(
 }
 
 /** Measures the rendered menu and keeps it pointer-anchored and fully visible.
- * Builtin and plugin items are resolved after the menu opens, so the menu grows
- * while visible; the effect re-runs on that growth and only shifts the menu as
- * far as the viewport requires. */
+ * Core rows are resolved before this menu is shown, and plugin rows live in a
+ * lazy submenu, so the top-level height stays stable while it is open. */
 export function useMenuPosition(
   x: number,
   y: number,
@@ -49,7 +48,9 @@ export function useMenuPosition(
     const element = ref.current
     const update = () => {
       const rect = element.getBoundingClientRect()
-      const next = placeMenu(x, y, Math.ceil(rect.width), element.scrollHeight, {
+      // Measure the top-level box, not scrollHeight: an absolutely positioned
+      // (lazy) submenu may overflow it and must not move the menu.
+      const next = placeMenu(x, y, Math.ceil(rect.width), Math.ceil(rect.height), {
         width: window.innerWidth,
         height: window.innerHeight,
       })

@@ -129,6 +129,10 @@ pub struct SearchBatch {
     /// Engine that produced this batch (`builtin` or a provider name).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub engine: Option<String>,
+    /// Virtual-folder results are complete snapshots: replace the visible list
+    /// instead of appending. Local walker batches always keep this false.
+    #[serde(default)]
+    pub replace: bool,
 }
 
 /// Streams bounded batches. Intermediate batches never claim completion; the
@@ -146,6 +150,7 @@ struct BatchSink<'a> {
     incomplete: bool,
     warning: Option<String>,
     engine: Option<String>,
+    done_sent: bool,
 }
 
 impl<'a> BatchSink<'a> {
@@ -163,6 +168,7 @@ impl<'a> BatchSink<'a> {
             incomplete: false,
             warning: None,
             engine: None,
+            done_sent: false,
         }
     }
 
@@ -198,12 +204,48 @@ impl<'a> BatchSink<'a> {
             incomplete: self.incomplete,
             warning: self.warning.clone(),
             engine: self.engine.clone(),
+            replace: false,
         });
+        if done {
+            self.done_sent = true;
+        }
+        self.last = Instant::now();
+    }
+
+    /// Virtual-folder batches carry a complete result set. They bypass the
+    /// incremental buffer: the first batch replaces the list, the terminal
+    /// batch either confirms it (empty, no replace) or replaces it again.
+    fn emit_snapshot(
+        &mut self,
+        entries: Vec<Entry>,
+        done: bool,
+        replace: bool,
+        truncated: bool,
+        skipped: usize,
+        scanned: usize,
+    ) {
+        (self.emit)(SearchBatch {
+            entries,
+            done,
+            elapsed_ms: self.started.elapsed().as_millis(),
+            truncated,
+            skipped,
+            scanned,
+            incomplete: false,
+            warning: self.warning.clone(),
+            engine: self.engine.clone(),
+            replace,
+        });
+        if done {
+            self.done_sent = true;
+        }
         self.last = Instant::now();
     }
 
     fn finish(&mut self) {
-        self.flush(true);
+        if !self.done_sent {
+            self.flush(true);
+        }
     }
 }
 
@@ -276,6 +318,11 @@ fn search_root(
     cancelled: &dyn Fn() -> bool,
     sink: &mut BatchSink<'_>,
 ) -> Result<(), String> {
+    // Core-owned virtual roots are not host paths: filter their root listing
+    // instead of asking a filesystem SearchProvider about a URI.
+    if virtual_search_root(root) {
+        return search_virtual(root, request, cancelled, sink);
+    }
     let local = !crate::plugins::mounts::handles(root) && !root.contains("://");
     if !local {
         return search_adapter(root, request, cancelled, sink);
@@ -338,6 +385,105 @@ fn search_root(
         sink,
     );
     Ok(())
+}
+
+/// A virtual search root owns a cached subtree (a root or one of its
+/// subdirectories). Only cached directories are searched; uncached directories
+/// are never enumerated.
+fn virtual_search_root(root: &str) -> bool {
+    if crate::plugins::mounts::handles(root) {
+        return false;
+    }
+    crate::core::volumes::virtual_storage::is_virtual_tree_path(root)
+}
+
+fn search_virtual(
+    root: &str,
+    request: &SearchRequest,
+    cancelled: &dyn Fn() -> bool,
+    sink: &mut BatchSink<'_>,
+) -> Result<(), String> {
+    sink.engine = Some("builtin".into());
+    if request.mode == SearchMode::Content {
+        // There is no file content to read behind a virtual identity. Return an
+        // explicit warning instead of a silently empty result.
+        sink.warning =
+            Some(crate::i18n::t("暂不支持在“最近使用”“应用程序”和“废纸篓”中搜索文件内容").into());
+        sink.incomplete = true;
+        return Ok(());
+    }
+    // First paint: one complete snapshot of the cached subtree. This batch is
+    // emitted before the refresh below, so the UI never waits for a list.
+    let first = crate::core::volumes::virtual_storage::search_view(
+        root,
+        &request.query,
+        request.hidden,
+        &request.ignores,
+        sink.limit,
+        cancelled,
+    )?;
+    let first_entries = first.entries.clone();
+    sink.emit_snapshot(
+        first.entries,
+        false,
+        true,
+        first.truncated,
+        first.skipped,
+        first.scanned,
+    );
+    if cancelled() {
+        return Ok(());
+    }
+    // Background pass: refresh this search root's own listing, then search the
+    // cached subtree again. Nested directories keep their cached snapshots.
+    if let Err(error) = crate::core::volumes::virtual_storage::list(root) {
+        sink.warning = Some(error);
+        sink.emit_snapshot(Vec::new(), true, false, false, 0, 0);
+        return Ok(());
+    }
+    if cancelled() {
+        return Ok(());
+    }
+    let second = crate::core::volumes::virtual_storage::search_view(
+        root,
+        &request.query,
+        request.hidden,
+        &request.ignores,
+        sink.limit,
+        cancelled,
+    )?;
+    if same_entry_snapshot(&first_entries, &second.entries) {
+        // Identical result: the first batch stays authoritative; only finish.
+        sink.emit_snapshot(
+            Vec::new(),
+            true,
+            false,
+            second.truncated,
+            second.skipped,
+            second.scanned,
+        );
+    } else {
+        // The refreshed listing changed the result set: replace in one batch.
+        sink.emit_snapshot(
+            second.entries,
+            true,
+            true,
+            second.truncated,
+            second.skipped,
+            second.scanned,
+        );
+    }
+    Ok(())
+}
+
+fn same_entry_snapshot(left: &[Entry], right: &[Entry]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.path == right.path
+                && left.name == right.name
+                && left.modified == right.modified
+                && left.size == right.size
+        })
 }
 
 fn search_adapter(

@@ -4,13 +4,11 @@ import type { Preferences } from '@/lib/types'
 export function TerminalAppearanceMenu({
   terminalFont,
   terminalFontSize,
-  terminalColor,
   fonts,
   onSettingsChange,
 }: {
   terminalFont?: string
   terminalFontSize?: number
-  terminalColor?: string
   fonts: string[]
   onSettingsChange: (patch: Partial<Preferences>) => void
 }) {
@@ -44,20 +42,6 @@ export function TerminalAppearanceMenu({
           value={terminalFontSize ?? 13}
           onChange={(event) => onSettingsChange({ terminalFontSize: Number(event.target.value) })}
         />
-      </label>
-      <label>
-        <span>{t('字体颜色')}</span>
-        <span className="terminal-color-control">
-          <input
-            type="color"
-            aria-label={t('字体颜色')}
-            value={terminalColor || '#e6e6e6'}
-            onChange={(event) => onSettingsChange({ terminalColor: event.target.value })}
-          />
-          <button type="button" onClick={() => onSettingsChange({ terminalColor: '' })}>
-            {t('跟随主题')}
-          </button>
-        </span>
       </label>
     </div>
   )
