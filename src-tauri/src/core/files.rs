@@ -1,4 +1,5 @@
 use crate::core::tags::{read_tags, Tag};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, time::UNIX_EPOCH};
 
@@ -144,7 +145,7 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
     crate::plugins::mounts::reject_local(path)?;
     let path = dunce::canonicalize(path).map_err(|e| e.to_string())?;
     let ignore = crate::core::ignores::IgnoreSet::new(ignores);
-    let mut entries = Vec::new();
+    let mut paths = Vec::new();
     let mut warnings = Vec::new();
     for item in fs::read_dir(&path).map_err(|e| e.to_string())? {
         match item {
@@ -155,12 +156,24 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
                 if ignore.is_ignored(std::path::Path::new(&item.file_name())) {
                     continue;
                 }
-                match entry(&item.path()) {
-                    Ok(e) => entries.push(e),
-                    Err(e) => warnings.push(e),
-                }
+                paths.push(item.path());
             }
             Err(e) => warnings.push(e.to_string()),
+        }
+    }
+    // Metadata, shortcut resolution and Finder tag xattrs are independent per
+    // entry. Build large directories in parallel instead of serializing one
+    // stat per row; small directories stay on the cheap sequential path.
+    let results: Vec<Result<Entry, String>> = if paths.len() >= 32 {
+        paths.par_iter().map(|path| entry(path)).collect()
+    } else {
+        paths.iter().map(|path| entry(path)).collect()
+    };
+    let mut entries = Vec::with_capacity(results.len());
+    for result in results {
+        match result {
+            Ok(entry) => entries.push(entry),
+            Err(error) => warnings.push(error),
         }
     }
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));

@@ -35,7 +35,7 @@ pub(super) fn public(conn: &StoredConnection) -> ConnectionInfo {
 }
 
 pub fn list_connections() -> Vec<ConnectionInfo> {
-    load_stored().iter().map(public).collect()
+    load_stored_public().iter().map(public).collect()
 }
 
 fn editable_config(mut connection: StoredConnection) -> ConnectionInput {
@@ -52,7 +52,7 @@ fn editable_config(mut connection: StoredConnection) -> ConnectionInput {
 }
 
 pub fn connection_config(id: &str) -> Result<ConnectionInput, String> {
-    load_stored()
+    load_stored_public()
         .into_iter()
         .find(|connection| connection.id == id)
         .map(editable_config)
