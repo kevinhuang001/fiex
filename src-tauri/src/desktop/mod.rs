@@ -165,8 +165,6 @@ pub fn run() {
             locations,
             list_directory,
             directory_open,
-            directory_cache,
-            directory_snapshot,
             file_info,
             read_preview,
             create_entry,
