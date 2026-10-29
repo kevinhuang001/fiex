@@ -32,7 +32,10 @@ const candidateCache = new MemoryCache<PreviewCandidate[]>(64, 3_000)
 // Cache only builtin, session-independent preview results. Plugin HTML sessions
 // and temporary asset paths must always be resolved through Core again.
 const resolvedCache = new MemoryCache<ResolvedPreview>(24, 90_000)
-window.addEventListener('fiex:plugins-changed', () => { candidateCache.clear(); resolvedCache.clear() })
+window.addEventListener('fiex:plugins-changed', () => {
+  candidateCache.clear()
+  resolvedCache.clear()
+})
 /** Package-local loading document (Core-owned asset path or inline HTML). */
 type LoadingDocument = { html?: string; src?: string }
 // A loading document belongs to the plugin package, not to the file being
@@ -141,7 +144,13 @@ export function Preview({
     if (!entry || !providerId) return
     let active = true
     const pluginId = pluginPreviewId(providerId)
-    const previewKey = JSON.stringify([entry.path, entry.size, entry.modified, entry.mime, providerId])
+    const previewKey = JSON.stringify([
+      entry.path,
+      entry.size,
+      entry.modified,
+      entry.mime,
+      providerId,
+    ])
     const warm = pluginId ? undefined : resolvedCache.peek(previewKey)
     const declaresLoading = Boolean(
       pluginId && candidates.find((candidate) => candidate.id === providerId)?.loading,
@@ -177,11 +186,12 @@ export function Preview({
           }
         })
     }
-    const load = () => call<ResolvedPreview>('preview_open', {
-      path: entry.path,
-      providerId,
-      providerOrder: candidates.map((candidate) => candidate.id),
-    })
+    const load = () =>
+      call<ResolvedPreview>('preview_open', {
+        path: entry.path,
+        providerId,
+        providerOrder: candidates.map((candidate) => candidate.id),
+      })
     const result = (pluginId ? load() : resolvedCache.get(previewKey, load)).then(
       (value) => ({ value }),
       (error) => ({ error }),
