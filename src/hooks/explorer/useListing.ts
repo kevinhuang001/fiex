@@ -17,7 +17,17 @@ export function useListing(
   pane = 'left',
   startOverride?: string,
 ) {
-  const { path, query, globalSearch, history, navigate, setSelected, setRenaming, setError } = nav
+  const {
+    path,
+    query,
+    globalSearch,
+    searchMode,
+    history,
+    navigate,
+    setSelected,
+    setRenaming,
+    setError,
+  } = nav
   const [locations, setLocations] = useState<Location[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
@@ -230,6 +240,8 @@ export function useListing(
             query,
             prefs.hidden,
             prefs.displayIgnore,
+            searchMode,
+            'auto',
             (b) => {
               if (generation !== searchRequest.current) return
               startTransition(() => setEntries((v) => [...v, ...b.entries]))
@@ -254,7 +266,17 @@ export function useListing(
       ++searchRequest.current
       void cancel()
     }
-  }, [enabled, pane, query, globalSearch, path, prefs.hidden, prefs.displayIgnore, refresh])
+  }, [
+    enabled,
+    pane,
+    query,
+    globalSearch,
+    path,
+    searchMode,
+    prefs.hidden,
+    prefs.displayIgnore,
+    refresh,
+  ])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])

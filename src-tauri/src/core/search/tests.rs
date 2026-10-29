@@ -1,19 +1,28 @@
 use super::*;
 
 fn search(root: &Path, query: &str, hidden: bool, ignores: &[String]) -> Vec<Entry> {
+    let mut request = SearchRequest::new(root.to_str().unwrap(), query);
+    request.hidden = hidden;
+    request.ignores = ignores.to_vec();
+    run(&request).0
+}
+
+/// Collects every batch so assertions cover the streamed protocol, not only
+/// the final result set.
+fn run(request: &SearchRequest) -> (Vec<Entry>, Vec<SearchBatch>) {
     let state = SearchState::default();
-    let found = Mutex::new(Vec::new());
+    let batches = Mutex::new(Vec::new());
     state
-        .run(
-            "test",
-            root.to_str().unwrap(),
-            query,
-            hidden,
-            ignores,
-            |batch| found.lock().unwrap().extend(batch.entries),
-        )
+        .stream("test", request, |batch| {
+            batches.lock().unwrap().push(batch);
+        })
         .unwrap();
-    found.into_inner().unwrap()
+    let batches = batches.into_inner().unwrap();
+    let entries = batches
+        .iter()
+        .flat_map(|batch| batch.entries.clone())
+        .collect();
+    (entries, batches)
 }
 
 #[test]
@@ -70,23 +79,49 @@ fn stops_at_the_result_limit() {
     for index in 0..(RESULT_LIMIT + 20) {
         std::fs::write(t.path().join(format!("Needle-{index}.txt")), "x").unwrap();
     }
-    let state = SearchState::default();
-    let result = Mutex::new((0usize, false));
-    state
-        .run(
-            "test",
-            t.path().to_str().unwrap(),
-            "needle",
-            false,
-            &[],
-            |batch| {
-                let mut result = result.lock().unwrap();
-                result.0 = batch.entries.len();
-                result.1 = batch.truncated;
-            },
-        )
-        .unwrap();
-    let (count, truncated) = result.into_inner().unwrap();
-    assert_eq!(count, RESULT_LIMIT);
-    assert!(truncated);
+    let (entries, batches) = run(&SearchRequest::new(t.path().to_str().unwrap(), "needle"));
+    assert_eq!(entries.len(), RESULT_LIMIT);
+    assert!(batches.last().unwrap().truncated);
+}
+
+#[test]
+fn streams_batches_before_the_walk_finishes() {
+    let t = tempfile::tempdir().unwrap();
+    for index in 0..(BATCH_SIZE * 2 + 10) {
+        std::fs::write(t.path().join(format!("Needle-{index}.txt")), "x").unwrap();
+    }
+    let (entries, batches) = run(&SearchRequest::new(t.path().to_str().unwrap(), "needle"));
+    assert_eq!(entries.len(), BATCH_SIZE * 2 + 10);
+    assert!(batches.len() >= 3, "{batches:?}");
+    assert!(batches.iter().any(|batch| !batch.done));
+    // Exactly one terminal batch, and it is the last one.
+    assert_eq!(batches.iter().filter(|batch| batch.done).count(), 1);
+    assert!(batches.last().unwrap().done);
+}
+
+#[test]
+fn content_mode_matches_text_and_skips_binaries() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("notes.txt"), "a line with a Needle inside").unwrap();
+    std::fs::write(t.path().join("binary.dat"), b"Needle\0binary").unwrap();
+    std::fs::write(t.path().join("other.txt"), "nothing here").unwrap();
+    let mut request = SearchRequest::new(t.path().to_str().unwrap(), "needle");
+    request.mode = SearchMode::Content;
+    let (entries, _) = run(&request);
+    let names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, ["notes.txt"]);
+}
+
+#[test]
+fn filename_mode_does_not_read_file_content() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("plain.txt"), "needle is only in the body").unwrap();
+    let entries = search(t.path(), "needle", false, &[]);
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn explicit_engine_names_are_parsed_for_the_ui() {
+    assert_eq!(SearchEngine::default(), SearchEngine::Auto);
+    assert_eq!(SearchMode::default(), SearchMode::Name);
 }
