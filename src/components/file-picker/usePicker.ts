@@ -1,6 +1,7 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { call } from '@/lib/api'
+import { loadState } from '@/lib/stateStore'
 import { listDirectory } from '@/lib/listing'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -65,6 +66,7 @@ export function usePicker(request: FilePickerRequest) {
   const [saveName, setSaveName] = useState(request.suggestedName || '')
   const [replace, setReplace] = useState(false)
   const [reload, setReload] = useState(0)
+  const [pickerHydrated, setPickerHydrated] = useState(false)
   const [sort, setSort] = useState(storedSort)
   const [group, setGroup] = useState<GroupKey>(storedGroup)
   const [menu, setMenu] = useState<PickerMenuState | null>(null)
@@ -75,6 +77,27 @@ export function usePicker(request: FilePickerRequest) {
   const menuRef = useRef<HTMLDivElement>(null)
   const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
   const dialogInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let active = true
+    void Promise.all([
+      loadState<string>('picker.lastDirectory', 'fiex.picker.directory'),
+      loadState<ReturnType<typeof storedSort>>('picker.sort', 'fiex.picker.sort'),
+      loadState<GroupKey>('picker.group', 'fiex.picker.group'),
+    ]).then(([last, savedSort, savedGroup]) => {
+      if (!active) return
+      if (!request.directory && last && !rememberedDirectory.current && !directory) {
+        setDirectory(last)
+        setHistory([last])
+        setIndex(0)
+      }
+      if (savedSort) setSort(savedSort)
+      if (savedGroup) setGroup(savedGroup)
+    }).catch(() => {}).finally(() => {
+      if (active) setPickerHydrated(true)
+    })
+    return () => { active = false }
+  }, [])
 
   const navigate = (path: string) => {
     if (!path || path === directory) return
@@ -155,8 +178,8 @@ export function usePicker(request: FilePickerRequest) {
   }, [directory, reload])
 
   useEffect(() => {
-    if (directory) persistPickerDirectory(directory)
-  }, [directory])
+    if (pickerHydrated && directory) persistPickerDirectory(directory)
+  }, [directory, pickerHydrated])
 
   useEffect(() => {
     if (request.mode !== 'saveFile') return
@@ -185,8 +208,8 @@ export function usePicker(request: FilePickerRequest) {
   }, [saveName, directory])
 
   useEffect(() => {
-    persistPickerSort(sort, group)
-  }, [sort, group])
+    if (pickerHydrated) persistPickerSort(sort, group)
+  }, [sort, group, pickerHydrated])
 
   useEffect(() => {
     if (!menu) return
