@@ -32,7 +32,7 @@ pub fn set(key: &str, value: Value) -> Result<(), String> {
     }
     let mut entries = state().lock().map_err(|_| "state store unavailable")?;
     let previous = entries.insert(key.into(), value);
-    let bytes = serde_json::to_vec(&serde_json::json!({"version":1,"values":*entries}))
+    let bytes = serde_json::to_vec(&serde_json::json!({"version":1,"values":&*entries}))
         .map_err(|e| e.to_string())?;
     if bytes.len() > MAX_STORE {
         if let Some(previous) = previous { entries.insert(key.into(), previous); }
