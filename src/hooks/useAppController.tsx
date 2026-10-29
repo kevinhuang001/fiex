@@ -5,6 +5,7 @@ import { call, native } from '@/lib/api'
 import { basename } from '@/lib/files'
 import { loadSavedTabs, saveTabs } from '@/lib/tabs'
 import { loadFolderView, saveFolderView } from '@/lib/folderView'
+import { saveState, loadState } from '@/lib/stateStore'
 import type { Entry, Preferences } from '@/lib/types'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useRef, useState } from 'react'
@@ -36,13 +37,14 @@ export function useAppController() {
   const update = (patch: Partial<Preferences>) => {
     if (
       left.path &&
-      ('view' in patch || 'sort' in patch || 'descending' in patch || 'group' in patch)
+      ('view' in patch || 'sort' in patch || 'descending' in patch || 'group' in patch || 'listColumns' in patch)
     ) {
       saveFolderView(left.path, {
         view: patch.view ?? prefs.view,
         sort: patch.sort ?? prefs.sort,
         descending: patch.descending ?? prefs.descending,
         group: patch.group ?? prefs.group,
+        listColumns: patch.listColumns ?? prefs.listColumns,
       })
     }
     applyPreferences(patch)
@@ -57,6 +59,7 @@ export function useAppController() {
       sort: remembered?.sort ?? 'name',
       descending: remembered?.descending ?? false,
       group: remembered?.group ?? 'none',
+      listColumns: remembered?.listColumns ?? prefs.listColumns,
     })
     // Applying the folder's own view must not overwrite it as "last used".
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,7 +87,7 @@ export function useAppController() {
     if (left.tabs.length) saveTabs(left.tabs, left.tab)
   }, [left.tabs, left.tab])
   useEffect(() => {
-    if (left.path && left.path !== 'recent://') localStorage.setItem('fiex:lastPath', left.path)
+    if (left.path && left.path !== 'recent://') saveState('navigation.lastPath', left.path)
   }, [left.path])
   const { terminals, ides, platform, trashPath } = useDesktopEnvironment()
   const workspace = useWorkspace()
