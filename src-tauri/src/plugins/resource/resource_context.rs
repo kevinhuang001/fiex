@@ -263,6 +263,9 @@ pub fn bind_selected(
         let path = std::path::Path::new(&binding.path);
         scope.authorize(&binding.path)?;
         let snapshot = ResourceSnapshot::new(&binding.path, path);
+        if snapshot.reference != binding.reference {
+            return Err("ScopeDenied: resource reference does not match selected node".into());
+        }
         scope.bind_resource(
             &serde_json::json!({"ref":binding.reference,"metadata":snapshot.metadata()}),
             Some(path),
