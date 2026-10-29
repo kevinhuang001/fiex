@@ -64,8 +64,12 @@ fn prune(root: &Path) {
     }
     if total <= MAX_DISK_BYTES && files.len() <= MAX_FILES { return; }
     files.sort_by_key(|(_,modified,_)| *modified);
+    let mut count = files.len();
     for (path,_,size) in files {
-        if total <= MAX_DISK_BYTES && (fs::read_dir(root).map(|x| x.count()).unwrap_or(0)) <= MAX_FILES { break; }
-        if fs::remove_file(path).is_ok() { total = total.saturating_sub(size); }
+        if total <= MAX_DISK_BYTES && count <= MAX_FILES { break; }
+        if fs::remove_file(path).is_ok() {
+            total = total.saturating_sub(size);
+            count = count.saturating_sub(1);
+        }
     }
 }
