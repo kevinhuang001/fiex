@@ -208,9 +208,20 @@ impl PluginHost {
                 created
             }
         };
+        let started = std::time::Instant::now();
         match instance.running.rpc(method, params, task_root) {
-            Ok(value) => Ok(value),
+            Ok(value) => {
+                crate::infrastructure::logging::plugin(
+                    plugin_id, "debug", "host", Some(method), "Plugin operation completed",
+                    json!({"durationMs": started.elapsed().as_millis() as u64}),
+                );
+                Ok(value)
+            }
             Err(failure) => {
+                crate::infrastructure::logging::plugin(
+                    plugin_id, "error", "host", Some(method), &failure.message,
+                    json!({"durationMs": started.elapsed().as_millis() as u64, "fatal": failure.fatal}),
+                );
                 if failure.fatal {
                     instance.running.stop();
                     instance.kill.terminate();
