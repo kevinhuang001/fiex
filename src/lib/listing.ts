@@ -1,5 +1,6 @@
-import { call } from './api'
-import type { Listing } from './types'
+import { call, native } from './api'
+import { Channel } from '@tauri-apps/api/core'
+import type { Listing, EntryDecoration } from './types'
 
 // Multiple panes, the column browser and the picker can ask for the same
 // directory concurrently. Share only in-flight work: a subsequent navigation
@@ -25,4 +26,29 @@ export function listDirectory(
     },
   )
   return request
+}
+
+export interface DirectoryFrame {
+  listing: Listing
+  decorations: EntryDecoration[]
+  done: boolean
+  warning?: string | null
+}
+
+/** One navigation operation. Core owns the cache-first, live-revalidation and
+ * presentation merge. React only receives normal directory snapshots. */
+export function openDirectory(
+  path: string,
+  hidden: boolean,
+  ignores: string[],
+  onFrame: (frame: DirectoryFrame) => void,
+): Promise<void> {
+  if (!native) {
+    return listDirectory(path, hidden, ignores).then((listing) => {
+      onFrame({ listing, decorations: [], done: true })
+    })
+  }
+  const channel = new Channel<DirectoryFrame>()
+  channel.onmessage = onFrame
+  return call<void>('directory_open', { path, hidden, ignores, onSnapshot: channel })
 }
