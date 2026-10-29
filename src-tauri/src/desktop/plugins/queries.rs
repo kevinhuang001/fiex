@@ -48,11 +48,16 @@ pub(crate) async fn plugin_decorations(
         return Err("invalid decoration directory".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::decorations::query_with_plugins(
+        let should_cache = include_plugins.unwrap_or(true);
+        let values = crate::plugins::resolvers::decorations::query_with_plugins(
             &directory,
-            entries,
-            include_plugins.unwrap_or(true),
-        )
+            entries.clone(),
+            should_cache,
+        );
+        if should_cache {
+            crate::core::fs::directory_cache::store_decorations(&directory, &entries, &values);
+        }
+        values
     })
     .await
     .map_err(|error| error.to_string())
