@@ -29,6 +29,10 @@ import { MemoryCache } from '@/lib/cache'
 const PdfPreview = lazy(() => import('./PdfPreview'))
 // Candidate discovery depends on the installed/enabled plugins; keep it brief.
 const candidateCache = new MemoryCache<PreviewCandidate[]>(64, 3_000)
+// Cache only builtin, session-independent preview results. Plugin HTML sessions
+// and temporary asset paths must always be resolved through Core again.
+const resolvedCache = new MemoryCache<ResolvedPreview>(24, 90_000)
+window.addEventListener('fiex:plugins-changed', () => { candidateCache.clear(); resolvedCache.clear() })
 /** Package-local loading document (Core-owned asset path or inline HTML). */
 type LoadingDocument = { html?: string; src?: string }
 // A loading document belongs to the plugin package, not to the file being
@@ -137,15 +141,17 @@ export function Preview({
     if (!entry || !providerId) return
     let active = true
     const pluginId = pluginPreviewId(providerId)
+    const previewKey = JSON.stringify([entry.path, entry.size, entry.modified, entry.mime, providerId])
+    const warm = pluginId ? undefined : resolvedCache.peek(previewKey)
     const declaresLoading = Boolean(
       pluginId && candidates.find((candidate) => candidate.id === providerId)?.loading,
     )
-    setLoading(true)
+    setLoading(!warm)
     setError('')
-    setResolved(null)
+    setResolved(warm ?? null)
     setMedia(null)
     setLoadingPage(null)
-    setPreviewReady(!declaresLoading)
+    setPreviewReady(Boolean(warm) || !declaresLoading)
     setPreviewAsset('')
     // Resolve the declared loading document first and keep the request running
     // independently of `preview.open`: a warm plugin answers immediately, but
@@ -171,11 +177,12 @@ export function Preview({
           }
         })
     }
-    const result = call<ResolvedPreview>('preview_open', {
+    const load = () => call<ResolvedPreview>('preview_open', {
       path: entry.path,
       providerId,
       providerOrder: candidates.map((candidate) => candidate.id),
-    }).then(
+    })
+    const result = (pluginId ? load() : resolvedCache.get(previewKey, load)).then(
       (value) => ({ value }),
       (error) => ({ error }),
     )
