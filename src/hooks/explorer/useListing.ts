@@ -154,7 +154,12 @@ export function useListing(
       if (cancelled) return
       let start: string | null = startOverride || launched || null
       if (!start && prefs.startPage === 'recent') start = 'recent://'
-      else if (!start && prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
+      else if (!start && prefs.startPage === 'last') {
+        start = await call<string | null>('state_get', {
+          namespace: 'explorer', key: 'lastPath',
+        }).catch(() => null)
+        if (!start) start = localStorage.getItem('fiex:lastPath')
+      }
       if (!start) {
         const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
         if (cancelled) return
@@ -167,7 +172,6 @@ export function useListing(
             : (pick('文稿') ?? initial ?? locations[0]?.path ?? null)
       }
       if (start) {
-        if (start !== 'recent://') localStorage.setItem('fiex:lastPath', start)
         nav.startAt(start)
       }
     })()
@@ -175,6 +179,15 @@ export function useListing(
       cancelled = true
     }
   }, [refreshLocations, enabled])
+  useEffect(() => {
+    // Persist only successfully opened locations, not incomplete navigation.
+    if (!enabled || !path || query || listedPath !== path) return
+    void call('state_put', {
+      namespace: 'explorer', key: 'lastPath', value: path,
+    }).then(() => localStorage.removeItem('fiex:lastPath'))
+      .catch(() => localStorage.setItem('fiex:lastPath', path))
+  }, [enabled, path, listedPath, query])
+
   useEffect(() => {
     if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
