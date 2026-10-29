@@ -12,9 +12,7 @@ export function stateSnapshot<T>(key: string, legacyKey?: string): T | null {
   if (!legacyKey) return null
   const legacy = localStorage.getItem(legacyKey)
   if (legacy === null) return null
-  if (legacyKey === 'fiex:preferences' || legacyKey === 'fiex.picker.sort')
-    return readJson<T>(legacy)
-  return legacy as T
+  return readJson<T>(legacy) ?? (legacy as T)
 }
 export async function loadState<T>(key: string, legacyKey?: string): Promise<T | null> {
   const snapshot = stateSnapshot<T>(key, legacyKey)
