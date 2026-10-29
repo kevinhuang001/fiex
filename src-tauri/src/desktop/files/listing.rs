@@ -64,7 +64,7 @@ pub(crate) async fn directory_snapshot(
 ) -> Result<Option<crate::core::fs::directory_cache::DirectorySnapshot>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let broker = crate::core::fs::trusted(&path, "core:directory-snapshot")?;
-        broker.require(crate::core::fs::FsOperation::List, false)?;
+        broker.require(crate::plugins::provider_registry::FsOperation::List, false)?;
         crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)
     })
     .await
