@@ -175,6 +175,7 @@ pub fn run() {
             plugin_files_dialog,
             plugin_search,
             search_providers,
+            provider_catalog,
             provider_preferences,
             set_provider_preference,
             reset_provider_preference,

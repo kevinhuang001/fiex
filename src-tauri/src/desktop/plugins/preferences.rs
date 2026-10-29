@@ -3,6 +3,11 @@
 //! Every priority-aware feature uses one store; the settings UI edits it
 //! through these commands instead of keeping a per-feature list in the webview.
 #[tauri::command]
+pub(crate) fn provider_catalog() -> serde_json::Value {
+    crate::plugins::preferences::catalog()
+}
+
+#[tauri::command]
 pub(crate) fn provider_preferences() -> serde_json::Value {
     crate::plugins::preferences::snapshot()
 }

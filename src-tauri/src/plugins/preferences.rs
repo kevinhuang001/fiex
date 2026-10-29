@@ -92,6 +92,107 @@ fn apply_with(
     providers
 }
 
+/// Features that expose provider ordering. The names match the manifest
+/// extension keys, so one catalog entry can never drift from the router.
+pub const FEATURES: [&str; 6] = [
+    "search",
+    "preview",
+    "info",
+    "decorations",
+    "contextMenus",
+    "hooks",
+];
+
+fn builtin_entries(feature: &str) -> Vec<serde_json::Value> {
+    use serde_json::json;
+    match feature {
+        "search" => vec![json!({
+            "id": "core.search",
+            "name": "Fiex",
+            "defaultPriority": 10,
+            "builtin": true,
+            "locked": false,
+            "modes": ["name", "content"],
+        })],
+        // Preview builtins are part of the rendering ladder, not removable
+        // contributions; only the fallback is locked in place.
+        "preview" => [
+            ("builtin:text", 10, false),
+            ("builtin:image", 20, false),
+            ("builtin:media", 30, false),
+            ("builtin:pdf", 40, false),
+            ("builtin:fallback", 0, true),
+        ]
+        .into_iter()
+        .map(|(id, priority, locked)| {
+            json!({
+                "id": id,
+                "name": "Fiex",
+                "defaultPriority": priority,
+                "builtin": true,
+                "locked": locked,
+            })
+        })
+        .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn search_modes(contribution: &serde_json::Value) -> Vec<&str> {
+    match contribution
+        .get("modes")
+        .and_then(serde_json::Value::as_array)
+    {
+        Some(modes) => modes
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .filter(|mode| matches!(*mode, "name" | "content"))
+            .collect(),
+        // A legacy single-RPC search contribution is filename search only.
+        None => vec!["name"],
+    }
+}
+
+/// Installed providers per feature plus the Core builtins. Locked entries are
+/// shown but cannot be reordered or disabled by the settings surface.
+pub fn catalog() -> serde_json::Value {
+    use serde_json::{json, Map, Value};
+    let mut features = Map::new();
+    for feature in FEATURES {
+        features.insert(feature.into(), Value::Array(builtin_entries(feature)));
+    }
+    for plugin in crate::plugins::host::catalog() {
+        for feature in FEATURES {
+            let Some(contribution) = plugin.extensions.get(feature) else {
+                continue;
+            };
+            if !contribution.is_object() && contribution.as_bool() != Some(true) {
+                continue;
+            }
+            let available = plugin.enabled && plugin.approved && plugin.backend_available;
+            let mut entry = json!({
+                "id": format!("plugin:{}", plugin.id),
+                "name": plugin.name,
+                "pluginId": plugin.id,
+                "defaultPriority": contribution
+                    .get("priority")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(50),
+                "builtin": false,
+                "locked": false,
+                "available": available,
+            });
+            if feature == "search" {
+                entry["modes"] = json!(search_modes(contribution));
+            }
+            if let Some(entries) = features.get_mut(feature).and_then(Value::as_array_mut) {
+                entries.push(entry);
+            }
+        }
+    }
+    json!({ "features": features })
+}
+
 /// Every stored preference, keyed by feature, for the settings surface.
 pub fn snapshot() -> serde_json::Value {
     let store = cache()
