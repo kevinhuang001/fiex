@@ -62,6 +62,7 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
             );
             drop(tasks);
             running.emit_task(&info);
+            crate::plugins::errors::report_log_limited(running.plugin_id(), "info", &format!("Background task started: {label}"));
             Ok(Value::Null)
         }
         "host.task.finish" => {
@@ -91,6 +92,7 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
             };
             crate::plugins::resource::lifecycle::release(&entry.owner);
             running.emit_task(&entry.info);
+            crate::plugins::errors::report_log_limited(running.plugin_id(), if entry.info.status == "failed" { "error" } else { "info" }, &format!("Background task {}: {}", entry.info.status, entry.info.label));
             running.remember_task(entry.info);
             Ok(Value::Null)
         }
