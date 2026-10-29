@@ -1,3 +1,9 @@
+# Fiex 0.7.6
+
+- Remove the Core-owned Office PDF converter and its PowerShell/COM execution. Core no longer knows DOCX/PPTX, Office or WPS.
+- The Office Preview plugin now renders Word/PowerPoint entirely in pure Rust (`office_oxide` IR + `printpdf` + `hayro`) with a bundled CJK font. It lays out only the requested first pages and returns plugin-owned PNG pages, so Core never executes Office or renders a generated PDF.
+- Move official-plugin demo/i18n copy out of Core's production language catalogs.
+
 # Fiex 0.7.5
 
 - Load plugin previews from the asset origin instead of `srcDoc`, so the app shell CSP no longer blocks the plugin's inline bundle. Archive, Office and Data previews now render instead of timing out.

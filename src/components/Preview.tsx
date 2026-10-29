@@ -385,7 +385,7 @@ export function Preview({
               </div>
             ) : view?.kind === 'pdf' && fileSource ? (
               <Suspense fallback={<p>{t('正在加载 PDF…')}</p>}>
-                <PdfPreview url={fileSource} maxPages={view.maxPages} />
+                <PdfPreview url={fileSource} />
               </Suspense>
             ) : (
               <div className="preview-fallback">

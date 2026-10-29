@@ -9,7 +9,7 @@ import worker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react'
 import { Button } from './ui/button'
 GlobalWorkerOptions.workerSrc = worker
-export default function PdfPreview({ url, maxPages }: { url: string; maxPages?: number }) {
+export default function PdfPreview({ url }: { url: string }) {
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null)
   const [page, setPage] = useState(1)
   const [error, setError] = useState('')
@@ -82,9 +82,6 @@ export default function PdfPreview({ url, maxPages }: { url: string; maxPages?: 
       cancel?.()
     }
   }, [document, page, width])
-  const lastPage = maxPages
-    ? Math.min(document?.numPages || maxPages, maxPages)
-    : document?.numPages || 1
   return (
     <div className="pdf-preview" ref={container}>
       <div className="pdf-controls">
@@ -98,14 +95,14 @@ export default function PdfPreview({ url, maxPages }: { url: string; maxPages?: 
           <ChevronLeft />
         </Button>
         <span>
-          {page} / {document ? lastPage : '…'}
+          {page} / {document?.numPages || '…'}
         </span>
         <Button
           variant="ghost"
           size="icon"
           title={t('下一页')}
-          disabled={!document || page >= lastPage}
-          onClick={() => setPage((p) => Math.min(lastPage, p + 1))}
+          disabled={!document || page >= document.numPages}
+          onClick={() => setPage((p) => p + 1)}
         >
           <ChevronRight />
         </Button>
