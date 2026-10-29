@@ -37,7 +37,7 @@ fn valid_component(value: &str) -> bool {
         value.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
 }
 fn validate(namespace: &str, key: &str) -> Result<String, String> {
-    if !matches!(namespace, "explorer" | "picker" | "search" | "layout")
+    if !matches!(namespace, "explorer" | "picker" | "search" | "layout" | "providers")
         || !valid_component(key) {
         return Err("invalid state namespace/key".into());
     }
