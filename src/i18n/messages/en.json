@@ -1369,5 +1369,8 @@
   "打开文件所在位置": "Show in folder",
   "无法在文件管理器中显示该位置": "Cannot reveal this location in the file manager",
   "正在加载插件操作…": "Loading plugin actions…",
-  "正在准备预览…": "Preparing preview…"
+  "正在准备预览…": "Preparing preview…",
+  "运行日志": "Execution logs",
+  "日志等级": "Log level",
+  "搜索日志": "Search logs"
 }
