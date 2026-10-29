@@ -156,15 +156,16 @@ pub fn store(key: &str, listing: &Listing) {
         .as_ref()
         .map(|p| p.decorations.clone())
         .unwrap_or_default();
+    let previous_entries = previous.as_ref().map(|p| {
+        p.listing.entries.iter().map(|entry| (&entry.path, get_entry_key(entry)))
+            .collect::<HashMap<_, _>>()
+    }).unwrap_or_default();
+    let refreshed_entries = listing.entries.iter()
+        .map(|entry| (&entry.path, get_entry_key(entry)))
+        .collect::<HashMap<_, _>>();
     decorations.retain(|path, _| {
-        let before = previous
-            .as_ref()
-            .and_then(|p| p.listing.entries.iter().find(|entry| entry.path == *path));
-        let after = listing.entries.iter().find(|entry| entry.path == *path);
-        match (before, after) {
-            (Some(left), Some(right)) => get_entry_key(left) == get_entry_key(right),
-            _ => false,
-        }
+        previous_entries.get(path) == refreshed_entries.get(path)
+            && previous_entries.contains_key(path)
     });
     // Only stable metadata identities are preserved. The resource service may
     // explicitly replace decorations after its current resolver pass.
@@ -185,17 +186,16 @@ fn get_entry_key(entry: &Entry) -> String {
 }
 pub fn set_decorations(key: &str, presented: &[Entry], values: Vec<Decoration>) {
     let Some(mut snapshot) = get(key) else { return };
+    let existing = snapshot.listing.entries.iter()
+        .map(|entry| (&entry.path, get_entry_key(entry))).collect::<HashMap<_, _>>();
+    let resolved = values.into_iter()
+        .map(|decoration| (decoration.path.clone(), decoration))
+        .collect::<HashMap<_, _>>();
     for entry in presented {
         // Do not attach a stale decoration to a resource changed in the meantime.
-        if !snapshot.listing.entries.iter().any(|cached| {
-            cached.path == entry.path && get_entry_key(cached) == get_entry_key(entry)
-        }) {
-            continue;
-        }
-        if let Some(decoration) = values.iter().find(|value| value.path == entry.path) {
-            snapshot
-                .decorations
-                .insert(entry.path.clone(), decoration.clone());
+        if existing.get(&entry.path) != Some(&get_entry_key(entry)) { continue; }
+        if let Some(decoration) = resolved.get(&entry.path) {
+            snapshot.decorations.insert(entry.path.clone(), decoration.clone());
         } else {
             snapshot.decorations.remove(&entry.path);
         }
