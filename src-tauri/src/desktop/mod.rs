@@ -92,6 +92,7 @@ pub fn run() {
             state_get,
             state_put,
             state_remove,
+            errors_pending,
             plugin_invoke,
             plugin_describe_resources,
             plugin_before_open,
