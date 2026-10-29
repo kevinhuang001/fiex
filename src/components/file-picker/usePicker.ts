@@ -33,9 +33,20 @@ export interface PickerGroup {
  * stays a thin composition root. */
 export function usePicker(request: FilePickerRequest) {
   const [preferences] = usePreferences()
-  const [directory, setDirectory] = useState('')
-  const [entries, setEntries] = useState<Entry[]>([])
   const initialSidebar = pickerSidebarSnapshot()
+  // Read once per mount: the picker should fall back to home only when the
+  // remembered folder has disappeared, not whenever a later navigation fails.
+  const rememberedDirectory = useRef(storedDirectory())
+  // Start listing from a known directory immediately instead of waiting for
+  // the locations/connections round trip just to choose the initial folder.
+  const initialDirectory =
+    request.directory ||
+    rememberedDirectory.current ||
+    (initialSidebar?.locations.find((item) => item.kind === 'home') || initialSidebar?.locations[0])
+      ?.path ||
+    ''
+  const [directory, setDirectory] = useState(initialDirectory)
+  const [entries, setEntries] = useState<Entry[]>([])
   const [locations, setLocations] = useState<Location[]>(initialSidebar?.locations || [])
   const usableConnections = (items: RemoteConnection[]) =>
     items.filter(
@@ -47,8 +58,8 @@ export function usePicker(request: FilePickerRequest) {
     usableConnections(initialSidebar?.connections || []),
   )
   const [selected, setSelected] = useState<string[]>([])
-  const [history, setHistory] = useState<string[]>([])
-  const [index, setIndex] = useState(-1)
+  const [history, setHistory] = useState<string[]>(initialDirectory ? [initialDirectory] : [])
+  const [index, setIndex] = useState(initialDirectory ? 0 : -1)
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [filter, setFilter] = useState('')
   const [saveName, setSaveName] = useState(request.suggestedName || '')
@@ -64,9 +75,6 @@ export function usePicker(request: FilePickerRequest) {
   const menuRef = useRef<HTMLDivElement>(null)
   const menuPosition = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, menuRef, Boolean(menu))
   const dialogInput = useRef<HTMLInputElement>(null)
-  // Read once per mount: the picker should fall back to home only when the
-  // remembered folder has disappeared, not whenever a later navigation fails.
-  const rememberedDirectory = useRef(storedDirectory())
 
   const navigate = (path: string) => {
     if (!path || path === directory) return
@@ -107,6 +115,16 @@ export function usePicker(request: FilePickerRequest) {
 
   useEffect(() => {
     let alive = true
+    // The first render happens before the sidebar can choose a home folder.
+    // Never ask the backend to list an empty path: on Windows that surfaces
+    // "The system cannot find the path specified" for a frame before navigation.
+    if (!directory) {
+      setEntries([])
+      setError('')
+      return () => {
+        alive = false
+      }
+    }
     setError('')
     void listDirectory(directory)
       .then((value) => {

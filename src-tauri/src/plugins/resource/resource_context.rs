@@ -9,7 +9,6 @@ use std::{
 
 #[derive(Clone)]
 pub struct ResourceSnapshot {
-    content: std::sync::Arc<std::sync::OnceLock<Result<PathBuf, String>>>,
     pub display: String,
     pub local: PathBuf,
     pub reference: ResourceRef,
@@ -27,7 +26,9 @@ impl ResourceSnapshot {
     pub fn new(display: &str, local: &Path) -> Self {
         let stat = fs::symlink_metadata(local).ok();
         let is_dir = stat.as_ref().is_some_and(fs::Metadata::is_dir);
-        let read_only = stat.as_ref().is_some_and(|s| crate::core::files::metadata_readonly(s));
+        let read_only = stat
+            .as_ref()
+            .is_some_and(crate::core::files::metadata_readonly);
         let name = local
             .file_name()
             .map(|value| value.to_string_lossy().into_owned())
@@ -38,19 +39,17 @@ impl ResourceSnapshot {
             .unwrap_or("")
             .to_ascii_lowercase();
         let mime = crate::plugins::match_rules::mime_for(&ext);
-        let reference = if crate::plugins::mounts::handles(display) {
-            crate::plugins::mounts::parse(display)
-                .map(|uri| ResourceRef {
-                    mount_id: uri.mount_id,
-                    node_id: format!("fiex-resource:{}", uri.relative),
-                })
-                .unwrap_or_else(|_| Self::local_ref())
-        } else {
-            Self::local_ref()
-        };
+        let reference = Self::reference_for(display);
         let metadata = stat.as_ref().map(|stat| ResourceMetadata {
             name: name.clone(),
-            kind: if is_dir { "directory" } else { "file" }.into(),
+            kind: if stat.file_type().is_symlink() {
+                "symlink"
+            } else if is_dir {
+                "directory"
+            } else {
+                "file"
+            }
+            .into(),
             extension: (!ext.is_empty()).then(|| ext.clone()),
             mime: (!ext.is_empty()).then(|| mime.clone()),
             size: (!is_dir).then_some(stat.len()),
@@ -61,7 +60,6 @@ impl ResourceSnapshot {
                 .map(|elapsed| elapsed.as_secs() as i64),
         });
         Self {
-            content: Default::default(),
             display: display.into(),
             local: local.to_path_buf(),
             reference,
@@ -76,13 +74,38 @@ impl ResourceSnapshot {
         }
     }
 
-    fn local_ref() -> ResourceRef {
+    /// Stable for this Core process; the keyed digest cannot reveal a host path.
+    /// Identity is never an authorization token: each request still needs Scope.
+    fn reference_for(display: &str) -> ResourceRef {
+        use sha2::{Digest, Sha256};
+        use std::sync::OnceLock;
+        static KEY: OnceLock<[u8; 32]> = OnceLock::new();
+        let key = KEY.get_or_init(|| {
+            let mut key = [0; 32];
+            getrandom::getrandom(&mut key).expect("Core resource identity entropy unavailable");
+            key
+        });
+        let mount_id = crate::plugins::mounts::parse(display)
+            .map(|uri| uri.mount_id)
+            .unwrap_or_else(|_| {
+                if let Some(route) = crate::usbfs::route(display) {
+                    return format!(
+                        "core:usb:{}",
+                        crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into())
+                    );
+                }
+                crate::core::volumes::virtual_resolvers::view_for(display)
+                    .map(|provider| provider.id().to_owned())
+                    .unwrap_or_else(|| "local".into())
+            });
+        let mut digest = Sha256::new();
+        digest.update(key);
+        digest.update(mount_id.as_bytes());
+        digest.update([0]);
+        digest.update(display.as_bytes());
         ResourceRef {
-            mount_id: "local".into(),
-            node_id: format!(
-                "fiex-resource:{}",
-                crate::plugins::mounts::new_id().unwrap_or_default()
-            ),
+            mount_id,
+            node_id: format!("node:{}", hex::encode(digest.finalize())),
         }
     }
 
@@ -112,16 +135,27 @@ impl ResourceSnapshot {
     pub fn from_entry(display: &str, entry: &crate::core::files::Entry) -> Self {
         let mut resource = Self::from_metadata(display, Self::entry_metadata(entry));
         if crate::core::volumes::applications::is_user(display) {
-            if let Ok(path) = crate::core::volumes::applications::stored_path(display) { resource.local = path; }
+            if let Ok(path) = crate::core::volumes::applications::stored_path(display) {
+                resource.local = path;
+            }
         }
         resource.read_only = entry.readonly;
-        resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(display, entry));
+        resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(
+            display, entry,
+        ));
         resource
     }
     pub fn entry_metadata(entry: &crate::core::files::Entry) -> ResourceMetadata {
         ResourceMetadata {
             name: entry.name.clone(),
-            kind: if entry.is_dir { "directory" } else { "file" }.into(),
+            kind: if entry.is_symlink {
+                "symlink"
+            } else if entry.is_dir {
+                "directory"
+            } else {
+                "file"
+            }
+            .into(),
             extension: Some(entry.extension.clone()),
             mime: Some(entry.mime.clone()),
             size: (!entry.is_dir).then_some(entry.size),
@@ -129,15 +163,8 @@ impl ResourceSnapshot {
         }
     }
     pub fn from_metadata(display: &str, metadata: ResourceMetadata) -> Self {
-        let reference = ResourceRef {
-            mount_id: crate::plugins::mounts::parse(display)
-                .map(|uri| uri.mount_id)
-                .unwrap_or_else(|_| crate::core::volumes::virtual_resolvers::resolver_for(display)
-                    .map(|provider| provider.id().to_owned()).unwrap_or_else(|| "local".into())),
-            node_id: Self::local_ref().node_id,
-        };
+        let reference = Self::reference_for(display);
         Self {
-            content: Default::default(),
             display: display.into(),
             local: PathBuf::from(display),
             reference,
@@ -151,37 +178,15 @@ impl ResourceSnapshot {
             operations: None,
         }
     }
-    pub fn materialize(&self) -> Result<PathBuf, String> {
-        if crate::plugins::mounts::handles(&self.display) {
-            crate::plugins::mounts::resolve(&self.display)?;
-        }
-        self.content
-            .get_or_init(|| self.materialize_uncached())
-            .clone()
-    }
-    fn materialize_uncached(&self) -> Result<PathBuf, String> {
-        if crate::core::volumes::applications::is_user(&self.display) { return crate::core::volumes::applications::stored_path(&self.display); }
-        if crate::core::volumes::virtual_resolvers::opaque(&self.display) {
-            return Err("VFS entry has no file content".into());
-        }
-        if !crate::plugins::mounts::handles(&self.display) {
-            return Ok(self.local.clone());
-        }
-        if crate::remote::is_remote(&self.display) {
-            if self.is_dir {
-                futures::executor::block_on(crate::remote::download_dir(
-                    &self.display,
-                    &crate::remote::TransferOptions::default(),
-                ))?;
-                return crate::remote::cached_path(&self.display).map(PathBuf::from);
-            }
-            return futures::executor::block_on(crate::remote::ensure_downloaded(
-                &self.display,
-                &crate::remote::TransferOptions::default(),
-            ))
-            .map(PathBuf::from);
-        }
-        crate::plugins::vfs::materialize(&self.display).map(PathBuf::from)
+    /// A native renderer needs a local path. Export through the same bounded,
+    /// leased broker as external open/drag; never expose provider caches.
+    pub fn export_path(&self) -> Result<PathBuf, String> {
+        let paths = crate::core::fs::export_for_external_drag(std::slice::from_ref(&self.display))?;
+        paths
+            .into_iter()
+            .next()
+            .map(PathBuf::from)
+            .ok_or("missing export".into())
     }
     pub fn project(
         &self,
@@ -241,9 +246,26 @@ pub fn bind_selected(
     bindings: &[ResourceBinding],
 ) -> Result<(), String> {
     for binding in bindings {
+        if crate::plugins::mounts::handles(&binding.path)
+            || crate::usbfs::route(&binding.path).is_some()
+            || crate::core::volumes::virtual_resolvers::opaque(&binding.path)
+        {
+            let snapshot = ResourceSnapshot::resolve(&binding.path)?;
+            if snapshot.reference != binding.reference {
+                return Err("ScopeDenied: resource reference does not match selected node".into());
+            }
+            scope.bind_remote(
+                &serde_json::json!({"ref":binding.reference,"metadata":snapshot.metadata()}),
+                &snapshot,
+            )?;
+            continue;
+        }
         let path = std::path::Path::new(&binding.path);
         scope.authorize(&binding.path)?;
         let snapshot = ResourceSnapshot::new(&binding.path, path);
+        if snapshot.reference != binding.reference {
+            return Err("ScopeDenied: resource reference does not match selected node".into());
+        }
         scope.bind_resource(
             &serde_json::json!({"ref":binding.reference,"metadata":snapshot.metadata()}),
             Some(path),

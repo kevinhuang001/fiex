@@ -12,7 +12,7 @@
   "icon": "puzzle-piece",
   "author": { "name": "Example", "url": "https://example.com" },
   "runtime": {
-    "protocolVersion": "5.0",
+    "protocolVersion": "6.0",
     "entrypoints": {
       "linux-x86_64": "fiex-plugin-example",
       "macos-aarch64": "fiex-plugin-example",
@@ -103,7 +103,9 @@
 }
 ```
 
-字段类型：`text | url | number | checkbox | secret | list | file`。`secret` 只进入系统钥匙串，不写入普通 settings。
+字段类型：`text | url | number | checkbox | secret | list | file | font | color`。`secret` 只进入系统钥匙串，不写入普通 settings。`font` 由 Core 提供系统字体候选（`system_fonts`），`color` 使用颜色选择器。
+
+面板和 PluginView 通过 `context.get().settings` 读取当前插件的非 secret 设置；设置项仍以 `id` 作为 `global` scope 的存储 key。
 
 文件选择器约定（Core 统一渲染，插件不需要自己实现）：
 

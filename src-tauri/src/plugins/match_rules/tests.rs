@@ -8,7 +8,6 @@ fn absent_context_does_not_bypass_rules() {
         json!({"mimeTypes":["text/*"]}),
         json!({"kinds":["file"]}),
         json!({"selection":"single"}),
-        json!({"contains":[".git"]}),
     ] {
         let rules = MatchRules::from_contribution(&json!({"match":predicate})).unwrap();
         assert!(!rules.matches_event(&[], ""), "{predicate}");
@@ -24,18 +23,36 @@ fn absent_context_does_not_bypass_rules() {
 }
 
 #[test]
-fn directory_markers_require_a_real_local_context() {
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::create_dir(dir.path().join(".git")).unwrap();
-    let child = dir.path().join("child");
-    std::fs::create_dir(&child).unwrap();
-    let rules = MatchRules::from_contribution(&json!({"match":{"contains":[".git"]}})).unwrap();
-    assert!(rules.matches_event(&[], child.to_str().unwrap()));
-    for directory in ["", ".", "fiex://mount/root", "fiex:mount/root"] {
-        assert!(!rules.matches_event(&[], directory), "{directory}");
+fn source_and_directory_predicates_are_rejected() {
+    for key in [
+        "contains",
+        "schemes",
+        "providerIds",
+        "mountIds",
+        "location",
+        "onlyOnVfs",
+    ] {
+        assert!(MatchRules::from_contribution(&json!({"match":{key:["local"]}})).is_err());
     }
-    let outside = tempfile::tempdir().unwrap();
-    assert!(!rules.matches_event(&[], outside.path().to_str().unwrap()));
+}
+
+#[test]
+fn mixed_selections_require_every_target_and_operation() {
+    let rules =
+        MatchRules::from_contribution(&json!({"match":{"kinds":["file"],"requiredOps":["read"]}}))
+            .unwrap();
+    assert!(rules.matches_event(
+        &[json!({"kind":"file","operations":["stat","read"]})],
+        "recent://"
+    ));
+    assert!(!rules.matches_event(&[json!({"kind":"file","operations":["stat"]})], "/tmp"));
+    assert!(!rules.matches_event(
+        &[
+            json!({"kind":"file","operations":["read"]}),
+            json!({"kind":"directory","operations":["read"]})
+        ],
+        "/tmp"
+    ));
 }
 
 #[test]
@@ -64,9 +81,9 @@ fn match_is_an_include_predicate() {
 }
 
 #[test]
-fn contains_and_selection_are_scoped_predicates() {
+fn selection_and_content_are_scoped_predicates() {
     let decorations = MatchRules::from_contribution(&json!({
-        "match": {"contains": [".git"], "extensions": ["ts"]}
+        "match": {"extensions": ["ts"]}
     }))
     .unwrap();
     assert!(decorations.matches("ts", "text/plain", false));

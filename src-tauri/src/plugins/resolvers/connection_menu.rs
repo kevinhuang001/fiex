@@ -24,10 +24,7 @@ impl Context {
             .ok_or("connection not found")?;
         let plugin_view = info.mount_path.starts_with("fiex-plugin-view://");
         let can_sync = !plugin_view && info.mount_path.starts_with("fiex://mount/");
-        Ok(Self {
-            info,
-            can_sync,
-        })
+        Ok(Self { info, can_sync })
     }
 
     /// The untrusted plugin sees identity and capabilities, never credentials.
@@ -349,8 +346,20 @@ mod tests {
     #[test]
     fn terminal_and_plugin_views_do_not_offer_sync() {
         for menu in [
-            ctx("org.example.other", "other", "fiex-plugin-view://c1", true, false),
-            ctx("org.example.view", "ssh", "fiex-plugin-view://c1", true, false),
+            ctx(
+                "org.example.other",
+                "other",
+                "fiex-plugin-view://c1",
+                true,
+                false,
+            ),
+            ctx(
+                "org.example.view",
+                "ssh",
+                "fiex-plugin-view://c1",
+                true,
+                false,
+            ),
         ] {
             assert!(builtin_items("builtin:connection-sync", &menu)
                 .unwrap()
@@ -390,4 +399,3 @@ mod tests {
         }
     }
 }
-

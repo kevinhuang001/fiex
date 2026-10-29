@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "fiex"
-version = "0.7.4"
+version = "0.7.5"
 dependencies = [
  "apfs",
  "arapuca",
@@ -1567,7 +1567,7 @@ dependencies = [
 
 [[package]]
 name = "fiex-plugin-sdk"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "serde",

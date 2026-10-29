@@ -13,73 +13,8 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-/// Every file-system operation in protocol 5.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FsOperation {
-    List,
-    Stat,
-    Read,
-    Write,
-    Mkdir,
-    Rename,
-    Remove,
-    Search,
-}
-
-impl FsOperation {
-    pub const ALL: [FsOperation; 8] = [
-        FsOperation::List,
-        FsOperation::Stat,
-        FsOperation::Read,
-        FsOperation::Write,
-        FsOperation::Mkdir,
-        FsOperation::Rename,
-        FsOperation::Remove,
-        FsOperation::Search,
-    ];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            FsOperation::List => "list",
-            FsOperation::Stat => "stat",
-            FsOperation::Read => "read",
-            FsOperation::Write => "write",
-            FsOperation::Mkdir => "mkdir",
-            FsOperation::Rename => "rename",
-            FsOperation::Remove => "remove",
-            FsOperation::Search => "search",
-        }
-    }
-
-    pub fn parse(value: &str) -> Option<Self> {
-        FsOperation::ALL
-            .into_iter()
-            .find(|operation| operation.as_str() == value)
-    }
-
-    /// Capability behind a wire method. Streaming sub-methods belong to the
-    /// operation that opened the stream.
-    pub fn from_method(method: &str) -> Option<Self> {
-        FsOperation::ALL.into_iter().find(|operation| {
-            let methods: &[&str] = match operation {
-                FsOperation::List => &["vfs.list"],
-                FsOperation::Stat => &["vfs.stat"],
-                FsOperation::Read => &["vfs.openRead", "vfs.readStream", "vfs.closeRead"],
-                FsOperation::Write => &[
-                    "vfs.beginWrite",
-                    "vfs.writeStream",
-                    "vfs.commit",
-                    "vfs.abort",
-                ],
-                FsOperation::Mkdir => &["vfs.mkdir"],
-                FsOperation::Rename => &["vfs.rename"],
-                FsOperation::Remove => &["vfs.remove"],
-                FsOperation::Search => &["vfs.search"],
-            };
-            methods.contains(&method)
-        })
-    }
-}
+/// The SDK and Core use the same operation vocabulary and wire mapping.
+pub use crate::plugin_sdk::filesystem::FsOperation;
 
 /// One plugin's declaration. `reported` distinguishes "declared nothing" from
 /// "never handshook": only the former is an authoritative empty set.
@@ -289,6 +224,6 @@ mod tests {
             FsOperation::from_method("vfs.commit"),
             Some(FsOperation::Write)
         );
-        assert_eq!(FsOperation::from_method("host.fs.stat"), None);
+        assert_eq!(FsOperation::from_method("fs.stat"), None);
     }
 }

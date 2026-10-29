@@ -1,6 +1,5 @@
 //! Recently opened files, persisted so the sidebar's Recent location survives
-//! restarts. Only local, regular files are tracked: remote downloads and disk
-//! image caches have no meaningful path for the user to return to.
+//! restarts. Store source identities, never downloaded cache paths.
 use crate::core::files::{entry, Entry};
 use std::{
     fs,
@@ -40,10 +39,18 @@ fn save(list: &[String]) {
 }
 
 pub fn record(state: &Recent, path: &str) {
-    if path.starts_with("remote://") || path.contains("://") || path.starts_with("recent://") {
+    if crate::core::volumes::virtual_resolvers::opaque(path) {
         return;
     }
-    if !Path::new(path).is_file() {
+    if crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path).map_or(
+        true,
+        |resource| {
+            resource.is_dir
+                || (!crate::plugins::mounts::handles(path)
+                    && crate::usbfs::route(path).is_none()
+                    && resource.stat.is_none())
+        },
+    ) {
         return;
     }
     let mut list = state.0.lock().unwrap();
@@ -53,13 +60,73 @@ pub fn record(state: &Recent, path: &str) {
     save(&list);
 }
 
+/// A Recent entry is a non-authorizing view alias. The persisted original
+/// identity is kept inside Core, never exposed as an OS path through the view.
+pub fn alias_for(source: &str) -> String {
+    // Use Core's keyed, per-process opaque identity, not reversible Base64 of
+    // an absolute path or remote resource URI.
+    let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+        source,
+        crate::plugins::contracts::ResourceMetadata::default(),
+    );
+    format!("recent://{}", snapshot.reference.node_id)
+}
+pub fn source_for(alias: &str) -> Result<String, String> {
+    if !alias.starts_with("recent://") || alias == "recent://" {
+        return Err("not a recent item".into());
+    }
+    load()
+        .into_iter()
+        .find(|path| alias_for(path) == alias)
+        .ok_or_else(|| "StaleRef: item is no longer in Recent".into())
+}
+fn source_entry(path: &str) -> Result<Entry, String> {
+    if crate::remote::is_remote(path) {
+        crate::remote::stat(path)
+    } else if crate::plugins::vfs::handles(path) {
+        crate::plugins::vfs::stat(path)
+    } else if let Some(route) = crate::usbfs::route(path) {
+        crate::usbfs::entry(&route)
+    } else {
+        entry(Path::new(path))
+    }
+}
+pub fn entry_for_alias(alias: &str) -> Result<Entry, String> {
+    let source = source_for(alias)?;
+    let mut item = source_entry(&source)?;
+    if item.is_dir {
+        return Err("Unsupported: Recent directories are not supported".into());
+    }
+    let cap = crate::plugins::resource::file_capabilities::for_path(&source);
+    item.path = alias.into();
+    item.link_target = None;
+    item.allowed_ops = if cap.read {
+        vec!["stat".into(), "read".into()]
+    } else {
+        vec!["stat".into()]
+    };
+    Ok(item)
+}
 pub fn entries(state: &Recent) -> Vec<Entry> {
     state
         .0
         .lock()
         .unwrap()
         .iter()
-        .filter_map(|path| entry(Path::new(path)).ok())
-        .filter(|entry| !entry.is_dir)
+        .filter_map(|path| entry_for_alias(&alias_for(path)).ok())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn view_aliases_do_not_reveal_or_authorize_source_paths() {
+        let uri = alias_for("/private/fiex-recent-secret.txt");
+        assert!(uri.starts_with("recent://node:"));
+        assert!(!uri.contains("private"));
+        assert!(!uri.contains("secret"));
+        assert!(source_for("recent://unregistered-identity").is_err());
+    }
 }

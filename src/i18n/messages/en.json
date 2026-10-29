@@ -1424,5 +1424,7 @@
   "系统应用不能在 Fiex 中删除": "System applications cannot be deleted in Fiex",
   "回收站项目请使用“放回原处”或“彻底删除”": "Use “Put back” or “Delete permanently” for Recycle Bin items",
   "已识别": "Recognized",
-  "系统": "System"
+  "系统": "System",
+  "使用系统主题字体": "Use the system theme font",
+  "留空跟随主题": "Leave blank to follow the theme"
 }

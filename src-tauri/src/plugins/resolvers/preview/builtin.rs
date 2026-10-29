@@ -17,6 +17,8 @@ pub(super) enum Builtin {
     Image,
     Media,
     Pdf,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    OfficePdf,
     Fallback,
 }
 
@@ -27,6 +29,7 @@ impl Builtin {
             Self::Image => "builtin:image",
             Self::Media => "builtin:media",
             Self::Pdf => "builtin:pdf",
+            Self::OfficePdf => "builtin:office-pdf",
             Self::Fallback => "builtin:fallback",
         }
     }
@@ -37,6 +40,7 @@ impl Builtin {
             Self::Image => 20,
             Self::Media => 30,
             Self::Pdf => 40,
+            Self::OfficePdf => 200,
             Self::Fallback => 0,
         }
     }
@@ -84,6 +88,10 @@ pub(super) fn builtin_candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Bui
     }
     if ext == "pdf" {
         values.push(Builtin::Pdf);
+    }
+    #[cfg(windows)]
+    if matches!(ext, "docx" | "pptx") {
+        values.push(Builtin::OfficePdf);
     }
     if values.is_empty() {
         values.push(Builtin::Fallback);
@@ -137,6 +145,15 @@ pub(super) fn builtin_view(kind: Builtin, local: &Path, _display: &str) -> Resul
             "path": local.to_string_lossy(),
             "name": name,
         }),
+        Builtin::OfficePdf => {
+            let path = super::office_pdf::convert(local, &ext)?;
+            serde_json::json!({
+                "kind": "pdf",
+                "path": path.to_string_lossy(),
+                "name": name,
+                "maxPages": 20,
+            })
+        }
         Builtin::Fallback => serde_json::json!({
             "kind": "fallback",
             "name": name,

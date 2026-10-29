@@ -1,7 +1,6 @@
 //! Ref-only public file protocol. All host paths below this layer are Core
 //! implementation details and must never be accepted from a plugin payload.
 use super::{run, Actor, Running};
-use crate::plugins::security::policy::Capability;
 use serde_json::{json, Value};
 
 pub(super) fn intercept(
@@ -10,7 +9,7 @@ pub(super) fn intercept(
     method: &str,
     params: &Value,
 ) -> Result<Option<Value>, String> {
-    if !method.starts_with("host.fs.") {
+    if !method.starts_with("fs.") {
         return Ok(None);
     }
     for key in ["path", "paths", "from", "to"] {
@@ -20,7 +19,7 @@ pub(super) fn intercept(
             );
         }
     }
-    if method == "host.fs.statBatch" {
+    if method == "fs.statBatch" {
         let refs = params["refs"]
             .as_array()
             .filter(|refs| refs.len() <= 256)
@@ -29,14 +28,14 @@ pub(super) fn intercept(
         for reference in refs {
             let mut item = params.clone();
             item["ref"] = reference.clone();
-            results.push(match run(running, "host.fs.stat", &item) {
+            results.push(match run(running, "fs.stat", &item) {
                 Ok(metadata) => json!({"metadata":metadata}),
                 Err(error) => json!({"error":error}),
             });
         }
         return Ok(Some(json!({"results":results})));
     }
-    if method == "host.fs.child" {
+    if method == "fs.child" {
         let scope = actor.scope.as_ref().ok_or("no operation scope")?;
         let reference = params.get("ref").ok_or("missing parent ref")?;
         let name = params["name"]
@@ -47,41 +46,22 @@ pub(super) fn intercept(
                     && !name.contains(['/', '\\', ':', '\0'])
             })
             .ok_or("invalid child name")?;
-        let parent = if let Some(snapshot) = scope.remote_target(&json!({"ref":reference}))? {
-            if !snapshot.is_dir {
-                return Err("parent ref must be a directory".into());
-            }
-            snapshot.display
-        } else {
-            let path = scope.resolve_reference(reference)?;
-            if !crate::plugins::resource::fs_access::is_directory(scope, &path)? {
-                return Err("parent ref must be a directory".into());
-            }
-            path
-        };
-        let child = if crate::plugins::mounts::handles(&parent) {
-            let uri = crate::plugins::mounts::parse(&parent)?;
-            crate::plugins::mounts::uri(
-                &uri.mount_id,
-                format!("{}/{}", uri.relative.trim_end_matches('/'), name).trim_start_matches('/'),
-            )?
-        } else {
-            std::path::Path::new(&parent)
-                .join(name)
-                .to_string_lossy()
-                .into_owned()
-        };
-        return scope.issue_child(reference, &child, None).map(Some);
+        let resource = crate::core::fs::ResourceBroker::resolve(scope, &actor.owner, reference)?;
+        if !resource.is_dir()? {
+            return Err("parent ref must be a directory".into());
+        }
+        let child = crate::core::fs::child(&resource, name)?;
+        return Ok(Some(json!({"ref":child.reference})));
     }
     const TARGET_METHODS: &[&str] = &[
-        "host.fs.openRead",
-        "host.fs.readChunk",
-        "host.fs.list",
-        "host.fs.stat",
-        "host.fs.beginWrite",
-        "host.fs.mkdir",
-        "host.fs.remove",
-        "host.fs.rename",
+        "fs.openRead",
+        "fs.readChunk",
+        "fs.list",
+        "fs.stat",
+        "fs.beginWrite",
+        "fs.mkdir",
+        "fs.remove",
+        "fs.rename",
     ];
     if TARGET_METHODS.contains(&method) && params.get("ref").is_none() {
         return Err("missing ResourceRef".into());
@@ -97,14 +77,11 @@ pub(super) fn intercept(
             return Err("resource not authorized in this operation".into());
         }
     }
-    if method == "host.fs.stat" {
-        running.ensure_permission(Capability::Metadata)?;
-    }
     Ok(None)
 }
 
 pub(super) fn metadata(value: &Value) -> Value {
-    json!({"name":value["name"],"kind":if value["isDir"]==true || value["kind"]=="directory" {"directory"}else if value["symlink"]==true {"symlink"}else{"file"},
+    json!({"name":value["name"],"kind":if value["symlink"]==true || value["isSymlink"]==true || value["kind"]=="symlink" {"symlink"}else if value["isDir"]==true || value["kind"]=="directory" {"directory"}else{"file"},
         "extension":value["extension"],"mime":value["mime"],"size":value["size"],"modified":value["modified"]})
 }
 pub(super) fn listing(

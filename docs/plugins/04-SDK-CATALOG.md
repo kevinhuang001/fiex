@@ -62,11 +62,11 @@ let task = ctx.spawn_task(|task| {
 
 ### Provider
 
-文件系统插件只实现 `FSProvider` 的方法，并显式实现 `operations()`：
+文件系统插件只实现 `VfsProvider` 的方法，并显式实现 `operations()`：
 
 ```rust
-impl FSProvider for GoogleDrive {
-    fn operations(&self) -> &'static [sdk::filesystem::FsOp] { &[sdk::filesystem::FsOp::List, sdk::filesystem::FsOp::Stat, sdk::filesystem::FsOp::Read, sdk::filesystem::FsOp::Write] }
+impl VfsProvider for GoogleDrive {
+    fn operations(&self) -> &'static [sdk::filesystem::FsOperation] { &[sdk::filesystem::FsOperation::List, sdk::filesystem::FsOperation::Stat, sdk::filesystem::FsOperation::Read, sdk::filesystem::FsOperation::Write] }
 
     fn list(&self, request: &FsRequest<'_>) -> Result<FsListing, RpcError> { … }
     fn stat(&self, request: &FsRequest<'_>) -> Result<FsEntry, RpcError> { … }

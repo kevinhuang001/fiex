@@ -203,19 +203,13 @@ pub(super) fn decode(
         .ok_or("invalid decorations response")?;
     let mut result = HashMap::new();
     for item in items.iter().take(entries.len().max(1)) {
-        // Prefer the direct child name; Core resolves it against the visible
-        // directory. Legacy `path` is accepted only when it names an entry.
-        let path = match item.get("name").and_then(Value::as_str) {
-            Some(name) => {
-                let matches = entries.values().filter(|entry| entry.name == name).collect::<Vec<_>>();
-                (matches.len() == 1).then(|| matches[0].path.clone())
-            },
-            None => item
-                .get("path")
-                .and_then(Value::as_str)
-                .filter(|path| entries.contains_key(*path))
-                .map(str::to_owned),
-        };
+        // The caller has already replaced a validated ResourceRef with a
+        // Core-owned path. Never fall back to a plugin-supplied name or path.
+        let path = item
+            .get("path")
+            .and_then(Value::as_str)
+            .filter(|path| entries.contains_key(*path))
+            .map(str::to_owned);
         let Some(path) = path else {
             continue;
         };
@@ -274,4 +268,3 @@ pub(super) fn decode(
 
 #[cfg(test)]
 mod tests;
-

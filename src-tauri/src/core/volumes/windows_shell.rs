@@ -5,7 +5,8 @@ pub fn run(script: &str) -> Result<String, String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     // PowerShell 5 otherwise emits the active OEM code page for native stdout.
-    let script = format!("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); {script}");
+    let script =
+        format!("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); {script}");
     let mut last_error = String::new();
     for executable in ["powershell.exe", "pwsh.exe"] {
         match std::process::Command::new(executable)
@@ -26,7 +27,6 @@ pub fn run(script: &str) -> Result<String, String> {
         last_error
     })
 }
-
 
 /// Ask the Shell image factory for the registered item's icon. Unlike file
 /// extraction this accepts AppsFolder identities and packaged applications.
@@ -65,6 +65,14 @@ public static class FiexShellIcon {
 }
 '@
 "#;
-    run(&format!("$ErrorActionPreference='Stop'; {code} [FiexShellIcon]::Save({}, {})", quote(source), quote(&target.to_string_lossy())))?;
-    if target.is_file() { Ok(()) } else { Err("Shell icon unavailable".into()) }
+    run(&format!(
+        "$ErrorActionPreference='Stop'; {code} [FiexShellIcon]::Save({}, {})",
+        quote(source),
+        quote(&target.to_string_lossy())
+    ))?;
+    if target.is_file() {
+        Ok(())
+    } else {
+        Err("Shell icon unavailable".into())
+    }
 }

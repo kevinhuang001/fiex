@@ -36,7 +36,7 @@ Core 负责 Resolve，SDK 负责 Provide：
 | Decorations | `DecorationResolver`（`plugin_decorations`）      | `DecorationProvider`            |
 | Search      | `SearchResolver`（`plugin_search`）               | `SearchProvider`                |
 | Toolbar     | `ToolbarResolver`                                 | `ToolbarProvider`               |
-| 文件系统    | `FsResolver`（`fs_resolver`）+ `ProviderRegistry` | `FSProvider`                    |
+| 文件系统    | `FsResolver`（`fs_resolver`）+ `ProviderRegistry` | `VfsProvider`                   |
 
 - Resolver 负责匹配、协调、调用、校验和结果聚合；Provider 是插件实现。
 - `ResourceBroker`（`fs_access` / `net` / `process` / `resources`）

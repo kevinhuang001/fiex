@@ -32,7 +32,10 @@ Core 启动插件预览时按以下顺序处理：
 2. 通过 `preview_loading_asset`（桌面，asset 协议 + 面板 CSP）或
    `preview_loading`（Web/演示，srcDoc）取得加载文档；
 3. 在 Core 拥有的 `sandbox="allow-scripts"` iframe 中立即显示加载页；
-4. 调用 `preview.open`；合法结果返回后在同一个预览位置替换为最终预览。
+4. 调用 `preview.open`；合法结果返回后，桌面端通过 `plugin_view_asset` 把最终
+   HTML 写入 Core 缓存并以 asset origin 加载，Web/演示端才回退到 `srcDoc`；
+5. 插件调用 `preview.ready` 后移除加载页。最终预览必须使用 asset origin：
+   `srcDoc` 会继承应用壳的严格 `script-src`，从而阻止插件的内联 bundle。
 
 加载页不是预览 Session：它没有资源 Scope，桥只允许 `context.get`、
 `theme.get`/`theme.changed` 和 `plugin.error`。真正预览的 iframe 仍使用
@@ -46,6 +49,20 @@ Core 启动插件预览时按以下顺序处理：
 - 只能加载所属插件包内的 HTML；
 - 支持 `tabTitle`（最多 80 字符）；
 - 不接受外部 URL、弹窗、窄面板或其他导航类型。
+
+## 主题
+
+面板、PluginView、预览页和加载页共用同一套主题桥：
+
+- `theme.get` 返回 `{ mode: 'light' | 'dark', tokens }`；
+- `theme.changed` 在主题切换时推送同样的快照；
+- `tokens` 包含 `text`、`surface`、`canvas`、`line`、`accent`、`selected`、
+  `font-family` 等 Core token；
+- 插件应把 `font-family` 作为系统字体默认值，并按 `mode`/`surface` 适配深色、
+  浅色背景。JS SDK 会自动把 token 写到插件文档的 CSS 变量上。
+
+`context.get()` 另外返回当前插件的 `settings`（非 secret 的设置字段值），
+面板无需为字体、字号、颜色等展示设置新增后端 RPC。
 
 ## 消息边界
 

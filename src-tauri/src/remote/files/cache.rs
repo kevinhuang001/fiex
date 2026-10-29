@@ -140,3 +140,63 @@ pub fn cached_path(path: &str) -> Result<String, String> {
     super::super::config::check_cache_path(&conn, &local)?;
     Ok(local.to_string_lossy().into_owned())
 }
+
+/// Resolve the provider's opaque ID, never a local download-cache path.
+pub(crate) fn adapter_node(
+    path: &str,
+) -> Result<(crate::plugins::resolvers::fs::Mount, String), String> {
+    let (conn, relative) = connection_for_path(path).ok_or("StaleRef: connection removed")?;
+    let plugin_id = ensure_provider_access(&conn)?;
+    let rel = rel_string(&relative);
+    if !rel.is_empty() {
+        stat(path)?;
+    }
+    let meta = load_meta(&conn);
+    let node = if rel.is_empty() {
+        String::new()
+    } else {
+        meta.files
+            .get(&rel)
+            .map(|entry| entry.node_id.clone())
+            .filter(|id| !id.is_empty())
+            .ok_or("StaleRef: provider node is unknown")?
+    };
+    Ok((
+        crate::plugins::resolvers::fs::Mount {
+            mount_id: conn.mount_id.clone(),
+            plugin_id,
+            source: crate::plugins::resolvers::fs::Source::Connection(provider_config(&conn)),
+            scope: None,
+        },
+        node,
+    ))
+}
+
+/// Bind a committed opaque provider ID to the exact scoped destination. This
+/// is also needed for newly created directories before their first listing.
+pub(crate) fn remember_adapter_entry(
+    path: &str,
+    entry: &crate::plugins::resolvers::fs::FsEntry,
+) -> Result<(), String> {
+    let (connection, relative) = connection_for_path(path).ok_or("StaleRef: connection removed")?;
+    ensure_provider_access(&connection)?;
+    let mut metadata = load_meta(&connection);
+    let file = metadata.files.entry(rel_string(&relative)).or_default();
+    // Preserve an existing local snapshot. A separate direct remote write
+    // must not silently rebaseline or destroy possibly edited cached bytes.
+    if file.downloaded {
+        file.conflict = true;
+    } else {
+        file.size = entry.size.unwrap_or(0);
+        file.modified = entry.modified.unwrap_or(0).max(0) as u64;
+        file.revision = entry.revision.clone().unwrap_or_default();
+    }
+    file.node_id = entry.node_id.clone();
+    file.is_dir = entry.is_dir();
+    file.readonly = entry.readonly.unwrap_or(false);
+    file.allowed_ops = entry
+        .allowed_ops
+        .as_ref()
+        .map(|ops| ops.iter().map(|op| op.as_str().to_owned()).collect());
+    save_meta(&connection, &metadata)
+}

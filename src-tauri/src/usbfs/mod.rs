@@ -3,15 +3,20 @@
 //! The drivers operate on a block device or disk image directly; no OS mount
 //! and no FUSE are involved. APFS, HFS+ and btrfs remain read-only elsewhere.
 
+mod access;
+mod identity;
 mod mount;
+pub use identity::generation;
 mod tree;
 mod util;
 mod write;
 
 pub use mount::{detect, eject, ensure_access, probe};
-pub use tree::{copy_to_local, entry, list, listing, read, read_path, search};
+pub use tree::{
+    copy_file_to, copy_to_local, entry, list, listing, read, read_at, read_path, search,
+};
 pub use util::{route, virtual_root, FsKind, Route, UsbEntry};
-pub use write::{copy_local_into, create, open_cached, remove, rename, write, write_path};
+pub use write::{commit_staged, create, open_cached, remove, rename, write, write_path};
 
 #[cfg(test)]
 mod tests {
@@ -84,8 +89,9 @@ mod tests {
         assert_eq!(read_path(&file_route).unwrap(), b"virtual usb");
         let entries = listing(&root_route).unwrap();
         assert!(entries.iter().any(|entry| entry.path == file_path));
-        assert!(search(&root_route, "notes", 10)
+        assert!(search(&root_route, "notes", 10, &|| false)
             .unwrap()
+            .0
             .iter()
             .any(|entry| entry.name == "notes.txt"));
         let local = temp.path().join("local");
@@ -186,5 +192,3 @@ mod tests {
         remove(&renamed).unwrap();
     }
 }
-
-pub mod transfers;

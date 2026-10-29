@@ -1,6 +1,7 @@
 //! Native file operations and local application state.
 pub mod drag_session;
 pub mod files;
+pub mod fs;
 pub mod ignores;
 pub mod operations;
 pub mod recent;

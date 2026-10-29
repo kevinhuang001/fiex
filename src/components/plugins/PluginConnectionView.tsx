@@ -34,6 +34,7 @@ export function PluginConnectionView({
   navigate.current = onNavigate
   const [view, setView] = useState<Extract<Destination, { kind: 'pluginView' }> | null>(null)
   const [error, setError] = useState('')
+  const emit = useRef<((name: string, payload: JsonValue) => void) | null>(null)
 
   useEffect(() => {
     let active = true
@@ -79,9 +80,30 @@ export function PluginConnectionView({
           'plugin.error',
           'navigation.open',
         ]),
+        onReady: () => emit.current?.('theme.changed', themeSnapshot()),
+        onError: (message) => setError(message),
+        subscribe: (send) => {
+          emit.current = send
+          const changed = () => send('theme.changed', themeSnapshot())
+          window.addEventListener('fiex:theme-changed', changed)
+          return () => {
+            emit.current = null
+            window.removeEventListener('fiex:theme-changed', changed)
+          }
+        },
         dispatch: async (method, params): Promise<JsonValue> => {
-          if (method === 'context.get')
-            return { locale: getLocale(), source: 'connection', connectionId, state: view.state }
+          if (method === 'context.get') {
+            const settings = await call<Record<string, JsonValue>>('plugin_settings', {
+              pluginId: view.pluginId,
+            }).catch(() => ({}))
+            return {
+              locale: getLocale(),
+              source: 'connection',
+              connectionId,
+              state: view.state,
+              settings,
+            }
+          }
           if (method === 'theme.get') return themeSnapshot()
           if (method === 'plugin.invoke') {
             const input = params as { method?: unknown; params?: unknown } | null
@@ -127,6 +149,7 @@ export function PluginConnectionView({
     return () => {
       element.removeEventListener('load', attach)
       dispose?.()
+      emit.current = null
     }
   }, [view, connectionId])
 

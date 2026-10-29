@@ -42,7 +42,7 @@ Manifest
 
 - [ ] 统一 ExtensionRegistry，内置和插件 Info/Preview 共享业务类型、Adapter、排序和 UI 渲染。
 - [ ] 标准 Info/Preview/Decoration 的获准 Metadata 在首次事件中直接提供；文件读取使用会话限定的懒加载流。
-- [ ] ContextMenu 查询只传选择的 opaque ref；插件按需使用 `host.fs.stat/statBatch`；点击真实 action 后创建执行 Scope。
+- [ ] ContextMenu 查询只传选择的 opaque ref；插件按需使用 `fs.stat/statBatch`；点击真实 action 后创建执行 Scope。
 - [ ] 实现 statBatch、Core Metadata 有效缓存、可重入双向 IPC、原生菜单首帧与动态结果增量合并。
 - [ ] Search、Toolbar、Themes、Settings、Hooks 各自具备事件与权限合同。
 

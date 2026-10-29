@@ -86,6 +86,17 @@ pub(crate) fn connection_plugin_id(conn: &StoredConnection) -> String {
 }
 
 pub(crate) fn load_stored() -> Vec<StoredConnection> {
+    load_stored_with_secrets(true)
+}
+
+/// Sidebar and picker projections never inspect credentials. Reading the OS
+/// keyring for every connection on every sidebar refresh is both slow and
+/// unnecessary; only operations that actually open a provider use this flag.
+pub(crate) fn load_stored_public() -> Vec<StoredConnection> {
+    load_stored_with_secrets(false)
+}
+
+fn load_stored_with_secrets(hydrate: bool) -> Vec<StoredConnection> {
     // Sidebar and the background scheduler may both be the first reader of an
     // old registry. Serialize assignment so its new identity is persisted once.
     static MIGRATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -135,14 +146,16 @@ pub(crate) fn load_stored() -> Vec<StoredConnection> {
     if changed && save_stored(&items).is_err() {
         return Vec::new();
     }
-    for item in &mut items {
-        for field in &item.secret_keys {
-            if let Ok(value) = crate::plugins::storage::secret_get(
-                &connection_plugin_id(item),
-                &format!("connection-{}", item.id),
-                field,
-            ) {
-                item.settings.insert(field.clone(), value.into());
+    if hydrate {
+        for item in &mut items {
+            for field in &item.secret_keys {
+                if let Ok(value) = crate::plugins::storage::secret_get(
+                    &connection_plugin_id(item),
+                    &format!("connection-{}", item.id),
+                    field,
+                ) {
+                    item.settings.insert(field.clone(), value.into());
+                }
             }
         }
     }

@@ -23,29 +23,31 @@ pub(crate) async fn search_files(
         hidden,
         ignores,
     } = request;
-    if remote::is_remote(&root) {
+    let scope = format!("{}:{pane}", window.label());
+    if root == "everywhere://" {
+        let state = state.inner().clone();
+        return tauri::async_runtime::spawn_blocking(move || {
+            state.run_global(&scope, &query, hidden, &ignores, |b| {
+                let _ = on_batch.send(b);
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    }
+    // One scoped ticket owns cancellation and stale-result rejection for every
+    // storage adapter; the root never selects a source-specific search path.
+    let ticket = state.begin(&scope);
+    let token = ticket.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        if token.cancelled() {
+            return Ok(());
+        }
         let started = std::time::Instant::now();
-        let mut pending = vec![root.clone()];
-        let mut entries = Vec::new();
-        let mut visited = 0;
-        while let Some(path) = pending.pop() {
-            visited += 1;
-            if visited > 1000 || entries.len() >= 500 {
-                break;
-            }
-            if let Some(listing) = remote::list_listing(&path, hidden, &ignores).await? {
-                for entry in listing.entries {
-                    if entry.is_dir {
-                        pending.push(entry.path.clone());
-                    }
-                    if entry.name.to_lowercase().contains(&query.to_lowercase()) {
-                        entries.push(entry);
-                    }
-                    if entries.len() >= 500 {
-                        break;
-                    }
-                }
-            }
+        let resource = crate::core::fs::trusted(&root, "core:search")?;
+        let (entries, truncated, skipped) =
+            resource.search(&query, hidden, &ignores, 500, &|| token.cancelled())?;
+        if token.cancelled() {
+            return Ok(());
         }
         let entries = crate::plugins::resolvers::search::resolve(
             &crate::plugins::resolvers::search::PluginSearchInput {
@@ -56,88 +58,19 @@ pub(crate) async fn search_files(
                 limit: Some(500),
             },
             || Ok(serde_json::json!({"entries":entries})),
-            || false,
+            || token.cancelled(),
         );
         let _ = on_batch.send(SearchBatch {
             entries,
             done: true,
             elapsed_ms: started.elapsed().as_millis(),
-            truncated: !pending.is_empty() || visited > 1000,
-            skipped: 0,
+            truncated,
+            skipped,
         });
-        return Ok(());
-    }
-    if crate::plugins::vfs::handles(&root) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let started = std::time::Instant::now();
-            let (entries, truncated) =
-                crate::plugins::vfs::search(&root, &query, hidden, &ignores, 500)?;
-            let entries = crate::plugins::resolvers::search::resolve(
-                &crate::plugins::resolvers::search::PluginSearchInput {
-                    query: query.clone(),
-                    root: root.clone(),
-                    hidden,
-                    ignores: ignores.clone(),
-                    limit: Some(500),
-                },
-                || Ok(serde_json::json!({"entries":entries})),
-                || false,
-            );
-            let _ = on_batch.send(SearchBatch {
-                entries,
-                done: true,
-                elapsed_ms: started.elapsed().as_millis(),
-                truncated,
-                skipped: 0,
-            });
-            Ok(())
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    }
-    if let Some(route) = crate::usbfs::route(&root) {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let started = std::time::Instant::now();
-            let entries = crate::usbfs::search(&route, &query, 500)?;
-            let entries = crate::plugins::resolvers::search::resolve(
-                &crate::plugins::resolvers::search::PluginSearchInput {
-                    query: query.clone(),
-                    root: root.clone(),
-                    hidden,
-                    ignores: ignores.clone(),
-                    limit: Some(500),
-                },
-                || Ok(serde_json::json!({"entries":entries})),
-                || false,
-            );
-            let _ = on_batch.send(SearchBatch {
-                entries,
-                done: true,
-                elapsed_ms: started.elapsed().as_millis(),
-                truncated: false,
-                skipped: 0,
-            });
-            Ok(())
-        })
-        .await
-        .map_err(|error| error.to_string())?;
-    }
-    let state = state.inner().clone();
-    let scope = format!("{}:{pane}", window.label());
-    tauri::async_runtime::spawn_blocking(move || {
-        if root == "everywhere://" {
-            state.run_global(&scope, &query, hidden, &ignores, |b| {
-                let _ = on_batch.send(b);
-            })
-        } else {
-            state.run(&scope, &root, &query, hidden, &ignores, |b| {
-                let _ = on_batch.send(b);
-            })
-        }
+        Ok(())
     })
     .await
-    .map_err(|e| e.to_string())??;
-    Ok(())
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

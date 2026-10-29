@@ -75,13 +75,14 @@ pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value
 }
 
 #[tauri::command]
-pub(crate) fn preview_candidates(
-    extension: String,
-    mime: String,
-    is_dir: bool,
-) -> Vec<serde_json::Value> {
-    crate::plugins::resolvers::preview::candidates_json(&extension, &mime, is_dir)
+pub(crate) async fn preview_candidates(path: String) -> Result<Vec<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::plugins::resolvers::preview::resource_candidates_json(&path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
+
 /// Optional package-local loading document for a plugin preview. It contains
 /// no preview session and grants no resource access; the frontend renders it in
 /// the same sandboxed Core-owned iframe while `preview.open` runs.
@@ -227,4 +228,3 @@ pub(crate) async fn plugin_describe_resources(
     .await
     .map_err(|error| error.to_string())?
 }
-

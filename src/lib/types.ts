@@ -19,6 +19,8 @@ export interface Entry {
   extension: string
   mime: string
   readonly: boolean
+  /** Explicit storage operations; absence is unknown, an empty set grants none. */
+  allowedOps?: string[]
   linkTarget: string | null
   tags: Tag[]
   /** This entry, or a directory descendant, has cached bytes. */

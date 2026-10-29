@@ -52,17 +52,28 @@ fn connection(entry: &DecorationEntry) -> Vec<NativeBadge> {
     badges
 }
 pub(super) fn resolve_in(
-    id: &str, directory: &str, entries: &HashMap<String, DecorationEntry>,
+    id: &str,
+    directory: &str,
+    entries: &HashMap<String, DecorationEntry>,
 ) -> Result<Value, String> {
     let mut decorations = Vec::new();
     for entry in entries.values() {
         if id == "builtin:application-icon" {
-            let recognized = directory == crate::core::volumes::applications::URI && entry.mime == "application/x-fiex-application"
+            let recognized = directory == crate::core::volumes::applications::URI
+                && entry.mime == "application/x-fiex-application"
                 && !crate::core::volumes::applications::is_user(&entry.path);
-            if directory != crate::core::volumes::applications::URI && !crate::core::volumes::applications::is_user(&entry.path) { continue; }
+            if directory != crate::core::volumes::applications::URI
+                && !crate::core::volumes::applications::is_user(&entry.path)
+            {
+                continue;
+            }
             let mut decoration = Decoration {
                 path: entry.path.clone(),
-                native_badges: if recognized { vec![badge("系统", "blue", None, None)] } else { vec![] },
+                native_badges: if recognized {
+                    vec![badge("系统", "blue", None, None)]
+                } else {
+                    vec![]
+                },
                 ..Default::default()
             };
             decoration.icon_path = application_icon(entry);
@@ -130,4 +141,3 @@ fn application_icon(entry: &DecorationEntry) -> Option<String> {
     };
     applications::cached_icon(source)
 }
-

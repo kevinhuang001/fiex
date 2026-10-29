@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::fs;
 
 mod builtin;
+mod office_pdf;
 mod session;
 use crate::plugins::events::{EventRouter, Resolver};
 use builtin::{builtin_candidates, builtin_view, Builtin};
@@ -31,12 +32,39 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     )
 }
 
-/// Ordered provider list for the source switcher. User ordering and the
-/// disabled list remain presentation preferences. A plugin that declares a
-/// loading page advertises it here so the UI can resolve the document before
-/// invoking `preview.open`.
-pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
-    candidates(ext, mime, is_dir)
+fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
+    let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(resource));
+    let readable = metadata[0]["operations"]
+        .as_array()
+        .is_some_and(|ops| ops.iter().any(|op| op == "read"));
+    let builtin = builtin_candidates(&resource.ext, &resource.mime, resource.is_dir)
+        .into_iter()
+        .filter(|kind| readable || *kind == Builtin::Fallback)
+        .map(|kind| Resolver::builtin(kind.id(), kind.priority()))
+        .collect();
+    let mut providers = EventRouter::providers("preview.open", &metadata, "", builtin);
+    // A provider that declares a preview byte ceiling must not be selected for
+    // a file above it. This is also the cheapest way to avoid opening a huge
+    // archive/Office document only to fail inside the plugin.
+    let size = resource.stat.as_ref().map(|stat| stat.len());
+    providers.retain(|provider| {
+        let crate::plugins::events::Handler::Plugin(plugin) = &provider.handler else {
+            return true;
+        };
+        plugin
+            .extensions
+            .pointer("/preview/maxBytes")
+            .and_then(Value::as_u64)
+            .is_none_or(|limit| size.is_none_or(|size| size <= limit))
+    });
+    providers
+}
+pub fn resource_candidates_json(display: &str) -> Result<Vec<Value>, String> {
+    let resource = ResourceSnapshot::resolve(display)?;
+    Ok(project_candidates(resource_candidates(&resource)))
+}
+fn project_candidates(providers: Vec<Resolver>) -> Vec<Value> {
+    providers
         .iter()
         .map(|provider| {
             let mut value = provider.json();
@@ -48,6 +76,14 @@ pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
             value
         })
         .collect()
+}
+
+/// Ordered provider list for the source switcher. User ordering and the
+/// disabled list remain presentation preferences. A plugin that declares a
+/// loading page advertises it here so the UI can resolve the document before
+/// invoking `preview.open`.
+pub fn candidates_json(ext: &str, mime: &str, is_dir: bool) -> Vec<Value> {
+    project_candidates(candidates(ext, mime, is_dir))
 }
 
 pub fn open_resource(
@@ -62,7 +98,7 @@ fn resolve_preview(
     preferred: Option<&str>,
     order: Option<&[String]>,
 ) -> Result<Value, String> {
-    let mut providers = candidates(&resource.ext, &resource.mime, resource.is_dir);
+    let mut providers = resource_candidates(&resource);
     if let Some(order) = order {
         providers.retain(|p| order.contains(&p.id));
         providers.sort_by_key(|p| {
@@ -92,6 +128,7 @@ fn resolve_preview(
                 Builtin::Image,
                 Builtin::Media,
                 Builtin::Pdf,
+                Builtin::OfficePdf,
                 Builtin::Fallback,
             ]
             .into_iter()
@@ -100,7 +137,7 @@ fn resolve_preview(
             let path = if kind == Builtin::Fallback {
                 resource.local.clone()
             } else {
-                resource.materialize()?
+                resource.export_path()?
             };
             builtin_view(kind, &path, &resource.display)
         },
