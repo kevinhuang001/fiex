@@ -41,22 +41,32 @@ fn file() -> Option<PathBuf> {
 fn cache() -> &'static Mutex<Store> {
     static STORE: OnceLock<Mutex<Store>> = OnceLock::new();
     STORE.get_or_init(|| {
-        let store = file()
-            .and_then(|path| std::fs::read(path).ok())
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default();
+        let saved = crate::infrastructure::state::get("providers", "ordering")
+            .ok().flatten()
+            .and_then(|value| serde_json::from_value::<Store>(value).ok());
+        let store = if let Some(saved) = saved {
+            saved
+        } else {
+            let old: Store = file()
+                .and_then(|path| std::fs::read(path).ok())
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .unwrap_or_default();
+            if !old.features.is_empty() {
+                if crate::infrastructure::state::put(
+                    "providers", "ordering", serde_json::to_value(&old).unwrap_or_default(),
+                ).is_ok() {
+                    if let Some(path) = file() { let _ = std::fs::remove_file(path); }
+                }
+            }
+            old
+        };
         Mutex::new(store)
     })
 }
 
-fn persist(store: &Store) {
-    let Some(file) = file() else { return };
-    if let Some(parent) = file.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(bytes) = serde_json::to_vec_pretty(store) {
-        let _ = std::fs::write(file, bytes);
-    }
+fn persist(store: &Store) -> Result<(), String> {
+    let value = serde_json::to_value(store).map_err(|e| e.to_string())?;
+    crate::infrastructure::state::put("providers", "ordering", value)
 }
 
 /// Apply the stored preference for `feature` to an already priority-sorted
@@ -223,6 +233,7 @@ pub fn set(feature: &str, order: Vec<String>, disabled: Vec<String>) -> Result<(
     let order = clean(order);
     let disabled = clean(disabled);
     let mut store = cache().lock().map_err(|_| "provider store poisoned")?;
+    let previous = store.clone();
     if order.is_empty() && disabled.is_empty() {
         store.features.remove(feature);
     } else {
@@ -230,7 +241,10 @@ pub fn set(feature: &str, order: Vec<String>, disabled: Vec<String>) -> Result<(
             .features
             .insert(feature.to_string(), ProviderPreference { order, disabled });
     }
-    persist(&store);
+    if let Err(error) = persist(&store) {
+        *store = previous;
+        return Err(error);
+    }
     Ok(())
 }
 
