@@ -7,7 +7,10 @@ import { dismissError, receiveCoreErrors, reportError, useCurrentError } from '@
 export function ErrorDialogHost({
   legacyError,
   clearLegacy,
-}: { legacyError: string; clearLegacy: () => void }) {
+}: {
+  legacyError: string
+  clearLegacy: () => void
+}) {
   const current = useCurrentError()
   useEffect(() => {
     if (legacyError) reportError(legacyError, 'ui.action', 'explorer')
@@ -25,9 +28,14 @@ export function ErrorDialogHost({
       window.removeEventListener('fiex:state-error', failedStateWrite)
     }
   }, [])
-  return <ExplorerErrorDialog
-    error={current?.message || ''}
-    onClose={() => { dismissError(); clearLegacy() }}
-    onError={(message) => reportError(message, 'ui.action', 'dialog')}
-  />
+  return (
+    <ExplorerErrorDialog
+      error={current?.message || ''}
+      onClose={() => {
+        dismissError()
+        clearLegacy()
+      }}
+      onError={(message) => reportError(message, 'ui.action', 'dialog')}
+    />
+  )
 }
