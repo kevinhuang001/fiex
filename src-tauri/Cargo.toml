@@ -61,7 +61,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 urlencoding = "2"
 notify = "8"
 trash = "5"
-open = "5"
+open = { version = "5", features = ["shellexecute-on-windows"] }
 which = "8"
 base64 = "0.22"
 ed25519-dalek = { version = "2", features = ["rand_core"] }

@@ -314,16 +314,9 @@ fn open_stored(path: &Path) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let status = std::process::Command::new("cmd")
-            .args(["/C", "start", ""])
-            .arg(path)
-            .status()
-            .map_err(|error| error.to_string())?;
-        return if status.success() {
-            Ok(())
-        } else {
-            Err(crate::i18n::t("无法启动应用").into())
-        };
+        // ShellExecute keeps the launch detached and never allocates a console;
+        // `cmd /C start` used to flash a console window for GUI applications.
+        return open::that_detached(path).map_err(|error| error.to_string());
     }
     #[allow(unreachable_code)]
     Err(crate::i18n::t("无法启动应用").into())
@@ -615,6 +608,25 @@ fn looks_like_path(value: &str) -> bool {
         && (value.as_bytes()[1] == b':' || value.starts_with("\\\\") || value.starts_with('{'))
 }
 
+/// Executable file types that the Applications view is allowed to launch.
+/// Documents and website shortcuts share the Start Menu namespace, so the
+/// enumeration has to reject them explicitly.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn is_executable_target(value: &str) -> bool {
+    if value.contains("://") {
+        return false;
+    }
+    let extension = Path::new(value)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        extension.as_str(),
+        "exe" | "com" | "bat" | "cmd" | "msc" | "cpl" | "scr" | "ps1" | "appref-ms" | "jar"
+    )
+}
+
 #[cfg(target_os = "windows")]
 fn platform_list() -> Result<Vec<Entry>, String> {
     let script = r#"$ErrorActionPreference='SilentlyContinue'
@@ -625,8 +637,19 @@ $items=@()
 foreach($item in $folder.Items()){
   $aumid=[string]$item.ExtendedProperty('System.AppUserModel.ID')
   $path=[string]$item.Path
+  $isUwp=[bool]($aumid -and $aumid -notmatch '[:\\]' -and $aumid -match '!')
+  # shell:AppsFolder also contains documents, website shortcuts and folders from
+  # the Start Menu. Keep executable targets only; uninstallers are executables
+  # and stay visible on purpose. Packaged apps have no path and are kept as-is.
+  if(-not $isUwp){
+    if($path -match '^[a-zA-Z][a-zA-Z0-9+.-]*://'){continue}
+    $target=[string]$item.ExtendedProperty('System.Link.TargetExtension')
+    if(-not $target){$target=[IO.Path]::GetExtension($path)}
+    $target=([string]$target).ToLowerInvariant()
+    if(@('.exe','.com','.bat','.cmd','.msc','.cpl','.scr','.ps1','.appref-ms','.jar') -notcontains $target){continue}
+  }
   $icon=''
-  if($aumid -and $aumid -notmatch '[:\\]' -and $aumid -match '!'){
+  if($isUwp){
     $pfn=$aumid.Split('!')[0]
     $location=$packages[$pfn]
     if($location){
@@ -675,10 +698,16 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
         let aumid_path = resolve_windows_path(&app.aumid);
         let shell_path = resolve_windows_path(&app.path);
         let id = if looks_like_path(&app.aumid) {
+            if !is_executable_target(&aumid_path) {
+                continue;
+            }
             format!("path:{aumid_path}")
         } else if !app.aumid.is_empty() {
             format!("aumid:{}", app.aumid)
         } else if !app.path.is_empty() {
+            if !is_executable_target(&shell_path) {
+                continue;
+            }
             format!("path:{shell_path}")
         } else {
             continue;
@@ -705,26 +734,16 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
 #[cfg(target_os = "windows")]
 fn platform_open(encoded: &str) -> Result<(), String> {
     let id = decode(encoded)?;
-    if let Some(aumid) = id.strip_prefix("aumid:") {
-        let script = format!(
-            "$ErrorActionPreference='Stop'; Start-Process ('shell:AppsFolder\\' + {})",
-            ps_quote(aumid)
-        );
-        super::windows_shell::run(&script)?;
-        return Ok(());
-    }
-    if let Some(path) = id.strip_prefix("path:") {
-        let status = std::process::Command::new("cmd")
-            .args(["/C", "start", "", path])
-            .status()
-            .map_err(|error| error.to_string())?;
-        return if status.success() {
-            Ok(())
-        } else {
-            Err(crate::i18n::t("无法启动应用").into())
-        };
-    }
-    Err(crate::i18n::t("无法启动应用").into())
+    let target = if let Some(aumid) = id.strip_prefix("aumid:") {
+        format!("shell:AppsFolder\\{aumid}")
+    } else if let Some(path) = id.strip_prefix("path:") {
+        path.to_owned()
+    } else {
+        return Err(crate::i18n::t("无法启动应用").into());
+    };
+    // ShellExecute resolves both `shell:AppsFolder\<AUMID>` and plain binaries.
+    // Unlike `cmd /C start` it is detached and never allocates a console window.
+    open::that_detached(target).map_err(|error| error.to_string())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -798,11 +817,6 @@ fn decode(value: &str) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|error| error.to_string())
 }
 
-#[cfg(target_os = "windows")]
-fn ps_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
-}
-
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
@@ -825,5 +839,39 @@ mod tests {
         assert_eq!(desktop_entry(&file), Some(("Hidden".into(), true, true)));
         std::fs::write(&file, "[Desktop Entry]\nType=Link\nName=Link\n").unwrap();
         assert_eq!(desktop_entry(&file), Some(("Link".into(), false, false)));
+    }
+}
+
+#[cfg(test)]
+mod executable_target_tests {
+    use super::is_executable_target;
+
+    #[test]
+    fn executables_are_kept_including_uninstallers() {
+        for path in [
+            r"C:\Program Files\App\app.exe",
+            r"C:\Program Files\App\unins000.exe",
+            r"C:\Program Files\App\Uninstall App.exe",
+            r"C:\Program Files\App\tool.cmd",
+            r"C:\Windows\System32\app.msc",
+            r"C:\Users\me\AppData\Roaming\Microsoft\Installer\{ABC}\app.appref-ms",
+        ] {
+            assert!(is_executable_target(path), "{path} should be launched");
+        }
+    }
+
+    #[test]
+    fn documents_and_websites_are_filtered() {
+        for path in [
+            r"C:\Program Files\App\readme.pdf",
+            r"C:\Program Files\App\manual.docx",
+            r"C:\Program Files\App\release-notes.txt",
+            "https://example.com",
+            "https://example.com/download",
+            r"C:\Program Files\App\website.url",
+            "",
+        ] {
+            assert!(!is_executable_target(path), "{path} should be filtered");
+        }
     }
 }
