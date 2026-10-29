@@ -7,7 +7,7 @@ import { openDirectory } from '@/lib/listing'
 import { cachePresentations } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { stateSnapshot, saveState } from '@/lib/stateStore'
-import type { Entry, Listing, Location, Preferences, RemoteConnection } from '@/lib/types'
+import type { Entry, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
 /** True for every path owned by the three Core virtual views, including their
