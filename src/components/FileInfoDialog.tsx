@@ -44,7 +44,14 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   useEffect(() => {
     if (!info) return
     let alive = true
-    const cacheKey = JSON.stringify([info.path, info.size, info.modified, info.created, info.mime, info.allowedOps])
+    const cacheKey = JSON.stringify([
+      info.path,
+      info.size,
+      info.modified,
+      info.created,
+      info.mime,
+      info.allowedOps,
+    ])
     const warm = infoCache.peek(cacheKey)
     setSections(warm ?? [])
     setError('')
@@ -55,7 +62,10 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
         15_000,
       ),
     )
-    void Promise.race([infoCache.get(cacheKey, () => call<InfoSection[]>('file_info_details', { path: info.path })), timeout])
+    void Promise.race([
+      infoCache.get(cacheKey, () => call<InfoSection[]>('file_info_details', { path: info.path })),
+      timeout,
+    ])
       .then((value) => {
         if (alive) setSections(Array.isArray(value) ? value : [])
       })
