@@ -20,6 +20,7 @@ pub(crate) async fn directory_open(
     on_snapshot: tauri::ipc::Channel<DirectoryViewUpdate>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let started = std::time::Instant::now();
         let broker = crate::core::fs::trusted(&path, "core:directory-open")?;
         broker.require(crate::plugins::provider_registry::FsOperation::List, false)?;
         let send = |snapshot: crate::core::fs::directory_cache::DirectorySnapshot, complete| {
@@ -54,6 +55,12 @@ pub(crate) async fn directory_open(
         {
             send(fresh, true);
         }
+        crate::infrastructure::logging::record_core(
+            "debug", "fs.list", &format!(
+                "Directory listed {} entries with presentation in {} ms",
+                listing.entries.len(), started.elapsed().as_millis(),
+            ),
+        );
         Ok::<(), String>(())
     })
     .await
