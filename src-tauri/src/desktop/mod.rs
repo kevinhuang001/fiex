@@ -164,6 +164,7 @@ pub fn run() {
             drag_files,
             locations,
             list_directory,
+            directory_open,
             directory_cache,
             directory_snapshot,
             file_info,
