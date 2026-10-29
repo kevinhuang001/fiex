@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { Modal } from '@/components/ui/Modal'
 import type { PluginInfo } from '@/lib/plugins'
-import { PluginErrorsSection } from './PluginErrorsSection'
+import { PluginLogViewer } from './PluginLogViewer'
 
 /** Per-plugin runtime log. The recent errors used to live at the bottom of the
  * permissions detail; they now have their own entry point on every row. */
@@ -21,7 +21,7 @@ export function PluginLogsSheet({
     >
       {plugin && (
         <div className="plugin-permissions-page plugin-logs-page">
-          <PluginErrorsSection pluginId={plugin.id} />
+          <PluginLogViewer pluginId={plugin.id} />
         </div>
       )}
     </Modal>
