@@ -114,6 +114,7 @@ pub fn run() {
             state_get,
             state_set,
             error_poll,
+            core_error_report,
             plugin_panel_html,
             preview_open,
             preview_candidates,
