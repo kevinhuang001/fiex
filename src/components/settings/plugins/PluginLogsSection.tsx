@@ -29,7 +29,9 @@ export function PluginLogsSection({ pluginId }: { pluginId: string }) {
     const update = async () => {
       try {
         const result = await call<LogRecord[]>('plugin_logs', {
-          pluginId, level: level || null, limit: 500,
+          pluginId,
+          level: level || null,
+          limit: 500,
         })
         if (alive) {
           setRecords((previous) =>
@@ -45,13 +47,18 @@ export function PluginLogsSection({ pluginId }: { pluginId: string }) {
     }
     setLoading(true)
     void update()
-    const timer = window.setInterval(() => { if (!document.hidden) void update() }, 1400)
-    return () => { alive = false; window.clearInterval(timer) }
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void update()
+    }, 1400)
+    return () => {
+      alive = false
+      window.clearInterval(timer)
+    }
   }, [pluginId, level])
 
   const filtered = records.filter((record) =>
-    [record.message, record.source, record.operation || ''].some(
-      (value) => value.toLowerCase().includes(query.toLowerCase()),
+    [record.message, record.source, record.operation || ''].some((value) =>
+      value.toLowerCase().includes(query.toLowerCase()),
     ),
   )
   const format = (record: LogRecord) =>
@@ -71,16 +78,29 @@ export function PluginLogsSection({ pluginId }: { pluginId: string }) {
         <strong>{t('运行日志')}</strong>
         <small>{loading ? t('读取中…') : t('{0} 条', filtered.length)}</small>
       </div>
-      <div className="plugin-log-controls" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div
+        className="plugin-log-controls"
+        style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}
+      >
         <select value={level} onChange={(e) => setLevel(e.target.value)} aria-label={t('日志等级')}>
-          {levels.map((value) =>
-            <option key={value} value={value}>{value ? value.toUpperCase() : t('全部')}</option>,
-          )}
+          {levels.map((value) => (
+            <option key={value} value={value}>
+              {value ? value.toUpperCase() : t('全部')}
+            </option>
+          ))}
         </select>
-        <input value={query} onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('搜索日志')} aria-label={t('搜索日志')} />
-        <Button type="button" variant="outline" size="sm"
-          onClick={() => void navigator.clipboard.writeText(filtered.map(format).join('\n'))}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('搜索日志')}
+          aria-label={t('搜索日志')}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void navigator.clipboard.writeText(filtered.map(format).join('\n'))}
+        >
           {t('复制')}
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={() => void clear()}>
@@ -88,19 +108,29 @@ export function PluginLogsSection({ pluginId }: { pluginId: string }) {
         </Button>
       </div>
       {loadError && <p role="alert">{loadError}</p>}
-      <ul className="plugin-error-list" aria-live="polite" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-        {filtered.map((record, index) =>
+      <ul
+        className="plugin-error-list"
+        aria-live="polite"
+        style={{ maxHeight: '55vh', overflowY: 'auto' }}
+      >
+        {filtered.map((record, index) => (
           <li key={`${record.at}-${index}`}>
-            <span className={`plugin-error-source ${record.level}`}>{record.level.toUpperCase()}</span>
+            <span className={`plugin-error-source ${record.level}`}>
+              {record.level.toUpperCase()}
+            </span>
             <div>
               <p>{record.message}</p>
-              <small>{record.source}{record.operation && ` · ${record.operation}`}</small>
-              {record.fields && Object.keys(record.fields).length > 0 &&
-                <pre>{JSON.stringify(record.fields, null, 2)}</pre>}
+              <small>
+                {record.source}
+                {record.operation && ` · ${record.operation}`}
+              </small>
+              {record.fields && Object.keys(record.fields).length > 0 && (
+                <pre>{JSON.stringify(record.fields, null, 2)}</pre>
+              )}
               <time>{new Date(record.at).toLocaleString(getLocale())}</time>
             </div>
-          </li>,
-        )}
+          </li>
+        ))}
       </ul>
       {!loading && !filtered.length && !loadError && <p>{t('没有记录')}</p>}
     </section>
