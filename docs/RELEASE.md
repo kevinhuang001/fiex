@@ -1,3 +1,13 @@
+# Fiex 0.7.5
+
+- Load plugin previews from the asset origin instead of `srcDoc`, so the app shell CSP no longer blocks the plugin's inline bundle. Archive, Office and Data previews now render instead of timing out.
+- Windows Office documents are converted to PDF through the installed Office automation server before preview; the built-in PDF viewer shows the first 20 pages. The office plugin remains the fallback when conversion is unavailable.
+- XLSX/XLS previews expose every workbook sheet in the same left-hand dataset list as SQLite tables.
+- Plugin panels and PluginViews receive `settings` through `context.get`; manifest settings support system-font (`font`) and color (`color`) pickers.
+- SSH terminal settings add font family, font size and foreground color; the terminal background and chrome follow light/dark theme tokens.
+- PluginViews receive `theme.changed` events, giving connection UIs the same live theme contract as panels and previews.
+- Picker startup no longer lists an empty path; sidebar connection projection avoids keyring reads and local directory metadata loads in parallel.
+
 # Fiex 0.7.4
 
 - Separate downloaded connection cache from pinned offline copies, with upload indicators, configurable synchronization intervals and activity records.

@@ -206,12 +206,16 @@ export function usePanelBridge({
                 current.allowCreate || current.selection.length === 0
                   ? (await resources.describe([current.directory]))[0]
                   : undefined
+              const settings = await call<Record<string, JsonValue>>('plugin_settings', {
+                pluginId: current.pluginId,
+              }).catch(() => ({}))
               return {
                 locale: getLocale(),
                 targets,
                 ...(directory ? { directory } : {}),
                 panelId: current.panelId,
                 panelTitle: current.title,
+                settings,
                 uiTimeoutMs: current.timeoutMs ?? 15000,
                 ...(current.source ? { source: current.source } : {}),
                 ...(current.preview

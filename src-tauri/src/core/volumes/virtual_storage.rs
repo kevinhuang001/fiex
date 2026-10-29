@@ -1,7 +1,11 @@
 //! Storage implementations for Core-owned virtual views. Presentation and
 //! dedicated actions stay in `virtual_resolvers`; adapters never mix them.
-use super::{applications, recycle, trash, virtual_resolvers};
-use crate::core::files::{self, Entry};
+#[cfg(not(target_os = "windows"))]
+use super::trash;
+use super::{applications, recycle, virtual_resolvers};
+#[cfg(not(target_os = "windows"))]
+use crate::core::files;
+use crate::core::files::Entry;
 use crate::core::recent;
 #[cfg(not(target_os = "windows"))]
 use std::path::Path;

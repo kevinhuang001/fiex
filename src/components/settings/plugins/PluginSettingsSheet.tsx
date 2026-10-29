@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { t } from '@/i18n'
+import { call } from '@/lib/api'
 import { Check, Database, KeyRound, LoaderCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
@@ -32,6 +34,19 @@ export function PluginSettingsSheet({
   onClose: () => void
   onDismiss: () => void
 }) {
+  const [fonts, setFonts] = useState<string[]>([])
+  useEffect(() => {
+    if (!fields.some((field) => field.type === 'font')) return
+    let alive = true
+    void call<string[]>('system_fonts')
+      .then((values) => {
+        if (alive) setFonts(values)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [fields])
   return (
     <Modal
       open={Boolean(plugin)}
@@ -66,6 +81,35 @@ export function PluginSettingsSheet({
                   checked={Boolean(draft[field.id])}
                   onChange={(event) => onDraftChange(field.id, event.target.checked)}
                 />
+              ) : field.type === 'font' ? (
+                <>
+                  <input
+                    type="text"
+                    list={`plugin-font-${field.id}`}
+                    value={String(draft[field.id] ?? '')}
+                    placeholder={field.placeholder || t('使用系统主题字体')}
+                    onChange={(event) => onDraftChange(field.id, event.target.value)}
+                  />
+                  <datalist id={`plugin-font-${field.id}`}>
+                    {fonts.map((font) => (
+                      <option key={font} value={font} />
+                    ))}
+                  </datalist>
+                </>
+              ) : field.type === 'color' ? (
+                <>
+                  <input
+                    type="color"
+                    value={String(draft[field.id] || '#e6edf3')}
+                    onChange={(event) => onDraftChange(field.id, event.target.value)}
+                  />
+                  <input
+                    type="text"
+                    value={String(draft[field.id] ?? '')}
+                    placeholder={field.placeholder || t('留空跟随主题')}
+                    onChange={(event) => onDraftChange(field.id, event.target.value)}
+                  />
+                </>
               ) : (
                 <input
                   type={field.type === 'secret' ? 'password' : field.type}

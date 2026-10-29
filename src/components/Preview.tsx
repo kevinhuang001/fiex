@@ -48,6 +48,7 @@ export function Preview({
   const [loading, setLoading] = useState(false)
   const [loadingPage, setLoadingPage] = useState<PluginLoadingPage | null>(null)
   const [previewReady, setPreviewReady] = useState(false)
+  const [previewAsset, setPreviewAsset] = useState('')
   const [readyToShow, setReadyToShow] = useState(false)
   const [error, setError] = useState('')
   const [media, setMedia] = useState<{ width: number; height: number } | null>(null)
@@ -61,6 +62,7 @@ export function Preview({
     setResolved(null)
     setLoadingPage(null)
     setPreviewReady(false)
+    setPreviewAsset('')
     setReadyToShow(false)
     setError('')
     setMedia(null)
@@ -120,6 +122,7 @@ export function Preview({
     setMedia(null)
     setLoadingPage(null)
     setPreviewReady(false)
+    setPreviewAsset('')
     const open = async () => {
       let page: PluginLoadingPage | null = null
       let finished = false
@@ -159,6 +162,20 @@ export function Preview({
       if ('error' in outcome) throw outcome.error
       const value = outcome.value
       if (!active) return
+      // Packaged builds must load plugin HTML from the asset origin: a srcDoc
+      // document inherits the app shell CSP and blocks the plugin's inline
+      // bundle. Browser/demo builds keep the inline fallback.
+      if (native && value.view?.kind === 'html' && value.view.pluginId && value.view.entry) {
+        try {
+          const path = await call<string>('plugin_view_asset', {
+            pluginId: value.view.pluginId,
+            entry: value.view.entry,
+          })
+          if (active) setPreviewAsset(asset(path))
+        } catch {
+          // Fall back to srcDoc below; the bridge will report a clear timeout.
+        }
+      }
       setResolved(value)
       // Keep the plugin loading document until the preview itself reports that
       // its data is rendered; never flash the plugin's empty shell.
@@ -297,7 +314,8 @@ export function Preview({
                   key={`${entry.path}:${providerId}`}
                   pluginId={view.pluginId || ''}
                   contributionId={view.contributionId || ''}
-                  html={view.html}
+                  html={previewAsset ? undefined : view.html}
+                  src={previewAsset || undefined}
                   context={view.context}
                   sessionId={view.sessionId || ''}
                   timeoutMs={view.timeoutMs}
@@ -367,7 +385,7 @@ export function Preview({
               </div>
             ) : view?.kind === 'pdf' && fileSource ? (
               <Suspense fallback={<p>{t('正在加载 PDF…')}</p>}>
-                <PdfPreview url={fileSource} />
+                <PdfPreview url={fileSource} maxPages={view.maxPages} />
               </Suspense>
             ) : (
               <div className="preview-fallback">

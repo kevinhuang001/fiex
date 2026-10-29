@@ -6,7 +6,7 @@ export interface PluginField {
   id: string
   label: string
   /** `list` renders a row editor and stores a JSON array of strings. */
-  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret' | 'list' | 'file'
+  type: 'text' | 'url' | 'number' | 'checkbox' | 'secret' | 'list' | 'file' | 'font' | 'color'
   placeholder?: string
   defaultValue?: string | boolean | string[]
   required?: boolean

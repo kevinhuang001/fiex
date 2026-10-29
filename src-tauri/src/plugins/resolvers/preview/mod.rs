@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::fs;
 
 mod builtin;
+mod office_pdf;
 mod session;
 use crate::plugins::events::{EventRouter, Resolver};
 use builtin::{builtin_candidates, builtin_view, Builtin};
@@ -41,7 +42,22 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
         .filter(|kind| readable || *kind == Builtin::Fallback)
         .map(|kind| Resolver::builtin(kind.id(), kind.priority()))
         .collect();
-    EventRouter::providers("preview.open", &metadata, "", builtin)
+    let mut providers = EventRouter::providers("preview.open", &metadata, "", builtin);
+    // A provider that declares a preview byte ceiling must not be selected for
+    // a file above it. This is also the cheapest way to avoid opening a huge
+    // archive/Office document only to fail inside the plugin.
+    let size = resource.stat.as_ref().map(|stat| stat.len());
+    providers.retain(|provider| {
+        let crate::plugins::events::Handler::Plugin(plugin) = &provider.handler else {
+            return true;
+        };
+        plugin
+            .extensions
+            .pointer("/preview/maxBytes")
+            .and_then(Value::as_u64)
+            .is_none_or(|limit| size.is_none_or(|size| size <= limit))
+    });
+    providers
 }
 pub fn resource_candidates_json(display: &str) -> Result<Vec<Value>, String> {
     let resource = ResourceSnapshot::resolve(display)?;
@@ -112,6 +128,7 @@ fn resolve_preview(
                 Builtin::Image,
                 Builtin::Media,
                 Builtin::Pdf,
+                Builtin::OfficePdf,
                 Builtin::Fallback,
             ]
             .into_iter()
