@@ -30,12 +30,18 @@ export async function loadState<T>(key: string, legacyKey?: string): Promise<T |
   }
   return value
 }
+// Serialize writes in the order of user actions; concurrent IPC writes can
+// otherwise arrive out of order and persist an older view layout.
+let writeQueue: Promise<void> = Promise.resolve()
 export function saveState<T>(key: string, value: T): void {
   // Immediate per-window mirror for pre-hydration startup; no second policy.
   localStorage.setItem(prefix + key, JSON.stringify(value))
   if (native) {
-    void call('state_set', { key, value }).catch((error) => {
-      window.dispatchEvent(new CustomEvent('fiex:state-error', { detail: String(error) }))
-    })
+    writeQueue = writeQueue
+      .catch(() => {})
+      .then(() => call<void>('state_set', { key, value }))
+      .catch((error) => {
+        window.dispatchEvent(new CustomEvent('fiex:state-error', { detail: String(error) }))
+      })
   }
 }
