@@ -4,6 +4,7 @@
  * trailing columns keep explicit pixel widths so dragging a divider moves just
  * that divider. Widths are persisted with the other preferences. */
 export interface ListColumns {
+  name: number
   modified: number
   size: number
   kind: number
@@ -11,8 +12,8 @@ export interface ListColumns {
 
 export type ListColumnKey = keyof ListColumns
 
-export const LIST_COLUMNS_DEFAULT: ListColumns = { modified: 155, size: 75, kind: 108 }
-export const LIST_COLUMNS_MIN: ListColumns = { modified: 110, size: 60, kind: 70 }
+export const LIST_COLUMNS_DEFAULT: ListColumns = { name: 320, modified: 155, size: 75, kind: 108 }
+export const LIST_COLUMNS_MIN: ListColumns = { name: 140, modified: 110, size: 60, kind: 70 }
 /** No column may swallow the whole window by accident. */
 export const LIST_COLUMNS_MAX = 640
 /** The flexible name column never shrinks below this. */
@@ -33,13 +34,13 @@ export function normalizeListColumns(value: unknown): ListColumns {
       ? clamp(raw, LIST_COLUMNS_MIN[key])
       : LIST_COLUMNS_DEFAULT[key]
   }
-  return { modified: read('modified'), size: read('size'), kind: read('kind') }
+  return { name: read('name'), modified: read('modified'), size: read('size'), kind: read('kind') }
 }
 
 /** CSS grid template shared by the header and every row: the name column takes
  * the rest, the trailing columns use their stored widths. */
 export function listGridTemplate(columns: ListColumns): string {
-  return `minmax(${LIST_NAME_MIN}px, 1fr) ${columns.modified}px ${columns.size}px ${columns.kind}px`
+  return `${columns.name}px ${columns.modified}px ${columns.size}px ${columns.kind}px minmax(0, 1fr)`
 }
 
 /** Applies one divider drag. `dx` is the pointer movement in pixels and the
@@ -54,7 +55,7 @@ export function resizeListColumn(
 ): ListColumns {
   const next = { ...columns }
   const neighbour: ListColumnKey | null =
-    column === 'size' ? 'modified' : column === 'kind' ? 'size' : null
+    column === 'modified' ? 'name' : column === 'size' ? 'modified' : column === 'kind' ? 'size' : null
   const wanted = Math.round(columns[column] - dx)
   if (!neighbour) {
     // The name column is flexible, so its divider only moves this column.
