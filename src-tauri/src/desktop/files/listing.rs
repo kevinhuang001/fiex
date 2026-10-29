@@ -42,31 +42,3 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// Cache lookup never enumerates a provider or opens file contents.
-#[tauri::command]
-pub(crate) async fn directory_cache(
-    path: String,
-    hidden: bool,
-    ignores: Vec<String>,
-) -> Result<Option<files::Listing>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::core::fs::directory_cache::read(&path, hidden, &ignores)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
-
-#[tauri::command]
-pub(crate) async fn directory_snapshot(
-    path: String,
-    hidden: bool,
-    ignores: Vec<String>,
-) -> Result<Option<crate::core::fs::directory_cache::DirectorySnapshot>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let broker = crate::core::fs::trusted(&path, "core:directory-snapshot")?;
-        broker.require(crate::plugins::provider_registry::FsOperation::List, false)?;
-        crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-}
