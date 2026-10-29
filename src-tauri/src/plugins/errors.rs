@@ -11,7 +11,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const MAX_ENTRIES: usize = 50;
+const MAX_ENTRIES: usize = 500;
 const MAX_MESSAGE: usize = 500;
 const MAX_DETAIL: usize = 4000;
 
@@ -22,6 +22,7 @@ pub struct PluginError {
     pub at: u64,
     /// `ui`, `bridge`, `panel` or `host`.
     pub source: String,
+    pub level: String,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
@@ -75,6 +76,7 @@ pub fn report(
     entries.push_front(PluginError {
         at: now_ms(),
         source: source.to_string(),
+        level: "error".to_string(),
         message,
         detail,
     });
@@ -132,6 +134,32 @@ pub fn report_limited(plugin_id: &str, code: &str, message: &str, detail: Option
         format!("[{code}] {message}")
     };
     let _ = report(plugin_id, "plugin", &text, detail);
+}
+
+
+pub fn report_log_limited(plugin_id: &str, level: &str, message: &str) {
+    if !matches!(level, "trace" | "debug" | "info" | "warn" | "error") {
+        return;
+    }
+    let message = truncate(&clean(message), MAX_MESSAGE);
+    if message.is_empty() {
+        return;
+    }
+    let now = now_ms();
+    if !allowed(plugin_id, now) {
+        return;
+    }
+    if let Ok(mut logs) = log().lock() {
+        let entries = logs.entry(plugin_id.to_string()).or_default();
+        entries.push_front(PluginError {
+            at: now,
+            source: "plugin".to_string(),
+            level: level.to_string(),
+            message,
+            detail: None,
+        });
+        entries.truncate(MAX_ENTRIES);
+    }
 }
 
 /// Newest first.
