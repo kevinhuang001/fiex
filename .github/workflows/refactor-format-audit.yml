@@ -1,0 +1,30 @@
+name: Temporary refactor formatting audit
+on:
+  push:
+    branches:
+      - refactor/unified-cache-state-log-error
+permissions:
+  contents: read
+jobs:
+  emit-formatted-files:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare formatter
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Format frontend and Rust source
+        run: |
+          npx prettier --write src
+          rustup component add rustfmt
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all
+      - name: Output formatted file contents
+        run: |
+          git diff --name-only -z -- src src-tauri/src | while IFS= read -r -d '' file; do
+            echo "FMT_FILE_START:$file"
+            base64 -w 0 "$file"
+            echo
+            echo "FMT_FILE_END:$file"
+          done
