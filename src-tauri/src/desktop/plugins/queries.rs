@@ -4,10 +4,29 @@ use super::*;
 pub(crate) async fn file_info_details(
     path: String,
 ) -> Vec<crate::plugins::resolvers::info::InfoSection> {
+    use crate::infrastructure::cache::memory::MemoryCache;
+    use crate::plugins::resolvers::info::InfoSection;
+    use std::sync::OnceLock;
+    use std::time::Duration;
+    static INFO: OnceLock<MemoryCache<Vec<InfoSection>>> = OnceLock::new();
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::info::file_info_resource(&path).unwrap_or_default()
+        let cache = INFO.get_or_init(|| MemoryCache::new(256, Duration::from_secs(90)));
+        // No metadata read may bypass the currently authorized storage owner.
+        let resource = crate::core::fs::trusted(&path, "core:info")?;
+        resource.require(crate::plugins::provider_registry::FsOperation::Stat, false)?;
+        let metadata = resource.desktop_entry().map_err(String::from)?;
+        let key = serde_json::to_string(&(
+            &path, metadata.modified, metadata.size, metadata.mime.as_str(),
+            crate::i18n::locale(), crate::plugins::preferences::snapshot(),
+        )).map_err(|e| e.to_string())?;
+        if let Some(value) = cache.get(&key) { return Ok::<_, String>(value); }
+        let result = crate::plugins::resolvers::info::file_info_resource(&path)?;
+        cache.insert(key, result.clone());
+        Ok(result)
     })
     .await
+    .ok()
+    .and_then(Result::ok)
     .unwrap_or_default()
 }
 
