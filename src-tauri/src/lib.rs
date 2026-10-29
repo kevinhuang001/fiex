@@ -5,6 +5,7 @@ pub mod core;
 #[cfg(feature = "desktop")]
 pub(crate) mod desktop;
 pub mod i18n;
+pub mod infrastructure;
 pub mod platform;
 pub mod plugins;
 pub mod remote;
