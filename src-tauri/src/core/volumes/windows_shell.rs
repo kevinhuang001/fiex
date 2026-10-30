@@ -137,7 +137,7 @@ public static class FiexShellIcon {
 /// Resolving the identifier is separate from checking that the target exists.
 #[cfg(target_os = "windows")]
 pub fn resolve_known_folder_path(value: &str) -> Option<std::path::PathBuf> {
-    use std::ffi::{OsStr, OsString, c_void};
+    use std::ffi::{c_void, OsStr, OsString};
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::ptr;
 
@@ -230,6 +230,8 @@ mod known_folder_tests {
     fn malformed_and_unknown_shell_identities_do_not_become_paths() {
         assert!(resolve_known_folder_path(r"{invalid}\msinfo32.exe").is_none());
         assert!(resolve_known_folder_path(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}").is_none());
-        assert!(resolve_known_folder_path(r"{00000000-0000-0000-0000-000000000000}\x.exe").is_none());
+        assert!(
+            resolve_known_folder_path(r"{00000000-0000-0000-0000-000000000000}\x.exe").is_none()
+        );
     }
 }
