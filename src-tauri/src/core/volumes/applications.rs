@@ -934,7 +934,10 @@ fn platform_open(encoded: &str) -> Result<(), String> {
     let target = if let Some(aumid) = id.strip_prefix("aumid:") {
         format!("shell:AppsFolder\\{aumid}")
     } else if let Some(path) = id.strip_prefix("path:") {
-        path.to_owned()
+        // Revalidate bookmarked/cached identities at launch, including older
+        // paths that still contain a Known Folder GUID.
+        resolve_windows_executable(path)
+            .ok_or_else(|| crate::i18n::t("无法启动应用").to_string())?
     } else {
         return Err(crate::i18n::t("无法启动应用").into());
     };
