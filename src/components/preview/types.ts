@@ -9,7 +9,6 @@ export interface ResolvedPreview {
     text?: string
     truncated?: boolean
     path?: string
-    maxPages?: number
     name?: string
     mime?: string
     media?: 'video' | 'audio'

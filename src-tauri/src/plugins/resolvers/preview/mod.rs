@@ -9,7 +9,6 @@ use serde_json::Value;
 use std::fs;
 
 mod builtin;
-mod office_pdf;
 mod session;
 use crate::plugins::events::{EventRouter, Resolver};
 use builtin::{builtin_candidates, builtin_view, Builtin};
@@ -128,7 +127,6 @@ fn resolve_preview(
                 Builtin::Image,
                 Builtin::Media,
                 Builtin::Pdf,
-                Builtin::OfficePdf,
                 Builtin::Fallback,
             ]
             .into_iter()
