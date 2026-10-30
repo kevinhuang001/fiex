@@ -106,7 +106,6 @@ export function TerminalView({
   const resizeRef = useRef<(() => void) | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<SessionStatus>('connecting')
-  const [error, setError] = useState('')
 
   useEffect(() => {
     const element = host.current
@@ -155,7 +154,6 @@ export function TerminalView({
           data: Array.from(new TextEncoder().encode(data)),
         }).catch((cause) => {
           if (!disposed) {
-            setError(String(cause))
             reportError(cause, 'terminal:write')
             setStatus('error')
           }
@@ -193,7 +191,6 @@ export function TerminalView({
       return true
     })
     setStatus('connecting')
-    setError('')
     if (!native) {
       setStatus('demo')
       const disposeShell = attachDemoShell(terminal, cwd)
@@ -213,7 +210,6 @@ export function TerminalView({
       setStatus,
       (message) => {
         const detail = message || t('终端会话表不可用')
-        setError(detail)
         reportError(detail, 'terminal:session')
       },
     )
@@ -239,7 +235,6 @@ export function TerminalView({
       })
       .catch((cause) => {
         if (disposed || events.ended()) return
-        setError(String(cause))
         reportError(cause, 'terminal:open')
         setStatus('error')
       })
