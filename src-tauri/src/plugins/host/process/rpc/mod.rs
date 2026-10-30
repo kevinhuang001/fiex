@@ -15,6 +15,7 @@ use std::{
 mod actor;
 mod dispatch;
 mod permissions;
+mod stderr;
 mod tasks;
 pub(super) mod transport;
 

@@ -27,6 +27,7 @@ impl Running {
         child: crate::plugins::security::sandbox::SandboxChild,
         stdin: Box<dyn Write + Send>,
         stdout: BufReader<Box<dyn Read + Send>>,
+        stderr: BufReader<Box<dyn Read + Send>>,
     ) -> Arc<Self> {
         let RunningInit {
             plugin_id,
@@ -57,6 +58,7 @@ impl Running {
             .name("fiex-plugin-reader".into())
             .spawn(move || reader_running.read_loop(stdout))
             .expect("plugin reader thread");
+        super::stderr::spawn(running.plugin_id.clone(), stderr);
         running
     }
 

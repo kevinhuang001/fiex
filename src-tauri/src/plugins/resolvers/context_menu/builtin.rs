@@ -40,8 +40,7 @@ impl Context {
         // folders) use the Applications view; its blank canvas keeps the
         // capability-gated create menu.
         let virtual_provider = provider.filter(|p| {
-            p.id() != "core:recent"
-                && !(p.id() == "core:applications" && paths.is_empty())
+            p.id() != "core:recent" && !(p.id() == "core:applications" && paths.is_empty())
         });
         if let Some(owner) = virtual_provider {
             if owner.id() == "core:trash"

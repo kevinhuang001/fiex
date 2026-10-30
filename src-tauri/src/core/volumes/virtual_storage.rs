@@ -2,13 +2,15 @@
 //! dedicated actions stay in `virtual_resolvers`; adapters never mix them.
 //!
 //! List always enumerates the source; navigation caching is owned by Core FS.
-use super::{applications, recycle, trash, virtual_resolvers};
+#[cfg(not(target_os = "windows"))]
+use super::trash;
+use super::{applications, recycle, virtual_resolvers};
 #[cfg(not(target_os = "windows"))]
 use crate::core::files;
 use crate::core::files::Entry;
 use crate::core::recent;
-use std::path::Path;
-use std::sync::OnceLock;
+#[cfg(not(target_os = "windows"))]
+use std::{path::Path, sync::OnceLock};
 
 /// The sidebar's logical Trash place. The platform root is `recyclebin://` on
 /// Windows and a real directory on Unix.

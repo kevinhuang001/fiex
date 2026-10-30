@@ -18,11 +18,13 @@ describe('normalizeListColumns', () => {
 
   it('keeps valid widths and clamps the rest', () => {
     expect(normalizeListColumns({ modified: 200, size: 90, kind: 120 })).toEqual({
+      name: LIST_COLUMNS_DEFAULT.name,
       modified: 200,
       size: 90,
       kind: 120,
     })
     expect(normalizeListColumns({ modified: 4, size: 9999, kind: 71 })).toEqual({
+      name: LIST_COLUMNS_DEFAULT.name,
       modified: LIST_COLUMNS_MIN.modified,
       size: LIST_COLUMNS_MAX,
       kind: 71,
@@ -31,6 +33,7 @@ describe('normalizeListColumns', () => {
 
   it('rounds fractional widths', () => {
     expect(normalizeListColumns({ modified: 200.6, size: 90.2, kind: 120.5 })).toEqual({
+      name: LIST_COLUMNS_DEFAULT.name,
       modified: 201,
       size: 90,
       kind: 121,
@@ -41,12 +44,17 @@ describe('normalizeListColumns', () => {
 describe('listGridTemplate', () => {
   it('keeps the name column flexible and pins the trailing widths', () => {
     expect(listGridTemplate({ modified: 155, size: 75, kind: 108 })).toBe(
-      `minmax(${LIST_NAME_MIN}px, 1fr) 155px 75px 108px`,
+      `minmax(${LIST_COLUMNS_DEFAULT.name}px, 1fr) 155px 75px 108px`,
     )
   })
 })
 
 describe('resizeListColumn', () => {
+  it('supports a user-defined name column minimum', () => {
+    expect(resizeListColumn({ ...LIST_COLUMNS_DEFAULT }, 'name', 45).name).toBe(305)
+    expect(resizeListColumn({ ...LIST_COLUMNS_DEFAULT }, 'name', -9999).name).toBe(LIST_NAME_MIN)
+  })
+
   it('drags the divider of a fixed column and moves the neighbour the other way', () => {
     const columns = { modified: 155, size: 75, kind: 108 }
     // Dragging the size divider right shrinks size and grows modified.

@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { CoreLogsSheet } from './plugins/CoreLogsSheet'
 import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
 import { t } from '@/i18n'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
@@ -13,6 +16,7 @@ import { usePluginSettingsController } from '@/hooks/usePluginSettingsController
 import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
 
 export function PluginSettings() {
+  const [coreLogs, setCoreLogs] = useState(false)
   const {
     plugins,
     category,
@@ -73,6 +77,9 @@ export function PluginSettings() {
           onOpenStore={() => setStoreOpen(true)}
         >
           <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
+          <Button type="button" size="sm" variant="outline" onClick={() => setCoreLogs(true)}>
+            {t('Core 运行日志')}
+          </Button>
         </PluginStoreToolbar>
         <PluginList
           plugins={shown}
@@ -136,6 +143,7 @@ export function PluginSettings() {
       />
 
       <PluginLogsSheet plugin={logsFor} onClose={() => setLogsFor(null)} />
+      <CoreLogsSheet open={coreLogs} onClose={() => setCoreLogs(false)} />
 
       {permissionsFor &&
         domainSettingsOpen &&

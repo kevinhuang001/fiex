@@ -19,6 +19,10 @@ use std::{collections::HashMap, sync::Mutex};
 use tauri::{ipc::Channel, Emitter, Manager};
 
 #[macro_use]
+mod directory_open;
+pub(crate) use directory_open::*;
+
+#[macro_use]
 mod listing;
 pub(crate) use listing::*;
 

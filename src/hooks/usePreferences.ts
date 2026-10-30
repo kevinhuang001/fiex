@@ -55,13 +55,13 @@ function isStyle(value: unknown): value is ShortcutStyle {
   return value === 'mac' || value === 'win' || value === 'linux'
 }
 
-function load(): Preferences {
+function load(input?: Partial<Preferences>): Preferences {
   const systemStyle = inferShortcutStyle()
   const fallback = defaultsFor(systemStyle)
   try {
-    const stored = JSON.parse(
-      localStorage.getItem('fiex:preferences') || '{}',
-    ) as Partial<Preferences>
+    const stored =
+      input ??
+      (JSON.parse(localStorage.getItem('fiex:preferences') || '{}') as Partial<Preferences>)
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
@@ -171,15 +171,66 @@ function load(): Preferences {
 
 export function usePreferences() {
   const [prefs, setPrefs] = useState<Preferences>(load)
+  const [stateReady, setStateReady] = useState(demo)
   useEffect(() => {
     setLocale(prefs.locale)
     void call('locale_set', { locale: prefs.locale })
       .catch(() => {})
       .then(() => window.dispatchEvent(new Event('fiex:plugins-changed')))
   }, [prefs.locale])
+  // One-time migration: Core StateStore becomes the only durable settings
+  // writer. The legacy localStorage value is read solely for first-paint and
+  // imported only if the Core store is empty.
   useEffect(() => {
-    localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
-  }, [prefs])
+    if (demo) return
+    let active = true
+    void (async () => {
+      try {
+        const saved = await call<Partial<Preferences> | null>('state_get', {
+          namespace: 'explorer',
+          key: 'preferences',
+        })
+        if (!active) return
+        if (saved) {
+          setPrefs(load(saved))
+        } else {
+          const legacy = localStorage.getItem('fiex:preferences')
+          if (legacy) {
+            await call('state_put', {
+              namespace: 'explorer',
+              key: 'preferences',
+              value: JSON.parse(legacy),
+            })
+          }
+        }
+        if (active) {
+          localStorage.removeItem('fiex:preferences')
+          setStateReady(true)
+        }
+      } catch {
+        // Keep legacy preferences in place if Core is not available.
+        if (active) setStateReady(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+  useEffect(() => {
+    if (demo) {
+      localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
+      return
+    }
+    if (!stateReady) return
+    void call('state_put', {
+      namespace: 'explorer',
+      key: 'preferences',
+      value: prefs,
+    }).catch(() => {
+      // Preserve edits until Core persistence recovers rather than lose them.
+      localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
+    })
+  }, [prefs, stateReady])
   useEffect(() => {
     // The desktop scheduler owns the timer; keep it in step with settings.
     void call('remote_set_sync_interval', { seconds: prefs.syncInterval }).catch(() => {})

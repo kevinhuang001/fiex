@@ -1,3 +1,4 @@
+import { call } from '@/lib/api'
 export type SortKey = 'name' | 'modified' | 'size' | 'kind'
 export type GroupKey = 'none' | 'kind' | 'modified' | 'size'
 
@@ -30,16 +31,22 @@ export function persistPickerSort(
   sort: { key: SortKey; direction: 'asc' | 'desc' },
   group: GroupKey,
 ) {
-  try {
-    localStorage.setItem(SORT_KEY, JSON.stringify(sort))
-    localStorage.setItem(GROUP_KEY, group)
-  } catch {
-    // Preferences are best effort.
-  }
+  void Promise.all([
+    call('state_put', { namespace: 'picker', key: 'sort', value: sort }),
+    call('state_put', { namespace: 'picker', key: 'group', value: group }),
+  ])
+    .then(() => {
+      localStorage.removeItem(SORT_KEY)
+      localStorage.removeItem(GROUP_KEY)
+    })
+    .catch(() => {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sort))
+      localStorage.setItem(GROUP_KEY, group)
+    })
 }
 
 /** The last folder the chooser showed, so it reopens where the user left off. */
-export function storedDirectory(): string {
+export function storedDirectory(_mode?: string): string {
   try {
     return localStorage.getItem(DIRECTORY_KEY) || ''
   } catch {
@@ -47,13 +54,12 @@ export function storedDirectory(): string {
   }
 }
 
-export function persistPickerDirectory(path: string) {
+export function persistPickerDirectory(path: string, mode: string) {
   if (!path) return
-  try {
-    localStorage.setItem(DIRECTORY_KEY, path)
-  } catch {
-    // Preferences are best effort.
-  }
+  const key = mode === 'saveFile' ? 'lastSaveDirectory' : 'lastOpenDirectory'
+  void call('state_put', { namespace: 'picker', key, value: path })
+    .then(() => localStorage.removeItem(DIRECTORY_KEY))
+    .catch(() => localStorage.setItem(DIRECTORY_KEY, path))
 }
 
 export const dirname = (path: string) => {

@@ -21,6 +21,7 @@ use std::io::{BufReader, Read, Write};
 pub struct SandboxChild {
     pub stdin: Box<dyn Write + Send>,
     pub stdout: BufReader<Box<dyn Read + Send>>,
+    pub stderr: BufReader<Box<dyn Read + Send>>,
     /// Private scratch space. Some codecs (RAR) need temporary spool files;
     /// they still cannot write to the user's directory or install package.
     _scratch: tempfile::TempDir,

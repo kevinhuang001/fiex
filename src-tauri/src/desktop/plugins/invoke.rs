@@ -42,6 +42,12 @@ pub(crate) async fn plugin_invoke(
         .transpose()?;
     let id = plugin_id.clone();
     let call = method.clone();
+    let started = std::time::Instant::now();
+    crate::infrastructure::logging::record_core(
+        "debug",
+        "plugin.invoke",
+        &format!("{id}: {call} started"),
+    );
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(mut scope) = preview_scope {
             crate::plugins::resource::resource_context::bind_selected(&mut scope, &bindings)?;
@@ -78,5 +84,30 @@ pub(crate) async fn plugin_invoke(
     })
     .await
     .map_err(|e| e.to_string())?
-    .inspect_err(|error| record_plugin_error(&id, "plugin", &format!("{call}: {error}")))
+    .inspect(|_| {
+        crate::infrastructure::logging::record_core(
+            "debug",
+            "plugin.invoke",
+            &format!(
+                "{id}: {call} completed in {} ms",
+                started.elapsed().as_millis()
+            ),
+        );
+        crate::plugins::errors::report_log_limited(
+            &id,
+            "debug",
+            &format!("{call} completed in {} ms", started.elapsed().as_millis()),
+        );
+    })
+    .inspect_err(|error| {
+        record_plugin_error(&id, "plugin", &format!("{call}: {error}"));
+        crate::infrastructure::logging::record_core(
+            "error",
+            "plugin.invoke",
+            &format!(
+                "{id}: {call} failed after {} ms",
+                started.elapsed().as_millis()
+            ),
+        );
+    })
 }

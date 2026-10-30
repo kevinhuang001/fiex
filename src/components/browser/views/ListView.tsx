@@ -67,7 +67,8 @@ export function ListView({
     document.body.classList.remove('col-resizing')
     if (
       draft &&
-      (draft.modified !== columns.modified ||
+      (draft.name !== columns.name ||
+        draft.modified !== columns.modified ||
         draft.size !== columns.size ||
         draft.kind !== columns.kind)
     )
@@ -120,11 +121,11 @@ export function ListView({
   return (
     <>
       <div className="list-header" style={{ gridTemplateColumns: template }} role="row">
-        <span role="columnheader" aria-sort={ariaSort('name')}>
+        <span className="list-col" role="columnheader" aria-sort={ariaSort('name')}>
           {sortButton('name', t('名称'))}
+          {resizer('name')}
         </span>
         <span className="list-col" role="columnheader" aria-sort={ariaSort('modified')}>
-          {resizer('modified')}
           {sortButton('modified', t('修改时间'))}
         </span>
         <span className="list-col" role="columnheader" aria-sort={ariaSort('size')}>

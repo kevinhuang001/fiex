@@ -64,6 +64,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
 
     let (child_stdin, parent_stdin) = pipe()?;
     let (parent_stdout, child_stdout) = pipe()?;
+    let (parent_stderr, child_stderr) = pipe()?;
     #[cfg(target_os = "linux")]
     arapuca::selfexec::enable_selfexec_mode();
     let sandbox = new().map_err(|e| format!("cannot initialize plugin sandbox: {e}"))?;
@@ -119,7 +120,7 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         work_dir: Some(scratch.path().to_path_buf()),
         stdin: Some(child_stdin.as_raw_fd()),
         stdout: Some(child_stdout.as_raw_fd()),
-        stderr: None,
+        stderr: Some(child_stderr.as_raw_fd()),
         extra_fds: Vec::new(),
         tty: false,
         network_proxy_socket: None,
@@ -136,9 +137,11 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
         .map_err(|e| format!("plugin start failed: {e}"))?;
     drop(child_stdin);
     drop(child_stdout);
+    drop(child_stderr);
     Ok(SandboxChild {
         stdin: Box::new(parent_stdin),
         stdout: BufReader::new(Box::new(parent_stdout) as Box<dyn Read + Send>),
+        stderr: BufReader::new(Box::new(parent_stderr) as Box<dyn Read + Send>),
         _scratch: scratch,
         _process: process,
         _socket_dir: socket_dir,

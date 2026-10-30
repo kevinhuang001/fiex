@@ -7,12 +7,12 @@
 //! deleting folders never invalidates the application enumeration/cache.
 use super::applications;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     path::PathBuf,
     sync::{Mutex, OnceLock},
 };
-use sha2::{Digest, Sha256};
 
 const VERSION: u32 = 1;
 
