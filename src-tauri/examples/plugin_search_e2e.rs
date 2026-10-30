@@ -1,5 +1,9 @@
 //! Cross-repository test for the Core-owned plugin search aggregator.
-use fiex_lib::{plugins::host as plugin_host, plugins::resolvers::search::PluginSearchInput};
+use fiex_lib::{
+    core::search::SearchMode,
+    plugins::host as plugin_host,
+    plugins::resolvers::search::PluginSearchInput,
+};
 
 fn main() {
     fiex_lib::plugins::security::sandbox::run_wrapper_if_requested();
@@ -31,6 +35,7 @@ fn main() {
         query: "mock".into(),
         root: root.path().to_string_lossy().into_owned(),
         hidden: false,
+        mode: SearchMode::Name,
         ignores: Vec::new(),
         limit: Some(50),
     });
