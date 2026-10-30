@@ -175,7 +175,18 @@ fn key(path: &str) -> String {
             path
         );
     }
-    crate::core::volumes::virtual_storage::virtual_path_key(path).unwrap_or_else(|| path.into())
+    if let Some(virtual_path) = crate::core::volumes::virtual_storage::virtual_path_key(path) {
+        return virtual_path;
+    }
+    // ResourceBroker canonicalizes local paths on macOS (/var is a symlink to
+    // /private/var). Use the same identity for the original UI path and the
+    // broker's normalized path, or a successful listing becomes a cache miss.
+    if Path::new(path).is_absolute() {
+        if let Ok(canonical) = dunce::canonicalize(path) {
+            return canonical.to_string_lossy().into_owned();
+        }
+    }
+    path.into()
 }
 fn validate_mount(path: &str) -> Result<(), String> {
     // Reauthorize every cache read, but never hydrate remote credentials:
