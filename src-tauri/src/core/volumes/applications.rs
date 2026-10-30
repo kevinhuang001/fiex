@@ -153,20 +153,13 @@ pub fn move_system_apps(paths: &[String], destination: &str) -> Result<(), Strin
 /// Context-menu delete for an application entry. Mapped system apps return to
 /// the root; user-store files are removed through the normal store rules.
 pub fn remove_entries(paths: &[String]) -> Result<(), String> {
+    // Review the whole selection before any mutation; mixed selections cannot
+    // accidentally remove user data before hitting a protected system app.
+    if paths.iter().any(|path| !is_user(path)) {
+        return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
+    }
     for path in paths {
-        if is_user(path) {
-            remove_user(path)?;
-        } else if is_system_app(path) {
-            let folder = application_folders::folder_for(path)
-                .ok_or_else(|| crate::i18n::t("应用不存在").to_string())?;
-            application_folders::unmap(std::slice::from_ref(path))?;
-            directory_cache::remove_entry(&folder, path);
-            if let Ok(entry) = system_entry(path) {
-                directory_cache::add_entry(URI, entry);
-            }
-        } else {
-            return Err(crate::i18n::t("应用不存在").to_string());
-        }
+        remove_user(path)?;
     }
     Ok(())
 }
@@ -174,20 +167,13 @@ pub fn remove_entries(paths: &[String]) -> Result<(), String> {
 /// Move user-store entries to the platform Trash. Mapped system apps in a
 /// trashed folder return to the root.
 pub fn trash_entries(paths: &[String]) -> Result<(), String> {
+    // Review the whole selection before any mutation; mixed selections cannot
+    // accidentally remove user data before hitting a protected system app.
+    if paths.iter().any(|path| !is_user(path)) {
+        return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
+    }
     for path in paths {
-        if is_user(path) {
-            trash_user(path)?;
-        } else if is_system_app(path) {
-            let folder = application_folders::folder_for(path)
-                .ok_or_else(|| crate::i18n::t("应用不存在").to_string())?;
-            application_folders::unmap(std::slice::from_ref(path))?;
-            directory_cache::remove_entry(&folder, path);
-            if let Ok(entry) = system_entry(path) {
-                directory_cache::add_entry(URI, entry);
-            }
-        } else {
-            return Err(crate::i18n::t("应用不存在").to_string());
-        }
+        trash_user(path)?;
     }
     Ok(())
 }
@@ -529,12 +515,24 @@ fn unique_child(root: &Path, name: &std::ffi::OsStr) -> PathBuf {
 fn open_stored(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        if super::application_policy::executable_file(&path.to_string_lossy()) {
+            return std::process::Command::new(path)
+                .spawn()
+                .map(|_| ())
+                .map_err(|error| error.to_string());
+        }
         return crate::core::terminals::open_path(&path.to_string_lossy());
     }
     #[cfg(target_os = "linux")]
     {
         if path.extension().and_then(|value| value.to_str()) == Some("desktop") {
             return launch_desktop(path);
+        }
+        if super::application_policy::executable_file(&path.to_string_lossy()) {
+            return std::process::Command::new(path)
+                .spawn()
+                .map(|_| ())
+                .map_err(|error| error.to_string());
         }
         return open::that_detached(path).map_err(|error| error.to_string());
     }

@@ -164,6 +164,9 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
             remove: writable && !route.rel.is_empty(),
         };
     }
+    if crate::core::volumes::application_policy::protected(path) {
+        return FileCapabilities::READ_ONLY;
+    }
     if !crate::plugins::mounts::handles(path) {
         return FileCapabilities {
             list: entry.is_dir,

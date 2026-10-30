@@ -7,6 +7,7 @@ import { ErrorDialogHost } from '@/components/ErrorDialogHost'
 import { reportError } from '@/lib/errorCenter'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
+import { LogCenter } from '@/components/activity/LogCenter'
 import { ActivityCenter } from '@/components/ActivityCenter'
 import { SecondaryPane } from '@/components/SecondaryPane'
 import { WorkspaceBar } from '@/components/WorkspaceBar'
@@ -206,6 +207,7 @@ export default function App() {
         )}
         {!fullView && <ExplorerStatusBar {...app} />}
         <ActivityCenter />
+        <LogCenter />
       </main>
       <div id="fiex-overlay-root" className="fiex-overlay-root" />
       {app.dragging && (

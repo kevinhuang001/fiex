@@ -55,17 +55,7 @@ pub(crate) async fn undo(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub(crate) async fn trash_path() -> Option<String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        volumes::trash_path().map(|path| path.to_string_lossy().into_owned())
-    })
-    .await
-    .ok()
-    .flatten()
-}
-
-#[tauri::command]
-pub(crate) fn open_trash() -> Result<(), String> {
-    terminals::open_trash()
+    Some(volumes::trash_vfs::URI.into())
 }
 
 #[tauri::command]

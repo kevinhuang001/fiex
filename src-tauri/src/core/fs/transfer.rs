@@ -12,6 +12,10 @@ mod rollback;
 use rollback::UndoLog;
 mod cleanup;
 mod execution;
+#[cfg(target_os = "linux")]
+mod linux_app_links;
+#[cfg(target_os = "macos")]
+mod mac_app_bundle;
 
 struct Step {
     source: ResourceBroker,
@@ -249,6 +253,32 @@ pub fn transfer(
     cancel: &AtomicBool,
     progress: &impl Fn(u64, u64, Option<&str>),
 ) -> Result<OperationResult, String> {
+    let applications = destination == crate::core::volumes::applications::URI
+        || crate::core::volumes::applications::is_user(destination);
+    if !applications
+        && paths.iter().any(|path| {
+            crate::core::volumes::applications::is_system_app(path)
+                || crate::core::volumes::application_policy::protected(path)
+        })
+    {
+        return Err(crate::i18n::t("系统应用不能移出应用程序视图").into());
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(result) = mac_app_bundle::import(
+        paths,
+        destination,
+        moving,
+        keep_both,
+        resolutions,
+        cancel,
+        progress,
+    )? {
+        return Ok(result);
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(result) = linux_app_links::import(paths, destination, keep_both, cancel)? {
+        return Ok(result);
+    }
     // Installed applications are not host files. Moving them into/out of an
     // Applications folder only rewrites the persisted mapping; user-store
     // entries in the same selection still go through the regular engine.

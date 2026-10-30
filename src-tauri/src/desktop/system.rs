@@ -174,10 +174,6 @@ pub(crate) fn remove_application_entries(paths: Vec<String>) -> Result<(), Strin
     crate::core::volumes::applications::remove_entries(&paths)
 }
 #[tauri::command]
-pub(crate) fn open_applications() -> Result<(), String> {
-    terminals::open_applications()
-}
-#[tauri::command]
 pub(crate) fn set_tags(paths: Vec<String>, tags: Vec<tags::Tag>) -> Result<(), String> {
     for path in &paths {
         crate::plugins::mounts::reject_local(path)?;

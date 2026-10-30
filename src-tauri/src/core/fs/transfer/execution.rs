@@ -73,11 +73,17 @@ pub(super) fn execute(
                 if !same_version(&step.source.stat()?, &step.source_version) {
                     return Err("Conflict: source changed during transfer".into());
                 }
+                let executable = step.source.transfer_metadata()?.executable_shortcut == Some(true);
                 writer.commit()?;
+                undo.record(index, step.target.stat().ok());
+                crate::core::volumes::application_policy::finish_import(
+                    &step.target.path,
+                    executable,
+                )?;
             }
             // Only successful mutations belong to the undo log. A rejected
             // create must never cause rollback to delete somebody else's file.
-            if !step.directory || !step.existing {
+            if step.directory && !step.existing {
                 undo.record(index, step.target.stat().ok());
             }
             Ok(())

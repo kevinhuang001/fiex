@@ -1,13 +1,10 @@
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { CoreLogsSheet } from './plugins/CoreLogsSheet'
+import { showLogs } from '@/lib/logCenter'
 import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
 import { t } from '@/i18n'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
 import { PluginImportDialog, PluginMessage, PluginUninstallDialog } from './plugins/PluginAlerts'
 import { PluginList } from './plugins/PluginList'
 import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
-import { PluginLogsSheet } from './plugins/PluginLogsSheet'
 import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
 import { PluginStore, PluginStoreToolbar } from './plugins/PluginStore'
 import { PluginCategoryFilter } from './plugins/PluginCategoryFilter'
@@ -16,7 +13,6 @@ import { usePluginSettingsController } from '@/hooks/usePluginSettingsController
 import { PluginPermissionPrompt, promptForPermission } from './PluginPermissionPrompt'
 
 export function PluginSettings() {
-  const [coreLogs, setCoreLogs] = useState(false)
   const {
     plugins,
     category,
@@ -30,8 +26,6 @@ export function PluginSettings() {
     setLocalPreview,
     permissionsFor,
     setPermissionsFor,
-    logsFor,
-    setLogsFor,
     settingsFor,
     setSettingsFor,
     busy,
@@ -77,9 +71,6 @@ export function PluginSettings() {
           onOpenStore={() => setStoreOpen(true)}
         >
           <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
-          <Button type="button" size="sm" variant="outline" onClick={() => setCoreLogs(true)}>
-            {t('Core 运行日志')}
-          </Button>
         </PluginStoreToolbar>
         <PluginList
           plugins={shown}
@@ -92,13 +83,12 @@ export function PluginSettings() {
             setMessage('')
             setDomainSettingsOpen(false)
             setCommandSettingsOpen(false)
-            setLogsFor(null)
             setPermissionsFor(plugin)
           }}
           onOpenLogs={(plugin) => {
             setMessage('')
             setPermissionsFor(null)
-            setLogsFor(plugin)
+            showLogs(plugin.id)
           }}
           onRemove={(plugin) => {
             setMessage('')
@@ -141,9 +131,6 @@ export function PluginSettings() {
           else setCommandSettingsOpen(true)
         }}
       />
-
-      <PluginLogsSheet plugin={logsFor} onClose={() => setLogsFor(null)} />
-      <CoreLogsSheet open={coreLogs} onClose={() => setCoreLogs(false)} />
 
       {permissionsFor &&
         domainSettingsOpen &&

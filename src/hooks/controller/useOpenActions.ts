@@ -24,7 +24,6 @@ export function useOpenActions({
   setTagInitial,
   setTagOpen,
   setPreview,
-  setTrashIssue,
   trashPath,
 }: {
   x: Explorer
@@ -40,14 +39,18 @@ export function useOpenActions({
   setTagInitial: Dispatch<SetStateAction<Tag[]>>
   setTagOpen: Dispatch<SetStateAction<boolean>>
   setPreview: Dispatch<SetStateAction<Entry | null>>
-  setTrashIssue: Dispatch<SetStateAction<boolean>>
   trashPath: string | null
 }) {
   const open = (e: Entry, pane = x) => {
     if (
+      pane.path.startsWith('trash://') ||
       pane.path.startsWith('recyclebin://') ||
       (trashPath && (pane.path === trashPath || pane.path.startsWith(trashPath + '/')))
     ) {
+      if (e.isDir && !e.isSymlink && e.path.startsWith('trash://')) {
+        pane.navigate(e.path)
+        return
+      }
       pane.setError(t('回收站项目请使用“放回原处”或“彻底删除”'))
       return
     }
@@ -96,26 +99,17 @@ export function useOpenActions({
       pane.reload()
     })
   }
-  const openTrash = async () => {
-    try {
-      // Navigate immediately: the pane paints its cached Trash snapshot and
-      // the normal listing fills it in on a worker thread. No synchronous
-      // permission/list preflight is allowed on the click path.
-      const destination = trashPath ?? (await call<string | null>('trash_path'))
-      if (!destination) {
-        void run(t('正在打开废纸篓…'), () => call('open_trash'))
-        return
-      }
-      setPreview(null)
-      if (x.path === destination) x.reload()
-      else x.navigate(destination)
-    } catch (error) {
-      const message = String(error)
-      if (/permitted|permission|权限/i.test(message)) setTrashIssue(true)
-      else x.setError(message)
-    }
+  const openTrash = () => {
+    const destination = 'trash://'
+    setPreview(null)
+    if (x.path === destination) x.reload()
+    else x.navigate(destination)
   }
-  const openApplications = () => void run(t('正在打开应用程序…'), () => call('open_applications'))
+  const openApplications = () => {
+    setPreview(null)
+    if (x.path === 'applications://') x.reload()
+    else x.navigate('applications://')
+  }
   const terminal = (id = prefs.terminal) => {
     if (id === 'builtin') {
       const cwd = first?.isDir ? first.path : x.path

@@ -1,9 +1,19 @@
 import { t, getLocale } from '@/i18n'
 import { call } from '@/lib/api'
-import { ChevronDown, ChevronUp, LoaderCircle, RotateCcw } from 'lucide-react'
+import {
+  Search,
+  Eye,
+  FileText,
+  Sparkles,
+  MousePointer2,
+  Workflow,
+  LoaderCircle,
+  RotateCcw,
+} from 'lucide-react'
+import { ProviderRow } from './ProviderRow'
 import { useEffect, useMemo, useState } from 'react'
 
-interface ProviderEntry {
+export interface ProviderEntry {
   id: string
   name: string
   defaultPriority: number
@@ -45,6 +55,8 @@ function arrange(entries: ProviderEntry[], preference?: Preference) {
 }
 
 export function ProviderSettings() {
+  const [feature, setFeature] = useState('search')
+  const [dragged, setDragged] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<Catalog>({})
   const [preferences, setPreferences] = useState<Preferences>({})
   const [loading, setLoading] = useState(true)
@@ -136,98 +148,106 @@ export function ProviderSettings() {
     )
   }
 
+  const list = rows[feature] ?? []
+  const disabled = new Set(preferences[feature]?.disabled ?? [])
+  const icons = [Search, Eye, FileText, Sparkles, MousePointer2, Workflow]
+  const drop = (target: string) => {
+    const order = currentOrder(feature)
+    if (!dragged || dragged === target || !order.includes(target)) return
+    const targetIndex = order.indexOf(target)
+    order.splice(order.indexOf(dragged), 1)
+    order.splice(targetIndex, 0, dragged)
+    setDragged(null)
+    void save(feature, order, [...disabled])
+  }
   return (
-    <>
-      <div className="settings-card">
-        <div className="settings-card-header">
-          <span>{t('提供程序优先级')}</span>
+    <section className="provider-manager">
+      <div className="provider-intro">
+        <div className="provider-intro-icon">
+          <Workflow size={23} />
         </div>
-        <p className="settings-hint">
-          {t(
-            '按功能调整提供程序的执行顺序：用户顺序优先于插件声明的默认优先级，内置保底项不可移动或关闭。',
-          )}
-        </p>
-        {error && <p className="settings-error">{error}</p>}
+        <div>
+          <h2>{t('提供程序')}</h2>
+          <p>{t('选择偏好的工具，按你的习惯安排顺序。')}</p>
+        </div>
       </div>
-      {FEATURES.map(([feature, label]) => {
-        const list = rows[feature] ?? []
-        const disabled = new Set(preferences[feature]?.disabled ?? [])
-        return (
-          <div className="settings-card" key={feature}>
-            <div className="settings-card-header">
-              <span>
-                {t(label)}
-                <small className="ignore-count">{list.length}</small>
-              </span>
-              <button
-                className="settings-reset"
-                disabled={saving === feature}
-                onClick={() => void reset(feature)}
-              >
-                <RotateCcw size={11} />
-                {t('恢复默认')}
-              </button>
-            </div>
-            {list.length === 0 && <p className="settings-empty">{t('尚未安装提供此功能的插件')}</p>}
-            {list.map((entry, index) => {
-              const movable = !entry.locked
-              const enabled = !disabled.has(entry.id)
-              return (
-                <div className={`provider-row ${enabled ? '' : 'disabled'}`} key={entry.id}>
-                  <div className="provider-main">
-                    <span className="provider-name">
-                      {entry.name}
-                      {entry.builtin && <em className="provider-badge">{t('内置')}</em>}
-                      {entry.available === false && (
-                        <em className="provider-badge warn">{t('不可用')}</em>
-                      )}
-                    </span>
-                    <code className="provider-id">{entry.id}</code>
-                    {entry.modes && entry.modes.length > 0 && (
-                      <small className="provider-modes">
-                        {entry.modes
-                          .map((mode) => (mode === 'content' ? t('文件内容') : t('文件名')))
-                          .join(' · ')}
-                      </small>
-                    )}
-                  </div>
-                  <span className="provider-priority" title={t('默认优先级')}>
-                    {entry.defaultPriority}
-                  </span>
-                  <button
-                    className="icon-button"
-                    aria-label={t('上移')}
-                    disabled={!movable || index === 0}
-                    onClick={() => move(feature, entry.id, -1)}
-                  >
-                    <ChevronUp size={14} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    aria-label={t('下移')}
-                    disabled={!movable || index === list.length - 1}
-                    onClick={() => move(feature, entry.id, 1)}
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                  <label
-                    className="provider-toggle"
-                    title={entry.locked ? t('内置保底项不可关闭') : ''}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={enabled}
-                      disabled={!!entry.locked}
-                      onChange={() => toggle(feature, entry.id)}
-                    />
-                    {enabled ? t('启用') : t('已停用')}
-                  </label>
-                </div>
-              )
-            })}
+      <div className="provider-feature-tabs" role="tablist" aria-label={t('功能分类')}>
+        {FEATURES.map(([id, label], index) => {
+          const Icon = icons[index]
+          return (
+            <button
+              key={id}
+              role="tab"
+              id={`provider-tab-${id}`}
+              aria-selected={feature === id}
+              aria-controls={`provider-panel-${id}`}
+              onClick={() => {
+                setFeature(id)
+                setDragged(null)
+              }}
+            >
+              <Icon size={16} />
+              <span>{t(label)}</span>
+              <small>{rows[id]?.length ?? 0}</small>
+            </button>
+          )
+        })}
+      </div>
+      <div
+        className="provider-stack"
+        role="tabpanel"
+        id={`provider-panel-${feature}`}
+        aria-labelledby={`provider-tab-${feature}`}
+      >
+        <div className="provider-stack-heading">
+          <div>
+            <h3>{t('执行顺序')}</h3>
+            <p>{t('拖动调整顺序，也可以使用上下移动按钮。')}</p>
           </div>
-        )
-      })}
-    </>
+          <button
+            className="settings-reset"
+            disabled={Boolean(saving)}
+            onClick={() => void reset(feature)}
+          >
+            <RotateCcw size={13} />
+            {t('恢复默认')}
+          </button>
+        </div>
+        {error && (
+          <p className="settings-error" role="alert">
+            {error}
+          </p>
+        )}
+        {list.length === 0 && (
+          <div className="provider-empty">
+            <Workflow size={28} />
+            <p>{t('尚未安装提供此功能的插件')}</p>
+          </div>
+        )}
+        <div className="provider-stack-list">
+          {list.map((entry, index) => (
+            <ProviderRow
+              key={entry.id}
+              entry={entry}
+              index={index}
+              last={index === currentOrder(feature).length - 1}
+              enabled={!disabled.has(entry.id)}
+              busy={Boolean(saving)}
+              dragging={dragged === entry.id}
+              onDrag={() => setDragged(entry.id)}
+              onDragEnd={() => setDragged(null)}
+              onDrop={() => drop(entry.id)}
+              onMove={(delta) => move(feature, entry.id, delta)}
+              onToggle={() => toggle(feature, entry.id)}
+            />
+          ))}
+        </div>
+        <div className="provider-stack-note">
+          <Sparkles size={14} />
+          <span>{t('内置保底提供程序始终保留，让功能随时可用。')}</span>
+          {saving && <LoaderCircle className="spin" size={14} />}
+        </div>
+      </div>
+    </section>
   )
 }

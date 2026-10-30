@@ -106,6 +106,7 @@ pub(crate) fn filtered(mut listing: Listing, hidden: bool, ignores: &[String]) -
 fn visible(entry: &Entry, hidden: bool, filter: &IgnoreSet) -> bool {
     (hidden || !entry.name.starts_with('.')) && !filter.is_ignored(Path::new(&entry.name))
 }
+#[cfg(test)]
 pub(crate) fn read(
     path: &str,
     hidden: bool,

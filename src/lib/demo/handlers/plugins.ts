@@ -1,3 +1,4 @@
+import { handleProviders } from './providers'
 import { handlePluginInstaller } from './pluginInstaller'
 import { demoBuiltinMenus, executeDemoBuiltin } from '../presentation/menus'
 import { demoDecorations } from '../presentation/decorations'
@@ -176,11 +177,17 @@ async function resolveDemoPreview(a: Record<string, unknown>) {
 }
 
 export async function handlePlugins(command: string, a: Record<string, unknown>): Promise<unknown> {
+  const provider = handleProviders(command, a)
+  if (provider !== notHandled) return provider
   const installed = handlePluginInstaller(command, a)
   if (installed !== notHandled) return installed
   switch (command) {
     case 'plugins_list':
       return structuredClone(demoPlugins)
+    case 'plugin_logs':
+      return { entries: [], cursor: Number(a.after) || 0, hasMore: false }
+    case 'plugin_logs_clear':
+      return null
     case 'plugin_errors':
       return []
     case 'ui_error_report':
