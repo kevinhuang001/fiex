@@ -134,6 +134,22 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     if identity_changed || record.cache_revision.is_empty() {
         record.cache_revision = crate::plugins::mounts::new_id()?;
     }
+    // Fail before touching the keyring if old account data cannot be cleared.
+    // On success the subsequent secret update and registry write cannot
+    // resurrect the old account's directory/download snapshots.
+    if identity_changed {
+        if let Some(old) = previous.as_ref() {
+            // Revoke every visited directory before replacing the public
+            // connection registry. Old snapshots may belong to another account.
+            let root = crate::plugins::mounts::uri(&old.mount_id, "")?;
+            crate::core::fs::directory_cache::drop_subtree(&root);
+            let download_cache = mount_path(old);
+            if download_cache.exists() {
+                fs::remove_dir_all(&download_cache).map_err(|e| e.to_string())?;
+            }
+            super::super::sync::forget_meta(old);
+        }
+    }
     let scope = format!("connection-{id}");
     for field in &record.secret_keys {
         if let Some(value) = record
@@ -151,19 +167,6 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     }
     if !plugin_view_connection(&record) {
         fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
-    }
-    if identity_changed {
-        if let Some(old) = previous.as_ref() {
-            // Revoke every visited directory before replacing the public
-            // connection registry. Old snapshots may belong to another account.
-            let root = crate::plugins::mounts::uri(&old.mount_id, "")?;
-            crate::core::fs::directory_cache::drop_subtree(&root);
-            let download_cache = mount_path(old);
-            if download_cache.exists() {
-                fs::remove_dir_all(&download_cache).map_err(|e| e.to_string())?;
-            }
-            super::super::sync::forget_meta(old);
-        }
     }
     if let Some(index) = existing {
         items[index] = record.clone();
