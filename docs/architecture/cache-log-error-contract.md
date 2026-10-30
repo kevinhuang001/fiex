@@ -75,7 +75,7 @@ RPC start/completion and SDK log calls use the same authenticated owner context;
 plugins cannot submit another plugin identity. SDK's existing simple log/error
 API is retained. Companion SDK #14 adds opt-in provider/task diagnostics and UI
 SDK diagnostics forwarding. Core and the official plugins pin SDK commit
-`bd3f50079aeddc881b2422768668b58f405bf894`; all 13 native official plugins opt in.
+`5ccc80732dd1418322715ed173df758988edd735`; all 13 native official plugins opt in.
 Task failure text is scrubbed before entering Core task history or UI events.
 `plugin_logs(after)` returns an incremental page and cursor. UI pause stops
 polling without stopping collection; the viewer bounds retained rows to 500 and
