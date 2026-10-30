@@ -281,10 +281,7 @@ export function ConnectionDialog({
             <Button type="button" onClick={onClose}>
               {t('取消')}
             </Button>
-            <Button
-              type="submit"
-              disabled={busy || loading || configLoadFailed || !name.trim()}
-            >
+            <Button type="submit" disabled={busy || loading || configLoadFailed || !name.trim()}>
               {loading
                 ? t('加载中…')
                 : busy
