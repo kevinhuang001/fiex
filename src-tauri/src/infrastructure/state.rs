@@ -120,6 +120,15 @@ fn persist(state: &State) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     temp.write_all(&bytes).map_err(|e| e.to_string())?;
     temp.flush().map_err(|e| e.to_string())?;
-    temp.persist(path).map_err(|e| e.to_string())?;
-    Ok(())
+    match temp.persist(&path) {
+        Ok(_) => Ok(()),
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+            // Some Windows filesystems reject replacement via rename. Avoid
+            // reporting success if the old destination cannot be removed.
+            fs::remove_file(&path).map_err(|e| e.to_string())?;
+            error.file.persist(path).map_err(|e| e.to_string())?;
+            Ok(())
+        }
+        Err(error) => Err(error.to_string()),
+    }
 }
