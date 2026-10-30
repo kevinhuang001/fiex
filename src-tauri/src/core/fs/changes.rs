@@ -21,6 +21,26 @@ pub(crate) fn committed(path: &str) {
         Err(_) => directory_cache::invalidate_directory(&parent),
     }
 }
+/// A successful create is authoritative even if a remote provider's stat has
+/// not caught up yet. Keep a minimal, non-privileged entry until list confirms
+/// the final metadata and capabilities.
+pub(crate) fn created(path: &str, name: &str, directory: bool) {
+    if !directory_cache::enabled(path) {
+        return;
+    }
+    let Ok(parent) = binding::parent_path(path) else {
+        return;
+    };
+    let entry = binding::trusted(path, "core:mutation")
+        .and_then(|broker| broker.desktop_entry().map_err(String::from))
+        .unwrap_or_else(|_| crate::core::files::Entry {
+            path: path.into(),
+            name: name.into(),
+            is_dir: directory,
+            ..Default::default()
+        });
+    directory_cache::add_entry(&parent, entry);
+}
 /// Use the entry returned by mkdir itself: a second remote stat is unnecessary
 /// and may temporarily fail on eventually consistent providers.
 pub(crate) fn committed_result(path: &str, value: &serde_json::Value) {
