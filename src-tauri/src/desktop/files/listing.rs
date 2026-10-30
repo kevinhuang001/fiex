@@ -56,4 +56,3 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
     .await
     .map_err(|e| e.to_string())?
 }
-
