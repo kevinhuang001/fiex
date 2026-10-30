@@ -1,6 +1,6 @@
-use serde::Serialize;
 use crate::core::files::Listing;
 use crate::plugins::resolvers::decorations::Decoration;
+use serde::Serialize;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,19 +35,27 @@ pub(crate) async fn directory_open(
         {
             send(cached, false);
         }
-        let listing = broker.desktop_listing(hidden, &ignores).map_err(String::from)?;
+        let listing = broker
+            .desktop_listing(hidden, &ignores)
+            .map_err(String::from)?;
         if let Some(fresh) =
             crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?
         {
             send(fresh, false);
         }
         let entries: Vec<crate::plugins::resolvers::decorations::DecorationEntry> = listing
-            .entries.iter()
-            .filter_map(|entry| serde_json::to_value(entry).ok()
-                .and_then(|value| serde_json::from_value(value).ok()))
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                serde_json::to_value(entry)
+                    .ok()
+                    .and_then(|value| serde_json::from_value(value).ok())
+            })
             .collect();
         let decorations = crate::plugins::resolvers::decorations::query_with_plugins(
-            &path, entries.clone(), true,
+            &path,
+            entries.clone(),
+            true,
         );
         crate::core::fs::directory_cache::store_decorations(&path, &entries, &decorations);
         if let Some(fresh) =
@@ -56,9 +64,12 @@ pub(crate) async fn directory_open(
             send(fresh, true);
         }
         crate::infrastructure::logging::record_core(
-            "debug", "fs.list", &format!(
+            "debug",
+            "fs.list",
+            &format!(
                 "Directory listed {} entries with presentation in {} ms",
-                listing.entries.len(), started.elapsed().as_millis(),
+                listing.entries.len(),
+                started.elapsed().as_millis(),
             ),
         );
         Ok::<(), String>(())
