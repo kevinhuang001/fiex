@@ -113,7 +113,7 @@ pub fn run() {
             plugin_settings,
             file_info_details,
             plugin_logs,
-            plugin_error_report,
+            ui_error_report,
             plugin_logs_clear,
             plugin_panel_html,
             preview_open,
@@ -309,6 +309,7 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit) {
                 crate::plugins::host::global().shutdown();
                 crate::plugins::vfs::cleanup_exports();
+                crate::infrastructure::logging::flush();
             }
         });
 }

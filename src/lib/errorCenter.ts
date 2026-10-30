@@ -1,3 +1,4 @@
+import { redactDiagnostic } from './redactDiagnostic'
 /** One global UI notification queue, separate from persistent diagnostics.
  * Normal cancellation and internal fallbacks should not call this API. */
 export interface AppFailure {
@@ -5,6 +6,7 @@ export interface AppFailure {
   source: string
   message: string
   at: number
+  diagnosticId?: string
 }
 let queue: AppFailure[] = []
 let nextId = 0
@@ -19,17 +21,13 @@ export const subscribeErrors = (listener: () => void) => {
   }
 }
 export const activeError = () => queue[0] ?? null
-export function reportError(cause: unknown, source = 'core') {
-  const message = String(cause ?? '')
-    .trim()
-    .slice(0, 2000)
+export function reportError(cause: unknown, source = 'core', diagnosticId?: string) {
+  const message = redactDiagnostic(String(cause ?? ''), 2000)
   if (!message) return
   const now = Date.now()
-  if (
-    queue.some((item) => item.source === source && item.message === message && now - item.at < 3000)
-  )
-    return
-  queue = [...queue.slice(-49), { id: ++nextId, source, message, at: now }]
+  if (queue.some((item) => item.source === source && item.message === message)) return
+  if (queue.length >= 50) return
+  queue = [...queue, { id: ++nextId, source, message, at: now, diagnosticId }]
   publish()
 }
 export function dismissError(id: number) {

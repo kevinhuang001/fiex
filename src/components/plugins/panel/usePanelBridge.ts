@@ -43,9 +43,7 @@ export interface PanelBridgeOptions {
 
 function reportPluginError(pluginId: string, source: string, message: string) {
   if (!message) return
-  void call('plugin_error_report', { pluginId, source, message: message.slice(0, 500) }).catch(
-    () => {},
-  )
+  void call('ui_error_report', { pluginId, source, message: message.slice(0, 500) }).catch(() => {})
 }
 
 /** Loads one plugin panel document and connects its iframe to the sandboxed
@@ -252,7 +250,7 @@ export function usePanelBridge({
               const p = (params || {}) as { message?: unknown; detail?: unknown }
               if (typeof p.message !== 'string' || !p.message.trim())
                 throw new Error('Invalid error message')
-              await call('plugin_error_report', {
+              await call('ui_error_report', {
                 pluginId: current.pluginId,
                 source: 'ui',
                 message: p.message.slice(0, 500),

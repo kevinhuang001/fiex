@@ -3,7 +3,7 @@ use super::*;
 #[tauri::command]
 pub(crate) async fn file_info_details(
     path: String,
-) -> Vec<crate::plugins::resolvers::info::InfoSection> {
+) -> Result<Vec<crate::plugins::resolvers::info::InfoSection>, String> {
     use crate::infrastructure::cache::memory::MemoryCache;
     use crate::plugins::resolvers::info::InfoSection;
     use std::sync::OnceLock;
@@ -15,17 +15,21 @@ pub(crate) async fn file_info_details(
         // An InfoProvider can work without vfs.stat, so missing stat only
         // disables caching rather than disabling the Info feature.
         let resource = crate::core::fs::trusted(&path, "core:info")?;
-        let key = resource.desktop_entry().ok().and_then(|metadata| {
-            serde_json::to_string(&(
-                &path,
-                metadata.modified,
-                metadata.size,
-                metadata.mime.as_str(),
-                crate::i18n::locale(),
-                crate::plugins::preferences::snapshot(),
-            ))
-            .ok()
-        });
+        let key = (!crate::plugins::mounts::handles(&path))
+            .then(|| resource.desktop_entry().ok())
+            .flatten()
+            .and_then(|metadata| {
+                serde_json::to_string(&(
+                    &resource.reference,
+                    crate::core::fs::changes::revision(),
+                    metadata.modified,
+                    metadata.size,
+                    metadata.mime.as_str(),
+                    crate::i18n::locale(),
+                    crate::plugins::preferences::snapshot(),
+                ))
+                .ok()
+            });
         if let Some(value) = key.as_ref().and_then(|key| cache.get(key)) {
             return Ok::<_, String>(value);
         }
@@ -36,9 +40,7 @@ pub(crate) async fn file_info_details(
         Ok(result)
     })
     .await
-    .ok()
-    .and_then(Result::ok)
-    .unwrap_or_default()
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -78,16 +80,11 @@ pub(crate) async fn plugin_decorations(
         return Err("invalid decoration directory".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let should_cache = include_plugins.unwrap_or(true);
-        let values = crate::plugins::resolvers::decorations::query_with_plugins(
+        crate::plugins::resolvers::decorations::query_with_plugins(
             &directory,
             entries.clone(),
-            should_cache,
-        );
-        if should_cache {
-            crate::core::fs::directory_cache::store_decorations(&directory, &entries, &values);
-        }
-        values
+            include_plugins.unwrap_or(true),
+        )
     })
     .await
     .map_err(|error| error.to_string())

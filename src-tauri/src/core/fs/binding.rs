@@ -25,6 +25,7 @@ pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String>
 
 /// Desktop file operations enter through the same adapter surface as plugin
 /// calls. None of these helpers branch on local/USB/plugin/builtin storage.
+#[cfg(any(feature = "desktop", test))]
 pub(crate) fn create(
     path: &str,
     name: &str,
@@ -36,6 +37,7 @@ pub(crate) fn create(
         .map_err(String::from)
 }
 
+#[cfg(any(feature = "desktop", test))]
 pub(crate) fn rename_path(path: &str, name: &str, owner: &str) -> Result<String, String> {
     if !crate::plugins::mounts::handles(path)
         && crate::usbfs::route(path).is_none()
@@ -52,6 +54,7 @@ pub(crate) fn rename_path(path: &str, name: &str, owner: &str) -> Result<String,
 
 /// A local rename needs one directory capability that authorizes both the
 /// source and the new sibling name. The scope covers exactly those two paths.
+#[cfg(any(feature = "desktop", test))]
 fn local_rename(path: &str, name: &str, owner: &str) -> Result<String, String> {
     crate::plugins::mounts::segment(name)?;
     let source_path = Path::new(path);
@@ -94,6 +97,7 @@ pub(crate) fn move_to_trash(path: &str, owner: &str) -> Result<(), String> {
     trusted(path, owner)?.move_to_trash().map_err(String::from)
 }
 
+#[cfg(any(feature = "desktop", test))]
 pub(crate) fn remove_path(path: &str, owner: &str) -> Result<(), String> {
     trusted(path, owner)?.remove().map_err(String::from)
 }

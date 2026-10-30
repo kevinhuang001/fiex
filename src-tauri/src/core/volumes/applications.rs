@@ -1103,7 +1103,7 @@ mod folder_listing_tests {
         let children = folder_listing(
             vec![folder],
             std::slice::from_ref(&app),
-            &[app.path.clone()],
+            std::slice::from_ref(&app.path),
         );
         assert_eq!(
             children
@@ -1120,7 +1120,7 @@ mod folder_listing_tests {
         let entries = folder_listing(
             vec![app.clone()],
             std::slice::from_ref(&app),
-            &[app.path.clone()],
+            std::slice::from_ref(&app.path),
         );
         assert_eq!(entries.len(), 1);
     }

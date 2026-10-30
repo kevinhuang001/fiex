@@ -98,5 +98,8 @@ pub(super) fn execute(
         }
         progress(index as u64 + 1, total, Some(&step.source.path));
     }
+    for step in steps {
+        super::super::changes::committed(&step.target.path);
+    }
     Ok(())
 }

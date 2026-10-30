@@ -472,17 +472,20 @@ mod tests {
 
     #[test]
     fn stored_user_entries_launch_only_files_or_app_bundles() {
-        let mut shortcut = Entry::default();
-        shortcut.is_dir = false;
+        let shortcut = Entry::default();
         assert!(user_application_entry(&shortcut));
 
-        let mut folder = Entry::default();
-        folder.is_dir = true;
+        let folder = Entry {
+            is_dir: true,
+            ..Default::default()
+        };
         assert!(!user_application_entry(&folder));
 
-        let mut bundle = Entry::default();
-        bundle.is_dir = true;
-        bundle.extension = "app".into();
+        let bundle = Entry {
+            is_dir: true,
+            extension: "app".into(),
+            ..Default::default()
+        };
         assert!(user_application_entry(&bundle));
 
         assert!(!user_application(&format!(

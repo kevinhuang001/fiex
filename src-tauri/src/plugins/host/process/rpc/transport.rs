@@ -208,6 +208,15 @@ impl Running {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let owner = format!("{}:op:{id}", self.base_owner);
+        let started = std::time::Instant::now();
+        crate::infrastructure::logging::operation(
+            &self.plugin_id,
+            method,
+            &owner,
+            "debug",
+            None,
+            "request started",
+        );
         self.operations
             .lock()
             .map_err(|_| RpcFailure::fatal("operation registry unavailable"))?
@@ -251,6 +260,18 @@ impl Running {
         if let Ok(mut pending) = self.pending.lock() {
             pending.remove(&id);
         }
+        crate::infrastructure::logging::operation(
+            &self.plugin_id,
+            method,
+            &owner,
+            if result.is_ok() { "debug" } else { "warn" },
+            Some(started.elapsed().as_millis() as u64),
+            if result.is_ok() {
+                "request completed"
+            } else {
+                "request failed; caller owns recovery/presentation"
+            },
+        );
         self.finish_operation(id);
         result
     }
