@@ -173,9 +173,19 @@ fn key(path: &str) -> String {
     crate::core::volumes::virtual_storage::virtual_path_key(path).unwrap_or_else(|| path.into())
 }
 fn validate_mount(path: &str) -> Result<(), String> {
-    // Metadata reads must not stat a remote provider: that would delay first paint.
+    // Reauthorize every cache read, but never hydrate remote credentials:
+    // providers see exactly the same permissions while cached navigation
+    // avoids a keyring prompt on every paint and filename search.
     if crate::plugins::mounts::handles(path) {
-        crate::plugins::mounts::resolve(path)?;
+        let uri = crate::plugins::mounts::parse(path)?;
+        if let Some(connection) = crate::remote::load_stored_public()
+            .into_iter()
+            .find(|conn| conn.mount_id == uri.mount_id)
+        {
+            crate::remote::ensure_provider_access(&connection)?;
+        } else {
+            crate::plugins::mounts::view(&uri.mount_id)?;
+        }
     }
     Ok(())
 }
