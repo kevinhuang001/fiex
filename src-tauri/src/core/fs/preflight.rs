@@ -140,7 +140,10 @@ mod tests {
             &std::sync::atomic::AtomicBool::new(false),
             &|_, _, _| {},
         );
-        assert!(result.err().expect("transfer must be rejected").contains("executable shortcuts"));
+        assert!(result
+            .err()
+            .expect("transfer must be rejected")
+            .contains("executable shortcuts"));
         assert_eq!(std::fs::read(&file).unwrap(), b"keep source");
     }
     #[test]
