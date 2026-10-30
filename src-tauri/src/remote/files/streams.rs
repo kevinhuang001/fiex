@@ -6,6 +6,19 @@ pub(crate) fn fetch_remote(
     dest: &Path,
     options: &TransferOptions,
 ) -> Result<u64, String> {
+    fetch_remote_with_size(conn, rel, dest, options, None)
+}
+
+/// Reuse the file length already obtained from a provider listing when
+/// opening the remote stream. Unknown lengths remain optional, so providers
+/// can discover one on demand without a Core-side network round trip.
+pub(crate) fn fetch_remote_with_size(
+    conn: &StoredConnection,
+    rel: &str,
+    dest: &Path,
+    options: &TransferOptions,
+    known_size: Option<u64>,
+) -> Result<u64, String> {
     use base64::Engine;
     use std::io::Write;
 
@@ -25,7 +38,8 @@ pub(crate) fn fetch_remote(
         serde_json::json!({
             "mountId": conn.mount_id,
             "connection": provider_config(conn),
-            "nodeId": rel
+            "nodeId": rel,
+            "size": known_size,
         }),
     )?;
     let stream_id = opened
