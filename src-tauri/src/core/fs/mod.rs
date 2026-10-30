@@ -9,6 +9,7 @@ pub(crate) mod directory_cache;
 mod error;
 mod export;
 mod list_service;
+mod mutation_overlay;
 mod preflight;
 mod presentation;
 mod transfer;
@@ -199,7 +200,9 @@ impl ResourceBroker {
             child.require(FsOperation::Write, true)?;
             child.adapter()?.begin_write(true)?.commit()?;
         }
-        changes::committed(&child.path);
+        if !directory {
+            changes::created(&child.path, name, false);
+        }
         Ok(child.path)
     }
     /// Move this node to the platform Trash when its adapter supports it.
@@ -207,21 +210,21 @@ impl ResourceBroker {
         self.scope.authorize_method("fs.remove")?;
         self.require(FsOperation::Remove, false)?;
         self.adapter()?.move_to_trash()?;
-        changes::committed(&self.path);
+        changes::removed(&self.path);
         Ok(())
     }
     pub fn mkdir(&self) -> Result<Value, FsError> {
         self.scope.authorize_method("fs.mkdir")?;
         self.require(FsOperation::Mkdir, true)?;
         let result = self.adapter()?.mkdir()?;
-        changes::committed(&self.path);
+        changes::committed_result(&self.path, &result);
         Ok(result)
     }
     pub fn remove(&self) -> Result<(), FsError> {
         self.scope.authorize_method("fs.remove")?;
         self.require(FsOperation::Remove, false)?;
         self.adapter()?.remove()?;
-        changes::committed(&self.path);
+        changes::removed(&self.path);
         Ok(())
     }
     pub fn rename(&self, destination: &Self) -> Result<(), FsError> {
@@ -254,8 +257,7 @@ impl ResourceBroker {
             true,
         )?;
         self.adapter()?.rename(destination)?;
-        changes::committed(&self.path);
-        changes::committed(&destination.path);
+        changes::renamed(&self.path, &destination.path);
         Ok(())
     }
     pub(crate) fn clone_binding(&self) -> Self {

@@ -90,6 +90,15 @@ pub(super) fn execute(
         })();
         if let Err(error) = attempt {
             let failures = undo.rollback(steps);
+            // An earlier step may already have patched the optimistic VFS
+            // cache. Rollback (including partial rollback) requires an
+            // authoritative refresh, not a lingering created-entry overlay.
+            for attempted in steps {
+                super::super::directory_cache::drop_subtree(&attempted.target.path);
+                if let Ok(parent) = super::super::binding::parent_path(&attempted.target.path) {
+                    super::super::directory_cache::invalidate_directory(&parent);
+                }
+            }
             if failures.is_empty() {
                 return Err(error);
             }
