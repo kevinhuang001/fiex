@@ -34,13 +34,15 @@ export function persistPickerSort(
   void Promise.all([
     call('state_put', { namespace: 'picker', key: 'sort', value: sort }),
     call('state_put', { namespace: 'picker', key: 'group', value: group }),
-  ]).then(() => {
-    localStorage.removeItem(SORT_KEY)
-    localStorage.removeItem(GROUP_KEY)
-  }).catch(() => {
-    localStorage.setItem(SORT_KEY, JSON.stringify(sort))
-    localStorage.setItem(GROUP_KEY, group)
-  })
+  ])
+    .then(() => {
+      localStorage.removeItem(SORT_KEY)
+      localStorage.removeItem(GROUP_KEY)
+    })
+    .catch(() => {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sort))
+      localStorage.setItem(GROUP_KEY, group)
+    })
 }
 
 /** The last folder the chooser showed, so it reopens where the user left off. */
