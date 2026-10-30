@@ -62,7 +62,7 @@ fn cache() -> &'static Mutex<Store> {
             if migrated {
                 // Keep the Rust 2021 edition compatible; a let-chain here
                 // cannot be parsed by the project's rustfmt toolchain.
-                file().map(std::fs::remove_file);
+                let _ = file().map(std::fs::remove_file);
             }
             old
         };
