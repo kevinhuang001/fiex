@@ -11,7 +11,8 @@ export function ErrorDialogHost() {
     let alive = true
     const refresh = async () => {
       try {
-        const entries = await call<Array<{ source: string; code: string; message: string }>>('errors_pending')
+        const entries =
+          await call<Array<{ source: string; code: string; message: string }>>('errors_pending')
         if (alive) {
           for (const entry of entries) reportError(entry.message, `${entry.source}:${entry.code}`)
         }
@@ -21,12 +22,17 @@ export function ErrorDialogHost() {
     }
     void refresh()
     const interval = window.setInterval(() => void refresh(), 1500)
-    return () => { alive = false; window.clearInterval(interval) }
+    return () => {
+      alive = false
+      window.clearInterval(interval)
+    }
   }, [])
   return (
     <ExplorerErrorDialog
       error={error?.message ?? ''}
-      onClose={() => { if (error) dismissError(error.id) }}
+      onClose={() => {
+        if (error) dismissError(error.id)
+      }}
       onError={(cause) => reportError(cause, 'error-dialog')}
     />
   )
