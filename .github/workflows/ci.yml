@@ -24,6 +24,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Diagnose connection dialog Prettier output (temporary)
+        run: npx prettier --write src/components/ConnectionDialog.tsx && git diff -- src/components/ConnectionDialog.tsx
       - run: npm run format:check
       - run: npm run check:i18n
       - run: npm test
