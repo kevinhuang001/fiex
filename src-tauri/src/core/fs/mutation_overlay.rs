@@ -5,7 +5,10 @@
 use crate::core::files::{Entry, Listing};
 use std::{
     collections::HashMap,
-    sync::{atomic::{AtomicU64, Ordering}, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex, OnceLock,
+    },
     time::{Duration, Instant},
 };
 
@@ -72,7 +75,11 @@ pub(super) fn discard(parent: &str) {
 fn apply(listing: &mut Listing, pending: &Pending) {
     match &pending.change {
         Kind::Upsert(entry) => {
-            if let Some(current) = listing.entries.iter_mut().find(|item| item.path == entry.path) {
+            if let Some(current) = listing
+                .entries
+                .iter_mut()
+                .find(|item| item.path == entry.path)
+            {
                 *current = entry.clone();
             } else {
                 listing.entries.push(entry.clone());
@@ -82,7 +89,9 @@ fn apply(listing: &mut Listing, pending: &Pending) {
     }
 }
 fn order(listing: &mut Listing) {
-    listing.entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
+    listing
+        .entries
+        .sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
 }
 /// Cache paint never acknowledges a mutation: cached data may already include
 /// an optimistic entry and is not proof that the provider has caught up.
@@ -110,7 +119,10 @@ pub(super) fn reconcile(path: &str, listing: &mut Listing) {
         if pending.at.elapsed() >= RECONCILE_WINDOW {
             return false;
         }
-        let current = listing.entries.iter().find(|entry| entry.path == pending.path);
+        let current = listing
+            .entries
+            .iter()
+            .find(|entry| entry.path == pending.path);
         let confirmed = match &pending.change {
             Kind::Remove => current.is_none(),
             Kind::Upsert(expected) => current.is_some_and(|entry| {
@@ -132,11 +144,22 @@ pub(super) fn reconcile(path: &str, listing: &mut Listing) {
 mod tests {
     use super::*;
     fn listing(path: &str, entries: Vec<Entry>) -> Listing {
-        Listing { path: path.into(), entries, read_only: false,
-            can_create: true, virtual_volume: true, warnings: vec![], default_view: None }
+        Listing {
+            path: path.into(),
+            entries,
+            read_only: false,
+            can_create: true,
+            virtual_volume: true,
+            warnings: vec![],
+            default_view: None,
+        }
     }
     fn entry(path: &str) -> Entry {
-        Entry { path: path.into(), name: path.rsplit('/').next().unwrap().into(), ..Default::default() }
+        Entry {
+            path: path.into(),
+            name: path.rsplit('/').next().unwrap().into(),
+            ..Default::default()
+        }
     }
     #[test]
     fn stale_live_listing_does_not_erase_committed_create() {
