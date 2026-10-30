@@ -204,7 +204,12 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
     {
-        if let Some(item) = data.listing.entries.iter_mut().find(|item| item.path == entry.path) {
+        if let Some(item) = data
+            .listing
+            .entries
+            .iter_mut()
+            .find(|item| item.path == entry.path)
+        {
             *item = entry;
         } else {
             data.listing.entries.push(entry);
@@ -260,7 +265,12 @@ pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
         .get_mut(&key(path))
     {
         data.listing.entries.retain(|item| item.path != old_path);
-        if let Some(item) = data.listing.entries.iter_mut().find(|item| item.path == entry.path) {
+        if let Some(item) = data
+            .listing
+            .entries
+            .iter_mut()
+            .find(|item| item.path == entry.path)
+        {
             *item = entry;
         } else {
             data.listing.entries.push(entry);
