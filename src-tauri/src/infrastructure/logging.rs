@@ -93,17 +93,21 @@ fn clean(value: &str, limit: usize) -> String {
             authorization_scheme = true;
             continue;
         }
-        if lower.starts_with("authorization:bearer")
-            || lower.starts_with("authorization:basic")
-        {
+        if lower.starts_with("authorization:bearer") || lower.starts_with("authorization:basic") {
             result.push_str("Authorization:[REDACTED]");
             hide_next = true;
             continue;
         }
         if matches!(
             lower.as_str(),
-            "bearer" | "access_token:" | "refresh_token:" | "client_secret:"
-                | "password:" | "api_key:" | "apikey:" | "token:"
+            "bearer"
+                | "access_token:"
+                | "refresh_token:"
+                | "client_secret:"
+                | "password:"
+                | "api_key:"
+                | "apikey:"
+                | "token:"
         ) {
             result.push_str(word);
             hide_next = true;
