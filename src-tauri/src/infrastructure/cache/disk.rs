@@ -63,7 +63,7 @@ pub fn store<T: Serialize>(key: &str, value: &T) {
     }
     let Ok(data) = serde_json::to_vec(&Envelope {
         schema: SCHEMA,
-        key,
+        key: key.to_owned(),
         value,
     }) else {
         return;
