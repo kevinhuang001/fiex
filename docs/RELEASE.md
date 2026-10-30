@@ -3,7 +3,7 @@
 - Applications creates user folders directly under the view root (`applications://~…`). Breadcrumbs, the address bar and File Info show the real Chinese folder name instead of base64, and existing `applications://user/...` links plus mapped folders migrate automatically.
 - The address bar accepts every built-in virtual root (`recent`, `applications`, `trash`, `recyclebin`) with either URL or Windows-backslash separators. Breadcrumb clicks stay on `applications://` instead of degrading to `applications:\`.
 - Ejecting a Windows drive now resolves `E:\` through the Shell eject verb and leaves panes that are inside the volume before the location list refreshes; Windows USB ejection uses the same helper.
-- Plugin RPC logs record the important request parameters (node id, path, name, query, mode, limits, stream offsets) and result counts. Credentials, opaque identities and payload bodies remain redacted.
+- Plugin RPC logs record the important request parameters (node id, path, name, query, mode, limits, stream offsets) and result counts. Credentials, opaque identities and payload bodies remain redacted, and duplicate payload-free SDK lifecycle lines are suppressed.
 - Address-bar navigation now uses the same cached directory stream as the sidebar and history, so a previously opened path paints immediately.
 - Provider settings use a compact feature tab grid and a cleaner execution-order card with enable counts and provider summaries.
 

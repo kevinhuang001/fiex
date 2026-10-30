@@ -263,6 +263,22 @@ pub fn operation(
     );
 }
 
+/// The SDK also emits a payload-free request line (`vfs.list completed;
+/// duration_ms=…`). Core already records the same request with its selected
+/// parameters, so drop the duplicate instead of showing a bare method name.
+pub fn is_sdk_request_lifecycle(message: &str) -> bool {
+    let Some((method, rest)) = message.split_once(' ') else {
+        return false;
+    };
+    !method.is_empty()
+        && method.contains('.')
+        && !method.chars().any(char::is_whitespace)
+        && rest.contains("duration_ms=")
+        && (rest.starts_with("completed")
+            || rest.starts_with("failed")
+            || rest.starts_with("expected outcome"))
+}
+
 /// Same as [`operation`] with an additional, already-selected diagnostic
 /// detail. Callers must pass sanitized text; the store redacts it again.
 pub fn operation_detail(

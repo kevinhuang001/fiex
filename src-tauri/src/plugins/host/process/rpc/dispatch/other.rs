@@ -120,9 +120,11 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
         "host.log.report" => {
             let level = ctx.arg("level")?;
             let message = ctx.arg("message")?;
-            crate::infrastructure::logging::report_operation_limited(
-                &plugin_id, &level, &message, &owner,
-            );
+            if !crate::infrastructure::logging::is_sdk_request_lifecycle(&message) {
+                crate::infrastructure::logging::report_operation_limited(
+                    &plugin_id, &level, &message, &owner,
+                );
+            }
             Ok(Value::Null)
         }
         "host.process.run" => {

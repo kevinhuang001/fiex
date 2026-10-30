@@ -75,3 +75,23 @@ mod detail_tests {
         assert!(!detail.contains("\"a\""), "{detail}");
     }
 }
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn sdk_request_lifecycle_duplicates_are_recognized() {
+        assert!(is_sdk_request_lifecycle(
+            "vfs.list completed; duration_ms=12"
+        ));
+        assert!(is_sdk_request_lifecycle(
+            "git.status failed (RPC -32603); duration_ms=5"
+        ));
+        assert!(is_sdk_request_lifecycle(
+            "vfs.search expected outcome (-32601); duration_ms=1"
+        ));
+        assert!(!is_sdk_request_lifecycle("background task started"));
+        assert!(!is_sdk_request_lifecycle("Sync completed; duration_ms=9"));
+    }
+}
