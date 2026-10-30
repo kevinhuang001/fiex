@@ -5,6 +5,7 @@ import { ArrowLeft, LoaderCircle, Plug, Puzzle, Server } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { openFilePicker } from '@/lib/filePicker'
 import { usePluginCatalog, type PluginField } from '@/lib/plugins'
 import type { RemoteConnection } from '@/lib/types'
@@ -33,7 +34,7 @@ export function ConnectionDialog({
   const [values, setValues] = useState<Record<string, string | boolean>>({})
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [configLoadFailed, setConfigLoadFailed] = useState(false)
   const choiceKey = (pluginId: string) => pluginId
   const current = choices.find(({ plugin }) => choiceKey(plugin.id) === selected)
 
@@ -43,7 +44,7 @@ export function ConnectionDialog({
     setName(connection?.name ?? '')
     setValues({})
     setBusy(false)
-    setError('')
+    setConfigLoadFailed(false)
     setLoading(Boolean(connection))
     if (!connection) return
     let active = true
@@ -62,7 +63,10 @@ export function ConnectionDialog({
           )
       })
       .catch((cause) => {
-        if (active) setError(String(cause))
+        if (active) {
+          setConfigLoadFailed(true)
+          reportError(cause, 'connections:configuration')
+        }
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -84,7 +88,7 @@ export function ConnectionDialog({
         ]),
       ),
     )
-    setError('')
+    setConfigLoadFailed(false)
   }
   const browse = async (field: PluginField, read: boolean) => {
     const picked = await openFilePicker({
@@ -101,14 +105,14 @@ export function ConnectionDialog({
       const text = await call<string>('read_preview', { path })
       setValues((prev) => ({ ...prev, [field.id]: text }))
     } catch (cause) {
-      setError(String(cause))
+      reportError(cause, 'connections:configuration')
     }
   }
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!current || busy || loading) return
     setBusy(true)
-    setError('')
+    setConfigLoadFailed(false)
     try {
       const settings = Object.fromEntries(
         current.factory.fields.map((field) => [
@@ -131,7 +135,7 @@ export function ConnectionDialog({
       })
       onSaved(savedConnection)
     } catch (cause) {
-      setError(String(cause))
+      reportError(cause, 'connections:configuration')
     } finally {
       setBusy(false)
     }
@@ -197,13 +201,13 @@ export function ConnectionDialog({
               className="connection-back"
               onClick={() => {
                 setSelected(null)
-                setError('')
+                setConfigLoadFailed(false)
               }}
             >
               <ArrowLeft size={15} /> {t('选择其他类型')}
             </button>
           )}
-          <ConnectionSetupHelp factory={current.factory} busy={busy} onError={setError} />
+          <ConnectionSetupHelp factory={current.factory} busy={busy} />
           <label>
             <span>{t('连接名称')}</span>
             <input
@@ -266,11 +270,6 @@ export function ConnectionDialog({
               {field.type === 'checkbox' && <span>{field.label}</span>}
             </label>
           ))}
-          {error && (
-            <p className="connection-error" role="alert">
-              {error}
-            </p>
-          )}
           {busy && (
             <div className="connection-waiting" role="status" aria-live="polite">
               <LoaderCircle className="spin" size={22} />
@@ -285,7 +284,7 @@ export function ConnectionDialog({
             <Button
               type="submit"
               disabled={
-                busy || loading || !name.trim() || Boolean(error && !Object.keys(values).length)
+                busy || loading || configLoadFailed || !name.trim()
               }
             >
               {loading
