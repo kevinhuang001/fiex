@@ -93,7 +93,7 @@ pub fn store<T: Serialize>(key: &str, value: &T) {
         }
         Err(_) => return,
     }
-    if WRITES.fetch_add(1, Ordering::Relaxed) % 64 == 0 {
+    if WRITES.fetch_add(1, Ordering::Relaxed).is_multiple_of(64) {
         prune(root);
     }
 }
