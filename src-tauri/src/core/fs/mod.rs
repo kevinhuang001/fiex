@@ -201,7 +201,7 @@ impl ResourceBroker {
             child.adapter()?.begin_write(true)?.commit()?;
         }
         if !directory {
-            changes::committed(&child.path);
+            changes::created(&child.path, name, false);
         }
         Ok(child.path)
     }
