@@ -181,9 +181,23 @@ fn key(path: &str) -> String {
     // ResourceBroker canonicalizes local paths on macOS (/var is a symlink to
     // /private/var). Use the same identity for the original UI path and the
     // broker's normalized path, or a successful listing becomes a cache miss.
-    if Path::new(path).is_absolute() {
-        if let Ok(canonical) = dunce::canonicalize(path) {
-            return canonical.to_string_lossy().into_owned();
+    let original = Path::new(path);
+    if original.is_absolute() {
+        // Resolve the nearest existing ancestor so delete/rename invalidation
+        // finds the same cache key after a leaf directory no longer exists.
+        for ancestor in original.ancestors() {
+            if let Ok(canonical) = dunce::canonicalize(ancestor) {
+                if let Ok(suffix) = original.strip_prefix(ancestor) {
+                    // Never normalize unresolved .. components into another
+                    // directory's cached identity.
+                    if suffix
+                        .components()
+                        .all(|part| matches!(part, std::path::Component::Normal(_)))
+                    {
+                        return canonical.join(suffix).to_string_lossy().into_owned();
+                    }
+                }
+            }
         }
     }
     path.into()
@@ -368,6 +382,9 @@ pub(crate) fn search(
     Ok(())
 }
 pub(crate) fn remove_entry(path: &str, entry_path: &str) {
+    // A removed child may have previously visited descendants; invalidate
+    // their entire graph, not only the parent row.
+    drop_subtree(entry_path);
     disk::remove(&key(path));
     if let Some(data) = cache()
         .lock()
@@ -399,9 +416,8 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
     }
 }
 pub(crate) fn drop_subtree(path: &str) {
-    let root = key(path);
-    // Remove the previously visited disk graph, without enumerating cold FS/VFS
-    // directories or relying on URI string prefix matching.
+    // Walk only the already-visited graph: arbitrary string prefixes would
+    // incorrectly match unrelated VFS URIs, and miss a mount's root children.
     let mut pending = VecDeque::from([path.to_string()]);
     let mut removed = HashSet::new();
     while let Some(current) = pending.pop_front() {
@@ -409,7 +425,12 @@ pub(crate) fn drop_subtree(path: &str) {
         if !removed.insert(identity.clone()) {
             continue;
         }
-        if let Some(snapshot) = disk::load::<DirectorySnapshot>(&identity) {
+        let memory = cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&identity)
+            .cloned();
+        if let Some(snapshot) = memory.or_else(|| disk::load::<DirectorySnapshot>(&identity)) {
             for entry in snapshot.listing.entries {
                 if entry.is_dir && !entry.is_symlink {
                     pending.push_back(entry.path);
@@ -421,14 +442,11 @@ pub(crate) fn drop_subtree(path: &str) {
     cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .retain(|path, _| {
-            !(path == &root
-                || path
-                    .strip_prefix(&root)
-                    .is_some_and(|tail| root.ends_with("://") || tail.starts_with(['/', '\\'])))
-        });
+        .retain(|identity, _| !removed.contains(identity));
 }
 pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
+    // A folder rename changes every descendant URI/path in the old subtree.
+    drop_subtree(old_path);
     disk::remove(&key(path));
     if let Some(data) = cache()
         .lock()
