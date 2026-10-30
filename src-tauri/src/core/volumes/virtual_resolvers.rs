@@ -485,7 +485,10 @@ mod tests {
         bundle.extension = "app".into();
         assert!(user_application_entry(&bundle));
 
-        assert!(!user_application(&format!("{}loose", applications::USER_PREFIX)));
+        assert!(!user_application(&format!(
+            "{}loose",
+            applications::USER_PREFIX
+        )));
         assert!(!user_application("applications://c3lzdGVt"));
     }
 
