@@ -117,15 +117,14 @@ fn application_user_children_use_builtin_broker_and_streamed_writes() {
 
 #[test]
 fn trash_view_denies_regular_storage_mutations() {
-    if let Some(path) = crate::core::volumes::trash_path() {
-        if path.is_dir() {
-            let view = super::binding::trusted(&path.to_string_lossy(), "core:test-trash").unwrap();
-            let write = view.require(FsOperation::Write, false).unwrap_err();
-            assert_eq!(write.kind, FsErrorKind::PermissionDenied);
-            let remove = view.require(FsOperation::Remove, false).unwrap_err();
-            assert_eq!(remove.kind, FsErrorKind::PermissionDenied);
-        }
-    }
+    let view = super::binding::trusted("trash://", "core:test-trash").unwrap();
+    let write = view.require(FsOperation::Write, false).unwrap_err();
+    assert_eq!(write.kind, FsErrorKind::PermissionDenied);
+    let remove = view.require(FsOperation::Remove, false).unwrap_err();
+    assert_eq!(remove.kind, FsErrorKind::PermissionDenied);
+    // Read-only Trash operations remain available.
+    view.require(FsOperation::Stat, false).unwrap();
+    view.require(FsOperation::List, false).unwrap();
 }
 
 #[test]
