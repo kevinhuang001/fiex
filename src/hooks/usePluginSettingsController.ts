@@ -1,6 +1,7 @@
 import { getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
 import { call, demo } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { usePluginConfiguration } from './usePluginConfiguration'
 import type { LocalPreview } from '@/components/settings/plugins/PluginAlerts'
 import { openFilePicker } from '@/lib/filePicker'
@@ -90,7 +91,7 @@ export function usePluginSettingsController() {
       const preview = await call<LocalPreview>('plugin_prepare_local_install', { path })
       setLocalPreview(preview)
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -107,7 +108,7 @@ export function usePluginSettingsController() {
       setLocalPreview(null)
       refreshPluginCatalog()
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -126,7 +127,11 @@ export function usePluginSettingsController() {
   )
   const updateActivation = async (plugin: PluginInfo, enabled: boolean) => {
     if (enabled) {
-      await requestPluginActivation(plugin.id)
+      try {
+        await requestPluginActivation(plugin.id)
+      } catch (error) {
+        reportError(error, 'plugins:activation')
+      }
       return
     }
     setBusy(true)
@@ -135,7 +140,7 @@ export function usePluginSettingsController() {
       await call('plugin_set_enabled', { pluginId: plugin.id, enabled })
       refreshPluginCatalog()
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -152,7 +157,7 @@ export function usePluginSettingsController() {
       setPermissionToApprove(null)
       refreshPluginCatalog()
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -170,7 +175,7 @@ export function usePluginSettingsController() {
       setPermissionToApprove(null)
       refreshPluginCatalog()
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -188,7 +193,7 @@ export function usePluginSettingsController() {
       setDomainDraft('')
       refreshPluginCatalog()
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -200,7 +205,7 @@ export function usePluginSettingsController() {
       await call('plugin_set_network_all', { pluginId: plugin.id, all })
       refreshPluginCatalog()
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -218,7 +223,7 @@ export function usePluginSettingsController() {
       setCommandToApprove(null)
       refreshPluginCatalog()
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
@@ -233,7 +238,7 @@ export function usePluginSettingsController() {
       refreshPluginCatalog()
       setMessage('')
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:management')
     } finally {
       setBusy(false)
     }
