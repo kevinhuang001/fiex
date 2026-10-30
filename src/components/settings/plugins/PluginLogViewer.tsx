@@ -1,5 +1,5 @@
 import { t, getLocale } from '@/i18n'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 
@@ -22,6 +22,8 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
   const [query, setQuery] = useState('')
   const [paused, setPaused] = useState(false)
   const [loading, setLoading] = useState(true)
+  const pausedRef = useRef(paused)
+  pausedRef.current = paused
   useEffect(() => {
     let active = true
     const load = async () => {
@@ -38,13 +40,13 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
     setLoading(true)
     void load()
     const refresh = window.setInterval(() => {
-      if (!paused) void load()
+      if (!pausedRef.current) void load()
     }, 2000)
     return () => {
       active = false
       window.clearInterval(refresh)
     }
-  }, [pluginId, paused])
+  }, [pluginId])
   const visible = useMemo(
     () =>
       entries.filter((entry) => {
