@@ -54,7 +54,6 @@ fn expected(code: &str, message: &str) -> bool {
         "permission request",
         "activation pending",
         "fallback",
-        "permissiondenied",
     ]
     .iter()
     .any(|text| combined.contains(text))
