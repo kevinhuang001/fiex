@@ -1,5 +1,4 @@
 import { showLogs } from '@/lib/logCenter'
-import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
 import { t } from '@/i18n'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
 import { PluginImportDialog, PluginMessage, PluginUninstallDialog } from './plugins/PluginAlerts'
@@ -114,14 +113,13 @@ export function PluginSettings() {
       <PluginPermissionsSheet
         plugin={permissionsFor}
         busy={busy}
-        message={message}
         onClose={() => {
           setPermissionsFor(null)
           setDomainSettingsOpen(false)
           setCommandSettingsOpen(false)
           setMessage('')
         }}
-        onActivate={(plugin) => requestPluginActivation(plugin.id)}
+        onActivate={(plugin) => void updateActivation(plugin, true)}
         onTogglePermission={(plugin, permission, granted) =>
           void updatePermission(plugin, permission, granted)
         }
@@ -165,7 +163,6 @@ export function PluginSettings() {
         fields={fields}
         draft={draft}
         busy={busy}
-        message={message}
         onDraftChange={updateDraft}
         onSave={() => void saveSettings()}
         onClose={() => setSettingsFor(null)}
