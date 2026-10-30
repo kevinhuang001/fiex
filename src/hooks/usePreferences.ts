@@ -59,9 +59,9 @@ function load(input?: Partial<Preferences>): Preferences {
   const systemStyle = inferShortcutStyle()
   const fallback = defaultsFor(systemStyle)
   try {
-    const stored = input ?? JSON.parse(
-      localStorage.getItem('fiex:preferences') || '{}',
-    ) as Partial<Preferences>
+    const stored =
+      input ??
+      (JSON.parse(localStorage.getItem('fiex:preferences') || '{}') as Partial<Preferences>)
     const style = isStyle(stored.shortcutStyle) ? stored.shortcutStyle : systemStyle
     const fontSize =
       typeof stored.fontSize === 'number' ? Math.min(18, Math.max(8, stored.fontSize)) : 11
@@ -187,7 +187,8 @@ export function usePreferences() {
     void (async () => {
       try {
         const saved = await call<Partial<Preferences> | null>('state_get', {
-          namespace: 'explorer', key: 'preferences',
+          namespace: 'explorer',
+          key: 'preferences',
         })
         if (!active) return
         if (saved) {
@@ -196,7 +197,9 @@ export function usePreferences() {
           const legacy = localStorage.getItem('fiex:preferences')
           if (legacy) {
             await call('state_put', {
-              namespace: 'explorer', key: 'preferences', value: JSON.parse(legacy),
+              namespace: 'explorer',
+              key: 'preferences',
+              value: JSON.parse(legacy),
             })
           }
         }
@@ -209,7 +212,9 @@ export function usePreferences() {
         if (active) setStateReady(false)
       }
     })()
-    return () => { active = false }
+    return () => {
+      active = false
+    }
   }, [])
   useEffect(() => {
     if (demo) {
@@ -218,7 +223,9 @@ export function usePreferences() {
     }
     if (!stateReady) return
     void call('state_put', {
-      namespace: 'explorer', key: 'preferences', value: prefs,
+      namespace: 'explorer',
+      key: 'preferences',
+      value: prefs,
     }).catch(() => {
       // Preserve edits until Core persistence recovers rather than lose them.
       localStorage.setItem('fiex:preferences', JSON.stringify(prefs))
