@@ -40,6 +40,7 @@ pub use cache::CacheChange;
 #[cfg(feature = "desktop")]
 pub(crate) use config::provider_config;
 pub(crate) use config::{connection_by_mount, ensure_provider_access};
+pub(crate) use store::load_stored_public;
 pub use config::{connection_for_path, is_remote};
 pub(crate) use files::{adapter_node, remember_adapter_entry};
 pub use files::{
