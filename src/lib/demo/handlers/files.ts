@@ -15,15 +15,28 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
   switch (command) {
     case 'list_directory': {
       const requested = String(a.path || '')
-      if (requested === 'trash://')
+      if (requested === 'trash://') {
+        // Trash entries use opaque identities, just like Core: the backing
+        // host path never reaches the UI.
+        const trashId = (name: string) =>
+          `trash://${btoa(name).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`
+        const entries = state.entries
+          .filter((entry) => parent(entry.path) === `${root}/.Trash`)
+          .map((entry) => ({
+            ...entry,
+            path: trashId(entry.name),
+            readonly: true,
+            allowedOps: ['stat'],
+          }))
         return {
           path: 'trash://',
-          entries: [],
-          readOnly: false,
+          entries,
+          readOnly: true,
           canCreate: false,
           virtualVolume: true,
           warnings: [],
         }
+      }
       if (requested === 'applications://') {
         const app = (name: string, path: string, extension: string) => ({
           path,

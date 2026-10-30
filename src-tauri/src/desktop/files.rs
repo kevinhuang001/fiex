@@ -9,7 +9,6 @@ use crate::{
     core::search::{
         SearchBatch, SearchEngine, SearchMode, SearchRequest, SearchState, RESULT_LIMIT,
     },
-    core::terminals,
     core::transfers::Resolution,
     core::volumes,
 };

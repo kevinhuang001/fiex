@@ -136,7 +136,11 @@ fn virtual_roots_are_recognized_without_host_paths() {
     assert!(!virtual_search_root("/tmp"));
     assert!(!virtual_search_root("fiex-plugin-view://example"));
     if let Some(root) = crate::core::volumes::trash_path() {
-        assert!(virtual_search_root(&root.to_string_lossy()));
+        let root = root.to_string_lossy();
+        // A platform URI (the Windows Recycle Bin) is virtual, while a real
+        // Unix Trash directory must never be promoted to a virtual root: the
+        // Trash is only reachable through its opaque `trash://` identities.
+        assert_eq!(virtual_search_root(&root), root.contains("://"), "{root}");
     }
 }
 

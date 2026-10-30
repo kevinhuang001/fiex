@@ -85,7 +85,7 @@ export function useShortcuts({
       preview ||
       info ||
       tagOpen ||
-      connectionOpen ||
+      connectionOpen,
     ),
     handlers: {
       settings: () => setSettings(true),
