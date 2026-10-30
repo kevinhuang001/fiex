@@ -18,7 +18,6 @@ export function PluginSettingsSheet({
   fields,
   draft,
   busy,
-  message,
   onDraftChange,
   onSave,
   onClose,
@@ -28,7 +27,6 @@ export function PluginSettingsSheet({
   fields: PluginField[]
   draft: Record<string, string | boolean | string[]>
   busy: boolean
-  message: string
   onDraftChange: (fieldId: string, value: string | boolean | string[]) => void
   onSave: () => void
   onClose: () => void
