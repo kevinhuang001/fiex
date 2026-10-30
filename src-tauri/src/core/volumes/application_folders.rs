@@ -34,11 +34,39 @@ fn load() -> Store {
     let Some(path) = store_path() else {
         return Store::default();
     };
-    std::fs::read(path)
+    let mut store = std::fs::read(path)
         .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .and_then(|bytes| serde_json::from_slice::<Store>(&bytes).ok())
         .filter(|store: &Store| store.version <= VERSION)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    migrate_legacy_folders(&mut store);
+    store
+}
+
+/// Older builds stored every user folder under `applications://user/<id>`.
+/// Rewrite those keys to the single-segment form so mapped system apps stay
+/// visible after the URI layout changed.
+fn migrate_legacy_folders(store: &mut Store) {
+    if !store
+        .folders
+        .keys()
+        .any(|folder| folder.starts_with("applications://user/"))
+    {
+        return;
+    }
+    let folders = std::mem::take(&mut store.folders);
+    for (folder, apps) in folders {
+        let key = folder
+            .strip_prefix("applications://user/")
+            .map(|payload| format!("{}{payload}", applications::USER_PREFIX))
+            .unwrap_or(folder);
+        let entry = store.folders.entry(key).or_default();
+        for app in apps {
+            if !entry.iter().any(|candidate| candidate == &app) {
+                entry.push(app);
+            }
+        }
+    }
 }
 
 fn save(store: &Store) -> Result<(), String> {
@@ -71,7 +99,7 @@ fn normalized(path: &str) -> String {
 }
 
 fn is_folder_key(folder: &str) -> bool {
-    folder == applications::URI || folder.starts_with(applications::USER_PREFIX)
+    folder == applications::URI || applications::is_user(folder)
 }
 
 fn is_same_or_child(folder: &str, candidate: &str) -> bool {
@@ -289,6 +317,20 @@ mod tests {
     const FOLDER_B: &str = "applications://user/Zm9sZGVyLWI";
     const APP_A: &str = "applications://YXBwLWE";
     const APP_B: &str = "applications://YXBwLWI";
+
+    #[test]
+    fn legacy_folder_keys_are_rewritten_to_the_single_segment_form() {
+        let mut store = Store::default();
+        store
+            .folders
+            .insert(FOLDER_A.to_string(), vec![APP_A.to_string()]);
+        migrate_legacy_folders(&mut store);
+        assert_eq!(
+            store.folders.get("applications://~Zm9sZGVyLWE"),
+            Some(&vec![APP_A.to_string()])
+        );
+        assert!(!store.folders.contains_key(FOLDER_A));
+    }
 
     #[test]
     fn moves_preserve_order_and_replace_the_previous_folder() {

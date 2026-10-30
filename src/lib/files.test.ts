@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   parent,
   join,
+  basename,
+  displayAddress,
+  normalizeAddress,
   pathCrumbs,
   sortEntries,
   nextSort,
@@ -71,7 +74,7 @@ describe('pathCrumbs', () => {
   })
 
   it('keeps a virtual location as one crumb', () => {
-    expect(pathCrumbs('recent://')).toEqual([{ name: 'recent://', path: 'recent://' }])
+    expect(pathCrumbs('recent://').map((crumb) => crumb.path)).toEqual(['recent://'])
   })
 })
 
@@ -106,5 +109,56 @@ describe('Core mount paths', () => {
       expect(() => parent(value)).toThrow()
       expect(() => pathCrumbs(value)).toThrow()
     }
+  })
+})
+
+describe('virtual addresses', () => {
+  it('normalizes roots, aliases and paths without touching local paths', () => {
+    for (const input of ['recent', 'recent:', 'recent:/', 'recent://'])
+      expect(normalizeAddress(input)).toBe('recent://')
+    for (const input of ['applications', 'applications:', 'applications:/', 'applications://'])
+      expect(normalizeAddress(input)).toBe('applications://')
+    for (const input of ['trash', 'trash:', 'trash:/', 'trash://'])
+      expect(normalizeAddress(input)).toBe('trash://')
+    expect(normalizeAddress('回收站')).toBe('recyclebin://')
+    expect(normalizeAddress('废纸篓')).toBe('trash://')
+    expect(normalizeAddress('C:\\Users')).toBe('C:\\Users')
+    expect(normalizeAddress('fiex://mount/account/')).toBe('fiex://mount/account/')
+    for (const [input, expected] of [
+      ['recent:\\', 'recent://'],
+      ['applications:\\', 'applications://'],
+      ['trash:\\', 'trash://'],
+    ])
+      expect(normalizeAddress(input)).toBe(expected)
+    expect(normalizeAddress('applications:\\未命名文件夹')).toBe(
+      normalizeAddress('applications://未命名文件夹'),
+    )
+    expect(displayAddress(normalizeAddress('applications:\\工作\\文档'))).toBe(
+      'applications://工作/文档',
+    )
+  })
+
+  it('shows Chinese folder names while keeping one opaque segment', () => {
+    const encoded = normalizeAddress('applications://未命名文件夹')
+    expect(encoded.startsWith('applications://~')).toBe(true)
+    expect(encoded).not.toContain('/user/')
+    expect(displayAddress(encoded)).toBe('applications://未命名文件夹')
+    expect(basename(encoded)).toBe('未命名文件夹')
+    expect(parent(encoded)).toBe('applications://')
+    expect(pathCrumbs(encoded).map((crumb) => crumb.path)).toEqual(['applications://', encoded])
+  })
+
+  it('keeps breadcrumb parents virtual instead of producing applications:\\', () => {
+    expect(pathCrumbs('applications://')[0].path).toBe('applications://')
+    expect(pathCrumbs('trash://')[0].path).toBe('trash://')
+    const trash = normalizeAddress('trash://Old draft.txt')
+    expect(displayAddress(trash)).toBe('trash://Old draft.txt')
+    expect(pathCrumbs(trash)[0].path).toBe('trash://')
+  })
+
+  it('accepts legacy user prefixes and canonicalizes them', () => {
+    expect(normalizeAddress('applications://user/5pyq5ZG95ZCN5paH5Lu25aS5')).toBe(
+      'applications://~5pyq5ZG95ZCN5paH5Lu25aS5',
+    )
   })
 })

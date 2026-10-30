@@ -1,6 +1,97 @@
 import { t, getLocale } from '@/i18n'
 import type { Entry, Group, Sort } from './types'
 export type CorePath = { root: string; parts: string[] }
+export type VirtualRoot = 'recent://' | 'applications://' | 'trash://' | 'recyclebin://'
+export type VirtualAddress = { root: VirtualRoot; payload: string }
+const VIRTUAL_LABELS: Record<string, VirtualRoot> = {
+  最近使用: 'recent://',
+  应用程序: 'applications://',
+  应用: 'applications://',
+  废纸篓: 'trash://',
+  回收站: 'recyclebin://',
+}
+function encodeBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+function decodeBase64Url(value: string): string | null {
+  try {
+    const base = value.replace(/-/g, '+').replace(/_/g, '/')
+    const binary = atob(base + '='.repeat((4 - (base.length % 4)) % 4))
+    return new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)))
+  } catch {
+    return null
+  }
+}
+/** Decoded value of an opaque payload, or null when the text is a literal
+ *  (Chinese or otherwise) user-entered path that should be encoded. */
+function opaquePayload(value: string): string | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null
+  const decoded = decodeBase64Url(value)
+  if (!decoded || decoded.includes('\uFFFD') || /[\u0000-\u001f\u007f]/.test(decoded)) return null
+  return decoded
+}
+/** Recognize the Core-owned virtual views without treating Windows drives or
+ *  `fiex://mount/...` identities as virtual application paths. */
+export function virtualPath(path: string): VirtualAddress | null {
+  const match = /^(recent|applications|trash|recyclebin):\/\/(.*)$/i.exec(path)
+  if (!match) return null
+  const root = `${match[1].toLowerCase()}://` as VirtualRoot
+  let payload = match[2]
+  if (root === 'applications://') payload = payload.replace(/^~/, '').replace(/^user\//, '')
+  return { root, payload }
+}
+function virtualHref(root: VirtualRoot, payload: string): string {
+  if (root === 'applications://') return payload ? `${root}~${payload}` : root
+  return root + payload
+}
+function virtualRootName(root: VirtualRoot): string {
+  if (root === 'recent://') return t('最近使用')
+  if (root === 'applications://') return t('应用程序')
+  if (root === 'trash://') return t('废纸篓')
+  return t('回收站')
+}
+/** Address-bar input accepts `recent`, `recent:/`, `recent://`, localized view
+ *  names and Windows/Unix paths. Virtual schemes always normalize to one root
+ *  and a single opaque payload segment; literal Chinese paths are encoded. */
+export function normalizeAddress(input: string): string {
+  const text = input.trim()
+  if (!text) return text
+  const label = text.replace(/[:：]+$/, '').replace(/[\\/]+$/, '')
+  if (VIRTUAL_LABELS[label]) return VIRTUAL_LABELS[label]
+  const bare = text.toLowerCase()
+  if (['recent', 'applications', 'trash', 'recyclebin'].includes(bare)) return `${bare}://`
+  // Both URL and Windows separators are accepted after a virtual scheme.
+  const match = /^(recent|applications|trash|recyclebin):[\\/]*(.*)$/i.exec(text)
+  if (!match) return text
+  const root = `${match[1].toLowerCase()}://` as VirtualRoot
+  let payload = match[2].replace(/^[\\/]+/, '')
+  if (root === 'applications://') {
+    if (/^user[\\/]/i.test(payload)) payload = payload.slice(5)
+    else if (payload.startsWith('~')) payload = payload.slice(1)
+    else if (payload && !opaquePayload(payload))
+      payload = encodeBase64Url(payload.replace(/\\/g, '/'))
+    return virtualHref(root, payload)
+  }
+  if (root === 'trash://') {
+    if (payload && !opaquePayload(payload)) payload = encodeBase64Url(payload.replace(/\\/g, '/'))
+    return virtualHref(root, payload)
+  }
+  return virtualHref(root, payload)
+}
+/** Human-readable address for the path editor and info dialogs. */
+export function displayAddress(path: string): string {
+  const virtual = virtualPath(path)
+  if (!virtual) return path
+  if (!virtual.payload) return virtual.root
+  if (virtual.root === 'applications://' || virtual.root === 'trash://') {
+    const relative = decodeBase64Url(virtual.payload)
+    if (relative) return virtual.root + relative
+  }
+  return path
+}
 export function corePath(path: string): CorePath | null {
   if (!/^fiex:/i.test(path)) return null
   const match = path.match(/^fiex:\/\/mount\/([A-Za-z0-9-]{1,128})\/(.*)$/)
@@ -26,6 +117,14 @@ export function corePath(path: string): CorePath | null {
 export function parent(path: string): string {
   const core = corePath(path)
   if (core) return core.root + core.parts.slice(0, -1).map(encodeURIComponent).join('/')
+  const virtual = virtualPath(path)
+  if (virtual) {
+    if (!virtual.payload || virtual.root === 'recent://' || virtual.root === 'recyclebin://')
+      return virtual.root
+    const relative = decodeBase64Url(virtual.payload)
+    if (!relative || !relative.includes('/')) return virtual.root
+    return virtualHref(virtual.root, encodeBase64Url(relative.slice(0, relative.lastIndexOf('/'))))
+  }
   const p = path.replace(/[\\/]+$/, '')
   const sep = p.includes('\\') ? '\\' : '/'
   const i = p.lastIndexOf(sep)
@@ -41,13 +140,18 @@ export function join(path: string, name: string): string {
     corePath(result)
     return result
   }
+  const virtual = virtualPath(path)
+  if (virtual && (virtual.root === 'applications://' || virtual.root === 'trash://')) {
+    const relative = virtual.payload ? decodeBase64Url(virtual.payload) : ''
+    if (relative !== null)
+      return virtualHref(virtual.root, encodeBase64Url(relative ? `${relative}/${name}` : name))
+  }
   return path.replace(/[\\/]+$/, '') + (path.includes('\\') ? '\\' : '/') + name
 }
 export type Crumb = { name: string; path: string }
 export function pathCrumbs(
   path: string,
-  displayName: (path: string) => string = (value) =>
-    value === 'recent://' ? value : basename(value),
+  displayName: (path: string) => string = (value) => basename(value),
 ): Crumb[] {
   const core = corePath(path)
   if (core)
@@ -63,7 +167,29 @@ export function pathCrumbs(
             .join('/'),
       })),
     ]
-  if (path === 'recent://') return [{ name: displayName(path), path }]
+  const virtual = virtualPath(path)
+  if (virtual) {
+    const root = virtual.root
+    const crumbs: Crumb[] = [{ name: displayName(root) || virtualRootName(root), path: root }]
+    // Recycle-bin identities are opaque records, not navigable folders.
+    if (virtual.payload && root !== 'recyclebin://') {
+      const relative = opaquePayload(virtual.payload)
+      if (relative) {
+        let prefix = ''
+        for (const part of relative.split('/').filter(Boolean)) {
+          prefix = prefix ? `${prefix}/${part}` : part
+          crumbs.push({
+            name: part,
+            path: virtualHref(root, encodeBase64Url(prefix)),
+          })
+        }
+      } else {
+        const child = virtualHref(root, virtual.payload)
+        crumbs.push({ name: displayName(child) || basename(child), path: child })
+      }
+    }
+    return crumbs
+  }
   let accumulated = path.startsWith('/') ? '' : path.startsWith('\\') ? '\\\\' : ''
   return path
     .split(/[\\/]/)
@@ -85,6 +211,15 @@ export function basename(path: string): string {
     return path
   }
   if (core) return core.parts.at(-1) || t('虚拟文件系统')
+  const virtual = virtualPath(path)
+  if (virtual) {
+    if (!virtual.payload) return virtualRootName(virtual.root)
+    if (virtual.root === 'applications://' || virtual.root === 'trash://') {
+      const relative = decodeBase64Url(virtual.payload)
+      if (relative) return relative.split('/').pop() || virtualRootName(virtual.root)
+    }
+    return virtual.payload
+  }
   return (
     path
       .replace(/[\\/]+$/, '')

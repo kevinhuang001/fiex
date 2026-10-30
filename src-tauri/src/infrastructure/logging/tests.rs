@@ -33,3 +33,45 @@ mod delivery_tests {
         clear(&id);
     }
 }
+
+#[cfg(test)]
+mod detail_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn request_detail_keeps_important_fields_and_drops_secrets() {
+        let detail = request_detail(
+            "vfs.search",
+            &json!({
+                "nodeId": "node-1",
+                "query": "report",
+                "mode": "name",
+                "hidden": true,
+                "limit": 200,
+                "ignores": ["a", "b"],
+                "token": "SECRET",
+                "dataBase64": "U0VDUkVU"
+            }),
+        );
+        assert!(detail.contains("nodeId=\"node-1\""), "{detail}");
+        assert!(detail.contains("query=\"report\""), "{detail}");
+        assert!(detail.contains("mode=\"name\""), "{detail}");
+        assert!(detail.contains("ignores=[2 items]"), "{detail}");
+        assert!(!detail.contains("SECRET"), "{detail}");
+        assert!(!detail.contains("dataBase64"), "{detail}");
+    }
+
+    #[test]
+    fn response_detail_reports_counts_without_payloads() {
+        let detail = response_detail(&json!({
+            "entries": [{"name": "a"}, {"name": "b"}],
+            "truncated": true,
+            "nextCursor": "2"
+        }));
+        assert!(detail.contains("entries=2"), "{detail}");
+        assert!(detail.contains("truncated=true"), "{detail}");
+        assert!(detail.contains("nextCursor=yes"), "{detail}");
+        assert!(!detail.contains("\"a\""), "{detail}");
+    }
+}

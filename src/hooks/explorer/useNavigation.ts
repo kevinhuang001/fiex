@@ -180,7 +180,8 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     canBack: cursor > 0,
     canForward: cursor < history.length - 1,
     up: () => {
-      if (path !== 'recent://') navigate(parent(path))
+      const upPath = parent(path)
+      if (upPath !== path) navigate(upPath)
     },
     tabs,
     tab,

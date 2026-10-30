@@ -3,7 +3,7 @@ import { Check, Copy } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
 import { FileIcon } from './FileIcon'
-import { date, parent, kind, size } from '@/lib/files'
+import { date, displayAddress, parent, kind, size } from '@/lib/files'
 import { tagHex } from '@/lib/tags'
 import { call } from '@/lib/api'
 import type { Entry } from '@/lib/types'
@@ -78,7 +78,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     ? [
         { label: t('种类'), value: kind(info) },
         { label: t('大小'), value: info.isDir ? t('文件夹') : size(info.size) },
-        { label: t('位置'), value: parent(info.path) },
+        { label: t('位置'), value: displayAddress(parent(info.path)) },
         { label: t('创建时间'), value: date(info.created) },
         { label: t('修改时间'), value: date(info.modified) },
         { label: t('权限'), value: info.readonly ? t('只读') : t('可读写') },

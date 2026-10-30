@@ -1,10 +1,12 @@
 /* Provider preferences: one focused, reorderable feature at a time. */
 .provider-manager {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px 20px;
+  align-items: start;
 }
 .provider-intro {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 13px;
@@ -36,43 +38,57 @@
 }
 .provider-feature-tabs {
   display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  padding: 5px;
-  border-radius: 12px;
-  background: var(--hover);
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
 }
 .provider-feature-tabs button {
   display: flex;
   align-items: center;
-  gap: 7px;
-  flex: 1 0 auto;
-  padding: 9px 11px;
+  gap: 9px;
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 10px 11px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 9px;
   color: var(--muted);
   background: transparent;
   font: inherit;
+  text-align: left;
   cursor: pointer;
   transition:
     background 0.15s,
-    color 0.15s;
+    color 0.15s,
+    border-color 0.15s;
 }
 .provider-feature-tabs button:hover {
   color: var(--text);
+  background: var(--hover);
 }
 .provider-feature-tabs button[aria-selected='true'] {
   color: var(--accent);
-  background: var(--canvas);
-  border-color: var(--line);
-  box-shadow: 0 1px 3px #00000006;
+  background: color-mix(in srgb, var(--accent) 9%, var(--canvas));
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--line));
 }
 .provider-feature-tabs small {
-  font-size: 10px;
-  opacity: 0.7;
+  min-width: 19px;
   margin-left: auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--hover);
+  font-size: 10px;
+  text-align: center;
+}
+.provider-feature-tabs button[aria-selected='true'] small {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .provider-stack {
+  align-self: start;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--canvas);
@@ -83,10 +99,28 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 19px 20px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.provider-stack-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.provider-stack-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--canvas));
 }
 .provider-stack-heading h3 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 13px;
   font-weight: 650;
 }
@@ -95,8 +129,36 @@
   color: var(--muted);
   font-size: 11px;
 }
+.provider-stack-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.provider-stack-count {
+  min-width: 32px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
 .provider-stack-list {
-  padding: 0 10px 10px;
+  padding: 10px;
+}
+@media (max-width: 760px) {
+  .provider-manager {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .provider-feature-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .provider-feature-tabs button {
+    width: auto;
+    white-space: nowrap;
+  }
 }
 .provider-choice {
   display: flex;

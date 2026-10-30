@@ -42,19 +42,7 @@ pub fn eject(path: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let drive = path.chars().next().ok_or(crate::i18n::t("无效设备"))?;
-        let script = format!(
-            "$d=(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{drive}:');$d.InvokeVerb('Eject')"
-        );
-        let mut command = std::process::Command::new("powershell");
-        command.args(["-NoProfile", "-Command", &script]);
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-        let status = command.status().map_err(|e| e.to_string())?;
-        if status.success() {
-            return Ok(());
-        }
-        return Err(crate::i18n::t("无法弹出该设备").into());
+        return crate::platform::windows::eject_path(path);
     }
     #[allow(unreachable_code)]
     Err(crate::i18n::t("当前平台不支持弹出设备").into())

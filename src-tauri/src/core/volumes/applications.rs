@@ -9,7 +9,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 pub const URI: &str = "applications://";
-pub const USER_PREFIX: &str = "applications://user/";
+/// User-created application-store nodes live directly under the view root.
+/// The `~` marker keeps them distinct from system application identities,
+/// which are base64-encoded host paths.
+pub const USER_PREFIX: &str = "applications://~";
+/// Older builds used a visible `user/` segment. Keep decoding those URIs so
+/// saved folders, bookmarks and tabs survive the upgrade.
+const LEGACY_USER_PREFIX: &str = "applications://user/";
 
 pub fn is_virtual(path: &str) -> bool {
     path == URI
@@ -208,14 +214,20 @@ fn trash_user(uri: &str) -> Result<(), String> {
 }
 
 pub fn open(encoded: &str) -> Result<(), String> {
-    if encoded.starts_with("user/") {
-        return open_stored(&stored_path(&format!("{URI}{encoded}"))?);
+    let uri = format!("{URI}{encoded}");
+    if is_user(&uri) {
+        return open_stored(&stored_path(&uri)?);
     }
     platform_open(encoded)
 }
 
+fn user_encoded(uri: &str) -> Option<&str> {
+    uri.strip_prefix(USER_PREFIX)
+        .or_else(|| uri.strip_prefix(LEGACY_USER_PREFIX))
+}
+
 pub fn is_user(path: &str) -> bool {
-    path.starts_with(USER_PREFIX)
+    user_encoded(path).is_some()
 }
 
 fn user_dir() -> PathBuf {
@@ -233,10 +245,7 @@ pub fn stored_path(uri: &str) -> Result<PathBuf, String> {
     if uri == URI {
         return Ok(root);
     }
-    let relative = decode(
-        uri.strip_prefix(USER_PREFIX)
-            .ok_or("not a stored application")?,
-    )?;
+    let relative = decode(user_encoded(uri).ok_or("not a stored application")?)?;
     if relative.is_empty()
         || relative.contains(['\\', ':', '\0'])
         || Path::new(&relative)
@@ -258,9 +267,7 @@ pub fn stored_path(uri: &str) -> Result<PathBuf, String> {
 /// every existing ancestor is canonicalized to reject symlink escapes.
 pub fn candidate_path(uri: &str) -> Result<PathBuf, String> {
     let root = stored_path(URI)?;
-    let encoded = uri
-        .strip_prefix(USER_PREFIX)
-        .ok_or("not a user application")?;
+    let encoded = user_encoded(uri).ok_or("not a user application")?;
     let relative = decode(encoded)?;
     if relative.is_empty()
         || relative.contains(['\\', ':', '\0'])
@@ -1073,6 +1080,16 @@ mod executable_target_tests {
 #[cfg(test)]
 mod folder_listing_tests {
     use super::*;
+
+    #[test]
+    fn user_uris_use_one_segment_and_keep_legacy_links_working() {
+        assert_eq!(user_encoded("applications://~abc"), Some("abc"));
+        assert_eq!(user_encoded("applications://user/abc"), Some("abc"));
+        assert!(is_user("applications://~abc"));
+        assert!(is_user("applications://user/abc"));
+        // System application identities are never user-store nodes.
+        assert!(!is_user("applications://YWJj"));
+    }
 
     fn item(name: &str, path: &str, is_dir: bool) -> Entry {
         Entry {

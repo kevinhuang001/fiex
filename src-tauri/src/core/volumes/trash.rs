@@ -228,7 +228,7 @@ pub fn delete_permanently(paths: &[String], cancel: &AtomicBool) -> Result<usize
             removed += 1;
             continue;
         }
-        if path.starts_with(super::applications::USER_PREFIX) {
+        if super::applications::is_user(path) {
             super::applications::remove_user(path)?;
             removed += 1;
             continue;

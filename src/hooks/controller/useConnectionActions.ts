@@ -26,11 +26,33 @@ export function useConnectionActions({
   setDialog: Dispatch<SetStateAction<DialogState | null>>
   trashPath: string | null
 }) {
+  const inside = (candidate: string, base: string) => {
+    const root = base.replace(/[\\/]+$/, '')
+    return (
+      candidate === base ||
+      candidate === root ||
+      candidate.startsWith(root + '/') ||
+      candidate.startsWith(root + '\\')
+    )
+  }
   const leaveDevice = (path: string) => {
-    const home = left.locations.find((location) => location.kind === 'favorite')?.path || '/'
+    // Ejecting a Windows drive must not fall back to "/", which the OS treats
+    // as an invalid path. Prefer the home favorite, then another mounted disk.
+    const home =
+      left.locations.find(
+        (location) => location.kind === 'favorite' && !inside(location.path, path),
+      )?.path ||
+      left.locations.find(
+        (location) =>
+          location.kind === 'disk' &&
+          location.mounted &&
+          !location.usbfs &&
+          location.path &&
+          !inside(location.path, path),
+      )?.path ||
+      (isWindows() ? 'C:\\' : '/')
     for (const pane of [left, right]) {
-      if (pane.path === path || pane.path.startsWith(path.replace(/[/\\]$/, '') + '/'))
-        pane.navigate(home)
+      if (inside(pane.path, path)) pane.navigate(home)
     }
   }
   const ejectDevice = (path: string) =>

@@ -275,7 +275,7 @@ export function useAppController() {
     startPathEdit,
     submitPath,
     crumbs,
-  } = usePathEditor({ x: left, prefs, displayName })
+  } = usePathEditor({ x: left, displayName })
 
   const { addWorkspace, refreshAll, bookmarkPaths, favorite } = useWorkspaceActions({
     x,

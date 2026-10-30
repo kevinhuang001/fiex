@@ -875,6 +875,8 @@
   "远程文件不存在": "Remote file does not exist",
   "不能作为文件打开文件夹": "Cannot open a folder as a file",
   "无法弹出该设备": "Cannot eject this device",
+  "请先在系统中挂载该设备再弹出": "Mount this device in the system before ejecting it",
+  "无法弹出该设备，请确认没有程序正在使用它": "Cannot eject this device; make sure no program is using it",
   "无法卸载该设备": "Cannot unmount this device",
   "当前平台不支持弹出设备": "Device ejection is not supported on this platform",
   "文件仍在保存，稍后重试": "File is still being saved; try again later",

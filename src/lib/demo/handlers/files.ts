@@ -65,7 +65,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           warnings: [],
           entries: [
             app('Fiex', 'applications://ZmlleHQ=', 'app'),
-            app('我的快捷方式', 'applications://user/bXktYXBw', 'app'),
+            app('我的快捷方式', 'applications://~bXktYXBw', 'app'),
           ],
         }
       }

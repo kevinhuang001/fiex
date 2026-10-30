@@ -151,6 +151,12 @@ export function ProviderSettings() {
   const list = rows[feature] ?? []
   const disabled = new Set(preferences[feature]?.disabled ?? [])
   const icons = [Search, Eye, FileText, Sparkles, MousePointer2, Workflow]
+  const activeIndex = Math.max(
+    0,
+    FEATURES.findIndex(([id]) => id === feature),
+  )
+  const ActiveIcon = icons[activeIndex]
+  const enabledCount = list.filter((entry) => entry.locked || !disabled.has(entry.id)).length
   const drop = (target: string) => {
     const order = currentOrder(feature)
     if (!dragged || dragged === target || !order.includes(target)) return
@@ -200,18 +206,28 @@ export function ProviderSettings() {
         aria-labelledby={`provider-tab-${feature}`}
       >
         <div className="provider-stack-heading">
-          <div>
-            <h3>{t('执行顺序')}</h3>
-            <p>{t('拖动调整顺序，也可以使用上下移动按钮。')}</p>
+          <div className="provider-stack-title">
+            <span className="provider-stack-icon">
+              <ActiveIcon size={17} />
+            </span>
+            <div>
+              <h3>{t('执行顺序')}</h3>
+              <p>{t('拖动调整顺序，也可以使用上下移动按钮。')}</p>
+            </div>
           </div>
-          <button
-            className="settings-reset"
-            disabled={Boolean(saving)}
-            onClick={() => void reset(feature)}
-          >
-            <RotateCcw size={13} />
-            {t('恢复默认')}
-          </button>
+          <div className="provider-stack-actions">
+            <span className="provider-stack-count" title={t('已启用')}>
+              {enabledCount}/{list.length}
+            </span>
+            <button
+              className="settings-reset"
+              disabled={Boolean(saving)}
+              onClick={() => void reset(feature)}
+            >
+              <RotateCcw size={13} />
+              {t('恢复默认')}
+            </button>
+          </div>
         </div>
         {error && (
           <p className="settings-error" role="alert">

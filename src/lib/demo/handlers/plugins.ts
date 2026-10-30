@@ -234,13 +234,13 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       )
         return []
       if (directory === 'applications://') {
-        const user = paths.some((path) => path.startsWith('applications://user/'))
+        const user = paths.some((path) => /^applications:\/\/(?:user\/|~)/.test(path))
         // Mirror Core: installed applications use the explicit launch verb,
         // while the root folder and user-owned stored shortcuts stay "打开".
         const launch =
           paths[0] !== undefined &&
           paths[0] !== 'applications://' &&
-          !paths[0].startsWith('applications://user/')
+          !/^applications:\/\/(?:user\/|~)/.test(paths[0])
         return [
           {
             kind: 'builtin',

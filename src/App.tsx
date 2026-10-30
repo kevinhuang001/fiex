@@ -139,7 +139,7 @@ export default function App() {
               data-drop-folder={
                 /^[a-z][a-z0-9+.-]*:\/\//i.test(app.left.path) &&
                 app.left.path !== 'applications://' &&
-                !app.left.path.startsWith('applications://user/')
+                !/^applications:\/\/(?:user\/|~)/.test(app.left.path)
                   ? undefined
                   : app.left.path
               }
