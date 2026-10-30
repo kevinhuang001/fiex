@@ -35,7 +35,11 @@ export function PickerEntries({
       aria-label={t('文件')}
       onContextMenu={(event) => onContextMenu(event)}
     >
-      {error && <p className="file-picker-hint" role="status">{t('无法读取文件夹')}</p>}
+      {error && (
+        <p className="file-picker-hint" role="status">
+          {t('无法读取文件夹')}
+        </p>
+      )}
       {!error && loading && !visible.length && (
         <div className="file-picker-empty-state">
           <LoaderCircle className="spin" size={30} strokeWidth={1.5} />
