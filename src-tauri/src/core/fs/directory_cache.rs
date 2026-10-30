@@ -241,6 +241,8 @@ pub(crate) fn drop_subtree(path: &str) {
                 }
             }
         }
+        // A deleted or renamed subtree must not resurrect old child overlays.
+        super::mutation_overlay::discard(&current);
         super::decoration_cache::invalidate(&identity);
         disk::remove(&identity);
     }
