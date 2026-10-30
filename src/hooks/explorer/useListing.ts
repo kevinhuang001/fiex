@@ -67,9 +67,15 @@ export function useListing(
   const [searchStats, setSearchStats] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
-  const [directoryDecorations, setDirectoryDecorations] = useState<Record<string, EntryDecoration>>({})
+  const [directoryDecorations, setDirectoryDecorations] = useState<Record<string, EntryDecoration>>(
+    {},
+  )
   const searchDecorations = useEntryDecorations({
-    entries, path, enabled: enabled && (Boolean(query) || !native), query, refresh,
+    entries,
+    path,
+    enabled: enabled && (Boolean(query) || !native),
+    query,
+    refresh,
   })
   const decorations = query || !native ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
@@ -159,7 +165,8 @@ export function useListing(
       if (!start && prefs.startPage === 'recent') start = 'recent://'
       else if (!start && prefs.startPage === 'last') {
         start = await call<string | null>('state_get', {
-          namespace: 'explorer', key: 'lastPath',
+          namespace: 'explorer',
+          key: 'lastPath',
         }).catch(() => null)
         if (!start) start = localStorage.getItem('fiex:lastPath')
       }
@@ -186,8 +193,11 @@ export function useListing(
     // Persist only successfully opened locations, not incomplete navigation.
     if (!enabled || !path || query || listedPath !== path) return
     void call('state_put', {
-      namespace: 'explorer', key: 'lastPath', value: path,
-    }).then(() => localStorage.removeItem('fiex:lastPath'))
+      namespace: 'explorer',
+      key: 'lastPath',
+      value: path,
+    })
+      .then(() => localStorage.removeItem('fiex:lastPath'))
       .catch(() => localStorage.setItem('fiex:lastPath', path))
   }, [enabled, path, listedPath, query])
 
@@ -234,25 +244,33 @@ export function useListing(
       }
       setListedPath(path)
       setLoading(false)
-      if (snapshot.complete && path === 'recent://' &&
-          l.entries.length === 0 && history.length <= 1) {
+      if (
+        snapshot.complete &&
+        path === 'recent://' &&
+        l.entries.length === 0 &&
+        history.length <= 1
+      ) {
         const home = locations.find((item) => item.name === '个人文件夹')?.path
         if (home) navigate(home)
       }
-    }).catch((error) => {
-      if (!active || id !== request.current) return
-      if (paintedKey === null) {
-        setEntries([])
-        setDirectoryDecorations({})
-        setError(String(error))
-      } else {
-        // An offline refresh must not remove a correctly authorized snapshot.
-        setWarnings([String(error)])
-      }
-    }).finally(() => {
-      if (active && id === request.current) setLoading(false)
     })
-    return () => { active = false }
+      .catch((error) => {
+        if (!active || id !== request.current) return
+        if (paintedKey === null) {
+          setEntries([])
+          setDirectoryDecorations({})
+          setError(String(error))
+        } else {
+          // An offline refresh must not remove a correctly authorized snapshot.
+          setWarnings([String(error)])
+        }
+      })
+      .finally(() => {
+        if (active && id === request.current) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [enabled, path, prefs.hidden, prefs.displayIgnore, refresh, query])
   useEffect(() => {
     if (
