@@ -217,7 +217,7 @@ impl ResourceBroker {
         self.scope.authorize_method("fs.mkdir")?;
         self.require(FsOperation::Mkdir, true)?;
         let result = self.adapter()?.mkdir()?;
-        changes::committed(&self.path);
+        changes::committed_result(&self.path, &result);
         Ok(result)
     }
     pub fn remove(&self) -> Result<(), FsError> {
