@@ -1,7 +1,7 @@
 import { ConnectionSetupHelp } from './connections/ConnectionSetupHelp'
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Plug, Puzzle, Server } from 'lucide-react'
+import { ArrowLeft, LoaderCircle, Plug, Puzzle, Server } from 'lucide-react'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { call } from '@/lib/api'
@@ -270,6 +270,13 @@ export function ConnectionDialog({
             <p className="connection-error" role="alert">
               {error}
             </p>
+          )}
+          {busy && (
+            <div className="connection-waiting" role="status" aria-live="polite">
+              <LoaderCircle className="spin" size={22} />
+              <strong>{t('正在验证连接')}</strong>
+              <p>{t('如果浏览器已打开，请完成授权；完成后会自动继续。')}</p>
+            </div>
           )}
           <footer>
             <Button type="button" onClick={onClose}>

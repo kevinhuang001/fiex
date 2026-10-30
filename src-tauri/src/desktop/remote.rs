@@ -29,10 +29,14 @@ pub(crate) fn remote_connection_config(id: String) -> Result<remote::ConnectionI
     remote::connection_config(&id)
 }
 #[tauri::command]
-pub(crate) fn save_remote_connection(
+pub(crate) async fn save_remote_connection(
     input: remote::ConnectionInput,
 ) -> Result<remote::ConnectionInfo, String> {
-    remote::save_connection(input)
+    // Saving validates the provider and may open the browser for OAuth. Keep
+    // that wait off the main thread so the window can paint its loading state.
+    tauri::async_runtime::spawn_blocking(move || remote::save_connection(input))
+        .await
+        .map_err(|error| error.to_string())?
 }
 #[tauri::command]
 pub(crate) fn update_connection_session(

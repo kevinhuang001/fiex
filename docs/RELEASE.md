@@ -3,6 +3,7 @@
 - Drop files onto any breadcrumb segment to copy or move them into that ancestor folder (including virtual roots and the ellipsis ancestor).
 - Transfer preflight now runs only across VFS boundaries. Moves, renames and app imports inside the same VFS keep Core capability checks without invoking provider review again.
 - The secondary pane address bar uses the same virtual-path normalization, decoded Chinese display and cached directory stream as the main pane.
+- Saving or validating a connection no longer blocks the window while the browser OAuth page waits. A loading overlay explains that Fiex is waiting for authorization and continues automatically after the callback.
 
 # Fiex 0.7.7
 

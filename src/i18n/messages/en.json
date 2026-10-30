@@ -1282,6 +1282,8 @@
   "留空保留已保存的凭据": "Leave blank to keep saved credentials",
   "保存连接": "Save connection",
   "保存中…": "Saving…",
+  "正在验证连接": "Verifying connection",
+  "如果浏览器已打开，请完成授权；完成后会自动继续。": "If the browser opened, complete authorization there; this window continues automatically.",
   "加载中…": "Loading…",
   "全部操作": "All operations",
   "传输": "Transfers",
