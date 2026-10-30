@@ -122,7 +122,6 @@ export function PluginSettingsSheet({
           )
         })}
         {!fields.length && <p className="sidebar-hint">{t('此插件没有需要配置的设置。')}</p>}
-        {message && <p role="status">{message}</p>}
         <footer className="plugin-consent-actions">
           <Button variant="outline" onClick={onClose}>
             {t('关闭')}
