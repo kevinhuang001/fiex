@@ -202,10 +202,8 @@ pub fn reveal(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Opens the platform's installed-applications UI. macOS has a real folder and
-/// is handled in-app; Windows/Linux use this command because there is no folder
-/// with the same semantics.
-
+/// Opens the macOS Full Disk Access settings. Other platforms have no
+/// equivalent page and report that the setting is macOS-only.
 pub fn open_full_disk_access() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
