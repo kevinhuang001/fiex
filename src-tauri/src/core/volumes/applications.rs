@@ -6,11 +6,7 @@ use crate::core::files::Entry;
 use crate::core::fs::directory_cache;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Mutex, OnceLock,
-};
-use std::time::{Duration, Instant};
+use std::sync::{Mutex, OnceLock};
 
 pub const URI: &str = "applications://";
 /// User-created application-store nodes live directly under the view root.
@@ -52,7 +48,7 @@ fn entry(name: String, path: String, extension: &str, modified: u64, readonly: b
 }
 
 pub fn list() -> Result<Vec<Entry>, String> {
-    let system = system_entries()?;
+    let system = refresh_system_entries()?;
     let mapped = application_folders::mapped_apps();
     Ok(root_listing(system, list_user(), &mapped))
 }
@@ -87,19 +83,9 @@ fn store_system_entries(entries: &[Entry]) {
         .unwrap_or_else(|error| error.into_inner()) = Some(entries.to_vec());
 }
 
-fn last_catalog_scan() -> &'static Mutex<Option<Instant>> {
-    static LAST: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
-    LAST.get_or_init(Default::default)
-}
-static CATALOG_REFRESHING: AtomicBool = AtomicBool::new(false);
-const CATALOG_MAX_AGE: Duration = Duration::from_secs(300);
-
 fn refresh_system_entries() -> Result<Vec<Entry>, String> {
     let entries = platform_list()?;
     store_system_entries(&entries);
-    *last_catalog_scan()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
     let ids = entries
         .iter()
         .map(|entry| entry.path.clone())
@@ -108,40 +94,14 @@ fn refresh_system_entries() -> Result<Vec<Entry>, String> {
     Ok(entries)
 }
 
-/// Refresh the installed-app catalog outside the directory-open critical path.
-/// A directory mutation must never force a new PowerShell / OS application scan.
-fn schedule_catalog_refresh() {
-    let stale = last_catalog_scan()
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .as_ref()
-        .is_none_or(|instant| instant.elapsed() >= CATALOG_MAX_AGE);
-    if !stale || CATALOG_REFRESHING.swap(true, Ordering::AcqRel) {
-        return;
-    }
-    std::thread::spawn(|| {
-        let previous = cached_system_entries().unwrap_or_default();
-        if let Ok(entries) = refresh_system_entries() {
-            let mut old: Vec<_> = previous.iter().map(|entry| &entry.path).collect();
-            let mut new: Vec<_> = entries.iter().map(|entry| &entry.path).collect();
-            old.sort_unstable();
-            new.sort_unstable();
-            if old != new {
-                directory_cache::invalidate_directory(URI);
-            }
-        }
-        CATALOG_REFRESHING.store(false, Ordering::Release);
-    });
-}
-
 /// All installed applications, including those currently mapped into folders.
-/// A warm read uses the catalog immediately and schedules an independent scan.
 pub fn system_entries() -> Result<Vec<Entry>, String> {
     if let Some(entries) = cached_system_entries() {
-        schedule_catalog_refresh();
         return Ok(entries);
     }
-    refresh_system_entries()
+    let entries = platform_list()?;
+    store_system_entries(&entries);
+    Ok(entries)
 }
 
 pub fn is_system_app(path: &str) -> bool {
