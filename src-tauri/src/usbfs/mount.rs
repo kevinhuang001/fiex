@@ -126,7 +126,7 @@ pub fn eject(device: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        return crate::platform::windows::eject_path(device);
+        crate::platform::windows::eject_path(device)
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
