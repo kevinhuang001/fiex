@@ -13,7 +13,6 @@ import { pluginIcon } from '../PluginInstaller'
 export function PluginPermissionsSheet({
   plugin,
   busy,
-  message,
   onClose,
   onActivate,
   onTogglePermission,
@@ -21,7 +20,6 @@ export function PluginPermissionsSheet({
 }: {
   plugin: PluginInfo | null
   busy: boolean
-  message: string
   onClose: () => void
   onActivate: (plugin: PluginInfo) => void
   onTogglePermission: (plugin: PluginInfo, permission: string, granted: boolean) => void
@@ -86,11 +84,6 @@ export function PluginPermissionsSheet({
               />
             </div>
           </section>
-          {message && (
-            <p role="status" className="plugin-page-message">
-              {message}
-            </p>
-          )}
         </div>
       )}
     </Modal>
