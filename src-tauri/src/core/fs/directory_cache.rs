@@ -53,6 +53,7 @@ pub(crate) fn read_snapshot(
         Some(data) => data,
         None => return Ok(None),
     };
+    super::mutation_overlay::paint(path, &mut data.listing);
     data.listing = filtered(data.listing, hidden, ignores);
     Ok(Some(data))
 }
@@ -89,8 +90,10 @@ pub(crate) fn store(path: &str, listing: &Listing) {
         return;
     }
     let identity = key(path);
+    let mut merged = listing.clone();
+    super::mutation_overlay::reconcile(path, &mut merged);
     let data = DirectorySnapshot {
-        listing: listing.clone(),
+        listing: merged,
         last_access: next_access(),
     };
     remember(&identity, &data);
@@ -176,6 +179,7 @@ pub(crate) fn remove_entry(path: &str, entry_path: &str) {
         return;
     }
     drop_subtree(entry_path);
+    super::mutation_overlay::remove(path, entry_path);
     super::decoration_cache::invalidate(&key(path));
     disk::remove(&key(path));
     if let Some(data) = cache()
@@ -192,6 +196,7 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
     if !enabled(path) {
         return;
     }
+    super::mutation_overlay::upsert(path, entry.clone());
     super::decoration_cache::invalidate(&key(path));
     disk::remove(&key(path));
     if let Some(data) = cache()
@@ -199,12 +204,9 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
     {
-        if !data
-            .listing
-            .entries
-            .iter()
-            .any(|item| item.path == entry.path)
-        {
+        if let Some(item) = data.listing.entries.iter_mut().find(|item| item.path == entry.path) {
+            *item = entry;
+        } else {
             data.listing.entries.push(entry);
         }
     }
@@ -248,6 +250,8 @@ pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
         return;
     }
     drop_subtree(old_path);
+    super::mutation_overlay::remove(path, old_path);
+    super::mutation_overlay::upsert(path, entry.clone());
     super::decoration_cache::invalidate(&key(path));
     disk::remove(&key(path));
     if let Some(data) = cache()
@@ -255,13 +259,11 @@ pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
     {
-        if let Some(item) = data
-            .listing
-            .entries
-            .iter_mut()
-            .find(|item| item.path == old_path)
-        {
+        data.listing.entries.retain(|item| item.path != old_path);
+        if let Some(item) = data.listing.entries.iter_mut().find(|item| item.path == entry.path) {
             *item = entry;
+        } else {
+            data.listing.entries.push(entry);
         }
     }
 }
@@ -274,6 +276,7 @@ pub(crate) fn invalidate_directory(path: &str) {
         return;
     }
     let identity = key(path);
+    super::mutation_overlay::discard(path);
     cache()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
