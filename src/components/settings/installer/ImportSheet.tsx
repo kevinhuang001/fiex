@@ -115,7 +115,6 @@ export function ImportSheet({
           )}
         </section>
 
-
         <footer className="plugin-consent-actions">
           <Button variant="outline" type="button" disabled={installing} onClick={onDiscard}>
             {t('取消')}
