@@ -1,4 +1,5 @@
-import { getLocale, subscribeLocale } from '@/i18n'
+import { getLocale, subscribeLocale, t } from '@/i18n'
+import { reportError } from '@/lib/errorCenter'
 import { useEffect, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { themeSnapshot } from '@/lib/themes'
@@ -78,7 +79,10 @@ export function PluginPreviewFrame({
         onError: (value) => {
           // A static loading page may never open the bridge; keep it visible
           // until preview.open replaces it.
-          if (!loading) setError(value)
+          if (!loading) {
+            setError(value)
+            reportError(value, 'plugins:preview')
+          }
         },
         subscribe: (send) => {
           emit.current = send
@@ -173,7 +177,7 @@ export function PluginPreviewFrame({
     }
   }, [html, src, sessionId, pluginId, timeoutMs, loading, name, extension, context])
 
-  if (error) return <div className="preview-plugin-state">{error}</div>
+  if (error) return <div className="preview-plugin-state">{t('无法预览')}</div>
   return (
     <iframe
       ref={frame}
