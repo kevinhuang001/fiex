@@ -417,6 +417,7 @@ export function usePanelBridge({
         })
       } catch (cause) {
         setError(String(cause))
+        reportPluginError(current.pluginId, 'bridge', String(cause))
       }
     }
     connect()
