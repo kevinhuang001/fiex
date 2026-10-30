@@ -2,6 +2,7 @@ import { requestPluginActivation } from '@/components/plugins/PluginActivationHo
 import { t } from '@/i18n'
 import { useEffect, useState } from 'react'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { pluginMarketplace, type MarketplacePlugin, type PluginInfo } from '@/lib/plugins'
 import { ImportSheet } from './installer/ImportSheet'
 import { MarketplaceList } from './installer/MarketplaceList'
@@ -30,7 +31,6 @@ export function PluginInstaller({
 }) {
   const [entries, setEntries] = useState<MarketplacePlugin[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [busyId, setBusyId] = useState('')
   const [preview, setPreview] = useState<InstallPreview | null>(null)
   const [installing, setInstalling] = useState(false)
@@ -40,11 +40,10 @@ export function PluginInstaller({
   const load = () => {
     if (loading) return
     setLoading(true)
-    setError('')
     setMessage('')
     void pluginMarketplace()
       .then(setEntries)
-      .catch((cause) => setError(String(cause)))
+      .catch((cause) => reportError(cause, 'plugins:marketplace'))
       .finally(() => setLoading(false))
   }
   useEffect(() => {
@@ -59,7 +58,6 @@ export function PluginInstaller({
   const prepare = async (entry: MarketplacePlugin) => {
     if (busyId) return
     setBusyId(entry.id)
-    setError('')
     setMessage('')
     try {
       const data = await call<InstallPreview>('plugin_prepare_install', {
@@ -68,7 +66,7 @@ export function PluginInstaller({
       })
       setPreview(data)
     } catch (cause) {
-      setError(String(cause))
+      reportError(cause, 'plugins:installation')
     } finally {
       setBusyId('')
     }
@@ -81,7 +79,6 @@ export function PluginInstaller({
   const confirm = async () => {
     if (!preview || installing) return
     setInstalling(true)
-    setError('')
     try {
       const pluginId = await call<string>('plugin_confirm_install', {
         ticket: preview.ticket,
@@ -97,7 +94,7 @@ export function PluginInstaller({
       )
       onInstalled()
     } catch (cause) {
-      setError(String(cause))
+      reportError(cause, 'plugins:installation')
     } finally {
       setInstalling(false)
     }
@@ -111,7 +108,6 @@ export function PluginInstaller({
         onClose={onClose}
         query={query}
         setQuery={setQuery}
-        error={error}
         message={message}
         loading={loading}
         entries={entries}
@@ -121,7 +117,6 @@ export function PluginInstaller({
       />
       <ImportSheet
         preview={preview}
-        error={error}
         installing={installing}
         onDiscard={discard}
         onConfirm={confirm}
