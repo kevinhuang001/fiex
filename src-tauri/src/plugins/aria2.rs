@@ -238,15 +238,8 @@ pub(crate) fn open(owner: &str, params: &Value) -> Result<Value, String> {
     let size = params.get("size").and_then(Value::as_u64);
     let connection_cap = number(params, "connections", 16, 1, 16) as u16;
     let split_cap = number(params, "split", 16, 1, 16) as u16;
-    let min_split = number(
-        params,
-        "minSplitSize",
-        MIB,
-        MIB,
-        1024 * MIB,
-    );
-    let (connections, split) =
-        download_parallelism(size, connection_cap, split_cap, min_split);
+    let min_split = number(params, "minSplitSize", MIB, MIB, 1024 * MIB);
+    let (connections, split) = download_parallelism(size, connection_cap, split_cap, min_split);
     let timeout_ms = number(params, "timeoutMs", 300_000, 1_000, 86_400_000);
     let allow_invalid_certs = params
         .get("allowInvalidCerts")
@@ -448,7 +441,10 @@ mod tests {
     fn adaptive_parallelism_respects_caller_caps_and_minimum_split() {
         assert_eq!(download_parallelism(Some(256 * MIB), 4, 16, MIB), (4, 4));
         assert_eq!(download_parallelism(Some(256 * MIB), 16, 2, MIB), (2, 2));
-        assert_eq!(download_parallelism(Some(16 * MIB), 16, 16, 8 * MIB), (2, 2));
+        assert_eq!(
+            download_parallelism(Some(16 * MIB), 16, 16, 8 * MIB),
+            (2, 2)
+        );
         assert_eq!(download_parallelism(Some(4 * MIB), 16, 16, 4 * MIB), (1, 1));
         assert_eq!(download_parallelism(None, 16, 16, MIB), (1, 1));
     }
