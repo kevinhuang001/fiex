@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { reportError } from '@/lib/errorCenter'
 import { useEffect, useRef, useState } from 'react'
 import {
   getDocument,
@@ -31,6 +32,7 @@ export default function PdfPreview({ url }: { url: string }) {
       .catch((e) => {
         if (active) {
           setError(t('无法预览 PDF：{0}', String(e)))
+          reportError(e, 'preview:pdf')
           setLoading(false)
         }
       })
@@ -74,6 +76,7 @@ export default function PdfPreview({ url }: { url: string }) {
       .catch((e) => {
         if (active) {
           setError(String(e))
+          reportError(e, 'preview:pdf')
           setLoading(false)
         }
       })
@@ -110,8 +113,6 @@ export default function PdfPreview({ url }: { url: string }) {
       </div>
       {error ? (
         <p className="error">
-          {error}
-          <br />
           {t('可点击下方“打开”使用系统默认应用查看。')}
         </p>
       ) : (
