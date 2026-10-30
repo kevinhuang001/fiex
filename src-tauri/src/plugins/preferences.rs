@@ -52,17 +52,16 @@ fn cache() -> &'static Mutex<Store> {
                 .and_then(|path| std::fs::read(path).ok())
                 .and_then(|bytes| serde_json::from_slice(&bytes).ok())
                 .unwrap_or_default();
-            if !old.features.is_empty() {
-                if crate::infrastructure::state::put(
+            let migrated = !old.features.is_empty()
+                && crate::infrastructure::state::put(
                     "providers",
                     "ordering",
                     serde_json::to_value(&old).unwrap_or_default(),
                 )
-                .is_ok()
-                {
-                    if let Some(path) = file() {
-                        let _ = std::fs::remove_file(path);
-                    }
+                .is_ok();
+            if migrated {
+                if let Some(path) = file() {
+                    let _ = std::fs::remove_file(path);
                 }
             }
             old
