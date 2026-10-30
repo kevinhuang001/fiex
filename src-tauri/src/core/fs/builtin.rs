@@ -1,15 +1,13 @@
 //! Core-owned virtual storage adapter; never turns a view URI into a host path.
 use super::*;
+mod handles;
 use crate::core::{
     recent,
     volumes::{applications, virtual_resolvers, virtual_storage},
 };
+use handles::{AppRead, AppWrite};
 use serde_json::{json, to_value};
-use std::{
-    fs,
-    io::{Read, Seek, SeekFrom, Write},
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
 pub(super) struct BuiltinFsAdapter<'a>(pub &'a ResourceBroker);
 impl BuiltinFsAdapter<'_> {
@@ -56,6 +54,36 @@ impl BuiltinFsAdapter<'_> {
     }
 }
 impl FsAdapter for BuiltinFsAdapter<'_> {
+    fn preflight(
+        &self,
+        request: &crate::plugin_sdk::filesystem::TransferPreflight,
+    ) -> Result<(), FsError> {
+        use crate::plugin_sdk::filesystem::TransferDirection;
+        if matches!(request.direction, TransferDirection::Import)
+            && self.path().starts_with(virtual_resolvers::RECENT_URI)
+        {
+            return Err("PermissionDenied: Recent does not accept imports".into());
+        }
+        if virtual_resolvers::view_for(self.path()).is_some_and(|view| view.id() == "core:trash") {
+            return Err(
+                "PermissionDenied: Trash requires its dedicated restore/delete actions".into(),
+            );
+        }
+        if !self.path().starts_with(applications::URI) {
+            return Ok(());
+        }
+        match request.direction {
+            TransferDirection::Export if request.metadata.system && !request.same_mount => Err(
+                "PermissionDenied: system applications cannot leave the Applications view".into(),
+            ),
+            TransferDirection::Import
+                if !request.same_mount && request.metadata.executable_shortcut != Some(true) =>
+            {
+                Err("PermissionDenied: Applications accepts only executable shortcuts".into())
+            }
+            _ => Ok(()),
+        }
+    }
     fn desktop_listing(
         &self,
         path: &str,
@@ -86,19 +114,72 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         limit: usize,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
-        if !virtual_storage::is_virtual_tree_path(self.path()) {
-            return Err(FsError::new(
-                FsErrorKind::Unsupported,
-                "Unsupported: virtual adapter search is limited to the Applications and Trash views",
-            ));
-        }
-        // The adapter only delegates: cache policy and subtree traversal stay
-        // inside the virtual storage module.
-        let result =
-            virtual_storage::search_view(self.path(), query, hidden, ignores, limit, cancelled)
-                .map_err(FsError::from)?;
-        Ok((result.entries, result.truncated, result.skipped))
+        let mut entries = Vec::new();
+        let (truncated, skipped) =
+            self.search_stream(query, hidden, ignores, limit, cancelled, &mut |entry| {
+                entries.push(entry)
+            })?;
+        Ok((entries, truncated, skipped))
     }
+    #[allow(clippy::too_many_arguments)]
+    fn search_stream(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(crate::core::files::Entry),
+    ) -> Result<(bool, usize), FsError> {
+        let mut pending = vec![self.path().to_string()];
+        let mut visited = std::collections::HashSet::new();
+        let mut count = 0usize;
+        let filter = crate::core::ignores::IgnoreSet::new(ignores);
+        let mut truncated = false;
+        while let Some(path) = pending.pop() {
+            if cancelled() {
+                break;
+            }
+            if !visited.insert(path.clone()) {
+                continue;
+            }
+            if visited.len() > 1000 {
+                truncated = true;
+                break;
+            }
+            let listing =
+                super::binding::trusted(&path, "core:search")?.desktop_listing(true, &[])?;
+            for entry in listing.entries {
+                if cancelled() {
+                    break;
+                }
+                if (!hidden && entry.name.starts_with('.'))
+                    || filter.is_ignored(std::path::Path::new(&entry.name))
+                {
+                    continue;
+                }
+                if entry.is_dir
+                    && !entry.is_symlink
+                    && virtual_storage::is_virtual_tree_path(&entry.path)
+                {
+                    pending.push(entry.path.clone());
+                }
+                if entry.name.to_lowercase().contains(&query.to_lowercase()) {
+                    if count == limit {
+                        truncated = true;
+                        break;
+                    }
+                    count += 1;
+                    emit(entry);
+                }
+            }
+            if truncated {
+                break;
+            }
+        }
+        Ok((truncated, 0))
+    }
+
     fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         if self.path() == applications::URI {
             return if matches!(
@@ -125,7 +206,9 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         if virtual_resolvers::view_for(self.path())
             .is_some_and(|resolver| resolver.id() == "core:trash")
         {
-            let listable = virtual_storage::is_virtual_tree_path(self.path());
+            let listable = virtual_storage::is_virtual_tree_path(self.path())
+                && virtual_storage::entry(self.path())
+                    .is_ok_and(|entry| entry.is_dir && !entry.is_symlink);
             return if op == FsOperation::Stat
                 || (matches!(op, FsOperation::List | FsOperation::Search) && listable)
             {
@@ -212,64 +295,5 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         applications::after_rename(self.path(), &destination.path, directory)
             .map_err(FsError::from)?;
         Ok(())
-    }
-}
-struct AppRead {
-    file: fs::File,
-    size: u64,
-}
-impl ReadHandle for AppRead {
-    fn size(&self) -> u64 {
-        self.size
-    }
-    fn read_at(&mut self, offset: u64, length: usize) -> Result<(Vec<u8>, bool), String> {
-        self.file
-            .seek(SeekFrom::Start(offset))
-            .map_err(|e| e.to_string())?;
-        let mut data = vec![0; length.min(CHUNK)];
-        let n = self.file.read(&mut data).map_err(|e| e.to_string())?;
-        data.truncate(n);
-        Ok((data, offset.saturating_add(n as u64) >= self.size))
-    }
-}
-struct AppWrite {
-    temporary: Option<tempfile::NamedTempFile>,
-    target: PathBuf,
-    create: bool,
-}
-impl WriteHandle for AppWrite {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.temporary
-            .as_mut()
-            .ok_or("stream closed")?
-            .as_file_mut()
-            .write_all(bytes)
-            .map_err(|e| e.to_string())
-    }
-    fn seek(&mut self, kind: &str, offset: i64) -> Result<u64, String> {
-        let from = match kind {
-            "start" => SeekFrom::Start(u64::try_from(offset).map_err(|e| e.to_string())?),
-            "current" => SeekFrom::Current(offset),
-            "end" => SeekFrom::End(offset),
-            _ => return Err("Unsupported: invalid seek operation".into()),
-        };
-        self.temporary
-            .as_mut()
-            .ok_or("stream closed")?
-            .as_file_mut()
-            .seek(from)
-            .map_err(|e| e.to_string())
-    }
-    fn commit(mut self: Box<Self>) -> Result<Value, String> {
-        let temp = self.temporary.take().ok_or("stream closed")?;
-        temp.as_file().sync_all().map_err(|e| e.to_string())?;
-        if self.create {
-            temp.persist_noclobber(&self.target)
-                .map_err(|e| e.error.to_string())?;
-        } else {
-            temp.persist(&self.target)
-                .map_err(|e| e.error.to_string())?;
-        }
-        Ok(json!(null))
     }
 }

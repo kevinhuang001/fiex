@@ -6,6 +6,7 @@ import { kind } from '@/lib/files'
 import { fileVisual } from '@/lib/fileIcons'
 import { MemoryCache } from '@/lib/cache'
 import { useDecorationIcon } from '@/lib/decorationIcons'
+import { cachedPresentation } from '@/lib/entryPresentation'
 import type { Entry } from '@/lib/types'
 
 const cache = new MemoryCache<string | null>(600, 5 * 60_000)
@@ -62,30 +63,31 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
   // response (built from the cached listing). native_icon would stat a URI that
   // has no host file, so keep it for real host paths only.
   const canNativeIcon = isApplication && !e.path.includes('://')
-  const [native, setNative] = useState<string | null>(null)
-  const decorationIcon = useDecorationIcon(e.path)
+  const [native, setNative] = useState<{ key: string; url: string | null }>()
+  const decorationIcon = useDecorationIcon(e)
   const ref = useRef<HTMLSpanElement>(null)
   const pixels = Math.min(
     512,
     Math.max(32, Math.ceil((size * (window.devicePixelRatio || 1)) / 32) * 32),
   )
+  const iconKey = `${e.path}:${e.modified}:${pixels}`
+  const nativeUrl = native?.key === iconKey ? native.url : cache.peek(iconKey)
   useEffect(() => {
-    setNative(null)
     if (!canNativeIcon || !ref.current) return
     let active = true
     const stop = whenVisible(ref.current, () => {
-      const key = `${e.path}:${e.modified}:${pixels}`
+      const key = iconKey
       void cache
         .get(key, () => nativeIcon(e.path, pixels))
         .then((url) => {
-          if (active) setNative(url)
+          if (active) setNative({ key, url })
         })
     })
     return () => {
       active = false
       stop()
     }
-  }, [e.path, e.modified, canNativeIcon, pixels])
+  }, [e.path, e.modified, canNativeIcon, pixels, iconKey])
 
   const visual = fileVisual(e)
   const generic = visual.generic ? (visual.folder ? 'generic-folder' : 'generic-file') : ''
@@ -93,8 +95,15 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
     <span ref={ref} className="file-icon" style={{ width: size, height: size }}>
       {decorationIcon ? (
         <img src={decorationIcon} alt="" draggable={false} />
-      ) : isApplication && native ? (
-        <img src={native} alt="" draggable={false} onError={() => setNative(null)} />
+      ) : isApplication && nativeUrl ? (
+        <img
+          src={nativeUrl}
+          alt=""
+          draggable={false}
+          onError={() => setNative({ key: iconKey, url: null })}
+        />
+      ) : isApplication && e.path.includes('://') && !cachedPresentation(e) ? (
+        <span aria-hidden="true" />
       ) : (
         <img className={generic} src={visual.url} alt="" draggable={false} />
       )}

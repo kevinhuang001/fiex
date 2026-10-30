@@ -56,7 +56,6 @@ export function usePluginSettingsController() {
   }, [])
   const [localPreview, setLocalPreview] = useState<LocalPreview | null>(null)
   const [permissionsFor, setPermissionsFor] = useState<PluginInfo | null>(null)
-  const [logsFor, setLogsFor] = useState<PluginInfo | null>(null)
   const [settingsFor, setSettingsFor] = useState<PluginInfo | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -254,8 +253,6 @@ export function usePluginSettingsController() {
     setLocalPreview,
     permissionsFor,
     setPermissionsFor,
-    logsFor,
-    setLogsFor,
     settingsFor,
     setSettingsFor,
     busy,

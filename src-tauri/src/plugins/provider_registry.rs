@@ -24,6 +24,7 @@ pub struct RegisteredProvider {
     pub operations: BTreeSet<FsOperation>,
     pub reported: bool,
     pub discovery: bool,
+    pub preflight: bool,
 }
 
 impl RegisteredProvider {
@@ -60,6 +61,10 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
             }
         }
     }
+    provider.preflight = reply
+        .pointer("/vfs/preflight")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     provider.discovery = reply
         .pointer("/vfs/discovery")
         .and_then(Value::as_bool)

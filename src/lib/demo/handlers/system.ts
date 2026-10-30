@@ -130,7 +130,7 @@ export function handleSystem(command: string, a: Record<string, unknown> = {}): 
     case 'native_icon':
       throw new Error('UI fixture')
     case 'trash_path':
-      return root + '/.Trash'
+      return 'trash://'
     case 'open_applications':
       return null
     case 'detect_ides':

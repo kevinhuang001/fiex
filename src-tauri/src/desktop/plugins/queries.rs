@@ -3,12 +3,44 @@ use super::*;
 #[tauri::command]
 pub(crate) async fn file_info_details(
     path: String,
-) -> Vec<crate::plugins::resolvers::info::InfoSection> {
+) -> Result<Vec<crate::plugins::resolvers::info::InfoSection>, String> {
+    use crate::infrastructure::cache::memory::MemoryCache;
+    use crate::plugins::resolvers::info::InfoSection;
+    use std::sync::OnceLock;
+    use std::time::Duration;
+    static INFO: OnceLock<MemoryCache<Vec<InfoSection>>> = OnceLock::new();
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::info::file_info_resource(&path).unwrap_or_default()
+        let cache = INFO.get_or_init(|| MemoryCache::new(256, Duration::from_secs(90)));
+        // A cache lookup must still validate the current resource identity.
+        // An InfoProvider can work without vfs.stat, so missing stat only
+        // disables caching rather than disabling the Info feature.
+        let resource = crate::core::fs::trusted(&path, "core:info")?;
+        let key = (!crate::plugins::mounts::handles(&path))
+            .then(|| resource.desktop_entry().ok())
+            .flatten()
+            .and_then(|metadata| {
+                serde_json::to_string(&(
+                    &resource.reference,
+                    crate::core::fs::changes::revision(),
+                    metadata.modified,
+                    metadata.size,
+                    metadata.mime.as_str(),
+                    crate::i18n::locale(),
+                    crate::plugins::preferences::snapshot(),
+                ))
+                .ok()
+            });
+        if let Some(value) = key.as_ref().and_then(|key| cache.get(key)) {
+            return Ok::<_, String>(value);
+        }
+        let result = crate::plugins::resolvers::info::file_info_resource(&path)?;
+        if let Some(key) = key {
+            cache.insert(key, result.clone());
+        }
+        Ok(result)
     })
     .await
-    .unwrap_or_default()
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -50,7 +82,7 @@ pub(crate) async fn plugin_decorations(
     tauri::async_runtime::spawn_blocking(move || {
         crate::plugins::resolvers::decorations::query_with_plugins(
             &directory,
-            entries,
+            entries.clone(),
             include_plugins.unwrap_or(true),
         )
     })

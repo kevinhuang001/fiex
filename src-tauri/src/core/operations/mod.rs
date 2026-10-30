@@ -23,7 +23,7 @@ pub(crate) use fs_ops::{copy_stream, copy_tree_with_progress};
 pub use queue::Operations;
 
 /// Error returned by every long operation once the shared flag is set.
-pub const CANCELLED: &str = "已取消";
+pub const CANCELLED: &str = "Cancelled: user cancelled operation";
 
 /// Shared cancel switch for the long-running operations of one app instance.
 /// `begin_operation` resets it; `cancel_operation` flips it; the loops below

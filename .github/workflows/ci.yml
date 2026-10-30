@@ -27,7 +27,55 @@ jobs:
       - run: npm run format:check
       - run: npm run check:i18n
       - run: npm test
+      - name: Restore checked frontend bundle and native icons
+        id: web-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            dist
+            src-tauri/icons
+          # Exact inputs only: a bundle from different source is never reused.
+          key: web-v1-${{ runner.os }}-node22-${{ hashFiles('package.json', 'package-lock.json', 'src/**', 'public/**', 'assets/**', 'scripts/**', 'sdk/ui/**', 'index.html', 'vite.config.*', 'tsconfig*.json', '.env*') }}
+      - run: npm run icons
+        if: steps.web-cache.outputs.cache-hit != 'true'
       - run: npm run build
+        if: steps.web-cache.outputs.cache-hit != 'true'
+      - name: Typecheck on a bundle cache hit
+        if: steps.web-cache.outputs.cache-hit == 'true'
+        run: npx tsc --noEmit
+      - name: Save checked frontend bundle and native icons
+        if: steps.web-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            dist
+            src-tauri/icons
+          key: ${{ steps.web-cache.outputs.cache-primary-key }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-web-assets
+          if-no-files-found: error
+          path: |
+            dist/
+            src-tauri/icons/
+
+  e2e:
+    name: Browser UI tests
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -44,12 +92,18 @@ jobs:
             playwright-report/
             test-results/
   desktop:
+    needs: checks
     name: Desktop (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
       SCCACHE_GHA_ENABLED: 'true'
       SCCACHE_CACHE_SIZE: '10G'
+      # Keep tests, examples and Clippy in the same explicit-target cache.
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      CARGO_INCREMENTAL: '0'
+      # Core and the SDK mock share dependencies and one target tree.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
     strategy:
       fail-fast: false
       matrix:
@@ -90,15 +144,49 @@ jobs:
         with:
           workspaces: |
             src-tauri -> target
-            sdk/rust -> sdk/rust/target
+            sdk/rust -> ../../src-tauri/target
           key: ${{ matrix.target }}
+          # Full target outputs are managed separately, without pruning Core.
+          cache-targets: false
           cache-all-crates: true
           cache-on-failure: true
       - run: npm ci
-      - run: npm run icons
-      - run: npm run build
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-web-assets
+          path: .
+      - name: Compute native build cache identity
+        id: native-key
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process'
+          import { createHash } from 'node:crypto'
+          import { appendFileSync } from 'node:fs'
+          const hash = (value) => createHash('sha256').update(value).digest('hex')
+          const buildEnv = Object.fromEntries(Object.entries(process.env)
+            .filter(([name]) => /^(CARGO|RUST|CC|CXX|CFLAGS|CMAKE|ImageOS)/.test(name))
+            .sort(([a], [b]) => a.localeCompare(b)))
+          const compiler = hash(Buffer.concat([execFileSync('rustc', ['-vV']),
+            Buffer.from(JSON.stringify(buildEnv))]))
+          // Git object IDs cover tracked native sources, vendor code, config,
+          // workflow flags and the exact SDK gitlink; generated targets are absent.
+          const source = hash(execFileSync('git', ['ls-files', '--stage', '--',
+            'src-tauri', 'sdk', '.cargo', 'rust-toolchain', 'rust-toolchain.toml',
+            '.github/workflows/ci.yml']))
+          appendFileSync(process.env.GITHUB_OUTPUT, `compiler=${compiler}\nsource=${source}\n`)
+          JS
+      - name: Restore native Cargo build outputs
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            src-tauri/target
+          key: native-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-${{ steps.native-key.outputs.compiler }}-${{ hashFiles('src-tauri/Cargo.lock', 'sdk/rust/Cargo.lock') }}-${{ steps.native-key.outputs.source }}-${{ hashFiles('dist/**', 'src-tauri/icons/**') }}
+          restore-keys: |
+            native-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-${{ steps.native-key.outputs.compiler }}-${{ hashFiles('src-tauri/Cargo.lock', 'sdk/rust/Cargo.lock') }}-
       - name: Core Rust tests
+        id: core-tests
         shell: bash
         run: |
           set +e
@@ -126,7 +214,7 @@ jobs:
           cp sdk/rust/fixtures/mock-manifest.json "$FIEX_PLUGIN_DIR/org.fiex.mock/manifest.json"
           executable=mock_plugin
           if [ "$RUNNER_OS" = Windows ]; then executable=mock_plugin.exe; fi
-          cp "sdk/rust/target/${{ matrix.target }}/debug/examples/$executable" "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"
+          cp "src-tauri/target/${{ matrix.target }}/debug/examples/$executable" "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"
           if [ "$RUNNER_OS" != Windows ]; then chmod +x "$FIEX_PLUGIN_DIR/org.fiex.mock/$executable"; fi
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_smoke -- org.fiex.mock
           cargo run --locked --manifest-path src-tauri/Cargo.toml --no-default-features --features usbfs --example plugin_concurrency
@@ -194,7 +282,10 @@ jobs:
           exit "$status"
       - uses: tauri-apps/tauri-action@v0
         with:
-          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          # The exact frontend and icons checked above are shared by all installers.
+          args: >-
+            --config '{"build":{"beforeBuildCommand":""}}'
+            --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Verify self-contained native libraries
         run: npm run audit:native -- --target ${{ matrix.target }}
       - name: sccache stats
@@ -228,10 +319,35 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
 
+      - name: Trim generated installer bundles from build cache
+        if: always() && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' && steps.core-tests.outcome != 'skipped'
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { rmSync } from 'node:fs'
+          import { join } from 'node:path'
+          // Installer artifacts have already been uploaded; cache compiler outputs.
+          rmSync(join('src-tauri', 'target', process.env.CARGO_BUILD_TARGET, 'release', 'bundle'), { recursive: true, force: true })
+          JS
+      - name: Save native Cargo build outputs
+        if: always() && steps.native-cache.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' && steps.core-tests.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            src-tauri/target
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+      - name: Build cache summary
+        if: always()
+        shell: bash
+        env:
+          BUILD_CACHE_HIT: ${{ steps.native-cache.outputs.cache-hit }}
+        run: |
+          echo "### Native Cargo outputs: exact cache hit = ${BUILD_CACHE_HIT:-false}" >> "$GITHUB_STEP_SUMMARY"
+
   release:
     name: Publish tested installers
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [checks, desktop]
+    needs: [checks, e2e, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write

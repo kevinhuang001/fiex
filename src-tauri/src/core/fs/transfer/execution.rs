@@ -8,6 +8,10 @@ pub(super) fn execute(
     let total = steps.len() as u64;
     // Stage all overwrite backups before touching any destination. If the
     // backup itself fails, no partial transfer has taken place.
+    for step in steps {
+        check_cancelled(cancel)?;
+        step.review()?;
+    }
     let mut undo = UndoLog::prepare(steps, cancel)?;
     for (index, step) in steps.iter().enumerate() {
         let attempt = (|| -> Result<(), String> {
@@ -15,6 +19,7 @@ pub(super) fn execute(
             if !same_version(&step.source.stat()?, &step.source_version) {
                 return Err(format!("Conflict: source changed: {}", step.source.path));
             }
+            step.review()?;
             let latest = optional_stat(&step.target)?;
             if !matches!((&step.target_version, &latest), (None, None))
                 && !matches!((&step.target_version, &latest), (Some(expected), Some(actual)) if same_version(expected, actual))
@@ -68,11 +73,17 @@ pub(super) fn execute(
                 if !same_version(&step.source.stat()?, &step.source_version) {
                     return Err("Conflict: source changed during transfer".into());
                 }
+                let executable = step.source.transfer_metadata()?.executable_shortcut == Some(true);
                 writer.commit()?;
+                undo.record(index, step.target.stat().ok());
+                crate::core::volumes::application_policy::finish_import(
+                    &step.target.path,
+                    executable,
+                )?;
             }
             // Only successful mutations belong to the undo log. A rejected
             // create must never cause rollback to delete somebody else's file.
-            if !step.directory || !step.existing {
+            if step.directory && !step.existing {
                 undo.record(index, step.target.stat().ok());
             }
             Ok(())
@@ -92,6 +103,9 @@ pub(super) fn execute(
             ));
         }
         progress(index as u64 + 1, total, Some(&step.source.path));
+    }
+    for step in steps {
+        super::super::changes::committed(&step.target.path);
     }
     Ok(())
 }

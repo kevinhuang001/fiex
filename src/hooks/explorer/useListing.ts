@@ -1,10 +1,12 @@
 import { useEntryDecorations } from './useEntryDecorations'
+import { cachePresentations } from '@/lib/entryPresentation'
+import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
-import { listDirectory } from '@/lib/listing'
-import type { Entry, Location, Preferences, RemoteConnection } from '@/lib/types'
+import { openDirectoryStream } from '@/lib/listing'
+import type { Entry, EntryDecoration, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
 /** True for every path owned by the three Core virtual views, including their
@@ -26,11 +28,7 @@ function virtualViewPath(value: string, trashRoot: string | null): boolean {
 /** Lightweight identity of a listing: order plus the fields that visibly
  *  change. Used to skip a redundant state replacement after the cache paint. */
 function listingKey(entries: Entry[]): string {
-  let key = ''
-  for (const entry of entries) {
-    key += `${entry.path}\u0000${entry.name}\u0000${entry.modified}\u0000${entry.size}\u0001`
-  }
-  return key
+  return JSON.stringify([...entries].sort((a, b) => a.path.localeCompare(b.path)))
 }
 
 /** Everything a pane lists: entries, decorations, locations, connections,
@@ -69,7 +67,17 @@ export function useListing(
   const [searchStats, setSearchStats] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [warnings, setWarnings] = useState<string[]>([])
-  const decorations = useEntryDecorations({ entries, path, enabled, query, refresh })
+  const [directoryDecorations, setDirectoryDecorations] = useState<Record<string, EntryDecoration>>(
+    {},
+  )
+  const searchDecorations = useEntryDecorations({
+    entries,
+    path,
+    enabled: enabled && (Boolean(query) || !native),
+    query,
+    refresh,
+  })
+  const decorations = query || !native ? searchDecorations : directoryDecorations
   const [connections, setConnections] = useState<RemoteConnection[]>([])
   const [listedPath, setListedPath] = useState('')
   const request = useRef(0)
@@ -155,7 +163,13 @@ export function useListing(
       if (cancelled) return
       let start: string | null = startOverride || launched || null
       if (!start && prefs.startPage === 'recent') start = 'recent://'
-      else if (!start && prefs.startPage === 'last') start = localStorage.getItem('fiex:lastPath')
+      else if (!start && prefs.startPage === 'last') {
+        start = await call<string | null>('state_get', {
+          namespace: 'explorer',
+          key: 'lastPath',
+        }).catch(() => null)
+        if (!start) start = localStorage.getItem('fiex:lastPath')
+      }
       if (!start) {
         const initial = native ? await call<string | null>('initial_path').catch(() => null) : null
         if (cancelled) return
@@ -168,7 +182,6 @@ export function useListing(
             : (pick('文稿') ?? initial ?? locations[0]?.path ?? null)
       }
       if (start) {
-        if (start !== 'recent://') localStorage.setItem('fiex:lastPath', start)
         nav.startAt(start)
       }
     })()
@@ -177,40 +190,42 @@ export function useListing(
     }
   }, [refreshLocations, enabled])
   useEffect(() => {
+    // Persist only successfully opened locations, not incomplete navigation.
+    if (!enabled || !path || query || listedPath !== path) return
+    void call('state_put', {
+      namespace: 'explorer',
+      key: 'lastPath',
+      value: path,
+    })
+      .then(() => localStorage.removeItem('fiex:lastPath'))
+      .catch(() => localStorage.setItem('fiex:lastPath', path))
+  }, [enabled, path, listedPath, query])
+
+  useEffect(() => {
     if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
     let paintedKey: string | null = null
     setLoading(true)
     setError('')
-    void (async () => {
-      // Core-owned virtual roots paint their previous listing immediately, so
-      // opening Recent/Applications/Trash never waits for PowerShell first.
-      if (virtualViewPath(path, trashRoot.current)) {
-        try {
-          const cached = await call<Entry[]>('virtual_cache', { path })
-          if (!active || id !== request.current) return
-          if (cached.length) {
-            paintedKey = listingKey(cached)
-            setEntries(cached)
-            setListedPath(path)
-            setVirtualVolume(true)
-            setLoading(false)
-          }
-        } catch {
-          // A cold cache must not block the real list below.
-        }
-      }
-      const l = await listDirectory(path, prefs.hidden, prefs.displayIgnore)
+    void openDirectoryStream(path, prefs.hidden, prefs.displayIgnore, (snapshot) => {
       if (!active || id !== request.current) return
+      const l = snapshot.listing
       if (l.path !== path) {
         navigate(l.path)
         return
       }
-      // The cache is only a placeholder. If the fresh listing has the same
-      // order and visible fields, keep the current array (and selection) so
-      // the pane does not flicker, lose selection or jump its scroll.
-      const unchanged = paintedKey !== null && listingKey(l.entries) === paintedKey
+      const nextKey = listingKey(l.entries)
+      if (snapshot.decorations.length) {
+        cachePresentations(l.entries, snapshot.decorations)
+        publishPresentationIcons(l.entries)
+      }
+      const presentation = Object.fromEntries(
+        snapshot.decorations.map((value) => [value.path, value]),
+      )
+      setDirectoryDecorations((previous) =>
+        JSON.stringify(previous) === JSON.stringify(presentation) ? previous : presentation,
+      )
       setDirectoryReadOnly(Boolean(l.readOnly))
       setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
       setVirtualVolume(Boolean(l.virtualVolume))
@@ -221,28 +236,37 @@ export function useListing(
           ? previous
           : l.warnings,
       )
-      if (!paintedKey) setListedPath(path)
-      if (!unchanged) {
+      if (paintedKey !== nextKey) {
+        paintedKey = nextKey
         setEntries(l.entries)
         const paths = new Set(l.entries.map((entry) => entry.path))
         setSelected((selected) => selected.filter((p) => paths.has(p)))
       }
-      // A fresh install has nothing recent yet; do not greet the user with an
-      // empty list.
-      if (path === 'recent://' && l.entries.length === 0 && history.length <= 1) {
+      setListedPath(path)
+      setLoading(false)
+      if (
+        snapshot.complete &&
+        path === 'recent://' &&
+        l.entries.length === 0 &&
+        history.length <= 1
+      ) {
         const home = locations.find((item) => item.name === '个人文件夹')?.path
         if (home) navigate(home)
       }
-    })()
-      .catch((e) => {
-        if (active) {
-          setError(String(e))
-          // Keep the painted cache visible when only the refresh failed.
-          if (!paintedKey) setEntries([])
+    })
+      .catch((error) => {
+        if (!active || id !== request.current) return
+        if (paintedKey === null) {
+          setEntries([])
+          setDirectoryDecorations({})
+          setError(String(error))
+        } else {
+          // An offline refresh must not remove a correctly authorized snapshot.
+          setWarnings([String(error)])
         }
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (active && id === request.current) setLoading(false)
       })
     return () => {
       active = false
@@ -318,9 +342,25 @@ export function useListing(
               if (generation !== searchRequest.current) return
               if (b.replace) {
                 // Virtual-folder results are complete snapshots.
-                startTransition(() => setEntries(b.entries))
+                startTransition(() =>
+                  setEntries((previous) =>
+                    listingKey(previous) === listingKey(b.entries) ? previous : b.entries,
+                  ),
+                )
               } else if (b.entries.length) {
-                startTransition(() => setEntries((v) => [...v, ...b.entries]))
+                startTransition(() =>
+                  setEntries((previous) => {
+                    const merged = new Map(previous.map((entry) => [entry.path, entry]))
+                    let changed = false
+                    for (const entry of b.entries) {
+                      if (JSON.stringify(merged.get(entry.path)) !== JSON.stringify(entry)) {
+                        merged.set(entry.path, entry)
+                        changed = true
+                      }
+                    }
+                    return changed ? [...merged.values()] : previous
+                  }),
+                )
               }
               if (b.done) {
                 setSearching(false)

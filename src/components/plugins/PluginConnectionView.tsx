@@ -132,7 +132,7 @@ export function PluginConnectionView({
             const input = params as { message?: unknown; detail?: unknown } | null
             if (!input || typeof input.message !== 'string' || !input.message.trim())
               throw new Error('Invalid error message')
-            await call('plugin_error_report', {
+            await call('ui_error_report', {
               pluginId: view.pluginId,
               source: 'connection-ui',
               message: input.message.slice(0, 500),

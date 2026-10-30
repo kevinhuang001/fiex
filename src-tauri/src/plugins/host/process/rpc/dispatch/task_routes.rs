@@ -62,6 +62,11 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
             );
             drop(tasks);
             running.emit_task(&info);
+            crate::plugins::errors::report_log_limited(
+                running.plugin_id(),
+                "info",
+                &format!("Background task started: {label}"),
+            );
             Ok(Value::Null)
         }
         "host.task.finish" => {
@@ -70,12 +75,16 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
                 .get("taskId")
                 .and_then(Value::as_str)
                 .ok_or("missing task authorization")?;
-            let finished = running
-                .tasks
-                .lock()
-                .map_err(|_| "task registry unavailable")?
-                .remove(task_id)
-                .map(|mut entry| {
+            // Atomically hand off the task from the live registry to history.
+            // task() checks live tasks before history; publishing after dropping
+            // the live lock can make a just-finished task disappear briefly.
+            // The disk-backed diagnostics call below used to widen that race.
+            let finished = {
+                let mut tasks = running
+                    .tasks
+                    .lock()
+                    .map_err(|_| "task registry unavailable")?;
+                tasks.remove(task_id).map(|mut entry| {
                     entry.info.status = match p.get("status").and_then(Value::as_str) {
                         Some("completed") => "completed",
                         Some("cancelled") => "cancelled",
@@ -83,15 +92,31 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
                     }
                     .to_string();
                     entry.info.result = p.get("result").cloned().unwrap_or(Value::Null);
-                    entry.info.error = p.get("error").and_then(Value::as_str).map(str::to_owned);
+                    entry.info.error = p
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .map(|value| crate::infrastructure::redact::clean(value, 1500));
+                    running.remember_task(entry.info.clone());
                     entry
-                });
+                })
+            };
             let Some(entry) = finished else {
                 return Ok(Value::Null);
             };
             crate::plugins::resource::lifecycle::release(&entry.owner);
             running.emit_task(&entry.info);
-            running.remember_task(entry.info);
+            crate::plugins::errors::report_log_limited(
+                running.plugin_id(),
+                if entry.info.status == "failed" {
+                    "error"
+                } else {
+                    "info"
+                },
+                &format!(
+                    "Background task {}: {}",
+                    entry.info.status, entry.info.label
+                ),
+            );
             Ok(Value::Null)
         }
         "host.task.progress" => {

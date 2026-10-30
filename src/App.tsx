@@ -3,9 +3,11 @@ import { t, useLocale } from '@/i18n'
 import { FileViews } from '@/components/browser/FileViews'
 import { BatchRenameDialog } from '@/components/BatchRenameDialog'
 import { ExplorerDialogs } from '@/components/explorer/ExplorerDialogs'
-import { ExplorerErrorDialog } from '@/components/ExplorerErrorDialog'
+import { ErrorDialogHost } from '@/components/ErrorDialogHost'
+import { reportError } from '@/lib/errorCenter'
 import { ExplorerPathBar } from '@/components/explorer/ExplorerPathBar'
 import { ExplorerStatusBar } from '@/components/explorer/ExplorerStatusBar'
+import { LogCenter } from '@/components/activity/LogCenter'
 import { ActivityCenter } from '@/components/ActivityCenter'
 import { SecondaryPane } from '@/components/SecondaryPane'
 import { WorkspaceBar } from '@/components/WorkspaceBar'
@@ -28,6 +30,11 @@ export default function App() {
 
   const app = useAppController()
   usePluginTasks()
+  useEffect(() => {
+    if (!app.x.error) return
+    reportError(app.x.error, 'explorer')
+    app.x.setError('')
+  }, [app.x.error])
 
   useEffect(() => {
     warmFilePickerData()
@@ -200,6 +207,7 @@ export default function App() {
         )}
         {!fullView && <ExplorerStatusBar {...app} />}
         <ActivityCenter />
+        <LogCenter />
       </main>
       <div id="fiex-overlay-root" className="fiex-overlay-root" />
       {app.dragging && (
@@ -218,11 +226,7 @@ export default function App() {
         onApply={app.applyBatchRename}
       />
       <ExplorerDialogs {...app} />
-      <ExplorerErrorDialog
-        error={app.x.error}
-        onClose={() => app.x.setError('')}
-        onError={app.x.setError}
-      />
+      <ErrorDialogHost />
       <PluginServices />
     </div>
   )

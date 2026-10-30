@@ -15,3 +15,6 @@ public/file-icons/
 # GitHub Apps cannot push modifications to workflow files without workflow permissions.
 .github/workflows/plugin-validation.yml
 
+
+# Vendored upstream code: formatting is owned by the upstream project.
+src-tauri/vendor/arapuca/

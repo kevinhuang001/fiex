@@ -17,6 +17,8 @@ mod local_terminal;
 mod files;
 #[macro_use]
 mod locale;
+#[macro_use]
+mod state;
 mod tray;
 use locale::locale_set;
 use tray::{setup_tray, QUITTING};
@@ -37,6 +39,7 @@ pub(crate) use files::*;
 pub(crate) use local_terminal::*;
 pub(crate) use plugins::*;
 pub(crate) use remote::*;
+pub(crate) use state::*;
 pub(crate) use system::*;
 pub(crate) use volumes::*;
 
@@ -86,6 +89,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             platform,
             locale_set,
+            state_get,
+            state_put,
+            state_remove,
+            errors_pending,
             plugin_invoke,
             plugin_describe_resources,
             plugin_before_open,
@@ -105,9 +112,9 @@ pub fn run() {
             plugins_list,
             plugin_settings,
             file_info_details,
-            plugin_errors,
-            plugin_error_report,
-            plugin_error_clear,
+            plugin_logs,
+            ui_error_report,
+            plugin_logs_clear,
             plugin_panel_html,
             preview_open,
             preview_candidates,
@@ -158,7 +165,7 @@ pub fn run() {
             drag_files,
             locations,
             list_directory,
-            virtual_cache,
+            directory_open,
             file_info,
             read_preview,
             create_entry,
@@ -212,10 +219,8 @@ pub fn run() {
             restore_from_trash,
             trash_restore_needs_folder,
             delete_permanently,
-            open_applications,
             set_tags,
             open_full_disk_access,
-            open_trash,
             watch_directory,
             unwatch_directory,
             native_icon
@@ -271,9 +276,6 @@ pub fn run() {
             }
             setup_tray(app.handle())?;
             std::thread::spawn(crate::core::fs::initialize_exports);
-            // Fill the three virtual-root caches once, off the main thread;
-            // later list/search calls only read them.
-            std::thread::spawn(crate::core::volumes::virtual_storage::warm_caches);
             std::thread::spawn(|| {
                 crate::plugins::host::global().start_enabled();
             });
@@ -305,6 +307,7 @@ pub fn run() {
             if matches!(event, tauri::RunEvent::Exit) {
                 crate::plugins::host::global().shutdown();
                 crate::plugins::vfs::cleanup_exports();
+                crate::infrastructure::logging::flush();
             }
         });
 }

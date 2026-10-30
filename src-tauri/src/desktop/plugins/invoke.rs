@@ -1,25 +1,8 @@
 /// Generic plugin process bridge. Deliberately runs on the blocking pool:
 /// stdout/IPC must never block the WebView or Tauri's async scheduler.
 /// Errors that are normal before activation must not flood the diagnostic log.
-pub(super) fn expected_plugin_error(message: &str) -> bool {
-    [
-        "plugin is not installed",
-        "plugin disabled or not approved",
-        "plugin is not enabled",
-        "permission not granted",
-        "permissiondenied",
-        "permission request",
-        "not authorized",
-    ]
-    .iter()
-    .any(|prefix| message.to_ascii_lowercase().contains(prefix))
-}
-
 pub(super) fn record_plugin_error(plugin_id: &str, source: &str, message: &str) {
-    if expected_plugin_error(message) {
-        return;
-    }
-    let _ = crate::plugins::errors::report(plugin_id, source, message, None);
+    let _ = crate::infrastructure::logging::report(plugin_id, source, message, None);
 }
 
 #[tauri::command]
@@ -42,6 +25,12 @@ pub(crate) async fn plugin_invoke(
         .transpose()?;
     let id = plugin_id.clone();
     let call = method.clone();
+    let started = std::time::Instant::now();
+    crate::infrastructure::logging::record_core(
+        "debug",
+        "plugin.invoke",
+        &format!("{id}: {call} started"),
+    );
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(mut scope) = preview_scope {
             crate::plugins::resource::resource_context::bind_selected(&mut scope, &bindings)?;
@@ -78,5 +67,30 @@ pub(crate) async fn plugin_invoke(
     })
     .await
     .map_err(|e| e.to_string())?
-    .inspect_err(|error| record_plugin_error(&id, "plugin", &format!("{call}: {error}")))
+    .inspect(|_| {
+        crate::infrastructure::logging::record_core(
+            "debug",
+            "plugin.invoke",
+            &format!(
+                "{id}: {call} completed in {} ms",
+                started.elapsed().as_millis()
+            ),
+        );
+        crate::plugins::errors::report_log_limited(
+            &id,
+            "debug",
+            &format!("{call} completed in {} ms", started.elapsed().as_millis()),
+        );
+    })
+    .inspect_err(|error| {
+        record_plugin_error(&id, "plugin", &format!("{call}: {error}"));
+        crate::infrastructure::logging::record_core(
+            "error",
+            "plugin.invoke",
+            &format!(
+                "{id}: {call} failed after {} ms",
+                started.elapsed().as_millis()
+            ),
+        );
+    })
 }

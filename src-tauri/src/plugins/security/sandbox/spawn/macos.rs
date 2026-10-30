@@ -25,14 +25,16 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     let mut process = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("plugin sandbox launch failed: {e}"))?;
     let stdin = process.stdin.take().ok_or("missing plugin stdin")?;
     let stdout = process.stdout.take().ok_or("missing plugin stdout")?;
+    let stderr = process.stderr.take().ok_or("missing plugin stderr")?;
     Ok(SandboxChild {
         stdin: Box::new(stdin),
         stdout: BufReader::new(Box::new(stdout)),
+        stderr: BufReader::new(Box::new(stderr)),
         _scratch: scratch,
         process,
     })

@@ -134,8 +134,6 @@ export function useAppController() {
     setDialogError,
     dialogBusy,
     setDialogBusy,
-    trashIssue,
-    setTrashIssue,
     tagOpen,
     setTagOpen,
     connectionOpen,
@@ -265,7 +263,6 @@ export function useAppController() {
     setTagInitial,
     setTagOpen,
     setPreview,
-    setTrashIssue,
     trashPath,
   })
 
@@ -305,7 +302,6 @@ export function useAppController() {
     info,
     tagOpen,
     connectionOpen,
-    trashIssue,
     focusSearch,
     startPathEdit,
     copy,
@@ -432,8 +428,6 @@ export function useAppController() {
     dialogValue,
     setDialogValue,
     dialogError,
-    trashIssue,
-    setTrashIssue,
     info,
     tagOpen,
     tagInitial,

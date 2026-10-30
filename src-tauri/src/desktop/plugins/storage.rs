@@ -36,22 +36,34 @@ pub(crate) fn plugins_list() -> Vec<crate::plugins::host::PluginInfo> {
 }
 
 #[tauri::command]
-pub(crate) fn plugin_errors(plugin_id: String) -> Vec<crate::plugins::errors::PluginError> {
-    crate::plugins::errors::list(&plugin_id)
+pub(crate) async fn plugin_logs(
+    plugin_id: String,
+    after: Option<u64>,
+) -> Result<crate::infrastructure::logging::LogPage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::infrastructure::logging::query(&plugin_id, after.unwrap_or(0), 500)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub(crate) fn plugin_error_report(
-    plugin_id: String,
-    source: String,
+pub(crate) fn ui_error_report(
+    window: tauri::WebviewWindow,
     message: String,
     detail: Option<String>,
 ) -> Result<(), String> {
-    crate::plugins::errors::report(&plugin_id, &source, &message, detail.as_deref())
+    let source = format!("ui:{}", window.label());
+    crate::infrastructure::logging::record_core("error", &source, &message);
+    // The initiating UI already presents this error. Recording it must not enqueue it twice.
+    if let Some(detail) = detail {
+        crate::infrastructure::logging::record_core("debug", &source, &detail);
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub(crate) fn plugin_error_clear(plugin_id: String) {
+pub(crate) fn plugin_logs_clear(plugin_id: String) {
     crate::plugins::errors::clear(&plugin_id);
 }
 

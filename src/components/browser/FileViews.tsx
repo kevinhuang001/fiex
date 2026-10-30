@@ -1,3 +1,4 @@
+import { useDirectoryColumns } from '@/hooks/useDirectoryColumns'
 import { t, getLocale } from '@/i18n'
 import { isWindows } from '@/lib/platform'
 import { useEffect, useMemo, useRef } from 'react'
@@ -27,6 +28,7 @@ export function FileViews(props: Props) {
     onWorkspace,
     dragPaths,
   } = props
+  const [columns, updateColumns] = useDirectoryColumns(x.path, prefs.listColumns)
   const readOnly = Boolean(props.readOnly)
   const inTrash = Boolean(props.trashPath && x.path === props.trashPath)
   const entries = useMemo(
@@ -216,8 +218,8 @@ export function FileViews(props: Props) {
         <ListView
           explorer={x}
           flat={flat}
-          columns={prefs.listColumns}
-          onColumnsChange={(listColumns) => updatePrefs({ listColumns })}
+          columns={columns}
+          onColumnsChange={updateColumns}
           sort={prefs.sort}
           descending={prefs.descending}
           onSort={sortBy}

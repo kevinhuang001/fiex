@@ -16,7 +16,6 @@ export function useDialogs(x: Explorer) {
   const [dialogValue, setDialogValue] = useState('')
   const [dialogError, setDialogError] = useState('')
   const [dialogBusy, setDialogBusy] = useState(false)
-  const [trashIssue, setTrashIssue] = useState(false)
   const [tagOpen, setTagOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [connectionToEdit, setConnectionToEdit] = useState<RemoteConnection | null>(null)
@@ -66,8 +65,6 @@ export function useDialogs(x: Explorer) {
     setDialogError,
     dialogBusy,
     setDialogBusy,
-    trashIssue,
-    setTrashIssue,
     tagOpen,
     setTagOpen,
     connectionOpen,

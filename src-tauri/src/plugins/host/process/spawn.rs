@@ -178,6 +178,19 @@ pub fn run_command(
     let (stderr, err_truncated) = err_receiver
         .recv_timeout(remaining())
         .map_err(|_| "command error output timed out")?;
+    // Command output is returned only to the owning plugin; the diagnostic
+    // log records timing/status/byte counts, never arguments, stdin or output.
+    crate::plugins::errors::report_log_limited(
+        plugin_id,
+        if status.success() { "info" } else { "warn" },
+        &format!(
+            "host.process.run {command} exit={:?} stdout={}B stderr={}B truncated={}",
+            status.code(),
+            stdout.len(),
+            stderr.len(),
+            out_truncated || err_truncated,
+        ),
+    );
     use base64::Engine;
     Ok(json!({
         "code": status.code(),

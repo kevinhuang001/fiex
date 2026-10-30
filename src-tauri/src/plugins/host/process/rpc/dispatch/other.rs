@@ -117,6 +117,14 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             crate::plugins::errors::report_limited(&plugin_id, code, message, detail);
             Ok(Value::Null)
         }
+        "host.log.report" => {
+            let level = ctx.arg("level")?;
+            let message = ctx.arg("message")?;
+            crate::infrastructure::logging::report_operation_limited(
+                &plugin_id, &level, &message, &owner,
+            );
+            Ok(Value::Null)
+        }
         "host.process.run" => {
             ctx.running.ensure_command(&ctx.arg("command")?)?;
             let scope = ctx.scope()?;

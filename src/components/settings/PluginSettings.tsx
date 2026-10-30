@@ -1,10 +1,10 @@
+import { showLogs } from '@/lib/logCenter'
 import { requestPluginActivation } from '@/components/plugins/PluginActivationHost'
 import { t } from '@/i18n'
 import { CommandDialog, DomainDialog } from './plugins/PermissionDialogs'
 import { PluginImportDialog, PluginMessage, PluginUninstallDialog } from './plugins/PluginAlerts'
 import { PluginList } from './plugins/PluginList'
 import { PluginPermissionsSheet } from './plugins/PluginPermissionsSheet'
-import { PluginLogsSheet } from './plugins/PluginLogsSheet'
 import { PluginSettingsSheet } from './plugins/PluginSettingsSheet'
 import { PluginStore, PluginStoreToolbar } from './plugins/PluginStore'
 import { PluginCategoryFilter } from './plugins/PluginCategoryFilter'
@@ -26,8 +26,6 @@ export function PluginSettings() {
     setLocalPreview,
     permissionsFor,
     setPermissionsFor,
-    logsFor,
-    setLogsFor,
     settingsFor,
     setSettingsFor,
     busy,
@@ -85,13 +83,12 @@ export function PluginSettings() {
             setMessage('')
             setDomainSettingsOpen(false)
             setCommandSettingsOpen(false)
-            setLogsFor(null)
             setPermissionsFor(plugin)
           }}
           onOpenLogs={(plugin) => {
             setMessage('')
             setPermissionsFor(null)
-            setLogsFor(plugin)
+            showLogs(plugin.id)
           }}
           onRemove={(plugin) => {
             setMessage('')
@@ -134,8 +131,6 @@ export function PluginSettings() {
           else setCommandSettingsOpen(true)
         }}
       />
-
-      <PluginLogsSheet plugin={logsFor} onClose={() => setLogsFor(null)} />
 
       {permissionsFor &&
         domainSettingsOpen &&

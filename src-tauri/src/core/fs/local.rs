@@ -29,6 +29,17 @@ impl FsAdapter for LocalFsAdapter<'_> {
     }
     fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         self.0.scope.authorize(&self.0.path)?;
+        if crate::core::volumes::application_policy::protected(&self.0.path)
+            && !matches!(
+                op,
+                FsOperation::Read | FsOperation::List | FsOperation::Stat | FsOperation::Search
+            )
+        {
+            return Err(
+                "PermissionDenied: installed applications are managed by the operating system"
+                    .into(),
+            );
+        }
         // Creation targets may not exist. Validate their scoped parent instead.
         if create || op == FsOperation::Mkdir {
             std::path::Path::new(&self.0.path)

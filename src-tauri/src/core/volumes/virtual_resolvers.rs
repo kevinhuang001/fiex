@@ -1,7 +1,7 @@
 //! Presentation and dedicated-action policy for the three Core-owned virtual
 //! folders (Recent, Applications, Trash). Storage lives in
 //! `virtual_storage`; these views never cross plugin IPC.
-use super::{applications, recycle, trash};
+use super::{applications, recycle, trash_vfs};
 use crate::core::files::Entry;
 use serde_json::json;
 
@@ -213,14 +213,6 @@ impl VirtualView for ApplicationView {
                 danger: true,
                 tail: true,
             });
-        } else if applications::is_mapped(path) {
-            items.push(VirtualMenuItem {
-                id: "delete",
-                title: crate::i18n::t("彻底删除").into(),
-                icon: "trash",
-                danger: true,
-                tail: true,
-            });
         }
         items
     }
@@ -251,21 +243,7 @@ impl VirtualView for ApplicationView {
                     paths: paths.to_vec(),
                 })
             }
-            "delete" => {
-                if paths
-                    .iter()
-                    .all(|path| applications::is_system_app(path) && applications::is_mapped(path))
-                {
-                    return Ok(VirtualAction {
-                        command: "removeApplications",
-                        paths: paths.to_vec(),
-                    });
-                }
-                Ok(VirtualAction {
-                    command: "delete",
-                    paths: paths.to_vec(),
-                })
-            }
+            "delete" => Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into()),
             _ => Err("unknown application action".into()),
         }
     }
@@ -297,7 +275,10 @@ impl VirtualView for TrashView {
     fn operations(&self, _path: &str) -> Vec<&'static str> {
         vec!["list", "stat", "remove"]
     }
-    fn menu(&self, _path: &str) -> Vec<VirtualMenuItem> {
+    fn menu(&self, path: &str) -> Vec<VirtualMenuItem> {
+        if path == trash_vfs::URI || path == recycle::URI {
+            return vec![];
+        }
         vec![
             VirtualMenuItem {
                 id: "restore",
@@ -350,12 +331,8 @@ pub fn view_for(path: &str) -> Option<&'static dyn VirtualView> {
     if recycle::is_virtual(path) {
         return Some(&TRASH);
     }
-    if let Some(root) = trash::trash_path() {
-        let root = root.to_string_lossy();
-        let root = root.trim_end_matches(['/', '\\']);
-        if path == root || path.starts_with(&format!("{root}/")) {
-            return Some(&TRASH);
-        }
+    if trash_vfs::handles(path) {
+        return Some(&TRASH);
     }
     None
 }
@@ -391,7 +368,10 @@ pub fn menu_json(view: &dyn VirtualView, paths: &[String]) -> serde_json::Value 
 /// URI-backed resources have no host path. Never canonicalize or materialize
 /// these identifiers as files, even for metadata-only extension calls.
 pub fn opaque(path: &str) -> bool {
-    path.starts_with(RECENT_URI) || path.starts_with(APPLICATIONS_URI) || recycle::is_virtual(path)
+    path.starts_with(RECENT_URI)
+        || path.starts_with(APPLICATIONS_URI)
+        || recycle::is_virtual(path)
+        || trash_vfs::handles(path)
 }
 
 pub fn resource_entry(path: &str) -> Result<Entry, String> {
@@ -472,20 +452,26 @@ mod tests {
 
     #[test]
     fn stored_user_entries_launch_only_files_or_app_bundles() {
-        let mut shortcut = Entry::default();
-        shortcut.is_dir = false;
+        let shortcut = Entry::default();
         assert!(user_application_entry(&shortcut));
 
-        let mut folder = Entry::default();
-        folder.is_dir = true;
+        let folder = Entry {
+            is_dir: true,
+            ..Default::default()
+        };
         assert!(!user_application_entry(&folder));
 
-        let mut bundle = Entry::default();
-        bundle.is_dir = true;
-        bundle.extension = "app".into();
+        let bundle = Entry {
+            is_dir: true,
+            extension: "app".into(),
+            ..Default::default()
+        };
         assert!(user_application_entry(&bundle));
 
-        assert!(!user_application(&format!("{}loose", applications::USER_PREFIX)));
+        assert!(!user_application(&format!(
+            "{}loose",
+            applications::USER_PREFIX
+        )));
         assert!(!user_application("applications://c3lzdGVt"));
     }
 

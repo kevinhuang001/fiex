@@ -15,9 +15,11 @@ pub fn spawn(policy: &Policy) -> Result<SandboxChild, String> {
     let mut child = super::super::windows_stdio::spawn(&executable, &payload)?;
     let stdin = child.stdin.take().ok_or("plugin stdin unavailable")?;
     let stdout = child.stdout.take().ok_or("plugin stdout unavailable")?;
+    let stderr = child.stderr.take().ok_or("plugin stderr unavailable")?;
     Ok(SandboxChild {
         stdin: Box::new(stdin),
         stdout: BufReader::new(Box::new(stdout) as Box<dyn Read + Send>),
+        stderr: BufReader::new(Box::new(stderr) as Box<dyn Read + Send>),
         _scratch: scratch,
         process: child,
     })

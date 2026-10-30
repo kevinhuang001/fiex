@@ -451,6 +451,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
 dependencies = [
  "memchr",
+ "regex-automata",
  "serde_core",
 ]
 
@@ -1522,6 +1523,8 @@ dependencies = [
  "futures",
  "getrandom 0.2.17",
  "globset",
+ "grep-matcher",
+ "grep-regex",
  "gtk",
  "hex",
  "hfsplus",
@@ -1541,6 +1544,7 @@ dependencies = [
  "portable-pty",
  "rayon",
  "reflink-copy",
+ "regex",
  "reqwest 0.12.28",
  "rfd",
  "rust-fs-btrfs",
@@ -1549,6 +1553,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "shell-words",
  "sysinfo",
  "tauri",
  "tauri-build",
@@ -2149,6 +2154,28 @@ dependencies = [
  "glib-sys 0.22.9",
  "libc",
  "system-deps 9.0.0",
+]
+
+[[package]]
+name = "grep-matcher"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9417543f4870fc8f1c8e1af870afae2431007626d9e703fce6471c468d33847"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "grep-regex"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce0c256c3ad82bcc07b812c15a45ec1d398122e8e15124f96695234db7112ef"
+dependencies = [
+ "bstr",
+ "grep-matcher",
+ "log",
+ "regex-automata",
+ "regex-syntax",
 ]
 
 [[package]]

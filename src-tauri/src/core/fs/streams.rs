@@ -162,7 +162,9 @@ pub fn stream_call(owner: &str, method: &str, params: &Value) -> Result<Value, S
                         .lock()
                         .map_err(|_| "stream registry unavailable")?
                         .remove(id);
-                    write.commit()
+                    let result = write.commit()?;
+                    super::changes::committed(&stream.resource.path);
+                    Ok(result)
                 }
                 _ => Err("invalid stream method".into()),
             }

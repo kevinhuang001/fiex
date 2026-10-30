@@ -1,7 +1,8 @@
+import { showLogs } from '@/lib/logCenter'
 import { ActivityDetails, StatusIcon } from './activity/ActivityDetails'
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, ChevronRight, Clock3, Filter, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Clock3, Filter, ScrollText, X } from 'lucide-react'
 import { useActivity, type ActivityKind } from '@/hooks/useActivity'
 import { usePluginCatalog } from '@/lib/plugins'
 import { activityEta as eta } from '@/lib/activity'
@@ -116,6 +117,17 @@ export function ActivityCenter() {
           </span>
         )}
         <div className="activity-header-actions">
+          <button
+            className="icon-button"
+            title={t('运行日志')}
+            aria-label={t('运行日志')}
+            onClick={() => {
+              activity.setOpen(false)
+              showLogs()
+            }}
+          >
+            <ScrollText size={16} />
+          </button>
           {!selected && (
             <div className="activity-filter" ref={filterRef}>
               <button

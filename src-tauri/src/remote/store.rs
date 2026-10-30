@@ -20,6 +20,10 @@ pub struct StoredConnection {
     pub(crate) id: String,
     #[serde(default)]
     pub(crate) mount_id: String,
+    /// Rotated when authorization/configuration changes. The cache layer
+    /// reads this public epoch without fetching credentials from the keyring.
+    #[serde(default)]
+    pub(crate) cache_revision: String,
     pub(crate) name: String,
     pub(crate) kind: String,
     /// The exact installed provider ID, never derived from publisher privilege.

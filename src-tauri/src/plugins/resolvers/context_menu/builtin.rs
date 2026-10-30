@@ -40,8 +40,7 @@ impl Context {
         // folders) use the Applications view; its blank canvas keeps the
         // capability-gated create menu.
         let virtual_provider = provider.filter(|p| {
-            p.id() != "core:recent"
-                && !(p.id() == "core:applications" && paths.is_empty())
+            p.id() != "core:recent" && !(p.id() == "core:applications" && paths.is_empty())
         });
         if let Some(owner) = virtual_provider {
             if owner.id() == "core:trash"
@@ -78,9 +77,8 @@ impl Context {
                     && crate::usbfs::route(path).is_none()
                     && !crate::core::volumes::virtual_resolvers::opaque(path)
             });
-        let in_trash = !crate::plugins::mounts::handles(directory)
-            && crate::core::volumes::trash_path()
-                .is_some_and(|trash| std::path::Path::new(directory).starts_with(trash));
+        let in_trash = crate::core::volumes::virtual_resolvers::view_for(directory)
+            .is_some_and(|view| view.id() == "core:trash");
         Ok(Self {
             directory: directory.into(),
             paths: paths.to_vec(),

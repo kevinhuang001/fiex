@@ -9,7 +9,6 @@ use crate::{
     core::search::{
         SearchBatch, SearchEngine, SearchMode, SearchRequest, SearchState, RESULT_LIMIT,
     },
-    core::terminals,
     core::transfers::Resolution,
     core::volumes,
 };
@@ -17,6 +16,10 @@ use notify::Watcher;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};
 use tauri::{ipc::Channel, Emitter, Manager};
+
+#[macro_use]
+mod directory_open;
+pub(crate) use directory_open::*;
 
 #[macro_use]
 mod listing;

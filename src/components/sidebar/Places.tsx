@@ -1,5 +1,5 @@
 import { t } from '@/i18n'
-import { cacheLocations, readCachedLocations } from '@/lib/locationCache'
+import { cacheLocations, readCachedLocations, loadCachedLocations } from '@/lib/locationCache'
 import { commonPlaces } from '@/lib/places'
 import {
   AppWindow,
@@ -14,7 +14,7 @@ import {
   Music,
   Trash2,
 } from 'lucide-react'
-import { Fragment, useEffect } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import type { SidebarProps, SetSidebarMenu } from './types'
 
 function iconFor(name: string) {
@@ -54,11 +54,23 @@ export function Places({
 }: Pick<SidebarProps, 'x' | 'prefs' | 'trashPath' | 'onTrash' | 'onApplications'> & {
   setMenu: SetSidebarMenu
 }) {
+  const [cached, setCached] = useState(readCachedLocations)
+  useEffect(() => {
+    let alive = true
+    void loadCachedLocations()
+      .then((value) => {
+        if (alive) setCached(value)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   const order = new Map(prefs.placeOrder.map((key, index) => [key, index]))
   useEffect(() => {
     cacheLocations(x.locations)
   }, [x.locations])
-  const places = commonPlaces(x.locations.length ? x.locations : readCachedLocations())
+  const places = commonPlaces(x.locations.length ? x.locations : cached)
     .filter((location) => !prefs.hiddenPlaces.includes(location.path || location.name))
     .sort(
       (left, right) =>
