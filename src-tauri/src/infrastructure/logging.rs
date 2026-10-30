@@ -220,6 +220,13 @@ pub fn report_log_limited(plugin_id: &str, level: &str, message: &str) {
     }
     let _ = append(plugin_id, "plugin", level, message, None);
 }
+/// Capture the plugin's diagnostic channel without mixing it with JSON-RPC.
+pub fn report_plugin_stderr(plugin_id: &str, message: &str) {
+    if !allowed(plugin_id) {
+        return;
+    }
+    let _ = append(plugin_id, "stderr", "info", message, None);
+}
 pub fn record_core(level: &str, source: &str, message: &str) {
     let _ = append("core", source, level, message, None);
 }

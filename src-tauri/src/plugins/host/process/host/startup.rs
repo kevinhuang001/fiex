@@ -35,6 +35,10 @@ impl PluginHost {
             &mut sandbox.stdout,
             BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
         );
+        let stderr = std::mem::replace(
+            &mut sandbox.stderr,
+            BufReader::new(Box::new(std::io::empty()) as Box<dyn Read + Send>),
+        );
         let kill = sandbox.kill_handle();
         let commands = manifest
             .permissions
@@ -63,6 +67,7 @@ impl PluginHost {
             sandbox,
             stdin,
             stdout,
+            stderr,
         );
         Ok(Arc::new(Instance { running, kill }))
     }
@@ -128,7 +133,11 @@ impl PluginHost {
                 continue;
             }
             if let Err(error) = self.start(&manifest.id) {
-                eprintln!("plugin {} failed to auto-start: {error}", manifest.id);
+                crate::plugins::errors::report_log_limited(
+                    &manifest.id,
+                    "error",
+                    &format!("Plugin failed to auto-start: {error}"),
+                );
             }
         }
     }
