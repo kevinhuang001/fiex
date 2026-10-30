@@ -92,7 +92,10 @@ pub(super) fn host_method(running: &Running, method: &str, p: &Value) -> Result<
                     }
                     .to_string();
                     entry.info.result = p.get("result").cloned().unwrap_or(Value::Null);
-                    entry.info.error = p.get("error").and_then(Value::as_str).map(str::to_owned);
+                    entry.info.error = p
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .map(|value| crate::infrastructure::redact::clean(value, 1500));
                     running.remember_task(entry.info.clone());
                     entry
                 })

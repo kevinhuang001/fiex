@@ -73,7 +73,10 @@ budget of 128 and a per-source budget of 500. Disk pruning bounds all sources to
 Records have stable IDs, optional host-assigned operation IDs and durations.
 RPC start/completion and SDK log calls use the same authenticated owner context;
 plugins cannot submit another plugin identity. SDK's existing simple log/error
-API is retained; no SDK or official plugin contract change is necessary.
+API is retained. Companion SDK #14 adds opt-in provider/task diagnostics and UI
+SDK diagnostics forwarding. Core and the official plugins pin SDK commit
+`bd3f50079aeddc881b2422768668b58f405bf894`; all 13 native official plugins opt in.
+Task failure text is scrubbed before entering Core task history or UI events.
 `plugin_logs(after)` returns an incremental page and cursor. UI pause stops
 polling without stopping collection; the viewer bounds retained rows to 500 and
 supports level/text filtering, copy/export and clear.
