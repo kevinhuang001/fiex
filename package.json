@@ -13,7 +13,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "format": "prettier --write .",
-    "format:check": "node scripts/format-report.mjs",
+    "format:check": "prettier --check .",
     "check:size": "node scripts/check-file-size.mjs",
     "audit:native": "node scripts/audit-native-deps.mjs",
     "tauri": "tauri",
