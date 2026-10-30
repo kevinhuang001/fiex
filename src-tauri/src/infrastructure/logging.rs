@@ -127,7 +127,10 @@ fn persist(plugin_id: &str, record: &LogRecord) {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            if file.set_permissions(fs::Permissions::from_mode(0o600)).is_err() {
+            if file
+                .set_permissions(fs::Permissions::from_mode(0o600))
+                .is_err()
+            {
                 return;
             }
         }
