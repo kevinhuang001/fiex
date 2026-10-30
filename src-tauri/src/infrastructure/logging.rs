@@ -47,10 +47,21 @@ fn clean(value: &str, limit: usize) -> String {
     // stderr and structured plugin logs are untrusted input. Scrub common
     // credential formats *before* truncating or persisting a diagnostic.
     const INLINE_SECRETS: [&str; 16] = [
-        "access_token=", "access_token:", "refresh_token=", "refresh_token:",
-        "client_secret=", "client_secret:", "password=", "password:",
-        "api_key=", "api_key:", "apikey=", "apikey:",
-        "authorization=", "\"access_token\":", "\"refresh_token\":",
+        "access_token=",
+        "access_token:",
+        "refresh_token=",
+        "refresh_token:",
+        "client_secret=",
+        "client_secret:",
+        "password=",
+        "password:",
+        "api_key=",
+        "api_key:",
+        "apikey=",
+        "apikey:",
+        "authorization=",
+        "\"access_token\":",
+        "\"refresh_token\":",
         "\"client_secret\":",
     ];
     let value = value.replace(['\0', '\u{001b}'], "");
@@ -98,9 +109,10 @@ fn clean(value: &str, limit: usize) -> String {
             hide_next = true;
             continue;
         }
-        let marker = INLINE_SECRETS.iter().filter_map(|marker| {
-            lower.find(marker).map(|start| start + marker.len())
-        }).min();
+        let marker = INLINE_SECRETS
+            .iter()
+            .filter_map(|marker| lower.find(*marker).map(|start| start + marker.len()))
+            .min();
         if let Some(end) = marker {
             result.push_str(&word[..end]);
             result.push_str("[REDACTED]");
