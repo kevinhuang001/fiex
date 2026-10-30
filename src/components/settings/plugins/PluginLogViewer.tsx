@@ -37,22 +37,34 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
     setEntries([])
     setLoading(true)
     void load()
-    const refresh = window.setInterval(() => { if (!paused) void load() }, 2000)
+    const refresh = window.setInterval(() => {
+      if (!paused) void load()
+    }, 2000)
     return () => {
       active = false
       window.clearInterval(refresh)
     }
   }, [pluginId, paused])
-  const visible = useMemo(() => entries.filter((entry) => {
-    if (level !== 'all' && entry.level !== level) return false
-    const term = query.trim().toLowerCase()
-    return !term || [entry.source, entry.message, entry.detail ?? ''].some(
-      (part) => part.toLowerCase().includes(term),
+  const visible = useMemo(
+    () =>
+      entries.filter((entry) => {
+        if (level !== 'all' && entry.level !== level) return false
+        const term = query.trim().toLowerCase()
+        return (
+          !term ||
+          [entry.source, entry.message, entry.detail ?? ''].some((part) =>
+            part.toLowerCase().includes(term),
+          )
+        )
+      }),
+    [entries, level, query],
+  )
+  const formatted = visible
+    .map(
+      (entry) =>
+        `${new Date(entry.at).toISOString()} [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}${entry.detail ? '\n' + entry.detail : ''}`,
     )
-  }), [entries, level, query])
-  const formatted = visible.map((entry) =>
-    `${new Date(entry.at).toISOString()} [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}${entry.detail ? '\n' + entry.detail : ''}`,
-  ).join('\n')
+    .join('\n')
   const clear = async () => {
     try {
       await call('plugin_logs_clear', { pluginId })
@@ -77,22 +89,47 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
         <small>{loading ? t('读取中…') : t('{0} 条', visible.length)}</small>
       </div>
       <div className="plugin-log-toolbar">
-        <select aria-label={t('日志级别')} value={level} onChange={(event) => setLevel(event.target.value as LevelFilter)}>
-          {levels.map((value) => <option key={value} value={value}>{value.toUpperCase()}</option>)}
+        <select
+          aria-label={t('日志级别')}
+          value={level}
+          onChange={(event) => setLevel(event.target.value as LevelFilter)}
+        >
+          {levels.map((value) => (
+            <option key={value} value={value}>
+              {value.toUpperCase()}
+            </option>
+          ))}
         </select>
-        <input aria-label={t('搜索日志')} value={query} placeholder={t('搜索日志')}
-          onChange={(event) => setQuery(event.target.value)} />
+        <input
+          aria-label={t('搜索日志')}
+          value={query}
+          placeholder={t('搜索日志')}
+          onChange={(event) => setQuery(event.target.value)}
+        />
         <Button type="button" size="sm" variant="outline" onClick={() => setPaused((x) => !x)}>
           {paused ? t('继续') : t('暂停')}
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(formatted).catch(() => {})}>{t('复制')}</Button>
-        <Button type="button" size="sm" variant="outline" onClick={exportLogs}>{t('导出')}</Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => void clear()}>{t('清空记录')}</Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => void navigator.clipboard.writeText(formatted).catch(() => {})}
+        >
+          {t('复制')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={exportLogs}>
+          {t('导出')}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => void clear()}>
+          {t('清空记录')}
+        </Button>
       </div>
       <ul className="plugin-error-list">
         {visible.map((entry, index) => (
           <li key={`${entry.at}-${index}`}>
-            <span className={`plugin-error-source ${entry.level}`}>{entry.level.toUpperCase()}</span>
+            <span className={`plugin-error-source ${entry.level}`}>
+              {entry.level.toUpperCase()}
+            </span>
             <div>
               <small>{entry.source}</small>
               <p>{entry.message}</p>
