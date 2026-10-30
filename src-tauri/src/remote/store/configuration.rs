@@ -88,12 +88,17 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             }
         }
     }
+    let cache_revision = crate::plugins::mounts::new_id()?;
     let mut record = StoredConnection {
         id: id.clone(),
         mount_id: previous
             .as_ref()
             .map(|c| c.mount_id.clone())
             .unwrap_or(crate::plugins::mounts::new_id()?),
+        cache_revision: previous
+            .as_ref()
+            .map(|c| c.cache_revision.clone())
+            .unwrap_or(cache_revision),
         name: name.into(),
         kind: kind.into(),
         plugin_id: plugin_id.clone(),
@@ -120,6 +125,15 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
             validation,
         )?;
     }
+    // A connection edit can replace the actual account while leaving its URI
+    // and non-secret settings unchanged. Compare the fully hydrated validated
+    // configuration here, before removing the private fields.
+    let identity_changed = previous.as_ref().is_some_and(|old| {
+        old.settings != record.settings || old.secret_keys != record.secret_keys
+    });
+    if identity_changed || record.cache_revision.is_empty() {
+        record.cache_revision = crate::plugins::mounts::new_id()?;
+    }
     let scope = format!("connection-{id}");
     for field in &record.secret_keys {
         if let Some(value) = record
@@ -137,6 +151,19 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
     }
     if !plugin_view_connection(&record) {
         fs::create_dir_all(mount_path(&record)).map_err(|e| e.to_string())?;
+    }
+    if identity_changed {
+        if let Some(old) = previous.as_ref() {
+            // Revoke every visited directory before replacing the public
+            // connection registry. Old snapshots may belong to another account.
+            let root = crate::plugins::mounts::uri(&old.mount_id, "")?;
+            crate::core::fs::directory_cache::drop_subtree(&root);
+            let download_cache = mount_path(old);
+            if download_cache.exists() {
+                fs::remove_dir_all(&download_cache).map_err(|e| e.to_string())?;
+            }
+            super::super::sync::forget_meta(old);
+        }
     }
     if let Some(index) = existing {
         items[index] = record.clone();
@@ -172,6 +199,10 @@ pub fn remove_connection(id: &str) -> Result<(), String> {
     let mut items = load_stored();
     let removed = items.iter().find(|conn| conn.id == id).cloned();
     items.retain(|conn| conn.id != id);
+    if let Some(conn) = removed.as_ref() {
+        let root = crate::plugins::mounts::uri(&conn.mount_id, "")?;
+        crate::core::fs::directory_cache::drop_subtree(&root);
+    }
     save_stored(&items)?;
     if let Some(conn) = removed {
         let scope = format!("connection-{id}");

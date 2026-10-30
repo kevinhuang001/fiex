@@ -155,6 +155,7 @@ fn key(path: &str) -> String {
                         conn.kind,
                         conn.settings,
                         conn.mount_id,
+                        conn.cache_revision,
                     ))
                     .ok()
                 })
