@@ -1,50 +1,25 @@
 # Global error dialog policy
 
-Fiex has one user-facing runtime error channel: `reportError(cause, source)`
-from `src/lib/errorCenter.ts`, rendered by the single `ErrorDialogHost`
-mounted in `App.tsx`. Native/Core errors are polled into this same channel.
+Fiex has one user-facing runtime error channel: `reportError(cause, source)` from `src/lib/errorCenter.ts`, rendered by `ErrorDialogHost` in `App.tsx`. Native/Core errors are polled into this same channel.
 
 ## Rules
 
-- Report actionable, failed user operations and backend/plugin runtime errors using
-  `reportError`. Do **not** render the exception string in a page banner,
-  settings pane, text field, terminal status, or plugin iframe.
-- Preserve the failing workflow state (e.g. retain an open form, stop a spinner,
-  prevent a partially loaded connection from being saved). If the broken view
-  cannot render, show a **generic** unavailable/retry placeholder without
-  repeating the error text; the dialog supplies the specific diagnostic.
-- Keep local input validation (required fields, invalid rename templates,
-  invalid numeric values), permission/risk warnings, loading indicators,
-  unsupported-format fallback advice, and successful-operation feedback inline.
-  Normal cancel and recoverable cache/fallback attempts are not runtime errors.
-- `ui_error_report` is the plugin-to-Core diagnostics channel. Core persists it
-  and the global dialog host presents it. Do not additionally call
-  `reportError` on the success path or the same failure can appear twice;
-  use a local `reportError` fallback only if the report itself fails.
-- Make all async UI handlers explicitly catch rejected promises. Avoid alert
-  loops caused by error polling or intended fallback paths. Use source keys
-  such as `plugins:installation`, `connections:configuration`, `file-picker`,
-  and `preview:pdf` to identify the failing operation.
+- Report failed user operations and plugin/backend runtime errors with `reportError`. Do not display raw exceptions in inline banners, text fields, terminal status, or iframes.
+- Preserve workflow state when operations fail. The global dialog shows the specific error; failed content areas may show a generic fallback and retry state.
+- Keep required-field validation, invalid rename templates, permissions and risk notices, loading, successful operations, and unsupported-format advice inline.
+- `ui_error_report` persists plugin errors through Core. Avoid reporting the same failure locally when Core already queues it. Only report locally if the Core reporting path fails.
+- Handle async UI failures explicitly. Suppress normal cancel and recoverable fallback attempts rather than causing repeated error dialogs.
 
-## Audited user-facing flows
+## Audited flows
 
-- Plugin manager: catalog, import/install/upgrade/uninstall, activation,
-  permissions, provider priorities, and plugin settings load/save.
-- Plugin content: connection views, preview iframe, panel bridge, and
-  plugin/Core `ui_error_report` diagnostics.
-- General application: connection editor/setup, credential backend,
-  background-image selection, file info, batch rename execution,
-  file picker, file preview/PDF/media, terminal session failures, and
-  explorer operation dialogs.
+- Plugin manager: catalog, installation, upgrades, uninstall, activation, permissions, preferences, and plugin settings.
+- Plugin UI: connection views, preview iframe, panel bridge, and `ui_error_report`.
+- Application: connection setup, credential backend, background selection, file information, batch rename, file picker, preview, PDF, terminal, and explorer dialogs.
 
 ## Regression checks
 
-1. Force a failed plugin install and permission write: one global error dialog,
-   no embedded raw error message; the original controls remain available.
-2. Force a connection configuration fetch failure: popup appears and the
-   partially loaded form cannot be submitted.
-3. Make a PDF renderer, plugin panel, or directory picker fail: show the global
-   dialog and a non-diagnostic fallback state instead of raw exception text.
-4. Enter an invalid batch-rename regex: show local field validation *without*
-   a modal; cancelling a picker must not show an error.
-5. Force a Core/SDK `ui_error_report`: the global dialog shows it once.
+1. Failed plugin installation and permission writes show one global dialog and no raw inline error.
+2. Failed connection configuration load prevents saving partial settings.
+3. Failed PDF render, plugin panel, and file picker show the dialog and a generic fallback.
+4. Invalid rename regex shows local validation without the global dialog.
+5. Cancelled pickers do not report errors; Core plugin reports produce only one dialog.
