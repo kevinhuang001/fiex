@@ -1048,19 +1048,17 @@ mod windows_target_tests {
 
     #[test]
     fn valid_system_known_folder_target_is_launchable() {
-        let target = resolve_windows_executable(
-            r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\cmd.exe",
-        )
-        .expect("Windows System32 cmd.exe should exist");
+        let target = resolve_windows_executable(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\cmd.exe")
+            .expect("Windows System32 cmd.exe should exist");
         assert!(target.to_lowercase().ends_with(r"\system32\cmd.exe"));
     }
 
     #[test]
     fn unresolved_and_missing_targets_are_not_listed() {
-        assert!(resolve_windows_executable(
-            r"{00000000-0000-0000-0000-000000000000}\missing.exe"
-        )
-        .is_none());
+        assert!(
+            resolve_windows_executable(r"{00000000-0000-0000-0000-000000000000}\missing.exe")
+                .is_none()
+        );
         assert!(resolve_windows_executable(
             r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\fiex-nonexistent-test.exe"
         )
