@@ -7,6 +7,7 @@ use crate::core::{
 };
 use std::sync::atomic::AtomicBool;
 
+use crate::plugin_sdk::filesystem::{TransferAction, TransferDirection};
 mod rollback;
 use rollback::UndoLog;
 mod cleanup;
@@ -15,6 +16,8 @@ mod execution;
 struct Step {
     source: ResourceBroker,
     target: ResourceBroker,
+    policy_parent: ResourceBroker,
+    action: TransferAction,
     directory: bool,
     existing: bool,
     source_version: serde_json::Value,
@@ -117,6 +120,8 @@ fn plan(
     result: &mut OperationResult,
     steps: &mut Vec<Step>,
     depth: usize,
+    action: TransferAction,
+    policy_parent: &ResourceBroker,
 ) -> Result<(), String> {
     check_cancelled(cancel)?;
     if depth > 128 || steps.len() >= 100_000 {
@@ -134,6 +139,14 @@ fn plan(
         return Err("Unsupported: symlink transfer needs an explicit policy".into());
     }
     let directory = src["isDir"] == true;
+    source.require(
+        if directory {
+            FsOperation::List
+        } else {
+            FsOperation::Read
+        },
+        false,
+    )?;
     let mut target = binding::child(parent, name)?;
     if source.path == target.path
         || (directory
@@ -170,11 +183,30 @@ fn plan(
     {
         return Err("Unsupported: replacement changes destination kind".into());
     }
+    let metadata = source.transfer_metadata()?;
+    let same_mount = source.reference.mount_id == parent.reference.mount_id;
+    source.review_transfer(
+        TransferDirection::Export,
+        action,
+        name,
+        &metadata,
+        same_mount,
+    )?;
+    let final_name = target.path.rsplit(['/', '\\']).next().unwrap_or(name);
+    policy_parent.review_transfer(
+        TransferDirection::Import,
+        action,
+        final_name,
+        &metadata,
+        same_mount,
+    )?;
     let had_target = existing.is_some();
     let directory_source = source.clone_binding();
     steps.push(Step {
         source,
         target: target.clone_binding(),
+        policy_parent: policy_parent.clone_binding(),
+        action,
         directory,
         existing: had_target,
         source_version: src,
@@ -198,6 +230,8 @@ fn plan(
                 result,
                 steps,
                 depth + 1,
+                action,
+                if had_target { &target } else { policy_parent },
             )?;
         }
     }
@@ -240,6 +274,25 @@ pub fn transfer(
                 .filter(|path| !system.iter().any(|candidate| candidate == *path))
                 .cloned()
                 .collect();
+            let parent = binding::destination(destination, "core:transfer")?;
+            for path in &system {
+                let source = binding::trusted(path, "core:transfer")?;
+                let metadata = source.transfer_metadata()?;
+                source.review_transfer(
+                    TransferDirection::Export,
+                    TransferAction::Move,
+                    &metadata.name,
+                    &metadata,
+                    true,
+                )?;
+                parent.review_transfer(
+                    TransferDirection::Import,
+                    TransferAction::Move,
+                    &metadata.name,
+                    &metadata,
+                    true,
+                )?;
+            }
             crate::core::volumes::applications::move_system_apps(&system, destination)?;
             let mut result = OperationResult {
                 paths: system,
@@ -290,6 +343,12 @@ pub fn transfer(
             &mut result,
             &mut steps,
             0,
+            if moving {
+                TransferAction::Move
+            } else {
+                TransferAction::Copy
+            },
+            &parent,
         )?;
         sources.push(source);
     }
@@ -327,4 +386,32 @@ pub fn transfer(
         }
     }
     Ok(result)
+}
+
+impl Step {
+    fn review(&self) -> Result<(), String> {
+        let metadata = self.source.transfer_metadata()?;
+        let same_mount = self.source.reference.mount_id == self.target.reference.mount_id;
+        let name = self
+            .target
+            .path
+            .rsplit(['/', '\\'])
+            .next()
+            .ok_or("missing target name")?;
+        self.source.review_transfer(
+            TransferDirection::Export,
+            self.action,
+            name,
+            &metadata,
+            same_mount,
+        )?;
+        self.policy_parent.review_transfer(
+            TransferDirection::Import,
+            self.action,
+            name,
+            &metadata,
+            same_mount,
+        )?;
+        Ok(())
+    }
 }

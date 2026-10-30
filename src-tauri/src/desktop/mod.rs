@@ -158,7 +158,7 @@ pub fn run() {
             drag_files,
             locations,
             list_directory,
-            virtual_cache,
+            directory_cache,
             file_info,
             read_preview,
             create_entry,
@@ -271,9 +271,6 @@ pub fn run() {
             }
             setup_tray(app.handle())?;
             std::thread::spawn(crate::core::fs::initialize_exports);
-            // Fill the three virtual-root caches once, off the main thread;
-            // later list/search calls only read them.
-            std::thread::spawn(crate::core::volumes::virtual_storage::warm_caches);
             std::thread::spawn(|| {
                 crate::plugins::host::global().start_enabled();
             });

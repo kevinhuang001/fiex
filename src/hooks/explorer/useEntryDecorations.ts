@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { getLocale } from '@/i18n'
 import { call } from '@/lib/api'
-import { clearDecorationIcons, syncDecorationIcons } from '@/lib/decorationIcons'
+import { publishPresentationIcons } from '@/lib/decorationIcons'
+import { cachedPresentations, cachePresentations } from '@/lib/entryPresentation'
 import type { Entry, EntryDecoration } from '@/lib/types'
 
 /** Receive the unified Core decoration DTO. Search requests builtin providers
@@ -24,16 +25,14 @@ export function useEntryDecorations({
     key: string
     values: Record<string, EntryDecoration>
   }>()
-  const [iconOwner] = useState(() => crypto.randomUUID())
   const request = useRef(0)
   const locale = getLocale()
   const key = JSON.stringify([path, Boolean(query), locale])
-  const decorations = snapshot?.entries === entries && snapshot.key === key ? snapshot.values : {}
+  const decorations =
+    snapshot?.entries === entries && snapshot.key === key
+      ? snapshot.values
+      : cachedPresentations(entries)
 
-  useEffect(() => {
-    syncDecorationIcons(decorations, iconOwner)
-  }, [decorations, iconOwner])
-  useEffect(() => () => clearDecorationIcons(iconOwner), [iconOwner])
   useEffect(() => {
     if (!enabled || !path || !entries.length) return
     const generation = ++request.current
@@ -45,6 +44,8 @@ export function useEntryDecorations({
       })
         .then((values) => {
           if (generation !== request.current) return
+          cachePresentations(entries, values)
+          publishPresentationIcons(entries)
           setSnapshot({
             entries,
             key,
@@ -52,7 +53,9 @@ export function useEntryDecorations({
           })
         })
         .catch(() => {
-          if (generation === request.current) setSnapshot({ entries, key, values: {} })
+          // Keep the last complete presentation if revalidation fails.
+          if (generation === request.current)
+            setSnapshot({ entries, key, values: cachedPresentations(entries) })
         })
     }, 0)
     return () => {

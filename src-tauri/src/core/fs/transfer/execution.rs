@@ -8,6 +8,10 @@ pub(super) fn execute(
     let total = steps.len() as u64;
     // Stage all overwrite backups before touching any destination. If the
     // backup itself fails, no partial transfer has taken place.
+    for step in steps {
+        check_cancelled(cancel)?;
+        step.review()?;
+    }
     let mut undo = UndoLog::prepare(steps, cancel)?;
     for (index, step) in steps.iter().enumerate() {
         let attempt = (|| -> Result<(), String> {
@@ -15,6 +19,7 @@ pub(super) fn execute(
             if !same_version(&step.source.stat()?, &step.source_version) {
                 return Err(format!("Conflict: source changed: {}", step.source.path));
             }
+            step.review()?;
             let latest = optional_stat(&step.target)?;
             if !matches!((&step.target_version, &latest), (None, None))
                 && !matches!((&step.target_version, &latest), (Some(expected), Some(actual)) if same_version(expected, actual))

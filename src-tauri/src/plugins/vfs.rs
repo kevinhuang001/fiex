@@ -227,19 +227,26 @@ pub fn read_prefix(path: &str, max_bytes: usize) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-pub fn search(
+#[allow(clippy::too_many_arguments)]
+pub fn search_stream(
     path: &str,
     query: &str,
     hidden: bool,
     ignores: &[String],
     limit: usize,
-) -> Result<(Vec<Entry>, bool), String> {
+    cancelled: &dyn Fn() -> bool,
+    emit: &mut dyn FnMut(Entry),
+) -> Result<bool, String> {
     let (uri, view, node_id) = node(path)?;
     let mount = mount_for(&uri, &view);
-    let (items, truncated) = mount.search(&node_id, query, hidden, ignores, limit)?;
-    let entries = items
-        .into_iter()
-        .map(|item| {
+    mount.search_stream(
+        &node_id,
+        query,
+        hidden,
+        ignores,
+        limit,
+        cancelled,
+        &mut |item| {
             let relative = item
                 .relative_path
                 .clone()
@@ -248,8 +255,8 @@ pub fn search(
             if !uri.relative.is_empty() && !relative.starts_with(&format!("{}/", uri.relative)) {
                 return Err("search entry escaped subtree".into());
             }
-            bound_entry(&mount, &uri, &relative, item)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok((entries, truncated))
+            emit(bound_entry(&mount, &uri, &relative, item)?);
+            Ok(())
+        },
+    )
 }

@@ -126,7 +126,7 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
         sync: None,
     })
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
     pub read_only: bool,

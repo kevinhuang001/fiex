@@ -5,6 +5,7 @@ use std::{collections::BTreeSet, path::Path};
 pub(super) fn validate(steps: &[Step], cancel: &AtomicBool) -> Result<(), String> {
     check_cancelled(cancel)?;
     for step in steps {
+        step.review()?;
         step.source.require(FsOperation::Remove, false)?;
         if !same_version(&step.source.stat()?, &step.source_version) {
             return Err(format!(

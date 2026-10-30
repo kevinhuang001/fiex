@@ -116,45 +116,91 @@ impl Mount {
         Err("provider sent too many pages".into())
     }
 
+    pub fn preflight(
+        &self,
+        request: &crate::plugin_sdk::filesystem::TransferPreflight,
+    ) -> Result<(), String> {
+        if !crate::plugins::provider_registry::get(&self.plugin_id)
+            .is_some_and(|provider| provider.preflight)
+        {
+            return Ok(());
+        }
+        let reply = self.invoke(
+            "vfs.preflight",
+            serde_json::to_value(request).map_err(|e| e.to_string())?,
+        )?;
+        let decision: crate::plugin_sdk::filesystem::PreflightDecision =
+            serde_json::from_value(reply)
+                .map_err(|e| format!("invalid preflight response: {e}"))?;
+        if decision.allowed {
+            Ok(())
+        } else {
+            Err(format!(
+                "PermissionDenied: {}",
+                decision
+                    .reason
+                    .unwrap_or_else(|| "transfer denied by provider".into())
+            ))
+        }
+    }
+
     pub fn stat(&self, node_id: &str) -> Result<FsEntry, String> {
         let value = self.invoke("vfs.stat", json!({"nodeId": node_id}))?;
         FsEntry::parse(value)
     }
 
-    pub fn search(
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_stream(
         &self,
         node_id: &str,
         query: &str,
         hidden: bool,
         ignores: &[String],
         limit: usize,
-    ) -> Result<(Vec<FsEntry>, bool), String> {
-        let value = self.invoke(
-            "vfs.search",
-            json!({
-                "nodeId": node_id,
-                "query": query,
-                "hidden": hidden,
-                "ignores": ignores,
-                "limit": limit,
-            }),
-        )?;
-        let items = value
-            .get("entries")
-            .and_then(Value::as_array)
-            .ok_or("provider search is missing entries")?;
-        if items.len() > limit {
-            return Err("provider exceeded the search limit".into());
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(FsEntry) -> Result<(), String>,
+    ) -> Result<bool, String> {
+        let mut cursor: Option<String> = None;
+        let mut seen = std::collections::HashSet::new();
+        let mut count = 0usize;
+        for _ in 0..MAX_PAGES {
+            if cancelled() {
+                return Ok(true);
+            }
+            let remaining = limit.saturating_sub(count);
+            if remaining == 0 {
+                return Ok(true);
+            }
+            let page = self.invoke(
+                "vfs.search",
+                json!({
+                    "nodeId": node_id, "query": query, "mode": "name", "hidden": hidden,
+                    "ignores": ignores, "limit": remaining.min(PAGE_LIMIT), "cursor": cursor,
+                }),
+            )?;
+            let items = page["entries"]
+                .as_array()
+                .ok_or("provider search is missing entries")?;
+            if items.len() > remaining.min(PAGE_LIMIT) {
+                return Err("provider exceeded the search limit".into());
+            }
+            for item in items {
+                if cancelled() {
+                    return Ok(true);
+                }
+                emit(FsEntry::parse(item.clone())?)?;
+                count += 1;
+            }
+            let next = page["nextCursor"].as_str().map(str::to_owned);
+            match next {
+                None => return Ok(page["truncated"].as_bool().unwrap_or(false)),
+                Some(next) if !seen.insert(next.clone()) => {
+                    return Err("search pagination cursor did not advance".into())
+                }
+                Some(next) => cursor = Some(next),
+            }
         }
-        let entries = items
-            .iter()
-            .map(|item| FsEntry::parse(item.clone()))
-            .collect::<Result<Vec<_>, _>>()?;
-        let truncated = value
-            .get("truncated")
-            .and_then(Value::as_bool)
-            .unwrap_or(entries.len() >= limit);
-        Ok((entries, truncated))
+        Ok(true)
     }
 
     pub fn mkdir(&self, parent_id: &str, name: &str) -> Result<FsEntry, String> {

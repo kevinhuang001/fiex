@@ -231,7 +231,7 @@ impl<'a> BatchSink<'a> {
             truncated,
             skipped,
             scanned,
-            incomplete: false,
+            incomplete: self.incomplete,
             warning: self.warning.clone(),
             engine: self.engine.clone(),
             replace,
@@ -315,13 +315,16 @@ impl SearchState {
 fn search_root(
     root: &str,
     request: &SearchRequest,
-    cancelled: &dyn Fn() -> bool,
+    cancelled: &(dyn Fn() -> bool + Sync),
     sink: &mut BatchSink<'_>,
 ) -> Result<(), String> {
     // Core-owned virtual roots are not host paths: filter their root listing
     // instead of asking a filesystem SearchProvider about a URI.
-    if virtual_search_root(root) {
-        return search_virtual(root, request, cancelled, sink);
+    if virtual_search_root(root)
+        || (request.mode == SearchMode::Name
+            && (crate::plugins::mounts::handles(root) || crate::usbfs::route(root).is_some()))
+    {
+        return search_cached_vfs(root, request, cancelled, sink);
     }
     let local = !crate::plugins::mounts::handles(root) && !root.contains("://");
     if !local {
@@ -397,10 +400,10 @@ fn virtual_search_root(root: &str) -> bool {
     crate::core::volumes::virtual_storage::is_virtual_tree_path(root)
 }
 
-fn search_virtual(
+fn search_cached_vfs(
     root: &str,
     request: &SearchRequest,
-    cancelled: &dyn Fn() -> bool,
+    cancelled: &(dyn Fn() -> bool + Sync),
     sink: &mut BatchSink<'_>,
 ) -> Result<(), String> {
     sink.engine = Some("builtin".into());
@@ -412,78 +415,93 @@ fn search_virtual(
         sink.incomplete = true;
         return Ok(());
     }
-    // First paint: one complete snapshot of the cached subtree. This batch is
-    // emitted before the refresh below, so the UI never waits for a list.
-    let first = crate::core::volumes::virtual_storage::search_view(
+    let mut cached = Vec::new();
+    crate::core::fs::directory_cache::search(
         root,
         &request.query,
         request.hidden,
         &request.ignores,
-        sink.limit,
         cancelled,
+        &mut |entry| {
+            if cached.len() < sink.limit {
+                cached.push(entry.clone());
+                sink.push(entry);
+            }
+        },
     )?;
-    let first_entries = first.entries.clone();
-    sink.emit_snapshot(
-        first.entries,
-        false,
-        true,
-        first.truncated,
-        first.skipped,
-        first.scanned,
-    );
+    sink.flush(false);
     if cancelled() {
         return Ok(());
     }
-    // Background pass: refresh this search root's own listing, then search the
-    // cached subtree again. Nested directories keep their cached snapshots.
-    if let Err(error) = crate::core::volumes::virtual_storage::list(root) {
+    // The live pass emits additions/metadata updates as they arrive; old hits
+    // stay visible until the final authoritative set can remove stale hits.
+    let live: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
+    let upstream = sink.emit;
+    let emit = |mut batch: SearchBatch| {
+        {
+            let mut live = live.lock().unwrap_or_else(|e| e.into_inner());
+            for entry in &batch.entries {
+                if let Some(previous) = live.iter_mut().find(|previous| previous.path == entry.path)
+                {
+                    *previous = entry.clone();
+                } else {
+                    live.push(entry.clone());
+                }
+            }
+        }
+        batch
+            .entries
+            .retain(|entry| !cached.iter().any(|old| same_entry(old, entry)));
+        batch.done = false;
+        batch.replace = false;
+        if !batch.entries.is_empty() {
+            (upstream)(batch);
+        }
+    };
+    let mut fresh = BatchSink::new(&emit, sink.started, sink.limit);
+    let (refresh, result) = std::thread::scope(|scope| {
+        let refresh =
+            scope.spawn(|| crate::core::fs::directory_cache::refresh_tree(root, cancelled));
+        let result = search_adapter(root, request, cancelled, &mut fresh);
+        let refresh = refresh
+            .join()
+            .unwrap_or_else(|_| Err("cache refresh failed".into()));
+        (refresh, result)
+    });
+    fresh.flush(false);
+    if cancelled() {
+        return Ok(());
+    }
+    if let Err(error) = refresh.and(result) {
         sink.warning = Some(error);
+        sink.incomplete = true;
         sink.emit_snapshot(Vec::new(), true, false, false, 0, 0);
         return Ok(());
     }
-    if cancelled() {
-        return Ok(());
-    }
-    let second = crate::core::volumes::virtual_storage::search_view(
-        root,
-        &request.query,
-        request.hidden,
-        &request.ignores,
-        sink.limit,
-        cancelled,
-    )?;
-    if same_entry_snapshot(&first_entries, &second.entries) {
-        // Identical result: the first batch stays authoritative; only finish.
-        sink.emit_snapshot(
-            Vec::new(),
-            true,
-            false,
-            second.truncated,
-            second.skipped,
-            second.scanned,
-        );
-    } else {
-        // The refreshed listing changed the result set: replace in one batch.
-        sink.emit_snapshot(
-            second.entries,
-            true,
-            true,
-            second.truncated,
-            second.skipped,
-            second.scanned,
-        );
-    }
+    let entries = live.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let same = same_entry_snapshot(&cached, &entries);
+    let truncated = fresh.truncated;
+    let skipped = fresh.skipped;
+    let scanned = fresh.scanned;
+    drop(fresh);
+    sink.emit_snapshot(
+        if same { Vec::new() } else { entries },
+        true,
+        !same,
+        truncated,
+        skipped,
+        scanned,
+    );
     Ok(())
 }
-
+fn same_entry(left: &Entry, right: &Entry) -> bool {
+    serde_json::to_value(left).ok() == serde_json::to_value(right).ok()
+}
 fn same_entry_snapshot(left: &[Entry], right: &[Entry]) -> bool {
     left.len() == right.len()
-        && left.iter().zip(right).all(|(left, right)| {
-            left.path == right.path
-                && left.name == right.name
-                && left.modified == right.modified
-                && left.size == right.size
-        })
+        && left
+            .iter()
+            .all(|left| right.iter().any(|right| same_entry(left, right)))
 }
 
 fn search_adapter(
@@ -498,17 +516,18 @@ fn search_adapter(
         // that flow exists, refuse instead of silently downloading content.
         return Err("暂不支持在远程连接中搜索文件内容".into());
     }
-    let (entries, truncated, skipped) = resource.search(
+    sink.engine = Some("builtin".into());
+    let limit = sink.limit;
+    let (truncated, skipped) = resource.search_stream(
         &request.query,
         request.hidden,
         &request.ignores,
-        sink.limit,
+        limit,
         cancelled,
+        &mut |entry| sink.push(entry),
     )?;
-    sink.engine = Some("builtin".into());
     sink.truncated |= truncated;
     sink.skipped += skipped;
-    sink.extend(entries);
     Ok(())
 }
 

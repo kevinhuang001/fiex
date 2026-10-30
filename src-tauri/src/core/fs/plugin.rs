@@ -50,6 +50,15 @@ impl<'a> PluginFsAdapter<'a> {
     }
 }
 impl FsAdapter for PluginFsAdapter<'_> {
+    fn preflight(
+        &self,
+        request: &crate::plugin_sdk::filesystem::TransferPreflight,
+    ) -> Result<(), FsError> {
+        let (mount, node) = self.node()?;
+        let mut request = request.clone();
+        request.node_id = node;
+        mount.preflight(&request).map_err(FsError::from)
+    }
     fn desktop_entry(&self) -> Result<crate::core::files::Entry, FsError> {
         if crate::remote::is_remote(&self.resource.path) {
             crate::remote::stat(&self.resource.path).map_err(FsError::from)
@@ -102,38 +111,64 @@ impl FsAdapter for PluginFsAdapter<'_> {
         limit: usize,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
-        if !crate::remote::is_remote(&self.resource.path) {
-            let (entries, truncated) =
-                crate::plugins::vfs::search(&self.resource.path, query, hidden, ignores, limit)?;
-            return Ok((entries, truncated, 0));
+        let mut entries = Vec::new();
+        let (truncated, skipped) =
+            self.search_stream(query, hidden, ignores, limit, cancelled, &mut |entry| {
+                entries.push(entry)
+            })?;
+        Ok((entries, truncated, skipped))
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn search_stream(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(crate::core::files::Entry),
+    ) -> Result<(bool, usize), FsError> {
+        let (mount, _) = self.node()?;
+        if !crate::remote::is_remote(&self.resource.path) && mount.supports(FsOperation::Search) {
+            let truncated = crate::plugins::vfs::search_stream(
+                &self.resource.path,
+                query,
+                hidden,
+                ignores,
+                limit,
+                cancelled,
+                emit,
+            )?;
+            return Ok((truncated, 0));
         }
         let mut pending = vec![self.resource.path.clone()];
-        let mut entries = Vec::new();
+        let mut count = 0usize;
         let mut visited = 0usize;
         while let Some(path) = pending.pop() {
-            if cancelled() || visited >= 1000 || entries.len() >= limit {
+            if cancelled() || visited >= 1000 || count >= limit {
                 break;
             }
             visited += 1;
-            let Some(listing) =
-                futures::executor::block_on(crate::remote::list_listing(&path, hidden, ignores))?
-            else {
-                break;
-            };
+            let directory = binding::trusted(&path, "core:search")?;
+            directory.require(FsOperation::List, false)?;
+            let listing = directory
+                .adapter()?
+                .desktop_listing(&path, hidden, ignores)?;
             for entry in listing.entries {
-                if cancelled() || entries.len() >= limit {
+                if cancelled() || count >= limit {
                     break;
                 }
-                if entry.is_dir {
+                if entry.is_dir && !entry.is_symlink {
                     pending.push(entry.path.clone());
                 }
                 if entry.name.to_lowercase().contains(&query.to_lowercase()) {
-                    entries.push(entry);
+                    count += 1;
+                    emit(entry);
                 }
             }
         }
-        let truncated = !pending.is_empty() || visited >= 1000 || entries.len() >= limit;
-        Ok((entries, truncated, 0))
+        let truncated = !pending.is_empty() || visited >= 1000 || count >= limit;
+        Ok((truncated, 0))
     }
     fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         // Connection search is a Core-side bounded walk over `vfs.list`; it

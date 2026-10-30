@@ -4,7 +4,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { listen } from '@tauri-apps/api/event'
 import { call, native, search } from '@/lib/api'
 import { listDirectory } from '@/lib/listing'
-import type { Entry, Location, Preferences, RemoteConnection } from '@/lib/types'
+import type { Entry, Listing, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
 /** True for every path owned by the three Core virtual views, including their
@@ -26,11 +26,7 @@ function virtualViewPath(value: string, trashRoot: string | null): boolean {
 /** Lightweight identity of a listing: order plus the fields that visibly
  *  change. Used to skip a redundant state replacement after the cache paint. */
 function listingKey(entries: Entry[]): string {
-  let key = ''
-  for (const entry of entries) {
-    key += `${entry.path}\u0000${entry.name}\u0000${entry.modified}\u0000${entry.size}\u0001`
-  }
-  return key
+  return JSON.stringify([...entries].sort((a, b) => a.path.localeCompare(b.path)))
 }
 
 /** Everything a pane lists: entries, decorations, locations, connections,
@@ -184,24 +180,31 @@ export function useListing(
     setLoading(true)
     setError('')
     void (async () => {
-      // Core-owned virtual roots paint their previous listing immediately, so
-      // opening Recent/Applications/Trash never waits for PowerShell first.
-      if (virtualViewPath(path, trashRoot.current)) {
-        try {
-          const cached = await call<Entry[]>('virtual_cache', { path })
-          if (!active || id !== request.current) return
-          if (cached.length) {
-            paintedKey = listingKey(cached)
-            setEntries(cached)
-            setListedPath(path)
-            setVirtualVolume(true)
-            setLoading(false)
-          }
-        } catch {
-          // A cold cache must not block the real list below.
+      // Start the live enumeration while reading the navigation snapshot.
+      const fresh = listDirectory(path, prefs.hidden, prefs.displayIgnore)
+      // Attach immediately: a fast provider failure must not become unhandled.
+      void fresh.catch(() => {})
+      try {
+        const cached = await call<Listing | null>('directory_cache', {
+          path,
+          hidden: prefs.hidden,
+          ignores: prefs.displayIgnore,
+        })
+        if (!active || id !== request.current) return
+        if (cached) {
+          paintedKey = listingKey(cached.entries)
+          setEntries(cached.entries)
+          setListedPath(path)
+          setVirtualVolume(Boolean(cached.virtualVolume))
+          setDirectoryReadOnly(Boolean(cached.readOnly))
+          setDirectoryCanCreate(cached.canCreate !== false && !cached.readOnly)
+          setDefaultView(cached.defaultView || null)
+          setLoading(false)
         }
+      } catch {
+        // Cache miss/failure must never prevent live enumeration.
       }
-      const l = await listDirectory(path, prefs.hidden, prefs.displayIgnore)
+      const l = await fresh
       if (!active || id !== request.current) return
       if (l.path !== path) {
         navigate(l.path)
@@ -221,7 +224,7 @@ export function useListing(
           ? previous
           : l.warnings,
       )
-      if (!paintedKey) setListedPath(path)
+      if (paintedKey === null) setListedPath(path)
       if (!unchanged) {
         setEntries(l.entries)
         const paths = new Set(l.entries.map((entry) => entry.path))
@@ -238,7 +241,7 @@ export function useListing(
         if (active) {
           setError(String(e))
           // Keep the painted cache visible when only the refresh failed.
-          if (!paintedKey) setEntries([])
+          if (paintedKey === null) setEntries([])
         }
       })
       .finally(() => {
@@ -318,9 +321,25 @@ export function useListing(
               if (generation !== searchRequest.current) return
               if (b.replace) {
                 // Virtual-folder results are complete snapshots.
-                startTransition(() => setEntries(b.entries))
+                startTransition(() =>
+                  setEntries((previous) =>
+                    listingKey(previous) === listingKey(b.entries) ? previous : b.entries,
+                  ),
+                )
               } else if (b.entries.length) {
-                startTransition(() => setEntries((v) => [...v, ...b.entries]))
+                startTransition(() =>
+                  setEntries((previous) => {
+                    const merged = new Map(previous.map((entry) => [entry.path, entry]))
+                    let changed = false
+                    for (const entry of b.entries) {
+                      if (JSON.stringify(merged.get(entry.path)) !== JSON.stringify(entry)) {
+                        merged.set(entry.path, entry)
+                        changed = true
+                      }
+                    }
+                    return changed ? [...merged.values()] : previous
+                  }),
+                )
               }
               if (b.done) {
                 setSearching(false)
