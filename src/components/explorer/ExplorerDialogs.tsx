@@ -1,4 +1,5 @@
 import { t } from '@/i18n'
+import { call } from '@/lib/api'
 import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
 import { FilePickerDialog } from '@/components/FilePickerDialog'
 import { ConflictDialog } from '@/components/ConflictDialog'
