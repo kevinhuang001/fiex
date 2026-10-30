@@ -59,10 +59,8 @@ fn cache() -> &'static Mutex<Store> {
                     serde_json::to_value(&old).unwrap_or_default(),
                 )
                 .is_ok();
-            if migrated {
-                if let Some(path) = file() {
-                    let _ = std::fs::remove_file(path);
-                }
+            if migrated && let Some(path) = file() {
+                let _ = std::fs::remove_file(path);
             }
             old
         };
