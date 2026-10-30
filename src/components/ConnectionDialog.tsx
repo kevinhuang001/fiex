@@ -92,22 +92,18 @@ export function ConnectionDialog({
   }
   const browse = async (field: PluginField, read: boolean) => {
     try {
-    const picked = await openFilePicker({
-      mode: 'openFile',
-      extensions: field.extensions,
-    })
-    const path = Array.isArray(picked) ? picked[0] : picked
-    if (!path) return
-    if (!read) {
-      setValues((prev) => ({ ...prev, [field.id]: path }))
-      return
-    }
-    try {
+      const picked = await openFilePicker({
+        mode: 'openFile',
+        extensions: field.extensions,
+      })
+      const path = Array.isArray(picked) ? picked[0] : picked
+      if (!path) return
+      if (!read) {
+        setValues((prev) => ({ ...prev, [field.id]: path }))
+        return
+      }
       const text = await call<string>('read_preview', { path })
       setValues((prev) => ({ ...prev, [field.id]: text }))
-    } catch (cause) {
-      reportError(cause, 'connections:configuration')
-    }
     } catch (cause) {
       reportError(cause, 'connections:file-picker')
     }
