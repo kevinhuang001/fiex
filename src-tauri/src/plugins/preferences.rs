@@ -59,8 +59,10 @@ fn cache() -> &'static Mutex<Store> {
                     serde_json::to_value(&old).unwrap_or_default(),
                 )
                 .is_ok();
-            if migrated && let Some(path) = file() {
-                let _ = std::fs::remove_file(path);
+            if migrated {
+                // Keep the Rust 2021 edition compatible; a let-chain here
+                // cannot be parsed by the project's rustfmt toolchain.
+                file().map(std::fs::remove_file);
             }
             old
         };
