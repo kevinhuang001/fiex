@@ -150,8 +150,13 @@ fn key(path: &str) -> String {
                 .find(|conn| conn.mount_id == uri.mount_id)
                 .and_then(|conn| {
                     serde_json::to_vec(&(
-                        conn.id, conn.plugin_id, conn.kind, conn.settings, conn.mount_id,
-                    )).ok()
+                        conn.id,
+                        conn.plugin_id,
+                        conn.kind,
+                        conn.settings,
+                        conn.mount_id,
+                    ))
+                    .ok()
                 })
                 .or_else(|| {
                     crate::plugins::mounts::view(&uri.mount_id)
