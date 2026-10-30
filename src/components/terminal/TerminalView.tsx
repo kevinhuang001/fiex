@@ -8,6 +8,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { LoaderCircle, RotateCw } from 'lucide-react'
 import { call, native } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { themeSnapshot } from '@/lib/themes'
 
 import { terminalEvents, type TerminalEvent, type SessionStatus } from './sessionEvents'
@@ -105,7 +106,6 @@ export function TerminalView({
   const resizeRef = useRef<(() => void) | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<SessionStatus>('connecting')
-  const [error, setError] = useState('')
 
   useEffect(() => {
     const element = host.current
@@ -154,7 +154,7 @@ export function TerminalView({
           data: Array.from(new TextEncoder().encode(data)),
         }).catch((cause) => {
           if (!disposed) {
-            setError(String(cause))
+            reportError(cause, 'terminal:write')
             setStatus('error')
           }
         })
@@ -191,7 +191,6 @@ export function TerminalView({
       return true
     })
     setStatus('connecting')
-    setError('')
     if (!native) {
       setStatus('demo')
       const disposeShell = attachDemoShell(terminal, cwd)
@@ -209,7 +208,10 @@ export function TerminalView({
     const events = terminalEvents(
       (data) => terminal.write(data),
       setStatus,
-      (message) => setError(message || t('终端会话表不可用')),
+      (message) => {
+        const detail = message || t('终端会话表不可用')
+        reportError(detail, 'terminal:session')
+      },
     )
     channel.onmessage = (event) => {
       if (!disposed) events.receive(event)
@@ -233,7 +235,7 @@ export function TerminalView({
       })
       .catch((cause) => {
         if (disposed || events.ended()) return
-        setError(String(cause))
+        reportError(cause, 'terminal:open')
         setStatus('error')
       })
     return () => {
@@ -272,7 +274,7 @@ export function TerminalView({
             </>
           ) : (
             <>
-              <span>{status === 'error' ? error : t('SSH 会话已结束')}</span>
+              <span>{status === 'error' ? t('连接失败') : t('SSH 会话已结束')}</span>
               <button type="button" onClick={() => setAttempt((value) => value + 1)}>
                 <RotateCw size={13} /> {t('重新连接')}
               </button>

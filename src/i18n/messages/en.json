@@ -1408,5 +1408,10 @@
   "无法导入应用包": "Could not import application bundle",
   "请将可执行链接与其他文件分开导入": "Import executable links separately from other files",
   "系统应用不能移出应用程序视图": "System applications cannot leave the Applications view",
-  "已启用": "Enabled"
+  "已启用": "Enabled",
+  "无法打开连接": "Unable to open connection",
+  "无法预览": "Preview unavailable",
+  "插件面板无法加载": "Plugin panel failed to load",
+  "连接失败": "Connection failed",
+  "无法读取文件夹": "Could not read folder"
 }

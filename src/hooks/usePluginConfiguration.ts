@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import type { PluginInfo } from '@/lib/plugins'
 import { asList } from '@/components/settings/plugins/listValue'
 
@@ -37,7 +38,7 @@ export function usePluginConfiguration(
         if (alive) setDraft(Object.fromEntries(entries))
       })
       .catch((error) => {
-        if (alive) setMessage(String(error))
+        if (alive) reportError(error, 'plugins:settings')
       })
     return () => {
       alive = false
@@ -85,7 +86,7 @@ export function usePluginConfiguration(
         ),
       )
     } catch (error) {
-      setMessage(String(error))
+      reportError(error, 'plugins:settings')
     } finally {
       setBusy(false)
     }
