@@ -142,16 +142,25 @@ fn key(path: &str) -> String {
     // accounts, settings or provider. Include its current authorized identity.
     if crate::plugins::mounts::handles(path) {
         use sha2::{Digest, Sha256};
-        if let Ok((_, source)) = crate::plugins::mounts::resolve(path) {
-            let identity = match source {
-                crate::plugins::mounts::Source::Connection(connection) => {
-                    serde_json::to_vec(&connection).unwrap_or_default()
-                }
-                crate::plugins::mounts::Source::View(view) => {
-                    serde_json::to_vec(&view.descriptor).unwrap_or_default()
-                }
-            };
-            return format!("mount:{}:{}", hex::encode(Sha256::digest(&identity)), path);
+        if let Ok(uri) = crate::plugins::mounts::parse(path) {
+            // Cache identity is built from the public connection record: do
+            // not hydrate secrets or trigger OS keyring prompts on cache reads.
+            let identity = crate::remote::load_stored_public()
+                .into_iter()
+                .find(|conn| conn.mount_id == uri.mount_id)
+                .and_then(|conn| {
+                    serde_json::to_vec(&(
+                        conn.id, conn.plugin_id, conn.kind, conn.settings, conn.mount_id,
+                    )).ok()
+                })
+                .or_else(|| {
+                    crate::plugins::mounts::view(&uri.mount_id)
+                        .ok()
+                        .and_then(|view| serde_json::to_vec(&view.descriptor).ok())
+                });
+            if let Some(identity) = identity {
+                return format!("mount:{}:{}", hex::encode(Sha256::digest(&identity)), path);
+            }
         }
     }
     if let Some(route) = crate::usbfs::route(path) {
