@@ -30,18 +30,22 @@ pub(crate) async fn directory_open(
                 complete,
             });
         };
-        if let Some(cached) =
-            crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?
-        {
+        let cached = crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?;
+        // A cold Applications listing needs its real per-app icons. Avoid
+        // painting generic icons while the Decoration providers are resolving.
+        let defer_first_paint = cached.is_none() && path.starts_with("applications://");
+        if let Some(cached) = cached {
             send(cached, false);
         }
         let listing = broker
             .desktop_listing(hidden, &ignores)
             .map_err(String::from)?;
-        if let Some(fresh) =
-            crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?
-        {
-            send(fresh, false);
+        if !defer_first_paint {
+            if let Some(fresh) =
+                crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?
+            {
+                send(fresh, false);
+            }
         }
         let entries: Vec<crate::plugins::resolvers::decorations::DecorationEntry> = listing
             .entries
