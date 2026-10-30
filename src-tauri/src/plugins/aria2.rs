@@ -2,8 +2,8 @@
 //!
 //! The engine is the pure-Rust aria2 rewrite (`aria2-core`), so no external
 //! `aria2c` binary is required. Each download owns a small runtime thread; the
-//! host API only exposes a growing file as a stream, exactly like the old
-//! process-backed implementation.
+//! host API exposes a sequential stream and stages parallel downloads until
+//! complete so out-of-order ranges never escape as unwritten file holes.
 use aria2_core::{
     request::request_group::DownloadOptions, request::request_group_man::RequestGroupMan,
     DownloadEngine, DownloadStatus,
@@ -81,6 +81,39 @@ fn number(params: &Value, key: &str, default: u64, min: u64, max: u64) -> u64 {
         .and_then(Value::as_u64)
         .unwrap_or(default)
         .clamp(min, max)
+}
+
+const MIB: u64 = 1024 * 1024;
+
+/// Select the actual number of ranges centrally. SDK options are upper bounds,
+/// not a requirement to open all those connections for every file. The remote
+/// server may ultimately decline HTTP Range requests, in which case aria2
+/// handles its own single-connection fallback.
+///
+/// Without a trustworthy content length, start sequentially so VFS previews
+/// can consume a growing contiguous prefix immediately.
+fn download_parallelism(
+    size: Option<u64>,
+    connection_cap: u16,
+    split_cap: u16,
+    min_split: u64,
+) -> (u16, u16) {
+    let desired = match size {
+        Some(bytes) if bytes >= 256 * MIB => 16,
+        Some(bytes) if bytes >= 64 * MIB => 8,
+        Some(bytes) if bytes >= 16 * MIB => 4,
+        Some(bytes) if bytes >= 4 * MIB => 2,
+        _ => 1,
+    };
+    let by_size = size
+        .map(|bytes| (bytes / min_split.max(1)).clamp(1, u16::MAX as u64) as u16)
+        .unwrap_or(1);
+    let parallel = desired
+        .min(connection_cap)
+        .min(split_cap)
+        .min(by_size)
+        .max(1);
+    (parallel, parallel)
 }
 
 fn proxy() -> (Option<String>, Option<String>, Option<String>) {
@@ -203,22 +236,17 @@ pub(crate) fn open(owner: &str, params: &Value) -> Result<Value, String> {
     }
     let headers = header(params.get("headers").unwrap_or(&Value::Null))?;
     let size = params.get("size").and_then(Value::as_u64);
-    let connections = number(params, "connections", 8, 1, 16) as u16;
-    let requested_split = number(params, "split", 8, 1, 16) as u16;
-    // Small or unknown-length streams avoid aria2's segment setup and stay
-    // readable as a contiguous prefix while the server is still sending data.
-    let split = if size.unwrap_or(0) < 16 * 1024 * 1024 {
-        1
-    } else {
-        requested_split
-    };
+    let connection_cap = number(params, "connections", 16, 1, 16) as u16;
+    let split_cap = number(params, "split", 16, 1, 16) as u16;
     let min_split = number(
         params,
         "minSplitSize",
-        1024 * 1024,
-        1024 * 1024,
-        1024 * 1024 * 1024,
+        MIB,
+        MIB,
+        1024 * MIB,
     );
+    let (connections, split) =
+        download_parallelism(size, connection_cap, split_cap, min_split);
     let timeout_ms = number(params, "timeoutMs", 300_000, 1_000, 86_400_000);
     let allow_invalid_certs = params
         .get("allowInvalidCerts")
@@ -235,7 +263,7 @@ pub(crate) fn open(owner: &str, params: &Value) -> Result<Value, String> {
         dir: Some(directory.path().to_string_lossy().into_owned()),
         out: Some("payload".into()),
         split: Some(split),
-        max_connection_per_server: Some(connections.min(split)),
+        max_connection_per_server: Some(connections),
         min_split_size: Some(min_split),
         allow_overwrite: true,
         auto_file_renaming: false,
@@ -399,4 +427,29 @@ pub(crate) fn close(owner: &str, params: &Value) -> Result<(), String> {
             .remove(id);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{download_parallelism, MIB};
+
+    #[test]
+    fn adaptive_parallelism_respects_size_boundaries() {
+        assert_eq!(download_parallelism(None, 16, 16, MIB), (1, 1));
+        assert_eq!(download_parallelism(Some(0), 16, 16, MIB), (1, 1));
+        assert_eq!(download_parallelism(Some(4 * MIB - 1), 16, 16, MIB), (1, 1));
+        assert_eq!(download_parallelism(Some(4 * MIB), 16, 16, MIB), (2, 2));
+        assert_eq!(download_parallelism(Some(16 * MIB), 16, 16, MIB), (4, 4));
+        assert_eq!(download_parallelism(Some(64 * MIB), 16, 16, MIB), (8, 8));
+        assert_eq!(download_parallelism(Some(256 * MIB), 16, 16, MIB), (16, 16));
+    }
+
+    #[test]
+    fn adaptive_parallelism_respects_caller_caps_and_minimum_split() {
+        assert_eq!(download_parallelism(Some(256 * MIB), 4, 16, MIB), (4, 4));
+        assert_eq!(download_parallelism(Some(256 * MIB), 16, 2, MIB), (2, 2));
+        assert_eq!(download_parallelism(Some(16 * MIB), 16, 16, 8 * MIB), (2, 2));
+        assert_eq!(download_parallelism(Some(4 * MIB), 16, 16, 4 * MIB), (1, 1));
+        assert_eq!(download_parallelism(None, 16, 16, MIB), (1, 1));
+    }
 }
