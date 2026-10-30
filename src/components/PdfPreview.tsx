@@ -112,9 +112,7 @@ export default function PdfPreview({ url }: { url: string }) {
         {loading && <LoaderCircle className="spin" size={13} />}
       </div>
       {error ? (
-        <p role="status">
-          {t('可点击下方“打开”使用系统默认应用查看。')}
-        </p>
+        <p role="status">{t('可点击下方“打开”使用系统默认应用查看。')}</p>
       ) : (
         <canvas ref={canvas} />
       )}
