@@ -1,15 +1,13 @@
 //! Core-owned virtual storage adapter; never turns a view URI into a host path.
 use super::*;
+mod handles;
 use crate::core::{
     recent,
     volumes::{applications, virtual_resolvers, virtual_storage},
 };
+use handles::{AppRead, AppWrite};
 use serde_json::{json, to_value};
-use std::{
-    fs,
-    io::{Read, Seek, SeekFrom, Write},
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
 pub(super) struct BuiltinFsAdapter<'a>(pub &'a ResourceBroker);
 impl BuiltinFsAdapter<'_> {
@@ -139,7 +137,9 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
                 truncated = true;
                 break;
             }
-            for entry in virtual_storage::list(&path)? {
+            let listing =
+                super::binding::trusted(&path, "core:search")?.desktop_listing(true, &[])?;
+            for entry in listing.entries {
                 if cancelled() {
                     break;
                 }
@@ -283,64 +283,5 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         applications::after_rename(self.path(), &destination.path, directory)
             .map_err(FsError::from)?;
         Ok(())
-    }
-}
-struct AppRead {
-    file: fs::File,
-    size: u64,
-}
-impl ReadHandle for AppRead {
-    fn size(&self) -> u64 {
-        self.size
-    }
-    fn read_at(&mut self, offset: u64, length: usize) -> Result<(Vec<u8>, bool), String> {
-        self.file
-            .seek(SeekFrom::Start(offset))
-            .map_err(|e| e.to_string())?;
-        let mut data = vec![0; length.min(CHUNK)];
-        let n = self.file.read(&mut data).map_err(|e| e.to_string())?;
-        data.truncate(n);
-        Ok((data, offset.saturating_add(n as u64) >= self.size))
-    }
-}
-struct AppWrite {
-    temporary: Option<tempfile::NamedTempFile>,
-    target: PathBuf,
-    create: bool,
-}
-impl WriteHandle for AppWrite {
-    fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.temporary
-            .as_mut()
-            .ok_or("stream closed")?
-            .as_file_mut()
-            .write_all(bytes)
-            .map_err(|e| e.to_string())
-    }
-    fn seek(&mut self, kind: &str, offset: i64) -> Result<u64, String> {
-        let from = match kind {
-            "start" => SeekFrom::Start(u64::try_from(offset).map_err(|e| e.to_string())?),
-            "current" => SeekFrom::Current(offset),
-            "end" => SeekFrom::End(offset),
-            _ => return Err("Unsupported: invalid seek operation".into()),
-        };
-        self.temporary
-            .as_mut()
-            .ok_or("stream closed")?
-            .as_file_mut()
-            .seek(from)
-            .map_err(|e| e.to_string())
-    }
-    fn commit(mut self: Box<Self>) -> Result<Value, String> {
-        let temp = self.temporary.take().ok_or("stream closed")?;
-        temp.as_file().sync_all().map_err(|e| e.to_string())?;
-        if self.create {
-            temp.persist_noclobber(&self.target)
-                .map_err(|e| e.error.to_string())?;
-        } else {
-            temp.persist(&self.target)
-                .map_err(|e| e.error.to_string())?;
-        }
-        Ok(json!(null))
     }
 }

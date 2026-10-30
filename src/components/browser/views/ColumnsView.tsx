@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { BrowserColumn } from '../BrowserColumn'
 import { FileIcon } from '../../FileIcon'
 import { NameCell, rowVars, Thumbnail } from './shared'
-import { listDirectory } from '@/lib/listing'
+import { openPresentedDirectory } from '@/lib/listing'
 import { kind, parent, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
 import type { Props, SharedRow } from './shared'
@@ -29,11 +29,9 @@ export function ColumnsView({
   const selected = x.entries.find((e) => e.path === x.selected[0])
   useEffect(() => {
     let active = true
-    void listDirectory(parent(x.path), prefs.hidden, prefs.displayIgnore)
-      .then((l) => {
-        if (active) setLeft(l.entries)
-      })
-      .catch(() => setLeft([]))
+    void openPresentedDirectory(parent(x.path), prefs.hidden, prefs.displayIgnore, (l) => {
+      if (active) setLeft(l.entries)
+    }).catch(() => setLeft([]))
     return () => {
       active = false
     }
@@ -43,13 +41,11 @@ export function ColumnsView({
     setRight([])
     setError('')
     if (selected?.isDir)
-      void listDirectory(selected.path, prefs.hidden, prefs.displayIgnore)
-        .then((l) => {
-          if (active) setRight(l.entries)
-        })
-        .catch((e) => {
-          if (active) setError(String(e))
-        })
+      void openPresentedDirectory(selected.path, prefs.hidden, prefs.displayIgnore, (l) => {
+        if (active) setRight(l.entries)
+      }).catch((e) => {
+        if (active) setError(String(e))
+      })
     return () => {
       active = false
     }

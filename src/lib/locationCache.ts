@@ -1,22 +1,36 @@
+import { call } from './api'
 import type { Location } from './types'
-
 const KEY = 'fiex:locations:v1'
-
-/** Last known places, used to paint the sidebar before the async volume scan. */
+let snapshot: Location[] = []
 export function readCachedLocations(): Location[] {
-  try {
-    const cached = JSON.parse(localStorage.getItem(KEY) || '[]')
-    return Array.isArray(cached) ? (cached as Location[]) : []
-  } catch {
-    return []
-  }
+  return snapshot
 }
-
+export async function loadCachedLocations(): Promise<Location[]> {
+  const stored = await call<Location[] | null>('state_get', {
+    namespace: 'explorer',
+    key: 'locations',
+  })
+  if (stored) {
+    snapshot = stored
+    localStorage.removeItem(KEY)
+    return stored
+  }
+  try {
+    const old = JSON.parse(localStorage.getItem(KEY) || '[]')
+    if (Array.isArray(old) && old.length) {
+      await call('state_put', { namespace: 'explorer', key: 'locations', value: old })
+      snapshot = old
+      localStorage.removeItem(KEY)
+    }
+  } catch {
+    /* malformed migration data is not a live location source */
+  }
+  return snapshot
+}
 export function cacheLocations(locations: Location[]) {
   if (!locations.length) return
-  try {
-    localStorage.setItem(KEY, JSON.stringify(locations))
-  } catch {
-    /* private windows may reject storage */
-  }
+  snapshot = locations
+  void call('state_put', { namespace: 'explorer', key: 'locations', value: locations }).catch(
+    () => {},
+  )
 }

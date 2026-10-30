@@ -1,7 +1,7 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { call } from '@/lib/api'
-import { listDirectory } from '@/lib/listing'
+import { openPresentedDirectory } from '@/lib/listing'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { usePreferences } from '@/hooks/usePreferences'
 import { commonPlaces } from '@/lib/places'
@@ -166,30 +166,28 @@ export function usePicker(request: FilePickerRequest) {
       }
     }
     setError('')
-    void listDirectory(directory)
-      .then((value) => {
-        if (!alive) return
-        setEntries(value.entries || [])
-        persistPickerDirectory(directory, request.mode)
-        if (rememberedDirectory.current === directory) rememberedDirectory.current = ''
-      })
-      .catch((cause) => {
-        if (!alive) return
-        const home = (locations.find((item) => item.kind === 'home') || locations[0])?.path
-        if (
-          !request.directory &&
-          rememberedDirectory.current === directory &&
-          home &&
-          home !== directory
-        ) {
-          rememberedDirectory.current = ''
-          setDirectory(home)
-          setHistory([home])
-          setIndex(0)
-          return
-        }
-        setError(String(cause))
-      })
+    void openPresentedDirectory(directory, false, [], (value) => {
+      if (!alive) return
+      setEntries(value.entries || [])
+      persistPickerDirectory(directory, request.mode)
+      if (rememberedDirectory.current === directory) rememberedDirectory.current = ''
+    }).catch((cause) => {
+      if (!alive) return
+      const home = (locations.find((item) => item.kind === 'home') || locations[0])?.path
+      if (
+        !request.directory &&
+        rememberedDirectory.current === directory &&
+        home &&
+        home !== directory
+      ) {
+        rememberedDirectory.current = ''
+        setDirectory(home)
+        setHistory([home])
+        setIndex(0)
+        return
+      }
+      setError(String(cause))
+    })
     return () => {
       alive = false
     }

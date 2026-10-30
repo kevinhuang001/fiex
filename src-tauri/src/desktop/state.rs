@@ -13,6 +13,6 @@ pub(crate) fn state_remove(namespace: String, key: String) -> Result<(), String>
 }
 
 #[tauri::command]
-pub(crate) fn errors_pending() -> Vec<crate::infrastructure::errors::AppError> {
-    crate::infrastructure::errors::drain()
+pub(crate) fn errors_pending(after: Option<u64>) -> Vec<crate::infrastructure::errors::AppError> {
+    crate::infrastructure::errors::pending(after.unwrap_or(0))
 }

@@ -1,3 +1,5 @@
+import { cachePresentations } from './entryPresentation'
+import { publishPresentationIcons } from './decorationIcons'
 import { call, native } from './api'
 import { Channel } from '@tauri-apps/api/core'
 import type { EntryDecoration } from './types'
@@ -51,4 +53,17 @@ export function openDirectoryStream(
   const channel = new Channel<DirectoryViewUpdate>()
   channel.onmessage = onSnapshot
   return call<void>('directory_open', { path, hidden, ignores, onSnapshot: channel })
+}
+
+export function openPresentedDirectory(
+  path: string,
+  hidden: boolean,
+  ignores: string[],
+  onListing: (listing: Listing) => void,
+): Promise<void> {
+  return openDirectoryStream(path, hidden, ignores, (snapshot) => {
+    cachePresentations(snapshot.listing.entries, snapshot.decorations)
+    publishPresentationIcons(snapshot.listing.entries)
+    onListing(snapshot.listing)
+  })
 }

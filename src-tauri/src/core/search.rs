@@ -321,8 +321,7 @@ fn search_root(
     // Core-owned virtual roots are not host paths: filter their root listing
     // instead of asking a filesystem SearchProvider about a URI.
     if virtual_search_root(root)
-        || (request.mode == SearchMode::Name
-            && (crate::plugins::mounts::handles(root) || crate::usbfs::route(root).is_some()))
+        || (request.mode == SearchMode::Name && crate::plugins::mounts::handles(root))
     {
         return search_cached_vfs(root, request, cancelled, sink);
     }
@@ -459,20 +458,12 @@ fn search_cached_vfs(
         }
     };
     let mut fresh = BatchSink::new(&emit, sink.started, sink.limit);
-    let (refresh, result) = std::thread::scope(|scope| {
-        let refresh =
-            scope.spawn(|| crate::core::fs::directory_cache::refresh_tree(root, cancelled));
-        let result = search_adapter(root, request, cancelled, &mut fresh);
-        let refresh = refresh
-            .join()
-            .unwrap_or_else(|_| Err("cache refresh failed".into()));
-        (refresh, result)
-    });
+    let result = search_adapter(root, request, cancelled, &mut fresh);
     fresh.flush(false);
     if cancelled() {
         return Ok(());
     }
-    if let Err(error) = refresh.and(result) {
+    if let Err(error) = result {
         sink.warning = Some(error);
         sink.incomplete = true;
         sink.emit_snapshot(Vec::new(), true, false, false, 0, 0);

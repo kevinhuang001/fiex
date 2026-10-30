@@ -183,7 +183,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       return structuredClone(demoPlugins)
     case 'plugin_errors':
       return []
-    case 'plugin_error_report':
+    case 'ui_error_report':
       return null
     case 'plugin_error_clear':
       return null

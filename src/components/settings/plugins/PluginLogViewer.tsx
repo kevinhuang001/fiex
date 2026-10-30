@@ -1,9 +1,11 @@
+import { redactDiagnostic } from '@/lib/redactDiagnostic'
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { call } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 
 interface LogRecord {
+  id: number
   at: number
   source: string
   level: 'trace' | 'debug' | 'info' | 'warn' | 'error'
@@ -26,13 +28,29 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
   pausedRef.current = paused
   useEffect(() => {
     let active = true
+    let cursor = 0
+    let loadingPage = false
     const load = async () => {
+      if (loadingPage) return
+      loadingPage = true
       try {
-        const values = await call<LogRecord[]>('plugin_logs', { pluginId })
-        if (active) setEntries(values)
+        const page = await call<{ entries: LogRecord[]; cursor: number }>('plugin_logs', {
+          pluginId,
+          after: cursor,
+        })
+        if (active) {
+          cursor = page.cursor
+          setEntries((old) =>
+            [...page.entries, ...old.filter((r) => !page.entries.some((v) => v.id === r.id))].slice(
+              0,
+              500,
+            ),
+          )
+        }
       } catch {
         // Diagnostics may be unavailable while Core shuts down.
       } finally {
+        loadingPage = false
         if (active) setLoading(false)
       }
     }
@@ -61,12 +79,15 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
       }),
     [entries, level, query],
   )
-  const formatted = visible
-    .map(
-      (entry) =>
-        `${new Date(entry.at).toISOString()} [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}${entry.detail ? '\n' + entry.detail : ''}`,
-    )
-    .join('\n')
+  const formatted = redactDiagnostic(
+    visible
+      .map(
+        (entry) =>
+          `${new Date(entry.at).toISOString()} [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}${entry.detail ? '\n' + entry.detail : ''}`,
+      )
+      .join('\n'),
+    256 * 1024,
+  )
   const clear = async () => {
     try {
       await call('plugin_logs_clear', { pluginId })
@@ -128,7 +149,7 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
       </div>
       <ul className="plugin-error-list">
         {visible.map((entry, index) => (
-          <li key={`${entry.at}-${index}`}>
+          <li key={`${entry.id}-${index}`}>
             <span className={`plugin-error-source ${entry.level}`}>
               {entry.level.toUpperCase()}
             </span>

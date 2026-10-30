@@ -9,15 +9,25 @@ export function ErrorDialogHost() {
   useEffect(() => {
     if (!native) return
     let alive = true
+    let cursor = 0
+    let polling = false
     const refresh = async () => {
+      if (polling) return
+      polling = true
       try {
-        const entries =
-          await call<Array<{ source: string; code: string; message: string }>>('errors_pending')
+        const entries = await call<
+          Array<{ id: number; source: string; code: string; message: string }>
+        >('errors_pending', { after: cursor })
         if (alive) {
-          for (const entry of entries) reportError(entry.message, `${entry.source}:${entry.code}`)
+          for (const entry of entries) {
+            reportError(entry.message, `${entry.source}:${entry.code}`, `error:${entry.id}`)
+            cursor = Math.max(cursor, entry.id)
+          }
         }
       } catch {
         // A failed diagnostic poll must not create another diagnostic loop.
+      } finally {
+        polling = false
       }
     }
     void refresh()
@@ -30,6 +40,7 @@ export function ErrorDialogHost() {
   return (
     <ExplorerErrorDialog
       error={error?.message ?? ''}
+      diagnosticId={error?.diagnosticId}
       onClose={() => {
         if (error) dismissError(error.id)
       }}

@@ -98,7 +98,10 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
                             Handler::Plugin(p) => Some(p.id),
                             _ => None,
                         },
-                        rows: vec![row(crate::i18n::t("错误"), error)],
+                        rows: vec![row(
+                            crate::i18n::t("错误"),
+                            crate::infrastructure::redact::clean(&error, 1500),
+                        )],
                     }],
                 })
                 .collect()

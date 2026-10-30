@@ -2,9 +2,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
-    fs::{self, OpenOptions},
-    io::Write,
-    path::PathBuf,
     sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -18,9 +15,15 @@ const MAX_REPORTS_PER_MINUTE: u32 = 120;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogRecord {
+    #[serde(default)]
+    pub id: u64,
     pub at: u64,
     pub source: String,
     pub level: String,
+    #[serde(default)]
+    pub operation_id: Option<String>,
+    #[serde(default)]
+    pub duration_ms: Option<u64>,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
@@ -43,172 +46,27 @@ fn now_ms() -> u64 {
         .map(|d| d.as_millis() as u64)
         .unwrap_or_default()
 }
-fn clean(value: &str, limit: usize) -> String {
-    // stderr and structured plugin logs are untrusted input. Scrub common
-    // credential formats *before* truncating or persisting a diagnostic.
-    const INLINE_SECRETS: [&str; 16] = [
-        "access_token=",
-        "access_token:",
-        "refresh_token=",
-        "refresh_token:",
-        "client_secret=",
-        "client_secret:",
-        "password=",
-        "password:",
-        "api_key=",
-        "api_key:",
-        "apikey=",
-        "apikey:",
-        "authorization=",
-        "\"access_token\":",
-        "\"refresh_token\":",
-        "\"client_secret\":",
-    ];
-    let value = value.replace(['\0', '\u{001b}'], "");
-    let mut result = String::new();
-    let mut hide_next = false;
-    let mut authorization_scheme = false;
-    for word in value.split_whitespace() {
-        if !result.is_empty() {
-            result.push(' ');
-        }
-        let lower = word.to_ascii_lowercase();
-        if hide_next {
-            result.push_str("[REDACTED]");
-            hide_next = false;
-            continue;
-        }
-        if authorization_scheme {
-            authorization_scheme = false;
-            if matches!(lower.as_str(), "bearer" | "basic" | "token" | "apikey") {
-                result.push_str(word);
-                hide_next = true;
-            } else {
-                result.push_str("[REDACTED]");
-            }
-            continue;
-        }
-        if lower == "authorization:" {
-            result.push_str(word);
-            authorization_scheme = true;
-            continue;
-        }
-        if lower.starts_with("authorization:bearer") || lower.starts_with("authorization:basic") {
-            result.push_str("Authorization:[REDACTED]");
-            hide_next = true;
-            continue;
-        }
-        if matches!(
-            lower.as_str(),
-            "bearer"
-                | "access_token:"
-                | "refresh_token:"
-                | "client_secret:"
-                | "password:"
-                | "api_key:"
-                | "apikey:"
-                | "token:"
-        ) {
-            result.push_str(word);
-            hide_next = true;
-            continue;
-        }
-        let marker = INLINE_SECRETS
-            .iter()
-            .filter_map(|marker| lower.find(*marker).map(|start| start + marker.len()))
-            .min();
-        if let Some(end) = marker {
-            result.push_str(&word[..end]);
-            result.push_str("[REDACTED]");
-            if end == word.len() {
-                hide_next = true;
-            }
-        } else {
-            result.push_str(word);
-        }
-    }
-    result.chars().take(limit).collect()
-}
+use super::redact::clean;
+mod writer;
 
-fn directory() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|p| p.join("fiex").join("logs"))
-}
-fn paths(plugin_id: &str) -> Option<(PathBuf, PathBuf)> {
-    use sha2::{Digest, Sha256};
-    let dir = directory()?;
-    let hash = hex::encode(Sha256::digest(plugin_id.as_bytes()));
-    Some((
-        dir.join(format!("{hash}.jsonl")),
-        dir.join(format!("{hash}.previous.jsonl")),
-    ))
-}
-fn load_disk(plugin_id: &str) -> VecDeque<LogRecord> {
-    let mut rows = VecDeque::new();
-    let Some((current, previous)) = paths(plugin_id) else {
-        return rows;
-    };
-    for path in [previous, current] {
-        if let Ok(content) = fs::read_to_string(path) {
-            for line in content.lines() {
-                if let Ok(record) = serde_json::from_str::<LogRecord>(line) {
-                    rows.push_front(record);
-                    rows.truncate(MAX_ENTRIES);
-                }
-            }
-        }
-    }
-    rows
-}
-fn persist(plugin_id: &str, record: &LogRecord) {
-    let Some((current, previous)) = paths(plugin_id) else {
-        return;
-    };
-    let Some(parent) = current.parent() else {
-        return;
-    };
-    if fs::create_dir_all(parent).is_err() {
-        return;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).is_err() {
-            return;
-        }
-    }
-    if fs::metadata(&current).is_ok_and(|m| m.len() > MAX_FILE_BYTES) {
-        let _ = fs::remove_file(&previous);
-        let _ = fs::rename(&current, &previous);
-    }
-    let mut options = OpenOptions::new();
-    options.create(true).append(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    if let Ok(mut file) = options.open(current) {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if file
-                .set_permissions(fs::Permissions::from_mode(0o600))
-                .is_err()
-            {
-                return;
-            }
-        }
-        if let Ok(json) = serde_json::to_string(record) {
-            let _ = writeln!(file, "{json}");
-        }
-    }
-}
 fn append(
     plugin_id: &str,
     source: &str,
     level: &str,
     message: &str,
     detail: Option<&str>,
+) -> Result<(), String> {
+    append_context(plugin_id, source, level, message, detail, None, None)
+}
+#[allow(clippy::too_many_arguments)]
+fn append_context(
+    plugin_id: &str,
+    source: &str,
+    level: &str,
+    message: &str,
+    detail: Option<&str>,
+    operation: Option<&str>,
+    duration: Option<u64>,
 ) -> Result<(), String> {
     if !matches!(level, "trace" | "debug" | "info" | "warn" | "error") {
         return Err("unknown log level".into());
@@ -218,6 +76,9 @@ fn append(
         return Err("empty log message".into());
     }
     let record = LogRecord {
+        id: next_id(),
+        operation_id: operation.map(|v| clean(v, 128)),
+        duration_ms: duration,
         at: now_ms(),
         source: clean(source, 64),
         level: level.into(),
@@ -227,25 +88,50 @@ fn append(
             .filter(|d| !d.is_empty()),
     };
     let mut state = state().lock().map_err(|_| "log store unavailable")?;
-    let entries = state
-        .entries
-        .entry(plugin_id.into())
-        .or_insert_with(|| load_disk(plugin_id));
+    if state.entries.len() >= 128 && !state.entries.contains_key(plugin_id) {
+        if let Some(victim) = state.entries.keys().find(|k| k.as_str() != "core").cloned() {
+            state.entries.remove(&victim);
+        }
+    }
+    let entries = state.entries.entry(plugin_id.into()).or_default();
     entries.push_front(record.clone());
     entries.truncate(MAX_ENTRIES);
-    persist(plugin_id, &record);
+    writer::append(plugin_id, record);
     Ok(())
 }
-fn allowed(plugin_id: &str) -> bool {
+fn allowed(plugin_id: &str, level: &str) -> bool {
+    if !matches!(
+        level,
+        "trace" | "debug" | "info" | "warn" | "error" | "stderr"
+    ) {
+        return false;
+    }
     let now = now_ms();
     let Ok(mut state) = state().lock() else {
         return false;
     };
-    let entry = state.rates.entry(plugin_id.into()).or_insert((now, 0));
+    if state.rates.len() >= 512 {
+        state
+            .rates
+            .retain(|_, (at, _)| now.saturating_sub(*at) < 60_000);
+    }
+    if state.rates.len() >= 512 {
+        return false;
+    }
+    let entry = state
+        .rates
+        .entry(format!("{plugin_id}:{level}"))
+        .or_insert((now, 0));
     if now.saturating_sub(entry.0) >= 60_000 {
         *entry = (now, 0);
     }
-    if entry.1 >= MAX_REPORTS_PER_MINUTE {
+    let limit = if matches!(level, "warn" | "error") {
+        240
+    } else {
+        MAX_REPORTS_PER_MINUTE
+    };
+    if entry.1 >= limit {
+        writer::dropped();
         return false;
     }
     entry.1 += 1;
@@ -268,7 +154,7 @@ pub fn report_limited(plugin_id: &str, code: &str, message: &str, detail: Option
     {
         return;
     }
-    if !allowed(plugin_id) {
+    if !allowed(plugin_id, "error") {
         return;
     }
     let message = if code.is_empty() {
@@ -279,14 +165,14 @@ pub fn report_limited(plugin_id: &str, code: &str, message: &str, detail: Option
     let _ = append(plugin_id, "plugin", "error", &message, detail);
 }
 pub fn report_log_limited(plugin_id: &str, level: &str, message: &str) {
-    if !allowed(plugin_id) {
+    if !allowed(plugin_id, level) {
         return;
     }
     let _ = append(plugin_id, "plugin", level, message, None);
 }
 /// Capture the plugin's diagnostic channel without mixing it with JSON-RPC.
 pub fn report_plugin_stderr(plugin_id: &str, message: &str) {
-    if !allowed(plugin_id) {
+    if !allowed(plugin_id, "stderr") {
         return;
     }
     let _ = append(plugin_id, "stderr", "info", message, None);
@@ -295,43 +181,99 @@ pub fn record_core(level: &str, source: &str, message: &str) {
     let _ = append("core", source, level, message, None);
 }
 pub fn list(plugin_id: &str) -> Vec<LogRecord> {
-    state()
-        .lock()
-        .map(|mut state| {
-            state
-                .entries
-                .entry(plugin_id.into())
-                .or_insert_with(|| load_disk(plugin_id))
-                .iter()
-                .cloned()
-                .collect()
+    // Read history outside the memory mutex, then merge by stable process IDs.
+    let mut rows = writer::load_disk(plugin_id);
+    if let Ok(state) = state().lock() {
+        if let Some(memory) = state.entries.get(plugin_id) {
+            for record in memory.iter().rev() {
+                if !rows
+                    .iter()
+                    .any(|old| old.id == record.id && old.at == record.at)
+                {
+                    rows.push_front(record.clone());
+                }
+            }
+        }
+    }
+    rows.truncate(MAX_ENTRIES);
+    rows.into_iter()
+        .map(|mut r| {
+            r.message = clean(&r.message, MAX_MESSAGE);
+            r.detail = r.detail.map(|v| clean(&v, MAX_DETAIL));
+            r.source = clean(&r.source, 64);
+            r
         })
-        .unwrap_or_default()
+        .collect()
 }
 pub fn clear(plugin_id: &str) {
     if let Ok(mut state) = state().lock() {
         state.entries.remove(plugin_id);
-        state.rates.remove(plugin_id);
-        if let Some((current, previous)) = paths(plugin_id) {
-            let _ = fs::remove_file(current);
-            let _ = fs::remove_file(previous);
-        }
+        state
+            .rates
+            .retain(|key, _| !key.starts_with(&format!("{plugin_id}:")));
+        writer::clear(plugin_id);
+    }
+}
+fn next_id() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static ID: OnceLock<AtomicU64> = OnceLock::new();
+    ID.get_or_init(|| AtomicU64::new(now_ms().saturating_mul(1000)))
+        .fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogPage {
+    pub entries: Vec<LogRecord>,
+    pub cursor: u64,
+    pub has_more: bool,
+}
+pub fn query(plugin_id: &str, after: u64, limit: usize) -> LogPage {
+    let mut entries: Vec<_> = list(plugin_id)
+        .into_iter()
+        .filter(|r| r.id > after)
+        .collect();
+    entries.sort_by_key(|r| r.id);
+    let has_more = entries.len() > limit.clamp(1, 500);
+    entries.truncate(limit.clamp(1, 500));
+    let cursor = entries.last().map_or(after, |r| r.id);
+    entries.reverse();
+    LogPage {
+        entries,
+        cursor,
+        has_more,
+    }
+}
+
+/// Finite shutdown barrier; background I/O cannot indefinitely hold up exit.
+pub fn flush() {
+    writer::flush();
+}
+
+pub fn operation(
+    plugin_id: &str,
+    component: &str,
+    operation: &str,
+    level: &str,
+    duration: Option<u64>,
+    message: &str,
+) {
+    let _ = append_context(
+        plugin_id,
+        component,
+        level,
+        message,
+        None,
+        Some(operation),
+        duration,
+    );
+}
+
+pub fn report_operation_limited(plugin_id: &str, level: &str, message: &str, operation_id: &str) {
+    if allowed(plugin_id, level) {
+        operation(plugin_id, "plugin", operation_id, level, None, message);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::clean;
-
-    #[test]
-    fn credential_headers_and_query_values_are_redacted() {
-        let value = clean("Authorization: Bearer SECRET1 refresh_token=SECRET2", 1024);
-        assert!(!value.contains("SECRET1"));
-        assert!(!value.contains("SECRET2"));
-        assert!(value.contains("[REDACTED]"));
-        let json = clean(r#"{"access_token":"SECRET3"}"#, 1024);
-        assert!(!json.contains("SECRET3"));
-        let separated = clean("Authorization: Basic SECRET4", 1024);
-        assert!(!separated.contains("SECRET4"));
-    }
-}
+mod tests;

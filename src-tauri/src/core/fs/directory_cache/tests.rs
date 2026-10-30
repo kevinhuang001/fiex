@@ -19,39 +19,29 @@ fn item(path: &str, name: &str, directory: bool) -> Entry {
     }
 }
 #[test]
-fn only_navigation_enrolls_directories_and_empty_snapshots_are_hits() {
+fn local_listing_never_builds_directory_snapshots() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().to_str().unwrap();
     std::fs::write(root.path().join("needle.txt"), b"x").unwrap();
-    // A background refresh and live list do not create navigation snapshots.
-    refresh_tree(path, &|| false).unwrap();
-    super::super::trusted(path, "core:test")
-        .unwrap()
-        .list()
-        .unwrap();
+    let broker = super::super::trusted(path, "core:test").unwrap();
+    broker.list().unwrap();
+    broker.desktop_listing(true, &[]).unwrap();
+    store(path, &listing(path, vec![]));
     assert!(read(path, true, &[]).unwrap().is_none());
-    let mut found = Vec::new();
-    search(path, "needle", true, &[], &|| false, &mut |entry| {
-        found.push(entry)
-    })
-    .unwrap();
-    assert!(found.is_empty());
-    super::super::trusted(path, "core:test")
-        .unwrap()
-        .desktop_listing(true, &[])
-        .unwrap();
-    assert_eq!(read(path, true, &[]).unwrap().unwrap().entries.len(), 1);
-    let empty = root.path().join("empty");
-    std::fs::create_dir(&empty).unwrap();
-    let empty = empty.to_str().unwrap();
-    store(empty, &listing(empty, vec![]));
-    assert!(read(empty, true, &[]).unwrap().unwrap().entries.is_empty());
+    assert!(!enabled(path));
+}
+#[test]
+fn empty_vfs_snapshot_is_complete_and_does_not_create_decorations() {
+    let path = "applications://user/cache-test-empty";
+    store(path, &listing(path, vec![]));
+    let cached = read(path, true, &[]).unwrap().unwrap();
+    assert!(cached.entries.is_empty());
+    assert!(super::super::decoration_cache::read(path, &cached).is_none());
     drop_subtree(path);
 }
 #[test]
 fn cached_tree_respects_parent_edges_hidden_filters_and_cancellation() {
-    let root = tempfile::tempdir().unwrap();
-    let path = root.path().to_str().unwrap();
+    let path = "applications://user/cache-test-tree";
     let child = format!("{path}/.hidden");
     let stale = format!("{path}/deleted");
     store(path, &listing(path, vec![item(&child, ".hidden", true)]));
@@ -95,8 +85,8 @@ fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
     let parent = root.path().join("visited");
     let child = parent.join("child");
     std::fs::create_dir_all(&child).unwrap();
-    let parent = parent.to_string_lossy().into_owned();
-    let child = child.to_string_lossy().into_owned();
+    let parent = "applications://user/cache-test-delete".to_string();
+    let child = format!("{parent}/child");
     store(
         &parent,
         &listing(&parent, vec![item(&child, "child", true)]),
@@ -108,7 +98,6 @@ fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
             vec![item(&format!("{child}/needle"), "needle", false)],
         ),
     );
-    std::fs::remove_dir(&child).unwrap();
     drop_subtree(&child);
     assert!(read(&child, true, &[]).unwrap().is_none());
     assert!(read(&parent, true, &[]).unwrap().is_some());
@@ -118,12 +107,9 @@ fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
 
 #[test]
 fn invalidation_uses_parent_edges_and_does_not_remove_unrelated_siblings() {
-    let root = tempfile::tempdir().unwrap();
-    let parent = root.path().to_string_lossy().into_owned();
+    let parent = "applications://user/cache-test-siblings".to_string();
     let first = format!("{parent}/first");
     let second = format!("{parent}/second");
-    std::fs::create_dir_all(&first).unwrap();
-    std::fs::create_dir_all(&second).unwrap();
     store(
         &parent,
         &listing(
@@ -137,4 +123,17 @@ fn invalidation_uses_parent_edges_and_does_not_remove_unrelated_siblings() {
     assert!(read(&first, true, &[]).unwrap().is_none());
     assert!(read(&second, true, &[]).unwrap().is_some());
     drop_subtree(&parent);
+}
+
+#[test]
+fn presentation_snapshot_requires_matching_entry_metadata() {
+    let path = "applications://user/cache-test-presentation";
+    let value = listing(path, vec![item(&format!("{path}/app"), "app", false)]);
+    super::super::decoration_cache::store(path, &value, &[]);
+    assert!(super::super::decoration_cache::read(path, &value).is_some());
+    let mut changed = value.clone();
+    changed.entries[0].modified = 42;
+    assert!(super::super::decoration_cache::read(path, &changed).is_none());
+    store(path, &value);
+    drop_subtree(path);
 }

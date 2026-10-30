@@ -47,7 +47,13 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
             None
         } else {
             resource.desktop_entry().ok().and_then(|entry| {
-                serde_json::to_string(&(path.as_str(), entry.modified, entry.size)).ok()
+                serde_json::to_string(&(
+                    &resource.reference,
+                    entry.modified,
+                    entry.size,
+                    crate::core::fs::changes::revision(),
+                ))
+                .ok()
             })
         };
         if let Some(value) = key.as_ref().and_then(|key| cache.get(key)) {

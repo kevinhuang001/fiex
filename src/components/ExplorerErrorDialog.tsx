@@ -1,6 +1,5 @@
 import { t } from '@/i18n'
 import { AlertCircle } from 'lucide-react'
-import { call } from '@/lib/api'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 
@@ -9,13 +8,13 @@ import { Button } from './ui/button'
 export function ExplorerErrorDialog({
   error,
   onClose,
-  onError,
+  diagnosticId,
 }: {
   error: string
   onClose: () => void
-  onError: (error: string) => void
+  onError?: (error: string) => void
+  diagnosticId?: string
 }) {
-  const elevated = navigator.userAgent.includes('Windows') && /管理员/.test(error)
   return (
     <Modal open={Boolean(error)} onClose={onClose} title={t('错误')}>
       <div className="error-dialog" role="alert">
@@ -23,14 +22,12 @@ export function ExplorerErrorDialog({
         <p>{error}</p>
       </div>
       <div className="dialog-actions">
-        {elevated && (
+        {diagnosticId && (
           <Button
             variant="secondary"
-            onClick={() => {
-              void call('relaunch_elevated').catch((cause) => onError(String(cause)))
-            }}
+            onClick={() => void navigator.clipboard.writeText(diagnosticId).catch(() => {})}
           >
-            {t('以管理员身份重启')}
+            {diagnosticId}
           </Button>
         )}
         <Button variant="ghost" onClick={onClose}>

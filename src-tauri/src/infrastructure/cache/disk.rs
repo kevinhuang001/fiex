@@ -8,7 +8,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-const SCHEMA: u32 = 1;
+const SCHEMA: u32 = 2;
 const MAX_SNAPSHOT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DISK_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_FILES: usize = 2_000;
@@ -22,7 +22,7 @@ struct Envelope<T> {
 }
 
 fn root() -> Option<PathBuf> {
-    dirs::cache_dir().map(|root| root.join("fiex").join("directory-v1"))
+    dirs::cache_dir().map(|root| root.join("fiex").join("directory-v2"))
 }
 fn file(key: &str) -> Option<PathBuf> {
     root().map(|p| {

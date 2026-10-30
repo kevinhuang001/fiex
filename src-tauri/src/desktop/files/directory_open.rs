@@ -21,51 +21,39 @@ pub(crate) async fn directory_open(
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let started = std::time::Instant::now();
-        let broker = crate::core::fs::trusted(&path, "core:directory-open")?;
-        broker.require(crate::plugins::provider_registry::FsOperation::List, false)?;
-        let send = |snapshot: crate::core::fs::directory_cache::DirectorySnapshot, complete| {
-            let _ = on_snapshot.send(DirectoryViewUpdate {
-                listing: snapshot.listing,
-                decorations: snapshot.decorations,
-                complete,
-            });
-        };
+        let identity = crate::core::fs::directory_cache::key(&path);
         let cached = crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?;
         // Warm listings paint an atomic metadata + Decoration snapshot.
         // A cold listing waits for its first complete presentation rather
         // than displaying generic icons which will immediately flash.
         if let Some(cached) = cached {
-            send(cached, false);
+            let decorations = crate::core::fs::decoration_cache::resolve(&path, &cached.listing);
+            let _ = on_snapshot.send(DirectoryViewUpdate {
+                listing: cached.listing,
+                decorations,
+                complete: false,
+            });
         }
+        let broker = crate::core::fs::trusted(&path, "core:directory-open")?;
         let listing = broker
             .desktop_listing(hidden, &ignores)
             .map_err(String::from)?;
-        let entries: Vec<crate::plugins::resolvers::decorations::DecorationEntry> = listing
-            .entries
-            .iter()
-            .filter_map(|entry| {
-                serde_json::to_value(entry)
-                    .ok()
-                    .and_then(|value| serde_json::from_value(value).ok())
-            })
-            .collect();
-        let decorations = crate::plugins::resolvers::decorations::query_with_plugins(
-            &path,
-            entries.clone(),
-            true,
-        );
-        crate::core::fs::directory_cache::store_decorations(&path, &entries, &decorations);
-        if let Some(fresh) =
-            crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?
-        {
-            send(fresh, true);
+        let decorations = crate::core::fs::decoration_cache::resolve(&path, &listing);
+        if identity != crate::core::fs::directory_cache::key(&path) {
+            return Err("StaleRef: connection identity changed during listing".into());
         }
+        let count = listing.entries.len();
+        let _ = on_snapshot.send(DirectoryViewUpdate {
+            listing,
+            decorations,
+            complete: true,
+        });
         crate::infrastructure::logging::record_core(
             "debug",
             "fs.list",
             &format!(
                 "Directory listed {} entries with presentation in {} ms",
-                listing.entries.len(),
+                count,
                 started.elapsed().as_millis(),
             ),
         );

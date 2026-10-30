@@ -1,25 +1,8 @@
 /// Generic plugin process bridge. Deliberately runs on the blocking pool:
 /// stdout/IPC must never block the WebView or Tauri's async scheduler.
 /// Errors that are normal before activation must not flood the diagnostic log.
-pub(super) fn expected_plugin_error(message: &str) -> bool {
-    [
-        "plugin is not installed",
-        "plugin disabled or not approved",
-        "plugin is not enabled",
-        "permission not granted",
-        "permissiondenied",
-        "permission request",
-        "not authorized",
-    ]
-    .iter()
-    .any(|prefix| message.to_ascii_lowercase().contains(prefix))
-}
-
 pub(super) fn record_plugin_error(plugin_id: &str, source: &str, message: &str) {
-    if expected_plugin_error(message) {
-        return;
-    }
-    let _ = crate::plugins::errors::report(plugin_id, source, message, None);
+    let _ = crate::infrastructure::logging::report(plugin_id, source, message, None);
 }
 
 #[tauri::command]

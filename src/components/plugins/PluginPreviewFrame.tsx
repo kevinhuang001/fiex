@@ -112,7 +112,7 @@ export function PluginPreviewFrame({
             const p = (params || {}) as { message?: unknown; detail?: unknown }
             if (typeof p.message !== 'string' || !p.message.trim())
               throw new Error('Invalid error message')
-            await call('plugin_error_report', {
+            await call('ui_error_report', {
               pluginId,
               source: 'ui',
               message: p.message.slice(0, 500),

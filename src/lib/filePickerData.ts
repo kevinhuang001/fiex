@@ -1,3 +1,4 @@
+import { loadCachedLocations } from './locationCache'
 import { call } from '@/lib/api'
 import type { Location, RemoteConnection } from '@/lib/types'
 
@@ -16,7 +17,7 @@ export function loadPickerSidebarData(): Promise<PickerSidebarData> {
   if (snapshot && Date.now() - snapshot.loadedAt < 30_000) return Promise.resolve(snapshot)
   if (pending) return pending
   pending = Promise.all([
-    call<Location[]>('locations').catch(() => [] as Location[]),
+    call<Location[]>('locations').catch(() => loadCachedLocations().catch(() => [] as Location[])),
     call<RemoteConnection[]>('remote_connections').catch(() => [] as RemoteConnection[]),
   ])
     .then(([locations, connections]) => {

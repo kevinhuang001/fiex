@@ -22,7 +22,7 @@ pub fn report_limited(plugin_id: &str, code: &str, message: &str, detail: Option
     crate::infrastructure::logging::report_limited(plugin_id, code, message, detail);
     crate::infrastructure::errors::report(
         &format!("plugin:{plugin_id}"),
-        code,
+        &format!("plugin.{code}"),
         message,
         None,
         false,
