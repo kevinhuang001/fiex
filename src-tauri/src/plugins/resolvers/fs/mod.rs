@@ -134,6 +134,9 @@ impl Mount {
             json!({
                 "nodeId": node_id,
                 "query": query,
+                // SDK search modes are explicit; this helper is used by the
+                // integration examples, which only exercise name matching.
+                "mode": "name",
                 "hidden": hidden,
                 "ignores": ignores,
                 "limit": limit,
