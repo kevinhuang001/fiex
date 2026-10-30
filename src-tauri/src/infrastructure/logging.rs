@@ -44,28 +44,76 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 fn clean(value: &str, limit: usize) -> String {
-    // Diagnostics never include control sequences. Avoid accidentally storing
-    // access tokens in the common Authorization / Bearer header formats.
-    let words = value.replace(['\0', '\u{001b}'], "");
-    let tokens: Vec<&str> = words.split_whitespace().collect();
-    let mut redacted = String::new();
-    let mut hide = false;
-    for word in tokens {
-        if !redacted.is_empty() {
-            redacted.push(' ');
+    // stderr and structured plugin logs are untrusted input. Scrub common
+    // credential formats *before* truncating or persisting a diagnostic.
+    const INLINE_SECRETS: [&str; 16] = [
+        "access_token=", "access_token:", "refresh_token=", "refresh_token:",
+        "client_secret=", "client_secret:", "password=", "password:",
+        "api_key=", "api_key:", "apikey=", "apikey:",
+        "authorization=", "\"access_token\":", "\"refresh_token\":",
+        "\"client_secret\":",
+    ];
+    let value = value.replace(['\0', '\u{001b}'], "");
+    let mut result = String::new();
+    let mut hide_next = false;
+    let mut authorization_scheme = false;
+    for word in value.split_whitespace() {
+        if !result.is_empty() {
+            result.push(' ');
         }
-        if hide {
-            redacted.push_str("[REDACTED]");
-            hide = false;
+        let lower = word.to_ascii_lowercase();
+        if hide_next {
+            result.push_str("[REDACTED]");
+            hide_next = false;
+            continue;
+        }
+        if authorization_scheme {
+            authorization_scheme = false;
+            if matches!(lower.as_str(), "bearer" | "basic" | "token" | "apikey") {
+                result.push_str(word);
+                hide_next = true;
+            } else {
+                result.push_str("[REDACTED]");
+            }
+            continue;
+        }
+        if lower == "authorization:" {
+            result.push_str(word);
+            authorization_scheme = true;
+            continue;
+        }
+        if lower.starts_with("authorization:bearer")
+            || lower.starts_with("authorization:basic")
+        {
+            result.push_str("Authorization:[REDACTED]");
+            hide_next = true;
+            continue;
+        }
+        if matches!(
+            lower.as_str(),
+            "bearer" | "access_token:" | "refresh_token:" | "client_secret:"
+                | "password:" | "api_key:" | "apikey:" | "token:"
+        ) {
+            result.push_str(word);
+            hide_next = true;
+            continue;
+        }
+        let marker = INLINE_SECRETS.iter().filter_map(|marker| {
+            lower.find(marker).map(|start| start + marker.len())
+        }).min();
+        if let Some(end) = marker {
+            result.push_str(&word[..end]);
+            result.push_str("[REDACTED]");
+            if end == word.len() {
+                hide_next = true;
+            }
         } else {
-            redacted.push_str(word);
-            hide = word.eq_ignore_ascii_case("Bearer")
-                || word.eq_ignore_ascii_case("Authorization:")
-                || word.eq_ignore_ascii_case("access_token:");
+            result.push_str(word);
         }
     }
-    redacted.chars().take(limit).collect()
+    result.chars().take(limit).collect()
 }
+
 fn directory() -> Option<PathBuf> {
     dirs::data_local_dir().map(|p| p.join("fiex").join("logs"))
 }
@@ -252,5 +300,22 @@ pub fn clear(plugin_id: &str) {
             let _ = fs::remove_file(current);
             let _ = fs::remove_file(previous);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean;
+
+    #[test]
+    fn credential_headers_and_query_values_are_redacted() {
+        let value = clean("Authorization: Bearer SECRET1 refresh_token=SECRET2", 1024);
+        assert!(!value.contains("SECRET1"));
+        assert!(!value.contains("SECRET2"));
+        assert!(value.contains("[REDACTED]"));
+        let json = clean(r#"{"access_token":"SECRET3"}"#, 1024);
+        assert!(!json.contains("SECRET3"));
+        let separated = clean("Authorization: Basic SECRET4", 1024);
+        assert!(!separated.contains("SECRET4"));
     }
 }
