@@ -93,25 +93,36 @@ export function usePicker(request: FilePickerRequest) {
     const lastKey = request.mode === 'saveFile' ? 'lastSaveDirectory' : 'lastOpenDirectory'
     void Promise.all([
       call<{ key: SortKey; direction: 'asc' | 'desc' } | null>('state_get', {
-        namespace: 'picker', key: 'sort',
+        namespace: 'picker',
+        key: 'sort',
       }),
       call<GroupKey | null>('state_get', { namespace: 'picker', key: 'group' }),
       call<string | null>('state_get', { namespace: 'picker', key: lastKey }),
-    ]).then(([savedSort, savedGroup, savedDirectory]) => {
-      if (!alive) return
-      if (savedSort && ['name', 'modified', 'size', 'kind'].includes(savedSort.key)) {
-        setSort({ key: savedSort.key, direction: savedSort.direction === 'desc' ? 'desc' : 'asc' })
-      }
-      if (savedGroup && ['none', 'kind', 'modified', 'size'].includes(savedGroup)) setGroup(savedGroup)
-      if (!request.directory && savedDirectory && !navigationChanged.current) {
-        rememberedDirectory.current = savedDirectory
-        setDirectory(savedDirectory)
-        setHistory([savedDirectory])
-        setIndex(0)
-      }
-      setSettingsReady(true)
-    }).catch(() => { if (alive) setSettingsReady(true) })
-    return () => { alive = false }
+    ])
+      .then(([savedSort, savedGroup, savedDirectory]) => {
+        if (!alive) return
+        if (savedSort && ['name', 'modified', 'size', 'kind'].includes(savedSort.key)) {
+          setSort({
+            key: savedSort.key,
+            direction: savedSort.direction === 'desc' ? 'desc' : 'asc',
+          })
+        }
+        if (savedGroup && ['none', 'kind', 'modified', 'size'].includes(savedGroup))
+          setGroup(savedGroup)
+        if (!request.directory && savedDirectory && !navigationChanged.current) {
+          rememberedDirectory.current = savedDirectory
+          setDirectory(savedDirectory)
+          setHistory([savedDirectory])
+          setIndex(0)
+        }
+        setSettingsReady(true)
+      })
+      .catch(() => {
+        if (alive) setSettingsReady(true)
+      })
+    return () => {
+      alive = false
+    }
   }, [])
 
   useEffect(() => {
