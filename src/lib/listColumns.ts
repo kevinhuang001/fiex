@@ -35,7 +35,7 @@ export function normalizeListColumns(value: unknown): ListColumns {
       ? clamp(raw, LIST_COLUMNS_MIN[key] ?? LIST_NAME_MIN)
       : LIST_COLUMNS_DEFAULT[key]
   }
-  return { name: read('name'), modified: read('modified'), size: read('size'), kind: read('kind') }
+  return { name: read('name'), modified: read('modified')!, size: read('size')!, kind: read('kind')! }
 }
 
 /** CSS grid template shared by the header and every row: the name column takes
