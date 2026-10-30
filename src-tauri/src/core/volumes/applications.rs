@@ -768,39 +768,23 @@ struct WindowsApp {
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_windows_path(value: &str) -> String {
-    fn join(base: Option<String>, rest: &str) -> Option<String> {
-        let base = base?;
-        Some(format!(
-            "{}\\{}",
-            base.trim_end_matches(['\\', '/']),
-            rest.trim_start_matches(['\\', '/'])
-        ))
+fn resolve_windows_executable(value: &str) -> Option<String> {
+    if !is_executable_target(value) {
+        return None;
     }
-    let known = [
-        ("{6D809377-6AF0-444B-8957-A3773F02200E}", "ProgramFiles"),
-        (
-            "{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}",
-            "ProgramFiles(x86)",
-        ),
-        ("{F38BF404-1D43-42F2-9305-67DE0B28FC23}", "windir"),
-        ("{D65231B0-B2F1-4857-A4CE-A8E7C6EA7D27}", "SysWOW64"),
-    ];
-    for (guid, variable) in known {
-        if let Some(rest) = value.strip_prefix(guid) {
-            let base = if variable == "SysWOW64" {
-                std::env::var("windir")
-                    .ok()
-                    .map(|windir| format!("{}\\SysWOW64", windir.trim_end_matches('\\')))
-            } else {
-                std::env::var(variable).ok()
-            };
-            if let Some(path) = join(base, rest) {
-                return path;
-            }
-        }
+    let path = if value.starts_with('{') {
+        // AppsFolder returns Known Folder IDs for tools such as msinfo32.exe.
+        // An unresolved GUID must never be passed to ShellExecute as a path.
+        super::windows_shell::resolve_known_folder_path(value)?
+    } else {
+        PathBuf::from(value)
+    };
+    // Reject stale Start Menu shortcuts and unresolvable shell identities
+    // before they enter the VFS listing and its persistent directory cache.
+    if !path.is_file() {
+        return None;
     }
-    value.to_string()
+    Some(path.to_string_lossy().into_owned())
 }
 
 #[cfg(target_os = "windows")]
@@ -896,35 +880,47 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
         let Ok(app) = serde_json::from_value::<WindowsApp>(value) else {
             continue;
         };
-        let aumid_path = resolve_windows_path(&app.aumid);
-        let shell_path = resolve_windows_path(&app.path);
-        let id = if looks_like_path(&app.aumid) {
-            if !is_executable_target(&aumid_path) {
-                continue;
-            }
-            format!("path:{aumid_path}")
-        } else if !app.aumid.is_empty() {
-            format!("aumid:{}", app.aumid)
-        } else if !app.path.is_empty() {
-            if !is_executable_target(&shell_path) {
-                continue;
-            }
-            format!("path:{shell_path}")
-        } else {
-            continue;
-        };
         if app.name.trim().is_empty() {
             continue;
         }
+
+        let path_is_file = looks_like_path(&app.path);
+        let resolved_path = if path_is_file {
+            resolve_windows_executable(&app.path)
+        } else {
+            None
+        };
+        let id = if looks_like_path(&app.aumid) {
+            // A desktop AppsFolder identity may itself be a Known Folder
+            // target. Prefer it, but fall back to the item's real path.
+            let Some(target) =
+                resolve_windows_executable(&app.aumid).or_else(|| resolved_path.clone())
+            else {
+                continue;
+            };
+            format!("path:{target}")
+        } else if !app.aumid.is_empty() {
+            // Packaged apps launch through their AUMID, not a local path.
+            // Non-packaged entries with a stale local target are skipped.
+            if !app.aumid.contains('!') && path_is_file && resolved_path.is_none() {
+                continue;
+            }
+            format!("aumid:{}", app.aumid)
+        } else if let Some(target) = resolved_path {
+            format!("path:{target}")
+        } else {
+            continue;
+        };
+
         let mut item = entry(app.name, format!("{URI}{}", encode(&id)), "app", 0, true);
-        if !app.aumid.is_empty() && !looks_like_path(&app.aumid) {
-            item.link_target = Some(format!("shell:AppsFolder\\{}", app.aumid));
-        } else if !app.icon.is_empty() {
+        // Icon lookup must use the *resolved* launch target, not the original
+        // {GUID}\foo.exe token that the Shell image factory cannot parse.
+        if !app.icon.is_empty() && Path::new(&app.icon).is_file() {
             item.link_target = Some(app.icon);
-        } else if looks_like_path(&app.path) {
-            item.link_target = Some(shell_path);
-        } else if !app.path.is_empty() {
-            item.link_target = Some(app.path.clone());
+        } else if let Some(aumid) = id.strip_prefix("aumid:") {
+            item.link_target = Some(format!("shell:AppsFolder\\{aumid}"));
+        } else if let Some(target) = id.strip_prefix("path:") {
+            item.link_target = Some(target.to_owned());
         }
         entries.push(item);
     }
@@ -938,7 +934,10 @@ fn platform_open(encoded: &str) -> Result<(), String> {
     let target = if let Some(aumid) = id.strip_prefix("aumid:") {
         format!("shell:AppsFolder\\{aumid}")
     } else if let Some(path) = id.strip_prefix("path:") {
-        path.to_owned()
+        // Revalidate bookmarked/cached identities at launch, including older
+        // paths that still contain a Known Folder GUID.
+        resolve_windows_executable(path)
+            .ok_or_else(|| crate::i18n::t("无法启动应用").to_string())?
     } else {
         return Err(crate::i18n::t("无法启动应用").into());
     };
@@ -1040,6 +1039,32 @@ mod tests {
         assert_eq!(desktop_entry(&file), Some(("Hidden".into(), true, true)));
         std::fs::write(&file, "[Desktop Entry]\nType=Link\nName=Link\n").unwrap();
         assert_eq!(desktop_entry(&file), Some(("Link".into(), false, false)));
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_target_tests {
+    use super::resolve_windows_executable;
+
+    #[test]
+    fn valid_system_known_folder_target_is_launchable() {
+        let target = resolve_windows_executable(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\cmd.exe")
+            .expect("Windows System32 cmd.exe should exist");
+        assert!(target.to_lowercase().ends_with(r"\system32\cmd.exe"));
+    }
+
+    #[test]
+    fn unresolved_and_missing_targets_are_not_listed() {
+        assert!(
+            resolve_windows_executable(r"{00000000-0000-0000-0000-000000000000}\missing.exe")
+                .is_none()
+        );
+        assert!(resolve_windows_executable(
+            r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\fiex-nonexistent-test.exe"
+        )
+        .is_none());
+        assert!(resolve_windows_executable(r"C:\fiex-nonexistent-test.exe").is_none());
+        assert!(resolve_windows_executable(r"C:\Windows\readme.txt").is_none());
     }
 }
 
