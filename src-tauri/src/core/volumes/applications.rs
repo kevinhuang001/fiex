@@ -6,7 +6,10 @@ use crate::core::files::Entry;
 use crate::core::fs::directory_cache;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::{AtomicBool, Ordering}, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex, OnceLock,
+};
 use std::time::{Duration, Instant};
 
 pub const URI: &str = "applications://";
@@ -94,7 +97,9 @@ const CATALOG_MAX_AGE: Duration = Duration::from_secs(300);
 fn refresh_system_entries() -> Result<Vec<Entry>, String> {
     let entries = platform_list()?;
     store_system_entries(&entries);
-    *last_catalog_scan().lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+    *last_catalog_scan()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
     let ids = entries
         .iter()
         .map(|entry| entry.path.clone())
