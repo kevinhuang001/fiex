@@ -1,7 +1,6 @@
 //! Cross-repository test for the Core-owned plugin search aggregator.
 use fiex_lib::{
-    core::search::SearchMode,
-    plugins::host as plugin_host,
+    core::search::SearchMode, plugins::host as plugin_host,
     plugins::resolvers::search::PluginSearchInput,
 };
 
