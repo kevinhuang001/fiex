@@ -42,7 +42,8 @@ fn cache() -> &'static Mutex<Store> {
     static STORE: OnceLock<Mutex<Store>> = OnceLock::new();
     STORE.get_or_init(|| {
         let saved = crate::infrastructure::state::get("providers", "ordering")
-            .ok().flatten()
+            .ok()
+            .flatten()
             .and_then(|value| serde_json::from_value::<Store>(value).ok());
         let store = if let Some(saved) = saved {
             saved
@@ -53,9 +54,15 @@ fn cache() -> &'static Mutex<Store> {
                 .unwrap_or_default();
             if !old.features.is_empty() {
                 if crate::infrastructure::state::put(
-                    "providers", "ordering", serde_json::to_value(&old).unwrap_or_default(),
-                ).is_ok() {
-                    if let Some(path) = file() { let _ = std::fs::remove_file(path); }
+                    "providers",
+                    "ordering",
+                    serde_json::to_value(&old).unwrap_or_default(),
+                )
+                .is_ok()
+                {
+                    if let Some(path) = file() {
+                        let _ = std::fs::remove_file(path);
+                    }
                 }
             }
             old
