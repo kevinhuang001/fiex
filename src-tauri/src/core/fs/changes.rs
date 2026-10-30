@@ -51,7 +51,7 @@ pub(crate) fn committed_result(path: &str, value: &serde_json::Value) {
         return;
     };
     match super::presentation::entry(value.clone()) {
-        Ok(mut entry) => {
+        Ok(mut entry) if !entry.name.is_empty() => {
             entry.path = path.into();
             directory_cache::add_entry(&parent, entry);
         }
