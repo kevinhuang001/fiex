@@ -18,7 +18,7 @@ static CLOCK: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 enum Kind {
-    Upsert(Entry),
+    Upsert(Box<Entry>),
     Remove,
 }
 struct Pending {
@@ -60,7 +60,7 @@ fn record(parent: &str, path: &str, change: Kind) {
     }
 }
 pub(super) fn upsert(parent: &str, entry: Entry) {
-    record(parent, &entry.path.clone(), Kind::Upsert(entry));
+    record(parent, &entry.path.clone(), Kind::Upsert(Box::new(entry)));
 }
 pub(super) fn remove(parent: &str, path: &str) {
     record(parent, path, Kind::Remove);
@@ -80,9 +80,9 @@ fn apply(listing: &mut Listing, pending: &Pending) {
                 .iter_mut()
                 .find(|item| item.path == entry.path)
             {
-                *current = entry.clone();
+                *current = entry.as_ref().clone();
             } else {
-                listing.entries.push(entry.clone());
+                listing.entries.push(entry.as_ref().clone());
             }
         }
         Kind::Remove => listing.entries.retain(|entry| entry.path != pending.path),
