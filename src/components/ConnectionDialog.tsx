@@ -91,6 +91,7 @@ export function ConnectionDialog({
     setConfigLoadFailed(false)
   }
   const browse = async (field: PluginField, read: boolean) => {
+    try {
     const picked = await openFilePicker({
       mode: 'openFile',
       extensions: field.extensions,
@@ -106,6 +107,9 @@ export function ConnectionDialog({
       setValues((prev) => ({ ...prev, [field.id]: text }))
     } catch (cause) {
       reportError(cause, 'connections:configuration')
+    }
+    } catch (cause) {
+      reportError(cause, 'connections:file-picker')
     }
   }
   const save = async (event: React.FormEvent) => {
