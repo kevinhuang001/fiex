@@ -2,10 +2,17 @@
 //! outside this generic backend; no provider-specific keys or logic here.
 use std::{
     collections::HashMap,
-    sync::{Mutex, atomic::{AtomicU64, Ordering}},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    },
     time::{Duration, Instant},
 };
-struct Slot<V> { value: V, expires: Instant, access: u64 }
+struct Slot<V> {
+    value: V,
+    expires: Instant,
+    access: u64,
+}
 pub struct MemoryCache<V> {
     capacity: usize,
     ttl: Duration,
@@ -35,21 +42,32 @@ impl<V: Clone> MemoryCache<V> {
         if let Ok(mut entries) = self.entries.lock() {
             entries.retain(|_, entry| Instant::now() < entry.expires);
             if !entries.contains_key(&key) && entries.len() >= self.capacity {
-                if let Some(victim) = entries.iter().min_by_key(|(_, entry)| entry.access)
-                    .map(|(key,_)| key.clone())
-                { entries.remove(&victim); }
+                if let Some(victim) = entries
+                    .iter()
+                    .min_by_key(|(_, entry)| entry.access)
+                    .map(|(key, _)| key.clone())
+                {
+                    entries.remove(&victim);
+                }
             }
-            entries.insert(key, Slot {
-                value,
-                expires: Instant::now() + self.ttl,
-                access: self.clock.fetch_add(1, Ordering::Relaxed),
-            });
+            entries.insert(
+                key,
+                Slot {
+                    value,
+                    expires: Instant::now() + self.ttl,
+                    access: self.clock.fetch_add(1, Ordering::Relaxed),
+                },
+            );
         }
     }
     pub fn invalidate(&self, key: &str) {
-        if let Ok(mut entries) = self.entries.lock() { entries.remove(key); }
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.remove(key);
+        }
     }
     pub fn clear(&self) {
-        if let Ok(mut entries) = self.entries.lock() { entries.clear(); }
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.clear();
+        }
     }
 }
