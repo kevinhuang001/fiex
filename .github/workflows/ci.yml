@@ -27,7 +27,33 @@ jobs:
       - run: npm run format:check
       - run: npm run check:i18n
       - run: npm test
+      - run: npm run icons
       - run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-web-assets
+          if-no-files-found: error
+          path: |
+            dist/
+            src-tauri/icons/
+
+  e2e:
+    name: Browser UI tests
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned SDK
+        run: git submodule update --init sdk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -44,12 +70,15 @@ jobs:
             playwright-report/
             test-results/
   desktop:
+    needs: checks
     name: Desktop (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
       SCCACHE_GHA_ENABLED: 'true'
       SCCACHE_CACHE_SIZE: '10G'
+      # Keep tests, examples and Clippy in the same explicit-target cache.
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
@@ -90,14 +119,15 @@ jobs:
         with:
           workspaces: |
             src-tauri -> target
-            sdk/rust -> sdk/rust/target
+            sdk/rust -> target
           key: ${{ matrix.target }}
           cache-all-crates: true
           cache-on-failure: true
       - run: npm ci
-      - run: npm run icons
-      - run: npm run build
-      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-web-assets
+          path: .
       - name: Core Rust tests
         shell: bash
         run: |
@@ -194,7 +224,10 @@ jobs:
           exit "$status"
       - uses: tauri-apps/tauri-action@v0
         with:
-          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          # The exact frontend and icons checked above are shared by all installers.
+          args: >-
+            --config '{"build":{"beforeBuildCommand":""}}'
+            --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: Verify self-contained native libraries
         run: npm run audit:native -- --target ${{ matrix.target }}
       - name: sccache stats
@@ -231,7 +264,7 @@ jobs:
   release:
     name: Publish tested installers
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [checks, desktop]
+    needs: [checks, e2e, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write

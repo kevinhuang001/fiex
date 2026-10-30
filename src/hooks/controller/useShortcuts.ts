@@ -79,13 +79,13 @@ export function useShortcuts({
     shortcuts: prefs.shortcuts,
     blocked: Boolean(
       dialog ||
-      conflict ||
-      settings ||
-      pluginManager ||
-      preview ||
-      info ||
-      tagOpen ||
-      connectionOpen ||
+        conflict ||
+        settings ||
+        pluginManager ||
+        preview ||
+        info ||
+        tagOpen ||
+        connectionOpen,
     ),
     handlers: {
       settings: () => setSettings(true),
