@@ -18,7 +18,6 @@ import { TagDialog } from '@/components/TagDialog'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/Modal'
 import type { AppController } from '@/hooks/useAppController'
-import { call } from '@/lib/api'
 import { LoaderCircle } from 'lucide-react'
 export function ExplorerDialogs({
   left,
@@ -39,9 +38,6 @@ export function ExplorerDialogs({
   x,
   setDialogValue,
   dialogError,
-  trashIssue,
-  setTrashIssue,
-  openTrash,
   info,
   setInfo,
   tagOpen,
@@ -80,9 +76,6 @@ export function ExplorerDialogs({
   | 'x'
   | 'setDialogValue'
   | 'dialogError'
-  | 'trashIssue'
-  | 'setTrashIssue'
-  | 'openTrash'
   | 'info'
   | 'setInfo'
   | 'tagOpen'
@@ -179,40 +172,6 @@ export function ExplorerDialogs({
             </Button>
           </div>
         </form>
-      </Modal>
-
-      <Modal open={trashIssue} onClose={() => setTrashIssue(false)} title={t('无法浏览废纸篓')}>
-        <div className="dialog-actions">
-          <Button variant="ghost" onClick={() => setTrashIssue(false)}>
-            {t('取消')}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setTrashIssue(false)
-              void call('open_trash').catch((error) => x.setError(String(error)))
-            }}
-          >
-            {t('在 Finder 中打开')}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setTrashIssue(false)
-              setTimeout(() => void openTrash(), 300)
-            }}
-          >
-            {t('重试')}
-          </Button>
-          <Button
-            onClick={() => {
-              setTrashIssue(false)
-              void call('open_full_disk_access').catch((error) => x.setError(String(error)))
-            }}
-          >
-            {t('打开权限设置')}
-          </Button>
-        </div>
       </Modal>
 
       <FileInfoDialog info={info} onClose={() => setInfo(null)} />

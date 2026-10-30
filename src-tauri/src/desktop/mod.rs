@@ -219,10 +219,8 @@ pub fn run() {
             restore_from_trash,
             trash_restore_needs_folder,
             delete_permanently,
-            open_applications,
             set_tags,
             open_full_disk_access,
-            open_trash,
             watch_directory,
             unwatch_directory,
             native_icon

@@ -7,11 +7,13 @@
 //! - `trash`: browsing, restoring and emptying the Trash.
 
 pub mod application_folders;
+pub mod application_policy;
 pub mod applications;
 mod mounts;
 pub mod recycle;
 mod roots;
 mod trash;
+pub mod trash_vfs;
 pub mod virtual_resolvers;
 pub mod virtual_storage;
 #[cfg(target_os = "windows")]

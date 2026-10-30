@@ -15,6 +15,15 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
   switch (command) {
     case 'list_directory': {
       const requested = String(a.path || '')
+      if (requested === 'trash://')
+        return {
+          path: 'trash://',
+          entries: [],
+          readOnly: false,
+          canCreate: false,
+          virtualVolume: true,
+          warnings: [],
+        }
       if (requested === 'applications://') {
         const app = (name: string, path: string, extension: string) => ({
           path,

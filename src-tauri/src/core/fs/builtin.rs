@@ -59,6 +59,16 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         request: &crate::plugin_sdk::filesystem::TransferPreflight,
     ) -> Result<(), FsError> {
         use crate::plugin_sdk::filesystem::TransferDirection;
+        if matches!(request.direction, TransferDirection::Import)
+            && self.path().starts_with(virtual_resolvers::RECENT_URI)
+        {
+            return Err("PermissionDenied: Recent does not accept imports".into());
+        }
+        if virtual_resolvers::view_for(self.path()).is_some_and(|view| view.id() == "core:trash") {
+            return Err(
+                "PermissionDenied: Trash requires its dedicated restore/delete actions".into(),
+            );
+        }
         if !self.path().starts_with(applications::URI) {
             return Ok(());
         }
@@ -196,7 +206,9 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         if virtual_resolvers::view_for(self.path())
             .is_some_and(|resolver| resolver.id() == "core:trash")
         {
-            let listable = virtual_storage::is_virtual_tree_path(self.path());
+            let listable = virtual_storage::is_virtual_tree_path(self.path())
+                && virtual_storage::entry(self.path())
+                    .is_ok_and(|entry| entry.is_dir && !entry.is_symlink);
             return if op == FsOperation::Stat
                 || (matches!(op, FsOperation::List | FsOperation::Search) && listable)
             {

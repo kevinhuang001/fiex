@@ -20,6 +20,9 @@ pub(crate) async fn directory_open(
     on_snapshot: tauri::ipc::Channel<DirectoryViewUpdate>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        if crate::core::volumes::trash_vfs::handles(&path) {
+            crate::core::volumes::trash_vfs::check_access()?;
+        }
         let started = std::time::Instant::now();
         let identity = crate::core::fs::directory_cache::key(&path);
         let cached = crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?;

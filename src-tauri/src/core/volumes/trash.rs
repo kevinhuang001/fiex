@@ -17,15 +17,11 @@ pub use journal::*;
 pub fn trash_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        dirs::home_dir()
-            .map(|home| home.join(".Trash"))
-            .filter(|path| path.is_dir())
+        dirs::home_dir().map(|home| home.join(".Trash"))
     }
     #[cfg(target_os = "linux")]
     {
-        dirs::data_dir()
-            .map(|data| data.join("Trash/files"))
-            .filter(|path| path.is_dir())
+        dirs::data_dir().map(|data| data.join("Trash/files"))
     }
     #[cfg(target_os = "windows")]
     {
@@ -45,7 +41,11 @@ struct TrashOrigin {
 
 pub fn restore_needs_folder(paths: &[String]) -> bool {
     paths.iter().any(|path| {
-        !path.starts_with(super::recycle::URI) && original_location(Path::new(path)).is_none()
+        !path.starts_with(super::recycle::URI)
+            && super::trash_vfs::action_path(path)
+                .ok()
+                .and_then(|p| original_location(Path::new(&p)))
+                .is_none()
     })
 }
 
@@ -156,6 +156,8 @@ pub fn restore_from_trash(
     let mut restored = 0;
     for path in paths {
         check_cancelled(cancel)?;
+        let resolved = super::trash_vfs::action_path(path)?;
+        let path = &resolved;
         if let Some(encoded) = path.strip_prefix(super::recycle::URI) {
             super::recycle::restore(encoded)?;
             restored += 1;
@@ -219,6 +221,8 @@ pub fn delete_permanently(paths: &[String], cancel: &AtomicBool) -> Result<usize
     let mut removed = 0;
     for path in paths {
         check_cancelled(cancel)?;
+        let resolved = super::trash_vfs::action_path(path)?;
+        let path = &resolved;
         if let Some(encoded) = path.strip_prefix(super::recycle::URI) {
             super::recycle::purge(encoded)?;
             removed += 1;

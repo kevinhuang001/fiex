@@ -88,6 +88,17 @@ fn executable_shortcut(path: &str, target: Option<&str>) -> Option<bool> {
     }
     #[cfg(target_os = "macos")]
     {
+        let app = std::path::Path::new(path);
+        if app
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("app"))
+        {
+            return Some(
+                app.is_dir()
+                    && app.join("Contents/Info.plist").is_file()
+                    && !std::fs::symlink_metadata(app).is_ok_and(|m| m.file_type().is_symlink()),
+            );
+        }
         // Finder aliases are regular files; resolving an alias never executes it.
         let kind = std::process::Command::new("mdls")
             .args(["-raw", "-name", "kMDItemContentType", path])
@@ -119,7 +130,9 @@ fn executable_shortcut(path: &str, target: Option<&str>) -> Option<bool> {
             );
         }
     }
-    Some(false)
+    Some(crate::core::volumes::application_policy::executable_file(
+        path,
+    ))
 }
 
 #[cfg(test)]

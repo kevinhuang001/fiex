@@ -21,7 +21,6 @@ export function useShortcuts({
   info,
   tagOpen,
   connectionOpen,
-  trashIssue,
   focusSearch,
   startPathEdit,
   copy,
@@ -54,7 +53,6 @@ export function useShortcuts({
   info: Entry | null
   tagOpen: boolean
   connectionOpen: boolean
-  trashIssue: boolean
   focusSearch: () => void
   startPathEdit: () => void
   copy: (moving: boolean) => void
@@ -88,7 +86,6 @@ export function useShortcuts({
       info ||
       tagOpen ||
       connectionOpen ||
-      trashIssue,
     ),
     handlers: {
       settings: () => setSettings(true),

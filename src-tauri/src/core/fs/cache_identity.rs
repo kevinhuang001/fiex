@@ -46,6 +46,9 @@ pub(super) fn validate_mount(path: &str) -> Result<(), String> {
     // Reauthorize every cache read, but never hydrate remote credentials:
     // providers see exactly the same permissions while cached navigation
     // avoids a keyring prompt on every paint and filename search.
+    if crate::core::volumes::trash_vfs::handles(path) {
+        crate::core::volumes::trash_vfs::check_access()?;
+    }
     if crate::plugins::mounts::handles(path) {
         let uri = crate::plugins::mounts::parse(path)?;
         if let Some(connection) = crate::remote::load_stored_public()
