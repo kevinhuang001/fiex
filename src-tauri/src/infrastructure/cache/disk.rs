@@ -81,7 +81,18 @@ pub fn store<T: Serialize>(key: &str, value: &T) {
     if temp.write_all(&data).is_err() || temp.flush().is_err() {
         return;
     }
-    let _ = temp.persist(&path);
+    // tempfile::persist cannot replace an existing destination on some
+    // Windows filesystems. Keep the existing snapshot on unexpected errors,
+    // but allow a best-effort remove-and-retry for AlreadyExists.
+    match temp.persist(&path) {
+        Ok(_) => {}
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+            if fs::remove_file(&path).is_ok() {
+                let _ = error.file.persist(&path);
+            }
+        }
+        Err(_) => return,
+    }
     if WRITES.fetch_add(1, Ordering::Relaxed) % 64 == 0 {
         prune(root);
     }
