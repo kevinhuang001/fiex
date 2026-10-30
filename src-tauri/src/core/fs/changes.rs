@@ -55,7 +55,7 @@ pub(crate) fn committed_result(path: &str, value: &serde_json::Value) {
             entry.path = path.into();
             directory_cache::add_entry(&parent, entry);
         }
-        Err(_) => committed(path),
+        _ => committed(path),
     }
 }
 pub(crate) fn removed(path: &str) {
