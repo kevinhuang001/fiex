@@ -1,14 +1,13 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { Button } from '../ui/button'
 export function ConnectionSetupHelp({
   factory,
   busy,
-  onError,
 }: {
   factory: { description?: string; setupUrl?: string }
   busy: boolean
-  onError: (error: string) => void
 }) {
   return (
     <>
@@ -20,7 +19,7 @@ export function ConnectionSetupHelp({
           disabled={busy}
           onClick={() =>
             void call('open_external_url', { url: factory.setupUrl }).catch((cause) =>
-              onError(String(cause)),
+              reportError(cause, 'connections:setup'),
             )
           }
         >
