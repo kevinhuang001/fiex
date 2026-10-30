@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { t } from '@/i18n'
 import { call, native } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { SelectField } from '../ui/SelectField'
 import { KeyRound } from 'lucide-react'
 
 export function CredentialSettings() {
   const [backend, setBackend] = useState('local')
   const [busy, setBusy] = useState(true)
-  const [error, setError] = useState('')
   useEffect(() => {
     if (!native) {
       setBusy(false)
@@ -23,7 +23,7 @@ export function CredentialSettings() {
       })
       .catch((cause) => {
         if (alive) {
-          setError(String(cause))
+          reportError(cause, 'credentials')
           setBusy(false)
         }
       })
@@ -34,12 +34,11 @@ export function CredentialSettings() {
   const change = async (next: string) => {
     if (busy || next === backend) return
     setBusy(true)
-    setError('')
     try {
       if (native) await call('credential_backend_set', { backend: next })
       setBackend(next)
     } catch (cause) {
-      setError(String(cause))
+      reportError(cause, 'credentials')
     } finally {
       setBusy(false)
     }
@@ -67,7 +66,6 @@ export function CredentialSettings() {
           </fieldset>
         </div>
       </div>
-      {error && <p role="alert">{error}</p>}
     </>
   )
 }
