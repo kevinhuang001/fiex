@@ -21,6 +21,23 @@ pub(crate) fn committed(path: &str) {
         Err(_) => directory_cache::invalidate_directory(&parent),
     }
 }
+/// Use the entry returned by mkdir itself: a second remote stat is unnecessary
+/// and may temporarily fail on eventually consistent providers.
+pub(crate) fn committed_result(path: &str, value: &serde_json::Value) {
+    if !directory_cache::enabled(path) {
+        return;
+    }
+    let Ok(parent) = binding::parent_path(path) else {
+        return;
+    };
+    match super::presentation::entry(value.clone()) {
+        Ok(mut entry) => {
+            entry.path = path.into();
+            directory_cache::add_entry(&parent, entry);
+        }
+        Err(_) => committed(path),
+    }
+}
 pub(crate) fn removed(path: &str) {
     if !directory_cache::enabled(path) {
         return;
