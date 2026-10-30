@@ -1,3 +1,10 @@
+# Fiex 0.7.9
+
+- SDK 0.3.2 adds an active `ctx.aria2()` API that mirrors `ctx.http()`: providers set headers, timeout, connection/split counts and an optional progress callback, then read the download as a stream. Core owns the aria2 process and temporary output.
+- WebDAV, OpenList and Google Drive use `ctx.aria2` for file reads and fall back to the existing HTTP path when aria2 is unavailable.
+- Opening a remote file that is already cached no longer creates a “正在缓存” activity row in the status centre.
+- Google Drive native editors export by type and report the exported size; Office preview/open no longer fail with “incomplete export”.
+
 # Fiex 0.7.8
 
 - Drop files onto any breadcrumb segment to copy or move them into that ancestor folder (including virtual roots and the ellipsis ancestor).

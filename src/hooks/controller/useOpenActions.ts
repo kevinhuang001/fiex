@@ -60,11 +60,12 @@ export function useOpenActions({
       return
     }
     const remote = isRemotePath(e.path)
+    const cached = remote && Boolean(e.hasCache)
     let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
-      // Opening a connection file caches it locally on the way to the system
-      // app; the activity says so instead of claiming a download.
-      remote ? t('正在缓存…') : t('正在打开…'),
+      // Cached files open directly; only a real cache miss gets a transfer
+      // activity in the status centre.
+      remote && !cached ? t('正在缓存…') : t('正在打开…'),
       async () => {
         const outcome = await runBeforeOpenHooks(e)
         if (outcome.preview) {
@@ -80,8 +81,8 @@ export function useOpenActions({
       },
       e.name,
       false,
-      remote ? 'transfer' : undefined,
-      remote
+      remote && !cached ? 'transfer' : undefined,
+      remote && !cached
         ? (id) => {
             onProgress = progressChannel(id)
           }
@@ -90,6 +91,10 @@ export function useOpenActions({
   }
   const previewEntry = (entry: Entry, pane = x) => {
     if (!isRemotePath(entry.path)) {
+      setPreview(entry)
+      return
+    }
+    if (entry.hasCache) {
       setPreview(entry)
       return
     }

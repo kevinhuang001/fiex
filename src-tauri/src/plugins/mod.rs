@@ -1,4 +1,5 @@
 //! Plugin lifecycle, services, resource security and event resolvers.
+pub(crate) mod aria2;
 pub mod cache;
 pub mod contracts;
 mod credentials;

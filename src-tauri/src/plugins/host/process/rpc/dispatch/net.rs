@@ -25,6 +25,19 @@ pub(super) fn dispatch(ctx: &mut Context<'_>) -> Result<Value, String> {
             ctx.running.ensure_network_target(&host)?;
             crate::plugins::oauth::authorize(ctx.params, || ctx.running.actor(ctx.params).is_ok())
         }
+        "host.aria2.open" => {
+            let host = request_url_host(ctx.params)?;
+            ctx.running.ensure_network_target(&host)?;
+            crate::plugins::aria2::open(ctx.params)
+        }
+        "host.aria2.read" => {
+            ctx.running.require_permission(Capability::Network)?;
+            crate::plugins::aria2::read(ctx.params)
+        }
+        "host.aria2.close" => {
+            crate::plugins::aria2::close(ctx.params)?;
+            Ok(Value::Null)
+        }
         "host.net.http.open" => {
             let host = request_url_host(ctx.params)?;
             ctx.running.ensure_network_target(&host)?;

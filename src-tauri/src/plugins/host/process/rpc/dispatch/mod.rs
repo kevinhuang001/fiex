@@ -68,7 +68,10 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
     };
     if method.starts_with("fs.") {
         fs::dispatch(&mut ctx)
-    } else if method.starts_with("host.net.") || method == "host.oauth.authorize" {
+    } else if method.starts_with("host.net.")
+        || method.starts_with("host.aria2.")
+        || method == "host.oauth.authorize"
+    {
         net::dispatch(&mut ctx)
     } else {
         other::dispatch(&mut ctx)
