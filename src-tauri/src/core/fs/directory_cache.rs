@@ -1,16 +1,19 @@
 //! Navigation snapshots shared by every storage adapter. No provider sees this
 //! cache. Internal list/search/transfer calls never enroll new directories.
-use crate::infrastructure::cache::disk;
 use crate::core::{
     files::{Entry, Listing},
     ignores::IgnoreSet,
 };
-use serde::{Deserialize, Serialize};
+use crate::infrastructure::cache::disk;
 use crate::plugins::resolvers::decorations::{Decoration, DecorationEntry};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
     path::Path,
-    sync::{Mutex, OnceLock, atomic::{AtomicU64, Ordering}},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex, OnceLock,
+    },
 };
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -28,9 +31,18 @@ pub(crate) struct DirectorySnapshot {
 fn stamp() -> String {
     use sha2::{Digest, Sha256};
     let catalog = crate::plugins::host::catalog();
-    let versions = catalog.iter().map(|p|
-        (&p.id, &p.version, p.enabled, p.approved, &p.granted_permissions)
-    ).collect::<Vec<_>>();
+    let versions = catalog
+        .iter()
+        .map(|p| {
+            (
+                &p.id,
+                &p.version,
+                p.enabled,
+                p.approved,
+                &p.granted_permissions,
+            )
+        })
+        .collect::<Vec<_>>();
     let providers = serde_json::to_vec(&versions).unwrap_or_default();
     let prefs = serde_json::to_vec(&crate::plugins::preferences::snapshot()).unwrap_or_default();
     let mut hash = Sha256::new();
@@ -40,7 +52,9 @@ fn stamp() -> String {
     hex::encode(hash.finalize())
 }
 static ACCESS_CLOCK: AtomicU64 = AtomicU64::new(1);
-fn next_access() -> u64 { ACCESS_CLOCK.fetch_add(1, Ordering::Relaxed) }
+fn next_access() -> u64 {
+    ACCESS_CLOCK.fetch_add(1, Ordering::Relaxed)
+}
 fn snapshot(key: &str) -> Option<DirectorySnapshot> {
     let memory = {
         let mut cache = cache().lock().unwrap_or_else(|e| e.into_inner());
@@ -49,7 +63,8 @@ fn snapshot(key: &str) -> Option<DirectorySnapshot> {
             entry.clone()
         })
     };
-    memory.or_else(|| disk::load::<DirectorySnapshot>(key))
+    memory
+        .or_else(|| disk::load::<DirectorySnapshot>(key))
         .map(|mut data| {
             if !data.decorations.is_empty() && data.presentation_stamp != stamp() {
                 data.decorations.clear();
@@ -58,31 +73,54 @@ fn snapshot(key: &str) -> Option<DirectorySnapshot> {
         })
 }
 pub(crate) fn read_snapshot(
-    path: &str, hidden: bool, ignores: &[String],
+    path: &str,
+    hidden: bool,
+    ignores: &[String],
 ) -> Result<Option<DirectorySnapshot>, String> {
     validate_mount(path)?;
-    let mut data = match snapshot(&key(path)) { Some(data) => data, None => return Ok(None) };
+    let mut data = match snapshot(&key(path)) {
+        Some(data) => data,
+        None => return Ok(None),
+    };
     data.listing = filtered(data.listing, hidden, ignores);
-    let visible: HashSet<_> = data.listing.entries.iter().map(|e| e.path.as_str()).collect();
-    data.decorations.retain(|d| visible.contains(d.path.as_str()));
+    let visible: HashSet<_> = data
+        .listing
+        .entries
+        .iter()
+        .map(|e| e.path.as_str())
+        .collect();
+    data.decorations
+        .retain(|d| visible.contains(d.path.as_str()));
     Ok(Some(data))
 }
 
 /// Decoration responses attach only to already-visited directories, and only
 /// when they still describe the same entries the user actually viewed.
 pub(crate) fn store_decorations(
-    path: &str, displayed: &[DecorationEntry], decorations: &[Decoration],
+    path: &str,
+    displayed: &[DecorationEntry],
+    decorations: &[Decoration],
 ) {
     let identity = key(path);
-    let Some(mut data) = snapshot(&identity) else { return };
-    let valid = displayed.iter().all(|incoming| data.listing.entries.iter().any(|entry| {
-        entry.path == incoming.path && entry.name == incoming.name
-            && entry.is_dir == incoming.is_dir && entry.extension == incoming.extension
-            && entry.mime == incoming.mime && entry.readonly == incoming.readonly
-    }));
-    if !valid { return; }
+    let Some(mut data) = snapshot(&identity) else {
+        return;
+    };
+    let valid = displayed.iter().all(|incoming| {
+        data.listing.entries.iter().any(|entry| {
+            entry.path == incoming.path
+                && entry.name == incoming.name
+                && entry.is_dir == incoming.is_dir
+                && entry.extension == incoming.extension
+                && entry.mime == incoming.mime
+                && entry.readonly == incoming.readonly
+        })
+    });
+    if !valid {
+        return;
+    }
     let targets: HashSet<_> = displayed.iter().map(|e| e.path.as_str()).collect();
-    data.decorations.retain(|d| !targets.contains(d.path.as_str()));
+    data.decorations
+        .retain(|d| !targets.contains(d.path.as_str()));
     data.decorations.extend(decorations.iter().cloned());
     data.presentation_stamp = stamp();
     data.last_access = next_access();
@@ -106,10 +144,12 @@ fn key(path: &str) -> String {
         use sha2::{Digest, Sha256};
         if let Ok((_, source)) = crate::plugins::mounts::resolve(path) {
             let identity = match source {
-                crate::plugins::mounts::Source::Connection(connection) =>
-                    serde_json::to_vec(&connection).unwrap_or_default(),
-                crate::plugins::mounts::Source::View(view) =>
-                    serde_json::to_vec(&view.descriptor).unwrap_or_default(),
+                crate::plugins::mounts::Source::Connection(connection) => {
+                    serde_json::to_vec(&connection).unwrap_or_default()
+                }
+                crate::plugins::mounts::Source::View(view) => {
+                    serde_json::to_vec(&view.descriptor).unwrap_or_default()
+                }
             };
             return format!("mount:{}:{}", hex::encode(Sha256::digest(&identity)), path);
         }
@@ -137,27 +177,43 @@ pub(crate) fn store(path: &str, listing: &Listing) {
     let unchanged = previous.as_ref().is_some_and(|old| {
         let mut left = old.listing.entries.clone();
         let mut right = listing.entries.clone();
-        left.sort_by(|a,b| a.path.cmp(&b.path));
-        right.sort_by(|a,b| a.path.cmp(&b.path));
+        left.sort_by(|a, b| a.path.cmp(&b.path));
+        right.sort_by(|a, b| a.path.cmp(&b.path));
         serde_json::to_value(left).ok() == serde_json::to_value(right).ok()
     });
     let data = DirectorySnapshot {
         listing: listing.clone(),
-        decorations: if unchanged { previous.as_ref().map(|v| v.decorations.clone()).unwrap_or_default() }
-                     else { Vec::new() },
-        presentation_stamp: if unchanged { previous.map(|v| v.presentation_stamp).unwrap_or_default() }
-                            else { String::new() },
+        decorations: if unchanged {
+            previous
+                .as_ref()
+                .map(|v| v.decorations.clone())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        },
+        presentation_stamp: if unchanged {
+            previous.map(|v| v.presentation_stamp).unwrap_or_default()
+        } else {
+            String::new()
+        },
         last_access: next_access(),
     };
     {
         let mut values = cache().lock().unwrap_or_else(|e| e.into_inner());
         let mut total: usize = values.values().map(|v| v.listing.entries.len()).sum();
         total = total.saturating_sub(values.get(&identity).map_or(0, |v| v.listing.entries.len()));
-        while (values.len() >= MAX_DIRECTORIES || total.saturating_add(listing.entries.len()) > MAX_ENTRIES)
+        while (values.len() >= MAX_DIRECTORIES
+            || total.saturating_add(listing.entries.len()) > MAX_ENTRIES)
             && !values.is_empty()
         {
-            let Some(victim) = values.iter().filter(|(key,_)| *key != &identity)
-                .min_by_key(|(_,record)| record.last_access).map(|(key,_)| key.clone()) else { break };
+            let Some(victim) = values
+                .iter()
+                .filter(|(key, _)| *key != &identity)
+                .min_by_key(|(_, record)| record.last_access)
+                .map(|(key, _)| key.clone())
+            else {
+                break;
+            };
             if let Some(value) = values.remove(&victim) {
                 total = total.saturating_sub(value.listing.entries.len());
             }
@@ -213,8 +269,7 @@ pub(crate) fn refresh_tree(root: &str, cancelled: &dyn Fn() -> bool) -> Result<(
         let listing = read(&path, true, &[])?;
         if let Some(listing) = listing {
             for entry in listing.entries {
-                if entry.is_dir && !entry.is_symlink
-                    && read(&entry.path, true, &[])?.is_some() {
+                if entry.is_dir && !entry.is_symlink && read(&entry.path, true, &[])?.is_some() {
                     queue.push_back(entry.path);
                 }
             }
@@ -250,8 +305,11 @@ pub(crate) fn search(
         if !visited.insert(path.clone()) {
             continue;
         }
-        let Some(data) = snapshots.get(&path).cloned()
-            .or_else(|| disk::load::<DirectorySnapshot>(&path)) else {
+        let Some(data) = snapshots
+            .get(&path)
+            .cloned()
+            .or_else(|| disk::load::<DirectorySnapshot>(&path))
+        else {
             continue;
         };
         for entry in &data.listing.entries {
@@ -281,7 +339,9 @@ pub(crate) fn remove_entry(path: &str, entry_path: &str) {
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
     {
-        data.listing.entries.retain(|entry| entry.path != entry_path);
+        data.listing
+            .entries
+            .retain(|entry| entry.path != entry_path);
         data.decorations.clear();
     }
 }
@@ -292,7 +352,12 @@ pub(crate) fn add_entry(path: &str, entry: Entry) {
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
     {
-        if !data.listing.entries.iter().any(|item| item.path == entry.path) {
+        if !data
+            .listing
+            .entries
+            .iter()
+            .any(|item| item.path == entry.path)
+        {
             data.listing.entries.push(entry);
             data.decorations.clear();
         }
@@ -306,10 +371,14 @@ pub(crate) fn drop_subtree(path: &str) {
     let mut removed = HashSet::new();
     while let Some(current) = pending.pop_front() {
         let identity = key(&current);
-        if !removed.insert(identity.clone()) { continue; }
+        if !removed.insert(identity.clone()) {
+            continue;
+        }
         if let Some(snapshot) = disk::load::<DirectorySnapshot>(&identity) {
             for entry in snapshot.listing.entries {
-                if entry.is_dir && !entry.is_symlink { pending.push_back(entry.path); }
+                if entry.is_dir && !entry.is_symlink {
+                    pending.push_back(entry.path);
+                }
             }
         }
         disk::remove(&identity);
@@ -331,7 +400,8 @@ pub(crate) fn rename_entry(path: &str, old_path: &str, entry: Entry) {
         .unwrap_or_else(|e| e.into_inner())
         .get_mut(&key(path))
     {
-        if let Some(item) = data.listing
+        if let Some(item) = data
+            .listing
             .entries
             .iter_mut()
             .find(|item| item.path == old_path)
