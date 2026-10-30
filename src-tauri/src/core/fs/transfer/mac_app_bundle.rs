@@ -44,19 +44,20 @@ pub(super) fn import(
             .or_else(|_| source.require(FsOperation::List, false))?;
         let metadata = source.transfer_metadata()?;
         let name = metadata.name.clone();
+        let same_mount = source.reference.mount_id == parent.reference.mount_id;
         source.review_transfer(
             TransferDirection::Export,
             TransferAction::Copy,
             &name,
             &metadata,
-            false,
+            same_mount,
         )?;
         parent.review_transfer(
             TransferDirection::Import,
             TransferAction::Copy,
             &name,
             &metadata,
-            false,
+            same_mount,
         )?;
         let mut target = binding::child(&parent, &name)?;
         let source_version = source.stat()?;
@@ -125,7 +126,7 @@ pub(super) fn import(
             TransferAction::Copy,
             &metadata.name,
             metadata,
-            false,
+            source.reference.mount_id == parent.reference.mount_id,
         )?;
         target.require(FsOperation::Mkdir, true)?;
         // Reserve an empty destination atomically. rename only replaces this

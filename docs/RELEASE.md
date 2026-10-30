@@ -1,3 +1,9 @@
+# Fiex 0.7.8
+
+- Drop files onto any breadcrumb segment to copy or move them into that ancestor folder (including virtual roots and the ellipsis ancestor).
+- Transfer preflight now runs only across VFS boundaries. Moves, renames and app imports inside the same VFS keep Core capability checks without invoking provider review again.
+- The secondary pane address bar uses the same virtual-path normalization, decoded Chinese display and cached directory stream as the main pane.
+
 # Fiex 0.7.7
 
 - Applications creates user folders directly under the view root (`applications://~…`). Breadcrumbs, the address bar and File Info show the real Chinese folder name instead of base64, and existing `applications://user/...` links plus mapped folders migrate automatically.

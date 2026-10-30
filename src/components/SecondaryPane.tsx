@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileViews } from './browser/FileViews'
 import { PathToolbar } from './explorer/PathToolbar'
 import { useExplorer } from '@/hooks/useExplorer'
-import { pathCrumbs } from '@/lib/files'
+import { displayAddress, normalizeAddress, pathCrumbs } from '@/lib/files'
 import { shortcutLabel } from '@/lib/shortcuts'
 import type { Entry, Preferences } from '@/lib/types'
 
@@ -99,12 +99,12 @@ export function SecondaryPane({
           draft={draft}
           setDraft={setDraft}
           startEdit={() => {
-            setDraft(x.path)
+            setDraft(displayAddress(x.path))
             setEditing(true)
           }}
           submit={(event) => {
             event.preventDefault()
-            const next = draft.trim()
+            const next = normalizeAddress(draft)
             if (next) x.navigate(next)
             setEditing(false)
           }}

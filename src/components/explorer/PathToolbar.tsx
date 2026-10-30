@@ -90,7 +90,7 @@ export function PathToolbar({
                     ]
                   : crumbs.map((crumb) => ({ ...crumb, ellipsis: false }))
               return visible.map((crumb, index) => (
-                <span key={crumb.path}>
+                <span key={crumb.path} data-drop-folder={crumb.path}>
                   {index > 0 && <ChevronRight size={11} />}
                   <button
                     title={crumb.ellipsis ? t('更上层') : crumb.path}

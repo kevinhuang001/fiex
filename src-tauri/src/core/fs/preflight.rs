@@ -34,6 +34,12 @@ impl ResourceBroker {
         metadata: &TransferMetadata,
         same_mount: bool,
     ) -> Result<(), FsError> {
+        // Provider review is a cross-VFS contract. A transfer inside the same
+        // VFS already has Core capability checks and must not prompt or run
+        // provider-specific policy again.
+        if same_mount {
+            return Ok(());
+        }
         self.adapter()?.preflight(&TransferPreflight {
             node_id: self.reference.node_id.clone(),
             direction,
@@ -159,6 +165,35 @@ mod tests {
             .contains("executable shortcuts"));
         assert_eq!(std::fs::read(&file).unwrap(), b"keep source");
     }
+    #[test]
+    fn same_vfs_transfers_skip_provider_preflight() {
+        let view = crate::core::fs::binding::trusted(
+            crate::core::volumes::applications::URI,
+            "core:test-preflight",
+        )
+        .unwrap();
+        let metadata = view.transfer_metadata().unwrap();
+        // Applications rejects document imports across a VFS boundary.
+        assert!(view
+            .review_transfer(
+                TransferDirection::Import,
+                TransferAction::Copy,
+                "document.txt",
+                &metadata,
+                false,
+            )
+            .is_err());
+        // The same review is a no-op inside one VFS.
+        view.review_transfer(
+            TransferDirection::Import,
+            TransferAction::Copy,
+            "document.txt",
+            &metadata,
+            true,
+        )
+        .unwrap();
+    }
+
     #[test]
     fn metadata_unknown_is_not_a_proof_of_an_executable_shortcut() {
         assert_eq!(

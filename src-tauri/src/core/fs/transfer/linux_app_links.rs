@@ -32,19 +32,20 @@ pub(super) fn import(
         let source = binding::trusted(path, "core:application-import")?;
         source.require(FsOperation::Read, false)?;
         let metadata = source.transfer_metadata()?;
+        let same_mount = source.reference.mount_id == parent.reference.mount_id;
         parent.review_transfer(
             TransferDirection::Import,
             TransferAction::Copy,
             &metadata.name,
             &metadata,
-            false,
+            same_mount,
         )?;
         source.review_transfer(
             TransferDirection::Export,
             TransferAction::Copy,
             &metadata.name,
             &metadata,
-            false,
+            same_mount,
         )?;
         let executable = dunce::canonicalize(path).map_err(|e| e.to_string())?;
         let executable = executable
