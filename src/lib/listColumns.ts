@@ -35,7 +35,12 @@ export function normalizeListColumns(value: unknown): ListColumns {
       ? clamp(raw, LIST_COLUMNS_MIN[key] ?? LIST_NAME_MIN)
       : LIST_COLUMNS_DEFAULT[key]
   }
-  return { name: read('name'), modified: read('modified')!, size: read('size')!, kind: read('kind')! }
+  return {
+    name: read('name'),
+    modified: read('modified')!,
+    size: read('size')!,
+    kind: read('kind')!,
+  }
 }
 
 /** CSS grid template shared by the header and every row: the name column takes
@@ -56,7 +61,10 @@ export function resizeListColumn(
 ): ListColumns {
   const next = { ...columns }
   if (column === 'name') {
-    next.name = clamp((columns.name ?? LIST_COLUMNS_DEFAULT.name ?? LIST_NAME_MIN) + dx, LIST_NAME_MIN)
+    next.name = clamp(
+      (columns.name ?? LIST_COLUMNS_DEFAULT.name ?? LIST_NAME_MIN) + dx,
+      LIST_NAME_MIN,
+    )
     return next
   }
   const neighbour: ListColumnKey | null =
