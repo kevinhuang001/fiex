@@ -14,7 +14,7 @@ pub(super) fn fresh(broker: &ResourceBroker) -> Result<Listing, FsError> {
     if !directory_cache::enabled(&broker.path) {
         return broker.adapter()?.desktop_listing(&broker.path, true, &[]);
     }
-    let revision = super::changes::revision();
+    let revision = super::changes::revision(&broker.path);
     let identity = directory_cache::key(&broker.path);
     let key = format!("{identity}:{revision}");
     let (flight, owner) = {
@@ -34,12 +34,14 @@ pub(super) fn fresh(broker: &ResourceBroker) -> Result<Listing, FsError> {
     if owner {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let listing = broker.adapter()?.desktop_listing(&broker.path, true, &[])?;
-            if revision == super::changes::revision()
-                && identity == directory_cache::key(&broker.path)
-            {
+            if identity == directory_cache::key(&broker.path) {
+                // Live listings reconcile with committed local changes. This
+                // also protects a write that completed during the RPC.
                 directory_cache::store(&broker.path, &listing);
             }
-            Ok(listing)
+            let mut visible = listing;
+            super::mutation_overlay::paint(&broker.path, &mut visible);
+            Ok(visible)
         }))
         .unwrap_or_else(|_| Err(FsError::from("VFS listing worker panicked")));
         *flight.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(result.clone());
