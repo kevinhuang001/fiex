@@ -67,6 +67,7 @@ function Picker({ request }: { request: FilePickerRequest }) {
           <PickerEntries
             view={picker.view}
             error={picker.error}
+            loading={picker.loading}
             visible={picker.visible}
             grouped={picker.grouped}
             selected={picker.selected}

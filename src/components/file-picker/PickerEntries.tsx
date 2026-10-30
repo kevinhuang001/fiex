@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, LoaderCircle } from 'lucide-react'
 import { FileIcon } from '@/components/FileIcon'
 import { date, size } from '@/lib/files'
 import type { Entry } from '@/lib/types'
@@ -10,6 +10,7 @@ import type { PickerGroup } from './usePicker'
 export function PickerEntries({
   view,
   error,
+  loading,
   visible,
   grouped,
   selected,
@@ -19,6 +20,7 @@ export function PickerEntries({
 }: {
   view: 'list' | 'grid'
   error: string
+  loading: boolean
   visible: Entry[]
   grouped: PickerGroup[]
   selected: string[]
@@ -34,7 +36,13 @@ export function PickerEntries({
       onContextMenu={(event) => onContextMenu(event)}
     >
       {error && <p className="file-picker-hint error">{error}</p>}
-      {!error && !visible.length && (
+      {!error && loading && !visible.length && (
+        <div className="file-picker-empty-state">
+          <LoaderCircle className="spin" size={30} strokeWidth={1.5} />
+          <span>{t('正在读取文件夹…')}</span>
+        </div>
+      )}
+      {!error && !loading && !visible.length && (
         <div className="file-picker-empty-state">
           <FolderOpen size={30} strokeWidth={1.5} />
           <span>{t('文件夹是空的')}</span>

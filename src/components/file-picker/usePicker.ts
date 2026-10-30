@@ -48,6 +48,7 @@ export function usePicker(request: FilePickerRequest) {
     ''
   const [directory, setDirectory] = useState(initialDirectory)
   const [entries, setEntries] = useState<Entry[]>([])
+  const [loading, setLoading] = useState(true)
   const [locations, setLocations] = useState<Location[]>(initialSidebar?.locations || [])
   const usableConnections = (items: RemoteConnection[]) =>
     items.filter(
@@ -82,6 +83,8 @@ export function usePicker(request: FilePickerRequest) {
     if (!path || path === directory) return
     navigationChanged.current = true
     setDirectory(path)
+    setEntries([])
+    setLoading(true)
     setSelected([])
     setFilter('')
     setHistory((old) => [...old.slice(0, index + 1), path])
@@ -161,18 +164,22 @@ export function usePicker(request: FilePickerRequest) {
     if (!directory) {
       setEntries([])
       setError('')
+      setLoading(false)
       return () => {
         alive = false
       }
     }
     setError('')
+    setLoading(true)
     void openPresentedDirectory(directory, false, [], (value) => {
       if (!alive) return
       setEntries(value.entries || [])
+      setLoading(false)
       persistPickerDirectory(directory, request.mode)
       if (rememberedDirectory.current === directory) rememberedDirectory.current = ''
     }).catch((cause) => {
       if (!alive) return
+      setLoading(false)
       const home = (locations.find((item) => item.kind === 'home') || locations[0])?.path
       if (
         !request.directory &&
@@ -469,6 +476,7 @@ export function usePicker(request: FilePickerRequest) {
     directory,
     selected,
     selectedEntries,
+    loading,
     visible,
     grouped,
     error,
