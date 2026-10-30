@@ -23,6 +23,25 @@
   --code-function: #4078f2;
   --code-variable: #c2413b;
   --code-type: #9a6700;
+  /* Fixed ANSI palette for the integrated terminal, one set per color scheme.
+     Themes may override any entry; the terminal reads these variables instead
+     of keeping its own color settings. */
+  --terminal-ansi-black: #24292f;
+  --terminal-ansi-red: #cf222e;
+  --terminal-ansi-green: #116329;
+  --terminal-ansi-yellow: #7a5b00;
+  --terminal-ansi-blue: #0969da;
+  --terminal-ansi-magenta: #8250df;
+  --terminal-ansi-cyan: #1b7c83;
+  --terminal-ansi-white: #6e7781;
+  --terminal-ansi-bright-black: #57606a;
+  --terminal-ansi-bright-red: #a40e26;
+  --terminal-ansi-bright-green: #1a7f37;
+  --terminal-ansi-bright-yellow: #8a6d00;
+  --terminal-ansi-bright-blue: #218bff;
+  --terminal-ansi-bright-magenta: #a475f9;
+  --terminal-ansi-bright-cyan: #3192aa;
+  --terminal-ansi-bright-white: #8c959f;
   --danger: #c34d4d;
   --success: #368761;
   --warning: #b98624;
@@ -86,6 +105,22 @@
   --code-function: #61afef;
   --code-variable: #e06c75;
   --code-type: #e5c07b;
+  --terminal-ansi-black: #15161e;
+  --terminal-ansi-red: #f7768e;
+  --terminal-ansi-green: #9ece6a;
+  --terminal-ansi-yellow: #e0af68;
+  --terminal-ansi-blue: #7aa2f7;
+  --terminal-ansi-magenta: #bb9af7;
+  --terminal-ansi-cyan: #7dcfff;
+  --terminal-ansi-white: #c0caf5;
+  --terminal-ansi-bright-black: #414868;
+  --terminal-ansi-bright-red: #ff7b72;
+  --terminal-ansi-bright-green: #56d364;
+  --terminal-ansi-bright-yellow: #e3b341;
+  --terminal-ansi-bright-blue: #79c0ff;
+  --terminal-ansi-bright-magenta: #d2a8ff;
+  --terminal-ansi-bright-cyan: #56d4dd;
+  --terminal-ansi-bright-white: #ffffff;
   --danger: #f08b8b;
   --success: #7ac7a1;
   --warning: #e2bd6c;

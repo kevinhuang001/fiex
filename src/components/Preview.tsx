@@ -29,6 +29,22 @@ import { MemoryCache } from '@/lib/cache'
 const PdfPreview = lazy(() => import('./PdfPreview'))
 // Candidate discovery depends on the installed/enabled plugins; keep it brief.
 const candidateCache = new MemoryCache<PreviewCandidate[]>(64, 3_000)
+/** Package-local loading document (Core-owned asset path or inline HTML). */
+type LoadingDocument = { html?: string; src?: string }
+// A loading document belongs to the plugin package, not to the file being
+// previewed. Cache it so provider switches and repeated opens can paint it
+// immediately instead of waiting for another IPC round-trip.
+const loadingDocumentCache = new MemoryCache<LoadingDocument | null>(16, 5 * 60_000)
+function loadingDocument(pluginId: string): Promise<LoadingDocument | null> {
+  return loadingDocumentCache.get(pluginId, async () => {
+    if (native) {
+      const path = await call<string | null>('preview_loading_asset', { pluginId })
+      return path ? { src: asset(path) } : null
+    }
+    const html = await call<string | null>('preview_loading', { pluginId })
+    return html ? { html } : null
+  })
+}
 
 export function Preview({
   entry,
@@ -97,6 +113,14 @@ export function Preview({
         setProviderId(allowed[0]?.id ?? null)
         if (!allowed.length) setError(t('没有可用的预览方式'))
         setReadyToShow(true)
+        // Warm every declared loading document as soon as the providers are
+        // known, before the first `preview.open` leaves the UI. The document is
+        // a local package file, so this is cheap and gives the selected
+        // provider a ready-to-paint loading page on the very next render.
+        for (const candidate of allowed) {
+          const pluginId = pluginPreviewId(candidate.id)
+          if (pluginId && candidate.loading) void loadingDocument(pluginId).catch(() => {})
+        }
       })
       .catch((cause) => {
         if (active) {
@@ -121,44 +145,42 @@ export function Preview({
     setResolved(null)
     setMedia(null)
     setLoadingPage(null)
-    setPreviewReady(false)
+    setPreviewReady(!declaresLoading)
     setPreviewAsset('')
+    // Resolve the declared loading document first and keep the request running
+    // independently of `preview.open`: a warm plugin answers immediately, but
+    // its real document may take minutes to convert. The document is read from
+    // the package by Core (no plugin process involved), so it can paint long
+    // before the provider result arrives.
+    if (pluginId && declaresLoading) {
+      void loadingDocument(pluginId)
+        .then((document) => {
+          if (!active) return
+          if (document) {
+            setLoadingPage({ pluginId, sessionId: crypto.randomUUID(), ...document })
+          } else {
+            // No document after all: don't block the real preview behind a
+            // placeholder that will never be replaced.
+            setPreviewReady(true)
+          }
+        })
+        .catch(() => {
+          // A broken loading document must not block the actual preview.
+          if (active) {
+            setPreviewReady(true)
+          }
+        })
+    }
+    const result = call<ResolvedPreview>('preview_open', {
+      path: entry.path,
+      providerId,
+      providerOrder: candidates.map((candidate) => candidate.id),
+    }).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    )
     const open = async () => {
-      let page: PluginLoadingPage | null = null
-      let finished = false
-      // Start the actual provider request before resolving its decorative loading page.
-      // Both Core commands may involve a plugin process; serializing them adds latency.
-      const result = call<ResolvedPreview>('preview_open', {
-        path: entry.path,
-        providerId,
-        providerOrder: candidates.map((candidate) => candidate.id),
-      }).then(
-        (value) => ({ value }),
-        (error) => ({ error }),
-      )
-      // Show a declared loading page while the provider runs, when it arrives
-      // before the preview result.
-      if (pluginId && declaresLoading) {
-        void (
-          native
-            ? call<string | null>('preview_loading_asset', { pluginId }).then((path) =>
-                path ? { pluginId, sessionId: crypto.randomUUID(), src: asset(path) } : null,
-              )
-            : call<string | null>('preview_loading', { pluginId }).then((html) =>
-                html ? { pluginId, sessionId: crypto.randomUUID(), html } : null,
-              )
-        )
-          .then((loaded) => {
-            if (!active || finished || !loaded) return
-            page = loaded
-            setLoadingPage(loaded)
-          })
-          .catch(() => {
-            // A bad loading document must not block the actual preview.
-          })
-      }
       const outcome = await result
-      finished = true
       if ('error' in outcome) throw outcome.error
       const value = outcome.value
       if (!active) return
@@ -176,18 +198,23 @@ export function Preview({
           // Fall back to srcDoc below; the bridge will report a clear timeout.
         }
       }
+      if (!active) return
       setResolved(value)
-      // Keep the plugin loading document until the preview itself reports that
-      // its data is rendered; never flash the plugin's empty shell.
-      if (!page || value.view?.kind !== 'html') setLoadingPage(null)
-      setPreviewReady(!page || value.view?.kind !== 'html')
+      // Non-HTML views have no plugin shell to cover. An HTML view keeps the
+      // loading document (or its placeholder) visible until the preview calls
+      // `preview.ready`, regardless of how long the conversion takes.
+      if (value.view?.kind !== 'html') {
+        setLoadingPage(null)
+        setPreviewReady(true)
+      } else if (!declaresLoading) {
+        setPreviewReady(true)
+      }
     }
     void open()
       .catch((cause) => {
-        if (active) {
-          setError(String(cause))
-          setLoadingPage(null)
-        }
+        if (!active) return
+        setError(String(cause))
+        setLoadingPage(null)
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -251,16 +278,15 @@ export function Preview({
     activePluginId &&
     candidates.some((candidate) => candidate.id === providerId && candidate.loading),
   )
-  const loadingPreview = !resolved && (loadingPage !== null || (loading && declaresLoading))
+  // The loading sheet owns the preview area from the moment the provider is
+  // selected until the plugin reports its first render. It must survive a slow
+  // conversion (large Office files) as well as a slow `preview.open`.
+  const loadingPreview = Boolean(!error && declaresLoading && !previewReady)
+  // Placeholder shown only while the package-local loading document is being
+  // resolved (normally a single IPC round-trip behind the prefetch).
+  const waitingForLoadingDocument = Boolean(loadingPreview && !loadingPage)
   const pluginSheet = view?.kind === 'html' || loadingPreview
-
-  useEffect(() => {
-    if (!loadingPage || !resolved || resolved.view?.kind !== 'html' || previewReady) return
-    // A third-party preview may not implement preview.ready; never trap the
-    // modal behind the loading sheet forever.
-    const timer = window.setTimeout(() => setPreviewReady(true), 30000)
-    return () => window.clearTimeout(timer)
-  }, [loadingPage, resolved, previewReady])
+  const loadingPlaceholder = <div className="preview-plugin-state">{t('正在准备预览…')}</div>
 
   return (
     <Modal
@@ -304,41 +330,45 @@ export function Preview({
                 extension={entry.extension}
                 loading
               />
-            ) : loading && !resolved ? (
-              declaresLoading ? null : (
-                <p>{t('正在读取…')}</p>
-              )
             ) : view?.kind === 'html' && view.html ? (
-              <>
-                <PluginPreviewFrame
-                  key={`${entry.path}:${providerId}`}
-                  pluginId={view.pluginId || ''}
-                  contributionId={view.contributionId || ''}
-                  html={previewAsset ? undefined : view.html}
-                  src={previewAsset || undefined}
-                  context={view.context}
-                  sessionId={view.sessionId || ''}
-                  timeoutMs={view.timeoutMs}
-                  name={entry.name}
-                  extension={entry.extension}
-                  onPreviewReady={() => setPreviewReady(true)}
-                />
-                {loadingPage && !previewReady && (
-                  <div className="preview-plugin-loading">
-                    <PluginPreviewFrame
-                      key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
-                      pluginId={loadingPage.pluginId}
-                      contributionId={loadingPage.pluginId}
-                      html={loadingPage.html}
-                      src={loadingPage.src}
-                      sessionId={loadingPage.sessionId}
-                      name={entry.name}
-                      extension={entry.extension}
-                      loading
-                    />
-                  </div>
-                )}
-              </>
+              waitingForLoadingDocument ? (
+                loadingPlaceholder
+              ) : (
+                <>
+                  <PluginPreviewFrame
+                    key={`${entry.path}:${providerId}`}
+                    pluginId={view.pluginId || ''}
+                    contributionId={view.contributionId || ''}
+                    html={previewAsset ? undefined : view.html}
+                    src={previewAsset || undefined}
+                    context={view.context}
+                    sessionId={view.sessionId || ''}
+                    timeoutMs={view.timeoutMs}
+                    name={entry.name}
+                    extension={entry.extension}
+                    onPreviewReady={() => setPreviewReady(true)}
+                  />
+                  {loadingPage && !previewReady && (
+                    <div className="preview-plugin-loading">
+                      <PluginPreviewFrame
+                        key={`overlay:${entry.path}:${providerId}:${loadingPage.sessionId}`}
+                        pluginId={loadingPage.pluginId}
+                        contributionId={loadingPage.pluginId}
+                        html={loadingPage.html}
+                        src={loadingPage.src}
+                        sessionId={loadingPage.sessionId}
+                        name={entry.name}
+                        extension={entry.extension}
+                        loading
+                      />
+                    </div>
+                  )}
+                </>
+              )
+            ) : waitingForLoadingDocument ? (
+              loadingPlaceholder
+            ) : loading && !resolved ? (
+              <p>{t('正在读取…')}</p>
             ) : view?.kind === 'text' ? (
               <pre className={highlighted ? 'preview-code' : undefined}>
                 {highlighted ? (

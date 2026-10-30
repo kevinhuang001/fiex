@@ -158,6 +158,7 @@ pub fn run() {
             drag_files,
             locations,
             list_directory,
+            virtual_cache,
             file_info,
             read_preview,
             create_entry,
@@ -174,6 +175,11 @@ pub fn run() {
             plugin_file_dialog,
             plugin_files_dialog,
             plugin_search,
+            search_providers,
+            provider_catalog,
+            provider_preferences,
+            set_provider_preference,
+            reset_provider_preference,
             detect_terminals,
             detect_ides,
             open_in_ide,
@@ -199,6 +205,8 @@ pub fn run() {
             relaunch_elevated,
             mount_device,
             reveal_path,
+            trash_application_entries,
+            remove_application_entries,
             trash_path,
             empty_trash,
             restore_from_trash,
@@ -263,6 +271,9 @@ pub fn run() {
             }
             setup_tray(app.handle())?;
             std::thread::spawn(crate::core::fs::initialize_exports);
+            // Fill the three virtual-root caches once, off the main thread;
+            // later list/search calls only read them.
+            std::thread::spawn(crate::core::volumes::virtual_storage::warm_caches);
             std::thread::spawn(|| {
                 crate::plugins::host::global().start_enabled();
             });

@@ -217,15 +217,30 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
     case 'plugin_context_menu_resolve': {
       const directory = String(a.directory || '')
       const paths = Array.isArray(a.paths) ? (a.paths as string[]) : []
+      // Core and plugin rows resolve separately so the top-level menu never
+      // waits for plugin IPC; "all" keeps the one-batch contract for callers
+      // that still ask for it.
+      const source = String(a.source || 'all')
+      if (
+        source === 'plugins' &&
+        (directory === 'applications://' || directory === 'recyclebin://')
+      )
+        return []
       if (directory === 'applications://') {
         const user = paths.some((path) => path.startsWith('applications://user/'))
+        // Mirror Core: installed applications use the explicit launch verb,
+        // while the root folder and user-owned stored shortcuts stay "打开".
+        const launch =
+          paths[0] !== undefined &&
+          paths[0] !== 'applications://' &&
+          !paths[0].startsWith('applications://user/')
         return [
           {
             kind: 'builtin',
             providerId: 'builtin:core:applications',
             menuSessionId: `virtual:${JSON.stringify(paths)}`,
             items: [
-              { id: 'open', kind: 'action', title: '打开', icon: 'open' },
+              { id: 'open', kind: 'action', title: launch ? '启动应用' : '打开', icon: 'open' },
               ...(user
                 ? [
                     {
@@ -262,18 +277,19 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           },
         ]
       }
-      return [
-        ...demoBuiltinMenus(a),
-        ...demoPlugins
-          .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
-          .flatMap((plugin) => {
-            try {
-              return [{ ...resolveDemoMenu({ ...a, pluginId: plugin.id }), kind: 'plugin' }]
-            } catch {
-              return []
-            }
-          }),
-      ]
+      const plugins = demoPlugins
+        .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+        .flatMap((plugin) => {
+          try {
+            return [{ ...resolveDemoMenu({ ...a, pluginId: plugin.id }), kind: 'plugin' }]
+          } catch {
+            return []
+          }
+        })
+      if (source === 'plugins') return plugins
+      const builtins = demoBuiltinMenus(a)
+      if (source === 'core') return builtins
+      return [...builtins, ...plugins]
     }
     case 'plugin_context_menu_children': {
       const session = demoMenuSessions.get(String(a.menuSessionId || ''))
@@ -291,7 +307,12 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       const virtual = String(a.menuSessionId || '')
       if (virtual.startsWith('virtual:')) {
         const paths = JSON.parse(virtual.slice('virtual:'.length)) as string[]
-        return { kind: 'coreAction', command: String(a.itemId || ''), paths }
+        return {
+          kind: 'coreAction',
+          command: String(a.itemId || ''),
+          paths,
+          path: paths[0] || '',
+        }
       }
       const builtin = await executeDemoBuiltin(a)
       if (builtin) return builtin

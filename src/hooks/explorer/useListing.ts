@@ -7,6 +7,32 @@ import { listDirectory } from '@/lib/listing'
 import type { Entry, Location, Preferences, RemoteConnection } from '@/lib/types'
 import type { Navigation } from './useNavigation'
 
+/** True for every path owned by the three Core virtual views, including their
+ *  subdirectories. A local SearchProvider cannot enumerate these. */
+function virtualViewPath(value: string, trashRoot: string | null): boolean {
+  if (
+    value === 'recent://' ||
+    value.startsWith('applications://') ||
+    value === 'recyclebin://' ||
+    value === 'trash://'
+  ) {
+    return true
+  }
+  if (!trashRoot) return false
+  const root = trashRoot.replace(/[/\\]+$/, '')
+  return value === root || value.startsWith(`${root}/`) || value.startsWith(`${root}\\`)
+}
+
+/** Lightweight identity of a listing: order plus the fields that visibly
+ *  change. Used to skip a redundant state replacement after the cache paint. */
+function listingKey(entries: Entry[]): string {
+  let key = ''
+  for (const entry of entries) {
+    key += `${entry.path}\u0000${entry.name}\u0000${entry.modified}\u0000${entry.size}\u0001`
+  }
+  return key
+}
+
 /** Everything a pane lists: entries, decorations, locations, connections,
  *  search results and the read-only/virtual-volume flags. Path, history and tab
  *  state come from useNavigation. */
@@ -17,7 +43,17 @@ export function useListing(
   pane = 'left',
   startOverride?: string,
 ) {
-  const { path, query, globalSearch, history, navigate, setSelected, setRenaming, setError } = nav
+  const {
+    path,
+    query,
+    globalSearch,
+    searchMode,
+    history,
+    navigate,
+    setSelected,
+    setRenaming,
+    setError,
+  } = nav
   const [locations, setLocations] = useState<Location[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
@@ -40,7 +76,20 @@ export function useListing(
   const locationsRequest = useRef(0)
   const searchRequest = useRef(0)
   const cancelQueue = useRef<Promise<unknown>>(Promise.resolve())
+  const trashRoot = useRef<string | null>(null)
   const reload = useCallback(() => setRefresh((v) => v + 1), [getLocale()])
+  useEffect(() => {
+    if (!native || !enabled) return
+    let active = true
+    void call<string | null>('trash_path')
+      .then((root) => {
+        if (active) trashRoot.current = root ?? null
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [enabled])
   useEffect(() => {
     if (!native || !enabled) return
     const stop = listen('remote-sync', () => {
@@ -131,36 +180,65 @@ export function useListing(
     if (!enabled || !path || query || path.startsWith('fiex-plugin-view://')) return
     let active = true
     const id = ++request.current
+    let paintedKey: string | null = null
     setLoading(true)
     setError('')
-    void listDirectory(path, prefs.hidden, prefs.displayIgnore)
-      .then((l) => {
-        if (active && id === request.current) {
-          if (l.path !== path) {
-            navigate(l.path)
-            return
+    void (async () => {
+      // Core-owned virtual roots paint their previous listing immediately, so
+      // opening Recent/Applications/Trash never waits for PowerShell first.
+      if (virtualViewPath(path, trashRoot.current)) {
+        try {
+          const cached = await call<Entry[]>('virtual_cache', { path })
+          if (!active || id !== request.current) return
+          if (cached.length) {
+            paintedKey = listingKey(cached)
+            setEntries(cached)
+            setListedPath(path)
+            setVirtualVolume(true)
+            setLoading(false)
           }
-          setDirectoryReadOnly(Boolean(l.readOnly))
-          setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
-          setVirtualVolume(Boolean(l.virtualVolume))
-          setDefaultView(l.defaultView || null)
-          setListedPath(path)
-          setEntries(l.entries)
-          setWarnings(l.warnings)
-          // A fresh install has nothing recent yet; do not greet the user with
-          // an empty list.
-          if (path === 'recent://' && l.entries.length === 0 && history.length <= 1) {
-            const home = locations.find((item) => item.name === '个人文件夹')?.path
-            if (home) navigate(home)
-          }
-          const paths = new Set(l.entries.map((entry) => entry.path))
-          setSelected((selected) => selected.filter((path) => paths.has(path)))
+        } catch {
+          // A cold cache must not block the real list below.
         }
-      })
+      }
+      const l = await listDirectory(path, prefs.hidden, prefs.displayIgnore)
+      if (!active || id !== request.current) return
+      if (l.path !== path) {
+        navigate(l.path)
+        return
+      }
+      // The cache is only a placeholder. If the fresh listing has the same
+      // order and visible fields, keep the current array (and selection) so
+      // the pane does not flicker, lose selection or jump its scroll.
+      const unchanged = paintedKey !== null && listingKey(l.entries) === paintedKey
+      setDirectoryReadOnly(Boolean(l.readOnly))
+      setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
+      setVirtualVolume(Boolean(l.virtualVolume))
+      setDefaultView(l.defaultView || null)
+      setWarnings((previous) =>
+        previous.length === l.warnings.length &&
+        previous.every((warning, index) => warning === l.warnings[index])
+          ? previous
+          : l.warnings,
+      )
+      if (!paintedKey) setListedPath(path)
+      if (!unchanged) {
+        setEntries(l.entries)
+        const paths = new Set(l.entries.map((entry) => entry.path))
+        setSelected((selected) => selected.filter((p) => paths.has(p)))
+      }
+      // A fresh install has nothing recent yet; do not greet the user with an
+      // empty list.
+      if (path === 'recent://' && l.entries.length === 0 && history.length <= 1) {
+        const home = locations.find((item) => item.name === '个人文件夹')?.path
+        if (home) navigate(home)
+      }
+    })()
       .catch((e) => {
         if (active) {
           setError(String(e))
-          setEntries([])
+          // Keep the painted cache visible when only the refresh failed.
+          if (!paintedKey) setEntries([])
         }
       })
       .finally(() => {
@@ -220,23 +298,35 @@ export function useListing(
     setEntries([])
     setSelected([])
     setError('')
+    const root = globalSearch ? 'everywhere://' : path
+    // A Core-owned virtual root only has an in-process entry set; local search
+    // providers cannot enumerate it, so the engine stays builtin.
+    const engine = virtualViewPath(root, trashRoot.current) ? 'builtin' : 'auto'
     const timer = setTimeout(() => {
       void cancelled
         .then(() => {
           if (generation !== searchRequest.current) return
           return search(
             pane,
-            globalSearch ? 'everywhere://' : path,
+            root,
             query,
             prefs.hidden,
             prefs.displayIgnore,
+            searchMode,
+            engine,
             (b) => {
               if (generation !== searchRequest.current) return
-              startTransition(() => setEntries((v) => [...v, ...b.entries]))
+              if (b.replace) {
+                // Virtual-folder results are complete snapshots.
+                startTransition(() => setEntries(b.entries))
+              } else if (b.entries.length) {
+                startTransition(() => setEntries((v) => [...v, ...b.entries]))
+              }
               if (b.done) {
                 setSearching(false)
+                const warning = b.warning ? `${b.warning} · ` : ''
                 setSearchStats(
-                  `${b.elapsedMs} ms${b.truncated ? t(' · 已达到 500 项上限，请缩小范围') : ''}${b.skipped ? t(' · {0} 个位置无法访问', b.skipped) : ''}`,
+                  `${warning}${b.elapsedMs} ms${b.truncated ? t(' · 已达到 500 项上限，请缩小范围') : ''}${b.skipped ? t(' · {0} 个位置无法访问', b.skipped) : ''}`,
                 )
               }
             },
@@ -254,7 +344,17 @@ export function useListing(
       ++searchRequest.current
       void cancel()
     }
-  }, [enabled, pane, query, globalSearch, path, prefs.hidden, prefs.displayIgnore, refresh])
+  }, [
+    enabled,
+    pane,
+    query,
+    globalSearch,
+    path,
+    searchMode,
+    prefs.hidden,
+    prefs.displayIgnore,
+    refresh,
+  ])
   useEffect(() => {
     setTagFilterState(null)
   }, [path])

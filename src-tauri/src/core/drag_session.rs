@@ -33,7 +33,7 @@ impl DropPlan {
             if &resource.reference != reference {
                 return Err("StaleRef: drag source changed".into());
             }
-            if self.moving {
+            if self.moving && !crate::core::volumes::applications::is_system_app(path) {
                 resource.require(
                     crate::plugins::provider_registry::FsOperation::Remove,
                     false,

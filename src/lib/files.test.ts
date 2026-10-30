@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { parent, join, pathCrumbs, sortEntries, groupKey, uniqueName, corePath } from './files'
+import {
+  parent,
+  join,
+  pathCrumbs,
+  sortEntries,
+  nextSort,
+  groupKey,
+  uniqueName,
+  corePath,
+} from './files'
 import type { Entry } from './types'
 const e = (name: string, isDir = false): Entry => ({
   name,
@@ -28,6 +37,14 @@ describe('file models', () => {
       sortEntries([e('10'), e('2'), e('folder', true)], 'name', false).map((e) => e.name),
     ).toEqual(['folder', '2', '10'])
     expect(sortEntries([e('a'), e('z', true)], 'name', true)[0].isDir).toBe(true)
+  })
+  it('starts a new header sort ascending and flips the active one', () => {
+    expect(nextSort('name', false, 'size')).toEqual({ sort: 'size', descending: false })
+    // Re-clicking a different column always starts ascending, even if the
+    // previous column was descending.
+    expect(nextSort('name', true, 'size')).toEqual({ sort: 'size', descending: false })
+    expect(nextSort('size', false, 'size')).toEqual({ sort: 'size', descending: true })
+    expect(nextSort('size', true, 'size')).toEqual({ sort: 'size', descending: false })
   })
   it('makes Finder-style unique names', () => {
     expect(uniqueName([], '未命名文件夹')).toBe('未命名文件夹')

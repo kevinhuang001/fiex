@@ -35,15 +35,13 @@ impl Context {
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
         let provider = crate::core::volumes::virtual_resolvers::view_for(directory);
-        // Recent is a projection of original resources. Its container cannot
-        // create files, but selected files retain their own permissions.
+        // Recent is a projection of original resources and never owns the
+        // menu. Applications selections (including user-store entries and
+        // folders) use the Applications view; its blank canvas keeps the
+        // capability-gated create menu.
         let virtual_provider = provider.filter(|p| {
             p.id() != "core:recent"
-                && !(p.id() == "core:applications"
-                    && (paths.is_empty()
-                        || paths
-                            .iter()
-                            .all(|p| crate::core::volumes::applications::is_user(p))))
+                && !(p.id() == "core:applications" && paths.is_empty())
         });
         if let Some(owner) = virtual_provider {
             if owner.id() == "core:trash"
@@ -199,8 +197,12 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
     if id == "builtin:vfs-menu" {
         let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
         let action = provider.execute(item_id, &ctx.paths)?;
+        // `path` is the frontend's single-entry handle for actions such as
+        // "open"/"启动应用"; `paths` remains the full selection for batch ones.
+        // Use the selection path, not the provider's transformed result: Recent
+        // maps aliases to sources, but the frontend only knows the alias.
         return Ok(
-            json!({"kind":"coreAction", "command":action.command, "paths":action.paths, "directory":ctx.directory}),
+            json!({"kind":"coreAction", "command":action.command, "paths":action.paths, "path":ctx.paths.first().cloned().unwrap_or_default(), "directory":ctx.directory}),
         );
     }
     let paths = if matches!(item_id, "remote.keepLocal" | "remote.keepRemote") {

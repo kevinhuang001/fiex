@@ -8,6 +8,7 @@ import { AppearanceSettings } from './settings/AppearanceSettings'
 import { BehaviorSettings } from './settings/BehaviorSettings'
 import { IgnoreSettings } from './settings/IgnoreSettings'
 import { IntegrationSettings } from './settings/IntegrationSettings'
+import { ProviderSettings } from './settings/ProviderSettings'
 import { ShortcutSettings } from './settings/ShortcutSettings'
 import { SidebarSettings } from './settings/SidebarSettings'
 import { TagSettings } from './settings/TagSettings'
@@ -172,6 +173,8 @@ export function PreferencesDialog({
             {section === 'tags' && <TagSettings prefs={prefs} update={update} />}
 
             {section === 'ignore' && <IgnoreSettings prefs={prefs} update={update} />}
+
+            {section === 'providers' && <ProviderSettings />}
 
             {section === 'terminal' && (
               <IntegrationSettings

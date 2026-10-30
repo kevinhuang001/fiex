@@ -27,6 +27,14 @@ struct Session {
     submenus: HashMap<String, usize>,
     created: Instant,
 }
+/// Menu resolution is split by owner so the top-level Core menu never waits for
+/// plugin IPC. `All` is kept for callers that explicitly want one batch.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MenuScope {
+    All,
+    Core,
+    Plugins,
+}
 fn sessions() -> &'static Mutex<HashMap<String, Session>> {
     static SESSIONS: OnceLock<Mutex<HashMap<String, Session>>> = OnceLock::new();
     SESSIONS.get_or_init(Default::default)
@@ -88,6 +96,21 @@ fn register(
     }
 }
 pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::All)
+}
+
+/// Top-level, Core-owned items. This path must stay free of plugin IPC so the
+/// first visible menu is complete and cannot resize while plugins respond.
+pub fn query_core(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::Core)
+}
+
+/// Plugin-owned items, requested by the lazy "插件" submenu.
+pub fn query_plugins(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::Plugins)
+}
+
+fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Vec<Value>, String> {
     // An empty selection is the blank canvas. It uses the same provider
     // pipeline; manifests opt in with `match.selection: "zero"` (or `any`).
     if paths.len() > 256 || directory.is_empty() {
@@ -101,12 +124,21 @@ pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
             .collect::<Vec<_>>(),
     );
     let metadata = crate::plugins::events::resource_metadata(&resources);
-    let providers = EventRouter::providers(
+    let mut providers = EventRouter::providers(
         "contextMenu.resolve",
         &metadata,
         directory,
-        builtin::providers(&ctx),
+        if scope == MenuScope::Plugins {
+            Vec::new()
+        } else {
+            builtin::providers(&ctx)
+        },
     );
+    // Never invoke a plugin while resolving the Core-only top-level menu. For a
+    // plugin-only request the empty seed above already excludes builtin rows.
+    if scope == MenuScope::Core {
+        providers.retain(|provider| matches!(&provider.handler, Handler::Builtin(_)));
+    }
     Ok(EventRouter::resolve(
         "contextMenu.resolve",
         providers,

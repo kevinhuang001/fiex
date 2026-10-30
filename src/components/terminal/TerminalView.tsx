@@ -31,32 +31,38 @@ function withAlpha(color: string, alpha: number) {
   return rgb ? `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${alpha})` : value
 }
 
-function terminalTheme(color = '') {
+/**
+ * The terminal has no color settings of its own. Chrome colors come from the
+ * active theme tokens and the ANSI palette from `--terminal-ansi-*` variables,
+ * so a light/dark switch or a theme change recolors every terminal in place.
+ */
+function terminalTheme() {
   const { mode, tokens } = themeSnapshot()
-  const surface = tokens.surface || (mode === 'dark' ? '#22303c' : '#f8fafc')
+  const isDark = mode === 'dark'
+  const ansi = (name: string) => tokens[`terminal-ansi-${name}`] || undefined
   return {
     // Let the terminal surface, or the wallpaper behind it, show through.
-    background: withAlpha(surface, 0.4),
-    foreground: color || tokens.text || (mode === 'dark' ? '#e6e6e6' : '#1f2328'),
-    cursor: tokens.accent || (mode === 'dark' ? '#7aa2f7' : '#2f6fed'),
-    cursorAccent: tokens.surface || (mode === 'dark' ? '#1e1e1e' : '#ffffff'),
-    selectionBackground: tokens.selected || (mode === 'dark' ? '#3b4261' : '#cfe0ff'),
-    black: mode === 'dark' ? '#15161e' : '#24292f',
-    red: tokens.danger || '#e5534b',
-    green: tokens.success || '#2da44e',
-    yellow: tokens.warning || '#bf8700',
-    blue: tokens.accent || '#2f6fed',
-    magenta: '#a475f9',
-    cyan: '#39c5cf',
-    white: tokens.text || '#e6edf3',
-    brightBlack: tokens.muted || '#6e7781',
-    brightRed: '#ff7b72',
-    brightGreen: '#56d364',
-    brightYellow: '#e3b341',
-    brightBlue: '#79c0ff',
-    brightMagenta: '#d2a8ff',
-    brightCyan: '#56d4dd',
-    brightWhite: '#ffffff',
+    background: withAlpha(tokens.surface || (isDark ? '#22303c' : '#f8fafc'), 0.4),
+    foreground: tokens.text || (isDark ? '#e6edf3' : '#1f2328'),
+    cursor: tokens.accent || (isDark ? '#7aa2f7' : '#2f6fed'),
+    cursorAccent: tokens.surface || (isDark ? '#1e1e1e' : '#ffffff'),
+    selectionBackground: tokens.selected || (isDark ? '#3b4261' : '#cfe0ff'),
+    black: ansi('black'),
+    red: ansi('red'),
+    green: ansi('green'),
+    yellow: ansi('yellow'),
+    blue: ansi('blue'),
+    magenta: ansi('magenta'),
+    cyan: ansi('cyan'),
+    white: ansi('white'),
+    brightBlack: ansi('bright-black'),
+    brightRed: ansi('bright-red'),
+    brightGreen: ansi('bright-green'),
+    brightYellow: ansi('bright-yellow'),
+    brightBlue: ansi('bright-blue'),
+    brightMagenta: ansi('bright-magenta'),
+    brightCyan: ansi('bright-cyan'),
+    brightWhite: ansi('bright-white'),
   }
 }
 
@@ -86,7 +92,6 @@ export function TerminalView({
   name,
   terminalFont,
   terminalFontSize,
-  terminalColor,
 }: {
   cwd?: string
   shell?: string
@@ -94,13 +99,10 @@ export function TerminalView({
   /** A system font family chosen in Settings; Nerd Font names are supported. */
   terminalFont?: string
   terminalFontSize?: number
-  terminalColor?: string
 }) {
   const host = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const resizeRef = useRef<(() => void) | null>(null)
-  const colorRef = useRef(terminalColor)
-  colorRef.current = terminalColor
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [error, setError] = useState('')
@@ -120,7 +122,7 @@ export function TerminalView({
       fontSize: terminalFontSize ?? 13,
       lineHeight: 1.15,
       scrollback: 20000,
-      theme: terminalTheme(colorRef.current),
+      theme: terminalTheme(),
       windowsPty: { backend: 'conpty' },
     })
     const fit = new FitAddon()
@@ -140,7 +142,7 @@ export function TerminalView({
     terminal.focus()
 
     const applyTheme = () => {
-      terminal.options.theme = terminalTheme(colorRef.current)
+      terminal.options.theme = terminalTheme()
     }
     window.addEventListener('fiex:theme-changed', applyTheme)
 
@@ -250,10 +252,10 @@ export function TerminalView({
     if (!terminal) return
     terminal.options.fontFamily = terminalFontFamily(terminalFont)
     terminal.options.fontSize = terminalFontSize ?? 13
-    terminal.options.theme = terminalTheme(terminalColor)
+    terminal.options.theme = terminalTheme()
     const frame = requestAnimationFrame(() => resizeRef.current?.())
     return () => cancelAnimationFrame(frame)
-  }, [terminalFont, terminalFontSize, terminalColor])
+  }, [terminalFont, terminalFontSize])
 
   return (
     <div className="local-terminal-view">

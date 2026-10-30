@@ -78,11 +78,32 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
     fn list(&self) -> Result<Value, FsError> {
         to_value(virtual_storage::list(self.path())?).map_err(|e| FsError::internal(e.to_string()))
     }
+    fn search(
+        &self,
+        query: &str,
+        hidden: bool,
+        ignores: &[String],
+        limit: usize,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
+        if !virtual_storage::is_virtual_tree_path(self.path()) {
+            return Err(FsError::new(
+                FsErrorKind::Unsupported,
+                "Unsupported: virtual adapter search is limited to the Applications and Trash views",
+            ));
+        }
+        // The adapter only delegates: cache policy and subtree traversal stay
+        // inside the virtual storage module.
+        let result =
+            virtual_storage::search_view(self.path(), query, hidden, ignores, limit, cancelled)
+                .map_err(FsError::from)?;
+        Ok((result.entries, result.truncated, result.skipped))
+    }
     fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
         if self.path() == applications::URI {
             return if matches!(
                 op,
-                FsOperation::Stat | FsOperation::List | FsOperation::Mkdir
+                FsOperation::Stat | FsOperation::List | FsOperation::Mkdir | FsOperation::Search
             ) {
                 Ok(())
             } else {
@@ -104,11 +125,9 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         if virtual_resolvers::view_for(self.path())
             .is_some_and(|resolver| resolver.id() == "core:trash")
         {
+            let listable = virtual_storage::is_virtual_tree_path(self.path());
             return if op == FsOperation::Stat
-                || (op == FsOperation::List
-                    && crate::core::volumes::trash_path()
-                        .is_some_and(|root| root.to_string_lossy() == self.path()))
-                || (op == FsOperation::List && self.path() == crate::core::volumes::recycle::URI)
+                || (matches!(op, FsOperation::List | FsOperation::Search) && listable)
             {
                 Ok(())
             } else {
@@ -116,7 +135,10 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
             };
         }
         if self.path() == virtual_resolvers::RECENT_URI
-            && matches!(op, FsOperation::List | FsOperation::Stat)
+            && matches!(
+                op,
+                FsOperation::List | FsOperation::Stat | FsOperation::Search
+            )
         {
             return Ok(());
         }
@@ -185,7 +207,11 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
         if to.exists() {
             return Err("Conflict: application destination exists".into());
         }
-        fs::rename(from, to).map_err(|e| FsError::internal(e.to_string()))
+        let directory = from.is_dir();
+        fs::rename(from, to).map_err(|e| FsError::internal(e.to_string()))?;
+        applications::after_rename(self.path(), &destination.path, directory)
+            .map_err(FsError::from)?;
+        Ok(())
     }
 }
 struct AppRead {

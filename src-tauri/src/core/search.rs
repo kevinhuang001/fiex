@@ -1,25 +1,97 @@
-//! Live filename search backed by ripgrep's directory walker.
+//! Live search with independent filename/content modes.
 //!
-//! There is no persistent index: each query walks the current filesystem state
-//! with `ignore::WalkBuilder`. Advanced indexed/semantic search belongs in a
-//! plugin through `extensions.search`.
+//! Local FS queries can be served by an installed `SearchProvider` (for example
+//! Everything) or by the builtin walker, which is also the last Auto candidate.
+//! Only one engine runs per query; Core validates every hit, deduplicates it and
+//! streams partial batches to the UI before the walk finishes.
 use crate::{
     core::files::{entry, Entry},
     core::ignores::IgnoreSet,
 };
 use ignore::WalkBuilder;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
-const RESULT_LIMIT: usize = 500;
+pub const RESULT_LIMIT: usize = 500;
+const BATCH_SIZE: usize = 50;
+const BATCH_INTERVAL: Duration = Duration::from_millis(120);
+/// Content fallback stays local and bounded: no PDF/Office extraction and no
+/// unbounded reads, so a keystroke can never walk a whole disk byte by byte.
+const CONTENT_FILE_LIMIT: u64 = 2 * 1024 * 1024;
+const CONTENT_BYTE_BUDGET: u64 = 64 * 1024 * 1024;
+const CONTENT_FILE_BUDGET: usize = 5000;
+const BINARY_PROBE: usize = 8192;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchMode {
+    #[default]
+    Name,
+    Content,
+}
+
+impl SearchMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Name => "name",
+            Self::Content => "content",
+        }
+    }
+}
+
+/// Which engine the user asked for. `Auto` picks the first available provider
+/// that declares the mode and falls back to the builtin walker last.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SearchEngine {
+    #[default]
+    Auto,
+    Builtin,
+    Provider(String),
+}
+
+impl<'de> Deserialize<'de> for SearchEngine {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Ok(match value.as_str() {
+            "" | "auto" => Self::Auto,
+            "builtin" => Self::Builtin,
+            other => Self::Provider(other.trim_start_matches("plugin:").to_string()),
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SearchRequest {
+    pub root: String,
+    pub query: String,
+    pub mode: SearchMode,
+    pub engine: SearchEngine,
+    pub hidden: bool,
+    pub ignores: Vec<String>,
+    pub limit: usize,
+}
+
+impl SearchRequest {
+    pub fn new(root: &str, query: &str) -> Self {
+        Self {
+            root: root.into(),
+            query: query.into(),
+            mode: SearchMode::Name,
+            engine: SearchEngine::Auto,
+            hidden: false,
+            ignores: Vec::new(),
+            limit: RESULT_LIMIT,
+        }
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct SearchState {
@@ -40,7 +112,7 @@ impl SearchTicket {
     }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchBatch {
     pub entries: Vec<Entry>,
@@ -48,6 +120,133 @@ pub struct SearchBatch {
     pub elapsed_ms: u128,
     pub truncated: bool,
     pub skipped: usize,
+    /// Entries visited by the walker (files and directories).
+    pub scanned: usize,
+    /// The engine hit a budget and did not examine the whole subtree.
+    pub incomplete: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+    /// Engine that produced this batch (`builtin` or a provider name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+    /// Virtual-folder results are complete snapshots: replace the visible list
+    /// instead of appending. Local walker batches always keep this false.
+    #[serde(default)]
+    pub replace: bool,
+}
+
+/// Streams bounded batches. Intermediate batches never claim completion; the
+/// final batch carries the accumulated counters exactly once.
+struct BatchSink<'a> {
+    emit: &'a (dyn Fn(SearchBatch) + Send + Sync),
+    started: Instant,
+    last: Instant,
+    buffer: Vec<Entry>,
+    total: usize,
+    limit: usize,
+    truncated: bool,
+    skipped: usize,
+    scanned: usize,
+    incomplete: bool,
+    warning: Option<String>,
+    engine: Option<String>,
+    done_sent: bool,
+}
+
+impl<'a> BatchSink<'a> {
+    fn new(emit: &'a (dyn Fn(SearchBatch) + Send + Sync), started: Instant, limit: usize) -> Self {
+        Self {
+            emit,
+            started,
+            last: Instant::now(),
+            buffer: Vec::new(),
+            total: 0,
+            limit,
+            truncated: false,
+            skipped: 0,
+            scanned: 0,
+            incomplete: false,
+            warning: None,
+            engine: None,
+            done_sent: false,
+        }
+    }
+
+    fn push(&mut self, entry: Entry) {
+        if self.total >= self.limit {
+            self.truncated = true;
+            return;
+        }
+        self.total += 1;
+        self.buffer.push(entry);
+        if self.buffer.len() >= BATCH_SIZE || self.last.elapsed() >= BATCH_INTERVAL {
+            self.flush(false);
+        }
+    }
+
+    fn extend(&mut self, entries: Vec<Entry>) {
+        for entry in entries {
+            self.push(entry);
+        }
+    }
+
+    fn flush(&mut self, done: bool) {
+        if self.buffer.is_empty() && !done {
+            return;
+        }
+        (self.emit)(SearchBatch {
+            entries: std::mem::take(&mut self.buffer),
+            done,
+            elapsed_ms: self.started.elapsed().as_millis(),
+            truncated: self.truncated,
+            skipped: self.skipped,
+            scanned: self.scanned,
+            incomplete: self.incomplete,
+            warning: self.warning.clone(),
+            engine: self.engine.clone(),
+            replace: false,
+        });
+        if done {
+            self.done_sent = true;
+        }
+        self.last = Instant::now();
+    }
+
+    /// Virtual-folder batches carry a complete result set. They bypass the
+    /// incremental buffer: the first batch replaces the list, the terminal
+    /// batch either confirms it (empty, no replace) or replaces it again.
+    fn emit_snapshot(
+        &mut self,
+        entries: Vec<Entry>,
+        done: bool,
+        replace: bool,
+        truncated: bool,
+        skipped: usize,
+        scanned: usize,
+    ) {
+        (self.emit)(SearchBatch {
+            entries,
+            done,
+            elapsed_ms: self.started.elapsed().as_millis(),
+            truncated,
+            skipped,
+            scanned,
+            incomplete: false,
+            warning: self.warning.clone(),
+            engine: self.engine.clone(),
+            replace,
+        });
+        if done {
+            self.done_sent = true;
+        }
+        self.last = Instant::now();
+    }
+
+    fn finish(&mut self) {
+        if !self.done_sent {
+            self.flush(true);
+        }
+    }
 }
 
 impl SearchState {
@@ -70,145 +269,268 @@ impl SearchState {
         SearchTicket { generation, ticket }
     }
 
-    pub fn run_global(
+    /// Run one search session: a new generation cancels the previous one and
+    /// every late batch is rejected by the caller via its session token.
+    pub fn stream(
         &self,
         scope: &str,
-        query: &str,
-        hidden: bool,
-        ignores: &[String],
+        request: &SearchRequest,
         emit: impl Fn(SearchBatch) + Send + Sync,
     ) -> Result<(), String> {
         let started = Instant::now();
         let generation = self.generation(scope);
         let ticket = generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let mut entries = Vec::new();
-        let mut seen = HashSet::new();
-        let mut truncated = false;
-        let mut skipped = 0usize;
-        for root in accessible_roots() {
-            if generation.load(Ordering::Relaxed) != ticket || entries.len() >= RESULT_LIMIT {
-                break;
-            }
-            let (found, root_truncated, root_skipped) = search_root(
-                Path::new(&root),
-                query,
-                hidden,
-                ignores,
-                &generation,
-                ticket,
-                RESULT_LIMIT.saturating_sub(entries.len()),
-            );
-            truncated |= root_truncated;
-            skipped += root_skipped;
-            let found = crate::plugins::resolvers::search::resolve(
-                &crate::plugins::resolvers::search::PluginSearchInput {
-                    query: query.into(),
-                    root: root.clone(),
-                    hidden,
-                    ignores: ignores.to_vec(),
-                    limit: Some(RESULT_LIMIT.saturating_sub(entries.len())),
-                },
-                || Ok(serde_json::json!({"entries":found})),
-                || generation.load(Ordering::Relaxed) != ticket,
-            );
-            for item in found {
-                if entries.len() >= RESULT_LIMIT {
-                    truncated = true;
-                    break;
-                }
-                if seen.insert(item.path.clone()) {
-                    entries.push(item);
-                }
-            }
-        }
-        let truncated = truncated || entries.len() >= RESULT_LIMIT;
-        emit(SearchBatch {
-            entries,
-            done: true,
-            elapsed_ms: started.elapsed().as_millis(),
-            truncated,
-            skipped,
-        });
-        Ok(())
-    }
-
-    pub fn run(
-        &self,
-        scope: &str,
-        root: &str,
-        query: &str,
-        hidden: bool,
-        ignores: &[String],
-        emit: impl Fn(SearchBatch) + Send + Sync,
-    ) -> Result<(), String> {
-        let started = Instant::now();
-        let generation = self.generation(scope);
-        let ticket = generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let (entries, truncated, skipped) = search_root(
-            Path::new(root),
-            query,
-            hidden,
-            ignores,
-            &generation,
-            ticket,
-            RESULT_LIMIT,
-        );
-        let entries = crate::plugins::resolvers::search::resolve(
-            &crate::plugins::resolvers::search::PluginSearchInput {
-                query: query.into(),
-                root: root.into(),
-                hidden,
-                ignores: ignores.to_vec(),
-                limit: Some(RESULT_LIMIT),
-            },
-            || Ok(serde_json::json!({"entries":entries})),
-            || generation.load(Ordering::Relaxed) != ticket,
-        );
-        if generation.load(Ordering::Relaxed) != ticket {
+        let cancelled = || generation.load(Ordering::Relaxed) != ticket;
+        let limit = request.limit.clamp(1, RESULT_LIMIT);
+        let mut sink = BatchSink::new(&emit, started, limit);
+        if request.query.trim().is_empty() {
+            sink.finish();
             return Ok(());
         }
-        let truncated = truncated || entries.len() >= RESULT_LIMIT;
-        emit(SearchBatch {
-            entries,
-            done: true,
-            elapsed_ms: started.elapsed().as_millis(),
-            truncated,
-            skipped,
-        });
+        let roots = if request.root == "everywhere://" {
+            accessible_roots()
+        } else {
+            vec![request.root.clone()]
+        };
+        for root in roots {
+            if cancelled() {
+                return Ok(());
+            }
+            if let Err(error) = search_root(&root, request, &cancelled, &mut sink) {
+                if matches!(request.engine, SearchEngine::Auto) {
+                    // Auto never silently merges engines: record why the
+                    // preferred engine was skipped and keep the builtin
+                    // fallback for the remaining roots.
+                    sink.warning = Some(error);
+                } else {
+                    return Err(error);
+                }
+            }
+        }
+        sink.finish();
         Ok(())
     }
 }
 
 fn search_root(
-    root: &Path,
-    query: &str,
-    hidden: bool,
-    ignores: &[String],
-    generation: &AtomicU64,
-    ticket: u64,
-    limit: usize,
-) -> (Vec<Entry>, bool, usize) {
-    search_directory(root, query, hidden, ignores, limit, &|| {
-        generation.load(Ordering::Relaxed) != ticket
-    })
+    root: &str,
+    request: &SearchRequest,
+    cancelled: &dyn Fn() -> bool,
+    sink: &mut BatchSink<'_>,
+) -> Result<(), String> {
+    // Core-owned virtual roots are not host paths: filter their root listing
+    // instead of asking a filesystem SearchProvider about a URI.
+    if virtual_search_root(root) {
+        return search_virtual(root, request, cancelled, sink);
+    }
+    let local = !crate::plugins::mounts::handles(root) && !root.contains("://");
+    if !local {
+        return search_adapter(root, request, cancelled, sink);
+    }
+    let input = crate::plugins::resolvers::search::PluginSearchInput {
+        query: request.query.clone(),
+        root: root.to_string(),
+        hidden: request.hidden,
+        mode: request.mode,
+        ignores: request.ignores.clone(),
+        limit: Some(sink.limit),
+    };
+    let engines = crate::plugins::resolvers::search::engines(&input);
+    let selected = match &request.engine {
+        SearchEngine::Builtin => None,
+        SearchEngine::Provider(id) => {
+            let engine = engines
+                .iter()
+                .find(|engine| !engine.is_builtin() && engine.resolver.id == *id)
+                .ok_or_else(|| format!("未知搜索提供程序：{id}"))?;
+            if !engine.supports(request.mode) {
+                return Err(format!(
+                    "{} 不支持{}搜索",
+                    engine.resolver.name,
+                    mode_label(request.mode)
+                ));
+            }
+            Some(engine.clone())
+        }
+        SearchEngine::Auto => engines
+            .iter()
+            .find(|engine| !engine.is_builtin() && engine.supports(request.mode))
+            .cloned(),
+    };
+    if let Some(engine) = selected {
+        match crate::plugins::resolvers::search::run(&engine, &input, cancelled) {
+            Ok((entries, truncated)) => {
+                sink.engine = Some(engine.resolver.name.clone());
+                sink.truncated |= truncated;
+                sink.extend(entries);
+                return Ok(());
+            }
+            Err(error) => {
+                if matches!(request.engine, SearchEngine::Auto) {
+                    sink.warning = Some(format!("{}: {error}", engine.resolver.name));
+                } else {
+                    return Err(error);
+                }
+            }
+        }
+    }
+    sink.engine = Some("builtin".into());
+    walk_root(
+        Path::new(root),
+        &request.query,
+        request.mode,
+        request.hidden,
+        &request.ignores,
+        cancelled,
+        sink,
+    );
+    Ok(())
 }
 
-/// Adapter-neutral filename search. The caller owns cancellation and receives
-/// bounded results plus the number of unreadable/ignored entries.
-pub(crate) fn search_directory(
+/// A virtual search root owns a cached subtree (a root or one of its
+/// subdirectories). Only cached directories are searched; uncached directories
+/// are never enumerated.
+fn virtual_search_root(root: &str) -> bool {
+    if crate::plugins::mounts::handles(root) {
+        return false;
+    }
+    crate::core::volumes::virtual_storage::is_virtual_tree_path(root)
+}
+
+fn search_virtual(
+    root: &str,
+    request: &SearchRequest,
+    cancelled: &dyn Fn() -> bool,
+    sink: &mut BatchSink<'_>,
+) -> Result<(), String> {
+    sink.engine = Some("builtin".into());
+    if request.mode == SearchMode::Content {
+        // There is no file content to read behind a virtual identity. Return an
+        // explicit warning instead of a silently empty result.
+        sink.warning =
+            Some(crate::i18n::t("暂不支持在“最近使用”“应用程序”和“废纸篓”中搜索文件内容").into());
+        sink.incomplete = true;
+        return Ok(());
+    }
+    // First paint: one complete snapshot of the cached subtree. This batch is
+    // emitted before the refresh below, so the UI never waits for a list.
+    let first = crate::core::volumes::virtual_storage::search_view(
+        root,
+        &request.query,
+        request.hidden,
+        &request.ignores,
+        sink.limit,
+        cancelled,
+    )?;
+    let first_entries = first.entries.clone();
+    sink.emit_snapshot(
+        first.entries,
+        false,
+        true,
+        first.truncated,
+        first.skipped,
+        first.scanned,
+    );
+    if cancelled() {
+        return Ok(());
+    }
+    // Background pass: refresh this search root's own listing, then search the
+    // cached subtree again. Nested directories keep their cached snapshots.
+    if let Err(error) = crate::core::volumes::virtual_storage::list(root) {
+        sink.warning = Some(error);
+        sink.emit_snapshot(Vec::new(), true, false, false, 0, 0);
+        return Ok(());
+    }
+    if cancelled() {
+        return Ok(());
+    }
+    let second = crate::core::volumes::virtual_storage::search_view(
+        root,
+        &request.query,
+        request.hidden,
+        &request.ignores,
+        sink.limit,
+        cancelled,
+    )?;
+    if same_entry_snapshot(&first_entries, &second.entries) {
+        // Identical result: the first batch stays authoritative; only finish.
+        sink.emit_snapshot(
+            Vec::new(),
+            true,
+            false,
+            second.truncated,
+            second.skipped,
+            second.scanned,
+        );
+    } else {
+        // The refreshed listing changed the result set: replace in one batch.
+        sink.emit_snapshot(
+            second.entries,
+            true,
+            true,
+            second.truncated,
+            second.skipped,
+            second.scanned,
+        );
+    }
+    Ok(())
+}
+
+fn same_entry_snapshot(left: &[Entry], right: &[Entry]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| {
+            left.path == right.path
+                && left.name == right.name
+                && left.modified == right.modified
+                && left.size == right.size
+        })
+}
+
+fn search_adapter(
+    root: &str,
+    request: &SearchRequest,
+    cancelled: &dyn Fn() -> bool,
+    sink: &mut BatchSink<'_>,
+) -> Result<(), String> {
+    let resource = crate::core::fs::trusted(root, "core:search")?;
+    if request.mode == SearchMode::Content {
+        // Remote content fallback must confirm a network budget first; until
+        // that flow exists, refuse instead of silently downloading content.
+        return Err("暂不支持在远程连接中搜索文件内容".into());
+    }
+    let (entries, truncated, skipped) = resource.search(
+        &request.query,
+        request.hidden,
+        &request.ignores,
+        sink.limit,
+        cancelled,
+    )?;
+    sink.engine = Some("builtin".into());
+    sink.truncated |= truncated;
+    sink.skipped += skipped;
+    sink.extend(entries);
+    Ok(())
+}
+
+fn mode_label(mode: SearchMode) -> &'static str {
+    match mode {
+        SearchMode::Name => "文件名",
+        SearchMode::Content => "文件内容",
+    }
+}
+
+fn walk_root(
     root: &Path,
     query: &str,
+    mode: SearchMode,
     hidden: bool,
     ignores: &[String],
-    limit: usize,
     cancelled: &dyn Fn() -> bool,
-) -> (Vec<Entry>, bool, usize) {
-    if limit == 0 || !root.is_dir() {
-        return (Vec::new(), false, 0);
-    }
+    sink: &mut BatchSink<'_>,
+) {
     let lowered = query.to_lowercase();
-    if lowered.is_empty() {
-        return (Vec::new(), false, 0);
+    if !root.is_dir() || lowered.is_empty() {
+        return;
     }
     let root = root.to_path_buf();
     let filter_root = root.clone();
@@ -235,34 +557,129 @@ pub(crate) fn search_directory(
                 )
         })
         .build();
-    let mut entries = Vec::new();
-    let mut skipped = 0usize;
-    let mut truncated = false;
+    let mut content = ContentBudget::default();
     for item in walker {
         if cancelled() {
-            return (Vec::new(), false, 0);
+            return;
         }
-        match item {
-            Ok(item) if item.depth() > 0 => {
+        let Ok(item) = item else {
+            sink.skipped += 1;
+            continue;
+        };
+        if item.depth() == 0 {
+            continue;
+        }
+        sink.scanned += 1;
+        let path = item.path();
+        match mode {
+            SearchMode::Name => {
                 let name = item.file_name().to_string_lossy().to_lowercase();
                 if !name.contains(&lowered) {
                     continue;
                 }
-                if let Ok(entry) = entry(item.path()) {
-                    entries.push(entry);
-                } else {
-                    skipped += 1;
-                }
-                if entries.len() >= limit {
-                    truncated = true;
-                    break;
+                match entry(path) {
+                    Ok(value) => sink.push(value),
+                    Err(_) => sink.skipped += 1,
                 }
             }
-            Err(_) => skipped += 1,
-            _ => {}
+            SearchMode::Content => {
+                if path.is_dir() {
+                    continue;
+                }
+                match content.match_file(path, &lowered) {
+                    ContentMatch::Hit => match entry(path) {
+                        Ok(value) => sink.push(value),
+                        Err(_) => sink.skipped += 1,
+                    },
+                    ContentMatch::Miss => {}
+                    ContentMatch::Skipped => sink.skipped += 1,
+                    ContentMatch::Exhausted => {
+                        sink.incomplete = true;
+                        return;
+                    }
+                }
+            }
+        }
+        if sink.truncated {
+            return;
         }
     }
-    (entries, truncated, skipped)
+}
+
+#[derive(Default)]
+struct ContentBudget {
+    files: usize,
+    bytes: u64,
+}
+
+enum ContentMatch {
+    Hit,
+    Miss,
+    Skipped,
+    Exhausted,
+}
+
+impl ContentBudget {
+    fn match_file(&mut self, path: &Path, lowered: &str) -> ContentMatch {
+        if self.files >= CONTENT_FILE_BUDGET || self.bytes >= CONTENT_BYTE_BUDGET {
+            return ContentMatch::Exhausted;
+        }
+        let Ok(metadata) = std::fs::metadata(path) else {
+            return ContentMatch::Skipped;
+        };
+        if metadata.len() > CONTENT_FILE_LIMIT {
+            return ContentMatch::Skipped;
+        }
+        let Ok(bytes) = std::fs::read(path) else {
+            return ContentMatch::Skipped;
+        };
+        self.files += 1;
+        self.bytes += bytes.len() as u64;
+        let probe = &bytes[..bytes.len().min(BINARY_PROBE)];
+        if probe.contains(&0) {
+            return ContentMatch::Skipped;
+        }
+        let text = String::from_utf8_lossy(&bytes);
+        if text.to_lowercase().contains(lowered) {
+            ContentMatch::Hit
+        } else {
+            ContentMatch::Miss
+        }
+    }
+}
+
+/// Adapter-neutral filename search used by the local/virtual storage adapters.
+pub(crate) fn search_directory(
+    root: &Path,
+    query: &str,
+    hidden: bool,
+    ignores: &[String],
+    limit: usize,
+    cancelled: &dyn Fn() -> bool,
+) -> (Vec<Entry>, bool, usize) {
+    let found = Mutex::new(Vec::new());
+    let (truncated, skipped);
+    {
+        let emit = |batch: SearchBatch| {
+            if let Ok(mut found) = found.lock() {
+                found.extend(batch.entries);
+            }
+        };
+        let mut sink = BatchSink::new(&emit, Instant::now(), limit);
+        walk_root(
+            root,
+            query,
+            SearchMode::Name,
+            hidden,
+            ignores,
+            cancelled,
+            &mut sink,
+        );
+        sink.flush(false);
+        truncated = sink.truncated;
+        skipped = sink.skipped;
+    }
+    (found.into_inner().unwrap_or_default(), truncated, skipped)
 }
 
 /// Only filesystem roots readable with the application's own user token are

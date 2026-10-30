@@ -11,6 +11,7 @@ pub mod match_rules;
 pub mod mounts;
 pub mod net;
 pub(crate) mod oauth;
+pub mod preferences;
 pub mod provider_registry;
 pub mod resolvers;
 pub mod resource;

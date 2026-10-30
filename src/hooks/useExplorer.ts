@@ -38,6 +38,8 @@ export function useExplorer(
     setQuery: nav.setQuery,
     globalSearch: nav.globalSearch,
     setGlobalSearch: nav.setGlobalSearch,
+    searchMode: nav.searchMode,
+    setSearchMode: nav.setSearchMode,
     searching: listing.searching,
     searchStats: listing.searchStats,
     navigate: nav.navigate,

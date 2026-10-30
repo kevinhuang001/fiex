@@ -1,8 +1,12 @@
 //! The "Applications" virtual folder. Core enumerates installed applications
 //! itself so opening the entry never has to launch Finder or Explorer.
 
+use super::application_folders;
+use super::virtual_storage;
 use crate::core::files::Entry;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 pub const URI: &str = "applications://";
 pub const USER_PREFIX: &str = "applications://user/";
@@ -38,10 +42,185 @@ fn entry(name: String, path: String, extension: &str, modified: u64, readonly: b
 }
 
 pub fn list() -> Result<Vec<Entry>, String> {
-    let mut entries = platform_list()?;
-    entries.extend(list_user());
+    let system = refresh_system_entries()?;
+    let mapped = application_folders::mapped_apps();
+    Ok(root_listing(system, list_user(), &mapped))
+}
+
+fn root_listing(system: Vec<Entry>, user: Vec<Entry>, mapped: &HashSet<String>) -> Vec<Entry> {
+    let mut entries: Vec<Entry> = system
+        .into_iter()
+        .filter(|entry| !mapped.contains(&entry.path))
+        .collect();
+    entries.extend(user);
+    entries
+}
+
+/// System applications live in the platform's installed-app namespace, not in
+/// a real directory. Keep their last enumeration so a folder listing does not
+/// re-run the platform query after a move.
+fn system_cache() -> &'static Mutex<Option<Vec<Entry>>> {
+    static CACHE: OnceLock<Mutex<Option<Vec<Entry>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+fn cached_system_entries() -> Option<Vec<Entry>> {
+    system_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clone()
+}
+
+fn store_system_entries(entries: &[Entry]) {
+    *system_cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner()) = Some(entries.to_vec());
+}
+
+fn refresh_system_entries() -> Result<Vec<Entry>, String> {
+    let entries = platform_list()?;
+    store_system_entries(&entries);
+    let ids = entries
+        .iter()
+        .map(|entry| entry.path.clone())
+        .collect::<Vec<_>>();
+    application_folders::refresh(&ids);
     Ok(entries)
 }
+
+/// All installed applications, including those currently mapped into folders.
+pub fn system_entries() -> Result<Vec<Entry>, String> {
+    if let Some(entries) = cached_system_entries() {
+        return Ok(entries);
+    }
+    let entries = platform_list()?;
+    store_system_entries(&entries);
+    Ok(entries)
+}
+
+pub fn is_system_app(path: &str) -> bool {
+    path != URI && path.starts_with(URI) && !is_user(path)
+}
+
+pub fn is_mapped(path: &str) -> bool {
+    application_folders::is_mapped(path)
+}
+
+pub fn folder_for(path: &str) -> Option<String> {
+    application_folders::folder_for(path)
+}
+
+pub fn system_entry(path: &str) -> Result<Entry, String> {
+    if !is_system_app(path) {
+        return Err("not a system application".into());
+    }
+    system_entries()?
+        .into_iter()
+        .find(|entry| entry.path == path)
+        .ok_or_else(|| crate::i18n::t("应用不存在").to_string())
+}
+
+/// Move system applications into a folder (or back to the root). User-store
+/// files use the regular filesystem transfer instead.
+pub fn move_system_apps(paths: &[String], destination: &str) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut entries = Vec::with_capacity(paths.len());
+    let mut previous = Vec::with_capacity(paths.len());
+    for path in paths {
+        if !is_system_app(path) {
+            return Err("not a system application".into());
+        }
+        entries.push(system_entry(path)?);
+        previous.push(application_folders::folder_for(path));
+    }
+    application_folders::move_apps(paths, destination)?;
+    for ((app, entry), previous) in paths.iter().zip(entries).zip(previous) {
+        virtual_storage::remove_cached_entry(URI, app);
+        if let Some(folder) = previous {
+            virtual_storage::remove_cached_entry(&folder, app);
+        }
+        if destination == URI {
+            virtual_storage::add_cached_entry(URI, entry);
+        } else {
+            virtual_storage::add_cached_entry(destination, entry);
+        }
+    }
+    Ok(())
+}
+
+/// Context-menu delete for an application entry. Mapped system apps return to
+/// the root; user-store files are removed through the normal store rules.
+pub fn remove_entries(paths: &[String]) -> Result<(), String> {
+    for path in paths {
+        if is_user(path) {
+            remove_user(path)?;
+        } else if is_system_app(path) {
+            let folder = application_folders::folder_for(path)
+                .ok_or_else(|| crate::i18n::t("应用不存在").to_string())?;
+            application_folders::unmap(std::slice::from_ref(path))?;
+            virtual_storage::remove_cached_entry(&folder, path);
+            if let Ok(entry) = system_entry(path) {
+                virtual_storage::add_cached_entry(URI, entry);
+            }
+        } else {
+            return Err(crate::i18n::t("应用不存在").to_string());
+        }
+    }
+    Ok(())
+}
+
+/// Move user-store entries to the platform Trash. Mapped system apps in a
+/// trashed folder return to the root.
+pub fn trash_entries(paths: &[String]) -> Result<(), String> {
+    for path in paths {
+        if is_user(path) {
+            trash_user(path)?;
+        } else if is_system_app(path) {
+            let folder = application_folders::folder_for(path)
+                .ok_or_else(|| crate::i18n::t("应用不存在").to_string())?;
+            application_folders::unmap(std::slice::from_ref(path))?;
+            virtual_storage::remove_cached_entry(&folder, path);
+            if let Ok(entry) = system_entry(path) {
+                virtual_storage::add_cached_entry(URI, entry);
+            }
+        } else {
+            return Err(crate::i18n::t("应用不存在").to_string());
+        }
+    }
+    Ok(())
+}
+
+fn trash_user(uri: &str) -> Result<(), String> {
+    let target = stored_path(uri)?;
+    let parent = target.parent().ok_or("application item has no parent")?;
+    let root = stored_path(URI)?;
+    let parent_uri = if parent == root {
+        URI.to_string()
+    } else {
+        stored_uri(parent)?
+    };
+    let directory = target.is_dir();
+    let path = target.to_string_lossy().into_owned();
+    let result = crate::core::operations::recycle(std::slice::from_ref(&path))?;
+    if let Some(error) = result.errors.into_iter().next() {
+        return Err(error);
+    }
+    virtual_storage::remove_cached_entry(&parent_uri, uri);
+    virtual_storage::remove_cached_entry(URI, uri);
+    if directory {
+        let returned = application_folders::forget_folder(uri)?;
+        virtual_storage::drop_cached_subtree(uri);
+        for app in returned {
+            if let Ok(entry) = system_entry(&app) {
+                virtual_storage::add_cached_entry(URI, entry);
+            }
+        }
+    }
+    Ok(())
+}
+
 
 pub fn open(encoded: &str) -> Result<(), String> {
     if encoded.starts_with("user/") {
@@ -176,7 +355,24 @@ pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
     if uri == URI {
         return list();
     }
-    list_stored(&stored_path(uri)?)
+    let entries = list_stored(&stored_path(uri)?)?;
+    let mapped = application_folders::apps_in_folder(uri);
+    if mapped.is_empty() {
+        return Ok(entries);
+    }
+    Ok(folder_listing(entries, &system_entries()?, &mapped))
+}
+
+fn folder_listing(mut entries: Vec<Entry>, system: &[Entry], mapped: &[String]) -> Vec<Entry> {
+    for app in mapped {
+        let Some(entry) = system.iter().find(|entry| entry.path == *app).cloned() else {
+            continue;
+        };
+        if !entries.iter().any(|candidate| candidate.path == entry.path) {
+            entries.push(entry);
+        }
+    }
+    entries
 }
 
 fn list_stored(dir: &Path) -> Result<Vec<Entry>, String> {
@@ -211,7 +407,11 @@ pub fn create_stored(parent: &str, name: &str, folder: bool) -> Result<String, S
             .open(&target)
             .map_err(|e| e.to_string())?;
     }
-    stored_uri(&target)
+    let uri = stored_uri(&target)?;
+    if let Ok(entry) = stored_entry(&uri) {
+        virtual_storage::add_cached_entry(parent, entry);
+    }
+    Ok(uri)
 }
 
 pub fn rename_stored(uri: &str, name: &str) -> Result<String, String> {
@@ -221,8 +421,33 @@ pub fn rename_stored(uri: &str, name: &str) -> Result<String, String> {
     if target.exists() {
         return Err(crate::i18n::t("同名项目已存在，请更换名称").into());
     }
+    let directory = source.is_dir();
     std::fs::rename(&source, &target).map_err(|e| e.to_string())?;
-    stored_uri(&target)
+    let renamed = stored_uri(&target)?;
+    after_rename(uri, &renamed, directory)?;
+    Ok(renamed)
+}
+
+/// Keep persisted folder mappings and the parent cache coherent after a folder
+/// rename. `BuiltinFsAdapter::rename` calls this too, because it renames the
+/// backing store directly.
+pub fn after_rename(old_uri: &str, new_uri: &str, directory: bool) -> Result<(), String> {
+    if directory {
+        application_folders::rename_folder(old_uri, new_uri)?;
+        virtual_storage::drop_cached_subtree(old_uri);
+    }
+    let renamed = stored_path(new_uri)?;
+    let parent = renamed.parent().ok_or("application item has no parent")?;
+    let root = stored_path(URI)?;
+    let parent_uri = if parent == root {
+        URI.to_string()
+    } else {
+        stored_uri(parent)?
+    };
+    if let Ok(entry) = stored_entry(new_uri) {
+        virtual_storage::rename_cached_entry(&parent_uri, old_uri, entry);
+    }
+    Ok(())
 }
 
 /// Copy dragged shortcuts/app bundles into the user store. Dragging a system
@@ -292,12 +517,76 @@ pub fn remove_user(uri: &str) -> Result<(), String> {
         return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
     }
     let target = stored_path(uri)?;
-    if target.is_dir() {
-        std::fs::remove_dir_all(target)
+    let root = stored_path(URI)?;
+    let parent = target.parent().ok_or("application item has no parent")?;
+    let parent_uri = if parent == root {
+        URI.to_string()
     } else {
-        std::fs::remove_file(target)
+        stored_uri(parent)?
+    };
+    if target.is_dir() {
+        // Deleting an application folder is non-destructive for applications:
+        // real children return to the root and mapped system apps follow.
+        let mut moved = Vec::new();
+        let children = std::fs::read_dir(&target)
+            .map_err(|error| error.to_string())?
+            .map(|item| item.map(|item| item.path()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        for child in children {
+            let name = child.file_name().ok_or("application child has no name")?;
+            let destination = unique_child(&root, name);
+            std::fs::rename(&child, &destination).map_err(|error| error.to_string())?;
+            if let Ok(entry) = stored_entry(&stored_uri(&destination)?) {
+                moved.push(entry);
+            }
+        }
+        let returned = application_folders::forget_folder(uri)?;
+        std::fs::remove_dir(&target).map_err(|error| error.to_string())?;
+        virtual_storage::drop_cached_subtree(uri);
+        virtual_storage::remove_cached_entry(&parent_uri, uri);
+        virtual_storage::remove_cached_entry(URI, uri);
+        for entry in moved {
+            virtual_storage::add_cached_entry(URI, entry);
+        }
+        for app in returned {
+            if let Ok(entry) = system_entry(&app) {
+                virtual_storage::add_cached_entry(URI, entry);
+            }
+        }
+        Ok(())
+    } else {
+        std::fs::remove_file(target).map_err(|error| error.to_string())?;
+        virtual_storage::remove_cached_entry(&parent_uri, uri);
+        virtual_storage::remove_cached_entry(URI, uri);
+        Ok(())
     }
-    .map_err(|e| e.to_string())
+}
+
+fn unique_child(root: &Path, name: &std::ffi::OsStr) -> PathBuf {
+    let mut target = root.join(name);
+    if !target.exists() {
+        return target;
+    }
+    let name = name.to_string_lossy();
+    let path = Path::new(name.as_ref());
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("application");
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| format!(".{value}"))
+        .unwrap_or_default();
+    let mut index = 2;
+    loop {
+        target = root.join(format!("{stem} ({index}){extension}"));
+        if !target.exists() {
+            return target;
+        }
+        index += 1;
+    }
 }
 
 fn open_stored(path: &Path) -> Result<(), String> {
@@ -314,16 +603,9 @@ fn open_stored(path: &Path) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        let status = std::process::Command::new("cmd")
-            .args(["/C", "start", ""])
-            .arg(path)
-            .status()
-            .map_err(|error| error.to_string())?;
-        return if status.success() {
-            Ok(())
-        } else {
-            Err(crate::i18n::t("无法启动应用").into())
-        };
+        // ShellExecute keeps the launch detached and never allocates a console;
+        // `cmd /C start` used to flash a console window for GUI applications.
+        return open::that_detached(path).map_err(|error| error.to_string());
     }
     #[allow(unreachable_code)]
     Err(crate::i18n::t("无法启动应用").into())
@@ -615,6 +897,25 @@ fn looks_like_path(value: &str) -> bool {
         && (value.as_bytes()[1] == b':' || value.starts_with("\\\\") || value.starts_with('{'))
 }
 
+/// Executable file types that the Applications view is allowed to launch.
+/// Documents and website shortcuts share the Start Menu namespace, so the
+/// enumeration has to reject them explicitly.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn is_executable_target(value: &str) -> bool {
+    if value.contains("://") {
+        return false;
+    }
+    let extension = Path::new(value)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    matches!(
+        extension.as_str(),
+        "exe" | "com" | "bat" | "cmd" | "msc" | "cpl" | "scr" | "ps1" | "appref-ms" | "jar"
+    )
+}
+
 #[cfg(target_os = "windows")]
 fn platform_list() -> Result<Vec<Entry>, String> {
     let script = r#"$ErrorActionPreference='SilentlyContinue'
@@ -625,8 +926,19 @@ $items=@()
 foreach($item in $folder.Items()){
   $aumid=[string]$item.ExtendedProperty('System.AppUserModel.ID')
   $path=[string]$item.Path
+  $isUwp=[bool]($aumid -and $aumid -notmatch '[:\\]' -and $aumid -match '!')
+  # shell:AppsFolder also contains documents, website shortcuts and folders from
+  # the Start Menu. Keep executable targets only; uninstallers are executables
+  # and stay visible on purpose. Packaged apps have no path and are kept as-is.
+  if(-not $isUwp){
+    if($path -match '^[a-zA-Z][a-zA-Z0-9+.-]*://'){continue}
+    $target=[string]$item.ExtendedProperty('System.Link.TargetExtension')
+    if(-not $target){$target=[IO.Path]::GetExtension($path)}
+    $target=([string]$target).ToLowerInvariant()
+    if(@('.exe','.com','.bat','.cmd','.msc','.cpl','.scr','.ps1','.appref-ms','.jar') -notcontains $target){continue}
+  }
   $icon=''
-  if($aumid -and $aumid -notmatch '[:\\]' -and $aumid -match '!'){
+  if($isUwp){
     $pfn=$aumid.Split('!')[0]
     $location=$packages[$pfn]
     if($location){
@@ -675,10 +987,16 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
         let aumid_path = resolve_windows_path(&app.aumid);
         let shell_path = resolve_windows_path(&app.path);
         let id = if looks_like_path(&app.aumid) {
+            if !is_executable_target(&aumid_path) {
+                continue;
+            }
             format!("path:{aumid_path}")
         } else if !app.aumid.is_empty() {
             format!("aumid:{}", app.aumid)
         } else if !app.path.is_empty() {
+            if !is_executable_target(&shell_path) {
+                continue;
+            }
             format!("path:{shell_path}")
         } else {
             continue;
@@ -705,26 +1023,16 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
 #[cfg(target_os = "windows")]
 fn platform_open(encoded: &str) -> Result<(), String> {
     let id = decode(encoded)?;
-    if let Some(aumid) = id.strip_prefix("aumid:") {
-        let script = format!(
-            "$ErrorActionPreference='Stop'; Start-Process ('shell:AppsFolder\\' + {})",
-            ps_quote(aumid)
-        );
-        super::windows_shell::run(&script)?;
-        return Ok(());
-    }
-    if let Some(path) = id.strip_prefix("path:") {
-        let status = std::process::Command::new("cmd")
-            .args(["/C", "start", "", path])
-            .status()
-            .map_err(|error| error.to_string())?;
-        return if status.success() {
-            Ok(())
-        } else {
-            Err(crate::i18n::t("无法启动应用").into())
-        };
-    }
-    Err(crate::i18n::t("无法启动应用").into())
+    let target = if let Some(aumid) = id.strip_prefix("aumid:") {
+        format!("shell:AppsFolder\\{aumid}")
+    } else if let Some(path) = id.strip_prefix("path:") {
+        path.to_owned()
+    } else {
+        return Err(crate::i18n::t("无法启动应用").into());
+    };
+    // ShellExecute resolves both `shell:AppsFolder\<AUMID>` and plain binaries.
+    // Unlike `cmd /C start` it is detached and never allocates a console window.
+    open::that_detached(target).map_err(|error| error.to_string())
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
@@ -754,7 +1062,7 @@ pub fn cached_icon(source: &str) -> Option<String> {
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|t| t.as_secs())
         .unwrap_or(0);
-    let digest = Sha256::digest(format!("v2:{source}:{stamp}").as_bytes());
+    let digest = Sha256::digest(format!("v3:{source}:{stamp}").as_bytes());
     let target = cache.join(format!("{}.png", hex::encode(&digest[..12])));
     if target.exists() {
         return Some(target.to_string_lossy().into_owned());
@@ -798,11 +1106,6 @@ fn decode(value: &str) -> Result<String, String> {
     String::from_utf8(bytes).map_err(|error| error.to_string())
 }
 
-#[cfg(target_os = "windows")]
-fn ps_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
-}
-
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
@@ -825,5 +1128,85 @@ mod tests {
         assert_eq!(desktop_entry(&file), Some(("Hidden".into(), true, true)));
         std::fs::write(&file, "[Desktop Entry]\nType=Link\nName=Link\n").unwrap();
         assert_eq!(desktop_entry(&file), Some(("Link".into(), false, false)));
+    }
+}
+
+#[cfg(test)]
+mod executable_target_tests {
+    use super::is_executable_target;
+
+    #[test]
+    fn executables_are_kept_including_uninstallers() {
+        for path in [
+            r"C:\Program Files\App\app.exe",
+            r"C:\Program Files\App\unins000.exe",
+            r"C:\Program Files\App\Uninstall App.exe",
+            r"C:\Program Files\App\tool.cmd",
+            r"C:\Windows\System32\app.msc",
+            r"C:\Users\me\AppData\Roaming\Microsoft\Installer\{ABC}\app.appref-ms",
+        ] {
+            assert!(is_executable_target(path), "{path} should be launched");
+        }
+    }
+
+    #[test]
+    fn documents_and_websites_are_filtered() {
+        for path in [
+            r"C:\Program Files\App\readme.pdf",
+            r"C:\Program Files\App\manual.docx",
+            r"C:\Program Files\App\release-notes.txt",
+            "https://example.com",
+            "https://example.com/download",
+            r"C:\Program Files\App\website.url",
+            "",
+        ] {
+            assert!(!is_executable_target(path), "{path} should be filtered");
+        }
+    }
+}
+
+#[cfg(test)]
+mod folder_listing_tests {
+    use super::*;
+
+    fn item(name: &str, path: &str, is_dir: bool) -> Entry {
+        Entry {
+            name: name.into(),
+            path: path.into(),
+            is_dir,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn mapped_system_apps_leave_the_root_and_appear_once_in_the_folder() {
+        let app = item("Editor", "applications://YXBw", false);
+        let other = item("Browser", "applications://YnJvd3Nlcg", false);
+        let folder = item("Work", "applications://user/d29yaw", true);
+        let mapped = HashSet::from([app.path.clone()]);
+        let root = root_listing(
+            vec![app.clone(), other.clone()],
+            vec![folder.clone()],
+            &mapped,
+        );
+        assert!(root.iter().any(|entry| entry.path == other.path));
+        assert!(root.iter().any(|entry| entry.path == folder.path));
+        assert!(!root.iter().any(|entry| entry.path == app.path));
+
+        let children = folder_listing(vec![folder], std::slice::from_ref(&app), &[app.path.clone()]);
+        assert_eq!(
+            children
+                .iter()
+                .filter(|entry| entry.path == app.path)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn duplicate_real_and_mapped_entries_are_collapsed() {
+        let app = item("Editor", "applications://YXBw", false);
+        let entries = folder_listing(vec![app.clone()], std::slice::from_ref(&app), &[app.path.clone()]);
+        assert_eq!(entries.len(), 1);
     }
 }

@@ -8,6 +8,10 @@ const SESSION_TTL: Duration = Duration::from_secs(30 * 60);
 const MAX_SESSIONS: usize = 64;
 const MAX_HTML: u64 = 1024 * 1024;
 const MAX_TEXT: usize = 256 * 1024;
+/// A provider saying "this resource is not mine" is not a failure: the router
+/// may fall through to the next provider. Any other error keeps the user's
+/// selected provider and is reported instead of being masked by the builtin.
+pub(super) const UNSUPPORTED: &str = "fiex.preview.unsupported";
 struct Session {
     plugin_id: String,
     resource: ResourceSnapshot,
@@ -52,7 +56,7 @@ pub(super) fn validate(plugin_id: &str, value: Value) -> Result<Value, String> {
             }
             Ok(serde_json::json!({"kind":"text","text":text}))
         }
-        "unsupported" => Err("provider does not support this resource".into()),
+        "unsupported" => Err(UNSUPPORTED.into()),
         other => Err(format!("unsupported PreviewView kind: {other}")),
     }
 }

@@ -1,7 +1,7 @@
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import type { Explorer } from '@/hooks/useExplorer'
-import { ArrowUp, ChevronRight, LoaderCircle, Search, X } from 'lucide-react'
+import { ArrowUp, ChevronRight, FileText, LoaderCircle, Search, Type, X } from 'lucide-react'
 import type { FormEvent, RefObject } from 'react'
 
 export type Crumb = { name: string; path: string }
@@ -123,10 +123,25 @@ export function PathToolbar({
             <Search size={15} />
           </button>
         )}
+        <button
+          className="search-scope"
+          title={x.searchMode === 'content' ? t('切换为文件名搜索') : t('切换为文件内容搜索')}
+          aria-label={t('搜索模式')}
+          aria-pressed={x.searchMode === 'content'}
+          onClick={() => x.setSearchMode(x.searchMode === 'content' ? 'name' : 'content')}
+        >
+          {x.searchMode === 'content' ? <FileText size={15} /> : <Type size={15} />}
+        </button>
         <input
           ref={searchInput}
           aria-label={searchLabel}
-          placeholder={x.globalSearch ? t('搜索所有可访问位置') : t('搜索此文件夹')}
+          placeholder={
+            x.searchMode === 'content'
+              ? t('搜索文件内容')
+              : x.globalSearch
+                ? t('搜索所有可访问位置')
+                : t('搜索此文件夹')
+          }
           value={x.query}
           onChange={(event) => x.setQuery(event.target.value)}
           onKeyDown={(event) => {

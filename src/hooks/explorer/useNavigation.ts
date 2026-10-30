@@ -15,6 +15,15 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [globalSearch, setGlobalSearch] = useState(false)
+  // The search mode is a pane preference, not query state: switching modes
+  // cancels the old session and re-runs the query with the other capability.
+  const [searchMode, setSearchModeState] = useState<'name' | 'content'>(() =>
+    localStorage.getItem('fiex:search-mode') === 'content' ? 'content' : 'name',
+  )
+  const setSearchMode = useCallback((mode: 'name' | 'content') => {
+    setSearchModeState(mode)
+    localStorage.setItem('fiex:search-mode', mode)
+  }, [])
   const [history, setHistory] = useState<string[]>(initialPath ? [initialPath] : [])
   const [cursor, setCursor] = useState(initialPath ? 0 : -1)
   const [tabs, setTabs] = useState<string[]>(initialTabs?.paths || [])
@@ -161,6 +170,8 @@ export function useNavigation(initialTabs?: { paths: string[]; active: number })
     setQuery,
     globalSearch,
     setGlobalSearch,
+    searchMode,
+    setSearchMode,
     history,
     navigate,
     startAt,

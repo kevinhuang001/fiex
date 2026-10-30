@@ -155,8 +155,23 @@ pub(crate) async fn open_path(
 }
 #[tauri::command]
 pub(crate) fn reveal_path(path: String) -> Result<(), String> {
+    // Recent aliases are opaque to the host OS. Resolve the original local
+    // source inside Core and reveal that, without exposing it to the webview.
+    if path.starts_with(crate::core::volumes::virtual_resolvers::RECENT_URI) {
+        if let Some(provider) = crate::core::volumes::virtual_resolvers::view_for(&path) {
+            return provider.reveal(&path);
+        }
+    }
     crate::plugins::mounts::reject_local(&path)?;
     terminals::reveal(&path)
+}
+#[tauri::command]
+pub(crate) fn trash_application_entries(paths: Vec<String>) -> Result<(), String> {
+    crate::core::volumes::applications::trash_entries(&paths)
+}
+#[tauri::command]
+pub(crate) fn remove_application_entries(paths: Vec<String>) -> Result<(), String> {
+    crate::core::volumes::applications::remove_entries(&paths)
 }
 #[tauri::command]
 pub(crate) fn open_applications() -> Result<(), String> {

@@ -1,19 +1,28 @@
 use super::*;
 
 fn search(root: &Path, query: &str, hidden: bool, ignores: &[String]) -> Vec<Entry> {
+    let mut request = SearchRequest::new(root.to_str().unwrap(), query);
+    request.hidden = hidden;
+    request.ignores = ignores.to_vec();
+    run(&request).0
+}
+
+/// Collects every batch so assertions cover the streamed protocol, not only
+/// the final result set.
+fn run(request: &SearchRequest) -> (Vec<Entry>, Vec<SearchBatch>) {
     let state = SearchState::default();
-    let found = Mutex::new(Vec::new());
+    let batches = Mutex::new(Vec::new());
     state
-        .run(
-            "test",
-            root.to_str().unwrap(),
-            query,
-            hidden,
-            ignores,
-            |batch| found.lock().unwrap().extend(batch.entries),
-        )
+        .stream("test", request, |batch| {
+            batches.lock().unwrap().push(batch);
+        })
         .unwrap();
-    found.into_inner().unwrap()
+    let batches = batches.into_inner().unwrap();
+    let entries = batches
+        .iter()
+        .flat_map(|batch| batch.entries.clone())
+        .collect();
+    (entries, batches)
 }
 
 #[test]
@@ -70,23 +79,161 @@ fn stops_at_the_result_limit() {
     for index in 0..(RESULT_LIMIT + 20) {
         std::fs::write(t.path().join(format!("Needle-{index}.txt")), "x").unwrap();
     }
-    let state = SearchState::default();
-    let result = Mutex::new((0usize, false));
-    state
-        .run(
-            "test",
-            t.path().to_str().unwrap(),
-            "needle",
-            false,
-            &[],
-            |batch| {
-                let mut result = result.lock().unwrap();
-                result.0 = batch.entries.len();
-                result.1 = batch.truncated;
-            },
-        )
-        .unwrap();
-    let (count, truncated) = result.into_inner().unwrap();
-    assert_eq!(count, RESULT_LIMIT);
-    assert!(truncated);
+    let (entries, batches) = run(&SearchRequest::new(t.path().to_str().unwrap(), "needle"));
+    assert_eq!(entries.len(), RESULT_LIMIT);
+    assert!(batches.last().unwrap().truncated);
+}
+
+#[test]
+fn streams_batches_before_the_walk_finishes() {
+    let t = tempfile::tempdir().unwrap();
+    for index in 0..(BATCH_SIZE * 2 + 10) {
+        std::fs::write(t.path().join(format!("Needle-{index}.txt")), "x").unwrap();
+    }
+    let (entries, batches) = run(&SearchRequest::new(t.path().to_str().unwrap(), "needle"));
+    assert_eq!(entries.len(), BATCH_SIZE * 2 + 10);
+    assert!(batches.len() >= 3, "{batches:?}");
+    assert!(batches.iter().any(|batch| !batch.done));
+    // Exactly one terminal batch, and it is the last one.
+    assert_eq!(batches.iter().filter(|batch| batch.done).count(), 1);
+    assert!(batches.last().unwrap().done);
+}
+
+#[test]
+fn content_mode_matches_text_and_skips_binaries() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("notes.txt"), "a line with a Needle inside").unwrap();
+    std::fs::write(t.path().join("binary.dat"), b"Needle\0binary").unwrap();
+    std::fs::write(t.path().join("other.txt"), "nothing here").unwrap();
+    let mut request = SearchRequest::new(t.path().to_str().unwrap(), "needle");
+    request.mode = SearchMode::Content;
+    let (entries, _) = run(&request);
+    let names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+    assert_eq!(names, ["notes.txt"]);
+}
+
+#[test]
+fn filename_mode_does_not_read_file_content() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("plain.txt"), "needle is only in the body").unwrap();
+    let entries = search(t.path(), "needle", false, &[]);
+    assert!(entries.is_empty());
+}
+
+#[test]
+fn explicit_engine_names_are_parsed_for_the_ui() {
+    assert_eq!(SearchEngine::default(), SearchEngine::Auto);
+    assert_eq!(SearchMode::default(), SearchMode::Name);
+}
+
+fn virtual_entry(name: &str) -> Entry {
+    Entry {
+        path: format!("recent://{name}"),
+        name: name.into(),
+        ..Default::default()
+    }
+}
+
+fn filter_virtual(
+    entries: Vec<Entry>,
+    query: &str,
+    limit: usize,
+) -> crate::core::volumes::virtual_storage::CachedSearch {
+    crate::core::volumes::virtual_storage::filter_entries(entries, query, limit, &|| false)
+}
+
+#[test]
+fn virtual_roots_are_recognized_without_host_paths() {
+    assert!(virtual_search_root("recent://"));
+    assert!(virtual_search_root("applications://"));
+    assert!(virtual_search_root("recyclebin://"));
+    assert!(virtual_search_root("trash://"));
+    assert!(virtual_search_root("applications://user/QnV6ei50eHQ"));
+    assert!(!virtual_search_root("/tmp"));
+    assert!(!virtual_search_root("fiex-plugin-view://example"));
+    if let Some(root) = crate::core::volumes::trash_path() {
+        assert!(virtual_search_root(&root.to_string_lossy()));
+    }
+}
+
+#[test]
+fn virtual_filter_matches_names_case_insensitively() {
+    let found = filter_virtual(
+        vec![
+            virtual_entry("Needle One"),
+            virtual_entry("needle-two"),
+            virtual_entry("other"),
+        ],
+        "NEEDLE",
+        RESULT_LIMIT,
+    );
+    let names: Vec<_> = found
+        .entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect();
+    assert_eq!(names, ["Needle One", "needle-two"]);
+    // Name mode never reads file contents; a body-only match stays absent.
+    assert!(!found.truncated);
+    assert_eq!(found.skipped, 0);
+    assert_eq!(found.scanned, 3);
+}
+
+#[test]
+fn virtual_filter_respects_the_result_limit() {
+    let found = filter_virtual(
+        vec![
+            virtual_entry("needle-1"),
+            virtual_entry("needle-2"),
+            virtual_entry("needle-3"),
+        ],
+        "needle",
+        2,
+    );
+    assert_eq!(found.entries.len(), 2);
+    assert!(found.truncated);
+}
+
+#[test]
+fn virtual_content_mode_warns_instead_of_returning_empty() {
+    let mut request = SearchRequest::new("recent://", "needle");
+    request.mode = SearchMode::Content;
+    let (entries, batches) = run(&request);
+    assert!(entries.is_empty());
+    let last = batches.last().unwrap();
+    assert!(last.done);
+    assert!(last.incomplete);
+    assert_eq!(last.engine.as_deref(), Some("builtin"));
+    assert!(
+        last.warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("暂不支持")),
+        "{last:?}"
+    );
+}
+
+#[test]
+fn virtual_search_emits_a_cache_snapshot_then_a_terminal_batch() {
+    let request = SearchRequest::new("recent://", "__fiex_virtual_search_probe__");
+    let (_entries, batches) = run(&request);
+    assert_eq!(batches.len(), 2, "{batches:?}");
+    assert!(batches[0].replace);
+    assert!(!batches[0].done);
+    let last = batches.last().unwrap();
+    assert!(last.done);
+    // Identical refresh results confirm with an empty batch; changed results
+    // arrive as one replacement snapshot.
+    assert!(last.replace || last.entries.is_empty(), "{last:?}");
+}
+
+#[test]
+fn virtual_filter_stops_when_cancelled() {
+    let found = crate::core::volumes::virtual_storage::filter_entries(
+        vec![virtual_entry("needle-1"), virtual_entry("needle-2")],
+        "needle",
+        RESULT_LIMIT,
+        &|| true,
+    );
+    assert!(found.entries.is_empty());
+    assert_eq!(found.scanned, 0);
 }

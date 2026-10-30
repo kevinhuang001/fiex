@@ -27,3 +27,7 @@ pub(crate) use resources::*;
 #[macro_use]
 mod contributions;
 pub(crate) use contributions::*;
+
+#[macro_use]
+mod preferences;
+pub(crate) use preferences::*;

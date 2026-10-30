@@ -14,7 +14,11 @@ export function Menu({
   align?: 'start' | 'center' | 'end'
 }) {
   return (
-    <D.DropdownMenu>
+    // Non-modal: a modal Radix menu disables pointer events on the rest of the
+    // page, so clicking a different toolbar menu could only dismiss the open
+    // one. Non-modal menus let the second trigger receive the same click, which
+    // closes the first menu and opens the target immediately.
+    <D.DropdownMenu modal={false}>
       <D.DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" title={label} aria-label={label}>
           {icon}

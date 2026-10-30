@@ -217,6 +217,15 @@ export function sortEntries(entries: Entry[], sort: Sort, desc: boolean): Entry[
             : a[sort] - b[sort] || collator.compare(a.name, b.name)),
   )
 }
+/** Sort for a clicked list header: a different column starts ascending, the
+ *  active column flips direction. Folder-first ordering stays in sortEntries. */
+export function nextSort(
+  sort: Sort,
+  descending: boolean,
+  key: Sort,
+): { sort: Sort; descending: boolean } {
+  return { sort: key, descending: sort === key ? !descending : false }
+}
 export function groups(entries: Entry[], by: Group): [string, Entry[]][] {
   const map = new Map<string, Entry[]>()
   for (const e of entries) {

@@ -24,6 +24,12 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
     case 'open':
       if (entry) props.open(entry)
       break
+    case 'reveal':
+      // Core resolves Recent aliases to local sources inside the command; the
+      // webview only ever passes the opaque alias.
+      return (async () => {
+        for (const path of effect.paths) await call('reveal_path', { path })
+      })()
     case 'preview':
       if (entry) props.previewEntry(entry)
       break
@@ -51,6 +57,16 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
     case 'trash':
       props.recycle(effect.paths)
       break
+    case 'trashApplications':
+      return call('trash_application_entries', { paths: effect.paths }).then(() => {
+        props.x.setSelected([])
+        props.x.reload()
+      })
+    case 'removeApplications':
+      return call('remove_application_entries', { paths: effect.paths }).then(() => {
+        props.x.setSelected([])
+        props.x.reload()
+      })
     case 'newFolder':
       props.create()
       break

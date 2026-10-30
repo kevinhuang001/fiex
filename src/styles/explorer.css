@@ -598,6 +598,37 @@ body.col-resizing {
   cursor: ew-resize;
   user-select: none;
 }
+/* Sortable header label. The whole label is the hit target; the arrow appears
+   only on the active column so the row stays calm. */
+.list-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.list-sort:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+.list-sort:active {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.list-sort:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.list-sort svg {
+  opacity: 0.8;
+}
 .list-header {
   position: sticky;
   top: 0;
@@ -1579,23 +1610,6 @@ body.resizing-terminal {
   border-radius: 5px;
   background: var(--canvas);
   color: var(--text);
-}
-.terminal-color-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.terminal-color-control input {
-  width: 34px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-.terminal-panel-actions .terminal-color-control button {
-  width: auto;
-  padding: 0 7px;
-  font-size: 11px;
 }
 .terminal-shell-menu {
   position: absolute;

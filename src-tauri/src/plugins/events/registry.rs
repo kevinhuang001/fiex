@@ -71,6 +71,9 @@ impl EventRouter {
             });
         }
         providers.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.id.cmp(&b.id)));
-        providers
+        // One shared preference model covers every priority-aware feature:
+        // the user's stored order wins over manifest defaults and disabled
+        // contributions are removed without disabling the whole plugin.
+        crate::plugins::preferences::apply(event.extension, providers)
     }
 }

@@ -87,17 +87,29 @@ pub(crate) async fn preview_candidates(path: String) -> Result<Vec<serde_json::V
 /// no preview session and grants no resource access; the frontend renders it in
 /// the same sandboxed Core-owned iframe while `preview.open` runs.
 #[tauri::command]
-pub(crate) fn preview_loading(plugin_id: String) -> Result<Option<String>, String> {
-    crate::plugins::host::preview_loading(&plugin_id).inspect_err(|error| {
-        record_plugin_error(&plugin_id, "preview", &format!("loading: {error}"))
-    })
+pub(crate) async fn preview_loading(plugin_id: String) -> Result<Option<String>, String> {
+    // Resolving a package document scans installed plugins and reads the file.
+    // Keep that I/O off the event loop so the loading page can paint immediately.
+    let id = plugin_id.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::plugins::host::preview_loading(&id))
+        .await
+        .map_err(|error| error.to_string())?
+        .inspect_err(|error| {
+            record_plugin_error(&plugin_id, "preview", &format!("loading: {error}"))
+        })
 }
 
 #[tauri::command]
-pub(crate) fn preview_loading_asset(plugin_id: String) -> Result<Option<String>, String> {
-    crate::plugins::host::preview_loading_asset(&plugin_id).inspect_err(|error| {
-        record_plugin_error(&plugin_id, "preview", &format!("loading asset: {error}"))
-    })
+pub(crate) async fn preview_loading_asset(plugin_id: String) -> Result<Option<String>, String> {
+    // Same bounded disk work as `preview_loading`; the document never starts the
+    // plugin process, so the prefetched page is available before `preview.open`.
+    let id = plugin_id.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::plugins::host::preview_loading_asset(&id))
+        .await
+        .map_err(|error| error.to_string())?
+        .inspect_err(|error| {
+            record_plugin_error(&plugin_id, "preview", &format!("loading asset: {error}"))
+        })
 }
 
 #[tauri::command]
@@ -121,9 +133,14 @@ pub(crate) async fn preview_open(
 pub(crate) async fn plugin_context_menu_resolve(
     directory: String,
     paths: Vec<String>,
+    source: Option<String>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::context_menu::query(&directory, &paths)
+    let source = source.unwrap_or_else(|| "all".into());
+    tauri::async_runtime::spawn_blocking(move || match source.as_str() {
+        "core" => crate::plugins::resolvers::context_menu::query_core(&directory, &paths),
+        "plugins" => crate::plugins::resolvers::context_menu::query_plugins(&directory, &paths),
+        "" | "all" => crate::plugins::resolvers::context_menu::query(&directory, &paths),
+        other => Err(format!("unknown context menu source: {other}")),
     })
     .await
     .map_err(|error| error.to_string())?

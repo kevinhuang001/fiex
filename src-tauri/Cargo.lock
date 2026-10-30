@@ -100,7 +100,6 @@ dependencies = [
 [[package]]
 name = "arapuca"
 version = "0.2.9"
-source = "git+https://github.com/sergio-correia/arapuca.git?rev=55e40035fb87ef766eedf23bd1c01fd91261c447#55e40035fb87ef766eedf23bd1c01fd91261c447"
 dependencies = [
  "landlock",
  "libc",
@@ -3715,6 +3714,7 @@ version = "5.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa576c76302b7b808eecc68061e67336c47833ef9d22caa74dda10fa9675eebc"
 dependencies = [
+ "dunce",
  "is-wsl",
  "libc",
 ]

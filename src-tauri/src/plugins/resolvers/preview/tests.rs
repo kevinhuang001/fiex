@@ -1,5 +1,11 @@
-use super::session::validate;
+use super::session::{validate, UNSUPPORTED};
 use super::*;
+
+#[test]
+fn explicit_unsupported_view_is_not_a_failure() {
+    let error = validate("org.fiex.test", serde_json::json!({"kind":"unsupported"})).unwrap_err();
+    assert_eq!(error, UNSUPPORTED);
+}
 
 #[test]
 fn unknown_preview_kind_is_rejected() {
