@@ -46,7 +46,7 @@ fn now_ms() -> u64 {
 fn clean(value: &str, limit: usize) -> String {
     // Diagnostics never include control sequences. Avoid accidentally storing
     // access tokens in the common Authorization / Bearer header formats.
-    let words = value.replace('\0', "").replace('\u{001b}', "");
+    let words = value.replace(['\0', '\u{001b}'], "");
     let tokens: Vec<&str> = words.split_whitespace().collect();
     let mut redacted = String::new();
     let mut hide = false;
