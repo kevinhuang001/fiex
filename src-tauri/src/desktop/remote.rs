@@ -99,6 +99,12 @@ pub(crate) async fn remote_cache(
     }
     Ok(())
 }
+/// Whether a remote file can be opened without downloading it again.
+#[tauri::command]
+pub(crate) fn remote_cached(path: String) -> Result<bool, String> {
+    remote::is_cached(&path)
+}
+
 /// Opening a remote file downloads it first; report that download as progress.
 #[tauri::command]
 pub(crate) async fn remote_open(

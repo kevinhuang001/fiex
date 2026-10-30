@@ -120,6 +120,19 @@ pub fn stat(path: &str) -> Result<crate::core::files::Entry, String> {
         ),
     })
 }
+/// Exact cache state for the UI: metadata says downloaded and the local file
+/// still exists. Unlike the listing snapshot this cannot be stale after an
+/// upload or a cache eviction.
+#[cfg(feature = "desktop")]
+pub fn is_cached(path: &str) -> Result<bool, String> {
+    let (conn, rel) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;
+    ensure_provider_access(&conn)?;
+    let meta = load_meta(&conn);
+    Ok(meta.files.get(&rel_string(&rel)).is_some_and(|entry| {
+        !entry.is_dir && entry.downloaded && local_for(&conn, &rel_string(&rel)).is_file()
+    }))
+}
+
 /// OS operations receive only a checked materialized cache path.
 pub fn cached_path(path: &str) -> Result<String, String> {
     let (conn, rel) = connection_for_path(path).ok_or("MountNotFound: connection removed")?;

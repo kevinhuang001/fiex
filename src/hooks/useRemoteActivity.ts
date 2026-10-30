@@ -2,7 +2,7 @@ import { listen } from '@tauri-apps/api/event'
 import { useEffect } from 'react'
 import { t } from '@/i18n'
 import { native } from '@/lib/api'
-import { recordActivity } from '@/hooks/useActivity'
+import { listActivity, recordActivity } from '@/hooks/useActivity'
 
 interface CacheChange {
   path: string
@@ -24,12 +24,16 @@ export function useRemoteActivity() {
           const detail = failed
             .map((change) => `${change.path}: ${change.detail || ''}`.trim())
             .join('\n')
-          recordActivity(
-            event.payload.name ? t('{0} 同步失败', event.payload.name) : t('同步失败'),
-            detail,
-            'sync',
-            'error',
+          const label = event.payload.name ? t('{0} 同步失败', event.payload.name) : t('同步失败')
+          const duplicate = listActivity().some(
+            (item) =>
+              item.kind === 'sync' &&
+              item.status === 'error' &&
+              item.label === label &&
+              item.detail === detail &&
+              Date.now() - (item.finishedAt ?? item.startedAt) < 30 * 60 * 1000,
           )
+          if (!duplicate) recordActivity(label, detail, 'sync', 'error')
         }
         const uploaded = event.payload.changes.filter((change) => change.state === 'uploaded')
         if (uploaded.length) {

@@ -79,20 +79,8 @@ pub fn http_open(
         .get("timeoutMs")
         .and_then(Value::as_u64)
         .unwrap_or(90000)
-        .clamp(
-            1,
-            if streaming_length.is_some()
-                || params
-                    .get("bodyReadHandle")
-                    .and_then(Value::as_str)
-                    .is_some()
-            {
-                86_400_000
-            } else {
-                120_000
-            },
-        );
-    let client = reqwest::blocking::Client::builder()
+        .clamp(1, 86_400_000);
+    let mut builder = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(timeout))
         .redirect(reqwest::redirect::Policy::none())
         .danger_accept_invalid_certs(
@@ -100,9 +88,16 @@ pub fn http_open(
                 .get("allowInvalidCerts")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
-        )
-        .build()
-        .map_err(|e| e.to_string())?;
+        );
+    // Environment/system proxies mirror the marketplace client; a proxy
+    // scheme reqwest cannot build (for example SOCKS without the feature)
+    // falls back to reqwest's own system-proxy detection.
+    if let Some(proxy) = crate::platform::system_proxy::proxy_url() {
+        if let Ok(proxy) = reqwest::Proxy::all(proxy) {
+            builder = builder.proxy(proxy);
+        }
+    }
+    let client = builder.build().map_err(|e| e.to_string())?;
     let mut headers = reqwest::header::HeaderMap::new();
     if let Some(values) = params.get("headers").and_then(Value::as_object) {
         if values.len() > 64 {

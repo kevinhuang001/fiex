@@ -1,3 +1,11 @@
+# Fiex 0.7.10
+
+- `ctx.aria2` now runs the pure-Rust `aria2-core` engine; no external `aria2c` binary is required.
+- aria2 and plugin HTTP downloads use environment/system proxies, and file reads can use long-lived timeouts instead of the old 90–120 second limit.
+- Google Drive native Docs/Sheets/Slides can be written back through the provider’s Office export/import conversion (requires plugins 0.5.10).
+- Opening an already-cached remote file asks the cache registry first, so no redundant “Caching” activity is created; identical sync failures are coalesced.
+- Plugin logs default to WARN-and-above filtering, and directory/invoke logs include the actual path.
+
 # Fiex 0.7.9
 
 - SDK 0.3.2 adds an active `ctx.aria2()` API that mirrors `ctx.http()`: providers set headers, timeout, connection/split counts and an optional progress callback, then read the download as a stream. Core owns the aria2 process and temporary output.

@@ -127,6 +127,7 @@ export function ListView({
         </span>
         <span className="list-col" role="columnheader" aria-sort={ariaSort('modified')}>
           {sortButton('modified', t('修改时间'))}
+          {resizer('modified')}
         </span>
         <span className="list-col" role="columnheader" aria-sort={ariaSort('size')}>
           {resizer('size')}

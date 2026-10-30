@@ -25,12 +25,19 @@ interface LogRecord {
 
 const levels = ['all', 'trace', 'debug', 'info', 'warn', 'error'] as const
 type LevelFilter = (typeof levels)[number]
+const severity: Record<Exclude<LevelFilter, 'all'>, number> = {
+  trace: 0,
+  debug: 1,
+  info: 2,
+  warn: 3,
+  error: 4,
+}
 
 /** The plugin log view never reads other plugins' streams. All querying is
  * scoped by the host-managed plugin identity and entries are rendered as text. */
 export function PluginLogViewer({ pluginId }: { pluginId: string }) {
   const [entries, setEntries] = useState<LogRecord[]>([])
-  const [level, setLevel] = useState<LevelFilter>('all')
+  const [level, setLevel] = useState<LevelFilter>('warn')
   const [query, setQuery] = useState('')
   const [paused, setPaused] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -82,7 +89,7 @@ export function PluginLogViewer({ pluginId }: { pluginId: string }) {
   const visible = useMemo(
     () =>
       entries.filter((entry) => {
-        if (level !== 'all' && entry.level !== level) return false
+        if (level !== 'all' && severity[entry.level] < severity[level]) return false
         const term = query.trim().toLowerCase()
         return (
           !term ||

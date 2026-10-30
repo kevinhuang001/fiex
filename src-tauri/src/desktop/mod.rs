@@ -201,6 +201,7 @@ pub fn run() {
             remote_download,
             remote_download_dir,
             remote_cache,
+            remote_cached,
             remote_open,
             remote_sync,
             remote_uncache,

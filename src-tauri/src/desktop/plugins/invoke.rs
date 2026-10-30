@@ -25,11 +25,12 @@ pub(crate) async fn plugin_invoke(
         .transpose()?;
     let id = plugin_id.clone();
     let call = method.clone();
+    let scope = directory.clone().unwrap_or_else(|| "-".into());
     let started = std::time::Instant::now();
     crate::infrastructure::logging::record_core(
         "debug",
         "plugin.invoke",
-        &format!("{id}: {call} started"),
+        &format!("{id}: {call} started (directory={scope})"),
     );
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(mut scope) = preview_scope {
@@ -72,7 +73,7 @@ pub(crate) async fn plugin_invoke(
             "debug",
             "plugin.invoke",
             &format!(
-                "{id}: {call} completed in {} ms",
+                "{id}: {call} completed in {} ms (directory={scope})",
                 started.elapsed().as_millis()
             ),
         );
@@ -88,7 +89,7 @@ pub(crate) async fn plugin_invoke(
             "error",
             "plugin.invoke",
             &format!(
-                "{id}: {call} failed after {} ms",
+                "{id}: {call} failed after {} ms (directory={scope})",
                 started.elapsed().as_millis()
             ),
         );

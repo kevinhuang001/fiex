@@ -41,7 +41,7 @@ export function useOpenActions({
   setPreview: Dispatch<SetStateAction<Entry | null>>
   trashPath: string | null
 }) {
-  const open = (e: Entry, pane = x) => {
+  const open = async (e: Entry, pane = x) => {
     if (
       pane.path.startsWith('trash://') ||
       pane.path.startsWith('recyclebin://') ||
@@ -60,7 +60,11 @@ export function useOpenActions({
       return
     }
     const remote = isRemotePath(e.path)
-    const cached = remote && Boolean(e.hasCache)
+    // The listing snapshot can be stale after an upload or eviction. Ask the
+    // cache registry before deciding whether this open needs an activity.
+    const cached = remote
+      ? await call<boolean>('remote_cached', { path: e.path }).catch(() => Boolean(e.hasCache))
+      : false
     let onProgress: ReturnType<typeof progressChannel> | undefined
     void run(
       // Cached files open directly; only a real cache miss gets a transfer

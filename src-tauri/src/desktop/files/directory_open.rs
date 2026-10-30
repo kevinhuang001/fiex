@@ -26,6 +26,7 @@ pub(crate) async fn directory_open(
         let started = std::time::Instant::now();
         let identity = crate::core::fs::directory_cache::key(&path);
         let cached = crate::core::fs::directory_cache::read_snapshot(&path, hidden, &ignores)?;
+        let cache_hit = cached.is_some();
         // Warm listings paint an atomic metadata + Decoration snapshot.
         // A cold listing waits for its first complete presentation rather
         // than displaying generic icons which will immediately flash.
@@ -55,9 +56,12 @@ pub(crate) async fn directory_open(
             "debug",
             "fs.list",
             &format!(
-                "Directory listed {} entries with presentation in {} ms",
+                "Directory \"{}\" listed {} entries with presentation in {} ms (cache_hit={}, hidden={})",
+                path,
                 count,
                 started.elapsed().as_millis(),
+                cache_hit,
+                hidden,
             ),
         );
         Ok::<(), String>(())
