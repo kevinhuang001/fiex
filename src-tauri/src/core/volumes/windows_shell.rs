@@ -130,3 +130,106 @@ public static class FiexShellIcon {
         Err("Shell icon unavailable".into())
     }
 }
+
+/// Resolve an AppsFolder target such as
+/// \`{FOLDERID_System}\msinfo32.exe\` into a real filesystem path. AppsFolder
+/// uses known-folder IDs in place of drive letters for some Win32 shortcuts.
+/// Resolving the identifier is separate from checking that the target exists.
+#[cfg(target_os = "windows")]
+pub fn resolve_known_folder_path(value: &str) -> Option<std::path::PathBuf> {
+    use std::ffi::{OsStr, OsString, c_void};
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::ptr;
+
+    #[repr(C)]
+    struct Guid {
+        data1: u32,
+        data2: u16,
+        data3: u16,
+        data4: [u8; 8],
+    }
+
+    #[link(name = "ole32")]
+    unsafe extern "system" {
+        fn CLSIDFromString(value: *const u16, guid: *mut Guid) -> i32;
+        fn CoTaskMemFree(ptr: *mut c_void);
+    }
+    #[link(name = "shell32")]
+    unsafe extern "system" {
+        fn SHGetKnownFolderPath(
+            folder: *const Guid,
+            flags: u32,
+            token: *mut c_void,
+            result: *mut *mut u16,
+        ) -> i32;
+    }
+
+    let end = value.find('}')?;
+    let folder = value.get(..=end)?;
+    let rest = value.get(end + 1..)?;
+    if !folder.starts_with('{')
+        || folder.len() != 38
+        || !(rest.starts_with('\\') || rest.starts_with('/'))
+        || rest.trim_start_matches(['\\', '/']).is_empty()
+    {
+        return None;
+    }
+
+    let wide = OsStr::new(folder)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut guid = Guid {
+        data1: 0,
+        data2: 0,
+        data3: 0,
+        data4: [0; 8],
+    };
+    // Win32 HRESULTs with the high bit set indicate an error.
+    if unsafe { CLSIDFromString(wide.as_ptr(), &mut guid) } < 0 {
+        return None;
+    }
+
+    let mut raw = ptr::null_mut();
+    let status = unsafe { SHGetKnownFolderPath(&guid, 0, ptr::null_mut(), &mut raw) };
+    if status < 0 || raw.is_null() {
+        if !raw.is_null() {
+            unsafe { CoTaskMemFree(raw.cast()) };
+        }
+        return None;
+    }
+
+    // The returned PWSTR is allocated by the Shell and must be freed with
+    // CoTaskMemFree, including when a namespace target cannot be used.
+    let base = unsafe {
+        let mut len = 0;
+        while *raw.add(len) != 0 {
+            len += 1;
+        }
+        let value = OsString::from_wide(std::slice::from_raw_parts(raw, len));
+        CoTaskMemFree(raw.cast());
+        value
+    };
+    Some(std::path::PathBuf::from(base).join(rest.trim_start_matches(['\\', '/'])))
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod known_folder_tests {
+    use super::resolve_known_folder_path;
+
+    #[test]
+    fn system_folder_identity_resolves_without_hardcoded_paths() {
+        let path =
+            resolve_known_folder_path(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\msinfo32.exe")
+                .expect("FOLDERID_System should exist");
+        assert!(path.ends_with("msinfo32.exe"));
+        assert!(path.to_string_lossy().to_lowercase().contains("system32"));
+    }
+
+    #[test]
+    fn malformed_and_unknown_shell_identities_do_not_become_paths() {
+        assert!(resolve_known_folder_path(r"{invalid}\msinfo32.exe").is_none());
+        assert!(resolve_known_folder_path(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}").is_none());
+        assert!(resolve_known_folder_path(r"{00000000-0000-0000-0000-000000000000}\x.exe").is_none());
+    }
+}
