@@ -88,17 +88,19 @@ impl Running {
             "method": "plugin.cancel",
             "params": { "taskId": info.task_id },
         })) {
-            if let Some(mut entry) = self
-                .tasks
-                .lock()
-                .ok()
-                .and_then(|mut tasks| tasks.remove(id))
-            {
-                entry.info.status = "failed".into();
-                entry.info.error = Some(crate::i18n::t("插件进程已断开").into());
+            let failed = self.tasks.lock().ok().and_then(|mut tasks| {
+                tasks.remove(id).map(|mut entry| {
+                    entry.info.status = "failed".into();
+                    entry.info.error = Some(crate::i18n::t("插件进程已断开").into());
+                    // The task remains discoverable throughout the transition,
+                    // including when reporting a broken cancellation channel.
+                    self.remember_task(entry.info.clone());
+                    entry
+                })
+            });
+            if let Some(entry) = failed {
                 crate::plugins::resource::lifecycle::release(&entry.owner);
                 self.emit_task(&entry.info);
-                self.remember_task(entry.info);
             }
             return Err(error);
         }
