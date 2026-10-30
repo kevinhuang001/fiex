@@ -17,15 +17,22 @@ pub(crate) async fn file_info_details(
         let resource = crate::core::fs::trusted(&path, "core:info")?;
         let key = resource.desktop_entry().ok().and_then(|metadata| {
             serde_json::to_string(&(
-                &path, metadata.modified, metadata.size, metadata.mime.as_str(),
-                crate::i18n::locale(), crate::plugins::preferences::snapshot(),
-            )).ok()
+                &path,
+                metadata.modified,
+                metadata.size,
+                metadata.mime.as_str(),
+                crate::i18n::locale(),
+                crate::plugins::preferences::snapshot(),
+            ))
+            .ok()
         });
         if let Some(value) = key.as_ref().and_then(|key| cache.get(key)) {
             return Ok::<_, String>(value);
         }
         let result = crate::plugins::resolvers::info::file_info_resource(&path)?;
-        if let Some(key) = key { cache.insert(key, result.clone()); }
+        if let Some(key) = key {
+            cache.insert(key, result.clone());
+        }
         Ok(result)
     })
     .await
