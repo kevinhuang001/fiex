@@ -97,6 +97,23 @@ fn proxy() -> (Option<String>, Option<String>, Option<String>) {
     (Some(url.to_string()), user, pass)
 }
 
+// A process-wide Tokio scheduler avoids creating two new I/O workers and
+// initializing a fresh reactor for every download. Each download retains its
+// own request group, cancellation handle and temporary output.
+fn shared_runtime() -> Result<&'static tokio::runtime::Runtime, String> {
+    static RUNTIME: OnceLock<Result<tokio::runtime::Runtime, String>> = OnceLock::new();
+    RUNTIME
+        .get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(4)
+                .enable_all()
+                .build()
+                .map_err(|error| error.to_string())
+        })
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
 fn run(
     url: String,
     options: DownloadOptions,
@@ -105,11 +122,7 @@ fn run(
     shared: Arc<Mutex<Shared>>,
     mut cancel: tokio::sync::watch::Receiver<bool>,
 ) {
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build();
-    let result = match runtime {
+    let result = match shared_runtime() {
         Ok(runtime) => runtime.block_on(async move {
             let groups = Arc::new(RequestGroupMan::new());
             let engine = match DownloadEngine::new().start_with_request_group_man(groups) {
@@ -252,7 +265,16 @@ pub(crate) fn open(owner: &str, params: &Value) -> Result<Value, String> {
     let worker_payload = payload.clone();
     std::thread::Builder::new()
         .name("fiex-aria2".into())
-        .spawn(move || run(worker_url, options, worker_payload, size, worker_shared, worker_cancel))
+        .spawn(move || {
+            run(
+                worker_url,
+                options,
+                worker_payload,
+                size,
+                worker_shared,
+                worker_cancel,
+            )
+        })
         .map_err(|error| error.to_string())?;
 
     let id = next_id();
