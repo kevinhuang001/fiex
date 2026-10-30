@@ -16,7 +16,6 @@ pub(crate) async fn list_directory(
     .await
     .map_err(|e| e.to_string())?
 }
-
 #[tauri::command]
 pub(crate) async fn file_info(path: String) -> Result<files::Entry, String> {
     tauri::async_runtime::spawn_blocking(move || file_info_blocking(&path))
@@ -41,14 +40,17 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
         let resource = crate::core::fs::trusted(&path, "core:preview")?;
         // A cached preview never replaces the provider's live read authorization.
         resource.require(crate::plugins::provider_registry::FsOperation::Read, false)?;
-        let key = resource.desktop_entry().ok().and_then(|entry|
-            serde_json::to_string(&(path.as_str(), entry.modified, entry.size)).ok());
+        let key = resource.desktop_entry().ok().and_then(|entry| {
+            serde_json::to_string(&(path.as_str(), entry.modified, entry.size)).ok()
+        });
         if let Some(value) = key.as_ref().and_then(|key| cache.get(key)) {
             return Ok(value);
         }
         let bytes = resource.preview_prefix(512 * 1024)?;
         let text = String::from_utf8_lossy(&bytes).into_owned();
-        if let Some(key) = key { cache.insert(key, text.clone()); }
+        if let Some(key) = key {
+            cache.insert(key, text.clone());
+        }
         Ok::<String, String>(text)
     })
     .await
