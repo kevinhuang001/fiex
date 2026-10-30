@@ -105,11 +105,32 @@ fn persist(plugin_id: &str, record: &LogRecord) {
     if fs::create_dir_all(parent).is_err() {
         return;
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).is_err() {
+            return;
+        }
+    }
     if fs::metadata(&current).is_ok_and(|m| m.len() > MAX_FILE_BYTES) {
         let _ = fs::remove_file(&previous);
         let _ = fs::rename(&current, &previous);
     }
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(current) {
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    if let Ok(mut file) = options.open(current) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if file.set_permissions(fs::Permissions::from_mode(0o600)).is_err() {
+                return;
+            }
+        }
         if let Ok(json) = serde_json::to_string(record) {
             let _ = writeln!(file, "{json}");
         }
