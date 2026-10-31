@@ -1,11 +1,11 @@
 //! Optional before-open hooks share the same provider registry and the
 //! EventRouter's FirstSupported policy as other feature types.
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{
     events::{EventRouter, Handler},
     host::PluginInfo,
     resource::resource_context::ResourceSnapshot,
 };
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
 
 struct PluginHook<'a> {

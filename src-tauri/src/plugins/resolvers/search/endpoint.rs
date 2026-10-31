@@ -1,7 +1,7 @@
 //! Search plugin transport. Core supplies only a bound ResourceRef and a
 //! scope-narrowed request; no plugin-provided path can select its own owner.
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::Value;
 
 pub(super) struct PluginSearchEndpoint<'a> {
