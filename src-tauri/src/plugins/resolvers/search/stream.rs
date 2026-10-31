@@ -75,11 +75,11 @@ pub fn run_stream(
                 let Handler::Plugin(plugin) = &resolver.handler else {
                     return Err("native search runs through the streaming walker".into());
                 };
-                Ok(Box::new(endpoint::PluginSearchEndpoint {
-                    plugin: (**plugin).clone(),
-                    resources: &resources,
-                    directory: &request.root,
-                }) as Box<dyn ProviderEndpoint + '_>)
+                Ok(Box::new(proxy::ScopedSearchProxy::new(
+                    (**plugin).clone(),
+                    &resources,
+                    &request.root,
+                )?) as Box<dyn ProviderEndpoint + '_>)
             },
             |resolver, response| {
                 // Decode the same strict page DTO used by the SDK.
