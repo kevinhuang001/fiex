@@ -165,7 +165,10 @@ impl VirtualView for TrashView {
         false
     }
     fn operations(&self, _path: &str) -> Vec<&'static str> {
-        vec!["list", "stat", "remove"]
+        // Trash is enumerated and inspected through VFS. Restore and purge
+        // are dedicated, session-validated menu actions, never generic remove.
+        // A specific node's allowed_ops determines whether list is possible.
+        vec!["list", "stat"]
     }
     fn icon(&self, _path: &str) -> Option<String> {
         None
