@@ -7,6 +7,7 @@
 mod builtin;
 mod dynamic;
 mod endpoint;
+mod native;
 mod query;
 mod types;
 
