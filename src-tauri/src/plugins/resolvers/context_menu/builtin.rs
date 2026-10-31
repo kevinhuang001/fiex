@@ -9,7 +9,6 @@ pub(super) struct Context {
     pub paths: Vec<String>,
     pub entries: Vec<crate::core::files::Entry>,
     pub read_only: bool,
-    pub in_trash: bool,
     all_local: bool,
     capabilities: FileCapabilities,
 }
@@ -22,12 +21,6 @@ fn plain_local(path: &str) -> bool {
     matches!((view, storage),
         (Some(view), Some(storage))
             if view == storage && storage["providerId"] == "core:local-fs")
-}
-
-fn trash_view(path: &str) -> bool {
-    crate::plugins::match_rules::locations_for(path)
-        .0
-        .is_some_and(|view| view["providerId"] == "core:trash")
 }
 
 impl Context {
@@ -59,13 +52,11 @@ impl Context {
             );
         }
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
-        let in_trash = trash_view(directory);
         Ok(Self {
             directory: directory.into(),
             paths: paths.to_vec(),
             entries,
             read_only,
-            in_trash,
             all_local,
             capabilities,
         })
@@ -94,11 +85,10 @@ impl Context {
         paths: Vec<String>,
         entries: Vec<crate::core::files::Entry>,
         read_only: bool,
-        in_trash: bool,
     ) -> Self {
         let capabilities =
             crate::plugins::resource::file_capabilities::for_selection(&paths, &entries);
-        Self::for_test_caps(directory, paths, entries, read_only, in_trash, capabilities)
+        Self::for_test_caps(directory, paths, entries, read_only, capabilities)
     }
 
     /// Tests pin the capability snapshot to exercise menu gating directly.
@@ -108,7 +98,6 @@ impl Context {
         paths: Vec<String>,
         entries: Vec<crate::core::files::Entry>,
         read_only: bool,
-        in_trash: bool,
         capabilities: FileCapabilities,
     ) -> Self {
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
@@ -208,7 +197,5 @@ mod location_tests {
         assert!(!plain_local("applications://"));
         assert!(!plain_local("fiex://mount/unregistered/a.txt"));
         assert!(!plain_local("unregistered://somewhere"));
-        assert!(trash_view("recyclebin://"));
-        assert!(!trash_view("/tmp/example"));
     }
 }
