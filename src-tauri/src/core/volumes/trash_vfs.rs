@@ -137,6 +137,7 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
             path: URI.into(),
             name: crate::i18n::t("废纸篓").into(),
             is_dir: true,
+            readonly: true,
             allowed_ops: vec!["list".into(), "stat".into(), "search".into()],
             ..Default::default()
         });
