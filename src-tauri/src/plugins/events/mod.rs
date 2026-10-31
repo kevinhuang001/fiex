@@ -5,6 +5,7 @@ mod contract;
 pub(crate) mod matching;
 pub use matching::metadata as resource_metadata;
 mod directory_scope;
+mod owner;
 mod registry;
 mod router;
 mod scope;
@@ -71,11 +72,22 @@ pub fn call_owner(
     .into_iter()
     .filter(|p| matches!(&p.handler,Handler::Plugin(plugin) if plugin.id==plugin_id))
     .collect();
+    let request = crate::plugin_sdk::provider_contracts::ProviderRequest {
+        method: method.into(),
+        params,
+    };
     EventRouter::resolve(
         method,
         providers,
-        |_, _| Err("builtin owner not registered".into()),
-        |plugin| invoke_resources(plugin, method, params.clone(), resources, directory),
+        &request,
+        |provider| match &provider.handler {
+            Handler::Plugin(plugin) => Ok(Box::new(owner::PluginOwner {
+                plugin: (**plugin).clone(),
+                resources,
+                directory,
+            }) as Box<dyn crate::plugin_sdk::provider_contracts::ProviderEndpoint + '_>),
+            Handler::Builtin(_) => Err("native owner is not registered".into()),
+        },
         |_, value| Ok(value),
         |_| true,
         |results| {
