@@ -177,8 +177,7 @@ pub fn run(
             }) as Box<dyn ProviderEndpoint + '_>)
         },
         |resolver, response| {
-            let truncated = response.get("truncated").and_then(Value::as_bool)
-                .ok_or("invalid search response: truncated must be a boolean")?;
+            let truncated = parse_truncated(&response)?;
             let entries = validated(resolver, response, request)?;
             Ok((entries, truncated))
         },
@@ -254,14 +253,27 @@ fn validated(
     Ok(values)
 }
 
+/// SDK SearchResults omits false fields during serialization; absent means false.
+/// A present but malformed flag must fail instead of claiming completeness.
+fn parse_truncated(response: &Value) -> Result<bool, String> {
+    match response.get("truncated") {
+        None => Ok(false),
+        Some(Value::Bool(value)) => Ok(*value),
+        _ => Err("invalid search response: truncated must be a boolean".into()),
+    }
+}
+
 #[cfg(test)]
 mod response_tests {
     use super::*;
 
     #[test]
-    fn search_reply_must_report_truncation_explicitly() {
-        for malformed in [json!({}), json!({"truncated": null}), json!({"truncated": "false"})] {
-            assert!(malformed.get("truncated").and_then(Value::as_bool).is_none());
+    fn sdk_default_false_can_be_omitted_but_malformed_fields_are_rejected() {
+        assert_eq!(parse_truncated(&json!({"entries":[]})).unwrap(), false);
+        assert_eq!(parse_truncated(&json!({"truncated":false})).unwrap(), false);
+        assert_eq!(parse_truncated(&json!({"truncated":true})).unwrap(), true);
+        for malformed in [json!({"truncated":null}), json!({"truncated":"false"})] {
+            assert!(parse_truncated(&malformed).is_err());
         }
     }
 }
