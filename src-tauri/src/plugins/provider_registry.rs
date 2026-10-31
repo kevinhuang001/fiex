@@ -8,10 +8,11 @@
 //! node through `allowedOps`; user grants and the Operation Scope are checked
 //! independently by the permission layer.
 mod event_candidates;
+mod vfs_instances;
 pub use event_candidates::candidates;
 use serde_json::Value;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     sync::{Mutex, OnceLock},
 };
 
@@ -27,6 +28,7 @@ pub struct RegisteredProvider {
     pub reported: bool,
     pub discovery: bool,
     pub preflight: bool,
+    pub instances: BTreeMap<String, vfs_instances::VfsInstance>,
 }
 
 impl RegisteredProvider {
@@ -71,6 +73,17 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
         .pointer("/vfs/discovery")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    match vfs_instances::read(reply, &provider.operations, provider.preflight) {
+        Ok(instances) => provider.instances = instances,
+        Err(error) => {
+            // A malformed handshake never grants the union capability set.
+            eprintln!("VFS capability handshake rejected for {plugin_id}: {error}");
+            provider.reported = false;
+            provider.operations.clear();
+            provider.preflight = false;
+            provider.discovery = false;
+        }
+    }
     if let Ok(mut registry) = registry().lock() {
         registry.insert(plugin_id.to_string(), provider.clone());
     }
@@ -92,6 +105,20 @@ pub fn get(plugin_id: &str) -> Option<RegisteredProvider> {
 
 pub fn supports(plugin_id: &str, operation: FsOperation) -> bool {
     get(plugin_id).is_some_and(|provider| provider.declares(operation))
+}
+
+/// Bind a named VFS implementation to the actual registered Core mount,
+/// not to the providerId supplied by an arbitrary JSON request.
+pub fn bind_fs_instance(plugin_id: &str, params: &mut Value) -> Result<(), String> {
+    vfs_instances::bind(plugin_id, params)
+}
+
+pub fn supports_mount(plugin_id: &str, mount_id: &str, operation: FsOperation) -> bool {
+    vfs_instances::supports(plugin_id, mount_id, operation)
+}
+
+pub fn preflight_mount(plugin_id: &str, mount_id: &str) -> bool {
+    vfs_instances::preflight(plugin_id, mount_id)
 }
 
 /// Gate one outgoing method against the declaration. Non-file methods pass.
