@@ -6,6 +6,7 @@
 //! is validated against the authorized root before it leaves this module.
 use crate::core::files::Entry;
 mod endpoint;
+mod proxy;
 mod native;
 mod stream;
 use crate::core::search::SearchMode;
