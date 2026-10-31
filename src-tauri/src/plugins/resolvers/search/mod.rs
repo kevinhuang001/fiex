@@ -92,11 +92,10 @@ fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
     out
 }
 
-fn input(request: &PluginSearchInput) -> Value {
-    let resources =
-        crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&request.root)
-            .map(|resource| vec![resource])
-            .unwrap_or_default();
+fn input(
+    request: &PluginSearchInput,
+    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
+) -> Value {
     json!({
         "query": request.query,
         "root": resources.first().map(|resource| &resource.reference),
