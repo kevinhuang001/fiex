@@ -46,7 +46,8 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedInfo>, String> {
         return Err("missing InfoProvider plugin identity".into());
     }
     static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ScopedInfo>>> = OnceLock::new();
-    let registry = REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Info)));
+    let registry =
+        REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Info)));
     let mut registered = registry
         .lock()
         .map_err(|_| "InfoProvider registry unavailable".to_string())?;
