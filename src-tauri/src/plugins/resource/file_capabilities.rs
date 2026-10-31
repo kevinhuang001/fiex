@@ -86,18 +86,7 @@ impl FileCapabilities {
 fn declared_operations(path: &str) -> Option<Vec<FsOperation>> {
     let uri = crate::plugins::mounts::parse(path).ok()?;
     let plugin_id = crate::plugins::resolvers::fs::mount_plugin_id(path).ok()?;
-    Some(
-        FsOperation::ALL
-            .into_iter()
-            .filter(|operation| {
-                crate::plugins::provider_registry::supports_mount(
-                    &plugin_id,
-                    &uri.mount_id,
-                    *operation,
-                )
-            })
-            .collect(),
-    )
+    crate::plugins::provider_registry::operations_mount(&plugin_id, &uri.mount_id)
 }
 
 /// One node entry resolved through the right adapter (connection or view).
