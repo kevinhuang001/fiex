@@ -86,11 +86,11 @@ mod tests {
         let directory = candidates("", "", true);
         assert_eq!(directory.len(), 1);
         assert_eq!(directory[0].id, "builtin:fallback");
-        let resource = ResourceSnapshot::from_metadata(
-            "/unavailable",
-            Default::default(),
-        );
+        let resource = ResourceSnapshot::from_metadata("/unavailable", Default::default());
         assert!(open("not-registered", &resource).is_err());
-        assert_eq!(open("builtin:fallback", &resource).unwrap()["kind"], "fallback");
+        assert_eq!(
+            open("builtin:fallback", &resource).unwrap()["kind"],
+            "fallback"
+        );
     }
 }
