@@ -91,15 +91,6 @@ impl ResourceBroker {
                 return Err("StaleRef: USB mount generation changed".into());
             }
         }
-        // Unix Trash is a physical directory, not an opaque URI. Do not let
-        // its local filesystem adapter bypass the view policy: restore and
-        // permanent deletion must remain explicit Core-only actions.
-        if crate::core::volumes::virtual_resolvers::view_for(&self.path)
-            .is_some_and(|resolver| resolver.id() == "core:trash")
-            && !matches!(operation, FsOperation::Stat | FsOperation::List)
-        {
-            return Err("PermissionDenied: Trash requires a dedicated Core action".into());
-        }
         self.adapter()?.require(operation, create)
     }
     pub fn stat(&self) -> Result<Value, FsError> {
