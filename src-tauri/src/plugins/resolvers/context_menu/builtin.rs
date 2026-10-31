@@ -53,7 +53,7 @@ impl Context {
         } else {
             crate::plugins::resource::file_capabilities::for_selection(paths, &entries)
         };
-        if read_only || (directory == "recent://" && paths.is_empty()) {
+        if read_only {
             capabilities = capabilities.intersect(
                 crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
             );
