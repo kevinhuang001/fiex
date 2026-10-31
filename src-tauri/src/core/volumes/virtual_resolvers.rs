@@ -3,6 +3,9 @@
 //! `virtual_storage`; these views never cross plugin IPC.
 use super::{applications, recycle, trash_vfs};
 use crate::core::files::Entry;
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use std::sync::{Arc, OnceLock};
 
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
@@ -10,6 +13,8 @@ pub const APPLICATIONS_URI: &str = applications::URI;
 /// A builtin view owns only virtual storage capabilities, icons and platform
 /// launch/reveal operations; menu contributions live in native_views.
 pub trait VirtualView: Send + Sync {
+    /// Provider-owned URI recognition; never infer that an unknown URI is local.
+    fn handles(&self, path: &str) -> bool;
     fn id(&self) -> &'static str;
     fn readonly(&self) -> bool;
     /// Explicit storage-operation ceiling. Presentation and dispatch must not
@@ -50,6 +55,10 @@ fn revealable_source(source: &str) -> bool {
 
 struct RecentView;
 impl VirtualView for RecentView {
+    fn handles(&self, path: &str) -> bool {
+        path.starts_with(RECENT_URI)
+    }
+
     fn id(&self) -> &'static str {
         "core:recent"
     }
@@ -75,6 +84,10 @@ impl VirtualView for RecentView {
 
 struct ApplicationView;
 impl VirtualView for ApplicationView {
+    fn handles(&self, path: &str) -> bool {
+        path.starts_with(APPLICATIONS_URI)
+    }
+
     fn id(&self) -> &'static str {
         "core:applications"
     }
@@ -111,6 +124,10 @@ impl VirtualView for ApplicationView {
 
 struct TrashView;
 impl VirtualView for TrashView {
+    fn handles(&self, path: &str) -> bool {
+        recycle::is_virtual(path) || trash_vfs::handles(path)
+    }
+
     fn id(&self) -> &'static str {
         "core:trash"
     }
@@ -128,24 +145,29 @@ impl VirtualView for TrashView {
     }
 }
 
-static RECENT: RecentView = RecentView;
-static APPLICATIONS: ApplicationView = ApplicationView;
-static TRASH: TrashView = TrashView;
+/// Three Core-owned VFS instances are registered through the exact shared
+/// ProviderDescriptor/ProviderInstances rules used by SDK plugin providers.
+fn registry() -> &'static NativeProviderRegistry<dyn VirtualView> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn VirtualView>> = OnceLock::new();
+    REGISTERED.get_or_init(|| {
+        let mut registry: NativeProviderRegistry<dyn VirtualView> =
+            NativeProviderRegistry::new(ProviderKind::Vfs);
+        let providers: [Arc<dyn VirtualView>; 3] = [
+            Arc::new(RecentView),
+            Arc::new(ApplicationView),
+            Arc::new(TrashView),
+        ];
+        for provider in providers {
+            registry
+                .register(provider.id(), 100, ProviderMatchRule::default(), provider)
+                .expect("invalid native VFS registration");
+        }
+        registry
+    })
+}
 
 pub fn view_for(path: &str) -> Option<&'static dyn VirtualView> {
-    if path.starts_with(RECENT_URI) {
-        return Some(&RECENT);
-    }
-    if path == APPLICATIONS_URI || path.starts_with(applications::URI) {
-        return Some(&APPLICATIONS);
-    }
-    if recycle::is_virtual(path) {
-        return Some(&TRASH);
-    }
-    if trash_vfs::handles(path) {
-        return Some(&TRASH);
-    }
-    None
+    registry().find(|provider| provider.handles(path))
 }
 
 pub fn icon_for(path: &str) -> Option<String> {
@@ -155,10 +177,7 @@ pub fn icon_for(path: &str) -> Option<String> {
 /// URI-backed resources have no host path. Never canonicalize or materialize
 /// these identifiers as files, even for metadata-only extension calls.
 pub fn opaque(path: &str) -> bool {
-    path.starts_with(RECENT_URI)
-        || path.starts_with(APPLICATIONS_URI)
-        || recycle::is_virtual(path)
-        || trash_vfs::handles(path)
+    view_for(path).is_some()
 }
 
 pub fn resource_entry(path: &str) -> Result<Entry, String> {
@@ -168,6 +187,20 @@ pub fn resource_entry(path: &str) -> Result<Entry, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_vfs_instances_use_shared_contracts_and_claim_only_owned_paths() {
+        assert_eq!(registry().len(), 3);
+        for descriptor in registry().descriptors() {
+            assert_eq!(descriptor.kind, ProviderKind::Vfs);
+            descriptor.validate().unwrap();
+        }
+        assert_eq!(view_for("recent://item").unwrap().id(), "core:recent");
+        assert_eq!(view_for("applications://item").unwrap().id(), "core:applications");
+        assert!(view_for("unknown://item").is_none());
+        assert!(view_for("fiex://mount/not-a-native-view").is_none());
+        assert!(!opaque("unknown://item"));
+    }
 
     #[test]
     fn source_view_identities_remain_stable() {

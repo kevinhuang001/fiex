@@ -43,7 +43,7 @@ pub struct Mount {
 
 impl Mount {
     fn invoke(&self, method: &str, params: Value) -> Result<Value, String> {
-        use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+        use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
         endpoint::PluginFsEndpoint { mount: self }.invoke(&ProviderRequest {
             method: method.into(),
             params,

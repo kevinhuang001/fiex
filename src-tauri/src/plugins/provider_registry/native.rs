@@ -44,6 +44,14 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         self.entries.get(id)
     }
 
+    /// Select by an implementation-owned resource match, not a URI switch
+    /// in the generic broker. A rejected or unknown resource has no owner.
+    pub fn find(&self, mut matches: impl FnMut(&T) -> bool) -> Option<&T> {
+        self.entries
+            .instances()
+            .find_map(|(_, provider)| matches(provider).then_some(provider))
+    }
+
     pub fn descriptor(&self, id: &str) -> Option<&ProviderDescriptor> {
         self.entries.descriptor(id)
     }

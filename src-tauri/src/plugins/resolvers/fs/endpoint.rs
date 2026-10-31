@@ -2,7 +2,7 @@
 //! providers. Mount identity and scope are Core-owned and added here, never
 //! accepted from the caller's request parameters.
 use super::{Mount, Source};
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
 
 pub(super) struct PluginFsEndpoint<'a> {

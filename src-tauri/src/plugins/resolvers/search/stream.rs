@@ -1,7 +1,7 @@
 //! Incremental local SearchProvider pagination through the same verified
 //! EventRouter and operation scope used by single-page requests.
 use super::*;
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::events::EventRouter;
 use std::collections::HashSet;
 
