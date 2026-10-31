@@ -1,7 +1,7 @@
 //! Preview's native implementation and plugin IPC proxy implement the
 //! same provider contract. Both keep the Core-owned ResourceSnapshot.
 use super::{native, session::open_plugin_resource};
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use serde_json::Value;
 use std::sync::Arc;
