@@ -4,12 +4,12 @@
 //! own the shell actions (edit, session, sync, close); plugins declaring
 //! `extensions.connectionContextMenus` add their own flat action list.
 
+use crate::plugin_sdk::provider_contracts::ProviderRequest;
 use crate::plugins::events::{EventRouter, Handler, Resolver};
+mod endpoint;
 use crate::remote::ConnectionInfo;
 use serde_json::{json, Value};
 
-const BUILTIN_PREFIX: &str = "builtin:";
-const PLUGIN_PREFIX: &str = "plugin:";
 
 struct Context {
     info: ConnectionInfo,
@@ -166,46 +166,48 @@ fn valid_items(value: &Value) -> Result<Vec<Value>, String> {
 pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
     let ctx = Context::load(connection_id)?;
     let session = crate::plugins::mounts::new_id()?;
+    let metadata = [ctx.matcher_metadata()];
     let providers = crate::plugins::provider_registry::candidates(
         "connectionContextMenu.resolve",
-        &[ctx.matcher_metadata()],
+        &metadata,
         &ctx.info.mount_path,
         providers(),
     );
-    let mut menus = Vec::new();
-    for provider in providers {
-        let result = match &provider.handler {
-            Handler::Builtin(id) => builtin_items(id, &ctx).and_then(|items| {
-                let value = json!({"items":items});
-                valid_items(&value)
-            }),
-            Handler::Plugin(plugin) => plugin_items(plugin, &ctx, &session),
-        };
-        let Ok(items) = result else {
-            continue;
-        };
-        if items.is_empty() {
-            continue;
-        }
-        let menu = match &provider.handler {
-            Handler::Builtin(_) => json!({
-                "kind": "builtin",
-                "providerId": provider.id,
-                "menuSessionId": session,
-                "items": items,
-            }),
-            Handler::Plugin(plugin) => json!({
-                "kind": "plugin",
-                "providerId": provider.id,
-                "pluginId": plugin.id,
-                "pluginName": plugin.name,
-                "menuSessionId": session,
-                "items": items,
-            }),
-        };
-        menus.push(menu);
-    }
-    Ok(menus)
+    let request = ProviderRequest {
+        method: "connectionContextMenu.resolve".into(),
+        params: json!({}),
+    };
+    Ok(EventRouter::resolve(
+        "connectionContextMenu.resolve",
+        providers,
+        &request,
+        |provider| Ok(endpoint::from_resolver(provider, &ctx, &session)),
+        |provider, response| {
+            let items = valid_items(&response)?;
+            if items.is_empty() {
+                return Ok(None);
+            }
+            let value = match &provider.handler {
+                Handler::Builtin(_) => json!({
+                    "kind":"builtin",
+                    "providerId":provider.id,
+                    "menuSessionId":session,
+                    "items":items
+                }),
+                Handler::Plugin(plugin) => json!({
+                    "kind":"plugin",
+                    "providerId":provider.id,
+                    "pluginId":plugin.id,
+                    "pluginName":plugin.name,
+                    "menuSessionId":session,
+                    "items":items
+                }),
+            };
+            Ok(Some(value))
+        },
+        |_| true,
+        |results| results.into_iter().filter_map(|(_, result)| result.ok().flatten()).collect(),
+    ))
 }
 
 pub async fn execute(
@@ -215,58 +217,41 @@ pub async fn execute(
     menu_session_id: Option<&str>,
 ) -> Result<Value, String> {
     let ctx = Context::load(connection_id)?;
-    if let Some(id) = provider_id.strip_prefix(BUILTIN_PREFIX) {
-        let provider = format!("{BUILTIN_PREFIX}{id}");
-        let items = builtin_items(&provider, &ctx)?;
-        if !items.iter().any(|item| {
-            item.get("id").and_then(Value::as_str) == Some(item_id)
-                && item.get("disabled") != Some(&json!(true))
-        }) {
-            return Err("menu action is no longer available".into());
-        }
-        return builtin_execute(&ctx, item_id).await;
-    }
-    let plugin_id = provider_id
-        .strip_prefix(PLUGIN_PREFIX)
-        .ok_or("unknown menu provider")?;
-    let plugin = crate::plugins::host::catalog()
-        .into_iter()
-        .find(|plugin| plugin.id == plugin_id)
-        .ok_or("menu provider unavailable")?;
-    if !plugin.enabled
-        || !plugin.approved
-        || !plugin.backend_available
-        || !crate::plugins::events::matching::matches(
-            "connectionContextMenu.execute",
-            &plugin.extensions,
-            &[ctx.matcher_metadata()],
-            &ctx.info.mount_path,
-        )
-    {
-        return Err("menu provider unavailable or does not match connection".into());
-    }
+    let metadata = [ctx.matcher_metadata()];
+    let owner = crate::plugins::provider_registry::candidates(
+        "connectionContextMenu.execute",
+        &metadata,
+        &ctx.info.mount_path,
+        providers(),
+    )
+    .into_iter()
+    .find(|provider| provider.id == provider_id)
+    .ok_or("menu provider is disabled or does not match connection")?;
     let session = menu_session_id
         .map(str::to_owned)
         .unwrap_or(crate::plugins::mounts::new_id()?);
-    let offered = plugin_items(&plugin, &ctx, &session)?;
-    if !offered.iter().any(|item| {
-        item.get("kind").and_then(Value::as_str) == Some("action")
-            && item.get("id").and_then(Value::as_str) == Some(item_id)
-            && item.get("disabled") != Some(&json!(true))
-    }) {
-        return Err("menu action is no longer available".into());
-    }
-    let result = crate::plugins::host::global().invoke(
-        &plugin.id,
+    let request = ProviderRequest {
+        method: "connectionContextMenu.execute".into(),
+        params: json!({"itemId":item_id}),
+    };
+    let result = EventRouter::resolve(
         "connectionContextMenu.execute",
-        json!({
-            "menuSessionId": session,
-            "interactionId": crate::plugins::mounts::new_id()?,
-            "itemId": item_id,
-            "connection": ctx.summary(),
-        }),
+        vec![owner],
+        &request,
+        |provider| Ok(endpoint::from_resolver(provider, &ctx, &session)),
+        |_, result| Ok(result),
+        |_| true,
+        |results| {
+            results.into_iter().next()
+                .ok_or_else(|| "connection menu provider unavailable".to_string())?.1
+        },
     )?;
-    crate::plugins::events::validate_result("connectionContextMenu.execute", &result)?;
+    if result["kind"] == "nativeAction" {
+        if result["itemId"] != item_id {
+            return Err("invalid native connection action".into());
+        }
+        return builtin_execute(&ctx, item_id).await;
+    }
     Ok(result)
 }
 
@@ -321,133 +306,4 @@ async fn builtin_execute(ctx: &Context, item_id: &str) -> Result<Value, String> 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn ctx(plugin_id: &str, kind: &str, mount: &str, saved: bool, autostart: bool) -> Context {
-        let plugin_view = mount.starts_with("fiex-plugin-view://");
-        Context {
-            info: ConnectionInfo {
-                id: "c1".into(),
-                name: "Connection".into(),
-                kind: kind.into(),
-                plugin_id: plugin_id.into(),
-                mount_path: mount.into(),
-                saved,
-                autostart,
-                can_read: true,
-                can_write: false,
-            },
-            can_sync: !plugin_view && mount.starts_with("fiex://mount/"),
-        }
-    }
-
-    fn ids(items: Vec<Value>) -> Vec<String> {
-        items
-            .into_iter()
-            .filter_map(|item| item["id"].as_str().map(str::to_owned))
-            .collect()
-    }
-
-    #[test]
-    fn vfs_connections_offer_an_immediate_sync() {
-        let menu = ctx(
-            "org.fiex.openlist",
-            "org.fiex.openlist",
-            "fiex://mount/m/",
-            true,
-            false,
-        );
-        assert_eq!(
-            ids(builtin_items("builtin:connection-sync", &menu).unwrap()),
-            ["connection.syncNow"]
-        );
-        assert!(
-            ids(builtin_items("builtin:connection-session", &menu).unwrap())
-                .contains(&"connection.saveSession".into())
-        );
-    }
-
-    #[test]
-    fn terminal_and_plugin_views_do_not_offer_sync() {
-        for menu in [
-            ctx(
-                "org.example.other",
-                "other",
-                "fiex-plugin-view://c1",
-                true,
-                false,
-            ),
-            ctx(
-                "org.example.view",
-                "ssh",
-                "fiex-plugin-view://c1",
-                true,
-                false,
-            ),
-        ] {
-            assert!(builtin_items("builtin:connection-sync", &menu)
-                .unwrap()
-                .is_empty());
-        }
-    }
-
-    #[test]
-    fn unsaved_sessions_can_be_saved_and_autostart_toggles() {
-        let menu = ctx(
-            "org.fiex.openlist",
-            "org.fiex.openlist",
-            "fiex://mount/m/",
-            false,
-            true,
-        );
-        let session = ids(builtin_items("builtin:connection-session", &menu).unwrap());
-        assert_eq!(
-            session,
-            ["connection.saveSession", "connection.toggleAutostart"]
-        );
-        let close = builtin_items("builtin:connection-close", &menu).unwrap();
-        assert_eq!(close[0]["placement"], "tail");
-        assert_eq!(close[0]["danger"], true);
-    }
-
-    #[test]
-    fn connection_matches_are_core_owned_and_storage_sensitive() {
-        use crate::plugins::events::matching;
-        let connection = ctx("org.fiex.drive", "drive", "fiex-plugin-view://c1", true, false);
-        let metadata = connection.matcher_metadata();
-        assert_eq!(metadata["kind"], "connection");
-        assert_eq!(metadata["view"]["providerId"], "plugin:org.fiex.drive:drive");
-        let matched = json!({"connectionContextMenus":{"match":{
-            "kinds":["connection"],"view":{"providerIds":["plugin:org.fiex.drive:drive"]}
-        }}});
-        assert!(matching::matches(
-            "connectionContextMenu.resolve",
-            &matched,
-            &[metadata.clone()],
-            &connection.info.mount_path
-        ));
-        let denied = json!({"connectionContextMenus":{"match":{
-            "kinds":["connection"],"storage":{"types":["vfs"]}
-        }}});
-        assert!(!matching::matches(
-            "connectionContextMenu.resolve",
-            &denied,
-            &[metadata],
-            &connection.info.mount_path
-        ));
-    }
-
-    #[test]
-    fn flat_plugin_items_are_validated_before_rendering() {
-        let good = json!({"items":[{"id":"openlist.sync","kind":"action","title":"Sync"}]});
-        assert_eq!(valid_items(&good).unwrap().len(), 1);
-        for bad in [
-            json!({"items":[{"id":"x","kind":"submenu","title":"X"}]}),
-            json!({"items":[{"id":"x","kind":"action","title":"X","parentId":"p"}]}),
-            json!({"items":[{"id":"x","kind":"action","title":"X"},{"id":"x","kind":"action","title":"Y"}]}),
-        ] {
-            assert!(valid_items(&bad).is_err(), "{bad}");
-        }
-    }
-}
+mod tests;
