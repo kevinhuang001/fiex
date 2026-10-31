@@ -177,8 +177,10 @@ pub fn run(
             }) as Box<dyn ProviderEndpoint + '_>)
         },
         |resolver, response| {
-            let truncated = response["truncated"].as_bool().unwrap_or(false);
-            Ok((validated(resolver, response, request)?, truncated))
+            let truncated = response.get("truncated").and_then(Value::as_bool)
+                .ok_or("invalid search response: truncated must be a boolean")?;
+            let entries = validated(resolver, response, request)?;
+            Ok((entries, truncated))
         },
         |_| true,
         |results| {
@@ -250,4 +252,16 @@ fn validated(
         values.push(entry);
     }
     Ok(values)
+}
+
+#[cfg(test)]
+mod response_tests {
+    use super::*;
+
+    #[test]
+    fn search_reply_must_report_truncation_explicitly() {
+        for malformed in [json!({}), json!({"truncated": null}), json!({"truncated": "false"})] {
+            assert!(malformed.get("truncated").and_then(Value::as_bool).is_none());
+        }
+    }
 }
