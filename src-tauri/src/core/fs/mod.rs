@@ -20,7 +20,7 @@ pub use transfer::transfer;
 mod local;
 pub use export::{export as export_for_external_drag, initialize as initialize_exports};
 mod plugin;
-mod provider_registry;
+pub(crate) mod provider_registry;
 mod streams;
 mod usb;
 use crate::plugins::provider_registry::FsOperation;

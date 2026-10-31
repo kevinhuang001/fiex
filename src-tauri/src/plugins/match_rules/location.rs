@@ -8,43 +8,8 @@ fn descriptor(kind: &str, provider_id: &str, mount_id: &str) -> Value {
 }
 
 fn storage_location(path: &str) -> Option<Value> {
-    if let Some(view) = crate::core::volumes::virtual_resolvers::view_for(path) {
-        if view.id() == "core:recent" {
-            return None;
-        }
-        return Some(descriptor("vfs", view.id(), view.id()));
-    }
-    if crate::usbfs::route(path).is_some() {
-        // USB drives expose native FS operations, but have their own owner.
-        let mount = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-            path,
-            crate::plugins::contracts::ResourceMetadata::default(),
-        )
-        .reference
-        .mount_id;
-        return Some(descriptor("fs", "core:usb-fs", &mount));
-    }
-    if crate::plugins::mounts::handles(path) {
-        let (uri, source) = crate::plugins::mounts::resolve(path).ok()?;
-        // Package ID, contribution type and concrete mount are separate
-        // identities. Core establishes the mapping, not the plugin process.
-        let provider = match source {
-            crate::plugins::mounts::Source::Connection(conn) => {
-                format!("plugin:{}:{}", conn.plugin_id, conn.kind)
-            }
-            crate::plugins::mounts::Source::View(view) => format!(
-                "plugin:{}:{}",
-                view.descriptor.plugin_id, view.descriptor.contribution_id
-            ),
-        };
-        return Some(descriptor("vfs", &provider, &uri.mount_id));
-    }
-    // An unrecognized URL is not a native path. Do not promote unavailable
-    // or revoked VFS resources to core:local-fs.
-    if path.is_empty() || path.contains("://") {
-        return None;
-    }
-    Some(descriptor("fs", "core:local-fs", "local"))
+    let (kind, provider, mount) = crate::core::fs::provider_registry::identity(path)?;
+    Some(descriptor(kind, &provider, &mount))
 }
 
 /// The view determines presentation contributions; storage controls actual IO.
@@ -84,6 +49,19 @@ pub fn directory_metadata(directory: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_operation_and_matching_use_same_trusted_storage_identity() {
+        for path in ["/tmp/fiex-storage", "applications://"] {
+            let (kind, provider, mount) =
+                crate::core::fs::provider_registry::identity(path).unwrap();
+            let (_, storage) = locations_for(path);
+            let storage = storage.unwrap();
+            assert_eq!(storage["type"], kind);
+            assert_eq!(storage["providerId"], provider);
+            assert_eq!(storage["mountId"], mount);
+        }
+    }
 
     #[test]
     fn trusted_view_owner_is_not_inferred_from_plugin_payloads() {

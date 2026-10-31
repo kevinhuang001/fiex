@@ -32,6 +32,40 @@ fn resolve(path: &str) -> Result<Route, FsError> {
     Ok(Route::Local)
 }
 
+//// The same Core-owned storage identity drives both operations and matching.
+//// An unregistered source has no identity: never claim it as Local FS.
+pub(crate) fn identity(path: &str) -> Option<(&'static str, String, String)> {
+    match resolve(path).ok()? {
+        Route::Plugin => {
+            let (uri, source) = mounts::resolve(path).ok()?;
+            let provider = match source {
+                mounts::Source::Connection(connection) => {
+                    format!("plugin:{}:{}", connection.plugin_id, connection.kind)
+                }
+                mounts::Source::View(view) => {
+                    format!(
+                        "plugin:{}:{}",
+                        view.descriptor.plugin_id, view.descriptor.contribution_id
+                    )
+                }
+            };
+            Some(("vfs", provider, uri.mount_id))
+        }
+        Route::Usb(route) => {
+            let generation = usbfs::generation(&route).unwrap_or_else(|_| "offline".into());
+            Some(("fs", "core:usb-fs".into(), format!("core:usb:{generation}")))
+        }
+        Route::NativeView => {
+            let view = virtual_resolvers::view_for(path)?;
+            if view.id() == "core:recent" {
+                return None;
+            }
+            Some(("vfs", view.id().into(), view.id().into()))
+        }
+        Route::Local => Some(("fs", "core:local-fs".into(), "local".into())),
+    }
+}
+
 pub(super) fn adapter(resource: &ResourceBroker) -> Result<Box<dyn FsAdapter + '_>, FsError> {
     match resolve(&resource.path)? {
         Route::Plugin => Ok(Box::new(plugin::PluginFsAdapter::new(resource)?)),
