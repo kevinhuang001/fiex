@@ -194,7 +194,12 @@ impl NativeViewMenuProvider for TrashMenu {
         if path == trash_vfs::URI || path == recycle::URI {
             return vec![item(
                 "emptyTrash",
-                crate::i18n::t(if cfg!(windows) { "清空回收站" } else { "清空废纸篓" }).into(),
+                crate::i18n::t(if cfg!(windows) {
+                    "清空回收站"
+                } else {
+                    "清空废纸篓"
+                })
+                .into(),
                 "trash",
                 true,
                 true,
