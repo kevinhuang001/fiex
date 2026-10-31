@@ -1,20 +1,22 @@
-//! Persistent typed Core provider instances, one registry per provider kind.
-//! Registration validates the exact shared descriptor contract used by SDK
-//! providers; invocation never selects an implementation from untrusted input.
+//! Typed native Core provider registrations share storage, ID validation,
+//! and duplicate checking with the SDK's provider-instance registry.
+//! Core retains static IDs solely to construct native EventRouter candidates.
 use crate::plugins::events::Resolver;
-use fiex_provider_contracts::{ProviderDescriptor, ProviderKind, ProviderMatchRule};
-use std::{collections::BTreeMap, sync::Arc};
+use fiex_provider_contracts::{
+    ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule,
+};
+use std::sync::Arc;
 
-pub(crate) struct NativeProviderRegistry<T: ?Sized> {
-    kind: ProviderKind,
-    entries: BTreeMap<&'static str, (ProviderDescriptor, Arc<T>)>,
+pub(crate) struct NativeProviderRegistry<T: ?Sized + Send + Sync> {
+    entries: ProviderInstances<T>,
+    ids: Vec<&'static str>,
 }
 
 impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
     pub fn new(kind: ProviderKind) -> Self {
         Self {
-            kind,
-            entries: BTreeMap::new(),
+            entries: ProviderInstances::new(kind),
+            ids: Vec::new(),
         }
     }
 
@@ -25,41 +27,37 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         rule: ProviderMatchRule,
         implementation: Arc<T>,
     ) -> Result<(), String> {
-        let descriptor = ProviderDescriptor {
-            id: id.into(),
-            kind: self.kind,
-            priority,
-            r#match: rule,
-        };
-        descriptor.validate()?;
-        match self.entries.entry(id) {
-            std::collections::btree_map::Entry::Occupied(_) => {
-                Err(format!("duplicate native provider ID: {id}"))
-            }
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert((descriptor, implementation));
-                Ok(())
-            }
-        }
+        self.entries.register(
+            ProviderDescriptor {
+                id: id.into(),
+                kind: self.entries.kind(),
+                priority,
+                r#match: rule,
+            },
+            implementation,
+        )?;
+        self.ids.push(id);
+        Ok(())
     }
 
     pub fn get(&self, id: &str) -> Option<&T> {
-        self.entries.get(id).map(|(_, instance)| instance.as_ref())
+        self.entries.get(id)
     }
 
     pub fn descriptor(&self, id: &str) -> Option<&ProviderDescriptor> {
-        self.entries.get(id).map(|(descriptor, _)| descriptor)
+        self.entries.descriptor(id)
     }
 
     pub fn candidates(&self, mut eligible: impl FnMut(&T) -> bool) -> Vec<Resolver> {
         let mut providers = self
-            .entries
+            .ids
             .iter()
-            .filter(|(_, (_, instance))| eligible(instance))
-            .map(|(id, (descriptor, _))| Resolver::builtin(id, descriptor.priority))
+            .filter_map(|id| {
+                let implementation = self.entries.get(id)?;
+                let descriptor = self.entries.descriptor(id)?;
+                eligible(implementation).then(|| Resolver::builtin(id, descriptor.priority))
+            })
             .collect::<Vec<_>>();
-        // BTreeMap orders by ID, whereas EventRouter and the Decoration
-        // collector consume highest-priority providers first.
         providers.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
         providers
     }
@@ -71,7 +69,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
 
     #[cfg(test)]
     pub fn descriptors(&self) -> impl Iterator<Item = &ProviderDescriptor> {
-        self.entries.values().map(|(descriptor, _)| descriptor)
+        self.entries.descriptors()
     }
 }
 
@@ -82,6 +80,7 @@ mod tests {
     trait Handler: Send + Sync {
         fn call(&self) -> u32;
     }
+
     struct First;
     impl Handler for First {
         fn call(&self) -> u32 {
