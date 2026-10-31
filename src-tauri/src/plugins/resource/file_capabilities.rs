@@ -169,6 +169,14 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
         return FileCapabilities::READ_ONLY;
     }
     if !crate::plugins::mounts::handles(path) {
+        // Match the ResourceBroker's owner decision. An unknown URI scheme
+        // must not inherit local FS permissions from a synthetic Entry.
+        if !matches!(
+            crate::core::fs::provider_registry::identity(path),
+            Some(("fs", provider, _)) if provider == "core:local-fs"
+        ) {
+            return FileCapabilities::default();
+        }
         return FileCapabilities {
             list: entry.is_dir,
             stat: true,
@@ -214,6 +222,12 @@ pub fn for_path(path: &str) -> FileCapabilities {
             .unwrap_or_default();
     }
     if !crate::plugins::mounts::handles(path) {
+        if !matches!(
+            crate::core::fs::provider_registry::identity(path),
+            Some(("fs", provider, _)) if provider == "core:local-fs"
+        ) {
+            return FileCapabilities::default();
+        }
         return crate::core::files::entry(std::path::Path::new(path))
             .map(|entry| for_entry(path, &entry))
             .unwrap_or_default();
@@ -317,6 +331,15 @@ mod tests {
         let folder_caps = for_entry(&folder.path, &folder);
         assert!(folder_caps.list && folder_caps.search && folder_caps.create);
         assert!(!folder_caps.read && !folder_caps.write);
+    }
+
+    #[test]
+    fn unsupported_uri_never_inherits_local_capabilities() {
+        for path in ["unknown://forged.txt", "unknown:opaque-file"] {
+            let forged = entry(path, &["read", "write", "remove"], false);
+            assert_eq!(for_entry(path, &forged), FileCapabilities::default());
+            assert_eq!(for_path(path), FileCapabilities::default());
+        }
     }
 
     #[test]
