@@ -49,8 +49,8 @@ impl NativeConnectionMenu for Session {
     }
 }
 
-struct Sync;
-impl NativeConnectionMenu for Sync {
+struct SyncMenu;
+impl NativeConnectionMenu for SyncMenu {
     fn items(&self, ctx: &Context) -> Vec<Value> {
         if ctx.can_sync {
             vec![item(
@@ -86,7 +86,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeConnectionMenu> {
         let implementations: [(&str, i64, Arc<dyn NativeConnectionMenu>); 4] = [
             ("builtin:connection-edit", 100, Arc::new(Edit)),
             ("builtin:connection-session", 90, Arc::new(Session)),
-            ("builtin:connection-sync", 80, Arc::new(Sync)),
+            ("builtin:connection-sync", 80, Arc::new(SyncMenu)),
             ("builtin:connection-close", 70, Arc::new(Close)),
         ];
         for (id, priority, provider) in implementations {
