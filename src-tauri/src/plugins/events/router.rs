@@ -43,7 +43,12 @@ impl EventRouter {
         Self::dispatch_resolvers(
             method,
             providers,
-            |provider| endpoint(provider)?.invoke(request),
+            |provider| {
+                if request.method != method {
+                    return Err("provider request method does not match routed event".into());
+                }
+                endpoint(provider)?.invoke(request)
+            },
             validate,
             supported,
             collect,

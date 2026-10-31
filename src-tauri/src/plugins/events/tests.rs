@@ -138,3 +138,55 @@ fn fixed_events_are_core_owned_custom_methods_remain_available() {
         assert!(!is_protected_method(method), "{method}");
     }
 }
+
+#[test]
+fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing() {
+    use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+
+    struct Response(Value);
+    impl ProviderEndpoint for Response {
+        fn invoke(&self, _request: &ProviderRequest) -> Result<Value, String> {
+            Ok(self.0.clone())
+        }
+    }
+
+    let providers = vec![
+        Resolver::builtin("native", 100),
+        Resolver::builtin("ipc-proxy", 50),
+    ];
+    let request = ProviderRequest {
+        method: "contextMenu.resolve".into(),
+        params: json!({}),
+    };
+    let outcomes = EventRouter::resolve_endpoint(
+        "contextMenu.resolve",
+        providers.clone(),
+        &request,
+        |provider| {
+            let value = json!({"items":[{
+                "id": provider.id, "kind": "action", "title": provider.name
+            }]});
+            Ok(Box::new(Response(value)) as Box<dyn ProviderEndpoint>)
+        },
+        |_, value| Ok(value),
+        |_| true,
+        |results| results,
+    );
+    assert_eq!(outcomes.len(), 2);
+    assert!(outcomes.iter().all(|(_, result)| result.is_ok()));
+
+    let spoof = ProviderRequest {
+        method: "contextMenu.execute".into(),
+        params: json!({}),
+    };
+    let outcomes = EventRouter::resolve_endpoint(
+        "contextMenu.resolve",
+        providers,
+        &spoof,
+        |_| Ok(Box::new(Response(json!({"items":[]}))) as Box<dyn ProviderEndpoint>),
+        |_, value| Ok(value),
+        |_| true,
+        |results| results,
+    );
+    assert!(outcomes.iter().all(|(_, result)| result.is_err()));
+}
