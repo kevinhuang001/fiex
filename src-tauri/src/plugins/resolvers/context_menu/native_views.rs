@@ -95,10 +95,14 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
         return false;
     };
     let rule = &descriptor.r#match;
-    let (directory_view, _) = crate::plugins::match_rules::locations_for(directory);
-    // Preserve the actual selection cardinality: a blank canvas is zero,
-    // not a synthetic selected root. ProviderMatchRule owns this contract.
-    if !rule.matches_targets(&[json!({"view": directory_view})], paths.len()) {
+    let (directory_view, directory_storage) =
+        crate::plugins::match_rules::locations_for(directory);
+    // Match the real directory view and storage independently, including
+    // an empty selection. Recent can have a different source storage owner.
+    if !rule.matches_targets(
+        &[json!({"view": directory_view, "storage": directory_storage})],
+        paths.len(),
+    ) {
         return false;
     }
     if paths.is_empty() {
@@ -109,8 +113,8 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
     let targets = paths
         .iter()
         .map(|path| {
-            let (view, _) = crate::plugins::match_rules::locations_for(path);
-            json!({"view": view})
+            let (view, storage) = crate::plugins::match_rules::locations_for(path);
+            json!({"view": view, "storage": storage})
         })
         .collect::<Vec<_>>();
     rule.matches_targets(&targets, paths.len())
