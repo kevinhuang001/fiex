@@ -11,8 +11,8 @@
 //! - `rename` / `batch-rename`: require `rename` in a writable directory.
 //! - `clipboard`: `copy` requires `read`, `cut` requires `rename` in a writable
 //!   directory, `duplicate` requires `read && write` in a writable directory.
-//! - `trash`: requires `remove` in a writable directory; `restore`/`delete`
-//!   keep today's in-trash behaviour.
+//! - `trash`: requires `remove` in a writable directory. View-specific
+//!   restore, purge and empty actions belong only to the registered view provider.
 //! - `terminal` / `tags`: local selections only, because Core has no remote
 //!   terminal or tag path.
 //! - `copy-path`: always; it only uses the location Core already knows.
@@ -38,7 +38,6 @@ pub(super) struct Selection<'a> {
     pub(super) paths: &'a [String],
     pub(super) entries: &'a [Entry],
     pub(super) read_only: bool,
-    pub(super) in_trash: bool,
     pub(super) all_local: bool,
 }
 
@@ -288,12 +287,7 @@ impl BuiltinResolver for Trash {
         capabilities.remove && !selection.read_only && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
-        let mut items = if selection.in_trash {
-            vec![
-                item("restore", "放回原处", "restore", ""),
-                item("delete", "彻底删除", "trash", ""),
-            ]
-        } else if selection.all_local {
+        let mut items = if selection.all_local {
             // The platform Trash only accepts local paths. Windows exposes the
             // Recycle Bin under that name; the rest keep the Trash wording.
             let title = if cfg!(windows) {
@@ -309,7 +303,7 @@ impl BuiltinResolver for Trash {
         };
         for item in &mut items {
             item["placement"] = json!("tail");
-            item["danger"] = json!(item["id"] != "restore");
+            item["danger"] = json!(true);
         }
         items
     }
@@ -349,7 +343,6 @@ mod registry_tests {
             paths: &no_paths,
             entries: &entries,
             read_only: false,
-            in_trash: false,
             all_local: true,
         };
         assert!(available(&selection, &FileCapabilities::default()).is_empty());
