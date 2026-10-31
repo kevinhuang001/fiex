@@ -65,3 +65,12 @@ fn malformed_node_restrictions_cannot_become_unrestricted() {
     let unknown = entry(json!({"nodeId":"n","name":"a","allowedOps":["future"]})).unwrap();
     assert!(unknown.is_readonly());
 }
+
+#[test]
+fn vfs_pagination_preserves_truncation_without_requiring_false_flag() {
+    assert_eq!(truncated_flag(&json!({"entries":[]})).unwrap(), false);
+    assert_eq!(truncated_flag(&json!({"truncated":false})).unwrap(), false);
+    assert_eq!(truncated_flag(&json!({"truncated":true})).unwrap(), true);
+    assert!(truncated_flag(&json!({"truncated":null})).is_err());
+    assert!(truncated_flag(&json!({"truncated":"false"})).is_err());
+}
