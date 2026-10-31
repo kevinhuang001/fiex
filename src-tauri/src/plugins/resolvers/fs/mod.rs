@@ -33,29 +33,12 @@ pub struct Mount {
 }
 
 impl Mount {
-    fn invoke(&self, method: &str, mut params: Value) -> Result<Value, String> {
-        let object = params
-            .as_object_mut()
-            .ok_or("file-system parameters must be an object")?;
-        object.insert("mountId".into(), json!(self.mount_id));
-        match &self.source {
-            Source::Connection(config) => {
-                object.insert("connection".into(), config.clone());
-            }
-            Source::View {
-                contribution_id,
-                view_context,
-            } => {
-                object.insert("contributionId".into(), json!(contribution_id));
-                object.insert("viewContext".into(), view_context.clone());
-            }
-        }
-        crate::plugins::host::global().invoke_fs(
-            &self.plugin_id,
-            method,
+    fn invoke(&self, method: &str, params: Value) -> Result<Value, String> {
+        use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+        endpoint::PluginFsEndpoint { mount: self }.invoke(&ProviderRequest {
+            method: method.into(),
             params,
-            self.scope.clone(),
-        )
+        })
     }
 
     pub fn list(
@@ -314,6 +297,7 @@ pub fn mount_for_path(path: &str) -> Result<Mount, String> {
     }
 }
 
+mod endpoint;
 mod streams;
 mod types;
 pub use streams::{FsStream, FsWriteStream};
