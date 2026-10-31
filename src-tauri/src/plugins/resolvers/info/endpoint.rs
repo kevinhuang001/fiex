@@ -1,7 +1,7 @@
 //! Native and plugin Info implementations share the SDK endpoint contract.
 //! The plugin proxy retains the Core-owned resource snapshot and never
 //! accepts its resource identity from plugin-supplied parameters.
-use super::{media::media_sections, metadata::metadata_section};
+use super::native;
 use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use serde_json::{json, Value};
@@ -18,17 +18,7 @@ impl ProviderEndpoint for NativeInfoEndpoint {
         if request.method != "info.resolve" {
             return Err("unregistered Info event".into());
         }
-        let resource = &self.resource;
-        let sections = match self.id.as_str() {
-            "core.metadata" => vec![metadata_section(
-                &self.display,
-                &resource.local,
-                resource.stat.as_ref(),
-                resource.metadata(),
-            )],
-            "core.media" => media_sections(&resource.export_path()?),
-            _ => return Err("unknown native Info provider".into()),
-        };
+        let sections = native::invoke(&self.id, &self.display, &self.resource)?;
         Ok(json!({"sections": sections}))
     }
 }
