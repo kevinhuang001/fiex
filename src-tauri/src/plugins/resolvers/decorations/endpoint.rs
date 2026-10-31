@@ -1,7 +1,7 @@
 //! Unified decoration endpoint for Core-owned decorations and plugin IPC.
 use super::types::DecorationEntry;
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::Value;
 use std::collections::HashMap;
 
