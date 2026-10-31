@@ -3,7 +3,7 @@
 //! Providers are matched by extension/MIME and priority. Built-ins use a
 //! trusted local file; plugins receive a permission-projected `EventContext`
 //! and return a package-confined `PreviewView`.
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::contracts::PreviewView;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::Value;
