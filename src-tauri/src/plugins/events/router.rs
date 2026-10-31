@@ -23,7 +23,16 @@ impl EventRouter {
                 if request.method != method {
                     return Err("provider request method does not match routed event".into());
                 }
-                endpoint(provider)?.invoke(request)
+                let mut routed = request.clone();
+                if let Handler::Plugin(plugin) = &provider.handler {
+                    let prefix = format!("plugin:{}:", plugin.id);
+                    if let Some(name) = provider.id.strip_prefix(&prefix) {
+                        let fields = routed.params.as_object_mut()
+                            .ok_or("provider parameters must be an object")?;
+                        fields.insert("providerId".into(), serde_json::json!(name));
+                    }
+                }
+                endpoint(provider)?.invoke(&routed)
             },
             validate,
             supported,
