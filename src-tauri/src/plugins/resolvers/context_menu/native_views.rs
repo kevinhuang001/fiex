@@ -4,8 +4,8 @@
 //! generic EventRouter. Plugins never gain Core action ownership.
 use crate::core::files::Entry;
 use crate::core::volumes::{applications, recycle, trash_vfs, virtual_resolvers};
-use crate::plugins::events::Resolver;
 use crate::plugin_sdk::provider_matching::{LocationMatch, ProviderMatchRule};
+use crate::plugins::events::Resolver;
 use serde_json::{json, Value};
 
 struct Descriptor {
@@ -114,7 +114,13 @@ fn trash_title() -> &'static str {
 fn menu_for(owner: &str, path: &str) -> Vec<Value> {
     match owner {
         "core:recent" => {
-            let mut items = vec![item("open", crate::i18n::t("打开").into(), "open", false, false)];
+            let mut items = vec![item(
+                "open",
+                crate::i18n::t("打开").into(),
+                "open",
+                false,
+                false,
+            )];
             if virtual_resolvers::recent_reveal_source(path).is_some() {
                 items.push(item(
                     "reveal",
@@ -159,8 +165,20 @@ fn menu_for(owner: &str, path: &str) -> Vec<Value> {
                 return Vec::new();
             }
             vec![
-                item("restore", crate::i18n::t("放回原处").into(), "restore", false, false),
-                item("delete", crate::i18n::t("彻底删除").into(), "trash", true, true),
+                item(
+                    "restore",
+                    crate::i18n::t("放回原处").into(),
+                    "restore",
+                    false,
+                    false,
+                ),
+                item(
+                    "delete",
+                    crate::i18n::t("彻底删除").into(),
+                    "trash",
+                    true,
+                    true,
+                ),
             ]
         }
         _ => Vec::new(),
@@ -193,37 +211,46 @@ pub(super) fn execute(id: &str, item_id: &str, paths: &[String]) -> Result<Nativ
     match (owner, item_id) {
         ("core:recent", "open") => Ok(NativeAction {
             command: "open",
-            paths: paths.iter().map(|path| crate::core::recent::source_for(path))
+            paths: paths
+                .iter()
+                .map(|path| crate::core::recent::source_for(path))
                 .collect::<Result<Vec<_>, _>>()?,
         }),
         ("core:recent", "reveal") => {
             for path in paths {
-                virtual_resolvers::recent_reveal_source(path).ok_or_else(|| {
-                    crate::i18n::t("无法在文件管理器中显示该位置").to_string()
-                })?;
+                virtual_resolvers::recent_reveal_source(path)
+                    .ok_or_else(|| crate::i18n::t("无法在文件管理器中显示该位置").to_string())?;
             }
-            Ok(NativeAction { command: "reveal", paths: paths.to_vec() })
+            Ok(NativeAction {
+                command: "reveal",
+                paths: paths.to_vec(),
+            })
         }
         ("core:applications", "open") => Ok(NativeAction {
-            command: "open", paths: paths.to_vec(),
+            command: "open",
+            paths: paths.to_vec(),
         }),
         ("core:applications", "rename" | "trash") => {
             if paths.iter().any(|path| !applications::is_user(path)) {
                 return Err("only stored application entries can be modified".into());
             }
             Ok(NativeAction {
-                command: if item_id == "rename" { "rename" } else { "trashApplications" },
+                command: if item_id == "rename" {
+                    "rename"
+                } else {
+                    "trashApplications"
+                },
                 paths: paths.to_vec(),
             })
         }
-        ("core:applications", "delete") => {
-            Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into())
-        }
+        ("core:applications", "delete") => Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into()),
         ("core:trash", "restore") => Ok(NativeAction {
-            command: "restore", paths: paths.to_vec(),
+            command: "restore",
+            paths: paths.to_vec(),
         }),
         ("core:trash", "delete") => Ok(NativeAction {
-            command: "delete", paths: paths.to_vec(),
+            command: "delete",
+            paths: paths.to_vec(),
         }),
         _ => Err("unknown native menu action".into()),
     }
@@ -254,7 +281,12 @@ mod tests {
         let user = vec![format!("{}user/dXNlci1hcHA", applications::URI)];
         let value = resolve("core.applications.menu", &user).unwrap();
         assert_eq!(value["items"].as_array().unwrap().len(), 3);
-        assert_eq!(execute("core.applications.menu", "trash", &user).unwrap().command, "trashApplications");
+        assert_eq!(
+            execute("core.applications.menu", "trash", &user)
+                .unwrap()
+                .command,
+            "trashApplications"
+        );
     }
 
     #[test]

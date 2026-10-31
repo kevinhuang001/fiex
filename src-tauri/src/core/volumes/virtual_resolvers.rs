@@ -172,7 +172,10 @@ mod tests {
     #[test]
     fn source_view_identities_remain_stable() {
         assert_eq!(view_for("recent://").unwrap().id(), "core:recent");
-        assert_eq!(view_for("applications://").unwrap().id(), "core:applications");
+        assert_eq!(
+            view_for("applications://").unwrap().id(),
+            "core:applications"
+        );
         assert_eq!(view_for(trash_vfs::URI).unwrap().id(), "core:trash");
     }
 
