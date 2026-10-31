@@ -5,6 +5,9 @@
 //! requested mode, or the builtin walker as the last candidate. Every result
 //! is validated against the authorized root before it leaves this module.
 use crate::core::files::Entry;
+use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use crate::plugins::events::EventRouter;
+mod endpoint;
 use crate::core::search::SearchMode;
 use crate::plugins::events::{Handler, Resolver};
 use serde::Deserialize;
@@ -155,18 +158,35 @@ pub fn run(
         return Err("search cancelled".into());
     }
     let resources = resources(request);
-    let response = crate::plugins::events::invoke_resources(
-        match &engine.resolver.handler {
-            Handler::Plugin(plugin) => plugin,
-            Handler::Builtin(_) => return Err("builtin search engine runs in Core".into()),
-        },
+    let call = ProviderRequest {
+        method: "search.query".into(),
+        params: input(request),
+    };
+    EventRouter::resolve(
         "search.query",
-        input(request),
-        &resources,
-        Some(&request.root),
-    )?;
-    let entries = validated(&engine.resolver, response, request)?;
-    Ok((entries, false))
+        vec![engine.resolver.clone()],
+        &call,
+        |resolver| {
+            let Handler::Plugin(plugin) = &resolver.handler else {
+                return Err("native search runs through the streaming walker".into());
+            };
+            Ok(Box::new(endpoint::PluginSearchEndpoint {
+                plugin: (**plugin).clone(),
+                resources: &resources,
+                directory: &request.root,
+            }) as Box<dyn ProviderEndpoint + '_>)
+        },
+        |resolver, response| {
+            let truncated = response["truncated"].as_bool().unwrap_or(false);
+            Ok((validated(resolver, response, request)?, truncated))
+        },
+        |_| true,
+        |results| {
+            results.into_iter().next()
+                .ok_or_else(|| "search provider unavailable".to_string())?.1
+        },
+    )
+
 }
 
 /// Shared result validation: ownership, root confinement, hidden/ignore rules,
