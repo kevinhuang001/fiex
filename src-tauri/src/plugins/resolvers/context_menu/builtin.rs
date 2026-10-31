@@ -14,6 +14,22 @@ pub(super) struct Context {
     capabilities: FileCapabilities,
 }
 
+/// Host-only actions require a direct local FS resource. A location type
+/// of "fs" alone is not enough: raw USBFS is also FS but must not be
+/// accidentally passed to local operating-system commands.
+fn plain_local(path: &str) -> bool {
+    let (view, storage) = crate::plugins::match_rules::locations_for(path);
+    matches!((view, storage),
+        (Some(view), Some(storage))
+            if view == storage && storage["providerId"] == "core:local-fs")
+}
+
+fn trash_view(path: &str) -> bool {
+    crate::plugins::match_rules::locations_for(path)
+        .0
+        .is_some_and(|view| view["providerId"] == "core:trash")
+}
+
 impl Context {
     pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
         // All storage kinds resolve through ResourceBroker's trusted scope,
@@ -42,16 +58,8 @@ impl Context {
                 crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
             );
         }
-        let all_local = crate::usbfs::route(directory).is_none()
-            && !crate::core::volumes::virtual_resolvers::opaque(directory)
-            && !crate::plugins::mounts::handles(directory)
-            && paths.iter().all(|path| {
-                !crate::plugins::mounts::handles(path)
-                    && crate::usbfs::route(path).is_none()
-                    && !crate::core::volumes::virtual_resolvers::opaque(path)
-            });
-        let in_trash = crate::core::volumes::virtual_resolvers::view_for(directory)
-            .is_some_and(|view| view.id() == "core:trash");
+        let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
+        let in_trash = trash_view(directory);
         Ok(Self {
             directory: directory.into(),
             paths: paths.to_vec(),
@@ -107,14 +115,7 @@ impl Context {
         in_trash: bool,
         capabilities: FileCapabilities,
     ) -> Self {
-        let all_local = crate::usbfs::route(directory).is_none()
-            && !crate::core::volumes::virtual_resolvers::opaque(directory)
-            && !crate::plugins::mounts::handles(directory)
-            && paths.iter().all(|path| {
-                !crate::plugins::mounts::handles(path)
-                    && crate::usbfs::route(path).is_none()
-                    && !crate::core::volumes::virtual_resolvers::opaque(path)
-            });
+        let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         Self {
             directory: directory.into(),
             paths,
