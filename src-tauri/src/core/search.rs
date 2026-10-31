@@ -31,22 +31,8 @@ const CONTENT_BYTE_BUDGET: u64 = 64 * 1024 * 1024;
 const CONTENT_FILE_BUDGET: usize = 5000;
 const BINARY_PROBE: usize = 8192;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SearchMode {
-    #[default]
-    Name,
-    Content,
-}
-
-impl SearchMode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Name => "name",
-            Self::Content => "content",
-        }
-    }
-}
+/// Search mode is shared with SDK VFS and provider DTOs.
+pub use fiex_provider_contracts::SearchMode;
 
 /// Which engine the user asked for. `Auto` picks the first available provider
 /// that declares the mode and falls back to the builtin walker last.
