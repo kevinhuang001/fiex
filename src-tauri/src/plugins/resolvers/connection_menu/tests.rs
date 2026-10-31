@@ -90,10 +90,19 @@ fn unsaved_sessions_can_be_saved_and_autostart_toggles() {
 #[test]
 fn connection_matches_are_core_owned_and_storage_sensitive() {
     use crate::plugins::events::matching;
-    let connection = ctx("org.fiex.drive", "drive", "fiex-plugin-view://c1", true, false);
+    let connection = ctx(
+        "org.fiex.drive",
+        "drive",
+        "fiex-plugin-view://c1",
+        true,
+        false,
+    );
     let metadata = connection.matcher_metadata();
     assert_eq!(metadata["kind"], "connection");
-    assert_eq!(metadata["view"]["providerId"], "plugin:org.fiex.drive:drive");
+    assert_eq!(
+        metadata["view"]["providerId"],
+        "plugin:org.fiex.drive:drive"
+    );
     let matched = json!({"connectionContextMenus":{"match":{
         "kinds":["connection"],"view":{"providerIds":["plugin:org.fiex.drive:drive"]}
     }}});
@@ -126,4 +135,3 @@ fn flat_plugin_items_are_validated_before_rendering() {
         assert!(valid_items(&bad).is_err(), "{bad}");
     }
 }
-

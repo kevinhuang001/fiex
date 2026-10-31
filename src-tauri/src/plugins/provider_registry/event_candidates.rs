@@ -26,8 +26,7 @@ pub fn candidates(
             continue;
         }
         let declared = plugin.declared_permissions.iter().cloned().collect();
-        let policy =
-            crate::plugins::security::policy::PermissionPolicy::new(&plugin.id, &declared);
+        let policy = crate::plugins::security::policy::PermissionPolicy::new(&plugin.id, &declared);
         let required = match method {
             "decorations.resolve" => {
                 Some(crate::plugins::security::policy::Capability::FoldersRead)
@@ -41,7 +40,10 @@ pub fn candidates(
         native.push(Resolver {
             id: format!("plugin:{}", plugin.id),
             name: plugin.name.clone(),
-            priority: contribution.get("priority").and_then(Value::as_i64).unwrap_or(50),
+            priority: contribution
+                .get("priority")
+                .and_then(Value::as_i64)
+                .unwrap_or(50),
             handler: Handler::Plugin(Box::new(plugin)),
         });
     }

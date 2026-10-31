@@ -28,14 +28,24 @@ fn preview_skips_invalid_provider_and_stops_after_success() {
     let result = EventRouter::resolve(
         "preview.open",
         providers,
-        &ProviderRequest { method: "preview.open".into(), params: json!({}) },
-        |provider| Ok(Box::new(TestPreview {
-            name: provider.id.clone(),
-            calls: calls.clone(),
-        }) as Box<dyn ProviderEndpoint>),
+        &ProviderRequest {
+            method: "preview.open".into(),
+            params: json!({}),
+        },
+        |provider| {
+            Ok(Box::new(TestPreview {
+                name: provider.id.clone(),
+                calls: calls.clone(),
+            }) as Box<dyn ProviderEndpoint>)
+        },
         |_, value| Ok(value),
         |_| true,
-        |outcomes| outcomes.into_iter().find_map(|(_, result)| result.ok()).unwrap(),
+        |outcomes| {
+            outcomes
+                .into_iter()
+                .find_map(|(_, result)| result.ok())
+                .unwrap()
+        },
     );
     assert_eq!(result["text"], "ok");
     assert_eq!(*calls.lock().unwrap(), vec!["invalid", "working"]);

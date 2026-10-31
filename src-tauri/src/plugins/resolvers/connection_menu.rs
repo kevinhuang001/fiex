@@ -12,7 +12,6 @@ use validation::valid_items;
 use crate::remote::ConnectionInfo;
 use serde_json::{json, Value};
 
-
 struct Context {
     info: ConnectionInfo,
     can_sync: bool,
@@ -166,7 +165,12 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
             Ok(Some(value))
         },
         |_| true,
-        |results| results.into_iter().filter_map(|(_, result)| result.ok().flatten()).collect(),
+        |results| {
+            results
+                .into_iter()
+                .filter_map(|(_, result)| result.ok().flatten())
+                .collect()
+        },
     ))
 }
 
@@ -202,8 +206,11 @@ pub async fn execute(
         |_, result| Ok(result),
         |_| true,
         |results| {
-            results.into_iter().next()
-                .ok_or_else(|| "connection menu provider unavailable".to_string())?.1
+            results
+                .into_iter()
+                .next()
+                .ok_or_else(|| "connection menu provider unavailable".to_string())?
+                .1
         },
     )?;
     if result["kind"] == "nativeAction" {

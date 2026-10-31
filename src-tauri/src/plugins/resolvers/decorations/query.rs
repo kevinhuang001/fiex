@@ -67,7 +67,12 @@ pub fn query_with_plugins(
     let metadata = crate::plugins::events::resource_metadata(&resources);
     let builtins = super::builtin::providers();
     let providers = if include_plugins {
-        crate::plugins::provider_registry::candidates("decorations.resolve", &metadata, directory, builtins)
+        crate::plugins::provider_registry::candidates(
+            "decorations.resolve",
+            &metadata,
+            directory,
+            builtins,
+        )
     } else {
         builtins
     };

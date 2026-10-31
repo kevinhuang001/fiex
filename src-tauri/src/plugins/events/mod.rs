@@ -62,10 +62,15 @@ pub fn call_owner(
     directory: Option<&str>,
 ) -> Result<Value, String> {
     let metadata = matching::metadata(resources);
-    let providers = crate::plugins::provider_registry::candidates(method, &metadata, directory.unwrap_or(""), Vec::new())
-        .into_iter()
-        .filter(|p| matches!(&p.handler,Handler::Plugin(plugin) if plugin.id==plugin_id))
-        .collect();
+    let providers = crate::plugins::provider_registry::candidates(
+        method,
+        &metadata,
+        directory.unwrap_or(""),
+        Vec::new(),
+    )
+    .into_iter()
+    .filter(|p| matches!(&p.handler,Handler::Plugin(plugin) if plugin.id==plugin_id))
+    .collect();
     EventRouter::resolve(
         method,
         providers,

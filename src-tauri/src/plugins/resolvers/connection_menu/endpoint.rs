@@ -17,11 +17,12 @@ impl ProviderEndpoint for NativeMenu<'_> {
                 Ok(json!({"items":builtin_items(&self.id, self.ctx)?}))
             }
             "connectionContextMenu.execute" => {
-                let item = request.params["itemId"].as_str().ok_or("missing menu action")?;
+                let item = request.params["itemId"]
+                    .as_str()
+                    .ok_or("missing menu action")?;
                 let items = builtin_items(&self.id, self.ctx)?;
                 if !items.iter().any(|value| {
-                    value["id"] == item && value["disabled"] != true
-                        && value["kind"] == "action"
+                    value["id"] == item && value["disabled"] != true && value["kind"] == "action"
                 }) {
                     return Err("menu action is no longer available".into());
                 }
@@ -61,12 +62,12 @@ impl ProviderEndpoint for PluginMenu<'_> {
                 Ok(json!({"items":plugin_items(&self.plugin, self.ctx, self.session)?}))
             }
             "connectionContextMenu.execute" => {
-                let item = request.params["itemId"].as_str().ok_or("missing menu action")?;
+                let item = request.params["itemId"]
+                    .as_str()
+                    .ok_or("missing menu action")?;
                 let offered = plugin_items(&self.plugin, self.ctx, self.session)?;
                 if !offered.iter().any(|value| {
-                    value["kind"] == "action"
-                        && value["id"] == item
-                        && value["disabled"] != true
+                    value["kind"] == "action" && value["id"] == item && value["disabled"] != true
                 }) {
                     return Err("menu action is no longer available".into());
                 }

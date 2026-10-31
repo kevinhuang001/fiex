@@ -32,7 +32,8 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
     {
         builtin.push(Resolver::builtin("core.media", 100));
     }
-    let providers = crate::plugins::provider_registry::candidates("info.resolve", &[metadata], "", builtin);
+    let providers =
+        crate::plugins::provider_registry::candidates("info.resolve", &[metadata], "", builtin);
     let resource = Arc::new(resource);
     let request = ProviderRequest {
         method: "info.resolve".into(),
