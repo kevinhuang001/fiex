@@ -61,9 +61,8 @@ impl SearchEngineInfo {
     }
 }
 
-/// Declared modes for one provider. A contribution without `modes` is a
-/// legacy single-RPC search and is treated as filename search only: Core must
-/// never infer content support from the operation ceiling alone.
+/// Explicitly declared modes for one provider. Missing or invalid mode
+/// declarations never silently grant search capabilities.
 fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
     let Handler::Plugin(plugin) = &provider.handler else {
         return vec![SearchMode::Name, SearchMode::Content];
@@ -74,17 +73,10 @@ fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
     if !contribution.is_object() && contribution.as_bool() != Some(true) {
         return Vec::new();
     }
-    // `global` is a legacy spelling for "all local disks" and stays eligible
-    // for Local FS roots; any other scope is not a local search provider.
-    let scope = contribution
-        .get("scope")
-        .and_then(Value::as_str)
-        .unwrap_or("local");
-    if !matches!(scope, "local" | "global") {
-        return Vec::new();
-    }
+    // Eligibility for Local FS is handled by the standard trusted
+    // storage match. No obsolete "scope" or global-disks aliases.
     let Some(modes) = contribution.get("modes").and_then(Value::as_array) else {
-        return vec![SearchMode::Name];
+        return Vec::new();
     };
     let mut out = Vec::new();
     for mode in modes.iter().filter_map(Value::as_str) {
@@ -236,67 +228,4 @@ fn validated(
         values.push(entry);
     }
     Ok(values)
-}
-
-fn dedupe(groups: Vec<Vec<Entry>>, limit: usize) -> Vec<Entry> {
-    let mut seen = std::collections::HashSet::new();
-    let mut entries = Vec::new();
-    for values in groups {
-        for entry in values {
-            let remote = crate::plugins::mounts::handles(&entry.path);
-            let key = if remote {
-                let uri = crate::plugins::mounts::parse(&entry.path).expect("validated search URI");
-                format!("{}/{}", uri.mount_id, uri.relative)
-            } else {
-                dunce::canonicalize(&entry.path)
-                    .unwrap_or_else(|_| entry.path.clone().into())
-                    .to_string_lossy()
-                    .into_owned()
-            };
-            let key = if cfg!(windows) && !remote {
-                key.to_lowercase()
-            } else {
-                key
-            };
-            if seen.insert(key) {
-                entries.push(entry);
-            }
-        }
-    }
-    entries.truncate(limit);
-    entries
-}
-
-/// Legacy merge path used by `plugin_search`: every provider may contribute.
-pub fn resolve(
-    request: &PluginSearchInput,
-    mut builtin: impl FnMut() -> Result<Value, String>,
-    cancelled: impl Fn() -> bool,
-) -> Vec<Entry> {
-    let limit = request.limit();
-    let mut groups = Vec::new();
-    for engine in engines(request) {
-        if cancelled() {
-            return Vec::new();
-        }
-        if engine.is_builtin() {
-            if let Ok(value) = builtin() {
-                if let Ok(entries) = validated(&engine.resolver, value, request) {
-                    groups.push(entries);
-                }
-            }
-            continue;
-        }
-        if !engine.supports(request.mode) {
-            continue;
-        }
-        if let Ok((entries, _)) = run(&engine, request, &cancelled) {
-            groups.push(entries);
-        }
-    }
-    dedupe(groups, limit)
-}
-
-pub fn query(request: &PluginSearchInput) -> Vec<Entry> {
-    resolve(request, || Ok(json!({"entries":[]})), || false)
 }

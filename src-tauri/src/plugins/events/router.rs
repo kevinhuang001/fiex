@@ -3,35 +3,11 @@ use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 
 pub struct EventRouter;
 impl EventRouter {
-    /// Existing feature adapters can delegate to the same authorization and
-    /// collection loop until their native/IPC endpoint proxies are migrated.
-    pub fn resolve<T, R>(
-        method: &str,
-        providers: Vec<Resolver>,
-        mut builtin: impl FnMut(&Resolver, &str) -> Result<Value, String>,
-        mut plugin: impl FnMut(&crate::plugins::host::PluginInfo) -> Result<Value, String>,
-        validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
-        supported: impl FnMut(&T) -> bool,
-        collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
-    ) -> R {
-        Self::dispatch_resolvers(
-            method,
-            providers,
-            |provider| match &provider.handler {
-                Handler::Builtin(id) => builtin(provider, id),
-                Handler::Plugin(p) => plugin(p),
-            },
-            validate,
-            supported,
-            collect,
-        )
-    }
-
-    /// The new path: Core native providers and SDK-backed IPC proxies expose
+    /// Core native providers and SDK-backed IPC proxies expose
     /// the same transport-neutral endpoint, with one validation/merge policy.
     /// An endpoint factory only chooses the registered implementation; it does
     /// not select a different execution API based on where it runs.
-    pub fn resolve_endpoint<'a, T, R>(
+    pub fn resolve<'a, T, R>(
         method: &str,
         providers: Vec<Resolver>,
         request: &ProviderRequest,

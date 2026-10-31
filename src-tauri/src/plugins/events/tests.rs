@@ -2,35 +2,43 @@ use super::*;
 
 #[test]
 fn preview_skips_invalid_provider_and_stops_after_success() {
+    use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+    use std::sync::{Arc, Mutex};
+
+    struct TestPreview {
+        name: String,
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+    impl ProviderEndpoint for TestPreview {
+        fn invoke(&self, _request: &ProviderRequest) -> Result<Value, String> {
+            self.calls.lock().unwrap().push(self.name.clone());
+            Ok(if self.name == "invalid" {
+                json!({"kind":"external-url"})
+            } else {
+                json!({"kind":"text","text":"ok"})
+            })
+        }
+    }
     let providers = vec![
         Resolver::builtin("invalid", 100),
         Resolver::builtin("working", 50),
         Resolver::builtin("unused", 0),
     ];
-    let mut calls = Vec::new();
+    let calls = Arc::new(Mutex::new(Vec::new()));
     let result = EventRouter::resolve(
         "preview.open",
         providers,
-        |_, id| {
-            calls.push(id.to_string());
-            Ok(if id == "invalid" {
-                json!({"kind":"external-url"})
-            } else {
-                json!({"kind":"text","text":"ok"})
-            })
-        },
-        |_| unreachable!(),
+        &ProviderRequest { method: "preview.open".into(), params: json!({}) },
+        |provider| Ok(Box::new(TestPreview {
+            name: provider.id.clone(),
+            calls: calls.clone(),
+        }) as Box<dyn ProviderEndpoint>),
         |_, value| Ok(value),
         |_| true,
-        |outcomes| {
-            outcomes
-                .into_iter()
-                .find_map(|(_, result)| result.ok())
-                .unwrap()
-        },
+        |outcomes| outcomes.into_iter().find_map(|(_, result)| result.ok()).unwrap(),
     );
     assert_eq!(result["text"], "ok");
-    assert_eq!(calls, vec!["invalid", "working"]);
+    assert_eq!(*calls.lock().unwrap(), vec!["invalid", "working"]);
 }
 
 #[test]
@@ -158,7 +166,7 @@ fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing()
         method: "contextMenu.resolve".into(),
         params: json!({}),
     };
-    let outcomes = EventRouter::resolve_endpoint(
+    let outcomes = EventRouter::resolve(
         "contextMenu.resolve",
         providers.clone(),
         &request,
@@ -179,7 +187,7 @@ fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing()
         method: "contextMenu.execute".into(),
         params: json!({}),
     };
-    let outcomes = EventRouter::resolve_endpoint(
+    let outcomes = EventRouter::resolve(
         "contextMenu.resolve",
         providers,
         &spoof,
