@@ -79,7 +79,7 @@ pub fn query_with_plugins(
         method: "decorations.resolve".into(),
         params: json!({}),
     };
-    let result = EventRouter::resolve_endpoint(
+    let result = EventRouter::resolve(
         "decorations.resolve",
         providers,
         &request,

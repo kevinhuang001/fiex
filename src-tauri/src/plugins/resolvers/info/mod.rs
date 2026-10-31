@@ -38,7 +38,7 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
         method: "info.resolve".into(),
         params: serde_json::json!({}),
     };
-    EventRouter::resolve_endpoint(
+    EventRouter::resolve(
         "info.resolve",
         providers,
         &request,

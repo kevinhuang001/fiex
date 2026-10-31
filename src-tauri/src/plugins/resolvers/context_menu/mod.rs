@@ -146,7 +146,7 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
         method: "contextMenu.resolve".into(),
         params: json!({}),
     };
-    Ok(EventRouter::resolve_endpoint(
+    Ok(EventRouter::resolve(
         "contextMenu.resolve",
         providers,
         &request,
@@ -255,7 +255,7 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
             "interactionId": crate::plugins::mounts::new_id()?,
         }),
     };
-    EventRouter::resolve_endpoint(
+    EventRouter::resolve(
         "contextMenu.execute",
         vec![session.provider.clone()],
         &request,

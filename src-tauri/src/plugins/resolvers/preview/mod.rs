@@ -126,7 +126,7 @@ fn resolve_preview(
         method: "preview.open".into(),
         params: serde_json::json!({}),
     };
-    EventRouter::resolve_endpoint(
+    EventRouter::resolve(
         "preview.open",
         providers,
         &request,
