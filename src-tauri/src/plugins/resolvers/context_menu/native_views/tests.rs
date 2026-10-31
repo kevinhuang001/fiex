@@ -93,7 +93,7 @@ fn native_menu_executes_only_actions_offered_for_this_exact_selection() {
         "core.applications.menu",
         "open",
         "applications://",
-        &system_app
+        &system_app,
     )
     .unwrap();
     assert_eq!(launched.command, "open");
