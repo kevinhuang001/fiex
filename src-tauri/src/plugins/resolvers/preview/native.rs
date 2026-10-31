@@ -3,20 +3,23 @@
 //! as its IPC peer; only the transport-specific adapter differs.
 use super::builtin::{builtin_candidates, builtin_view, Builtin};
 use crate::plugins::events::Resolver;
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{ProviderDescriptor, ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use serde_json::Value;
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, OnceLock},
-};
+use std::sync::{Arc, OnceLock};
 
 trait NativePreviewProvider: Send + Sync {
+    fn supports(&self, kinds: &[Builtin]) -> bool;
     fn open(&self, resource: &ResourceSnapshot) -> Result<Value, String>;
 }
 
 struct BuiltinPreview(Builtin);
 impl NativePreviewProvider for BuiltinPreview {
+    fn supports(&self, kinds: &[Builtin]) -> bool {
+        kinds.contains(&self.0)
+    }
+
     fn open(&self, resource: &ResourceSnapshot) -> Result<Value, String> {
         let path = if self.0 == Builtin::Fallback {
             resource.local.clone()
@@ -27,15 +30,10 @@ impl NativePreviewProvider for BuiltinPreview {
     }
 }
 
-struct Registration {
-    descriptor: ProviderDescriptor,
-    implementation: Arc<dyn NativePreviewProvider>,
-}
-
-fn registry() -> &'static BTreeMap<&'static str, Registration> {
-    static REGISTRY: OnceLock<BTreeMap<&'static str, Registration>> = OnceLock::new();
+fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
+    static REGISTRY: OnceLock<NativeProviderRegistry<dyn NativePreviewProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut values = BTreeMap::new();
+        let mut values = NativeProviderRegistry::new(ProviderKind::Preview);
         for kind in [
             Builtin::Text,
             Builtin::Image,
@@ -43,40 +41,32 @@ fn registry() -> &'static BTreeMap<&'static str, Registration> {
             Builtin::Pdf,
             Builtin::Fallback,
         ] {
-            let descriptor = ProviderDescriptor {
-                id: kind.id().into(),
-                kind: ProviderKind::Preview,
-                priority: kind.priority(),
-                r#match: ProviderMatchRule::default(),
-            };
-            descriptor.validate().expect("invalid native PreviewProvider");
-            assert!(values
-                .insert(kind.id(), Registration {
-                    descriptor,
-                    implementation: Arc::new(BuiltinPreview(kind)),
-                })
-                .is_none(), "duplicate native PreviewProvider");
+            values
+                .register(
+                    kind.id(),
+                    kind.priority(),
+                    ProviderMatchRule::default(),
+                    Arc::new(BuiltinPreview(kind)),
+                )
+                .expect("invalid native PreviewProvider");
         }
         values
     })
 }
 
 pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
-    builtin_candidates(ext, mime, is_dir)
-        .into_iter()
-        .filter_map(|kind| {
-            registry()
-                .get(kind.id())
-                .map(|provider| Resolver::builtin(kind.id(), provider.descriptor.priority))
-        })
-        .collect()
+    let selected = builtin_candidates(ext, mime, is_dir);
+    registry().candidates(|provider| {
+        // BuiltinPreview is the registered implementation; its eligibility
+        // remains a native capability, never a supplied provider identity.
+        provider.supports(&selected)
+    })
 }
 
 pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<Value, String> {
     registry()
         .get(id)
         .ok_or("unknown native PreviewProvider")?
-        .implementation
         .open(resource)
 }
 
@@ -87,10 +77,9 @@ mod tests {
     #[test]
     fn native_preview_registry_has_five_distinct_typed_implementations() {
         assert_eq!(registry().len(), 5);
-        for (id, entry) in registry() {
-            assert_eq!(entry.descriptor.id, *id);
-            assert_eq!(entry.descriptor.kind, ProviderKind::Preview);
-            entry.descriptor.validate().unwrap();
+        for descriptor in registry().descriptors() {
+            assert_eq!(descriptor.kind, ProviderKind::Preview);
+            descriptor.validate().unwrap();
         }
         let image = candidates("png", "image/png", false);
         assert!(image.iter().any(|provider| provider.id == "builtin:image"));
