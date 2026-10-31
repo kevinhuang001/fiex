@@ -8,7 +8,6 @@ export interface SidebarProps {
   prefs: Preferences
   update: (p: Partial<Preferences>) => void
   onTrash: () => void
-  onEmptyTrash: () => void
   onApplications: () => void
   onAddConnection: () => void
   onEditConnection: (connection: RemoteConnection) => void
