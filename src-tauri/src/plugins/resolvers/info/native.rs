@@ -56,7 +56,8 @@ impl NativeInfoProvider for MediaInfo {
 fn registry() -> &'static NativeProviderRegistry<dyn NativeInfoProvider> {
     static REGISTRY: OnceLock<NativeProviderRegistry<dyn NativeInfoProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut values = NativeProviderRegistry::new(ProviderKind::Info);
+        let mut values: NativeProviderRegistry<dyn NativeInfoProvider> =
+            NativeProviderRegistry::new(ProviderKind::Info);
         values
             .register(
                 "core.metadata",
