@@ -32,11 +32,15 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
             r#match: rule,
         };
         descriptor.validate()?;
-        if self.entries.contains_key(id) {
-            return Err(format!("duplicate native provider ID: {id}"));
+        match self.entries.entry(id) {
+            std::collections::btree_map::Entry::Occupied(_) => {
+                Err(format!("duplicate native provider ID: {id}"))
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert((descriptor, implementation));
+                Ok(())
+            }
         }
-        self.entries.insert(id, (descriptor, implementation));
-        Ok(())
     }
 
     pub fn get(&self, id: &str) -> Option<&T> {
