@@ -141,11 +141,7 @@ fn retain_unclaimed(ctx: &Context, items: Vec<Value>) -> Vec<Value> {
     let claimed = super::native_views::claimed_actions(&ctx.paths);
     items
         .into_iter()
-        .filter(|item| {
-            !claimed
-                .iter()
-                .any(|id| item["id"].as_str() == Some(*id))
-        })
+        .filter(|item| !claimed.iter().any(|id| item["id"].as_str() == Some(*id)))
         .collect()
 }
 

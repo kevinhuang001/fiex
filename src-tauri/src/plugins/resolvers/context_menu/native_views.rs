@@ -74,11 +74,29 @@ pub(super) fn providers(paths: &[String]) -> Vec<Resolver> {
 /// generic Info, Preview, Copy Path and valid clipboard contributions remain
 /// eligible; this is not an EventRouter early return for builtin views.
 pub(super) fn claimed_actions(paths: &[String]) -> &'static [&'static str] {
-    let owner = PROVIDERS.iter().find(|candidate| eligible(candidate, paths));
+    let owner = PROVIDERS
+        .iter()
+        .find(|candidate| eligible(candidate, paths));
     match owner.map(|candidate| candidate.owner) {
-        Some("core:recent") => &["open", "reveal", "rename", "trash", "delete", "cut", "duplicate"],
+        Some("core:recent") => &[
+            "open",
+            "reveal",
+            "rename",
+            "trash",
+            "delete",
+            "cut",
+            "duplicate",
+        ],
         Some("core:applications") => &["open", "rename", "trash", "delete"],
-        Some("core:trash") => &["open", "restore", "delete", "trash", "rename", "cut", "duplicate"],
+        Some("core:trash") => &[
+            "open",
+            "restore",
+            "delete",
+            "trash",
+            "rename",
+            "cut",
+            "duplicate",
+        ],
         _ => &[],
     }
 }
