@@ -1,9 +1,7 @@
 //! The Hook IPC proxy is persistent, but each invocation receives the
 //! current trusted plugin record and an operation-scoped resource snapshot.
 //! In particular, no mount, selection, permission grant or path is cached.
-use crate::plugins::{
-    host::PluginInfo, resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
     ProviderDescriptor, ProviderEndpoint, ProviderInstances, ProviderKind, ProviderMatchRule,
     ProviderRequest,
@@ -49,7 +47,8 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedHook>, String> {
         return Err("missing HookProvider plugin identity".into());
     }
     static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ScopedHook>>> = OnceLock::new();
-    let registry = REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Hook)));
+    let registry =
+        REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Hook)));
     let mut providers = registry
         .lock()
         .map_err(|_| "HookProvider registry unavailable".to_string())?;
