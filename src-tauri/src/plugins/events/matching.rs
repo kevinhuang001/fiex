@@ -166,14 +166,14 @@ mod tests {
                 ..Default::default()
             },
         );
-        let metadata = metadata(&[resource]);
-        assert_eq!(metadata[0]["view"]["providerId"], "core:applications");
-        assert_eq!(metadata[0]["storage"]["type"], "vfs");
+        let selected_metadata = metadata(&[resource]);
+        assert_eq!(selected_metadata[0]["view"]["providerId"], "core:applications");
+        assert_eq!(selected_metadata[0]["storage"]["type"], "vfs");
         let extensions = json!({"contextMenus":{"match":{
             "view":{"providerIds":["core:applications"]},
             "kinds":["directory"]
         }}});
-        assert!(matches("contextMenu.resolve", &extensions, &metadata, path));
+        assert!(matches("contextMenu.resolve", &extensions, &selected_metadata, path));
         let local = ResourceSnapshot::from_metadata(
             "/tmp/fiex-matcher-local",
             crate::plugins::contracts::ResourceMetadata {
