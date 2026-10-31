@@ -14,6 +14,20 @@ enum Route {
     Local,
 }
 
+// Reject unregistered URI schemes even when they do not use "://". This
+// prevents opaque or malformed virtual references from being interpreted as
+// native filesystem paths. A Windows drive prefix is not a URI scheme.
+fn unregistered_scheme(path: &str) -> bool {
+    let Some(index) = path.find(':') else { return false; };
+    let prefix = &path[..index];
+    if prefix.len() == 1 && prefix.as_bytes()[0].is_ascii_alphabetic() {
+        return false;
+    }
+    !prefix.is_empty()
+        && prefix.as_bytes()[0].is_ascii_alphabetic()
+        && prefix.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+}
+
 fn resolve(path: &str) -> Result<Route, FsError> {
     // The mount service claims revoked and invalid mount URIs too, so these
     // must fail in the plugin resolver instead of falling through to Local.
@@ -26,7 +40,7 @@ fn resolve(path: &str) -> Result<Route, FsError> {
     if virtual_resolvers::view_for(path).is_some() {
         return Ok(Route::NativeView);
     }
-    if path.is_empty() || path.contains("://") {
+    if path.is_empty() || path.contains("://") || unregistered_scheme(path) {
         return Err("Unsupported: unregistered filesystem URI".into());
     }
     Ok(Route::Local)
@@ -96,6 +110,8 @@ mod tests {
     fn unknown_and_revoked_uri_schemes_cannot_become_local_fs() {
         for path in [
             "unknown://not-a-file",
+            "unknown:opaque-resource",
+            "fiex:unregistered",
             "fiex://mount/nonexistent/resource",
             "",
         ] {
@@ -105,6 +121,14 @@ mod tests {
             );
             assert!(!matches!(resolve(path), Ok(Route::Local)), "{path}");
         }
+    }
+
+    #[test]
+    fn uri_detection_preserves_windows_drive_paths() {
+        assert!(!unregistered_scheme(r"C:\\Users\\Example"));
+        assert!(!unregistered_scheme("D:/Documents"));
+        assert!(unregistered_scheme("unknown:opaque"));
+        assert!(unregistered_scheme("web+custom:resource"));
     }
 
     #[test]
