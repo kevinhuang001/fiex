@@ -4,11 +4,11 @@
 //! own the shell actions (edit, session, sync, close); plugins declaring
 //! `extensions.connectionContextMenus` add their own flat action list.
 
-use fiex_provider_contracts::ProviderRequest;
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 mod endpoint;
 mod validation;
 use crate::remote::ConnectionInfo;
+use fiex_provider_contracts::ProviderRequest;
 use serde_json::{json, Value};
 use validation::valid_items;
 
