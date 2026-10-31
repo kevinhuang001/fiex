@@ -38,13 +38,15 @@ pub fn invoke(
     ) {
         return Err("unregistered connection event".into());
     }
+    let owner = json!({
+        "type":"vfs",
+        "providerId":format!("plugin:{plugin_id}:{kind}"),
+        "mountId":mount_id,
+    });
     let metadata = [json!({
         "kind":"connection",
-        "view":{
-            "type":"vfs",
-            "providerId":format!("plugin:{plugin_id}:{kind}"),
-            "mountId":mount_id,
-        },
+        "view": owner,
+        "storage": owner,
         "operations":[]
     })];
     let selected = crate::plugins::provider_registry::candidates(
