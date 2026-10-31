@@ -117,4 +117,3 @@ pub fn run_stream(
     }
     Err("search provider exceeded pagination budget".into())
 }
-
