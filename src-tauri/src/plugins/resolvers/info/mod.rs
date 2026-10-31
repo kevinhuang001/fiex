@@ -47,9 +47,10 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
                     display: display.into(),
                     resource: resource.clone(),
                 }),
-                Handler::Plugin(plugin) => {
-                    Box::new(proxy::ScopedInfoProxy::new((**plugin).clone(), resource.clone())?)
-                },
+                Handler::Plugin(plugin) => Box::new(proxy::ScopedInfoProxy::new(
+                    (**plugin).clone(),
+                    resource.clone(),
+                )?),
             };
             Ok(endpoint)
         },

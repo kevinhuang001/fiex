@@ -134,9 +134,10 @@ fn resolve_preview(
                     id: (*id).into(),
                     resource: resource.clone(),
                 }),
-                Handler::Plugin(plugin) => {
-                    Box::new(proxy::ScopedPreviewProxy::new((**plugin).clone(), resource.clone())?)
-                },
+                Handler::Plugin(plugin) => Box::new(proxy::ScopedPreviewProxy::new(
+                    (**plugin).clone(),
+                    resource.clone(),
+                )?),
             };
             Ok(endpoint)
         },

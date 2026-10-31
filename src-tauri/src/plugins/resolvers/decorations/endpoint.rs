@@ -1,6 +1,6 @@
 //! Unified decoration endpoint for Core-owned decorations and plugin IPC.
-use super::types::DecorationEntry;
 use super::proxy::ScopedDecorationProxy;
+use super::types::DecorationEntry;
 use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::Value;
 use std::collections::HashMap;

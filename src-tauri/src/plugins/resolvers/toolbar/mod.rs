@@ -73,7 +73,10 @@ mod tests {
 
     #[test]
     fn builtin_provider_cannot_be_used_as_plugin_toolbar_owner() {
-        assert!(!belongs_to_default_owner(&Resolver::builtin("core.toolbar", 100), "foo"));
+        assert!(!belongs_to_default_owner(
+            &Resolver::builtin("core.toolbar", 100),
+            "foo"
+        ));
     }
 
     #[test]

@@ -31,11 +31,8 @@ impl ScopedPreview for IpcPreview {
         if self.plugin_id != plugin.id || request.method != "preview.open" {
             return Err("PreviewProvider identity or event mismatch".into());
         }
-        let response = open_plugin_resource(
-            resource,
-            plugin,
-            request.params["providerId"].as_str(),
-        )?;
+        let response =
+            open_plugin_resource(resource, plugin, request.params["providerId"].as_str())?;
         let mut view = response["view"].clone();
         if let Some(object) = view.as_object_mut() {
             for key in [

@@ -95,13 +95,11 @@ pub fn query_with_plugins(
                     directory,
                     entries: &entries,
                 }),
-                Handler::Plugin(plugin) => Box::new(
-                    super::proxy::ScopedDecorationProxy::new(
-                        (**plugin).clone(),
-                        directory,
-                        &resources,
-                    )?,
-                ),
+                Handler::Plugin(plugin) => Box::new(super::proxy::ScopedDecorationProxy::new(
+                    (**plugin).clone(),
+                    directory,
+                    &resources,
+                )?),
             };
             Ok(endpoint)
         },
