@@ -360,6 +360,24 @@ mod tests {
     }
 
     #[test]
+    fn native_vfs_operation_policy_is_owned_by_each_registered_instance() {
+        let recent = view_for(RECENT_URI).unwrap();
+        assert!(recent.require(RECENT_URI, "core:test", FsOperation::List, false).is_ok());
+        assert!(recent.require(RECENT_URI, "core:test", FsOperation::Search, false).is_ok());
+        assert!(recent.require(RECENT_URI, "core:test", FsOperation::Write, true).is_err());
+        assert!(recent.require("recent://missing", "core:test", FsOperation::Read, false).is_err());
+
+        let applications = view_for(APPLICATIONS_URI).unwrap();
+        assert!(applications.require(APPLICATIONS_URI, "core:test", FsOperation::Mkdir, true).is_ok());
+        assert!(applications.require(APPLICATIONS_URI, "core:test", FsOperation::Remove, false).is_err());
+        assert!(applications.require(APPLICATIONS_URI, "core:test", FsOperation::Read, false).is_err());
+
+        let trash = view_for(trash_vfs::URI).unwrap();
+        assert!(trash.require("trash://not-a-valid-node", "core:test", FsOperation::Remove, false).is_err());
+        assert!(trash.require("trash://not-a-valid-node", "core:test", FsOperation::Write, true).is_err());
+    }
+
+    #[test]
     fn recent_reveal_only_accepts_existing_local_files() {
         let directory = tempfile::tempdir().unwrap();
         let file = directory.path().join("recent.txt");
