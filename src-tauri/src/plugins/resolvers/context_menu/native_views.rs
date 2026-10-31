@@ -230,7 +230,12 @@ pub(super) struct NativeAction {
     pub paths: Vec<String>,
 }
 
-pub(super) fn execute(id: &str, item_id: &str, directory: &str, paths: &[String]) -> Result<NativeAction, String> {
+pub(super) fn execute(
+    id: &str,
+    item_id: &str,
+    directory: &str,
+    paths: &[String],
+) -> Result<NativeAction, String> {
     let owner = provider(id, directory, paths)?.owner;
     match (owner, item_id) {
         ("core:recent", "open") => Ok(NativeAction {
