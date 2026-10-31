@@ -34,41 +34,7 @@ pub(crate) async fn plugin_toolbar_invoke(
 #[tauri::command]
 pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        use crate::plugins::events::{EventRouter, Handler};
-        let resource =
-            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&path)?;
-        let metadata = serde_json::to_value(resource.metadata()).map_err(|e| e.to_string())?;
-        let providers = EventRouter::providers("hooks.invoke", &[metadata], "", Vec::new())
-            .into_iter()
-            .filter(|p| {
-                let Handler::Plugin(plugin) = &p.handler else {
-                    return false;
-                };
-                plugin.extensions["hooks"]["event"] == "beforeOpen"
-            })
-            .collect();
-        Ok::<_, String>(EventRouter::resolve(
-            "hooks.invoke",
-            providers,
-            |_, _| Err("no builtin hook".into()),
-            |plugin| {
-                crate::plugins::events::invoke_resources(
-                    plugin,
-                    "hooks.invoke",
-                    serde_json::json!({"event":"beforeOpen"}),
-                    std::slice::from_ref(&resource),
-                    None,
-                )
-            },
-            |_, value| Ok(value),
-            |value| value["handled"] == true,
-            |results| {
-                results
-                    .into_iter()
-                    .find_map(|(_, result)| result.ok().filter(|value| value["handled"] == true))
-                    .unwrap_or_else(|| serde_json::json!({"handled":false}))
-            },
-        ))
+        crate::plugins::resolvers::hooks::before_open(&path)
     })
     .await
     .map_err(|e| e.to_string())?

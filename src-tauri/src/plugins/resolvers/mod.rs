@@ -4,5 +4,6 @@ pub mod context_menu;
 pub mod decorations;
 pub mod fs;
 pub mod info;
+pub mod hooks;
 pub mod preview;
 pub mod search;

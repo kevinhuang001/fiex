@@ -1,15 +1,5 @@
 use super::*;
 
-#[tauri::command]
-pub(crate) async fn plugin_search(
-    request: crate::plugins::resolvers::search::PluginSearchInput,
-) -> Result<Vec<files::Entry>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        Ok(crate::plugins::resolvers::search::query(&request))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
 /// Host-owned native file chooser. Returns only a selected path; plugin
 /// code never gets a handle to the chooser UI or a directory browsing grant.
 #[tauri::command]
