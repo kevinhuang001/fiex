@@ -6,14 +6,16 @@
 use crate::plugins::contracts::PreviewView;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::Value;
-use std::fs;
+use std::{fs, sync::Arc};
+use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 
 mod builtin;
+mod endpoint;
 mod session;
 use crate::plugins::events::{EventRouter, Handler, Resolver};
-use builtin::{builtin_candidates, builtin_view, Builtin};
+use builtin::{builtin_candidates, Builtin};
 pub use session::session_scope;
-use session::{open_plugin_resource, UNSUPPORTED};
+use session::UNSUPPORTED;
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
@@ -119,43 +121,27 @@ fn resolve_preview(
     // The final fallback is a label-only renderer; it never reads/downloads content.
     providers.retain(|p| p.id != "builtin:fallback");
     providers.push(Resolver::builtin("builtin:fallback", i64::MIN));
-    EventRouter::resolve(
+    let resource = Arc::new(resource);
+    let request = ProviderRequest {
+        method: "preview.open".into(),
+        params: serde_json::json!({}),
+    };
+    EventRouter::resolve_endpoint(
         "preview.open",
         providers,
-        |_, id| {
-            let kind = [
-                Builtin::Text,
-                Builtin::Image,
-                Builtin::Media,
-                Builtin::Pdf,
-                Builtin::Fallback,
-            ]
-            .into_iter()
-            .find(|b| b.id() == id)
-            .ok_or("unknown preview builtin")?;
-            let path = if kind == Builtin::Fallback {
-                resource.local.clone()
-            } else {
-                resource.export_path()?
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(endpoint::NativePreviewEndpoint {
+                    id: (*id).into(),
+                    resource: resource.clone(),
+                }),
+                Handler::Plugin(plugin) => Box::new(endpoint::PluginPreviewProxy {
+                    plugin: (**plugin).clone(),
+                    resource: resource.clone(),
+                }),
             };
-            builtin_view(kind, &path, &resource.display)
-        },
-        |plugin| {
-            open_plugin_resource(&resource, plugin).map(|response| {
-                let mut view = response["view"].clone();
-                if let Some(object) = view.as_object_mut() {
-                    for key in [
-                        "sessionId",
-                        "context",
-                        "pluginId",
-                        "contributionId",
-                        "timeoutMs",
-                    ] {
-                        object.insert(key.into(), response[key].clone());
-                    }
-                }
-                view
-            })
+            Ok(endpoint)
         },
         |provider, mut view| {
             if let Some(object) = view.as_object_mut() {
