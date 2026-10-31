@@ -10,7 +10,6 @@ pub(super) struct Context {
     pub entries: Vec<crate::core::files::Entry>,
     pub read_only: bool,
     pub in_trash: bool,
-    virtual_provider: Option<&'static dyn crate::core::volumes::virtual_resolvers::VirtualView>,
     all_local: bool,
     capabilities: FileCapabilities,
 }
@@ -35,23 +34,6 @@ impl Context {
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
         let provider = crate::core::volumes::virtual_resolvers::view_for(directory);
-        // Recent is a projection of original resources and never owns the
-        // menu. Applications selections (including user-store entries and
-        // folders) use the Applications view; its blank canvas keeps the
-        // capability-gated create menu.
-        let virtual_provider = provider.filter(|p| {
-            p.id() != "core:recent" && !(p.id() == "core:applications" && paths.is_empty())
-        });
-        if let Some(owner) = virtual_provider {
-            if owner.id() == "core:trash"
-                && paths.iter().any(|path| {
-                    crate::core::volumes::virtual_resolvers::view_for(path)
-                        .is_none_or(|p| p.id() != owner.id())
-                })
-            {
-                return Err("selection outside VFS".into());
-            }
-        }
         let read_only = if let Some(provider) = provider {
             provider.readonly()
         } else {
@@ -85,7 +67,6 @@ impl Context {
             entries,
             read_only,
             in_trash,
-            virtual_provider,
             all_local,
             capabilities,
         })
@@ -149,7 +130,6 @@ impl Context {
             entries,
             read_only,
             in_trash,
-            virtual_provider: None,
             all_local,
             capabilities,
         }
@@ -158,8 +138,13 @@ impl Context {
 
 /// Only groups this selection can actually use become menu providers.
 pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
-    if ctx.virtual_provider.is_some() {
-        return vec![Resolver::builtin("builtin:vfs-menu", 100)];
+    // Dedicated native contributions use the *same* SDK match rule as plugin
+    // contributions. Their priority is not a URI-based EventRouter shortcut.
+    // Only one Core menu family owns each action set, avoiding duplicate
+    // open/rename rows; independently matched plugin menus still participate.
+    let native = super::native_views::providers(&ctx.paths);
+    if !native.is_empty() {
+        return native;
     }
     ctx.resolvers()
         .into_iter()
@@ -168,11 +153,8 @@ pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
 }
 
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
-    if id == "builtin:vfs-menu" {
-        let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
-        return Ok(crate::core::volumes::virtual_resolvers::menu_json(
-            provider, &ctx.paths,
-        ));
+    if super::native_views::owns(id) {
+        return super::native_views::resolve(id, &ctx.paths);
     }
     let resolver = ctx
         .resolvers()
@@ -192,16 +174,12 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
     }) {
         return Err("menu action is no longer available".into());
     }
-    if id == "builtin:vfs-menu" {
-        let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
-        let action = provider.execute(item_id, &ctx.paths)?;
-        // `path` is the frontend's single-entry handle for actions such as
-        // "open"/"启动应用"; `paths` remains the full selection for batch ones.
-        // Use the selection path, not the provider's transformed result: Recent
-        // maps aliases to sources, but the frontend only knows the alias.
-        return Ok(
-            json!({"kind":"coreAction", "command":action.command, "paths":action.paths, "path":ctx.paths.first().cloned().unwrap_or_default(), "directory":ctx.directory}),
-        );
+    if super::native_views::owns(id) {
+        let action = super::native_views::execute(id, item_id, &ctx.paths)?;
+        return Ok(json!({
+            "kind":"coreAction", "command":action.command, "paths":action.paths,
+            "path":ctx.paths.first().cloned().unwrap_or_default(), "directory":ctx.directory
+        }));
     }
     let paths = if matches!(item_id, "remote.keepLocal" | "remote.keepRemote") {
         ctx.entries

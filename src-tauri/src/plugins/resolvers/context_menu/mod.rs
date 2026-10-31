@@ -3,6 +3,7 @@ mod actions;
 mod builtin;
 mod connection_cache;
 mod file_ops;
+mod native_views;
 pub use actions::execute_remote;
 #[cfg(test)]
 mod tests;
