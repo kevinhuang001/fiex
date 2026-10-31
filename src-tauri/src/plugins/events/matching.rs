@@ -157,6 +157,27 @@ mod tests {
     }
 
     #[test]
+    fn core_assigns_view_and_storage_before_plugin_candidate_matching() {
+        let path = crate::core::volumes::applications::URI;
+        let resource = ResourceSnapshot::from_metadata(
+            path,
+            crate::plugins::contracts::ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        );
+        let metadata = metadata(&[resource]);
+        assert_eq!(metadata[0]["view"]["providerId"], "core:applications");
+        assert_eq!(metadata[0]["storage"]["type"], "vfs");
+        let extensions = json!({"contextMenus":{"match":{
+            "view":{"providerIds":["core:applications"]},
+            "kinds":["directory"]
+        }}});
+        assert!(matches("contextMenu.resolve", &extensions, &metadata, path));
+        assert!(!matches("contextMenu.resolve", &extensions, &metadata, "/tmp"));
+    }
+
+    #[test]
     fn blank_context_menus_require_an_explicit_zero_selection() {
         let directory = "/tmp";
         assert!(!matches(
