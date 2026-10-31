@@ -180,14 +180,13 @@ fn provider_ids(ctx: &super::builtin::Context) -> Vec<String> {
 fn mount_selection(
     path: &str,
     is_dir: bool,
-    read_only: bool,
     capabilities: crate::plugins::resource::file_capabilities::FileCapabilities,
 ) -> super::builtin::Context {
     super::builtin::Context::for_test_caps(
         path.rsplit_once('/').map_or(path, |(parent, _)| parent),
         vec![path.into()],
         vec![mount_entry(path, is_dir)],
-        read_only,
+        false,
         capabilities,
     )
 }
