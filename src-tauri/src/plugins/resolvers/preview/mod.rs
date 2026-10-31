@@ -12,6 +12,7 @@ use std::{fs, sync::Arc};
 mod builtin;
 mod endpoint;
 mod native;
+mod proxy;
 mod session;
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 pub use session::session_scope;
@@ -133,10 +134,9 @@ fn resolve_preview(
                     id: (*id).into(),
                     resource: resource.clone(),
                 }),
-                Handler::Plugin(plugin) => Box::new(endpoint::PluginPreviewProxy {
-                    plugin: (**plugin).clone(),
-                    resource: resource.clone(),
-                }),
+                Handler::Plugin(plugin) => {
+                    Box::new(proxy::ScopedPreviewProxy::new((**plugin).clone(), resource.clone())?)
+                },
             };
             Ok(endpoint)
         },
