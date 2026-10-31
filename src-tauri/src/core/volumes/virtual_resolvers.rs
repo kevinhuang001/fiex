@@ -3,7 +3,7 @@
 //! `virtual_storage`; these views never cross plugin IPC.
 use super::{applications, recycle, trash_vfs};
 use crate::core::files::Entry;
-use crate::plugin_sdk::filesystem::{TransferDirection, TransferPreflight};
+use fiex_provider_contracts::{TransferDirection, TransferPreflight};
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::provider_registry::FsOperation;
 use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
