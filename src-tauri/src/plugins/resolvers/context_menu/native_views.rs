@@ -5,9 +5,7 @@
 use crate::core::files::Entry;
 use crate::core::volumes::{applications, recycle, trash_vfs, virtual_resolvers};
 use crate::plugins::events::Resolver;
-use fiex_provider_contracts::{
-    LocationMatch, ProviderDescriptor, ProviderKind, ProviderMatchRule,
-};
+use fiex_provider_contracts::{LocationMatch, ProviderDescriptor, ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
 use std::sync::OnceLock;
 
@@ -35,8 +33,14 @@ fn descriptors() -> &'static [NativeMenu; 3] {
                     ..Default::default()
                 },
             };
-            descriptor.validate().expect("invalid built-in menu descriptor");
-            NativeMenu { descriptor, id, owner }
+            descriptor
+                .validate()
+                .expect("invalid built-in menu descriptor");
+            NativeMenu {
+                descriptor,
+                id,
+                owner,
+            }
         }
         [
             native("core.recent.menu", "core:recent"),
@@ -116,7 +120,9 @@ pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'
 }
 
 pub(super) fn owns(id: &str) -> bool {
-    descriptors().iter().any(|provider| provider.descriptor.id == id)
+    descriptors()
+        .iter()
+        .any(|provider| provider.descriptor.id == id)
 }
 
 fn item(id: &str, title: String, icon: &str, danger: bool, tail: bool) -> Value {
