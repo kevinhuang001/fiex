@@ -16,18 +16,12 @@ pub(super) struct Context {
 
 impl Context {
     pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
+        // All storage kinds resolve through ResourceBroker's trusted scope,
+        // rather than a second URI-sensitive routing table in ContextMenu.
         fn entry(path: &str) -> Result<crate::core::files::Entry, String> {
-            if crate::core::volumes::virtual_resolvers::opaque(path) {
-                crate::core::volumes::virtual_resolvers::resource_entry(path)
-            } else if let Some(route) = crate::usbfs::route(path) {
-                crate::usbfs::entry(&route)
-            } else if crate::remote::is_remote(path) {
-                crate::remote::stat(path)
-            } else if crate::plugins::mounts::handles(path) {
-                crate::plugins::vfs::stat(path)
-            } else {
-                crate::core::files::entry(std::path::Path::new(path))
-            }
+            crate::core::fs::trusted(path, "core:context-menu")?
+                .desktop_entry()
+                .map_err(String::from)
         }
         let entries = paths
             .iter()
