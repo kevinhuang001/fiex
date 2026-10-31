@@ -208,6 +208,9 @@ mod tests {
             }}),
         );
         assert!(operations(plugin_id, "unregistered").is_none());
+        let mut forged = json!({"mountId":"unregistered","providerId":"only"});
+        assert!(bind(plugin_id, &mut forged).is_err());
+        assert!(forged.get("providerId").is_none());
         assert!(!supports(plugin_id, "unregistered", FsOperation::Read));
         assert!(!supports(plugin_id, "unregistered", FsOperation::Write));
         assert!(!preflight(plugin_id, "unregistered"));
