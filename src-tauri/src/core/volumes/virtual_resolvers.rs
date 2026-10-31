@@ -261,8 +261,8 @@ impl VirtualView for TrashView {
     fn operations(&self, _path: &str) -> Vec<&'static str> {
         // Trash is enumerated and inspected through VFS. Restore and purge
         // are dedicated, session-validated menu actions, never generic remove.
-        // A specific node's allowed_ops determines whether list is possible.
-        vec!["list", "stat"]
+        // A specific node's allowed_ops determines whether list/search is possible.
+        vec!["list", "stat", "search"]
     }
     fn require(&self, path: &str, _owner: &str, op: FsOperation, _create: bool) -> Result<(), String> {
         let entry = self.stat(path)?;
