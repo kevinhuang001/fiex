@@ -89,7 +89,7 @@ impl VirtualView for RecentView {
     fn operations(&self, path: &str) -> Vec<&'static str> {
         if path == RECENT_URI {
             // Recent's root is an enumerable directory, not readable content.
-            vec!["list", "stat"]
+            vec!["list", "stat", "search"]
         } else {
             // An alias is a read-only file; its actual source permissions are
             // further narrowed by Recent's entry_for_alias implementation.
@@ -158,9 +158,9 @@ impl VirtualView for ApplicationView {
     }
     fn operations(&self, path: &str) -> Vec<&'static str> {
         if path == APPLICATIONS_URI {
-            vec!["list", "stat", "write", "mkdir"]
+            vec!["list", "stat", "search", "write", "mkdir"]
         } else if applications::is_user(path) {
-            vec!["list", "stat", "read", "write", "mkdir", "rename", "remove"]
+            vec!["list", "stat", "search", "read", "write", "mkdir", "rename", "remove"]
         } else {
             vec!["stat"]
         }
