@@ -1,5 +1,5 @@
 //! Builtin menu policy. The frontend receives data, never provider closures.
-use super::file_ops::{groups, BuiltinResolver, Selection};
+use super::file_ops::{available, BuiltinResolver, Selection};
 use crate::plugins::events::Resolver;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use serde_json::{json, Value};
@@ -84,11 +84,7 @@ impl Context {
     /// Resolvers whose capability exists for this selection.
     pub(super) fn resolvers(&self) -> Vec<&'static dyn BuiltinResolver> {
         let selection = self.selection();
-        groups()
-            .iter()
-            .copied()
-            .filter(|resolver| resolver.available(&selection, &self.capabilities))
-            .collect()
+        available(&selection, &self.capabilities)
     }
 
     /// Tests build menus without touching the mount registry.
