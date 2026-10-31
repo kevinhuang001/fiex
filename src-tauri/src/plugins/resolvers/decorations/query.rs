@@ -1,8 +1,8 @@
 use super::dynamic::{decode, merge};
 use super::types::{Decoration, DecorationEntry};
+use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::host as plugin_host;
 use serde_json::{json, Value};
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 use std::collections::HashMap;
 
 fn bind_targets(

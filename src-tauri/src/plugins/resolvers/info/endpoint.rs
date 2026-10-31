@@ -3,10 +3,7 @@
 //! accepts its resource identity from plugin-supplied parameters.
 use super::{media::media_sections, metadata::metadata_section};
 use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
-use crate::plugins::{
-    host::PluginInfo,
-    resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use serde_json::{json, Value};
 use std::sync::Arc;
 

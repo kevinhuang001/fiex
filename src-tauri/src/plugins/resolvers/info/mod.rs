@@ -4,9 +4,9 @@
 //! Core builds an `EventContext` after permission projection, invokes the
 //! matching provider, and merges validated sections with native
 //! metadata and media probes.
+use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 pub use crate::plugins::contracts::{InfoRow, InfoSection};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 use std::sync::Arc;
 
 fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
