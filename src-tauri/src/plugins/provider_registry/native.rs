@@ -48,11 +48,20 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
     }
 
     pub fn candidates(&self, mut eligible: impl FnMut(&T) -> bool) -> Vec<Resolver> {
-        self.entries
+        let mut providers = self
+            .entries
             .iter()
             .filter(|(_, (_, instance))| eligible(instance))
             .map(|(id, (descriptor, _))| Resolver::builtin(id, descriptor.priority))
-            .collect()
+            .collect::<Vec<_>>();
+        // BTreeMap orders by ID, whereas EventRouter and the Decoration
+        // collector consume highest-priority providers first.
+        providers.sort_by(|a, b| {
+            b.priority
+                .cmp(&a.priority)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        providers
     }
 
     #[cfg(test)]
