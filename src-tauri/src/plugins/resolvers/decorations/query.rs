@@ -2,6 +2,7 @@ use super::dynamic::{decode, merge};
 use super::types::{Decoration, DecorationEntry};
 use crate::plugins::host as plugin_host;
 use serde_json::{json, Value};
+use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 use std::collections::HashMap;
 
 fn bind_targets(
@@ -74,18 +75,28 @@ pub fn query_with_plugins(
         .into_iter()
         .map(|(m, f)| (m.id.clone(), (m, f)))
         .collect::<HashMap<_, _>>();
-    let result = EventRouter::resolve(
+    let request = ProviderRequest {
+        method: "decorations.resolve".into(),
+        params: json!({}),
+    };
+    let result = EventRouter::resolve_endpoint(
         "decorations.resolve",
         providers,
-        |_, id| super::builtin::resolve_in(id, directory, &entries),
-        |plugin| {
-            crate::plugins::events::invoke_resources(
-                plugin,
-                "decorations.resolve",
-                json!({}),
-                &resources,
-                Some(directory),
-            )
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint + '_> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(super::endpoint::NativeDecorationEndpoint {
+                    id: (*id).into(),
+                    directory,
+                    entries: &entries,
+                }),
+                Handler::Plugin(plugin) => Box::new(super::endpoint::PluginDecorationProxy {
+                    plugin: (**plugin).clone(),
+                    directory,
+                    resources: &resources,
+                }),
+            };
+            Ok(endpoint)
         },
         |provider, response| {
             if matches!(provider.handler, Handler::Builtin(_)) {

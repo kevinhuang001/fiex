@@ -5,6 +5,7 @@
 //! standard `decorations.resolve` method, sanitizes the response and merges
 //! providers by priority.
 mod builtin;
+mod endpoint;
 mod dynamic;
 mod query;
 mod types;
