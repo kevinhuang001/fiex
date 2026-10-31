@@ -2,11 +2,9 @@
 //!
 //! Both transports implement the SDK's ProviderEndpoint. Core owns the menu
 //! session, resource scope and output validation independently of transport.
-use super::builtin;
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use super::{builtin, proxy::ScopedMenuProxy};
 use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
-use std::sync::Arc;
 
 pub(super) struct NativeMenuEndpoint<'a> {
     pub id: String,
@@ -28,60 +26,9 @@ impl ProviderEndpoint for NativeMenuEndpoint<'_> {
     }
 }
 
-pub(super) struct PluginMenuProxy {
-    pub plugin: PluginInfo,
-    pub directory: String,
-    pub resources: Arc<Vec<ResourceSnapshot>>,
-}
-
-impl ProviderEndpoint for PluginMenuProxy {
+impl ProviderEndpoint for ScopedMenuProxy {
     fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        match request.method.as_str() {
-            "contextMenu.resolve" => {
-                let session_id = crate::plugins::mounts::new_id()?;
-                let mut params = request.params.clone();
-                let object = params.as_object_mut().ok_or("invalid menu parameters")?;
-                object.insert("menuSessionId".into(), json!(session_id));
-                object.insert(
-                    "interactionId".into(),
-                    json!(crate::plugins::mounts::new_id()?),
-                );
-                let mut result = crate::plugins::events::invoke_resources(
-                    &self.plugin,
-                    "contextMenu.resolve",
-                    params,
-                    &self.resources,
-                    Some(&self.directory),
-                )?;
-                result["menuSessionId"] = json!(session_id);
-                Ok(result)
-            }
-            "contextMenu.execute" => {
-                let params = request.params.clone();
-                let mut result = crate::plugins::events::call_owner(
-                    "contextMenu.execute",
-                    &self.plugin.id,
-                    params,
-                    &self.resources,
-                    Some(&self.directory),
-                )?;
-                // Only Core handlers can issue filesystem actions directly.
-                if matches!(result["kind"].as_str(), Some("coreAction" | "remoteAction")) {
-                    return Err("plugin returned a reserved action kind".into());
-                }
-                if result["kind"] == "panel" {
-                    let entry = result["entry"]
-                        .as_str()
-                        .ok_or("panel result missing entry")?;
-                    let asset = crate::plugins::host::plugin_view_asset(&self.plugin.id, entry)?;
-                    let object = result.as_object_mut().ok_or("invalid panel result")?;
-                    object.remove("entry");
-                    object.insert("assetPath".into(), json!(asset));
-                }
-                Ok(result)
-            }
-            _ => Err("unsupported ContextMenu event".into()),
-        }
+        self.call(request)
     }
 }
 

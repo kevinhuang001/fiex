@@ -3,6 +3,7 @@ mod actions;
 mod builtin;
 mod connection_cache;
 mod endpoint;
+mod proxy;
 mod file_ops;
 mod native_views;
 pub use actions::execute_remote;
@@ -159,11 +160,11 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
                     id: (*id).into(),
                     context: &ctx,
                 }),
-                Handler::Plugin(plugin) => Box::new(endpoint::PluginMenuProxy {
-                    plugin: (**plugin).clone(),
-                    directory: directory.into(),
-                    resources: resources.clone(),
-                }),
+                Handler::Plugin(plugin) => Box::new(proxy::ScopedMenuProxy::new(
+                    (**plugin).clone(),
+                    directory.into(),
+                    resources.clone(),
+                )?),
             };
             Ok(endpoint)
         },
@@ -278,11 +279,11 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
                     id: (*id).into(),
                     context: &ctx,
                 }),
-                Handler::Plugin(plugin) => Box::new(endpoint::PluginMenuProxy {
-                    plugin: (**plugin).clone(),
-                    directory: session.directory.clone(),
-                    resources: session.resources.clone(),
-                }),
+                Handler::Plugin(plugin) => Box::new(proxy::ScopedMenuProxy::new(
+                    (**plugin).clone(),
+                    session.directory.clone(),
+                    session.resources.clone(),
+                )?),
             };
             Ok(endpoint)
         },
