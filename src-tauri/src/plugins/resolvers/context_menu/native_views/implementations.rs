@@ -23,7 +23,15 @@ impl NativeViewMenuProvider for RecentMenu {
     }
 
     fn claimed_actions(&self) -> &'static [&'static str] {
-        &["open", "reveal", "rename", "trash", "delete", "cut", "duplicate"]
+        &[
+            "open",
+            "reveal",
+            "rename",
+            "trash",
+            "delete",
+            "cut",
+            "duplicate",
+        ]
     }
 
     fn items(&self, path: &str) -> Vec<Value> {
@@ -167,7 +175,13 @@ impl NativeViewMenuProvider for TrashMenu {
 
     fn claimed_actions(&self) -> &'static [&'static str] {
         &[
-            "open", "restore", "delete", "trash", "rename", "cut", "duplicate",
+            "open",
+            "restore",
+            "delete",
+            "trash",
+            "rename",
+            "cut",
+            "duplicate",
         ]
     }
 
