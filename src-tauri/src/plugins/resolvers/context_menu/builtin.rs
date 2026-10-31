@@ -138,7 +138,7 @@ impl Context {
 
 /// Only groups this selection can actually use become menu providers.
 fn retain_unclaimed(ctx: &Context, items: Vec<Value>) -> Vec<Value> {
-    let claimed = super::native_views::claimed_actions(&ctx.paths);
+    let claimed = super::native_views::claimed_actions(&ctx.directory, &ctx.paths);
     items
         .into_iter()
         .filter(|item| !claimed.iter().any(|id| item["id"].as_str() == Some(*id)))
@@ -149,7 +149,7 @@ fn retain_unclaimed(ctx: &Context, items: Vec<Value>) -> Vec<Value> {
 /// A native view claims only its OS-specific action identifiers, not the
 /// entire menu. Generic providers still contribute independent actions.
 pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
-    let mut candidates = super::native_views::providers(&ctx.paths);
+    let mut candidates = super::native_views::providers(&ctx.directory, &ctx.paths);
     let selection = ctx.selection();
     candidates.extend(
         ctx.resolvers()
@@ -164,7 +164,7 @@ pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
 
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
     if super::native_views::owns(id) {
-        return super::native_views::resolve(id, &ctx.paths);
+        return super::native_views::resolve(id, &ctx.directory, &ctx.paths);
     }
     let resolver = ctx
         .resolvers()
@@ -188,7 +188,7 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
         return Err("menu action is no longer available".into());
     }
     if super::native_views::owns(id) {
-        let action = super::native_views::execute(id, item_id, &ctx.paths)?;
+        let action = super::native_views::execute(id, item_id, &ctx.directory, &ctx.paths)?;
         return Ok(json!({
             "kind":"coreAction", "command":action.command, "paths":action.paths,
             "path":ctx.paths.first().cloned().unwrap_or_default(), "directory":ctx.directory
