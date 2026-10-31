@@ -30,18 +30,14 @@ impl ProviderEndpoint for PluginHook<'_> {
 pub fn before_open(path: &str) -> Result<Value, String> {
     let resource = ResourceSnapshot::resolve(path)?;
     let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(&resource));
-    let providers = crate::plugins::provider_registry::candidates(
-        "hooks.invoke",
-        &metadata,
-        "",
-        Vec::new(),
-    )
-    .into_iter()
-    .filter(|provider| {
-        matches!(&provider.handler, Handler::Plugin(plugin)
+    let providers =
+        crate::plugins::provider_registry::candidates("hooks.invoke", &metadata, "", Vec::new())
+            .into_iter()
+            .filter(|provider| {
+                matches!(&provider.handler, Handler::Plugin(plugin)
             if plugin.extensions["hooks"]["event"] == "beforeOpen")
-    })
-    .collect();
+            })
+            .collect();
     let call = ProviderRequest {
         method: "hooks.invoke".into(),
         params: json!({"event":"beforeOpen"}),
