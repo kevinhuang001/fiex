@@ -47,6 +47,10 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         self.entries.get(id).map(|(_, instance)| instance.as_ref())
     }
 
+    pub fn descriptor(&self, id: &str) -> Option<&ProviderDescriptor> {
+        self.entries.get(id).map(|(descriptor, _)| descriptor)
+    }
+
     pub fn candidates(&self, mut eligible: impl FnMut(&T) -> bool) -> Vec<Resolver> {
         let mut providers = self
             .entries
