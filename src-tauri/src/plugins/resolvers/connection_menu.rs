@@ -148,7 +148,7 @@ fn valid_items(value: &Value) -> Result<Vec<Value>, String> {
 pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
     let ctx = Context::load(connection_id)?;
     let session = crate::plugins::mounts::new_id()?;
-    let providers = EventRouter::providers("connectionContextMenu.resolve", &[], "", providers());
+    let providers = crate::plugins::provider_registry::candidates("connectionContextMenu.resolve", &[], "", providers());
     let mut menus = Vec::new();
     for provider in providers {
         let result = match &provider.handler {

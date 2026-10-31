@@ -3,17 +3,6 @@ use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 
 pub struct EventRouter;
 impl EventRouter {
-    /// One candidate registry for every feature, including builtins and
-    /// IPC plugins. Matching is independent of execution transport.
-    pub fn providers(
-        method: &str,
-        metadata: &[Value],
-        directory: &str,
-        native: Vec<Resolver>,
-    ) -> Vec<Resolver> {
-        crate::plugins::provider_registry::candidates(method, metadata, directory, native)
-    }
-
     /// Core native providers and SDK-backed IPC proxies expose
     /// the same transport-neutral endpoint, with one validation/merge policy.
     /// An endpoint factory only chooses the registered implementation; it does

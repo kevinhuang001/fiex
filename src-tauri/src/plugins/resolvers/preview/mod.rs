@@ -23,7 +23,7 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
         .into_iter()
         .map(|b| Resolver::builtin(b.id(), b.priority()))
         .collect();
-    EventRouter::providers(
+    crate::plugins::provider_registry::candidates(
         "preview.open",
         &[
             serde_json::json!({"extension":ext,"mime":mime,"kind":if is_dir{"directory"}else{"file"}}),
@@ -43,7 +43,7 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
         .filter(|kind| readable || *kind == Builtin::Fallback)
         .map(|kind| Resolver::builtin(kind.id(), kind.priority()))
         .collect();
-    let mut providers = EventRouter::providers("preview.open", &metadata, "", builtin);
+    let mut providers = crate::plugins::provider_registry::candidates("preview.open", &metadata, "", builtin);
     // A provider that declares a preview byte ceiling must not be selected for
     // a file above it. This is also the cheapest way to avoid opening a huge
     // archive/Office document only to fail inside the plugin.

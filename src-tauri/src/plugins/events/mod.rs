@@ -44,7 +44,7 @@ fn require_event(method: &str) -> Result<(), String> {
 
 /// Recheck a stored menu session using its actual targets, never empty placeholders.
 pub fn menu_allowed(plugin_id: &str, resources: &[ResourceSnapshot], directory: &str) -> bool {
-    EventRouter::providers(
+    crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
         &matching::metadata(resources),
         directory,
@@ -62,7 +62,7 @@ pub fn call_owner(
     directory: Option<&str>,
 ) -> Result<Value, String> {
     let metadata = matching::metadata(resources);
-    let providers = EventRouter::providers(method, &metadata, directory.unwrap_or(""), Vec::new())
+    let providers = crate::plugins::provider_registry::candidates(method, &metadata, directory.unwrap_or(""), Vec::new())
         .into_iter()
         .filter(|p| matches!(&p.handler,Handler::Plugin(plugin) if plugin.id==plugin_id))
         .collect();

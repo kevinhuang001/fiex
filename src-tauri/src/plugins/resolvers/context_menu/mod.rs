@@ -127,7 +127,7 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
             .collect::<Vec<_>>(),
     );
     let metadata = crate::plugins::events::resource_metadata(&resources);
-    let mut providers = EventRouter::providers(
+    let mut providers = crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
         &metadata,
         directory,
