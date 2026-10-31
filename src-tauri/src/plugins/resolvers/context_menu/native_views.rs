@@ -4,45 +4,53 @@
 //! generic EventRouter. Plugins never gain Core action ownership.
 use crate::core::files::Entry;
 use crate::core::volumes::{applications, recycle, trash_vfs, virtual_resolvers};
-use crate::plugin_sdk::provider_matching::{LocationMatch, ProviderMatchRule};
 use crate::plugins::events::Resolver;
+use fiex_provider_contracts::{
+    LocationMatch, ProviderDescriptor, ProviderKind, ProviderMatchRule,
+};
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 
-struct Descriptor {
+/// Core-native menus have the same validated descriptor and matcher used for
+/// IPC providers. Only the implementation behind the descriptor is native.
+struct NativeMenu {
+    descriptor: ProviderDescriptor,
     id: &'static str,
     owner: &'static str,
-    priority: i64,
 }
 
-const PROVIDERS: [Descriptor; 3] = [
-    Descriptor {
-        id: "core.recent.menu",
-        owner: "core:recent",
-        priority: 100,
-    },
-    Descriptor {
-        id: "core.applications.menu",
-        owner: "core:applications",
-        priority: 100,
-    },
-    Descriptor {
-        id: "core.trash.menu",
-        owner: "core:trash",
-        priority: 100,
-    },
-];
+fn descriptors() -> &'static [NativeMenu; 3] {
+    static REGISTERED: OnceLock<[NativeMenu; 3]> = OnceLock::new();
+    REGISTERED.get_or_init(|| {
+        fn native(id: &'static str, owner: &'static str) -> NativeMenu {
+            let descriptor = ProviderDescriptor {
+                id: id.into(),
+                kind: ProviderKind::ContextMenu,
+                priority: 100,
+                r#match: ProviderMatchRule {
+                    view: Some(LocationMatch {
+                        provider_ids: Some(vec![owner.into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            };
+            descriptor.validate().expect("invalid built-in menu descriptor");
+            NativeMenu { descriptor, id, owner }
+        }
+        [
+            native("core.recent.menu", "core:recent"),
+            native("core.applications.menu", "core:applications"),
+            native("core.trash.menu", "core:trash"),
+        ]
+    })
+}
 
-fn eligible(provider: &Descriptor, directory: &str, paths: &[String]) -> bool {
+fn eligible(provider: &NativeMenu, directory: &str, paths: &[String]) -> bool {
     if paths.is_empty() {
         return false;
     }
-    let rule = ProviderMatchRule {
-        view: Some(LocationMatch {
-            provider_ids: Some(vec![provider.owner.into()]),
-            ..Default::default()
-        }),
-        ..Default::default()
-    };
+    let rule = &provider.descriptor.r#match;
     // A selected item never changes the owner of its containing view.
     // Validate the directory independently, then every selected item.
     let (directory_view, _) = crate::plugins::match_rules::locations_for(directory);
@@ -61,18 +69,18 @@ fn eligible(provider: &Descriptor, directory: &str, paths: &[String]) -> bool {
     rule.matches_targets(&targets, paths.len())
 }
 
-fn provider(id: &str, directory: &str, paths: &[String]) -> Result<&'static Descriptor, String> {
-    PROVIDERS
+fn provider(id: &str, directory: &str, paths: &[String]) -> Result<&'static NativeMenu, String> {
+    descriptors()
         .iter()
-        .find(|candidate| candidate.id == id && eligible(candidate, directory, paths))
+        .find(|candidate| candidate.descriptor.id == id && eligible(candidate, directory, paths))
         .ok_or_else(|| "native menu provider does not match selection".into())
 }
 
 pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
-    PROVIDERS
+    descriptors()
         .iter()
         .filter(|candidate| eligible(candidate, directory, paths))
-        .map(|candidate| Resolver::builtin(candidate.id, candidate.priority))
+        .map(|candidate| Resolver::builtin(candidate.id, candidate.descriptor.priority))
         .collect()
 }
 
@@ -80,7 +88,7 @@ pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
 /// generic Info, Preview, Copy Path and valid clipboard contributions remain
 /// eligible; this is not an EventRouter early return for builtin views.
 pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'static str] {
-    let owner = PROVIDERS
+    let owner = descriptors()
         .iter()
         .find(|candidate| eligible(candidate, directory, paths));
     match owner.map(|candidate| candidate.owner) {
@@ -108,7 +116,7 @@ pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'
 }
 
 pub(super) fn owns(id: &str) -> bool {
-    PROVIDERS.iter().any(|provider| provider.id == id)
+    descriptors().iter().any(|provider| provider.descriptor.id == id)
 }
 
 fn item(id: &str, title: String, icon: &str, danger: bool, tail: bool) -> Value {
