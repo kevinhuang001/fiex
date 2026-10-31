@@ -1,7 +1,6 @@
 //! Core event pipeline: discover → dispatch → validate → collect.
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::{json, Value};
-mod contract;
 pub(crate) mod matching;
 pub use matching::metadata as resource_metadata;
 mod directory_scope;
@@ -10,7 +9,7 @@ mod registry;
 mod router;
 mod scope;
 mod validation;
-use contract::{event, Dispatch};
+use fiex_provider_contracts::{event, Dispatch};
 pub use registry::{Handler, Resolver};
 pub use router::EventRouter;
 #[cfg(test)]
@@ -93,7 +92,7 @@ pub fn call_owner(
         }
     })
     .collect();
-    let request = crate::plugin_sdk::provider_contracts::ProviderRequest {
+    let request = fiex_provider_contracts::ProviderRequest {
         method: method.into(),
         params,
     };
@@ -107,7 +106,7 @@ pub fn call_owner(
                 resources,
                 directory,
             })
-                as Box<dyn crate::plugin_sdk::provider_contracts::ProviderEndpoint + '_>),
+                as Box<dyn fiex_provider_contracts::ProviderEndpoint + '_>),
             Handler::Builtin(_) => Err("native owner is not registered".into()),
         },
         |_, value| Ok(value),
