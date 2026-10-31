@@ -11,6 +11,15 @@ const PAGE_LIMIT: usize = 500;
 const MAX_PAGES: usize = 1000;
 const MAX_ENTRIES: usize = 100_000;
 
+/// SDK FsListing omits a false truncation flag. Reject malformed true/false values.
+fn truncated_flag(page: &Value) -> Result<bool, String> {
+    match page.get("truncated") {
+        None => Ok(false),
+        Some(Value::Bool(value)) => Ok(*value),
+        _ => Err("invalid VFS truncated flag".into()),
+    }
+}
+
 /// Where a mount's plugin identity comes from.
 #[derive(Clone, Debug)]
 pub enum Source {
@@ -50,6 +59,7 @@ impl Mount {
         let mut cursor: Option<String> = None;
         let mut entries = Vec::new();
         let mut warnings = Vec::new();
+        let mut truncated = false;
         let mut cursors = std::collections::HashSet::new();
         for _ in 0..MAX_PAGES {
             let page = self.invoke(
@@ -69,6 +79,7 @@ impl Mount {
             if items.len() > PAGE_LIMIT {
                 return Err("provider exceeded the page limit".into());
             }
+            truncated |= truncated_flag(&page)?;
             for item in items {
                 entries.push(FsEntry::parse(item.clone())?);
                 if entries.len() > MAX_ENTRIES {
@@ -87,7 +98,7 @@ impl Mount {
                     return Ok(FsListing {
                         entries,
                         warnings,
-                        truncated: false,
+                        truncated,
                     })
                 }
                 Some(next) if !cursors.insert(next.clone()) => {
@@ -174,7 +185,7 @@ impl Mount {
             }
             let next = page["nextCursor"].as_str().map(str::to_owned);
             match next {
-                None => return Ok(page["truncated"].as_bool().unwrap_or(false)),
+                None => return truncated_flag(&page),
                 Some(next) if !seen.insert(next.clone()) => {
                     return Err("search pagination cursor did not advance".into())
                 }
