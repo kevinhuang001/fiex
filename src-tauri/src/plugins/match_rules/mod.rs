@@ -79,7 +79,7 @@ impl MatchRules {
             .then(|| location::directory_metadata(directory))
             .flatten();
         let targets: &[Value] = if metadata.is_empty() {
-            blank.as_ref().map(std::slice::from_ref).unwrap_or(&[])
+            blank.as_slice()
         } else {
             metadata
         };
