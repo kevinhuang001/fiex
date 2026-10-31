@@ -2,7 +2,7 @@
 use super::{event, ResourceSnapshot};
 use serde_json::{json, Value};
 
-pub(super) fn matches(
+pub(crate) fn matches(
     method: &str,
     extensions: &Value,
     metadata: &[Value],
