@@ -200,3 +200,19 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
         "command":item_id,"paths":paths,"path":ctx.paths.first().cloned().unwrap_or_default(),"directory":ctx.directory}),
     )
 }
+
+#[cfg(test)]
+mod location_tests {
+    use super::*;
+
+    #[test]
+    fn host_only_actions_require_trusted_direct_local_storage() {
+        assert!(plain_local("/tmp/example"));
+        assert!(!plain_local("recent://"));
+        assert!(!plain_local("applications://"));
+        assert!(!plain_local("fiex://mount/unregistered/a.txt"));
+        assert!(!plain_local("unregistered://somewhere"));
+        assert!(trash_view("recyclebin://"));
+        assert!(!trash_view("/tmp/example"));
+    }
+}
