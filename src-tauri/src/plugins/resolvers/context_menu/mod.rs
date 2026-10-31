@@ -3,9 +3,9 @@ mod actions;
 mod builtin;
 mod connection_cache;
 mod endpoint;
-mod proxy;
 mod file_ops;
 mod native_views;
+mod proxy;
 pub use actions::execute_remote;
 #[cfg(test)]
 mod tests;
