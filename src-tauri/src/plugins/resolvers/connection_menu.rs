@@ -4,7 +4,7 @@
 //! own the shell actions (edit, session, sync, close); plugins declaring
 //! `extensions.connectionContextMenus` add their own flat action list.
 
-use crate::plugin_sdk::provider_contracts::ProviderRequest;
+use fiex_provider_contracts::ProviderRequest;
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 mod endpoint;
 mod validation;
