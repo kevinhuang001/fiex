@@ -3,6 +3,8 @@
 //! `virtual_storage`; these views never cross plugin IPC.
 use super::{applications, recycle, trash_vfs};
 use crate::core::files::Entry;
+use crate::plugins::provider_registry::FsOperation;
+use crate::plugin_sdk::filesystem::{TransferDirection, TransferPreflight};
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use std::sync::{Arc, OnceLock};
@@ -26,6 +28,11 @@ pub trait VirtualView: Send + Sync {
     /// Explicit storage-operation ceiling. Presentation and dispatch must not
     /// infer write support from an adapter name or from readonly=false.
     fn operations(&self, path: &str) -> Vec<&'static str>;
+    /// Enforce the current native instance's policy at invocation time.
+    /// ResourceBroker has already authorized the scope; no generic adapter
+    /// may identify a builtin view by its URI or provider ID.
+    fn require(&self, path: &str, owner: &str, op: FsOperation, create: bool) -> Result<(), String>;
+    fn preflight(&self, path: &str, request: &TransferPreflight) -> Result<(), String>;
     fn icon(&self, path: &str) -> Option<String>;
     fn default_view(&self) -> Option<&'static str> {
         None
@@ -89,6 +96,30 @@ impl VirtualView for RecentView {
             vec!["stat", "read"]
         }
     }
+    fn require(&self, path: &str, owner: &str, op: FsOperation, _create: bool) -> Result<(), String> {
+        if path == RECENT_URI {
+            return if matches!(op, FsOperation::List | FsOperation::Stat | FsOperation::Search) {
+                Ok(())
+            } else {
+                Err("Unsupported: Recent root is read-only".into())
+            };
+        }
+        let source = crate::core::recent::source_for(path)?;
+        match op {
+            FsOperation::Stat => Ok(()),
+            FsOperation::Read => crate::core::fs::trusted(&source, owner)
+                .map_err(|error| error.to_string())?
+                .require(FsOperation::Read, false)
+                .map_err(|error| error.to_string()),
+            _ => Err("PermissionDenied: Recent is a read-only view".into()),
+        }
+    }
+    fn preflight(&self, _path: &str, request: &TransferPreflight) -> Result<(), String> {
+        if matches!(request.direction, TransferDirection::Import) {
+            return Err("PermissionDenied: Recent does not accept imports".into());
+        }
+        Ok(())
+    }
     fn icon(&self, _path: &str) -> Option<String> {
         None
     }
@@ -134,6 +165,62 @@ impl VirtualView for ApplicationView {
             vec!["stat"]
         }
     }
+    fn require(&self, path: &str, _owner: &str, op: FsOperation, create: bool) -> Result<(), String> {
+        if path == APPLICATIONS_URI {
+            return if matches!(
+                op,
+                FsOperation::Stat | FsOperation::List | FsOperation::Mkdir | FsOperation::Search
+            ) {
+                Ok(())
+            } else {
+                Err("Unsupported: applications root has no file stream".into())
+            };
+        }
+        if !applications::is_user(path) {
+            return if op == FsOperation::Stat {
+                Ok(())
+            } else {
+                Err("Unsupported: system application is launch-only".into())
+            };
+        }
+        let file = applications::candidate_path(path)?;
+        let exists = file.exists();
+        let directory = file.is_dir();
+        if create {
+            if !matches!(op, FsOperation::Write | FsOperation::Mkdir) {
+                return Err("Unsupported: invalid application create operation".into());
+            }
+            let parent = file.parent().ok_or("missing application parent")?;
+            return if parent.is_dir() && !exists {
+                Ok(())
+            } else {
+                Err("Conflict: application destination is unavailable".into())
+            };
+        }
+        if !exists {
+            return Err("NotFound: application item missing".into());
+        }
+        let allowed = match op {
+            FsOperation::Stat => true,
+            FsOperation::List | FsOperation::Search | FsOperation::Mkdir => directory,
+            FsOperation::Read | FsOperation::Write => !directory,
+            FsOperation::Rename | FsOperation::Remove => true,
+        };
+        if allowed { Ok(()) } else { Err(format!("Unsupported: {}", op.as_str())) }
+    }
+    fn preflight(&self, _path: &str, request: &TransferPreflight) -> Result<(), String> {
+        match request.direction {
+            TransferDirection::Export if request.metadata.system && !request.same_mount => Err(
+                "PermissionDenied: system applications cannot leave the Applications view".into(),
+            ),
+            TransferDirection::Import
+                if !request.same_mount && request.metadata.executable_shortcut != Some(true) =>
+            {
+                Err("PermissionDenied: Applications accepts only executable shortcuts".into())
+            }
+            _ => Ok(()),
+        }
+    }
     fn default_view(&self) -> Option<&'static str> {
         Some("icons")
     }
@@ -176,6 +263,20 @@ impl VirtualView for TrashView {
         // are dedicated, session-validated menu actions, never generic remove.
         // A specific node's allowed_ops determines whether list is possible.
         vec!["list", "stat"]
+    }
+    fn require(&self, path: &str, _owner: &str, op: FsOperation, _create: bool) -> Result<(), String> {
+        let entry = self.stat(path)?;
+        if op == FsOperation::Stat
+            || (matches!(op, FsOperation::List | FsOperation::Search)
+                && entry.is_dir && !entry.is_symlink)
+        {
+            Ok(())
+        } else {
+            Err("PermissionDenied: Trash requires a dedicated Core action".into())
+        }
+    }
+    fn preflight(&self, _path: &str, _request: &TransferPreflight) -> Result<(), String> {
+        Err("PermissionDenied: Trash requires dedicated restore/delete actions".into())
     }
     fn icon(&self, _path: &str) -> Option<String> {
         None
