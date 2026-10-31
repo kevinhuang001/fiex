@@ -2,6 +2,7 @@
 mod actions;
 mod builtin;
 mod connection_cache;
+mod endpoint;
 mod file_ops;
 mod native_views;
 pub use actions::execute_remote;
@@ -9,6 +10,7 @@ pub use actions::execute_remote;
 mod tests;
 mod validation;
 
+use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::{json, Value};
@@ -140,21 +142,27 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
     if scope == MenuScope::Core {
         providers.retain(|provider| matches!(&provider.handler, Handler::Builtin(_)));
     }
-    Ok(EventRouter::resolve(
+    let request = ProviderRequest {
+        method: "contextMenu.resolve".into(),
+        params: json!({}),
+    };
+    Ok(EventRouter::resolve_endpoint(
         "contextMenu.resolve",
         providers,
-        |_, id| builtin::resolve(id, &ctx),
-        |plugin| {
-            let session_id = crate::plugins::mounts::new_id()?;
-            let mut result = crate::plugins::events::invoke_resources(
-                plugin,
-                "contextMenu.resolve",
-                json!({"menuSessionId":session_id,"interactionId":crate::plugins::mounts::new_id()?}),
-                &resources,
-                Some(directory),
-            )?;
-            result["menuSessionId"] = json!(session_id);
-            Ok(result)
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint + '_> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(endpoint::NativeMenuEndpoint {
+                    id: (*id).into(),
+                    context: &ctx,
+                }),
+                Handler::Plugin(plugin) => Box::new(endpoint::PluginMenuProxy {
+                    plugin: (**plugin).clone(),
+                    directory: directory.into(),
+                    resources: resources.clone(),
+                }),
+            };
+            Ok(endpoint)
         },
         |provider, result| register(provider, &ctx, &resources, result),
         |_| true,
@@ -172,6 +180,7 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
         },
     ))
 }
+
 pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
     let (plugin_id, directory, resources, depth) = {
         let registry = sessions().lock().map_err(|_| "menu registry unavailable")?;
@@ -237,38 +246,32 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
     {
         return Err("menu session expired or item was not offered".into());
     }
-    EventRouter::resolve(
+    let ctx = builtin::Context::load(&session.directory, &session.paths)?;
+    let request = ProviderRequest {
+        method: "contextMenu.execute".into(),
+        params: json!({
+            "menuSessionId": session_id,
+            "itemId": item_id,
+            "interactionId": crate::plugins::mounts::new_id()?,
+        }),
+    };
+    EventRouter::resolve_endpoint(
         "contextMenu.execute",
         vec![session.provider.clone()],
-        |_, id| {
-            builtin::execute(
-                id,
-                item_id,
-                &builtin::Context::load(&session.directory, &session.paths)?,
-            )
-        },
-        |plugin| {
-            let params = json!({"menuSessionId":session_id,"itemId":item_id,"interactionId":crate::plugins::mounts::new_id()?});
-            let mut result = crate::plugins::events::call_owner(
-                "contextMenu.execute",
-                &plugin.id,
-                params,
-                &session.resources,
-                Some(&session.directory),
-            )?;
-            if matches!(result["kind"].as_str(), Some("coreAction" | "remoteAction")) {
-                return Err("plugin returned a reserved action kind".into());
-            }
-            if result["kind"] == "panel" {
-                let entry = result["entry"]
-                    .as_str()
-                    .ok_or("panel result missing entry")?;
-                let asset = crate::plugins::host::plugin_view_asset(&plugin.id, entry)?;
-                let object = result.as_object_mut().ok_or("invalid panel result")?;
-                object.remove("entry");
-                object.insert("assetPath".into(), json!(asset));
-            }
-            Ok(result)
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint + '_> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(endpoint::NativeMenuEndpoint {
+                    id: (*id).into(),
+                    context: &ctx,
+                }),
+                Handler::Plugin(plugin) => Box::new(endpoint::PluginMenuProxy {
+                    plugin: (**plugin).clone(),
+                    directory: session.directory.clone(),
+                    resources: session.resources.clone(),
+                }),
+            };
+            Ok(endpoint)
         },
         |_, result| Ok(result),
         |_| true,
