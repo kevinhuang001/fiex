@@ -1,8 +1,8 @@
 //! Native and plugin Info implementations share the SDK endpoint contract.
 //! The plugin proxy retains the Core-owned resource snapshot and never
 //! accepts its resource identity from plugin-supplied parameters.
-use super::native;
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use super::{native, proxy::ScopedInfoProxy};
+use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -23,23 +23,9 @@ impl ProviderEndpoint for NativeInfoEndpoint {
     }
 }
 
-pub(super) struct PluginInfoProxy {
-    pub plugin: PluginInfo,
-    pub resource: Arc<ResourceSnapshot>,
-}
-
-impl ProviderEndpoint for PluginInfoProxy {
+impl ProviderEndpoint for ScopedInfoProxy {
     fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        if request.method != "info.resolve" {
-            return Err("unregistered Info event".into());
-        }
-        crate::plugins::events::invoke_resources(
-            &self.plugin,
-            request.method.as_str(),
-            request.params.clone(),
-            std::slice::from_ref(self.resource.as_ref()),
-            None,
-        )
+        self.resolve(request)
     }
 }
 
