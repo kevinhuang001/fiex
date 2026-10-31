@@ -2,7 +2,7 @@
 //! The plugin proxy retains the Core-owned resource snapshot and never
 //! accepts its resource identity from plugin-supplied parameters.
 use super::native;
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use serde_json::{json, Value};
 use std::sync::Arc;
