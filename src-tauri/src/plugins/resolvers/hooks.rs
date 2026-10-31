@@ -53,7 +53,7 @@ pub fn before_open(path: &str) -> Result<Value, String> {
             }) as Box<dyn ProviderEndpoint + '_>),
             Handler::Builtin(_) => Err("unregistered native HookProvider".into()),
         },
-        |_, value| Ok(value),
+        |_, value| validate_hook_reply(value),
         |value| value["handled"] == true,
         |results| {
             results
@@ -62,4 +62,31 @@ pub fn before_open(path: &str) -> Result<Value, String> {
                 .unwrap_or_else(|| json!({"handled":false}))
         },
     ))
+}
+
+/// A hook can stop the FirstSupported chain only with a well-formed reply.
+/// Invalid plugin replies must not silently masquerade as "not handled".
+fn validate_hook_reply(value: Value) -> Result<Value, String> {
+    if value.get("handled").and_then(Value::as_bool).is_none() {
+        return Err("invalid hook reply: handled must be a boolean".into());
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_untyped_hook_results() {
+        assert!(validate_hook_reply(json!({})).is_err());
+        assert!(validate_hook_reply(json!({"handled":"true"})).is_err());
+        assert!(validate_hook_reply(json!(null)).is_err());
+    }
+
+    #[test]
+    fn accepts_explicit_handled_states() {
+        assert_eq!(validate_hook_reply(json!({"handled":true})).unwrap()["handled"], true);
+        assert_eq!(validate_hook_reply(json!({"handled":false})).unwrap()["handled"], false);
+    }
 }
