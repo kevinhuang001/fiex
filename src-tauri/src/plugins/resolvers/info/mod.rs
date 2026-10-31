@@ -20,18 +20,14 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
 mod endpoint;
 mod media;
 mod metadata;
+mod native;
 pub use media::media_sections;
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
-    use crate::plugins::events::{EventRouter, Handler, Resolver};
+    use crate::plugins::events::{EventRouter, Handler};
     let metadata =
         crate::plugins::events::resource_metadata(std::slice::from_ref(&resource)).remove(0);
-    let mut builtin = vec![Resolver::builtin("core.metadata", 1000)];
-    if !resource.is_dir
-        && (resource.mime.starts_with("audio/") || resource.mime.starts_with("video/"))
-    {
-        builtin.push(Resolver::builtin("core.media", 100));
-    }
+    let builtin = native::candidates(&resource);
     let providers =
         crate::plugins::provider_registry::candidates("info.resolve", &[metadata], "", builtin);
     let resource = Arc::new(resource);
