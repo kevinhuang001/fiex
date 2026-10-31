@@ -82,7 +82,13 @@ fn bound_plugin_request(
     fields.remove("providerId");
     let prefix = format!("plugin:{plugin_id}:");
     if let Some(id) = registered_id.strip_prefix(&prefix) {
+        if id.is_empty() {
+            return Err("empty registered provider instance ID".into());
+        }
         fields.insert("providerId".into(), serde_json::json!(id));
+    } else if registered_id != format!("plugin:{plugin_id}") {
+        // Never execute an endpoint with an identity from a different plugin.
+        return Err("provider instance does not belong to selected plugin".into());
     }
     Ok(routed)
 }
@@ -109,6 +115,8 @@ mod instance_tests {
             bound_plugin_request(&forged, "org.example.viewer", "plugin:org.example.viewer")
                 .unwrap();
         assert!(single.params.get("providerId").is_none());
+        assert!(bound_plugin_request(&forged, "org.example.viewer", "plugin:another.plugin:media").is_err());
+        assert!(bound_plugin_request(&forged, "org.example.viewer", "plugin:org.example.viewer:").is_err());
         assert!(bound_plugin_request(
             &ProviderRequest {
                 method: "info.resolve".into(),
