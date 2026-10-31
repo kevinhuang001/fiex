@@ -16,6 +16,7 @@ pub fn entry(path: &str) -> Result<Entry, String> {
             path: path.into(),
             name: view.id().into(),
             is_dir: true,
+            readonly: view.readonly(),
             allowed_ops: view
                 .operations(path)
                 .into_iter()
