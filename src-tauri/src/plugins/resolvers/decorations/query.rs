@@ -1,6 +1,6 @@
 use super::dynamic::{decode, merge};
 use super::types::{Decoration, DecorationEntry};
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::host as plugin_host;
 use serde_json::{json, Value};
 use std::collections::HashMap;
