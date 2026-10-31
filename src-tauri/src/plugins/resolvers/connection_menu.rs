@@ -8,9 +8,9 @@ use crate::plugins::events::{EventRouter, Handler};
 mod endpoint;
 mod native;
 mod validation;
-use native::{items as builtin_items, providers};
 use crate::remote::ConnectionInfo;
 use fiex_provider_contracts::ProviderRequest;
+use native::{items as builtin_items, providers};
 use serde_json::{json, Value};
 use validation::valid_items;
 
