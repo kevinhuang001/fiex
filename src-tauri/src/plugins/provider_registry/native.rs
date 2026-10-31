@@ -56,11 +56,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
             .collect::<Vec<_>>();
         // BTreeMap orders by ID, whereas EventRouter and the Decoration
         // collector consume highest-priority providers first.
-        providers.sort_by(|a, b| {
-            b.priority
-                .cmp(&a.priority)
-                .then_with(|| a.id.cmp(&b.id))
-        });
+        providers.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
         providers
     }
 
