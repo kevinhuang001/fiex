@@ -10,7 +10,7 @@ pub use actions::execute_remote;
 mod tests;
 mod validation;
 
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::{json, Value};
