@@ -52,3 +52,22 @@ fn mixed_app_selections_have_only_shared_actions() {
     assert_eq!(value["items"].as_array().unwrap().len(), 1);
     assert_eq!(value["items"][0]["id"], "open");
 }
+
+#[test]
+fn native_view_menus_use_validated_shared_descriptors() {
+    let providers = descriptors();
+    assert_eq!(providers.len(), 3);
+    for candidate in providers {
+        assert_eq!(candidate.descriptor.kind, ProviderKind::ContextMenu);
+        assert_eq!(candidate.descriptor.id, candidate.id);
+        candidate.descriptor.validate().unwrap();
+        let matching = json!({
+            "view": {"type":"vfs","providerId":candidate.owner,"mountId":candidate.owner}
+        });
+        assert!(candidate.descriptor.r#match.matches_targets(&[matching], 1));
+        let foreign = json!({
+            "view": {"type":"fs","providerId":"core:local-fs","mountId":"local"}
+        });
+        assert!(!candidate.descriptor.r#match.matches_targets(&[foreign], 1));
+    }
+}
