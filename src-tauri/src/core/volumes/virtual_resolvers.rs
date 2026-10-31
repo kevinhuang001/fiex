@@ -278,7 +278,8 @@ impl NativeVfsProvider for TrashView {
     }
 
     fn readonly(&self) -> bool {
-        false
+        // Generic FS mutations are forbidden; dedicated menu actions are separate.
+        true
     }
     fn operations(&self, _path: &str) -> Vec<&'static str> {
         // Trash is enumerated and inspected through VFS. Restore and purge
