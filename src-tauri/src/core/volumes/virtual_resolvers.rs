@@ -14,9 +14,9 @@ mod storage;
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 
-/// A builtin view owns only virtual storage capabilities, icons and platform
+/// A Core-native VFS provider owns only storage capabilities, icons and platform
 /// launch/reveal operations; menu contributions live in native_views.
-pub trait VirtualView: Send + Sync {
+pub trait NativeVfsProvider: Send + Sync {
     /// Provider-owned URI recognition; never infer that an unknown URI is local.
     fn handles(&self, path: &str) -> bool;
     fn id(&self) -> &'static str;
@@ -67,7 +67,7 @@ fn revealable_source(source: &str) -> bool {
 }
 
 struct RecentView;
-impl VirtualView for RecentView {
+impl NativeVfsProvider for RecentView {
     fn handles(&self, path: &str) -> bool {
         path.starts_with(RECENT_URI)
     }
@@ -135,7 +135,7 @@ impl VirtualView for RecentView {
 }
 
 struct ApplicationView;
-impl VirtualView for ApplicationView {
+impl NativeVfsProvider for ApplicationView {
     fn handles(&self, path: &str) -> bool {
         path.starts_with(APPLICATIONS_URI)
     }
@@ -239,7 +239,7 @@ impl VirtualView for ApplicationView {
 }
 
 struct TrashView;
-impl VirtualView for TrashView {
+impl NativeVfsProvider for TrashView {
     fn handles(&self, path: &str) -> bool {
         recycle::is_virtual(path) || trash_vfs::handles(path)
     }
@@ -288,12 +288,12 @@ impl VirtualView for TrashView {
 
 /// Three Core-owned VFS instances are registered through the exact shared
 /// ProviderDescriptor/ProviderInstances rules used by SDK plugin providers.
-fn registry() -> &'static NativeProviderRegistry<dyn VirtualView> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn VirtualView>> = OnceLock::new();
+fn registry() -> &'static NativeProviderRegistry<dyn NativeVfsProvider> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeVfsProvider>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
-        let mut registry: NativeProviderRegistry<dyn VirtualView> =
+        let mut registry: NativeProviderRegistry<dyn NativeVfsProvider> =
             NativeProviderRegistry::new(ProviderKind::Vfs);
-        let providers: [Arc<dyn VirtualView>; 3] = [
+        let providers: [Arc<dyn NativeVfsProvider>; 3] = [
             Arc::new(RecentView),
             Arc::new(ApplicationView),
             Arc::new(TrashView),
@@ -307,7 +307,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn VirtualView> {
     })
 }
 
-pub fn view_for(path: &str) -> Option<&'static dyn VirtualView> {
+pub fn view_for(path: &str) -> Option<&'static dyn NativeVfsProvider> {
     registry().find(|provider| provider.handles(path))
 }
 
