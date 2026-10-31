@@ -96,7 +96,9 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
     };
     let rule = &descriptor.r#match;
     let (directory_view, _) = crate::plugins::match_rules::locations_for(directory);
-    if !rule.matches_targets(&[json!({"view": directory_view})], 1) {
+    // Preserve the actual selection cardinality: a blank canvas is zero,
+    // not a synthetic selected root. ProviderMatchRule owns this contract.
+    if !rule.matches_targets(&[json!({"view": directory_view})], paths.len()) {
         return false;
     }
     if paths.is_empty() {
