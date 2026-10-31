@@ -10,9 +10,9 @@ pub use actions::execute_remote;
 mod tests;
 mod validation;
 
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
