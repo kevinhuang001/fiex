@@ -45,7 +45,14 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     // A provider that declares a preview byte ceiling must not be selected for
     // a file above it. This is also the cheapest way to avoid opening a huge
     // archive/Office document only to fail inside the plugin.
-    let size = resource.stat.as_ref().map(|stat| stat.len());
+    // Local files have OS metadata; virtual files and plugin VFS entries
+    // carry their size in the trusted Core ResourceSnapshot metadata instead.
+    // Failing to inspect that size bypasses maxBytes for remote previews.
+    let size = resource
+        .stat
+        .as_ref()
+        .map(|stat| stat.len())
+        .or_else(|| resource.metadata().and_then(|metadata| metadata.size));
     providers.retain(|provider| {
         let crate::plugins::events::Handler::Plugin(plugin) = &provider.handler else {
             return true;
