@@ -316,7 +316,11 @@ mod tests {
         assert!(applications.list && applications.search && applications.create);
         assert!(!applications.remove);
 
-        let mut folder = entry("trash://Zm9sZGVy", &["list", "stat", "search", "remove"], false);
+        let mut folder = entry(
+            "trash://Zm9sZGVy",
+            &["list", "stat", "search", "remove"],
+            false,
+        );
         folder.is_dir = true;
         let capabilities = for_entry(&folder.path, &folder);
         assert!(capabilities.list && capabilities.search && capabilities.stat);
