@@ -17,10 +17,7 @@ export function SidebarMenu({
   setMenu,
   menuRef,
   menuPosition,
-}: Pick<
-  SidebarProps,
-  'prefs' | 'update' | 'onTrash' | 'onEject' | 'onEjectDevice' | 'onMount'
-> & {
+}: Pick<SidebarProps, 'prefs' | 'update' | 'onTrash' | 'onEject' | 'onEjectDevice' | 'onMount'> & {
   menu: SidebarMenuState | null
   setMenu: SetSidebarMenu
   menuRef: RefObject<HTMLDivElement | null>
