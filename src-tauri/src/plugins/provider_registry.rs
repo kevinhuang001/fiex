@@ -16,7 +16,7 @@ use std::{
 };
 
 /// The SDK and Core use the same operation vocabulary and wire mapping.
-pub use crate::plugin_sdk::filesystem::FsOperation;
+pub use fiex_provider_contracts::FsOperation;
 
 /// One plugin's declaration. `reported` distinguishes "declared nothing" from
 /// "never handshook": only the former is an authoritative empty set.

@@ -14,10 +14,10 @@ pub use location::locations_for;
 /// canvas events; it never defines independent match/selection semantics.
 #[derive(Clone, Debug, Default, serde::Deserialize)]
 #[serde(transparent)]
-pub struct MatchRules(pub crate::plugin_sdk::provider_matching::ProviderMatchRule);
+pub struct MatchRules(pub fiex_provider_contracts::ProviderMatchRule);
 
 impl Deref for MatchRules {
-    type Target = crate::plugin_sdk::provider_matching::ProviderMatchRule;
+    type Target = fiex_provider_contracts::ProviderMatchRule;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -50,7 +50,7 @@ pub fn validate(
     _allow_contains: bool,
     allow_selection: bool,
 ) -> Result<(), String> {
-    crate::plugin_sdk::provider_matching::ProviderMatchRule::validate(value, allow_selection)
+    fiex_provider_contracts::ProviderMatchRule::validate(value, allow_selection)
 }
 
 /// Small extension → MIME map for resources whose directory entry has no MIME.
