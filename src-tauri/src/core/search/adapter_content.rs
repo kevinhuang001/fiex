@@ -90,7 +90,9 @@ pub(super) fn run(
 
 fn text_contains(bytes: &[u8], lowered: &str) -> bool {
     !bytes[..bytes.len().min(BINARY_PROBE)].contains(&0)
-        && String::from_utf8_lossy(bytes).to_lowercase().contains(lowered)
+        && String::from_utf8_lossy(bytes)
+            .to_lowercase()
+            .contains(lowered)
 }
 
 #[cfg(test)]
