@@ -23,20 +23,10 @@ impl EventRouter {
                 if request.method != method {
                     return Err("provider request method does not match routed event".into());
                 }
-                let mut routed = request.clone();
-                if let Handler::Plugin(plugin) = &provider.handler {
-                    let fields = routed
-                        .params
-                        .as_object_mut()
-                        .ok_or("provider parameters must be an object")?;
-                    // Only the verified contribution's registered instance
-                    // may select an SDK provider, never a caller-supplied ID.
-                    fields.remove("providerId");
-                    let prefix = format!("plugin:{}:", plugin.id);
-                    if let Some(name) = provider.id.strip_prefix(&prefix) {
-                        fields.insert("providerId".into(), serde_json::json!(name));
-                    }
-                }
+                let routed = match &provider.handler {
+                    Handler::Builtin(_) => request.clone(),
+                    Handler::Plugin(plugin) => bound_plugin_request(request, &plugin.id, &provider.id)?,
+                };
                 endpoint(provider)?.invoke(&routed)
             },
             validate,
@@ -74,5 +64,47 @@ impl EventRouter {
             }
         }
         collect(outcomes)
+    }
+}
+
+fn bound_plugin_request(
+    request: &ProviderRequest,
+    plugin_id: &str,
+    registered_id: &str,
+) -> Result<ProviderRequest, String> {
+    let mut routed = request.clone();
+    let fields = routed.params.as_object_mut()
+        .ok_or("provider parameters must be an object")?;
+    fields.remove("providerId");
+    let prefix = format!("plugin:{plugin_id}:");
+    if let Some(id) = registered_id.strip_prefix(&prefix) {
+        fields.insert("providerId".into(), serde_json::json!(id));
+    }
+    Ok(routed)
+}
+
+#[cfg(test)]
+mod instance_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn core_binds_selected_instance_and_erases_forged_provider_ids() {
+        let forged = ProviderRequest {
+            method:"info.resolve".into(),
+            params:json!({"providerId":"forged","other":"ok"}),
+        };
+        let named = bound_plugin_request(
+            &forged, "org.example.viewer", "plugin:org.example.viewer:media"
+        ).unwrap();
+        assert_eq!(named.params["providerId"], "media");
+        assert_eq!(named.params["other"], "ok");
+        let single = bound_plugin_request(
+            &forged, "org.example.viewer", "plugin:org.example.viewer"
+        ).unwrap();
+        assert!(single.params.get("providerId").is_none());
+        assert!(bound_plugin_request(
+            &ProviderRequest { method:"info.resolve".into(), params:json!(null) },
+            "org.example.viewer", "plugin:org.example.viewer"
+        ).is_err());
     }
 }
