@@ -16,11 +16,7 @@ impl ProviderEndpoint for PluginConnection {
         ) {
             return Err("unsupported connection event".into());
         }
-        crate::plugins::events::invoke(
-            &self.plugin_id,
-            &request.method,
-            request.params.clone(),
-        )
+        crate::plugins::events::invoke(&self.plugin_id, &request.method, request.params.clone())
     }
 }
 
@@ -36,7 +32,10 @@ pub fn invoke(
     if kind.is_empty() || mount_id.is_empty() || plugin_id.is_empty() {
         return Err("invalid connection identity".into());
     }
-    if !matches!(method, "connection.validate" | "connection.open" | "connection.create") {
+    if !matches!(
+        method,
+        "connection.validate" | "connection.open" | "connection.create"
+    ) {
         return Err("unregistered connection event".into());
     }
     let metadata = [json!({
@@ -53,7 +52,10 @@ pub fn invoke(
     ).into_iter().filter(|resolver|
         matches!(&resolver.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
     ).collect();
-    let request = ProviderRequest { method:method.into(), params };
+    let request = ProviderRequest {
+        method: method.into(),
+        params,
+    };
     EventRouter::resolve(
         method,
         selected,
@@ -66,8 +68,13 @@ pub fn invoke(
         },
         |_, value| Ok(value),
         |_| true,
-        |results| results.into_iter().next()
-            .ok_or_else(|| "connection provider unavailable or not matched".to_string())?.1,
+        |results| {
+            results
+                .into_iter()
+                .next()
+                .ok_or_else(|| "connection provider unavailable or not matched".to_string())?
+                .1
+        },
     )
 }
 
