@@ -360,16 +360,34 @@ fn search_root(
             .cloned(),
     };
     if let Some(engine) = selected {
-        match crate::plugins::resolvers::search::run(&engine, &input, cancelled) {
-            Ok((entries, truncated)) => {
-                sink.engine = Some(engine.resolver.name.clone());
+        sink.engine = Some(engine.resolver.name.clone());
+        let mut emitted = false;
+        let result = crate::plugins::resolvers::search::run_stream(
+            &engine,
+            &input,
+            cancelled,
+            &mut |entry| {
+                emitted = true;
+                sink.push(entry);
+            },
+        );
+        match result {
+            Ok(truncated) => {
                 sink.truncated |= truncated;
-                sink.extend(entries);
                 return Ok(());
             }
             Err(error) => {
+                if cancelled() {
+                    return Ok(());
+                }
                 if matches!(request.engine, SearchEngine::Auto) {
                     sink.warning = Some(format!("{}: {error}", engine.resolver.name));
+                    if emitted {
+                        // Partial pages were already streamed. Do not append
+                        // a different engine's results into the same session.
+                        sink.incomplete = true;
+                        return Ok(());
+                    }
                 } else {
                     return Err(error);
                 }
