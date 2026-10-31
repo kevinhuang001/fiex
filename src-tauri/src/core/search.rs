@@ -8,6 +8,7 @@ use crate::{
     core::files::{entry, Entry},
     core::ignores::IgnoreSet,
 };
+mod adapter_content;
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -513,13 +514,11 @@ fn search_adapter(
     cancelled: &dyn Fn() -> bool,
     sink: &mut BatchSink<'_>,
 ) -> Result<(), String> {
-    let resource = crate::core::fs::trusted(root, "core:search")?;
-    if request.mode == SearchMode::Content {
-        // Remote content fallback must confirm a network budget first; until
-        // that flow exists, refuse instead of silently downloading content.
-        return Err("暂不支持在远程连接中搜索文件内容".into());
-    }
     sink.engine = Some("builtin".into());
+    if request.mode == SearchMode::Content {
+        return adapter_content::run(root, request, cancelled, sink);
+    }
+    let resource = crate::core::fs::trusted(root, "core:search")?;
     let limit = sink.limit;
     let (truncated, skipped) = resource.search_stream(
         &request.query,
