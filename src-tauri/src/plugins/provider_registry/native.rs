@@ -71,25 +71,41 @@ mod tests {
     }
     struct First;
     impl Handler for First {
-        fn call(&self) -> u32 { 7 }
+        fn call(&self) -> u32 {
+            7
+        }
     }
 
     #[test]
     fn registry_validates_and_retains_typed_handlers() {
         let mut entries: NativeProviderRegistry<dyn Handler> =
             NativeProviderRegistry::new(ProviderKind::Info);
-        entries.register(
-            "core.example", 100, ProviderMatchRule::default(),
-            Arc::new(First),
-        ).unwrap();
+        entries
+            .register(
+                "core.example",
+                100,
+                ProviderMatchRule::default(),
+                Arc::new(First),
+            )
+            .unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries.get("core.example").unwrap().call(), 7);
-        assert!(entries.register(
-            "core.example", 90, ProviderMatchRule::default(), Arc::new(First)
-        ).is_err());
-        assert!(entries.register(
-            "invalid/id", 10, ProviderMatchRule::default(), Arc::new(First)
-        ).is_err());
+        assert!(entries
+            .register(
+                "core.example",
+                90,
+                ProviderMatchRule::default(),
+                Arc::new(First)
+            )
+            .is_err());
+        assert!(entries
+            .register(
+                "invalid/id",
+                10,
+                ProviderMatchRule::default(),
+                Arc::new(First)
+            )
+            .is_err());
         let selected = entries.candidates(|handler| handler.call() == 7);
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].id, "core.example");
