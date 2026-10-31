@@ -174,7 +174,19 @@ mod tests {
             "kinds":["directory"]
         }}});
         assert!(matches("contextMenu.resolve", &extensions, &metadata, path));
-        assert!(!matches("contextMenu.resolve", &extensions, &metadata, "/tmp"));
+        let local = ResourceSnapshot::from_metadata(
+            "/tmp/fiex-matcher-local",
+            crate::plugins::contracts::ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        );
+        assert!(!matches(
+            "contextMenu.resolve",
+            &extensions,
+            &metadata(&[local]),
+            "/tmp"
+        ));
     }
 
     #[test]
