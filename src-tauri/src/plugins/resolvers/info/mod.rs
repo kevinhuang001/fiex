@@ -21,6 +21,7 @@ mod endpoint;
 mod media;
 mod metadata;
 mod native;
+mod proxy;
 pub use media::media_sections;
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
@@ -46,10 +47,9 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
                     display: display.into(),
                     resource: resource.clone(),
                 }),
-                Handler::Plugin(plugin) => Box::new(endpoint::PluginInfoProxy {
-                    plugin: (**plugin).clone(),
-                    resource: resource.clone(),
-                }),
+                Handler::Plugin(plugin) => {
+                    Box::new(proxy::ScopedInfoProxy::new((**plugin).clone(), resource.clone())?)
+                },
             };
             Ok(endpoint)
         },
