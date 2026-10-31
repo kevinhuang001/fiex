@@ -32,7 +32,7 @@ const PROVIDERS: [Descriptor; 3] = [
     },
 ];
 
-fn eligible(provider: &Descriptor, paths: &[String]) -> bool {
+fn eligible(provider: &Descriptor, directory: &str, paths: &[String]) -> bool {
     if paths.is_empty() {
         return false;
     }
@@ -43,6 +43,12 @@ fn eligible(provider: &Descriptor, paths: &[String]) -> bool {
         }),
         ..Default::default()
     };
+    // A selected item never changes the owner of its containing view.
+    // Validate the directory independently, then every selected item.
+    let (directory_view, _) = crate::plugins::match_rules::locations_for(directory);
+    if !rule.matches_targets(&[json!({"view": directory_view})], 1) {
+        return false;
+    }
     // A mixed-source selection cannot inherit the menu rights of its first
     // member. All selected view identities must be derived by Core.
     let targets = paths
@@ -55,17 +61,17 @@ fn eligible(provider: &Descriptor, paths: &[String]) -> bool {
     rule.matches_targets(&targets, paths.len())
 }
 
-fn provider(id: &str, paths: &[String]) -> Result<&'static Descriptor, String> {
+fn provider(id: &str, directory: &str, paths: &[String]) -> Result<&'static Descriptor, String> {
     PROVIDERS
         .iter()
-        .find(|candidate| candidate.id == id && eligible(candidate, paths))
+        .find(|candidate| candidate.id == id && eligible(candidate, directory, paths))
         .ok_or_else(|| "native menu provider does not match selection".into())
 }
 
-pub(super) fn providers(paths: &[String]) -> Vec<Resolver> {
+pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
     PROVIDERS
         .iter()
-        .filter(|candidate| eligible(candidate, paths))
+        .filter(|candidate| eligible(candidate, directory, paths))
         .map(|candidate| Resolver::builtin(candidate.id, candidate.priority))
         .collect()
 }
@@ -73,10 +79,10 @@ pub(super) fn providers(paths: &[String]) -> Vec<Resolver> {
 /// Native ownership suppresses only conflicting Core actions. Independent
 /// generic Info, Preview, Copy Path and valid clipboard contributions remain
 /// eligible; this is not an EventRouter early return for builtin views.
-pub(super) fn claimed_actions(paths: &[String]) -> &'static [&'static str] {
+pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'static str] {
     let owner = PROVIDERS
         .iter()
-        .find(|candidate| eligible(candidate, paths));
+        .find(|candidate| eligible(candidate, directory, paths));
     match owner.map(|candidate| candidate.owner) {
         Some("core:recent") => &[
             "open",
@@ -203,8 +209,8 @@ fn menu_for(owner: &str, path: &str) -> Vec<Value> {
     }
 }
 
-pub(super) fn resolve(id: &str, paths: &[String]) -> Result<Value, String> {
-    let owner = provider(id, paths)?.owner;
+pub(super) fn resolve(id: &str, directory: &str, paths: &[String]) -> Result<Value, String> {
+    let owner = provider(id, directory, paths)?.owner;
     let offered = menu_for(owner, &paths[0]);
     let intersection = offered
         .into_iter()
@@ -224,8 +230,8 @@ pub(super) struct NativeAction {
     pub paths: Vec<String>,
 }
 
-pub(super) fn execute(id: &str, item_id: &str, paths: &[String]) -> Result<NativeAction, String> {
-    let owner = provider(id, paths)?.owner;
+pub(super) fn execute(id: &str, item_id: &str, directory: &str, paths: &[String]) -> Result<NativeAction, String> {
+    let owner = provider(id, directory, paths)?.owner;
     match (owner, item_id) {
         ("core:recent", "open") => Ok(NativeAction {
             command: "open",
@@ -283,24 +289,24 @@ mod tests {
         let applications = vec!["applications://c3lzdGVtLWFwcA".into()];
         let recent = vec!["recent://not-saved".into()];
         let root = vec!["/tmp/example".into()];
-        assert_eq!(providers(&applications)[0].id, "core.applications.menu");
-        assert_eq!(providers(&recent)[0].id, "core.recent.menu");
-        assert!(providers(&root).is_empty());
-        assert!(providers(&[applications[0].clone(), recent[0].clone()]).is_empty());
+        assert_eq!(providers("applications://", &applications)[0].id, "core.applications.menu");
+        assert_eq!(providers("recent://", &recent)[0].id, "core.recent.menu");
+        assert!(providers("/tmp", &root).is_empty());
+        assert!(providers("applications://", &[applications[0].clone(), recent[0].clone()]).is_empty());
     }
 
     #[test]
     fn system_app_is_launch_only_and_user_entries_are_protected() {
         let system = vec!["applications://c3lzdGVtLWFwcA".into()];
-        let value = resolve("core.applications.menu", &system).unwrap();
+        let value = resolve("core.applications.menu", "applications://", &system).unwrap();
         assert_eq!(value["items"].as_array().unwrap().len(), 1);
         assert_eq!(value["items"][0]["id"], "open");
-        assert!(execute("core.applications.menu", "rename", &system).is_err());
+        assert!(execute("core.applications.menu", "rename", "applications://", &system).is_err());
         let user = vec![format!("{}user/dXNlci1hcHA", applications::URI)];
-        let value = resolve("core.applications.menu", &user).unwrap();
+        let value = resolve("core.applications.menu", "applications://", &user).unwrap();
         assert_eq!(value["items"].as_array().unwrap().len(), 3);
         assert_eq!(
-            execute("core.applications.menu", "trash", &user)
+            execute("core.applications.menu", "trash", "applications://", &user)
                 .unwrap()
                 .command,
             "trashApplications"
@@ -313,7 +319,7 @@ mod tests {
             "applications://c3lzdGVtLWFwcA".into(),
             format!("{}user/dXNlci1hcHA", applications::URI),
         ];
-        let value = resolve("core.applications.menu", &selections).unwrap();
+        let value = resolve("core.applications.menu", "applications://", &selections).unwrap();
         assert_eq!(value["items"].as_array().unwrap().len(), 1);
         assert_eq!(value["items"][0]["id"], "open");
     }
