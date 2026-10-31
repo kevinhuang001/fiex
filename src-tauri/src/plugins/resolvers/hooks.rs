@@ -86,7 +86,13 @@ mod tests {
 
     #[test]
     fn accepts_explicit_handled_states() {
-        assert_eq!(validate_hook_reply(json!({"handled":true})).unwrap()["handled"], true);
-        assert_eq!(validate_hook_reply(json!({"handled":false})).unwrap()["handled"], false);
+        assert_eq!(
+            validate_hook_reply(json!({"handled":true})).unwrap()["handled"],
+            true
+        );
+        assert_eq!(
+            validate_hook_reply(json!({"handled":false})).unwrap()["handled"],
+            false
+        );
     }
 }
