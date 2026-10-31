@@ -226,6 +226,7 @@ fn plugin_items(
     plugin: &crate::plugins::host::PluginInfo,
     ctx: &Context,
     session: &str,
+    provider_id: Option<&str>,
 ) -> Result<Vec<Value>, String> {
     crate::plugins::host::global()
         .invoke(
@@ -235,6 +236,7 @@ fn plugin_items(
                 "menuSessionId": session,
                 "interactionId": crate::plugins::mounts::new_id()?,
                 "connection": ctx.summary(),
+                "providerId": provider_id,
             }),
         )
         .and_then(|value| valid_items(&value))

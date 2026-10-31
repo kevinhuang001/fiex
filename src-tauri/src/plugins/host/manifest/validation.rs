@@ -78,8 +78,9 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                         );
                     }
                 }
-                if object.keys().any(|key| key != "priority") {
-                    return Err("extensions.connectionContextMenus accepts only priority".into());
+                crate::plugins::match_rules::validate(object.get("match"), false, false)?;
+                if object.keys().any(|key| !matches!(key.as_str(), "priority" | "match" | "providers")) {
+                    return Err("extensions.connectionContextMenus accepts priority, match and providers".into());
                 }
             }
             _ => return Err("extensions.connectionContextMenus must be true or {priority}".into()),

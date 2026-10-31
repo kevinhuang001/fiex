@@ -39,6 +39,7 @@ pub(super) struct PluginMenu<'a> {
     pub plugin: PluginInfo,
     pub ctx: &'a Context,
     pub session: &'a str,
+    pub provider_id: Option<String>,
 }
 
 impl PluginMenu<'_> {
@@ -48,6 +49,9 @@ impl PluginMenu<'_> {
             "interactionId":crate::plugins::mounts::new_id()?,
             "connection":self.ctx.summary(),
         });
+        if let Some(id) = &self.provider_id {
+            params["providerId"] = json!(id);
+        }
         if let Some(item) = item {
             params["itemId"] = json!(item);
         }
@@ -59,13 +63,13 @@ impl ProviderEndpoint for PluginMenu<'_> {
     fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
         match request.method.as_str() {
             "connectionContextMenu.resolve" => {
-                Ok(json!({"items":plugin_items(&self.plugin, self.ctx, self.session)?}))
+                Ok(json!({"items":plugin_items(&self.plugin, self.ctx, self.session, self.provider_id.as_deref())?}))
             }
             "connectionContextMenu.execute" => {
                 let item = request.params["itemId"]
                     .as_str()
                     .ok_or("missing menu action")?;
-                let offered = plugin_items(&self.plugin, self.ctx, self.session)?;
+                let offered = plugin_items(&self.plugin, self.ctx, self.session, self.provider_id.as_deref())?;
                 if !offered.iter().any(|value| {
                     value["kind"] == "action" && value["id"] == item && value["disabled"] != true
                 }) {
@@ -96,6 +100,8 @@ pub(super) fn from_resolver<'a>(
             plugin: (**plugin).clone(),
             ctx,
             session,
+            provider_id: resolver.id.strip_prefix(&format!("plugin:{}:", plugin.id))
+                .map(str::to_owned),
         }),
     }
 }

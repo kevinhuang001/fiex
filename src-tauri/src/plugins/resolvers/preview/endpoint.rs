@@ -50,7 +50,11 @@ impl ProviderEndpoint for PluginPreviewProxy {
         }
         // Keep preview session creation, operation scope, returned HTML
         // package validation and owner binding in the existing secure service.
-        let response = open_plugin_resource(&self.resource, &self.plugin)?;
+        let response = open_plugin_resource(
+            &self.resource,
+            &self.plugin,
+            request.params["providerId"].as_str(),
+        )?;
         let mut view = response["view"].clone();
         if let Some(object) = view.as_object_mut() {
             for key in [

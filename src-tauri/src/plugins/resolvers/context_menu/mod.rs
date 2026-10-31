@@ -46,7 +46,12 @@ fn allowed(session: &Session) -> bool {
     match &session.provider.handler {
         Handler::Builtin(_) => true,
         Handler::Plugin(plugin) => {
-            crate::plugins::events::menu_allowed(&plugin.id, &session.resources, &session.directory)
+            crate::plugins::events::menu_allowed(
+                &plugin.id,
+                &session.provider.id,
+                &session.resources,
+                &session.directory,
+            )
         }
     }
 }
@@ -182,7 +187,7 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
 }
 
 pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
-    let (plugin_id, directory, resources, depth) = {
+    let (plugin_id, instance_id, directory, resources, depth) = {
         let registry = sessions().lock().map_err(|_| "menu registry unavailable")?;
         let session = registry.get(session_id).ok_or("menu session expired")?;
         if session.created.elapsed().as_secs() >= 90 || !allowed(session) {
@@ -193,15 +198,21 @@ pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
         };
         (
             plugin.id.clone(),
+            session.provider.id.strip_prefix(&format!("plugin:{}:", plugin.id)).map(str::to_owned),
             session.directory.clone(),
             session.resources.clone(),
             *session.submenus.get(parent_id).ok_or("unknown submenu")?,
         )
     };
+    let mut params = json!({"menuSessionId":session_id,"parentId":parent_id,
+        "interactionId":crate::plugins::mounts::new_id()?});
+    if let Some(id) = instance_id {
+        params["providerId"] = json!(id);
+    }
     let result = crate::plugins::events::call_owner(
         "contextMenu.resolve",
         &plugin_id,
-        json!({"menuSessionId":session_id,"parentId":parent_id,"interactionId":crate::plugins::mounts::new_id()?}),
+        params,
         &resources,
         Some(&directory),
     )?;

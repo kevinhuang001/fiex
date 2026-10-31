@@ -44,7 +44,12 @@ fn require_event(method: &str) -> Result<(), String> {
 }
 
 /// Recheck a stored menu session using its actual targets, never empty placeholders.
-pub fn menu_allowed(plugin_id: &str, resources: &[ResourceSnapshot], directory: &str) -> bool {
+pub fn menu_allowed(
+    plugin_id: &str,
+    provider_id: &str,
+    resources: &[ResourceSnapshot],
+    directory: &str,
+) -> bool {
     crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
         &matching::metadata(resources),
@@ -52,7 +57,8 @@ pub fn menu_allowed(plugin_id: &str, resources: &[ResourceSnapshot], directory: 
         Vec::new(),
     )
     .iter()
-    .any(|provider| matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id))
+    .any(|provider| provider.id == provider_id
+        && matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id))
 }
 
 pub fn call_owner(
@@ -70,7 +76,15 @@ pub fn call_owner(
         Vec::new(),
     )
     .into_iter()
-    .filter(|p| matches!(&p.handler,Handler::Plugin(plugin) if plugin.id==plugin_id))
+    .filter(|p| {
+        let Handler::Plugin(plugin) = &p.handler else { return false };
+        if plugin.id != plugin_id { return false; }
+        match params.get("providerId") {
+            Some(value) => value.as_str().is_some_and(|instance|
+                p.id == format!("plugin:{plugin_id}:{instance}")),
+            None => p.id == format!("plugin:{plugin_id}"),
+        }
+    })
     .collect();
     let request = crate::plugin_sdk::provider_contracts::ProviderRequest {
         method: method.into(),
