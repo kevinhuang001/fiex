@@ -1,7 +1,7 @@
 //! Connection lifecycle through the same trusted provider candidate registry
 //! and SDK endpoint used by every other Core feature. Credential projection,
 //! stored ownership and navigation validation remain in remote/store.
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::events::{EventRouter, Handler};
 use serde_json::{json, Value};
 
