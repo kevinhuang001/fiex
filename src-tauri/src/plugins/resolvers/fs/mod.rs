@@ -11,15 +11,6 @@ const PAGE_LIMIT: usize = 500;
 const MAX_PAGES: usize = 1000;
 const MAX_ENTRIES: usize = 100_000;
 
-/// SDK FsListing omits a false truncation flag. Reject malformed true/false values.
-fn truncated_flag(page: &Value) -> Result<bool, String> {
-    match page.get("truncated") {
-        None => Ok(false),
-        Some(Value::Bool(value)) => Ok(*value),
-        _ => Err("invalid VFS truncated flag".into()),
-    }
-}
-
 /// Where a mount's plugin identity comes from.
 #[derive(Clone, Debug)]
 pub enum Source {
@@ -72,27 +63,21 @@ impl Mount {
                     "limit": PAGE_LIMIT,
                 }),
             )?;
-            let items = page
-                .get("entries")
-                .and_then(Value::as_array)
-                .ok_or("provider listing is missing entries")?;
-            if items.len() > PAGE_LIMIT {
-                return Err("provider exceeded the page limit".into());
-            }
-            truncated |= truncated_flag(&page)?;
-            for item in items {
-                entries.push(FsEntry::parse(item.clone())?);
+            // The same bounded pagination DTO is accepted by Core and
+            // emitted by SDK VFS implementations.
+            let page: fiex_provider_contracts::VfsPage =
+                serde_json::from_value(page)
+                    .map_err(|error| format!("invalid VFS listing page: {error}"))?;
+            page.validate_page(PAGE_LIMIT)?;
+            truncated |= page.truncated;
+            for item in page.entries {
+                entries.push(FsEntry::parse(item)?);
                 if entries.len() > MAX_ENTRIES {
                     return Err("provider returned too many entries".into());
                 }
             }
-            if let Some(values) = page.get("warnings").and_then(Value::as_array) {
-                warnings.extend(values.iter().filter_map(Value::as_str).map(str::to_owned));
-            }
-            let next = page
-                .get("nextCursor")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
+            warnings.extend(page.warnings);
+            let next = page.next_cursor;
             match next {
                 None => {
                     return Ok(FsListing {
@@ -170,22 +155,21 @@ impl Mount {
                     "ignores": ignores, "limit": remaining.min(PAGE_LIMIT), "cursor": cursor,
                 }),
             )?;
-            let items = page["entries"]
-                .as_array()
-                .ok_or("provider search is missing entries")?;
-            if items.len() > remaining.min(PAGE_LIMIT) {
-                return Err("provider exceeded the search limit".into());
-            }
-            for item in items {
+            let page: fiex_provider_contracts::SearchResults =
+                serde_json::from_value(page)
+                    .map_err(|error| format!("invalid VFS search page: {error}"))?;
+            page.validate_page(remaining.min(PAGE_LIMIT))?;
+            for item in page.entries {
                 if cancelled() {
                     return Ok(true);
                 }
-                emit(FsEntry::parse(item.clone())?)?;
+                emit(FsEntry::parse(item)?)?;
                 count += 1;
             }
-            let next = page["nextCursor"].as_str().map(str::to_owned);
+            let truncated = page.truncated;
+            let next = page.next_cursor;
             match next {
-                None => return truncated_flag(&page),
+                None => return Ok(truncated),
                 Some(next) if !seen.insert(next.clone()) => {
                     return Err("search pagination cursor did not advance".into())
                 }
