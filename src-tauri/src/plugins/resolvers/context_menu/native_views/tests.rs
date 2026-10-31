@@ -71,3 +71,31 @@ fn native_view_menus_use_validated_shared_descriptors() {
         assert!(!descriptor.r#match.matches_targets(&[foreign], 1));
     }
 }
+
+#[test]
+fn native_menu_executes_only_actions_offered_for_this_exact_selection() {
+    let system_app = vec!["applications://c3lzdGVtLWFwcA".into()];
+    assert!(execute(
+        "core.applications.menu",
+        "trash",
+        "applications://",
+        &system_app
+    )
+    .is_err());
+    assert!(execute(
+        "core.applications.menu",
+        "delete",
+        "applications://",
+        &system_app
+    )
+    .is_err());
+    let launched = execute(
+        "core.applications.menu",
+        "open",
+        "applications://",
+        &system_app
+    )
+    .unwrap();
+    assert_eq!(launched.command, "open");
+    assert_eq!(launched.paths, system_app);
+}
