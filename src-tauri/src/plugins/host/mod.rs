@@ -7,8 +7,8 @@ mod panel;
 mod permissions;
 mod process;
 
-pub(crate) use catalog::{catalog_matching, invalidate_discovery};
 pub use catalog::{catalog, exists, installed_manifests, themes, PluginInfo};
+pub(crate) use catalog::{catalog_matching, invalidate_discovery};
 pub(crate) use manifest::preview_loading_entry;
 pub use manifest::{
     activation_requirements, declared_permissions, request_timeout_ms, ui_timeout_ms, valid_id,
