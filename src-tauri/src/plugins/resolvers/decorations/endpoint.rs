@@ -16,7 +16,8 @@ impl ProviderEndpoint for NativeDecorationEndpoint<'_> {
         if request.method != "decorations.resolve" {
             return Err("unregistered Decoration event".into());
         }
-        super::builtin::resolve_in(&self.id, self.directory, self.entries)
+        let decorations = super::native::resolve(&self.id, self.directory, self.entries)?;
+        Ok(serde_json::json!({"decorations": decorations}))
     }
 }
 
