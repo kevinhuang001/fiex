@@ -5,56 +5,69 @@
 use crate::core::files::Entry;
 use crate::core::volumes::{applications, recycle, trash_vfs, virtual_resolvers};
 use crate::plugins::events::Resolver;
-use fiex_provider_contracts::{LocationMatch, ProviderDescriptor, ProviderKind, ProviderMatchRule};
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
-/// Core-native menus have the same validated descriptor and matcher used for
-/// IPC providers. Only the implementation behind the descriptor is native.
-struct NativeMenu {
-    descriptor: ProviderDescriptor,
+/// Native view menus register business implementations once and use the
+/// exact same shared Descriptor matching contract as IPC menu contributions.
+trait NativeViewMenuProvider: Send + Sync {
+    fn id(&self) -> &'static str;
+    fn owner(&self) -> &'static str;
+}
+
+struct ViewMenu {
     id: &'static str,
     owner: &'static str,
 }
+impl NativeViewMenuProvider for ViewMenu {
+    fn id(&self) -> &'static str {
+        self.id
+    }
+    fn owner(&self) -> &'static str {
+        self.owner
+    }
+}
 
-fn descriptors() -> &'static [NativeMenu; 3] {
-    static REGISTERED: OnceLock<[NativeMenu; 3]> = OnceLock::new();
+fn registry() -> &'static NativeProviderRegistry<dyn NativeViewMenuProvider> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeViewMenuProvider>> =
+        OnceLock::new();
     REGISTERED.get_or_init(|| {
-        fn native(id: &'static str, owner: &'static str) -> NativeMenu {
-            let descriptor = ProviderDescriptor {
-                id: id.into(),
-                kind: ProviderKind::ContextMenu,
-                priority: 100,
-                r#match: ProviderMatchRule {
-                    view: Some(LocationMatch {
-                        provider_ids: Some(vec![owner.into()]),
+        let mut values: NativeProviderRegistry<dyn NativeViewMenuProvider> =
+            NativeProviderRegistry::new(ProviderKind::ContextMenu);
+        for (id, owner) in [
+            ("core.recent.menu", "core:recent"),
+            ("core.applications.menu", "core:applications"),
+            ("core.trash.menu", "core:trash"),
+        ] {
+            values
+                .register(
+                    id,
+                    100,
+                    ProviderMatchRule {
+                        view: Some(LocationMatch {
+                            provider_ids: Some(vec![owner.into()]),
+                            ..Default::default()
+                        }),
                         ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-            };
-            descriptor
-                .validate()
-                .expect("invalid built-in menu descriptor");
-            NativeMenu {
-                descriptor,
-                id,
-                owner,
-            }
+                    },
+                    Arc::new(ViewMenu { id, owner }),
+                )
+                .expect("invalid native ViewMenu provider");
         }
-        [
-            native("core.recent.menu", "core:recent"),
-            native("core.applications.menu", "core:applications"),
-            native("core.trash.menu", "core:trash"),
-        ]
+        values
     })
 }
 
-fn eligible(provider: &NativeMenu, directory: &str, paths: &[String]) -> bool {
+fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[String]) -> bool {
     if paths.is_empty() {
         return false;
     }
-    let rule = &provider.descriptor.r#match;
+    let Some(descriptor) = registry().descriptor(provider.id()) else {
+        return false;
+    };
+    let rule = &descriptor.r#match;
     // A selected item never changes the owner of its containing view.
     // Validate the directory independently, then every selected item.
     let (directory_view, _) = crate::plugins::match_rules::locations_for(directory);
@@ -73,29 +86,30 @@ fn eligible(provider: &NativeMenu, directory: &str, paths: &[String]) -> bool {
     rule.matches_targets(&targets, paths.len())
 }
 
-fn provider(id: &str, directory: &str, paths: &[String]) -> Result<&'static NativeMenu, String> {
-    descriptors()
-        .iter()
-        .find(|candidate| candidate.descriptor.id == id && eligible(candidate, directory, paths))
+fn provider(
+    id: &str,
+    directory: &str,
+    paths: &[String],
+) -> Result<&'static dyn NativeViewMenuProvider, String> {
+    registry()
+        .get(id)
+        .filter(|provider| eligible(*provider, directory, paths))
         .ok_or_else(|| "native menu provider does not match selection".into())
 }
 
 pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
-    descriptors()
-        .iter()
-        .filter(|candidate| eligible(candidate, directory, paths))
-        .map(|candidate| Resolver::builtin(candidate.id, candidate.descriptor.priority))
-        .collect()
+    registry().candidates(|candidate| eligible(candidate, directory, paths))
 }
 
 /// Native ownership suppresses only conflicting Core actions. Independent
 /// generic Info, Preview, Copy Path and valid clipboard contributions remain
 /// eligible; this is not an EventRouter early return for builtin views.
 pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'static str] {
-    let owner = descriptors()
-        .iter()
-        .find(|candidate| eligible(candidate, directory, paths));
-    match owner.map(|candidate| candidate.owner) {
+    let owner = providers(directory, paths)
+        .first()
+        .and_then(|candidate| registry().get(&candidate.id))
+        .map(|candidate| candidate.owner());
+    match owner {
         Some("core:recent") => &[
             "open",
             "reveal",
@@ -120,9 +134,7 @@ pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'
 }
 
 pub(super) fn owns(id: &str) -> bool {
-    descriptors()
-        .iter()
-        .any(|provider| provider.descriptor.id == id)
+    registry().get(id).is_some()
 }
 
 fn item(id: &str, title: String, icon: &str, danger: bool, tail: bool) -> Value {
@@ -224,7 +236,7 @@ fn menu_for(owner: &str, path: &str) -> Vec<Value> {
 }
 
 pub(super) fn resolve(id: &str, directory: &str, paths: &[String]) -> Result<Value, String> {
-    let owner = provider(id, directory, paths)?.owner;
+    let owner = provider(id, directory, paths)?.owner();
     let offered = menu_for(owner, &paths[0]);
     let intersection = offered
         .into_iter()
@@ -250,7 +262,7 @@ pub(super) fn execute(
     directory: &str,
     paths: &[String],
 ) -> Result<NativeAction, String> {
-    let owner = provider(id, directory, paths)?.owner;
+    let owner = provider(id, directory, paths)?.owner();
     match (owner, item_id) {
         ("core:recent", "open") => Ok(NativeAction {
             command: "open",
