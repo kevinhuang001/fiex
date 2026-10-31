@@ -116,6 +116,24 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
     ))
 }
 
+/// A plugin result is never authority to run a privileged native command.
+/// Only an already-matched Core builtin may return the private nativeAction
+/// marker, and the action must be identical to the one Core revalidated.
+fn native_action_authorized(
+    builtin: bool,
+    item_id: &str,
+    result: &Value,
+) -> Result<bool, String> {
+    match (builtin, result["kind"].as_str()) {
+        (true, Some("nativeAction")) if result["itemId"] == item_id => Ok(true),
+        (true, _) => Err("invalid native connection menu response".into()),
+        (false, Some("nativeAction" | "coreAction")) => {
+            Err("plugin cannot execute native connection actions".into())
+        }
+        (false, _) => Ok(false),
+    }
+}
+
 pub async fn execute(
     connection_id: &str,
     provider_id: &str,
@@ -133,6 +151,7 @@ pub async fn execute(
     .into_iter()
     .find(|provider| provider.id == provider_id)
     .ok_or("menu provider is disabled or does not match connection")?;
+    let builtin_owner = matches!(&owner.handler, Handler::Builtin(_));
     let session = menu_session_id
         .map(str::to_owned)
         .unwrap_or(crate::plugins::mounts::new_id()?);
@@ -155,10 +174,7 @@ pub async fn execute(
                 .1
         },
     )?;
-    if result["kind"] == "nativeAction" {
-        if result["itemId"] != item_id {
-            return Err("invalid native connection action".into());
-        }
+    if native_action_authorized(builtin_owner, item_id, &result)? {
         return builtin_execute(&ctx, item_id).await;
     }
     Ok(result)
