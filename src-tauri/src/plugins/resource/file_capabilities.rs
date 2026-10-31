@@ -308,6 +308,25 @@ mod tests {
     }
 
     #[test]
+    fn native_virtual_search_is_advertised_only_for_listable_directories() {
+        let recent = for_path("recent://");
+        assert!(recent.list && recent.search && recent.stat);
+        assert!(!recent.read && !recent.remove && !recent.write);
+        let applications = for_path("applications://");
+        assert!(applications.list && applications.search && applications.create);
+        assert!(!applications.remove);
+
+        let mut folder = entry("trash://Zm9sZGVy", &["list", "stat", "search", "remove"], false);
+        folder.is_dir = true;
+        let capabilities = for_entry(&folder.path, &folder);
+        assert!(capabilities.list && capabilities.search && capabilities.stat);
+        assert!(!capabilities.remove && !capabilities.write);
+        let file = entry("trash://ZmlsZQ", &["stat", "search", "remove"], false);
+        let capabilities = for_entry(&file.path, &file);
+        assert!(capabilities.stat && !capabilities.search && !capabilities.remove);
+    }
+
+    #[test]
     fn unsupported_uri_never_inherits_local_capabilities() {
         for path in ["unknown://forged.txt", "unknown:opaque-file"] {
             let forged = entry(path, &["read", "write", "remove"], false);
