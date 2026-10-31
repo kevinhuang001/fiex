@@ -32,9 +32,7 @@ fn resolve(path: &str) -> Result<Route, FsError> {
     Ok(Route::Local)
 }
 
-pub(super) fn adapter(
-    resource: &ResourceBroker,
-) -> Result<Box<dyn FsAdapter + '_>, FsError> {
+pub(super) fn adapter(resource: &ResourceBroker) -> Result<Box<dyn FsAdapter + '_>, FsError> {
     match resolve(&resource.path)? {
         Route::Plugin => Ok(Box::new(plugin::PluginFsAdapter::new(resource)?)),
         Route::Usb(route) => Ok(Box::new(usb::UsbFsAdapter::new(route))),
@@ -53,7 +51,10 @@ mod tests {
     #[test]
     fn registered_virtual_directories_are_native_storage_providers() {
         for path in ["recent://", "applications://"] {
-            assert!(matches!(resolve(path).unwrap(), Route::NativeView), "{path}");
+            assert!(
+                matches!(resolve(path).unwrap(), Route::NativeView),
+                "{path}"
+            );
         }
     }
 
@@ -64,7 +65,10 @@ mod tests {
             "fiex://mount/nonexistent/resource",
             "",
         ] {
-            assert!(matches!(resolve(path), Ok(Route::Plugin) | Err(_)), "{path}");
+            assert!(
+                matches!(resolve(path), Ok(Route::Plugin) | Err(_)),
+                "{path}"
+            );
             assert!(!matches!(resolve(path), Ok(Route::Local)), "{path}");
         }
     }
@@ -72,9 +76,6 @@ mod tests {
     #[test]
     fn real_host_paths_use_the_native_adapter() {
         let path = std::env::temp_dir().join("fiex-provider-registry-local");
-        assert!(matches!(
-            resolve(&path.to_string_lossy()),
-            Ok(Route::Local)
-        ));
+        assert!(matches!(resolve(&path.to_string_lossy()), Ok(Route::Local)));
     }
 }

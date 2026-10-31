@@ -182,11 +182,13 @@ pub fn run(
         },
         |_| true,
         |results| {
-            results.into_iter().next()
-                .ok_or_else(|| "search provider unavailable".to_string())?.1
+            results
+                .into_iter()
+                .next()
+                .ok_or_else(|| "search provider unavailable".to_string())?
+                .1
         },
     )
-
 }
 
 /// Shared result validation: ownership, root confinement, hidden/ignore rules,
