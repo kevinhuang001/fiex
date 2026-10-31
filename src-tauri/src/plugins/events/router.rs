@@ -1,5 +1,5 @@
 use super::*;
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 
 pub struct EventRouter;
 impl EventRouter {
