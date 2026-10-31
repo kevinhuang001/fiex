@@ -9,10 +9,28 @@ pub(super) struct PluginFsEndpoint<'a> {
     pub mount: &'a Mount,
 }
 
+/// Operation identity is bound to this Core-owned mount, not just the plugin
+/// package's union of VFS capabilities. Unknown methods fail closed.
+fn method_allowed(mount: &Mount, method: &str) -> bool {
+    if let Some(operation) = fiex_provider_contracts::FsOperation::from_method(method) {
+        return crate::plugins::provider_registry::supports_mount(
+            &mount.plugin_id,
+            &mount.mount_id,
+            operation,
+        );
+    }
+    method == "vfs.discover"
+        || (method == "vfs.preflight"
+            && crate::plugins::provider_registry::preflight_mount(
+                &mount.plugin_id,
+                &mount.mount_id,
+            ))
+}
+
 impl ProviderEndpoint for PluginFsEndpoint<'_> {
     fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        if !request.method.starts_with("vfs.") {
-            return Err("storage endpoint requires a vfs.* operation".into());
+        if !method_allowed(self.mount, &request.method) {
+            return Err("unsupported or unregistered VFS operation for this mount".into());
         }
         let mut params = request.params.clone();
         let object = params
@@ -66,5 +84,14 @@ mod tests {
             params: json!({}),
         });
         assert!(result.is_err());
+        for method in ["vfs.notImplemented", "vfs.list", "vfs.preflight"] {
+            assert!(!method_allowed(&mount, method));
+            assert!(endpoint
+                .invoke(&ProviderRequest {
+                    method: method.into(),
+                    params: json!({}),
+                })
+                .is_err());
+        }
     }
 }
