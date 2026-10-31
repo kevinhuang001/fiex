@@ -220,6 +220,9 @@ impl NativeViewMenuProvider for TrashMenu {
 
     fn selection_items(&self, directory: &str, paths: &[String]) -> Vec<Value> {
         let mut items = intersection(self, directory, paths);
+        if !paths.is_empty() {
+            items.retain(|item| item["id"] != "emptyTrash");
+        }
         if paths.len() > 1 {
             // Multi-selection can only permanently delete the exact offered
             // nodes. Never turn that into an empty-the-entire-bin action.
