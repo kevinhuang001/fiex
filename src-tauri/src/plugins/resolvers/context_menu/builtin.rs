@@ -137,19 +137,33 @@ impl Context {
 }
 
 /// Only groups this selection can actually use become menu providers.
-pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
-    // Dedicated native contributions use the *same* SDK match rule as plugin
-    // contributions. Their priority is not a URI-based EventRouter shortcut.
-    // Only one Core menu family owns each action set, avoiding duplicate
-    // open/rename rows; independently matched plugin menus still participate.
-    let native = super::native_views::providers(&ctx.paths);
-    if !native.is_empty() {
-        return native;
-    }
-    ctx.resolvers()
+fn retain_unclaimed(ctx: &Context, items: Vec<Value>) -> Vec<Value> {
+    let claimed = super::native_views::claimed_actions(&ctx.paths);
+    items
         .into_iter()
-        .map(|resolver| Resolver::builtin(resolver.id(), resolver.priority()))
+        .filter(|item| {
+            !claimed
+                .iter()
+                .any(|id| item["id"].as_str() == Some(*id))
+        })
         .collect()
+}
+
+/// Native and plugin contributions participate in the same EventRouter.
+/// A native view claims only its OS-specific action identifiers, not the
+/// entire menu. Generic providers still contribute independent actions.
+pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
+    let mut candidates = super::native_views::providers(&ctx.paths);
+    let selection = ctx.selection();
+    candidates.extend(
+        ctx.resolvers()
+            .into_iter()
+            .filter(|resolver| {
+                !retain_unclaimed(ctx, resolver.items(&selection, &ctx.capabilities)).is_empty()
+            })
+            .map(|resolver| Resolver::builtin(resolver.id(), resolver.priority())),
+    );
+    candidates
 }
 
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
@@ -162,7 +176,10 @@ pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
         .find(|resolver| resolver.id() == id)
         .ok_or("unknown or unavailable builtin menu provider")?;
     let selection = ctx.selection();
-    Ok(json!({"items": resolver.items(&selection, &ctx.capabilities)}))
+    Ok(json!({"items": retain_unclaimed(
+        ctx,
+        resolver.items(&selection, &ctx.capabilities),
+    )}))
 }
 
 pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, String> {
