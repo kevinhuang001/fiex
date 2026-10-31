@@ -6,6 +6,7 @@
 //! is validated against the authorized root before it leaves this module.
 use crate::core::files::Entry;
 mod endpoint;
+mod native;
 mod stream;
 use crate::core::search::SearchMode;
 use crate::plugins::events::{Handler, Resolver};
@@ -14,10 +15,6 @@ use serde_json::{json, Value};
 pub use stream::{run, run_stream};
 
 pub const BUILTIN_SEARCH: &str = "core.search";
-/// The builtin walker is the final candidate in Auto mode; a plugin that
-/// declares a higher priority becomes the default engine instead.
-const BUILTIN_PRIORITY: i64 = 10;
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginSearchInput {
@@ -68,7 +65,7 @@ impl SearchEngineInfo {
 /// declarations never silently grant search capabilities.
 fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
     let Handler::Plugin(plugin) = &provider.handler else {
-        return vec![SearchMode::Name, SearchMode::Content];
+        return native::modes(&provider.id);
     };
     let Some(contribution) = plugin.extensions.get("search") else {
         return Vec::new();
@@ -122,7 +119,7 @@ pub fn engines(request: &PluginSearchInput) -> Vec<SearchEngineInfo> {
         "search.query",
         &crate::plugins::events::resource_metadata(&resources),
         &request.root,
-        vec![Resolver::builtin(BUILTIN_SEARCH, BUILTIN_PRIORITY)],
+        native::candidates(),
     );
     providers
         .into_iter()
