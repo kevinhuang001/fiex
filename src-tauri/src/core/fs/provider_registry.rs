@@ -18,14 +18,18 @@ enum Route {
 // prevents opaque or malformed virtual references from being interpreted as
 // native filesystem paths. A Windows drive prefix is not a URI scheme.
 fn unregistered_scheme(path: &str) -> bool {
-    let Some(index) = path.find(':') else { return false; };
+    let Some(index) = path.find(':') else {
+        return false;
+    };
     let prefix = &path[..index];
     if prefix.len() == 1 && prefix.as_bytes()[0].is_ascii_alphabetic() {
         return false;
     }
     !prefix.is_empty()
         && prefix.as_bytes()[0].is_ascii_alphabetic()
-        && prefix.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+        && prefix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
 }
 
 fn resolve(path: &str) -> Result<Route, FsError> {
