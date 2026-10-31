@@ -31,6 +31,14 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     )
 }
 
+fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {
+    resource
+        .stat
+        .as_ref()
+        .map(|stat| stat.len())
+        .or_else(|| resource.metadata().and_then(|metadata| metadata.size))
+}
+
 fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(resource));
     let readable = metadata[0]["operations"]
@@ -48,11 +56,7 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     // Local files have OS metadata; virtual files and plugin VFS entries
     // carry their size in the trusted Core ResourceSnapshot metadata instead.
     // Failing to inspect that size bypasses maxBytes for remote previews.
-    let size = resource
-        .stat
-        .as_ref()
-        .map(|stat| stat.len())
-        .or_else(|| resource.metadata().and_then(|metadata| metadata.size));
+    let size = resource_size(resource);
     providers.retain(|provider| {
         let crate::plugins::events::Handler::Plugin(plugin) = &provider.handler else {
             return true;
