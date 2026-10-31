@@ -1,8 +1,20 @@
 //! Typed event candidate discovery lives beside the VFS capability registry.
 //! Matching and permission checks run before creating any IPC proxy.
-use crate::plugin_sdk::provider_contracts::event;
 use crate::plugins::events::{matching, Handler, Resolver};
+use fiex_provider_contracts::{event, ProviderDescriptor, ProviderKind, ProviderMatchRule};
 use serde_json::Value;
+
+/// Candidate identity and priority obey the same contract as native entries.
+fn valid_contribution(id: &str, kind: ProviderKind, priority: i64) -> bool {
+    ProviderDescriptor {
+        id: id.into(),
+        kind,
+        priority,
+        r#match: ProviderMatchRule::default(),
+    }
+    .validate()
+    .is_ok()
+}
 
 pub fn candidates(
     method: &str,
@@ -11,6 +23,9 @@ pub fn candidates(
     mut native: Vec<Resolver>,
 ) -> Vec<Resolver> {
     let Some(event) = event(method) else {
+        return native;
+    };
+    let Some(kind) = event.kind() else {
         return native;
     };
     // Prune unrelated packages before computing runtime permissions, resolving
@@ -71,16 +86,21 @@ pub fn candidates(
             if !matching::matches(method, &plugin.extensions, metadata, directory) {
                 continue;
             }
+            let priority = contribution
+                .get("priority")
+                .and_then(Value::as_i64)
+                .unwrap_or(50);
+            let instance_id = instance_name.as_deref().unwrap_or(&plugin.id);
+            if !valid_contribution(instance_id, kind, priority) {
+                continue;
+            }
             native.push(Resolver {
                 id: match instance_name {
                     Some(id) => format!("plugin:{}:{id}", plugin.id),
                     None => format!("plugin:{}", plugin.id),
                 },
                 name: plugin.name.clone(),
-                priority: contribution
-                    .get("priority")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(50),
+                priority,
                 handler: Handler::Plugin(Box::new(plugin)),
             });
         }
@@ -98,5 +118,13 @@ mod tests {
         let candidates = candidates("not.an.event", &[], "", builtins);
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].id, "core.metadata");
+    }
+
+    #[test]
+    fn malicious_or_malformed_ipc_provider_ids_and_priorities_are_rejected() {
+        assert!(valid_contribution("menu.edit", ProviderKind::ContextMenu, 100));
+        assert!(!valid_contribution("invalid/id", ProviderKind::ContextMenu, 100));
+        assert!(!valid_contribution("", ProviderKind::Info, 0));
+        assert!(!valid_contribution("feature", ProviderKind::Info, i64::MAX));
     }
 }
