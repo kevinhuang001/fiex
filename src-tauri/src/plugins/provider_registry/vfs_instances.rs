@@ -105,6 +105,22 @@ pub fn bind(plugin_id: &str, params: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Read a mount's effective operation ceiling once for UI and menu
+/// snapshots. Do not expose a package-wide union to a specific account.
+pub fn operations(plugin_id: &str, mount_id: &str) -> Option<Vec<FsOperation>> {
+    let owner = mount_owner(plugin_id, mount_id).ok()?;
+    let state = super::get(plugin_id)?;
+    if !state.reported {
+        return None;
+    }
+    let operations = match state.instances.len() {
+        0 => &state.operations,
+        1 => &state.instances.values().next()?.operations,
+        _ => &state.instances.get(&owner)?.operations,
+    };
+    Some(operations.iter().copied().collect())
+}
+
 pub fn supports(plugin_id: &str, mount_id: &str, operation: FsOperation) -> bool {
     let Some(state) = super::get(plugin_id) else {
         return false;
@@ -186,6 +202,7 @@ mod tests {
                 "providers":[{"id":"only","operations":["read"],"preflight":false}]
             }}),
         );
+        assert!(operations(plugin_id, "unregistered").is_none());
         assert!(!supports(plugin_id, "unregistered", FsOperation::Read));
         assert!(!supports(plugin_id, "unregistered", FsOperation::Write));
         assert!(!preflight(plugin_id, "unregistered"));
