@@ -43,12 +43,9 @@ fn main() {
         .find(|engine| engine.resolver.id == "plugin:org.fiex.mock")
         .expect("the activated mock must advertise filename search");
     assert!(engine.supports(SearchMode::Name));
-    let (entries, truncated) = fiex_lib::plugins::resolvers::search::run(
-        &engine,
-        &request,
-        || false,
-    )
-    .expect("single-provider search query");
+    let (entries, truncated) =
+        fiex_lib::plugins::resolvers::search::run(&engine, &request, || false)
+            .expect("single-provider search query");
     assert!(!truncated);
     assert_eq!(entries.len(), 1, "{entries:?}");
     assert_eq!(entries[0].name, "fiex-mock-search.txt");
