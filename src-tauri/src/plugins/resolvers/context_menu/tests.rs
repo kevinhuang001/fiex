@@ -470,3 +470,31 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
     );
     assert!(!provider_ids(&empty).contains(&"builtin:create".to_string()));
 }
+
+#[test]
+fn applications_menu_uses_descriptor_and_generic_info_without_duplicate_open() {
+    let path = "applications://c3lzdGVtLWFwcA";
+    let ctx = super::builtin::Context::for_test_caps(
+        "applications://",
+        vec![path.into()],
+        vec![mount_entry(path, false)],
+        false,
+        false,
+        crate::plugins::resource::file_capabilities::FileCapabilities {
+            read: true,
+            stat: true,
+            ..Default::default()
+        },
+    );
+    let ids = provider_ids(&ctx);
+    assert!(ids.contains(&"core.applications.menu".to_string()));
+    assert!(ids.contains(&"builtin:opening".to_string()));
+    let native = super::builtin::resolve("core.applications.menu", &ctx).unwrap();
+    assert_eq!(native["items"][0]["id"], "open");
+    let generic = super::builtin::resolve("builtin:opening", &ctx).unwrap();
+    let items = generic["items"].as_array().unwrap();
+    assert!(items.iter().any(|item| item["id"] == "info"));
+    assert!(items.iter().any(|item| item["id"] == "preview"));
+    assert!(!items.iter().any(|item| item["id"] == "open"));
+    assert!(super::builtin::execute("core.applications.menu", "delete", &ctx).is_err());
+}
