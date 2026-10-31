@@ -319,3 +319,40 @@ pub(super) fn item(id: &str, title: &'static str, icon: &str, shortcut: &str) ->
     // Availability decides presence; a builtin item is never greyed out.
     json!({"id":id,"kind":"action","title":crate::i18n::t(title),"icon":icon,"shortcut":shortcut,"disabled":false})
 }
+
+#[cfg(test)]
+mod registry_tests {
+    use super::*;
+
+    #[test]
+    fn generic_native_menus_are_distinct_registered_context_menu_providers() {
+        let registered = registry();
+        assert_eq!(registered.len(), 10);
+        for descriptor in registered.descriptors() {
+            assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
+            descriptor.validate().unwrap();
+        }
+        let sorted = registered.candidates(|_| true);
+        assert_eq!(sorted[0].id, "builtin:opening");
+        assert_eq!(sorted.last().unwrap().id, "builtin:trash");
+        assert!(sorted.windows(2).all(|pair| pair[0].priority >= pair[1].priority));
+        assert!(registered.get("builtin:nonexistent").is_none());
+    }
+
+    #[test]
+    fn capabilities_are_checked_by_each_registered_native_menu() {
+        let no_paths: Vec<String> = Vec::new();
+        let entries: Vec<Entry> = Vec::new();
+        let selection = Selection {
+            paths: &no_paths,
+            entries: &entries,
+            read_only: false,
+            in_trash: false,
+            all_local: true,
+        };
+        assert!(available(&selection, &FileCapabilities::default()).is_empty());
+        let allowed = available(&selection, &FileCapabilities::ALL);
+        assert_eq!(allowed.len(), 1);
+        assert_eq!(allowed[0].id(), "builtin:create");
+    }
+}
