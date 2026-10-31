@@ -58,26 +58,31 @@ fn provider_cannot_choose_a_different_mount_or_escape_with_a_name() {
 
 #[test]
 fn capabilities_narrow_the_provider_and_mark_entries_readonly() {
-    let plugin = "test.vfs.capabilities";
-    crate::plugins::provider_registry::register(
-        plugin,
-        &json!({"vfs":{"operations":["list","stat","read","write","rename","remove"]}}),
-    );
     let location = crate::plugins::mounts::parse("fiex://mount/owner-one/folder").unwrap();
-    let mount = mount(plugin);
+    let mount = mount("test.vfs.capabilities");
+    let declared = [FsOperation::Read, FsOperation::Rename];
+
     let mut writable = file_entry("a.txt");
     writable.allowed_ops = Some(vec![FsOperation::Read, FsOperation::Rename]);
+    assert_eq!(
+        allowed_operations(&writable, |operation| declared.contains(&operation)),
+        vec!["read", "rename"]
+    );
     let (projected, _) = project_entry(&mount, &location, "folder/a.txt", writable).unwrap();
-    assert_eq!(projected.allowed_ops, vec!["read", "rename"]);
+    // No registered mount exists: the real authorization gate must fail closed.
+    assert!(projected.allowed_ops.is_empty());
     assert!(!projected.readonly);
+
     let mut read_only = file_entry("b.txt");
     read_only.allowed_ops = Some(vec![FsOperation::Read]);
+    assert_eq!(
+        allowed_operations(&read_only, |operation| declared.contains(&operation)),
+        vec!["read"]
+    );
     let (projected, _) = project_entry(&mount, &location, "folder/b.txt", read_only).unwrap();
-    assert_eq!(projected.allowed_ops, vec!["read"]);
-    // The provider did not mark the node read-only; `allowedOps` is what
-    // narrows the operation set.
+    assert!(projected.allowed_ops.is_empty());
+    // Per-node readonly is separate from capability narrowing.
     assert!(!projected.readonly);
-    crate::plugins::provider_registry::forget(plugin);
 }
 
 #[test]
