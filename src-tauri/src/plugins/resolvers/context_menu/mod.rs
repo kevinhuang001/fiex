@@ -219,7 +219,10 @@ pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
                 .id
                 .strip_prefix(&format!("plugin:{}:", plugin.id))
                 .map(str::to_owned),
-            session.remote_session_id.clone().ok_or("plugin session missing")?,
+            session
+                .remote_session_id
+                .clone()
+                .ok_or("plugin session missing")?,
             session.directory.clone(),
             session.resources.clone(),
             *session.submenus.get(parent_id).ok_or("unknown submenu")?,
