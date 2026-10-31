@@ -79,8 +79,7 @@ impl NativeConnectionMenu for Close {
 }
 
 fn registry() -> &'static NativeProviderRegistry<dyn NativeConnectionMenu> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeConnectionMenu>> =
-        OnceLock::new();
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeConnectionMenu>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut values: NativeProviderRegistry<dyn NativeConnectionMenu> =
             NativeProviderRegistry::new(ProviderKind::ConnectionContextMenu);
