@@ -65,9 +65,8 @@ impl Mount {
             )?;
             // The same bounded pagination DTO is accepted by Core and
             // emitted by SDK VFS implementations.
-            let page: fiex_provider_contracts::VfsPage =
-                serde_json::from_value(page)
-                    .map_err(|error| format!("invalid VFS listing page: {error}"))?;
+            let page: fiex_provider_contracts::VfsPage = serde_json::from_value(page)
+                .map_err(|error| format!("invalid VFS listing page: {error}"))?;
             page.validate_page(PAGE_LIMIT)?;
             truncated |= page.truncated;
             for item in page.entries {
@@ -155,9 +154,8 @@ impl Mount {
                     "ignores": ignores, "limit": remaining.min(PAGE_LIMIT), "cursor": cursor,
                 }),
             )?;
-            let page: fiex_provider_contracts::SearchResults =
-                serde_json::from_value(page)
-                    .map_err(|error| format!("invalid VFS search page: {error}"))?;
+            let page: fiex_provider_contracts::SearchResults = serde_json::from_value(page)
+                .map_err(|error| format!("invalid VFS search page: {error}"))?;
             page.validate_page(remaining.min(PAGE_LIMIT))?;
             for item in page.entries {
                 if cancelled() {
