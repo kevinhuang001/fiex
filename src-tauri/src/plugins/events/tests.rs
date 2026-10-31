@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn preview_skips_invalid_provider_and_stops_after_success() {
-    use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+    use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
     use std::sync::{Arc, Mutex};
 
     struct TestPreview {
@@ -159,7 +159,7 @@ fn fixed_events_are_core_owned_custom_methods_remain_available() {
 
 #[test]
 fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing() {
-    use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+    use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 
     struct Response(Value);
     impl ProviderEndpoint for Response {
