@@ -85,7 +85,8 @@ pub fn call_owner(
                 plugin: (**plugin).clone(),
                 resources,
                 directory,
-            }) as Box<dyn crate::plugin_sdk::provider_contracts::ProviderEndpoint + '_>),
+            })
+                as Box<dyn crate::plugin_sdk::provider_contracts::ProviderEndpoint + '_>),
             Handler::Builtin(_) => Err("native owner is not registered".into()),
         },
         |_, value| Ok(value),
