@@ -10,22 +10,7 @@ pub(crate) async fn plugin_toolbar_invoke(
         return Err("too many toolbar targets".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let targets = if paths.is_empty() {
-            vec![directory.clone()]
-        } else {
-            paths
-        };
-        let resources = targets
-            .iter()
-            .map(|p| crate::plugins::resource::resource_context::ResourceSnapshot::resolve(p))
-            .collect::<Result<Vec<_>, _>>()?;
-        crate::plugins::events::call_owner(
-            "toolbar.invoke",
-            &plugin_id,
-            serde_json::json!({}),
-            &resources,
-            Some(&directory),
-        )
+        crate::plugins::resolvers::toolbar::invoke(&plugin_id, &directory, &paths)
     })
     .await
     .map_err(|e| e.to_string())?
