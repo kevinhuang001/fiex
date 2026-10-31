@@ -28,7 +28,10 @@
 use super::connection_cache::ConnectionCache;
 use crate::core::files::Entry;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
+use std::sync::{Arc, OnceLock};
 
 /// The selection a menu is resolved for.
 pub(super) struct Selection<'a> {
@@ -45,29 +48,55 @@ impl Selection<'_> {
     }
 }
 
-pub(super) trait BuiltinResolver {
+pub(super) trait BuiltinResolver: Send + Sync {
     fn id(&self) -> &'static str;
     fn priority(&self) -> i64;
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool;
     fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value>;
 }
 
-/// Canonical order; a filtered-out group keeps every later group's priority.
-const GROUPS: [&dyn BuiltinResolver; 10] = [
-    &Opening,
-    &Tags,
-    &Create,
-    &ConnectionCache,
-    &Rename,
-    &BatchRename,
-    &Clipboard,
-    &Terminal,
-    &CopyPath,
-    &Trash,
-];
+/// Every generic Core menu group is a registered typed provider instance.
+/// Capabilities determine eligibility; no per-request provider ID switch.
+fn registry() -> &'static NativeProviderRegistry<dyn BuiltinResolver> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn BuiltinResolver>> = OnceLock::new();
+    REGISTERED.get_or_init(|| {
+        let mut values: NativeProviderRegistry<dyn BuiltinResolver> =
+            NativeProviderRegistry::new(ProviderKind::ContextMenu);
+        let implementations: [Arc<dyn BuiltinResolver>; 10] = [
+            Arc::new(Opening),
+            Arc::new(Tags),
+            Arc::new(Create),
+            Arc::new(ConnectionCache),
+            Arc::new(Rename),
+            Arc::new(BatchRename),
+            Arc::new(Clipboard),
+            Arc::new(Terminal),
+            Arc::new(CopyPath),
+            Arc::new(Trash),
+        ];
+        for implementation in implementations {
+            values
+                .register(
+                    implementation.id(),
+                    implementation.priority(),
+                    ProviderMatchRule::default(),
+                    implementation,
+                )
+                .expect("invalid builtin menu registration");
+        }
+        values
+    })
+}
 
-pub(super) fn groups() -> &'static [&'static dyn BuiltinResolver] {
-    &GROUPS
+pub(super) fn available(
+    selection: &Selection<'_>,
+    capabilities: &FileCapabilities,
+) -> Vec<&'static dyn BuiltinResolver> {
+    registry()
+        .candidates(|implementation| implementation.available(selection, capabilities))
+        .iter()
+        .filter_map(|candidate| registry().get(&candidate.id))
+        .collect()
 }
 
 struct Opening;
