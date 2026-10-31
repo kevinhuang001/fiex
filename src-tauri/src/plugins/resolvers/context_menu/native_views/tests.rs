@@ -52,4 +52,3 @@ fn mixed_app_selections_have_only_shared_actions() {
     assert_eq!(value["items"].as_array().unwrap().len(), 1);
     assert_eq!(value["items"][0]["id"], "open");
 }
-
