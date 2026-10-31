@@ -2,30 +2,12 @@
 //! EventRouter's FirstSupported policy as other feature types.
 use crate::plugins::{
     events::{EventRouter, Handler},
-    host::PluginInfo,
     resource::resource_context::ResourceSnapshot,
 };
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::ProviderRequest;
 use serde_json::{json, Value};
 
-struct PluginHook<'a> {
-    plugin: PluginInfo,
-    resource: &'a ResourceSnapshot,
-}
-impl ProviderEndpoint for PluginHook<'_> {
-    fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        if request.method != "hooks.invoke" {
-            return Err("unsupported HookProvider event".into());
-        }
-        crate::plugins::events::invoke_resources(
-            &self.plugin,
-            &request.method,
-            request.params.clone(),
-            std::slice::from_ref(self.resource),
-            None,
-        )
-    }
-}
+mod proxy;
 
 pub fn before_open(path: &str) -> Result<Value, String> {
     let resource = ResourceSnapshot::resolve(path)?;
@@ -47,10 +29,7 @@ pub fn before_open(path: &str) -> Result<Value, String> {
         providers,
         &call,
         |resolver| match &resolver.handler {
-            Handler::Plugin(plugin) => Ok(Box::new(PluginHook {
-                plugin: (**plugin).clone(),
-                resource: &resource,
-            }) as Box<dyn ProviderEndpoint + '_>),
+            Handler::Plugin(plugin) => proxy::endpoint(plugin, &resource),
             Handler::Builtin(_) => Err("unregistered native HookProvider".into()),
         },
         |_, value| validate_hook_reply(value),
