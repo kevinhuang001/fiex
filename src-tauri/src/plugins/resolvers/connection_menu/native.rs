@@ -1,6 +1,5 @@
-//! Core connection-menu actions use persistent, typed providers. Each
-//! implementation owns its own menu policy; IPC proxies share the same
-//! EventRouter and response validation.
+//! Core connection menus implement one typed resolve/execute contract.
+//! Dispatch is direct for native providers; plugin actions remain IPC.
 use super::Context;
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
@@ -8,8 +7,16 @@ use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
+enum NativeEffect {
+    CoreAction(&'static str),
+    SaveSession,
+    ToggleAutostart,
+    SyncNow,
+}
+
 trait NativeConnectionMenu: Send + Sync {
     fn items(&self, ctx: &Context) -> Vec<Value>;
+    fn execute(&self, ctx: &Context, item: &str) -> Result<NativeEffect, String>;
 }
 
 fn item(id: &str, title: String, icon: &str) -> Value {
@@ -24,6 +31,13 @@ impl NativeConnectionMenu for Edit {
             crate::i18n::t("编辑连接…").into(),
             "pencil",
         )]
+    }
+
+    fn execute(&self, _ctx: &Context, item: &str) -> Result<NativeEffect, String> {
+        match item {
+            "connection.edit" => Ok(NativeEffect::CoreAction("editConnection")),
+            _ => Err("unknown connection edit action".into()),
+        }
     }
 }
 
@@ -47,6 +61,14 @@ impl NativeConnectionMenu for Session {
             ),
         ]
     }
+
+    fn execute(&self, _ctx: &Context, item: &str) -> Result<NativeEffect, String> {
+        match item {
+            "connection.saveSession" => Ok(NativeEffect::SaveSession),
+            "connection.toggleAutostart" => Ok(NativeEffect::ToggleAutostart),
+            _ => Err("unknown connection session action".into()),
+        }
+    }
 }
 
 struct SyncMenu;
@@ -62,6 +84,14 @@ impl NativeConnectionMenu for SyncMenu {
             Vec::new()
         }
     }
+
+    fn execute(&self, ctx: &Context, item: &str) -> Result<NativeEffect, String> {
+        if item == "connection.syncNow" && ctx.can_sync {
+            Ok(NativeEffect::SyncNow)
+        } else {
+            Err("connection does not support sync action".into())
+        }
+    }
 }
 
 struct Close;
@@ -75,6 +105,13 @@ impl NativeConnectionMenu for Close {
         close["danger"] = json!(true);
         close["placement"] = json!("tail");
         vec![close]
+    }
+
+    fn execute(&self, _ctx: &Context, item: &str) -> Result<NativeEffect, String> {
+        match item {
+            "connection.close" => Ok(NativeEffect::CoreAction("closeConnection")),
+            _ => Err("unknown connection close action".into()),
+        }
     }
 }
 
@@ -107,6 +144,47 @@ pub(super) fn items(id: &str, ctx: &Context) -> Result<Vec<Value>, String> {
         .get(id)
         .map(|provider| provider.items(ctx))
         .ok_or_else(|| "unknown native connection menu provider".into())
+}
+
+/// Execute an action on its own registered native provider. The Core action
+/// boundary stays async for session mutations and synchronization.
+pub(super) async fn execute(
+    provider_id: &str,
+    ctx: &Context,
+    item_id: &str,
+) -> Result<Value, String> {
+    let provider = registry()
+        .get(provider_id)
+        .ok_or("unknown native connection menu provider")?;
+    if !provider.items(ctx).iter().any(|value| {
+        value["id"] == item_id && value["kind"] == "action" && value["disabled"] != true
+    }) {
+        return Err("native menu action is not available".into());
+    }
+    let effect = provider.execute(ctx, item_id)?;
+    match effect {
+        NativeEffect::CoreAction(command) => Ok(json!({
+            "kind":"coreAction",
+            "command":command,
+            "connectionId":ctx.info.id
+        })),
+        NativeEffect::SaveSession => {
+            crate::remote::update_connection_session(&ctx.info.id, Some(true), None)?;
+            Ok(json!({"kind":"handled"}))
+        }
+        NativeEffect::ToggleAutostart => {
+            crate::remote::update_connection_session(
+                &ctx.info.id,
+                None,
+                Some(!ctx.info.autostart),
+            )?;
+            Ok(json!({"kind":"handled"}))
+        }
+        NativeEffect::SyncNow => {
+            crate::remote::reconcile_connection(&ctx.info.id).await;
+            Ok(json!({"kind":"handled"}))
+        }
+    }
 }
 
 #[cfg(test)]

@@ -171,7 +171,7 @@ pub async fn execute(
         },
     )?;
     if native_action_authorized(builtin_owner, item_id, &result)? {
-        return builtin_execute(&ctx, item_id).await;
+        return native::execute(provider_id, &ctx, item_id).await;
     }
     Ok(result)
 }
@@ -193,38 +193,6 @@ fn plugin_items(
     crate::plugins::host::global()
         .invoke(&plugin.id, "connectionContextMenu.resolve", params)
         .and_then(|value| valid_items(&value))
-}
-
-async fn builtin_execute(ctx: &Context, item_id: &str) -> Result<Value, String> {
-    match item_id {
-        "connection.edit" => Ok(json!({
-            "kind": "coreAction",
-            "command": "editConnection",
-            "connectionId": ctx.info.id,
-        })),
-        "connection.close" => Ok(json!({
-            "kind": "coreAction",
-            "command": "closeConnection",
-            "connectionId": ctx.info.id,
-        })),
-        "connection.saveSession" => {
-            crate::remote::update_connection_session(&ctx.info.id, Some(true), None)?;
-            Ok(json!({"kind": "handled"}))
-        }
-        "connection.toggleAutostart" => {
-            crate::remote::update_connection_session(
-                &ctx.info.id,
-                None,
-                Some(!ctx.info.autostart),
-            )?;
-            Ok(json!({"kind": "handled"}))
-        }
-        "connection.syncNow" => {
-            crate::remote::reconcile_connection(&ctx.info.id).await;
-            Ok(json!({"kind": "handled"}))
-        }
-        _ => Err("unknown connection menu action".into()),
-    }
 }
 
 #[cfg(test)]
