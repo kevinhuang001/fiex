@@ -130,9 +130,7 @@ fn parse_truncated(response: &Value) -> Result<bool, String> {
 fn parse_cursor(response: &Value) -> Result<Option<String>, String> {
     match response.get("nextCursor") {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::String(cursor))
-            if !cursor.is_empty() && cursor.len() <= MAX_CURSOR_BYTES =>
-        {
+        Some(Value::String(cursor)) if !cursor.is_empty() && cursor.len() <= MAX_CURSOR_BYTES => {
             Ok(Some(cursor.clone()))
         }
         _ => Err("invalid search pagination cursor".into()),
@@ -156,7 +154,10 @@ mod tests {
     #[test]
     fn pagination_cursors_must_be_bounded_and_typed() {
         assert_eq!(parse_cursor(&json!({})).unwrap(), None);
-        assert_eq!(parse_cursor(&json!({"nextCursor":"p2"})).unwrap(), Some("p2".into()));
+        assert_eq!(
+            parse_cursor(&json!({"nextCursor":"p2"})).unwrap(),
+            Some("p2".into())
+        );
         for invalid in [
             json!({"nextCursor":""}),
             json!({"nextCursor":true}),
