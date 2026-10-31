@@ -90,14 +90,19 @@ pub fn bind(plugin_id: &str, params: &mut Value) -> Result<(), String> {
     let state = super::get(plugin_id).ok_or("VFS provider handshake not complete")?;
     let fields = params.as_object_mut().ok_or("invalid VFS parameters")?;
     fields.remove("providerId");
-    if state.instances.len() <= 1 {
-        return Ok(());
-    }
     let mount_id = fields
         .get("mountId")
         .and_then(Value::as_str)
         .ok_or("VFS operation has no Core-bound mount")?;
+    // Authorize even the single-instance SDK: default provider identity is
+    // unambiguous, but a foreign or revoked mount must still be rejected.
     let selected = mount_owner(plugin_id, mount_id)?;
+    if !state.reported {
+        return Err("VFS provider handshake not complete".into());
+    }
+    if state.instances.len() <= 1 {
+        return Ok(());
+    }
     if !state.instances.contains_key(&selected) {
         return Err("mount has no registered VFS provider instance".into());
     }
@@ -225,6 +230,8 @@ mod tests {
         let mut params = json!({"mountId":"unregistered","providerId":"drive"});
         assert!(bind(plugin_id, &mut params).is_err());
         assert!(params.get("providerId").is_none());
+        assert!(!preflight(plugin_id, "unregistered"));
+
         super::super::forget(plugin_id);
     }
 }
