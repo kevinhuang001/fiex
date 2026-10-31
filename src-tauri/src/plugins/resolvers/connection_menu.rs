@@ -41,6 +41,24 @@ impl Context {
             "vfs": self.can_sync,
         })
     }
+
+    /// Verified connection identity for the common ProviderMatchRule.
+    /// The saved connection is authoritative; plugin JSON never supplies the
+    /// view owner, storage owner, mount or effective operations.
+    fn matcher_metadata(&self) -> Value {
+        let owner = format!("plugin:{}:{}", self.info.plugin_id, self.info.kind);
+        let (_, storage) = crate::plugins::match_rules::locations_for(&self.info.mount_path);
+        json!({
+            "kind":"connection",
+            "view":{
+                "type":"vfs",
+                "providerId":owner,
+                "mountId":self.info.id
+            },
+            "storage":storage,
+            "operations":[]
+        })
+    }
 }
 
 fn providers() -> Vec<Resolver> {
@@ -148,7 +166,12 @@ fn valid_items(value: &Value) -> Result<Vec<Value>, String> {
 pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
     let ctx = Context::load(connection_id)?;
     let session = crate::plugins::mounts::new_id()?;
-    let providers = crate::plugins::provider_registry::candidates("connectionContextMenu.resolve", &[], "", providers());
+    let providers = crate::plugins::provider_registry::candidates(
+        "connectionContextMenu.resolve",
+        &[ctx.matcher_metadata()],
+        &ctx.info.mount_path,
+        providers(),
+    );
     let mut menus = Vec::new();
     for provider in providers {
         let result = match &provider.handler {
@@ -213,12 +236,14 @@ pub async fn execute(
     if !plugin.enabled
         || !plugin.approved
         || !plugin.backend_available
-        || !matches!(
-            plugin.extensions.get("connectionContextMenus"),
-            Some(Value::Bool(true) | Value::Object(_))
+        || !crate::plugins::events::matching::matches(
+            "connectionContextMenu.execute",
+            &plugin.extensions,
+            &[ctx.matcher_metadata()],
+            &ctx.info.mount_path,
         )
     {
-        return Err("menu provider unavailable".into());
+        return Err("menu provider unavailable or does not match connection".into());
     }
     let session = menu_session_id
         .map(str::to_owned)
@@ -384,6 +409,33 @@ mod tests {
         let close = builtin_items("builtin:connection-close", &menu).unwrap();
         assert_eq!(close[0]["placement"], "tail");
         assert_eq!(close[0]["danger"], true);
+    }
+
+    #[test]
+    fn connection_matches_are_core_owned_and_storage_sensitive() {
+        use crate::plugins::events::matching;
+        let connection = ctx("org.fiex.drive", "drive", "fiex-plugin-view://c1", true, false);
+        let metadata = connection.matcher_metadata();
+        assert_eq!(metadata["kind"], "connection");
+        assert_eq!(metadata["view"]["providerId"], "plugin:org.fiex.drive:drive");
+        let matched = json!({"connectionContextMenus":{"match":{
+            "kinds":["connection"],"view":{"providerIds":["plugin:org.fiex.drive:drive"]}
+        }}});
+        assert!(matching::matches(
+            "connectionContextMenu.resolve",
+            &matched,
+            &[metadata.clone()],
+            &connection.info.mount_path
+        ));
+        let denied = json!({"connectionContextMenus":{"match":{
+            "kinds":["connection"],"storage":{"types":["vfs"]}
+        }}});
+        assert!(!matching::matches(
+            "connectionContextMenu.resolve",
+            &denied,
+            &[metadata],
+            &connection.info.mount_path
+        ));
     }
 
     #[test]
