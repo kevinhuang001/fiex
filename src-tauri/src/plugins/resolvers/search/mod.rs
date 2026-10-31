@@ -5,9 +5,9 @@
 //! requested mode, or the builtin walker as the last candidate. Every result
 //! is validated against the authorized root before it leaves this module.
 use crate::core::files::Entry;
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
-use crate::plugins::events::EventRouter;
 mod endpoint;
+mod stream;
+pub use stream::{run, run_stream};
 use crate::core::search::SearchMode;
 use crate::plugins::events::{Handler, Resolver};
 use serde::Deserialize;
@@ -135,63 +135,6 @@ pub fn engines(request: &PluginSearchInput) -> Vec<SearchEngineInfo> {
         .collect()
 }
 
-/// Invoke exactly one plugin engine and return its validated entries.
-pub fn run(
-    engine: &SearchEngineInfo,
-    request: &PluginSearchInput,
-    cancelled: impl Fn() -> bool,
-) -> Result<(Vec<Entry>, bool), String> {
-    if engine.is_builtin() {
-        return Err("builtin search engine runs in Core".into());
-    }
-    if !engine.supports(request.mode) {
-        return Err(format!(
-            "{} 不支持{}搜索",
-            engine.resolver.name,
-            match request.mode {
-                SearchMode::Name => "文件名",
-                SearchMode::Content => "文件内容",
-            }
-        ));
-    }
-    if cancelled() {
-        return Err("search cancelled".into());
-    }
-    let resources = resources(request);
-    let call = ProviderRequest {
-        method: "search.query".into(),
-        params: input(request),
-    };
-    EventRouter::resolve(
-        "search.query",
-        vec![engine.resolver.clone()],
-        &call,
-        |resolver| {
-            let Handler::Plugin(plugin) = &resolver.handler else {
-                return Err("native search runs through the streaming walker".into());
-            };
-            Ok(Box::new(endpoint::PluginSearchEndpoint {
-                plugin: (**plugin).clone(),
-                resources: &resources,
-                directory: &request.root,
-            }) as Box<dyn ProviderEndpoint + '_>)
-        },
-        |resolver, response| {
-            let truncated = parse_truncated(&response)?;
-            let entries = validated(resolver, response, request)?;
-            Ok((entries, truncated))
-        },
-        |_| true,
-        |results| {
-            results
-                .into_iter()
-                .next()
-                .ok_or_else(|| "search provider unavailable".to_string())?
-                .1
-        },
-    )
-}
-
 /// Shared result validation: ownership, root confinement, hidden/ignore rules,
 /// and bounded size. A provider can never widen the authorized search scope.
 fn validated(
@@ -253,27 +196,3 @@ fn validated(
     Ok(values)
 }
 
-/// SDK SearchResults omits false fields during serialization; absent means false.
-/// A present but malformed flag must fail instead of claiming completeness.
-fn parse_truncated(response: &Value) -> Result<bool, String> {
-    match response.get("truncated") {
-        None => Ok(false),
-        Some(Value::Bool(value)) => Ok(*value),
-        _ => Err("invalid search response: truncated must be a boolean".into()),
-    }
-}
-
-#[cfg(test)]
-mod response_tests {
-    use super::*;
-
-    #[test]
-    fn sdk_default_false_can_be_omitted_but_malformed_fields_are_rejected() {
-        assert_eq!(parse_truncated(&json!({"entries":[]})).unwrap(), false);
-        assert_eq!(parse_truncated(&json!({"truncated":false})).unwrap(), false);
-        assert_eq!(parse_truncated(&json!({"truncated":true})).unwrap(), true);
-        for malformed in [json!({"truncated":null}), json!({"truncated":"false"})] {
-            assert!(parse_truncated(&malformed).is_err());
-        }
-    }
-}
