@@ -6,7 +6,6 @@ use crate::plugins::events::EventRouter;
 use std::collections::HashSet;
 
 const MAX_PAGES: usize = 64;
-const MAX_CURSOR_BYTES: usize = 2048;
 
 /// Kept for command-line integration fixtures; UI calls run_stream directly.
 pub fn run(
@@ -83,13 +82,13 @@ pub fn run_stream(
                 }) as Box<dyn ProviderEndpoint + '_>)
             },
             |resolver, response| {
-                let page_truncated = parse_truncated(&response)?;
-                let next = parse_cursor(&response)?;
+                // Decode the same strict page DTO used by the SDK.
+                let page: fiex_provider_contracts::SearchResults =
+                    serde_json::from_value(response.clone())
+                        .map_err(|error| format!("invalid search page: {error}"))?;
+                page.validate_page(remaining)?;
                 let entries = validated(resolver, response, request)?;
-                if entries.len() > remaining {
-                    return Err("search provider exceeded requested page limit".into());
-                }
-                Ok((entries, page_truncated, next))
+                Ok((entries, page.truncated, page.next_cursor))
             },
             |_| true,
             |results| {
@@ -119,51 +118,3 @@ pub fn run_stream(
     Err("search provider exceeded pagination budget".into())
 }
 
-fn parse_truncated(response: &Value) -> Result<bool, String> {
-    match response.get("truncated") {
-        None => Ok(false),
-        Some(Value::Bool(value)) => Ok(*value),
-        _ => Err("invalid search response: truncated must be a boolean".into()),
-    }
-}
-
-fn parse_cursor(response: &Value) -> Result<Option<String>, String> {
-    match response.get("nextCursor") {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(cursor)) if !cursor.is_empty() && cursor.len() <= MAX_CURSOR_BYTES => {
-            Ok(Some(cursor.clone()))
-        }
-        _ => Err("invalid search pagination cursor".into()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sdk_omitted_false_is_valid_but_malformed_flags_fail() {
-        assert!(!parse_truncated(&json!({"entries":[]})).unwrap());
-        assert!(!parse_truncated(&json!({"truncated":false})).unwrap());
-        assert!(parse_truncated(&json!({"truncated":true})).unwrap());
-        for invalid in [json!({"truncated":null}), json!({"truncated":"false"})] {
-            assert!(parse_truncated(&invalid).is_err());
-        }
-    }
-
-    #[test]
-    fn pagination_cursors_must_be_bounded_and_typed() {
-        assert_eq!(parse_cursor(&json!({})).unwrap(), None);
-        assert_eq!(
-            parse_cursor(&json!({"nextCursor":"p2"})).unwrap(),
-            Some("p2".into())
-        );
-        for invalid in [
-            json!({"nextCursor":""}),
-            json!({"nextCursor":true}),
-            json!({"nextCursor":"x".repeat(MAX_CURSOR_BYTES + 1)}),
-        ] {
-            assert!(parse_cursor(&invalid).is_err());
-        }
-    }
-}
