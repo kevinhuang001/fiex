@@ -122,8 +122,16 @@ mod tests {
 
     #[test]
     fn malicious_or_malformed_ipc_provider_ids_and_priorities_are_rejected() {
-        assert!(valid_contribution("menu.edit", ProviderKind::ContextMenu, 100));
-        assert!(!valid_contribution("invalid/id", ProviderKind::ContextMenu, 100));
+        assert!(valid_contribution(
+            "menu.edit",
+            ProviderKind::ContextMenu,
+            100
+        ));
+        assert!(!valid_contribution(
+            "invalid/id",
+            ProviderKind::ContextMenu,
+            100
+        ));
         assert!(!valid_contribution("", ProviderKind::Info, 0));
         assert!(!valid_contribution("feature", ProviderKind::Info, i64::MAX));
     }

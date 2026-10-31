@@ -158,16 +158,10 @@ fn plugin_connection_menu_result_cannot_impersonate_a_core_action() {
         &json!({"kind":"nativeAction","itemId":"connection.edit"}),
     )
     .is_err());
-    assert!(native_action_authorized(
-        true,
-        "connection.close",
-        &json!({"kind":"handled"}),
-    )
-    .is_err());
-    assert!(!native_action_authorized(
-        false,
-        "connection.close",
-        &json!({"kind":"handled"}),
-    )
-    .unwrap());
+    assert!(
+        native_action_authorized(true, "connection.close", &json!({"kind":"handled"}),).is_err()
+    );
+    assert!(
+        !native_action_authorized(false, "connection.close", &json!({"kind":"handled"}),).unwrap()
+    );
 }

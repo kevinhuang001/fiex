@@ -119,11 +119,7 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
 /// A plugin result is never authority to run a privileged native command.
 /// Only an already-matched Core builtin may return the private nativeAction
 /// marker, and the action must be identical to the one Core revalidated.
-fn native_action_authorized(
-    builtin: bool,
-    item_id: &str,
-    result: &Value,
-) -> Result<bool, String> {
+fn native_action_authorized(builtin: bool, item_id: &str, result: &Value) -> Result<bool, String> {
     match (builtin, result["kind"].as_str()) {
         (true, Some("nativeAction")) if result["itemId"] == item_id => Ok(true),
         (true, _) => Err("invalid native connection menu response".into()),
