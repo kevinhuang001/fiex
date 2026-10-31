@@ -44,7 +44,6 @@ mod tests {
             Vec::new(),
             Vec::new(),
             true,
-            false,
             Default::default(),
         );
         let endpoint = NativeMenuEndpoint {
