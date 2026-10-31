@@ -3,7 +3,7 @@
 //! Both transports implement the SDK's ProviderEndpoint. Core owns the menu
 //! session, resource scope and output validation independently of transport.
 use super::builtin;
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use serde_json::{json, Value};
 use std::sync::Arc;
