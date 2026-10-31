@@ -80,12 +80,24 @@ impl FileCapabilities {
     }
 }
 
-/// What a mount's provider declared. `None` means "not a mount" only for local
-/// paths; callers distinguish the two cases before asking.
+/// Resolve the effective operation ceiling for the *selected mount*, not
+/// the union announced by every instance in the owning plugin package.
+/// A stale or forged mount never inherits another account's capabilities.
 fn declared_operations(path: &str) -> Option<Vec<FsOperation>> {
-    crate::plugins::resolvers::fs::mount_plugin_id(path)
-        .ok()
-        .and_then(|plugin_id| crate::plugins::provider_registry::operations(&plugin_id))
+    let uri = crate::plugins::mounts::parse(path).ok()?;
+    let plugin_id = crate::plugins::resolvers::fs::mount_plugin_id(path).ok()?;
+    Some(
+        FsOperation::ALL
+            .into_iter()
+            .filter(|operation| {
+                crate::plugins::provider_registry::supports_mount(
+                    &plugin_id,
+                    &uri.mount_id,
+                    *operation,
+                )
+            })
+            .collect(),
+    )
 }
 
 /// One node entry resolved through the right adapter (connection or view).
