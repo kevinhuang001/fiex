@@ -55,19 +55,19 @@ fn mixed_app_selections_have_only_shared_actions() {
 
 #[test]
 fn native_view_menus_use_validated_shared_descriptors() {
-    let providers = descriptors();
-    assert_eq!(providers.len(), 3);
-    for candidate in providers {
-        assert_eq!(candidate.descriptor.kind, ProviderKind::ContextMenu);
-        assert_eq!(candidate.descriptor.id, candidate.id);
-        candidate.descriptor.validate().unwrap();
+    let registered = registry();
+    assert_eq!(registered.len(), 3);
+    for descriptor in registered.descriptors() {
+        assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
+        descriptor.validate().unwrap();
+        let owner = registered.get(&descriptor.id).unwrap().owner();
         let matching = json!({
-            "view": {"type":"vfs","providerId":candidate.owner,"mountId":candidate.owner}
+            "view": {"type":"vfs","providerId":owner,"mountId":owner}
         });
-        assert!(candidate.descriptor.r#match.matches_targets(&[matching], 1));
+        assert!(descriptor.r#match.matches_targets(&[matching], 1));
         let foreign = json!({
             "view": {"type":"fs","providerId":"core:local-fs","mountId":"local"}
         });
-        assert!(!candidate.descriptor.r#match.matches_targets(&[foreign], 1));
+        assert!(!descriptor.r#match.matches_targets(&[foreign], 1));
     }
 }
