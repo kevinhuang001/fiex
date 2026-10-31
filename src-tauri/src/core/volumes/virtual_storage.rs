@@ -67,3 +67,14 @@ pub(crate) fn virtual_path_key(path: &str) -> Option<String> {
         || super::trash_vfs::is_tree(path))
     .then(|| path.into())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_view_policy_is_projected_into_root_entry() {
+        assert!(entry(virtual_resolvers::RECENT_URI).unwrap().readonly);
+        assert!(!entry(applications::URI).unwrap().readonly);
+    }
+}
