@@ -15,7 +15,39 @@ trait NativeViewMenuProvider: Send + Sync {
     fn owner(&self) -> &'static str;
     fn claimed_actions(&self) -> &'static [&'static str];
     fn items(&self, path: &str) -> Vec<Value>;
+    /// Blank-canvas actions are opt-in, matched against the view of the
+    /// current directory rather than a selected child.
+    fn supports_blank(&self, _directory: &str) -> bool {
+        false
+    }
+    fn selection_items(&self, directory: &str, paths: &[String]) -> Vec<Value> {
+        intersection(self, directory, paths)
+    }
     fn execute(&self, item_id: &str, paths: &[String]) -> Result<NativeAction, String>;
+}
+
+/// Compute an action intersection using the same native provider for every
+/// selected node. The empty selection is a valid directory target.
+fn intersection<P: NativeViewMenuProvider + ?Sized>(
+    implementation: &P,
+    directory: &str,
+    paths: &[String],
+) -> Vec<Value> {
+    let Some(first) = paths.first() else {
+        return implementation.items(directory);
+    };
+    implementation
+        .items(first)
+        .into_iter()
+        .filter(|item| {
+            paths.iter().skip(1).all(|path| {
+                implementation
+                    .items(path)
+                    .iter()
+                    .any(|other| other["id"] == item["id"])
+            })
+        })
+        .collect()
 }
 
 pub(super) struct NativeAction {
@@ -56,7 +88,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeViewMenuProvider> {
 }
 
 fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[String]) -> bool {
-    if paths.is_empty() {
+    if paths.is_empty() && !provider.supports_blank(directory) {
         return false;
     }
     let Some(descriptor) = registry().descriptor(provider.id()) else {
@@ -66,6 +98,9 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
     let (directory_view, _) = crate::plugins::match_rules::locations_for(directory);
     if !rule.matches_targets(&[json!({"view": directory_view})], 1) {
         return false;
+    }
+    if paths.is_empty() {
+        return true;
     }
     // A mixed-source selection must match *every* target. Never inherit
     // elevated actions from the first item or from a plugin-supplied path.
@@ -109,19 +144,7 @@ pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'
 
 pub(super) fn resolve(id: &str, directory: &str, paths: &[String]) -> Result<Value, String> {
     let implementation = provider(id, directory, paths)?;
-    let offered = implementation.items(&paths[0]);
-    let intersection = offered
-        .into_iter()
-        .filter(|item| {
-            paths.iter().skip(1).all(|path| {
-                implementation
-                    .items(path)
-                    .iter()
-                    .any(|other| other["id"] == item["id"])
-            })
-        })
-        .collect::<Vec<_>>();
-    Ok(json!({"items": intersection}))
+    Ok(json!({"items": implementation.selection_items(directory, paths)}))
 }
 
 pub(super) fn execute(
