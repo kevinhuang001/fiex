@@ -32,8 +32,8 @@ fn resolve(path: &str) -> Result<Route, FsError> {
     Ok(Route::Local)
 }
 
-//// The same Core-owned storage identity drives both operations and matching.
-//// An unregistered source has no identity: never claim it as Local FS.
+/// The same Core-owned storage identity drives both operations and matching.
+/// An unregistered source has no identity: never claim it as Local FS.
 pub(crate) fn identity(path: &str) -> Option<(&'static str, String, String)> {
     match resolve(path).ok()? {
         Route::Plugin => {

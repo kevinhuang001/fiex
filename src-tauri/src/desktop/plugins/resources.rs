@@ -1,5 +1,3 @@
-use super::*;
-
 /// Host-owned native file chooser. Returns only a selected path; plugin
 /// code never gets a handle to the chooser UI or a directory browsing grant.
 #[tauri::command]
