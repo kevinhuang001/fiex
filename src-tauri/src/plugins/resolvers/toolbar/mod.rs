@@ -61,7 +61,7 @@ pub fn invoke(plugin_id: &str, directory: &str, paths: &[String]) -> Result<Valu
             results
                 .into_iter()
                 .next()
-                .ok_or_else(|| "toolbar provider is disabled or does not match targets".into())?
+                .ok_or_else(|| "toolbar provider is disabled or does not match targets".to_string())?
                 .1
         },
     )
