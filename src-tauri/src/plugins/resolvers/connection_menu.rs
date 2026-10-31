@@ -4,9 +4,11 @@
 //! own the shell actions (edit, session, sync, close); plugins declaring
 //! `extensions.connectionContextMenus` add their own flat action list.
 
-use crate::plugins::events::{EventRouter, Handler, Resolver};
+use crate::plugins::events::{EventRouter, Handler};
 mod endpoint;
+mod native;
 mod validation;
+use native::{items as builtin_items, providers};
 use crate::remote::ConnectionInfo;
 use fiex_provider_contracts::ProviderRequest;
 use serde_json::{json, Value};
@@ -59,66 +61,6 @@ impl Context {
             "storage":storage,
             "operations":[]
         })
-    }
-}
-
-fn providers() -> Vec<Resolver> {
-    vec![
-        Resolver::builtin("builtin:connection-edit", 100),
-        Resolver::builtin("builtin:connection-session", 90),
-        Resolver::builtin("builtin:connection-sync", 80),
-        Resolver::builtin("builtin:connection-close", 70),
-    ]
-}
-
-fn item(id: &str, title: String, icon: &str) -> Value {
-    json!({"id":id,"kind":"action","title":title,"icon":icon})
-}
-
-fn builtin_items(id: &str, ctx: &Context) -> Result<Vec<Value>, String> {
-    match id {
-        "builtin:connection-edit" => Ok(vec![item(
-            "connection.edit",
-            crate::i18n::t("编辑连接…").into(),
-            "pencil",
-        )]),
-        "builtin:connection-session" => {
-            let mut items = vec![item(
-                "connection.saveSession",
-                crate::i18n::t("保存 Session").into(),
-                "pin",
-            )];
-            items.push(item(
-                "connection.toggleAutostart",
-                if ctx.info.autostart {
-                    crate::i18n::t("取消自启动").into()
-                } else {
-                    crate::i18n::t("设置为自启动").into()
-                },
-                "pin",
-            ));
-            Ok(items)
-        }
-        "builtin:connection-sync" => Ok(if ctx.can_sync {
-            vec![item(
-                "connection.syncNow",
-                crate::i18n::t("立即同步").into(),
-                "sync",
-            )]
-        } else {
-            Vec::new()
-        }),
-        "builtin:connection-close" => {
-            let mut close = item(
-                "connection.close",
-                crate::i18n::t("关闭连接").into(),
-                "trash",
-            );
-            close["danger"] = json!(true);
-            close["placement"] = json!("tail");
-            Ok(vec![close])
-        }
-        _ => Err("unknown connection menu provider".into()),
     }
 }
 
