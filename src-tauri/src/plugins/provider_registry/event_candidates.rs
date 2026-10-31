@@ -13,7 +13,15 @@ pub fn candidates(
     let Some(event) = event(method) else {
         return native;
     };
-    for plugin in crate::plugins::host::catalog() {
+    // Prune unrelated packages before computing runtime permissions, resolving
+    // backend executables, or checking command availability. Runtime grants
+    // are still checked afresh after discovery; the manifest is not trusted.
+    for plugin in crate::plugins::host::catalog_matching(|manifest| {
+        manifest
+            .extensions
+            .get(event.extension)
+            .is_some_and(|value| value.is_object() || value == true)
+    }) {
         if !plugin.enabled || !plugin.approved || !plugin.backend_available {
             continue;
         }
