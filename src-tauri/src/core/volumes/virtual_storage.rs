@@ -36,6 +36,10 @@ mod tests {
     fn builtin_view_policy_is_projected_into_root_entry() {
         assert!(entry(virtual_resolvers::RECENT_URI).unwrap().readonly);
         assert!(!entry(applications::URI).unwrap().readonly);
-        assert!(entry(crate::core::volumes::trash_vfs::URI).unwrap().readonly);
+        assert!(
+            entry(crate::core::volumes::trash_vfs::URI)
+                .unwrap()
+                .readonly
+        );
     }
 }
