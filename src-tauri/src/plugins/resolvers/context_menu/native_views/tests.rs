@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::volumes::applications;
 
 #[test]
 fn view_descriptors_are_disjoint_and_not_plugin_privileged() {
