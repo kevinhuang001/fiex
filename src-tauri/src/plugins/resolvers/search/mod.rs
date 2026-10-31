@@ -7,11 +7,11 @@
 use crate::core::files::Entry;
 mod endpoint;
 mod stream;
-pub use stream::{run, run_stream};
 use crate::core::search::SearchMode;
 use crate::plugins::events::{Handler, Resolver};
 use serde::Deserialize;
 use serde_json::{json, Value};
+pub use stream::{run, run_stream};
 
 pub const BUILTIN_SEARCH: &str = "core.search";
 /// The builtin walker is the final candidate in Auto mode; a plugin that
@@ -194,4 +194,3 @@ fn validated(
     }
     Ok(values)
 }
-
