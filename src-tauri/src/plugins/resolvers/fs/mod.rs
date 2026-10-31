@@ -103,9 +103,10 @@ impl Mount {
         &self,
         request: &crate::plugin_sdk::filesystem::TransferPreflight,
     ) -> Result<(), String> {
-        if !crate::plugins::provider_registry::get(&self.plugin_id)
-            .is_some_and(|provider| provider.preflight)
-        {
+        if !crate::plugins::provider_registry::preflight_mount(
+            &self.plugin_id,
+            &self.mount_id,
+        ) {
             return Ok(());
         }
         let reply = self.invoke(
@@ -255,7 +256,11 @@ impl Mount {
 
     /// Whether the provider declared an operation, for UI decisions.
     pub fn supports(&self, operation: FsOperation) -> bool {
-        crate::plugins::provider_registry::supports(&self.plugin_id, operation)
+        crate::plugins::provider_registry::supports_mount(
+            &self.plugin_id,
+            &self.mount_id,
+            operation,
+        )
     }
 }
 

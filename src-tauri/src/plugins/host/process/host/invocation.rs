@@ -208,6 +208,12 @@ impl PluginHost {
                 created
             }
         };
+        // The authenticated plugin.initialize handshake has completed by
+        // this point. Rebind the selected filesystem implementation using the
+        // real Core mount owner and its per-instance capability ceiling.
+        if method.starts_with("vfs.") {
+            crate::plugins::provider_registry::bind_fs_instance(plugin_id, &mut params)?;
+        }
         match instance.running.rpc(method, params, task_root) {
             Ok(value) => Ok(value),
             Err(failure) => {
