@@ -186,13 +186,9 @@ impl NativeViewMenuProvider for TrashMenu {
         ]
     }
 
-    fn supports_blank(&self, directory: &str) -> bool {
-        directory == trash_vfs::URI || directory == recycle::URI
-    }
-
-    fn items(&self, path: &str) -> Vec<Value> {
-        if path == trash_vfs::URI || path == recycle::URI {
-            return vec![item(
+    fn blank_items(&self, directory: &str) -> Vec<Value> {
+        if directory == trash_vfs::URI || directory == recycle::URI {
+            vec![item(
                 "emptyTrash",
                 crate::i18n::t(if cfg!(windows) {
                     "清空回收站"
@@ -203,8 +199,13 @@ impl NativeViewMenuProvider for TrashMenu {
                 "trash",
                 true,
                 true,
-            )];
+            )]
+        } else {
+            Vec::new()
         }
+    }
+
+    fn items(&self, _path: &str) -> Vec<Value> {
         vec![
             item(
                 "restore",
@@ -224,10 +225,10 @@ impl NativeViewMenuProvider for TrashMenu {
     }
 
     fn selection_items(&self, directory: &str, paths: &[String]) -> Vec<Value> {
-        let mut items = intersection(self, directory, paths);
-        if !paths.is_empty() {
-            items.retain(|item| item["id"] != "emptyTrash");
+        if paths.is_empty() {
+            return self.blank_items(directory);
         }
+        let mut items = intersection(self, paths);
         if paths.len() > 1 {
             // Multi-selection can only permanently delete the exact offered
             // nodes. Never turn that into an empty-the-entire-bin action.
