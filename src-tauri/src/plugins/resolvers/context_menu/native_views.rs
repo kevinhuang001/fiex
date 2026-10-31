@@ -95,8 +95,7 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
         return false;
     };
     let rule = &descriptor.r#match;
-    let (directory_view, directory_storage) =
-        crate::plugins::match_rules::locations_for(directory);
+    let (directory_view, directory_storage) = crate::plugins::match_rules::locations_for(directory);
     // Match the real directory view and storage independently, including
     // an empty selection. Recent can have a different source storage owner.
     if !rule.matches_targets(
