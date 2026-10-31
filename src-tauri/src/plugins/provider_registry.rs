@@ -8,6 +8,7 @@
 //! node through `allowedOps`; user grants and the Operation Scope are checked
 //! independently by the permission layer.
 mod event_candidates;
+pub(crate) mod native;
 mod vfs_instances;
 pub use event_candidates::candidates;
 use serde_json::Value;
