@@ -344,10 +344,19 @@ mod tests {
     #[test]
     fn trash_does_not_grant_generic_delete() {
         let trashed = entry("recyclebin://an-item", &["stat", "remove"], false);
-        assert!(!for_entry("recyclebin://an-item", &trashed).remove);
+        let capabilities = for_entry("recyclebin://an-item", &trashed);
+        assert!(capabilities.stat);
+        assert!(!capabilities.list && !capabilities.read && !capabilities.remove);
+        // Nonexistent opaque nodes fail closed, even though their provider is
+        // registered and supports stat on actual items.
         assert!(!for_path("recyclebin://an-item").remove);
-        assert!(for_path("recyclebin://an-item").stat);
+        assert!(!for_path("recyclebin://an-item").stat);
         assert!(for_path("recyclebin://").list);
+        let mut nested = entry("trash://opaque-folder", &["stat", "list", "remove"], false);
+        nested.is_dir = true;
+        let capabilities = for_entry(&nested.path, &nested);
+        assert!(capabilities.stat && capabilities.list);
+        assert!(!capabilities.remove && !capabilities.write);
     }
 
     #[test]
