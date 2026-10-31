@@ -1,6 +1,6 @@
 //! Unified decoration endpoint for Core-owned decorations and plugin IPC.
 use super::types::DecorationEntry;
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use super::proxy::ScopedDecorationProxy;
 use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -21,23 +21,8 @@ impl ProviderEndpoint for NativeDecorationEndpoint<'_> {
     }
 }
 
-pub(super) struct PluginDecorationProxy<'a> {
-    pub plugin: PluginInfo,
-    pub directory: &'a str,
-    pub resources: &'a [ResourceSnapshot],
-}
-
-impl ProviderEndpoint for PluginDecorationProxy<'_> {
+impl ProviderEndpoint for ScopedDecorationProxy<'_> {
     fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        if request.method != "decorations.resolve" {
-            return Err("unregistered Decoration event".into());
-        }
-        crate::plugins::events::invoke_resources(
-            &self.plugin,
-            "decorations.resolve",
-            request.params.clone(),
-            self.resources,
-            Some(self.directory),
-        )
+        self.resolve(request)
     }
 }
