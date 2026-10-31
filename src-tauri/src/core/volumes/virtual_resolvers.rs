@@ -7,6 +7,8 @@ use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use std::sync::{Arc, OnceLock};
 
+mod storage;
+
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 
@@ -17,6 +19,10 @@ pub trait VirtualView: Send + Sync {
     fn handles(&self, path: &str) -> bool;
     fn id(&self) -> &'static str;
     fn readonly(&self) -> bool;
+    /// Native VFS providers implement the same list/stat operations as
+    /// plugin VFS instances; no generic storage layer knows their URI names.
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String>;
+    fn stat(&self, path: &str) -> Result<Entry, String>;
     /// Explicit storage-operation ceiling. Presentation and dispatch must not
     /// infer write support from an adapter name or from readonly=false.
     fn operations(&self, path: &str) -> Vec<&'static str>;
@@ -62,6 +68,14 @@ impl VirtualView for RecentView {
     fn id(&self) -> &'static str {
         "core:recent"
     }
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String> {
+        storage::recent_list(path)
+    }
+
+    fn stat(&self, path: &str) -> Result<Entry, String> {
+        storage::recent_stat(self, path)
+    }
+
     fn readonly(&self) -> bool {
         true
     }
@@ -91,6 +105,14 @@ impl VirtualView for ApplicationView {
     fn id(&self) -> &'static str {
         "core:applications"
     }
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String> {
+        storage::applications_list(path)
+    }
+
+    fn stat(&self, path: &str) -> Result<Entry, String> {
+        storage::applications_stat(self, path)
+    }
+
     fn readonly(&self) -> bool {
         // The folder itself accepts user shortcuts; each system app entry stays
         // read-only so Core's context-menu resolver can hide delete for it.
@@ -131,6 +153,14 @@ impl VirtualView for TrashView {
     fn id(&self) -> &'static str {
         "core:trash"
     }
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String> {
+        storage::trash_list(path)
+    }
+
+    fn stat(&self, path: &str) -> Result<Entry, String> {
+        storage::trash_stat(self, path)
+    }
+
     fn readonly(&self) -> bool {
         false
     }
@@ -200,6 +230,9 @@ mod tests {
         assert!(view_for("unknown://item").is_none());
         assert!(view_for("fiex://mount/not-a-native-view").is_none());
         assert!(!opaque("unknown://item"));
+        assert!(view_for(RECENT_URI).unwrap().stat(RECENT_URI).is_ok());
+        assert!(view_for(RECENT_URI).unwrap().list(RECENT_URI).is_ok());
+        assert!(view_for(RECENT_URI).unwrap().list("recent://bad").is_err());
     }
 
     #[test]
