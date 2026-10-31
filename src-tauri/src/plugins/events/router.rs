@@ -115,8 +115,14 @@ mod instance_tests {
             bound_plugin_request(&forged, "org.example.viewer", "plugin:org.example.viewer")
                 .unwrap();
         assert!(single.params.get("providerId").is_none());
-        assert!(bound_plugin_request(&forged, "org.example.viewer", "plugin:another.plugin:media").is_err());
-        assert!(bound_plugin_request(&forged, "org.example.viewer", "plugin:org.example.viewer:").is_err());
+        assert!(
+            bound_plugin_request(&forged, "org.example.viewer", "plugin:another.plugin:media")
+                .is_err()
+        );
+        assert!(
+            bound_plugin_request(&forged, "org.example.viewer", "plugin:org.example.viewer:")
+                .is_err()
+        );
         assert!(bound_plugin_request(
             &ProviderRequest {
                 method: "info.resolve".into(),
