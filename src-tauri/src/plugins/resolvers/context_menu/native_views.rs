@@ -130,6 +130,16 @@ pub(super) fn execute(
     directory: &str,
     paths: &[String],
 ) -> Result<NativeAction, String> {
+    // The caller's session already checks what was offered; still enforce
+    // this invariant at the native provider boundary for direct invocations.
+    let offered = resolve(id, directory, paths)?;
+    if !offered["items"].as_array().is_some_and(|items| {
+        items
+            .iter()
+            .any(|item| item["id"] == item_id && item["disabled"] != true)
+    }) {
+        return Err("native menu action was not offered".into());
+    }
     provider(id, directory, paths)?.execute(item_id, paths)
 }
 
