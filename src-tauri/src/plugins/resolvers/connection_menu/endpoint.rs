@@ -1,8 +1,8 @@
 //! The same connection-menu endpoint contract is used by native menus and
 //! plugin IPC. The Core owns connection identity and the permission boundary.
 use super::{builtin_items, plugin_items, Context};
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::host::PluginInfo;
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
 
 pub(super) struct NativeMenu<'a> {
