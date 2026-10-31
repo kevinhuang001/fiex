@@ -100,3 +100,49 @@ fn native_menu_executes_only_actions_offered_for_this_exact_selection() {
     assert_eq!(launched.command, "open");
     assert_eq!(launched.paths, system_app);
 }
+
+#[test]
+fn blank_trash_canvas_offers_empty_without_selection() {
+    let blank = Vec::<String>::new();
+    for directory in [trash_vfs::URI, recycle::URI] {
+        let candidates = providers(directory, &blank);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].id, "core.trash.menu");
+        let result = resolve("core.trash.menu", directory, &blank).unwrap();
+        let items = result["items"].as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"], "emptyTrash");
+        assert_eq!(items[0]["danger"], true);
+        assert_eq!(
+            execute("core.trash.menu", "emptyTrash", directory, &blank)
+                .unwrap()
+                .command,
+            "emptyTrash"
+        );
+        assert!(execute("core.trash.menu", "delete", directory, &blank).is_err());
+    }
+    assert!(providers(applications::URI, &blank).is_empty());
+    assert!(providers("recent://", &blank).is_empty());
+    assert!(providers("/tmp", &blank).is_empty());
+}
+
+#[test]
+fn trash_selection_deletes_exactly_the_offered_nodes() {
+    let paths = vec!["trash://Zmlyc3Q".into(), "trash://c2Vjb25k".into()];
+    let single = resolve("core.trash.menu", trash_vfs::URI, &paths[..1]).unwrap();
+    let items = single["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["id"], "restore");
+    assert_eq!(items[1]["id"], "delete");
+
+    let multiple = resolve("core.trash.menu", trash_vfs::URI, &paths).unwrap();
+    let items = multiple["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], "delete");
+    let effect = execute("core.trash.menu", "delete", trash_vfs::URI, &paths).unwrap();
+    assert_eq!(effect.command, "delete");
+    assert_eq!(effect.paths, paths);
+    assert!(execute("core.trash.menu", "restore", trash_vfs::URI, &paths).is_err());
+    assert!(execute("core.trash.menu", "emptyTrash", trash_vfs::URI, &paths).is_err());
+    assert!(providers(trash_vfs::URI, &["/tmp/not-in-trash".into()]).is_empty());
+}
