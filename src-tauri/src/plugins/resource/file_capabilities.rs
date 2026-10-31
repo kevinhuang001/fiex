@@ -120,19 +120,6 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
 }
 
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::view_for(path)
-        .is_some_and(|p| p.id() == "core:trash")
-    {
-        // Trash supports metadata and root enumeration, not generic
-        // content reads, mutations or permanent deletion.
-        return FileCapabilities {
-            stat: true,
-            list: path == crate::core::volumes::recycle::URI
-                || crate::core::volumes::trash_path()
-                    .is_some_and(|root| root.to_string_lossy() == path),
-            ..FileCapabilities::default()
-        };
-    }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         let declared = crate::core::volumes::virtual_resolvers::view_for(path)
             .map(|provider| {
@@ -198,19 +185,6 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
 /// Capabilities of a single path. Local paths are unrestricted; a mount is the
 /// provider's declared operations narrowed by the node's entry.
 pub fn for_path(path: &str) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::view_for(path)
-        .is_some_and(|p| p.id() == "core:trash")
-    {
-        // Trash supports metadata and root enumeration, not generic
-        // content reads, mutations or permanent deletion.
-        return FileCapabilities {
-            stat: true,
-            list: path == crate::core::volumes::recycle::URI
-                || crate::core::volumes::trash_path()
-                    .is_some_and(|root| root.to_string_lossy() == path),
-            ..FileCapabilities::default()
-        };
-    }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         return crate::core::volumes::virtual_resolvers::resource_entry(path)
             .map(|entry| for_entry(path, &entry))
@@ -369,7 +343,7 @@ mod tests {
 
     #[test]
     fn trash_does_not_grant_generic_delete() {
-        let trashed = entry("recyclebin://an-item", &["remove"], false);
+        let trashed = entry("recyclebin://an-item", &["stat", "remove"], false);
         assert!(!for_entry("recyclebin://an-item", &trashed).remove);
         assert!(!for_path("recyclebin://an-item").remove);
         assert!(for_path("recyclebin://an-item").stat);
