@@ -5,7 +5,6 @@ use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::events::EventRouter;
 use std::collections::HashSet;
 
-const PAGE_SIZE: usize = 100;
 const MAX_PAGES: usize = 64;
 const MAX_CURSOR_BYTES: usize = 2048;
 
@@ -59,7 +58,9 @@ pub fn run_stream(
             return Ok(true);
         }
         let mut params = input(request, &resources);
-        params["limit"] = json!(remaining.min(PAGE_SIZE));
+        // Non-paged providers (including Everything) must still receive the full
+        // remaining limit. Providers that expose nextCursor may return smaller pages.
+        params["limit"] = json!(remaining);
         if let Some(current) = &cursor {
             params["cursor"] = json!(current);
         }
@@ -85,7 +86,7 @@ pub fn run_stream(
                 let page_truncated = parse_truncated(&response)?;
                 let next = parse_cursor(&response)?;
                 let entries = validated(resolver, response, request)?;
-                if entries.len() > remaining.min(PAGE_SIZE) {
+                if entries.len() > remaining {
                     return Err("search provider exceeded requested page limit".into());
                 }
                 Ok((entries, page_truncated, next))
