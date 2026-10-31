@@ -1,6 +1,7 @@
 node_modules
 dist
 src-tauri/target
+sdk/docs/
 sdk/**/target
 sdk/**/dist
 src-tauri/gen
