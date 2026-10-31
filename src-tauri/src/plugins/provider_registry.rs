@@ -117,6 +117,12 @@ pub fn supports_mount(plugin_id: &str, mount_id: &str, operation: FsOperation) -
     vfs_instances::supports(plugin_id, mount_id, operation)
 }
 
+/// A verified mount's declared operations, for one consistent UI capability
+/// snapshot. Unlike operations(plugin_id), this never returns a package union.
+pub fn operations_mount(plugin_id: &str, mount_id: &str) -> Option<Vec<FsOperation>> {
+    vfs_instances::operations(plugin_id, mount_id)
+}
+
 pub fn preflight_mount(plugin_id: &str, mount_id: &str) -> bool {
     vfs_instances::preflight(plugin_id, mount_id)
 }
