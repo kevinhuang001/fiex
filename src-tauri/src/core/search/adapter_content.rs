@@ -5,6 +5,8 @@ use super::*;
 use std::collections::HashSet;
 
 const MAX_DIRECTORIES: usize = 1000;
+const MAX_REMOTE_FILES: usize = 1024;
+const MAX_REMOTE_BYTES: u64 = 16 * 1024 * 1024;
 
 pub(super) fn run(
     root: &str,
@@ -54,13 +56,13 @@ pub(super) fn run(
                 sink.skipped += 1;
                 continue;
             }
-            if files >= CONTENT_FILE_BUDGET || bytes >= CONTENT_BYTE_BUDGET {
+            if files >= MAX_REMOTE_FILES || bytes >= MAX_REMOTE_BYTES {
                 sink.incomplete = true;
                 sink.warning = Some("content search reached the network/read budget".into());
                 return Ok(());
             }
             files += 1;
-            let limit = (CONTENT_BYTE_BUDGET - bytes).min(CONTENT_FILE_LIMIT) as usize;
+            let limit = (MAX_REMOTE_BYTES - bytes).min(CONTENT_FILE_LIMIT) as usize;
             let file = match crate::core::fs::trusted(&entry.path, "core:search") {
                 Ok(file) => file,
                 Err(_) => {
