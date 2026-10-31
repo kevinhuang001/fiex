@@ -11,18 +11,15 @@ use std::{fs, sync::Arc};
 
 mod builtin;
 mod endpoint;
+mod native;
 mod session;
 use crate::plugins::events::{EventRouter, Handler, Resolver};
-use builtin::{builtin_candidates, Builtin};
 pub use session::session_scope;
 use session::UNSUPPORTED;
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
-    let builtin = builtin_candidates(&ext, mime, is_dir)
-        .into_iter()
-        .map(|b| Resolver::builtin(b.id(), b.priority()))
-        .collect();
+    let builtin = native::candidates(&ext, mime, is_dir);
     crate::plugins::provider_registry::candidates(
         "preview.open",
         &[
@@ -38,10 +35,9 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     let readable = metadata[0]["operations"]
         .as_array()
         .is_some_and(|ops| ops.iter().any(|op| op == "read"));
-    let builtin = builtin_candidates(&resource.ext, &resource.mime, resource.is_dir)
+    let builtin = native::candidates(&resource.ext, &resource.mime, resource.is_dir)
         .into_iter()
-        .filter(|kind| readable || *kind == Builtin::Fallback)
-        .map(|kind| Resolver::builtin(kind.id(), kind.priority()))
+        .filter(|provider| readable || provider.id == "builtin:fallback")
         .collect();
     let mut providers =
         crate::plugins::provider_registry::candidates("preview.open", &metadata, "", builtin);
