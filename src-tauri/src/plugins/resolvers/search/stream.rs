@@ -43,6 +43,9 @@ pub fn run_stream(
     }
 
     let resources = resources(request);
+    if resources.len() != 1 {
+        return Err("search root could not be resolved to a trusted resource".into());
+    }
     let mut cursor: Option<String> = None;
     let mut seen = HashSet::new();
     let mut count = 0usize;
@@ -55,7 +58,7 @@ pub fn run_stream(
         if remaining == 0 {
             return Ok(true);
         }
-        let mut params = input(request);
+        let mut params = input(request, &resources);
         params["limit"] = json!(remaining.min(PAGE_SIZE));
         if let Some(current) = &cursor {
             params["cursor"] = json!(current);
