@@ -109,8 +109,20 @@ pub fn supports(plugin_id: &str, mount_id: &str, operation: FsOperation) -> bool
     let Some(state) = super::get(plugin_id) else {
         return false;
     };
-    if state.instances.len() <= 1 {
+    // A union-of-operations handshake must never widen one concrete mount.
+    // Even a single SDK instance is selected only for a Core-owned mount.
+    if mount_owner(plugin_id, mount_id).is_err() {
+        return false;
+    }
+    if state.instances.is_empty() {
         return state.declares(operation);
+    }
+    if state.instances.len() == 1 {
+        return state
+            .instances
+            .values()
+            .next()
+            .is_some_and(|instance| instance.operations.contains(&operation));
     }
     let Ok(selected) = mount_owner(plugin_id, mount_id) else {
         return false;
@@ -125,8 +137,18 @@ pub fn preflight(plugin_id: &str, mount_id: &str) -> bool {
     let Some(state) = super::get(plugin_id) else {
         return false;
     };
-    if state.instances.len() <= 1 {
+    if mount_owner(plugin_id, mount_id).is_err() {
+        return false;
+    }
+    if state.instances.is_empty() {
         return state.preflight;
+    }
+    if state.instances.len() == 1 {
+        return state
+            .instances
+            .values()
+            .next()
+            .is_some_and(|instance| instance.preflight);
     }
     let Ok(selected) = mount_owner(plugin_id, mount_id) else {
         return false;
@@ -152,6 +174,22 @@ mod tests {
         ] {
             assert!(read(&value, &ceiling, false).is_err());
         }
+    }
+
+    #[test]
+    fn unknown_mount_never_inherits_single_instance_capabilities() {
+        let plugin_id = "org.example.one-vfs";
+        super::super::register(
+            plugin_id,
+            &json!({"vfs":{
+                "operations":["read","write"],"preflight":true,
+                "providers":[{"id":"only","operations":["read"],"preflight":false}]
+            }}),
+        );
+        assert!(!supports(plugin_id, "unregistered", FsOperation::Read));
+        assert!(!supports(plugin_id, "unregistered", FsOperation::Write));
+        assert!(!preflight(plugin_id, "unregistered"));
+        super::super::forget(plugin_id);
     }
 
     #[test]
