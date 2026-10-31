@@ -103,10 +103,7 @@ impl Mount {
         &self,
         request: &crate::plugin_sdk::filesystem::TransferPreflight,
     ) -> Result<(), String> {
-        if !crate::plugins::provider_registry::preflight_mount(
-            &self.plugin_id,
-            &self.mount_id,
-        ) {
+        if !crate::plugins::provider_registry::preflight_mount(&self.plugin_id, &self.mount_id) {
             return Ok(());
         }
         let reply = self.invoke(

@@ -29,7 +29,9 @@ pub(super) fn read(
         if id.is_empty()
             || id.len() > 128
             || id.starts_with("core:")
-            || !id.bytes().all(|c| c.is_ascii_alphanumeric() || b"._-:".contains(&c))
+            || !id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"._-:".contains(&c))
             || instances.contains_key(id)
         {
             return Err("invalid or duplicate VFS provider ID".into());
@@ -39,18 +41,28 @@ pub(super) fn read(
             .ok_or("vfs instance operations missing")?;
         let mut selected = BTreeSet::new();
         for value in operations {
-            let operation = value.as_str().and_then(FsOperation::parse)
+            let operation = value
+                .as_str()
+                .and_then(FsOperation::parse)
                 .ok_or("unknown VFS provider operation")?;
             if !declared.contains(&operation) {
                 return Err("VFS instance exceeds negotiated operation ceiling".into());
             }
             selected.insert(operation);
         }
-        let enabled = item["preflight"].as_bool().ok_or("vfs preflight must be boolean")?;
+        let enabled = item["preflight"]
+            .as_bool()
+            .ok_or("vfs preflight must be boolean")?;
         if enabled && !preflight {
             return Err("VFS instance preflight exceeds negotiated ceiling".into());
         }
-        instances.insert(id.into(), VfsInstance { operations: selected, preflight: enabled });
+        instances.insert(
+            id.into(),
+            VfsInstance {
+                operations: selected,
+                preflight: enabled,
+            },
+        );
     }
     Ok(instances)
 }
@@ -60,9 +72,13 @@ fn mount_owner(plugin_id: &str, mount_id: &str) -> Result<String, String> {
     let (_, source) = crate::plugins::mounts::resolve(&path)?;
     match source {
         crate::plugins::mounts::Source::Connection(connection)
-            if connection.plugin_id == plugin_id => Ok(connection.kind),
-        crate::plugins::mounts::Source::View(view)
-            if view.descriptor.plugin_id == plugin_id => Ok(view.descriptor.contribution_id),
+            if connection.plugin_id == plugin_id =>
+        {
+            Ok(connection.kind)
+        }
+        crate::plugins::mounts::Source::View(view) if view.descriptor.plugin_id == plugin_id => {
+            Ok(view.descriptor.contribution_id)
+        }
         _ => Err("VFS provider does not own the selected mount".into()),
     }
 }
@@ -77,7 +93,9 @@ pub fn bind(plugin_id: &str, params: &mut Value) -> Result<(), String> {
     if state.instances.len() <= 1 {
         return Ok(());
     }
-    let mount_id = fields.get("mountId").and_then(Value::as_str)
+    let mount_id = fields
+        .get("mountId")
+        .and_then(Value::as_str)
         .ok_or("VFS operation has no Core-bound mount")?;
     let selected = mount_owner(plugin_id, mount_id)?;
     if !state.instances.contains_key(&selected) {
@@ -88,22 +106,35 @@ pub fn bind(plugin_id: &str, params: &mut Value) -> Result<(), String> {
 }
 
 pub fn supports(plugin_id: &str, mount_id: &str, operation: FsOperation) -> bool {
-    let Some(state) = super::get(plugin_id) else { return false };
+    let Some(state) = super::get(plugin_id) else {
+        return false;
+    };
     if state.instances.len() <= 1 {
         return state.declares(operation);
     }
-    let Ok(selected) = mount_owner(plugin_id, mount_id) else { return false };
-    state.instances.get(&selected)
+    let Ok(selected) = mount_owner(plugin_id, mount_id) else {
+        return false;
+    };
+    state
+        .instances
+        .get(&selected)
         .is_some_and(|instance| instance.operations.contains(&operation))
 }
 
 pub fn preflight(plugin_id: &str, mount_id: &str) -> bool {
-    let Some(state) = super::get(plugin_id) else { return false };
+    let Some(state) = super::get(plugin_id) else {
+        return false;
+    };
     if state.instances.len() <= 1 {
         return state.preflight;
     }
-    let Ok(selected) = mount_owner(plugin_id, mount_id) else { return false };
-    state.instances.get(&selected).is_some_and(|instance| instance.preflight)
+    let Ok(selected) = mount_owner(plugin_id, mount_id) else {
+        return false;
+    };
+    state
+        .instances
+        .get(&selected)
+        .is_some_and(|instance| instance.preflight)
 }
 
 #[cfg(test)]
@@ -126,13 +157,16 @@ mod tests {
     #[test]
     fn caller_cannot_choose_a_foreign_vfs_instance() {
         let plugin_id = "org.example.multi-vfs";
-        super::super::register(plugin_id, &json!({"vfs":{
-            "operations":["read","stat"],"preflight":false,
-            "providers":[
-                {"id":"drive","operations":["read"],"preflight":false},
-                {"id":"git","operations":["stat"],"preflight":false}
-            ]
-        }}));
+        super::super::register(
+            plugin_id,
+            &json!({"vfs":{
+                "operations":["read","stat"],"preflight":false,
+                "providers":[
+                    {"id":"drive","operations":["read"],"preflight":false},
+                    {"id":"git","operations":["stat"],"preflight":false}
+                ]
+            }}),
+        );
         let mut params = json!({"mountId":"unregistered","providerId":"drive"});
         assert!(bind(plugin_id, &mut params).is_err());
         assert!(params.get("providerId").is_none());
