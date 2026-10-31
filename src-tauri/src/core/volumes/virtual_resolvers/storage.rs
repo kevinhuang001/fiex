@@ -1,10 +1,10 @@
 //! Storage operations owned by each native VFS instance. Core routes all
 //! builtin list/stat requests through the selected instance, not URI switches
 //! in the generic storage adapter.
-use super::{applications, recycle, trash_vfs, VirtualView, APPLICATIONS_URI, RECENT_URI};
+use super::{applications, recycle, trash_vfs, NativeVfsProvider, APPLICATIONS_URI, RECENT_URI};
 use crate::core::{files::Entry, recent};
 
-pub(super) fn root_entry(view: &dyn VirtualView, path: &str) -> Entry {
+pub(super) fn root_entry(view: &dyn NativeVfsProvider, path: &str) -> Entry {
     Entry {
         path: path.into(),
         name: view.id().into(),
@@ -19,7 +19,7 @@ pub(super) fn root_entry(view: &dyn VirtualView, path: &str) -> Entry {
     }
 }
 
-pub(super) fn recent_stat(view: &dyn VirtualView, path: &str) -> Result<Entry, String> {
+pub(super) fn recent_stat(view: &dyn NativeVfsProvider, path: &str) -> Result<Entry, String> {
     if path == RECENT_URI {
         Ok(root_entry(view, path))
     } else {
@@ -35,7 +35,7 @@ pub(super) fn recent_list(path: &str) -> Result<Vec<Entry>, String> {
     }
 }
 
-pub(super) fn applications_stat(view: &dyn VirtualView, path: &str) -> Result<Entry, String> {
+pub(super) fn applications_stat(view: &dyn NativeVfsProvider, path: &str) -> Result<Entry, String> {
     if path == APPLICATIONS_URI {
         return Ok(root_entry(view, path));
     }
@@ -58,7 +58,7 @@ pub(super) fn applications_list(path: &str) -> Result<Vec<Entry>, String> {
     }
 }
 
-pub(super) fn trash_stat(view: &dyn VirtualView, path: &str) -> Result<Entry, String> {
+pub(super) fn trash_stat(view: &dyn NativeVfsProvider, path: &str) -> Result<Entry, String> {
     if trash_vfs::handles(path) {
         return trash_vfs::entry(path);
     }
