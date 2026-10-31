@@ -118,7 +118,8 @@ fn view_and_storage_are_independent_and_match_all_selected_resources() {
         "view":{"providerIds":["core:recent"]},
         "storage":{"types":["vfs"],"providerIds":["plugin:org.example.drive:gdrive"]},
         "kinds":["file"],"requiredOps":["read"]
-    }})).unwrap();
+    }}))
+    .unwrap();
     let remote = json!({
         "view":{"type":"vfs","providerId":"core:recent","mountId":"core:recent"},
         "storage":{"type":"vfs","providerId":"plugin:org.example.drive:gdrive","mountId":"account-1"},
@@ -134,7 +135,8 @@ fn view_and_storage_are_independent_and_match_all_selected_resources() {
     });
     let mount_specific = MatchRules::from_contribution(&json!({"match":{
         "storage":{"mountIds":["account-1"]}
-    }})).unwrap();
+    }}))
+    .unwrap();
     assert!(mount_specific.matches_event(&[remote.clone()], ""));
     assert!(!mount_specific.matches_event(&[another_account.clone()], ""));
     assert!(!mount_specific.matches_event(&[remote, another_account], ""));
@@ -145,19 +147,29 @@ fn location_dimensions_are_conjunctive_and_kind_is_not_resource_type() {
     let rule = MatchRules::from_contribution(&json!({"match":{
         "view":{"types":["vfs"],"providerIds":["core:applications"]},
         "kinds":["file"]
-    }})).unwrap();
-    assert!(rule.matches_event(&[json!({
-        "view":{"type":"vfs","providerId":"core:applications","mountId":"core:applications"},
-        "kind":"file"
-    })], ""));
-    assert!(!rule.matches_event(&[json!({
-        "view":{"type":"fs","providerId":"core:applications","mountId":"core:applications"},
-        "kind":"file"
-    })], ""));
-    assert!(!rule.matches_event(&[json!({
-        "view":{"type":"vfs","providerId":"core:applications","mountId":"core:applications"},
-        "kind":"directory"
-    })], ""));
+    }}))
+    .unwrap();
+    assert!(rule.matches_event(
+        &[json!({
+            "view":{"type":"vfs","providerId":"core:applications","mountId":"core:applications"},
+            "kind":"file"
+        })],
+        ""
+    ));
+    assert!(!rule.matches_event(
+        &[json!({
+            "view":{"type":"fs","providerId":"core:applications","mountId":"core:applications"},
+            "kind":"file"
+        })],
+        ""
+    ));
+    assert!(!rule.matches_event(
+        &[json!({
+            "view":{"type":"vfs","providerId":"core:applications","mountId":"core:applications"},
+            "kind":"directory"
+        })],
+        ""
+    ));
 }
 
 #[test]
@@ -173,14 +185,20 @@ fn invalid_fs_vfs_matches_fail_manifest_validation() {
         json!({"kinds":["vfs"]}),
         json!({"kinds":["unknown"]}),
     ] {
-        assert!(validate(Some(&predicate), false, true).is_err(), "{predicate}");
+        assert!(
+            validate(Some(&predicate), false, true).is_err(),
+            "{predicate}"
+        );
     }
     for predicate in [
         json!({"view":{"types":["fs","vfs"]}}),
         json!({"storage":{"providerIds":["core:local-fs"]}}),
         json!({"view":{"mountIds":["account-1"]}}),
     ] {
-        assert!(validate(Some(&predicate), false, true).is_ok(), "{predicate}");
+        assert!(
+            validate(Some(&predicate), false, true).is_ok(),
+            "{predicate}"
+        );
     }
 }
 
@@ -190,7 +208,8 @@ fn blank_canvas_uses_trusted_directory_owner() {
     let rule = MatchRules::from_contribution(&json!({"match":{
         "view":{"providerIds":["core:applications"]},
         "selection":"zero","kinds":["directory"]
-    }})).unwrap();
+    }}))
+    .unwrap();
     assert!(rule.matches_event(&[], root));
     assert!(!rule.matches_event(&[], "/tmp"));
     assert!(!rule.matches_event(&[json!({"kind":"file"})], root));

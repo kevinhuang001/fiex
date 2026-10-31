@@ -97,9 +97,8 @@ mod tests {
 
     #[test]
     fn unknown_mount_never_becomes_local_storage() {
-        let (view, storage) = locations_for(
-            "fiex://mount/00000000000000000000000000000000/resource",
-        );
+        let (view, storage) =
+            locations_for("fiex://mount/00000000000000000000000000000000/resource");
         assert!(view.is_none() && storage.is_none());
         let (view, storage) = locations_for("unrecognized://something");
         assert!(view.is_none() && storage.is_none());

@@ -26,9 +26,10 @@ impl LocationMatch {
     fn matches(&self, location: &Value) -> bool {
         let field_matches = |field: &str, accepted: &Option<Vec<String>>| {
             accepted.as_ref().is_none_or(|values| {
-                location.get(field).and_then(Value::as_str).is_some_and(|actual| {
-                    values.iter().any(|value| value == actual)
-                })
+                location
+                    .get(field)
+                    .and_then(Value::as_str)
+                    .is_some_and(|actual| values.iter().any(|value| value == actual))
             })
         };
         location.is_object()
@@ -37,7 +38,6 @@ impl LocationMatch {
             && field_matches("mountId", &self.mount_ids)
     }
 }
-
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -207,22 +207,33 @@ pub fn validate(
             return Err(format!("match.{key} entries must be strings"));
         }
     }
-    for (label, location) in [("view", object.get("view")), ("storage", object.get("storage"))] {
+    for (label, location) in [
+        ("view", object.get("view")),
+        ("storage", object.get("storage")),
+    ] {
         let Some(location) = location else { continue };
-        let fields = location.as_object().ok_or_else(|| format!("match.{label} must be an object"))?;
+        let fields = location
+            .as_object()
+            .ok_or_else(|| format!("match.{label} must be an object"))?;
         if fields.is_empty() {
-            return Err(format!("match.{label} must constrain types, providerIds or mountIds"));
+            return Err(format!(
+                "match.{label} must constrain types, providerIds or mountIds"
+            ));
         }
         for (key, values) in fields {
             if !matches!(key.as_str(), "types" | "providerIds" | "mountIds") {
                 return Err(format!("match.{label}.{key} is unknown"));
             }
-            let values = values.as_array().ok_or_else(|| format!("match.{label}.{key} must be an array"))?;
+            let values = values
+                .as_array()
+                .ok_or_else(|| format!("match.{label}.{key} must be an array"))?;
             if values.is_empty() || values.len() > 64 {
                 return Err(format!("match.{label}.{key} must have 1..64 entries"));
             }
             for value in values {
-                let item = value.as_str().ok_or_else(|| format!("match.{label}.{key} requires strings"))?;
+                let item = value
+                    .as_str()
+                    .ok_or_else(|| format!("match.{label}.{key} requires strings"))?;
                 if item.is_empty() || item.len() > 256 || item.chars().any(char::is_control) {
                     return Err(format!("match.{label}.{key} contains an invalid value"));
                 }
@@ -233,7 +244,10 @@ pub fn validate(
         }
     }
     if let Some(kinds) = object.get("kinds").and_then(Value::as_array) {
-        if kinds.iter().any(|item| !matches!(item.as_str(), Some("file" | "directory" | "connection"))) {
+        if kinds
+            .iter()
+            .any(|item| !matches!(item.as_str(), Some("file" | "directory" | "connection")))
+        {
             return Err("match.kinds accepts only file, directory or connection".into());
         }
     }
