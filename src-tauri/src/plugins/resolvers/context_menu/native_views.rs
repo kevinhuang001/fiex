@@ -15,13 +15,17 @@ trait NativeViewMenuProvider: Send + Sync {
     fn owner(&self) -> &'static str;
     fn claimed_actions(&self) -> &'static [&'static str];
     fn items(&self, path: &str) -> Vec<Value>;
-    /// Blank-canvas actions are opt-in, matched against the view of the
-    /// current directory rather than a selected child.
-    fn supports_blank(&self, _directory: &str) -> bool {
-        false
+    /// A provider may contribute actions for the directory when selection is
+    /// empty. Generic dispatch never needs to know which view owns them.
+    fn blank_items(&self, _directory: &str) -> Vec<Value> {
+        Vec::new()
     }
     fn selection_items(&self, directory: &str, paths: &[String]) -> Vec<Value> {
-        intersection(self, directory, paths)
+        if paths.is_empty() {
+            self.blank_items(directory)
+        } else {
+            intersection(self, paths)
+        }
     }
     fn execute(&self, item_id: &str, paths: &[String]) -> Result<NativeAction, String>;
 }
@@ -30,11 +34,10 @@ trait NativeViewMenuProvider: Send + Sync {
 /// selected node. The empty selection is a valid directory target.
 fn intersection<P: NativeViewMenuProvider + ?Sized>(
     implementation: &P,
-    directory: &str,
     paths: &[String],
 ) -> Vec<Value> {
     let Some(first) = paths.first() else {
-        return implementation.items(directory);
+        return Vec::new();
     };
     implementation
         .items(first)
@@ -88,7 +91,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeViewMenuProvider> {
 }
 
 fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[String]) -> bool {
-    if paths.is_empty() && !provider.supports_blank(directory) {
+    if paths.is_empty() && provider.blank_items(directory).is_empty() {
         return false;
     }
     let Some(descriptor) = registry().descriptor(provider.id()) else {
