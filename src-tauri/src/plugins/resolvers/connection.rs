@@ -28,6 +28,9 @@ impl ProviderEndpoint for PluginConnection {
 /// mount IDs or credentials. The candidate registry and Host verify all of
 /// those anew before each operation. No lock survives the IPC invocation.
 fn endpoint_for(plugin_id: &str) -> Result<Arc<dyn ProviderEndpoint>, String> {
+    if plugin_id.is_empty() {
+        return Err("missing plugin identity for ConnectionProvider".into());
+    }
     static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ProviderEndpoint>>> = OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Connection)));
