@@ -19,8 +19,7 @@ impl NativeSearchProvider for Walker {
 }
 
 fn registry() -> &'static NativeProviderRegistry<dyn NativeSearchProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeSearchProvider>> =
-        OnceLock::new();
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeSearchProvider>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut providers: NativeProviderRegistry<dyn NativeSearchProvider> =
             NativeProviderRegistry::new(ProviderKind::Search);
@@ -55,7 +54,10 @@ mod tests {
     fn walker_is_registered_once_with_exact_search_modes() {
         assert_eq!(registry().len(), 1);
         assert_eq!(candidates()[0].id, BUILTIN_SEARCH);
-        assert_eq!(modes(BUILTIN_SEARCH), vec![SearchMode::Name, SearchMode::Content]);
+        assert_eq!(
+            modes(BUILTIN_SEARCH),
+            vec![SearchMode::Name, SearchMode::Content]
+        );
         assert!(modes("builtin:unregistered").is_empty());
         for descriptor in registry().descriptors() {
             assert_eq!(descriptor.kind, ProviderKind::Search);
