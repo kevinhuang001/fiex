@@ -65,7 +65,7 @@ pub fn query_with_plugins(
         })
         .collect::<Vec<_>>();
     let metadata = crate::plugins::events::resource_metadata(&resources);
-    let builtins = super::builtin::providers();
+    let builtins = super::native::providers();
     let providers = if include_plugins {
         crate::plugins::provider_registry::candidates(
             "decorations.resolve",
