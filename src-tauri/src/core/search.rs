@@ -184,12 +184,6 @@ impl<'a> BatchSink<'a> {
         }
     }
 
-    fn extend(&mut self, entries: Vec<Entry>) {
-        for entry in entries {
-            self.push(entry);
-        }
-    }
-
     fn flush(&mut self, done: bool) {
         if self.buffer.is_empty() && !done {
             return;
