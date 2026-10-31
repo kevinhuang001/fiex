@@ -3,9 +3,9 @@
 //! `virtual_storage`; these views never cross plugin IPC.
 use super::{applications, recycle, trash_vfs};
 use crate::core::files::Entry;
-use crate::plugins::provider_registry::FsOperation;
 use crate::plugin_sdk::filesystem::{TransferDirection, TransferPreflight};
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use crate::plugins::provider_registry::FsOperation;
 use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use std::sync::{Arc, OnceLock};
 
@@ -31,7 +31,8 @@ pub trait NativeVfsProvider: Send + Sync {
     /// Enforce the current native instance's policy at invocation time.
     /// ResourceBroker has already authorized the scope; no generic adapter
     /// may identify a builtin view by its URI or provider ID.
-    fn require(&self, path: &str, owner: &str, op: FsOperation, create: bool) -> Result<(), String>;
+    fn require(&self, path: &str, owner: &str, op: FsOperation, create: bool)
+        -> Result<(), String>;
     fn preflight(&self, path: &str, request: &TransferPreflight) -> Result<(), String>;
     fn icon(&self, path: &str) -> Option<String>;
     fn default_view(&self) -> Option<&'static str> {
@@ -96,9 +97,18 @@ impl NativeVfsProvider for RecentView {
             vec!["stat", "read"]
         }
     }
-    fn require(&self, path: &str, owner: &str, op: FsOperation, _create: bool) -> Result<(), String> {
+    fn require(
+        &self,
+        path: &str,
+        owner: &str,
+        op: FsOperation,
+        _create: bool,
+    ) -> Result<(), String> {
         if path == RECENT_URI {
-            return if matches!(op, FsOperation::List | FsOperation::Stat | FsOperation::Search) {
+            return if matches!(
+                op,
+                FsOperation::List | FsOperation::Stat | FsOperation::Search
+            ) {
                 Ok(())
             } else {
                 Err("Unsupported: Recent root is read-only".into())
@@ -160,12 +170,20 @@ impl NativeVfsProvider for ApplicationView {
         if path == APPLICATIONS_URI {
             vec!["list", "stat", "search", "write", "mkdir"]
         } else if applications::is_user(path) {
-            vec!["list", "stat", "search", "read", "write", "mkdir", "rename", "remove"]
+            vec![
+                "list", "stat", "search", "read", "write", "mkdir", "rename", "remove",
+            ]
         } else {
             vec!["stat"]
         }
     }
-    fn require(&self, path: &str, _owner: &str, op: FsOperation, create: bool) -> Result<(), String> {
+    fn require(
+        &self,
+        path: &str,
+        _owner: &str,
+        op: FsOperation,
+        create: bool,
+    ) -> Result<(), String> {
         if path == APPLICATIONS_URI {
             return if matches!(
                 op,
@@ -206,7 +224,11 @@ impl NativeVfsProvider for ApplicationView {
             FsOperation::Read | FsOperation::Write => !directory,
             FsOperation::Rename | FsOperation::Remove => true,
         };
-        if allowed { Ok(()) } else { Err(format!("Unsupported: {}", op.as_str())) }
+        if allowed {
+            Ok(())
+        } else {
+            Err(format!("Unsupported: {}", op.as_str()))
+        }
     }
     fn preflight(&self, _path: &str, request: &TransferPreflight) -> Result<(), String> {
         match request.direction {
@@ -264,11 +286,18 @@ impl NativeVfsProvider for TrashView {
         // A specific node's allowed_ops determines whether list/search is possible.
         vec!["list", "stat", "search"]
     }
-    fn require(&self, path: &str, _owner: &str, op: FsOperation, _create: bool) -> Result<(), String> {
+    fn require(
+        &self,
+        path: &str,
+        _owner: &str,
+        op: FsOperation,
+        _create: bool,
+    ) -> Result<(), String> {
         let entry = self.stat(path)?;
         if op == FsOperation::Stat
             || (matches!(op, FsOperation::List | FsOperation::Search)
-                && entry.is_dir && !entry.is_symlink)
+                && entry.is_dir
+                && !entry.is_symlink)
         {
             Ok(())
         } else {
@@ -362,19 +391,47 @@ mod tests {
     #[test]
     fn native_vfs_operation_policy_is_owned_by_each_registered_instance() {
         let recent = view_for(RECENT_URI).unwrap();
-        assert!(recent.require(RECENT_URI, "core:test", FsOperation::List, false).is_ok());
-        assert!(recent.require(RECENT_URI, "core:test", FsOperation::Search, false).is_ok());
-        assert!(recent.require(RECENT_URI, "core:test", FsOperation::Write, true).is_err());
-        assert!(recent.require("recent://missing", "core:test", FsOperation::Read, false).is_err());
+        assert!(recent
+            .require(RECENT_URI, "core:test", FsOperation::List, false)
+            .is_ok());
+        assert!(recent
+            .require(RECENT_URI, "core:test", FsOperation::Search, false)
+            .is_ok());
+        assert!(recent
+            .require(RECENT_URI, "core:test", FsOperation::Write, true)
+            .is_err());
+        assert!(recent
+            .require("recent://missing", "core:test", FsOperation::Read, false)
+            .is_err());
 
         let applications = view_for(APPLICATIONS_URI).unwrap();
-        assert!(applications.require(APPLICATIONS_URI, "core:test", FsOperation::Mkdir, true).is_ok());
-        assert!(applications.require(APPLICATIONS_URI, "core:test", FsOperation::Remove, false).is_err());
-        assert!(applications.require(APPLICATIONS_URI, "core:test", FsOperation::Read, false).is_err());
+        assert!(applications
+            .require(APPLICATIONS_URI, "core:test", FsOperation::Mkdir, true)
+            .is_ok());
+        assert!(applications
+            .require(APPLICATIONS_URI, "core:test", FsOperation::Remove, false)
+            .is_err());
+        assert!(applications
+            .require(APPLICATIONS_URI, "core:test", FsOperation::Read, false)
+            .is_err());
 
         let trash = view_for(trash_vfs::URI).unwrap();
-        assert!(trash.require("trash://not-a-valid-node", "core:test", FsOperation::Remove, false).is_err());
-        assert!(trash.require("trash://not-a-valid-node", "core:test", FsOperation::Write, true).is_err());
+        assert!(trash
+            .require(
+                "trash://not-a-valid-node",
+                "core:test",
+                FsOperation::Remove,
+                false
+            )
+            .is_err());
+        assert!(trash
+            .require(
+                "trash://not-a-valid-node",
+                "core:test",
+                FsOperation::Write,
+                true
+            )
+            .is_err());
     }
 
     #[test]
