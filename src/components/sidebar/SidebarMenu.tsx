@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
-import { Folder, Plug, Trash, Unplug, X } from 'lucide-react'
+import { Folder, Plug, Unplug, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import { MenuLayer } from '@/components/ui/MenuLayer'
 import type { MenuPosition, SidebarMenuState, SidebarProps, SetSidebarMenu } from './types'
@@ -11,7 +11,6 @@ export function SidebarMenu({
   prefs,
   update,
   onTrash,
-  onEmptyTrash,
   onEject,
   onEjectDevice,
   onMount,
@@ -20,7 +19,7 @@ export function SidebarMenu({
   menuPosition,
 }: Pick<
   SidebarProps,
-  'prefs' | 'update' | 'onTrash' | 'onEmptyTrash' | 'onEject' | 'onEjectDevice' | 'onMount'
+  'prefs' | 'update' | 'onTrash' | 'onEject' | 'onEjectDevice' | 'onMount'
 > & {
   menu: SidebarMenuState | null
   setMenu: SetSidebarMenu
@@ -54,16 +53,6 @@ export function SidebarMenu({
             >
               <Folder size={14} />
               {t(isWindows() ? '打开回收站' : '打开废纸篓')}
-            </button>
-            <button
-              role="menuitem"
-              onClick={() => {
-                setMenu(null)
-                onEmptyTrash()
-              }}
-            >
-              <Trash size={14} />
-              {t(isWindows() ? '清空回收站' : '清空废纸篓')}
             </button>
           </>
         ) : menu.kind === 'favorite' ? (
