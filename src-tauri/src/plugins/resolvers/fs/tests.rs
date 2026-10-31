@@ -88,8 +88,7 @@ fn vfs_pagination_requires_canonical_bounded_shared_pages() {
     let empty_cursor: VfsPage =
         serde_json::from_value(json!({"entries":[],"nextCursor":""})).unwrap();
     assert!(empty_cursor.validate_page(500).is_err());
-    let oversize: VfsPage =
-        serde_json::from_value(json!({"entries":[{},{}]})).unwrap();
+    let oversize: VfsPage = serde_json::from_value(json!({"entries":[{},{}]})).unwrap();
     assert!(oversize.validate_page(1).is_err());
 
     let search: SearchResults =
