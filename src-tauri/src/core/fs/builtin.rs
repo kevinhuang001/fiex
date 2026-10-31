@@ -20,7 +20,6 @@ impl BuiltinFsAdapter<'_> {
         }
         applications::candidate_path(self.path())
     }
-
 }
 impl FsAdapter for BuiltinFsAdapter<'_> {
     fn preflight(
@@ -29,7 +28,9 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
     ) -> Result<(), FsError> {
         let provider = virtual_resolvers::view_for(self.path())
             .ok_or("Unsupported: unregistered native VFS provider")?;
-        provider.preflight(self.path(), request).map_err(FsError::from)
+        provider
+            .preflight(self.path(), request)
+            .map_err(FsError::from)
     }
     fn desktop_listing(
         &self,
@@ -109,11 +110,8 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
                 // list support. No per-view URI or directory-tree special case.
                 if entry.is_dir
                     && !entry.is_symlink
-                    && crate::plugins::resource::file_capabilities::for_entry(
-                        &entry.path,
-                        &entry,
-                    )
-                    .list
+                    && crate::plugins::resource::file_capabilities::for_entry(&entry.path, &entry)
+                        .list
                 {
                     pending.push(entry.path.clone());
                 }
