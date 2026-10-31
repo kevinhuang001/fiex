@@ -1,5 +1,5 @@
 use super::*;
-use crate::core::volumes::applications;
+use crate::core::volumes::{applications, recycle, trash_vfs};
 
 #[test]
 fn view_descriptors_are_disjoint_and_not_plugin_privileged() {
