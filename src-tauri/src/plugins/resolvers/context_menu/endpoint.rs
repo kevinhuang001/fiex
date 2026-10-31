@@ -4,7 +4,7 @@
 //! session, resource scope and output validation independently of transport.
 use super::{builtin, proxy::ScopedMenuProxy};
 use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 pub(super) struct NativeMenuEndpoint<'a> {
     pub id: String,
@@ -35,6 +35,7 @@ impl ProviderEndpoint for ScopedMenuProxy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn native_endpoint_rejects_unknown_methods_and_missing_item() {
