@@ -13,8 +13,11 @@ use std::{
 };
 
 trait NativeDecorationProvider: Send + Sync {
-    fn resolve(&self, directory: &str, entries: &HashMap<String, DecorationEntry>)
-        -> Vec<Decoration>;
+    fn resolve(
+        &self,
+        directory: &str,
+        entries: &HashMap<String, DecorationEntry>,
+    ) -> Vec<Decoration>;
 }
 
 struct BuiltinDecoration(NativeKind);
@@ -37,7 +40,11 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeDecorationProvider> {
         for (id, priority, kind) in [
             ("builtin:tags", -12, NativeKind::Tags),
             ("builtin:readonly", -11, NativeKind::Readonly),
-            ("builtin:connection-status", -10, NativeKind::ConnectionStatus),
+            (
+                "builtin:connection-status",
+                -10,
+                NativeKind::ConnectionStatus,
+            ),
             ("builtin:application-icon", -9, NativeKind::ApplicationIcon),
         ] {
             values
@@ -70,8 +77,8 @@ pub(super) fn resolve(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{DecorationTag, NativeBadge};
+    use super::*;
 
     #[test]
     fn all_native_decorations_are_typed_and_priority_sorted() {
@@ -99,21 +106,33 @@ mod tests {
             path: path.clone(),
             readonly: true,
             tags: vec![DecorationTag {
-                name: "project".into(), color: 2, hex: None,
+                name: "project".into(),
+                color: 2,
+                hex: None,
             }],
             sync: Some("cloud".into()),
             ..Default::default()
         };
         let mut entries = HashMap::new();
         entries.insert(path.clone(), entry.clone());
-        assert_eq!(resolve("builtin:readonly", "/", &entries).unwrap()[0].native_badges[0].text,
-            crate::i18n::t("只读"));
+        assert_eq!(
+            resolve("builtin:readonly", "/", &entries).unwrap()[0].native_badges[0].text,
+            crate::i18n::t("只读")
+        );
         assert!(resolve("builtin:tags", "/", &entries).unwrap()[0]
-            .native_badges.iter().all(|badge: &NativeBadge| badge.dot));
-        assert_eq!(resolve("builtin:connection-status", "/", &entries).unwrap()[0]
-            .native_badges[0].status.as_deref(), Some("cloud"));
+            .native_badges
+            .iter()
+            .all(|badge: &NativeBadge| badge.dot));
+        assert_eq!(
+            resolve("builtin:connection-status", "/", &entries).unwrap()[0].native_badges[0]
+                .status
+                .as_deref(),
+            Some("cloud")
+        );
         entry.readonly = false;
         entries.insert(path, entry);
-        assert!(resolve("builtin:readonly", "/", &entries).unwrap().is_empty());
+        assert!(resolve("builtin:readonly", "/", &entries)
+            .unwrap()
+            .is_empty());
     }
 }
