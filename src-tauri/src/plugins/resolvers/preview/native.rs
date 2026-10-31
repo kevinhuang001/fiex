@@ -33,7 +33,8 @@ impl NativePreviewProvider for BuiltinPreview {
 fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
     static REGISTRY: OnceLock<NativeProviderRegistry<dyn NativePreviewProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut values = NativeProviderRegistry::new(ProviderKind::Preview);
+        let mut values: NativeProviderRegistry<dyn NativePreviewProvider> =
+            NativeProviderRegistry::new(ProviderKind::Preview);
         for kind in [
             Builtin::Text,
             Builtin::Image,
