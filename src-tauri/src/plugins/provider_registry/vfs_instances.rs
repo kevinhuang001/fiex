@@ -1,7 +1,7 @@
 //! Core-owned selection of a named VFS implementation after the authenticated
 //! plugin.initialize handshake. Neither UI payloads nor plugin replies may
 //! select another account's mount or borrow an unrelated provider's grants.
-use super::{FsOperation, RegisteredProvider};
+use super::FsOperation;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 

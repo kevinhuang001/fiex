@@ -28,7 +28,7 @@ pub struct RegisteredProvider {
     pub reported: bool,
     pub discovery: bool,
     pub preflight: bool,
-    pub instances: BTreeMap<String, vfs_instances::VfsInstance>,
+    instances: BTreeMap<String, vfs_instances::VfsInstance>,
 }
 
 impl RegisteredProvider {
