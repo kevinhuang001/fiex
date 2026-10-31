@@ -27,8 +27,8 @@
 //! re-checks the same call on execute.
 use super::connection_cache::ConnectionCache;
 use crate::core::files::Entry;
-use crate::plugins::resource::file_capabilities::FileCapabilities;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use crate::plugins::resource::file_capabilities::FileCapabilities;
 use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
@@ -335,7 +335,9 @@ mod registry_tests {
         let sorted = registered.candidates(|_| true);
         assert_eq!(sorted[0].id, "builtin:opening");
         assert_eq!(sorted.last().unwrap().id, "builtin:trash");
-        assert!(sorted.windows(2).all(|pair| pair[0].priority >= pair[1].priority));
+        assert!(sorted
+            .windows(2)
+            .all(|pair| pair[0].priority >= pair[1].priority));
         assert!(registered.get("builtin:nonexistent").is_none());
     }
 
