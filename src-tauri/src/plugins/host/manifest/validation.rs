@@ -254,6 +254,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             return Err("extensions.connections.fields must be an array".into());
         }
         if key == "connections" {
+            crate::plugins::match_rules::validate(object.get("match"), false, false)?;
             connections::validate(object)?;
         }
 
