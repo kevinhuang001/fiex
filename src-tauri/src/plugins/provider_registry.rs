@@ -7,6 +7,8 @@
 //! plugin that supports `rename` for one account can still restrict a single
 //! node through `allowedOps`; user grants and the Operation Scope are checked
 //! independently by the permission layer.
+mod event_candidates;
+pub use event_candidates::candidates;
 use serde_json::Value;
 use std::{
     collections::{BTreeSet, HashMap},
