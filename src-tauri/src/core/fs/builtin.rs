@@ -24,7 +24,7 @@ impl BuiltinFsAdapter<'_> {
 impl FsAdapter for BuiltinFsAdapter<'_> {
     fn preflight(
         &self,
-        request: &crate::plugin_sdk::filesystem::TransferPreflight,
+        request: &fiex_provider_contracts::TransferPreflight,
     ) -> Result<(), FsError> {
         let provider = virtual_resolvers::view_for(self.path())
             .ok_or("Unsupported: unregistered native VFS provider")?;
