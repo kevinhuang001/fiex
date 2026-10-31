@@ -1,6 +1,6 @@
 //! Single-owner plugin event invocation uses the same endpoint as all other
 //! Provider families. Scope projection and output validation stay Core-owned.
-use crate::plugin_sdk::provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use serde_json::Value;
 
