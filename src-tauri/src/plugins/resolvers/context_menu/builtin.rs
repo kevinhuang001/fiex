@@ -27,12 +27,9 @@ impl Context {
             .iter()
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
-        let provider = crate::core::volumes::virtual_resolvers::view_for(directory);
-        let read_only = if let Some(provider) = provider {
-            provider.readonly()
-        } else {
-            entry(directory)?.readonly
-        };
+        // Read-only status comes from the selected storage provider's entry,
+        // including Core-native views. The menu does not special-case a view.
+        let read_only = entry(directory)?.readonly;
         // A blank-canvas menu has no selection: capabilities come from the
         // directory itself so "new folder/file" follows the same grant.
         let mut capabilities = if paths.is_empty() {
