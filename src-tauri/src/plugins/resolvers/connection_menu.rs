@@ -228,17 +228,16 @@ fn plugin_items(
     session: &str,
     provider_id: Option<&str>,
 ) -> Result<Vec<Value>, String> {
+    let mut params = json!({
+        "menuSessionId": session,
+        "interactionId": crate::plugins::mounts::new_id()?,
+        "connection": ctx.summary(),
+    });
+    if let Some(id) = provider_id {
+        params["providerId"] = json!(id);
+    }
     crate::plugins::host::global()
-        .invoke(
-            &plugin.id,
-            "connectionContextMenu.resolve",
-            json!({
-                "menuSessionId": session,
-                "interactionId": crate::plugins::mounts::new_id()?,
-                "connection": ctx.summary(),
-                "providerId": provider_id,
-            }),
-        )
+        .invoke(&plugin.id, "connectionContextMenu.resolve", params)
         .and_then(|value| valid_items(&value))
 }
 

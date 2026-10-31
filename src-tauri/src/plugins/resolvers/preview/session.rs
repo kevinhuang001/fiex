@@ -68,10 +68,14 @@ pub(super) fn open_plugin_resource(
 ) -> Result<Value, String> {
     let plugin_id = &plugin.id;
     let session_id = crate::plugins::mounts::new_id()?;
+    let mut params = serde_json::json!({"sessionId":session_id});
+    if let Some(id) = provider_id {
+        params["providerId"] = serde_json::json!(id);
+    }
     let (context, scope) = crate::plugins::events::resource_scope(
         plugin,
         "preview.open",
-        serde_json::json!({"sessionId":session_id,"providerId":provider_id}),
+        params,
         std::slice::from_ref(resource),
         None,
     )?;
