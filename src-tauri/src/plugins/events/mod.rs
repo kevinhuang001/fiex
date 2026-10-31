@@ -57,8 +57,10 @@ pub fn menu_allowed(
         Vec::new(),
     )
     .iter()
-    .any(|provider| provider.id == provider_id
-        && matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id))
+    .any(|provider| {
+        provider.id == provider_id
+            && matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
+    })
 }
 
 pub fn call_owner(
@@ -77,11 +79,16 @@ pub fn call_owner(
     )
     .into_iter()
     .filter(|p| {
-        let Handler::Plugin(plugin) = &p.handler else { return false };
-        if plugin.id != plugin_id { return false; }
+        let Handler::Plugin(plugin) = &p.handler else {
+            return false;
+        };
+        if plugin.id != plugin_id {
+            return false;
+        }
         match params.get("providerId") {
-            Some(value) => value.as_str().is_some_and(|instance|
-                p.id == format!("plugin:{plugin_id}:{instance}")),
+            Some(value) => value
+                .as_str()
+                .is_some_and(|instance| p.id == format!("plugin:{plugin_id}:{instance}")),
             None => p.id == format!("plugin:{plugin_id}"),
         }
     })

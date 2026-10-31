@@ -26,7 +26,9 @@ pub fn candidates(
         let declared = plugin.declared_permissions.iter().cloned().collect();
         let policy = crate::plugins::security::policy::PermissionPolicy::new(&plugin.id, &declared);
         let required = match method {
-            "decorations.resolve" => Some(crate::plugins::security::policy::Capability::FoldersRead),
+            "decorations.resolve" => {
+                Some(crate::plugins::security::policy::Capability::FoldersRead)
+            }
             "hooks.invoke" => Some(crate::plugins::security::policy::Capability::Hooks),
             _ => None,
         };
@@ -41,9 +43,13 @@ pub fn candidates(
             let mut instance_name = None;
             if let Some(instances) = instances {
                 let instance = &instances[index];
-                let Some(id) = instance["id"].as_str() else { continue };
+                let Some(id) = instance["id"].as_str() else {
+                    continue;
+                };
                 instance_name = Some(id.to_owned());
-                let Some(fields) = contribution.as_object_mut() else { continue };
+                let Some(fields) = contribution.as_object_mut() else {
+                    continue;
+                };
                 fields.remove("providers");
                 if let Some(extra) = instance.as_object() {
                     for (key, value) in extra {
@@ -63,7 +69,10 @@ pub fn candidates(
                     None => format!("plugin:{}", plugin.id),
                 },
                 name: plugin.name.clone(),
-                priority: contribution.get("priority").and_then(Value::as_i64).unwrap_or(50),
+                priority: contribution
+                    .get("priority")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(50),
                 handler: Handler::Plugin(Box::new(plugin)),
             });
         }

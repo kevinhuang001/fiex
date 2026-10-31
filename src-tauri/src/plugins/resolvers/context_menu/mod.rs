@@ -45,14 +45,12 @@ fn sessions() -> &'static Mutex<HashMap<String, Session>> {
 fn allowed(session: &Session) -> bool {
     match &session.provider.handler {
         Handler::Builtin(_) => true,
-        Handler::Plugin(plugin) => {
-            crate::plugins::events::menu_allowed(
-                &plugin.id,
-                &session.provider.id,
-                &session.resources,
-                &session.directory,
-            )
-        }
+        Handler::Plugin(plugin) => crate::plugins::events::menu_allowed(
+            &plugin.id,
+            &session.provider.id,
+            &session.resources,
+            &session.directory,
+        ),
     }
 }
 fn register(
@@ -198,7 +196,11 @@ pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
         };
         (
             plugin.id.clone(),
-            session.provider.id.strip_prefix(&format!("plugin:{}:", plugin.id)).map(str::to_owned),
+            session
+                .provider
+                .id
+                .strip_prefix(&format!("plugin:{}:", plugin.id))
+                .map(str::to_owned),
             session.directory.clone(),
             session.resources.clone(),
             *session.submenus.get(parent_id).ok_or("unknown submenu")?,

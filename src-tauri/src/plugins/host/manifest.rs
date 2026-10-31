@@ -3,8 +3,8 @@ mod connections;
 #[cfg(test)]
 mod contribution_tests;
 mod permissions;
-mod validation;
 mod provider_instances;
+mod validation;
 pub(crate) use permissions::declared;
 pub use permissions::{activation_requirements, declared_permissions};
 use serde::{Deserialize, Serialize};
