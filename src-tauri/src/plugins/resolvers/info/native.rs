@@ -115,6 +115,11 @@ mod tests {
         assert_eq!(candidates(&directory).len(), 1);
         assert!(invoke("core.media", "/no-such-directory", &directory).is_err());
         assert!(invoke("unknown", "/no-such-directory", &directory).is_err());
-        assert_eq!(invoke("core.metadata", "/no-such-directory", &directory).unwrap().len(), 1);
+        assert_eq!(
+            invoke("core.metadata", "/no-such-directory", &directory)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }
