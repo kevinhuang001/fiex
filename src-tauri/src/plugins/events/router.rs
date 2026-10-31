@@ -25,10 +25,13 @@ impl EventRouter {
                 }
                 let mut routed = request.clone();
                 if let Handler::Plugin(plugin) = &provider.handler {
+                    let fields = routed.params.as_object_mut()
+                        .ok_or("provider parameters must be an object")?;
+                    // Only the verified contribution's registered instance
+                    // may select an SDK provider, never a caller-supplied ID.
+                    fields.remove("providerId");
                     let prefix = format!("plugin:{}:", plugin.id);
                     if let Some(name) = provider.id.strip_prefix(&prefix) {
-                        let fields = routed.params.as_object_mut()
-                            .ok_or("provider parameters must be an object")?;
                         fields.insert("providerId".into(), serde_json::json!(name));
                     }
                 }
