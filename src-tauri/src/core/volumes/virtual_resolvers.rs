@@ -226,7 +226,10 @@ mod tests {
             descriptor.validate().unwrap();
         }
         assert_eq!(view_for("recent://item").unwrap().id(), "core:recent");
-        assert_eq!(view_for("applications://item").unwrap().id(), "core:applications");
+        assert_eq!(
+            view_for("applications://item").unwrap().id(),
+            "core:applications"
+        );
         assert!(view_for("unknown://item").is_none());
         assert!(view_for("fiex://mount/not-a-native-view").is_none());
         assert!(!opaque("unknown://item"));
