@@ -271,11 +271,7 @@ fn remove_adds_trash_and_delete_forever() {
         remove: true,
         ..Default::default()
     };
-    let ctx = mount_selection(
-        "fiex://mount/gating-mount/a.txt",
-        false,
-        capabilities,
-    );
+    let ctx = mount_selection("fiex://mount/gating-mount/a.txt", false, capabilities);
     assert!(provider_ids(&ctx).contains(&"builtin:trash".to_string()));
     let trash = super::builtin::resolve("builtin:trash", &ctx).unwrap();
     // Mounts have no Trash: the provider's `remove` is a permanent delete.
@@ -284,7 +280,9 @@ fn remove_adds_trash_and_delete_forever() {
     assert_eq!(trash["items"][0]["danger"], true);
     // A VFS remove capability never implies restore or empty-the-bin.
     let items = trash["items"].as_array().unwrap();
-    assert!(items.iter().all(|item| item["id"] != "restore" && item["id"] != "emptyTrash"));
+    assert!(items
+        .iter()
+        .all(|item| item["id"] != "restore" && item["id"] != "emptyTrash"));
     // A write-only mount keeps the trash group out.
     let without_remove = mount_selection(
         "fiex://mount/gating-mount/a.txt",
@@ -311,11 +309,7 @@ fn create_capability_never_adds_a_menu_group() {
         remove: false,
         ..Default::default()
     };
-    let ctx = mount_selection(
-        "fiex://mount/gating-mount/a.txt",
-        false,
-        capabilities,
-    );
+    let ctx = mount_selection("fiex://mount/gating-mount/a.txt", false, capabilities);
     let ids = provider_ids(&ctx);
     assert!(ids.contains(&"builtin:rename".to_string()));
     assert!(ids.contains(&"builtin:clipboard".to_string()));
@@ -409,13 +403,8 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         create: true,
         ..Default::default()
     };
-    let ctx = super::builtin::Context::for_test_caps(
-        "/tmp/blank",
-        vec![],
-        vec![],
-        false,
-        capabilities,
-    );
+    let ctx =
+        super::builtin::Context::for_test_caps("/tmp/blank", vec![], vec![], false, capabilities);
     assert_eq!(provider_ids(&ctx), ["builtin:create"]);
     let menu = super::builtin::resolve("builtin:create", &ctx).unwrap();
     let items = menu["items"].as_array().unwrap();
