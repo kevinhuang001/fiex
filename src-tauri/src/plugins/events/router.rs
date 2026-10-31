@@ -25,7 +25,9 @@ impl EventRouter {
                 }
                 let mut routed = request.clone();
                 if let Handler::Plugin(plugin) = &provider.handler {
-                    let fields = routed.params.as_object_mut()
+                    let fields = routed
+                        .params
+                        .as_object_mut()
                         .ok_or("provider parameters must be an object")?;
                     // Only the verified contribution's registered instance
                     // may select an SDK provider, never a caller-supplied ID.
