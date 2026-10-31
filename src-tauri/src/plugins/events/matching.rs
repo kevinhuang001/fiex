@@ -66,6 +66,16 @@ pub fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
                     .allows(*op))
                 .map(|op| op.as_str())
                 .collect::<Vec<_>>());
+            // Only the trusted Core mount and view registries may establish
+            // owner identities. Never accept a provider-supplied owner in
+            // resource metadata or allow it to change the IO route.
+            let (view, storage) = crate::plugins::match_rules::locations_for(&resource.display);
+            if let Some(view) = view {
+                metadata["view"] = view;
+            }
+            if let Some(storage) = storage {
+                metadata["storage"] = storage;
+            }
             metadata
         })
         .collect()
