@@ -1,6 +1,6 @@
 //! Native view-owned ContextMenu behavior. Each view implements the same
 //! ContextMenu contract and no generic menu dispatcher knows its URI scheme.
-use super::{NativeAction, NativeViewMenuProvider};
+use super::{intersection, NativeAction, NativeViewMenuProvider};
 use crate::core::files::Entry;
 use crate::core::volumes::{applications, recycle, trash_vfs, virtual_resolvers};
 use serde_json::{json, Value};
@@ -182,12 +182,23 @@ impl NativeViewMenuProvider for TrashMenu {
             "rename",
             "cut",
             "duplicate",
+            "copyPath",
         ]
+    }
+
+    fn supports_blank(&self, directory: &str) -> bool {
+        directory == trash_vfs::URI || directory == recycle::URI
     }
 
     fn items(&self, path: &str) -> Vec<Value> {
         if path == trash_vfs::URI || path == recycle::URI {
-            return Vec::new();
+            return vec![item(
+                "emptyTrash",
+                crate::i18n::t(if cfg!(windows) { "清空回收站" } else { "清空废纸篓" }).into(),
+                "trash",
+                true,
+                true,
+            )];
         }
         vec![
             item(
@@ -207,13 +218,27 @@ impl NativeViewMenuProvider for TrashMenu {
         ]
     }
 
+    fn selection_items(&self, directory: &str, paths: &[String]) -> Vec<Value> {
+        let mut items = intersection(self, directory, paths);
+        if paths.len() > 1 {
+            // Multi-selection can only permanently delete the exact offered
+            // nodes. Never turn that into an empty-the-entire-bin action.
+            items.retain(|item| item["id"] == "delete");
+        }
+        items
+    }
+
     fn execute(&self, id: &str, paths: &[String]) -> Result<NativeAction, String> {
         match id {
-            "restore" => Ok(NativeAction {
+            "emptyTrash" if paths.is_empty() => Ok(NativeAction {
+                command: "emptyTrash",
+                paths: Vec::new(),
+            }),
+            "restore" if paths.len() == 1 => Ok(NativeAction {
                 command: "restore",
                 paths: paths.to_vec(),
             }),
-            "delete" => Ok(NativeAction {
+            "delete" if !paths.is_empty() => Ok(NativeAction {
                 command: "delete",
                 paths: paths.to_vec(),
             }),
