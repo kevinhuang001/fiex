@@ -105,9 +105,15 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
                 {
                     continue;
                 }
+                // Traverse only entries whose storage provider declares
+                // list support. No per-view URI or directory-tree special case.
                 if entry.is_dir
                     && !entry.is_symlink
-                    && virtual_storage::is_virtual_tree_path(&entry.path)
+                    && crate::plugins::resource::file_capabilities::for_entry(
+                        &entry.path,
+                        &entry,
+                    )
+                    .list
                 {
                     pending.push(entry.path.clone());
                 }
