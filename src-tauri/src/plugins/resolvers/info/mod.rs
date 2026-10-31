@@ -6,6 +6,8 @@
 //! metadata and media probes.
 pub use crate::plugins::contracts::{InfoRow, InfoSection};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+use std::sync::Arc;
 
 fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     InfoRow {
@@ -15,46 +17,42 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     }
 }
 
+mod endpoint;
 mod media;
 mod metadata;
+mod native;
+mod proxy;
 pub use media::media_sections;
-use metadata::metadata_section;
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
-    use crate::plugins::events::{EventRouter, Handler, Resolver};
+    use crate::plugins::events::{EventRouter, Handler};
     let metadata =
         crate::plugins::events::resource_metadata(std::slice::from_ref(&resource)).remove(0);
-    let mut builtin = vec![Resolver::builtin("core.metadata", 1000)];
-    if !resource.is_dir
-        && (resource.mime.starts_with("audio/") || resource.mime.starts_with("video/"))
-    {
-        builtin.push(Resolver::builtin("core.media", 100));
-    }
-    let providers = EventRouter::providers("info.resolve", &[metadata], "", builtin);
+    let builtin = native::candidates(&resource);
+    let providers =
+        crate::plugins::provider_registry::candidates("info.resolve", &[metadata], "", builtin);
+    let resource = Arc::new(resource);
+    let request = ProviderRequest {
+        method: "info.resolve".into(),
+        params: serde_json::json!({}),
+    };
     EventRouter::resolve(
         "info.resolve",
         providers,
-        |_, id| {
-            let sections = match id {
-                "core.metadata" => vec![metadata_section(
-                    display,
-                    &resource.local,
-                    resource.stat.as_ref(),
-                    resource.metadata(),
-                )],
-                "core.media" => media_sections(&resource.export_path()?),
-                _ => return Err("unknown info builtin".into()),
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(endpoint::NativeInfoEndpoint {
+                    id: (*id).into(),
+                    display: display.into(),
+                    resource: resource.clone(),
+                }),
+                Handler::Plugin(plugin) => Box::new(proxy::ScopedInfoProxy::new(
+                    (**plugin).clone(),
+                    resource.clone(),
+                )?),
             };
-            Ok(serde_json::json!({"sections":sections}))
-        },
-        |plugin| {
-            crate::plugins::events::invoke_resources(
-                plugin,
-                "info.resolve",
-                serde_json::json!({}),
-                std::slice::from_ref(&resource),
-                None,
-            )
+            Ok(endpoint)
         },
         |provider, value| {
             let mut sections: Vec<InfoSection> =

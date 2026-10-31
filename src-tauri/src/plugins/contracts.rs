@@ -1,5 +1,5 @@
-//! Protocol types are defined once in the SDK and shared with Core.
-pub use fiex_plugin_sdk::{
+//! Shared provider protocol types are independent from plugin IPC runtime.
+pub use fiex_provider_contracts::{
     EventContext, InfoRow, InfoSection, PackageView, PreviewView, ResourceContext,
     ResourceMetadata, ResourceRef,
 };

@@ -6,6 +6,9 @@
 //! providers by priority.
 mod builtin;
 mod dynamic;
+mod endpoint;
+mod native;
+mod proxy;
 mod query;
 mod types;
 

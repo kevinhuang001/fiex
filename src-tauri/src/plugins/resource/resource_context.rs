@@ -123,6 +123,15 @@ impl ResourceSnapshot {
             return Ok(Self::from_entry(display, &entry));
         }
         if !crate::plugins::mounts::handles(display) {
+            // Share ResourceBroker's trusted owner resolution. Unsupported
+            // schemes may not masquerade as OS-local files during metadata
+            // discovery or provider candidate matching.
+            if !matches!(
+                crate::core::fs::provider_registry::identity(display),
+                Some(("fs", provider, _)) if provider == "core:local-fs"
+            ) {
+                return Err("Unsupported: unregistered filesystem URI".into());
+            }
             return Ok(Self::new(display, Path::new(display)));
         }
         let entry = if crate::remote::is_remote(display) {
@@ -213,6 +222,13 @@ impl ResourceSnapshot {
 mod tests {
     use super::*;
     #[test]
+    fn unknown_schemes_fail_before_local_metadata_discovery() {
+        for path in ["unknown://not-registered", "unknown:opaque-reference"] {
+            assert!(ResourceSnapshot::resolve(path).is_err(), "{path}");
+        }
+    }
+
+    #[test]
     fn metadata_projection_does_not_grant_read_and_reuses_identity() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("example.txt");
@@ -259,6 +275,14 @@ pub fn bind_selected(
                 &snapshot,
             )?;
             continue;
+        }
+        // An attacker-controlled resource binding is never promoted to a
+        // local path merely because its scheme has no registered mount.
+        if !matches!(
+            crate::core::fs::provider_registry::identity(&binding.path),
+            Some(("fs", provider, _)) if provider == "core:local-fs"
+        ) {
+            return Err("ScopeDenied: unsupported resource owner".into());
         }
         let path = std::path::Path::new(&binding.path);
         scope.authorize(&binding.path)?;

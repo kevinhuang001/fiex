@@ -1,5 +1,5 @@
 //! Builtin menu policy. The frontend receives data, never provider closures.
-use super::file_ops::{groups, BuiltinResolver, Selection};
+use super::file_ops::{available, BuiltinResolver, Selection};
 use crate::plugins::events::Resolver;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use serde_json::{json, Value};
@@ -9,54 +9,36 @@ pub(super) struct Context {
     pub paths: Vec<String>,
     pub entries: Vec<crate::core::files::Entry>,
     pub read_only: bool,
-    pub in_trash: bool,
-    virtual_provider: Option<&'static dyn crate::core::volumes::virtual_resolvers::VirtualView>,
     all_local: bool,
     capabilities: FileCapabilities,
 }
 
+/// Host-only actions require a direct local FS resource. A location type
+/// of "fs" alone is not enough: raw USBFS is also FS but must not be
+/// accidentally passed to local operating-system commands.
+fn plain_local(path: &str) -> bool {
+    let (view, storage) = crate::plugins::match_rules::locations_for(path);
+    matches!((view, storage),
+        (Some(view), Some(storage))
+            if view == storage && storage["providerId"] == "core:local-fs")
+}
+
 impl Context {
     pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
+        // All storage kinds resolve through ResourceBroker's trusted scope,
+        // rather than a second URI-sensitive routing table in ContextMenu.
         fn entry(path: &str) -> Result<crate::core::files::Entry, String> {
-            if crate::core::volumes::virtual_resolvers::opaque(path) {
-                crate::core::volumes::virtual_resolvers::resource_entry(path)
-            } else if let Some(route) = crate::usbfs::route(path) {
-                crate::usbfs::entry(&route)
-            } else if crate::remote::is_remote(path) {
-                crate::remote::stat(path)
-            } else if crate::plugins::mounts::handles(path) {
-                crate::plugins::vfs::stat(path)
-            } else {
-                crate::core::files::entry(std::path::Path::new(path))
-            }
+            crate::core::fs::trusted(path, "core:context-menu")?
+                .desktop_entry()
+                .map_err(String::from)
         }
         let entries = paths
             .iter()
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
-        let provider = crate::core::volumes::virtual_resolvers::view_for(directory);
-        // Recent is a projection of original resources and never owns the
-        // menu. Applications selections (including user-store entries and
-        // folders) use the Applications view; its blank canvas keeps the
-        // capability-gated create menu.
-        let virtual_provider = provider.filter(|p| {
-            p.id() != "core:recent" && !(p.id() == "core:applications" && paths.is_empty())
-        });
-        if let Some(owner) = virtual_provider {
-            if owner.id() == "core:trash"
-                && paths.iter().any(|path| {
-                    crate::core::volumes::virtual_resolvers::view_for(path)
-                        .is_none_or(|p| p.id() != owner.id())
-                })
-            {
-                return Err("selection outside VFS".into());
-            }
-        }
-        let read_only = if let Some(provider) = provider {
-            provider.readonly()
-        } else {
-            entry(directory)?.readonly
-        };
+        // Read-only status comes from the selected storage provider's entry,
+        // including Core-native views. The menu does not special-case a view.
+        let read_only = entry(directory)?.readonly;
         // A blank-canvas menu has no selection: capabilities come from the
         // directory itself so "new folder/file" follows the same grant.
         let mut capabilities = if paths.is_empty() {
@@ -64,28 +46,17 @@ impl Context {
         } else {
             crate::plugins::resource::file_capabilities::for_selection(paths, &entries)
         };
-        if read_only || (directory == "recent://" && paths.is_empty()) {
+        if read_only {
             capabilities = capabilities.intersect(
                 crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
             );
         }
-        let all_local = crate::usbfs::route(directory).is_none()
-            && !crate::core::volumes::virtual_resolvers::opaque(directory)
-            && !crate::plugins::mounts::handles(directory)
-            && paths.iter().all(|path| {
-                !crate::plugins::mounts::handles(path)
-                    && crate::usbfs::route(path).is_none()
-                    && !crate::core::volumes::virtual_resolvers::opaque(path)
-            });
-        let in_trash = crate::core::volumes::virtual_resolvers::view_for(directory)
-            .is_some_and(|view| view.id() == "core:trash");
+        let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         Ok(Self {
             directory: directory.into(),
             paths: paths.to_vec(),
             entries,
             read_only,
-            in_trash,
-            virtual_provider,
             all_local,
             capabilities,
         })
@@ -96,7 +67,6 @@ impl Context {
             paths: &self.paths,
             entries: &self.entries,
             read_only: self.read_only,
-            in_trash: self.in_trash,
             all_local: self.all_local,
         }
     }
@@ -104,11 +74,7 @@ impl Context {
     /// Resolvers whose capability exists for this selection.
     pub(super) fn resolvers(&self) -> Vec<&'static dyn BuiltinResolver> {
         let selection = self.selection();
-        groups()
-            .iter()
-            .copied()
-            .filter(|resolver| resolver.available(&selection, &self.capabilities))
-            .collect()
+        available(&selection, &self.capabilities)
     }
 
     /// Tests build menus without touching the mount registry.
@@ -118,11 +84,10 @@ impl Context {
         paths: Vec<String>,
         entries: Vec<crate::core::files::Entry>,
         read_only: bool,
-        in_trash: bool,
     ) -> Self {
         let capabilities =
             crate::plugins::resource::file_capabilities::for_selection(&paths, &entries);
-        Self::for_test_caps(directory, paths, entries, read_only, in_trash, capabilities)
+        Self::for_test_caps(directory, paths, entries, read_only, capabilities)
     }
 
     /// Tests pin the capability snapshot to exercise menu gating directly.
@@ -132,24 +97,14 @@ impl Context {
         paths: Vec<String>,
         entries: Vec<crate::core::files::Entry>,
         read_only: bool,
-        in_trash: bool,
         capabilities: FileCapabilities,
     ) -> Self {
-        let all_local = crate::usbfs::route(directory).is_none()
-            && !crate::core::volumes::virtual_resolvers::opaque(directory)
-            && !crate::plugins::mounts::handles(directory)
-            && paths.iter().all(|path| {
-                !crate::plugins::mounts::handles(path)
-                    && crate::usbfs::route(path).is_none()
-                    && !crate::core::volumes::virtual_resolvers::opaque(path)
-            });
+        let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         Self {
             directory: directory.into(),
             paths,
             entries,
             read_only,
-            in_trash,
-            virtual_provider: None,
             all_local,
             capabilities,
         }
@@ -157,22 +112,34 @@ impl Context {
 }
 
 /// Only groups this selection can actually use become menu providers.
-pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
-    if ctx.virtual_provider.is_some() {
-        return vec![Resolver::builtin("builtin:vfs-menu", 100)];
-    }
-    ctx.resolvers()
+fn retain_unclaimed(ctx: &Context, items: Vec<Value>) -> Vec<Value> {
+    let claimed = super::native_views::claimed_actions(&ctx.directory, &ctx.paths);
+    items
         .into_iter()
-        .map(|resolver| Resolver::builtin(resolver.id(), resolver.priority()))
+        .filter(|item| !claimed.iter().any(|id| item["id"].as_str() == Some(*id)))
         .collect()
 }
 
+/// Native and plugin contributions participate in the same EventRouter.
+/// A native view claims only its OS-specific action identifiers, not the
+/// entire menu. Generic providers still contribute independent actions.
+pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
+    let mut candidates = super::native_views::providers(&ctx.directory, &ctx.paths);
+    let selection = ctx.selection();
+    candidates.extend(
+        ctx.resolvers()
+            .into_iter()
+            .filter(|resolver| {
+                !retain_unclaimed(ctx, resolver.items(&selection, &ctx.capabilities)).is_empty()
+            })
+            .map(|resolver| Resolver::builtin(resolver.id(), resolver.priority())),
+    );
+    candidates
+}
+
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
-    if id == "builtin:vfs-menu" {
-        let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
-        return Ok(crate::core::volumes::virtual_resolvers::menu_json(
-            provider, &ctx.paths,
-        ));
+    if super::native_views::owns(id) {
+        return super::native_views::resolve(id, &ctx.directory, &ctx.paths);
     }
     let resolver = ctx
         .resolvers()
@@ -180,7 +147,10 @@ pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
         .find(|resolver| resolver.id() == id)
         .ok_or("unknown or unavailable builtin menu provider")?;
     let selection = ctx.selection();
-    Ok(json!({"items": resolver.items(&selection, &ctx.capabilities)}))
+    Ok(json!({"items": retain_unclaimed(
+        ctx,
+        resolver.items(&selection, &ctx.capabilities),
+    )}))
 }
 
 pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, String> {
@@ -192,16 +162,12 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
     }) {
         return Err("menu action is no longer available".into());
     }
-    if id == "builtin:vfs-menu" {
-        let provider = ctx.virtual_provider.ok_or("VFS owner unavailable")?;
-        let action = provider.execute(item_id, &ctx.paths)?;
-        // `path` is the frontend's single-entry handle for actions such as
-        // "open"/"启动应用"; `paths` remains the full selection for batch ones.
-        // Use the selection path, not the provider's transformed result: Recent
-        // maps aliases to sources, but the frontend only knows the alias.
-        return Ok(
-            json!({"kind":"coreAction", "command":action.command, "paths":action.paths, "path":ctx.paths.first().cloned().unwrap_or_default(), "directory":ctx.directory}),
-        );
+    if super::native_views::owns(id) {
+        let action = super::native_views::execute(id, item_id, &ctx.directory, &ctx.paths)?;
+        return Ok(json!({
+            "kind":"coreAction", "command":action.command, "paths":action.paths,
+            "path":ctx.paths.first().cloned().unwrap_or_default(), "directory":ctx.directory
+        }));
     }
     let paths = if matches!(item_id, "remote.keepLocal" | "remote.keepRemote") {
         ctx.entries
@@ -216,4 +182,18 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
         json!({"kind":if item_id.starts_with("remote.") { "remoteAction" } else { "coreAction" },
         "command":item_id,"paths":paths,"path":ctx.paths.first().cloned().unwrap_or_default(),"directory":ctx.directory}),
     )
+}
+
+#[cfg(test)]
+mod location_tests {
+    use super::*;
+
+    #[test]
+    fn host_only_actions_require_trusted_direct_local_storage() {
+        assert!(plain_local("/tmp/example"));
+        assert!(!plain_local("recent://"));
+        assert!(!plain_local("applications://"));
+        assert!(!plain_local("fiex://mount/unregistered/a.txt"));
+        assert!(!plain_local("unregistered://somewhere"));
+    }
 }

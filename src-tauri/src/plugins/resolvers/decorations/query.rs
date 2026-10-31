@@ -1,6 +1,7 @@
 use super::dynamic::{decode, merge};
 use super::types::{Decoration, DecorationEntry};
 use crate::plugins::host as plugin_host;
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -64,9 +65,14 @@ pub fn query_with_plugins(
         })
         .collect::<Vec<_>>();
     let metadata = crate::plugins::events::resource_metadata(&resources);
-    let builtins = super::builtin::providers();
+    let builtins = super::native::providers();
     let providers = if include_plugins {
-        EventRouter::providers("decorations.resolve", &metadata, directory, builtins)
+        crate::plugins::provider_registry::candidates(
+            "decorations.resolve",
+            &metadata,
+            directory,
+            builtins,
+        )
     } else {
         builtins
     };
@@ -74,18 +80,28 @@ pub fn query_with_plugins(
         .into_iter()
         .map(|(m, f)| (m.id.clone(), (m, f)))
         .collect::<HashMap<_, _>>();
+    let request = ProviderRequest {
+        method: "decorations.resolve".into(),
+        params: json!({}),
+    };
     let result = EventRouter::resolve(
         "decorations.resolve",
         providers,
-        |_, id| super::builtin::resolve_in(id, directory, &entries),
-        |plugin| {
-            crate::plugins::events::invoke_resources(
-                plugin,
-                "decorations.resolve",
-                json!({}),
-                &resources,
-                Some(directory),
-            )
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint + '_> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(super::endpoint::NativeDecorationEndpoint {
+                    id: (*id).into(),
+                    directory,
+                    entries: &entries,
+                }),
+                Handler::Plugin(plugin) => Box::new(super::proxy::ScopedDecorationProxy::new(
+                    (**plugin).clone(),
+                    directory,
+                    &resources,
+                )?),
+            };
+            Ok(endpoint)
         },
         |provider, response| {
             if matches!(provider.handler, Handler::Builtin(_)) {

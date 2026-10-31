@@ -65,3 +65,33 @@ fn malformed_node_restrictions_cannot_become_unrestricted() {
     let unknown = entry(json!({"nodeId":"n","name":"a","allowedOps":["future"]})).unwrap();
     assert!(unknown.is_readonly());
 }
+
+#[test]
+fn vfs_pagination_requires_canonical_bounded_shared_pages() {
+    use fiex_provider_contracts::{SearchResults, VfsPage};
+
+    let listing: VfsPage = serde_json::from_value(json!({"entries":[]})).unwrap();
+    assert!(!listing.truncated);
+    assert!(listing.validate_page(0).is_ok());
+    let truncated: VfsPage =
+        serde_json::from_value(json!({"entries":[],"truncated":true})).unwrap();
+    assert!(truncated.truncated);
+
+    for bad in [
+        json!({"entries":[],"truncated":null}),
+        json!({"entries":[],"truncated":"false"}),
+        json!({"entries":[],"nextCursor":42}),
+        json!({"entries":[],"warnings":"error"}),
+    ] {
+        assert!(serde_json::from_value::<VfsPage>(bad).is_err());
+    }
+    let empty_cursor: VfsPage =
+        serde_json::from_value(json!({"entries":[],"nextCursor":""})).unwrap();
+    assert!(empty_cursor.validate_page(500).is_err());
+    let oversize: VfsPage = serde_json::from_value(json!({"entries":[{},{}]})).unwrap();
+    assert!(oversize.validate_page(1).is_err());
+
+    let search: SearchResults =
+        serde_json::from_value(json!({"entries":[],"nextCursor":"bad\n"})).unwrap();
+    assert!(search.validate_page(500).is_err());
+}

@@ -5,16 +5,17 @@
 //! requested mode, or the builtin walker as the last candidate. Every result
 //! is validated against the authorized root before it leaves this module.
 use crate::core::files::Entry;
+mod endpoint;
+mod native;
+mod proxy;
+mod stream;
 use crate::core::search::SearchMode;
 use crate::plugins::events::{Handler, Resolver};
 use serde::Deserialize;
 use serde_json::{json, Value};
+pub use stream::{run, run_stream};
 
 pub const BUILTIN_SEARCH: &str = "core.search";
-/// The builtin walker is the final candidate in Auto mode; a plugin that
-/// declares a higher priority becomes the default engine instead.
-const BUILTIN_PRIORITY: i64 = 10;
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginSearchInput {
@@ -61,12 +62,11 @@ impl SearchEngineInfo {
     }
 }
 
-/// Declared modes for one provider. A contribution without `modes` is a
-/// legacy single-RPC search and is treated as filename search only: Core must
-/// never infer content support from the operation ceiling alone.
+/// Explicitly declared modes for one provider. Missing or invalid mode
+/// declarations never silently grant search capabilities.
 fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
     let Handler::Plugin(plugin) = &provider.handler else {
-        return vec![SearchMode::Name, SearchMode::Content];
+        return native::modes(&provider.id);
     };
     let Some(contribution) = plugin.extensions.get("search") else {
         return Vec::new();
@@ -74,17 +74,10 @@ fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
     if !contribution.is_object() && contribution.as_bool() != Some(true) {
         return Vec::new();
     }
-    // `global` is a legacy spelling for "all local disks" and stays eligible
-    // for Local FS roots; any other scope is not a local search provider.
-    let scope = contribution
-        .get("scope")
-        .and_then(Value::as_str)
-        .unwrap_or("local");
-    if !matches!(scope, "local" | "global") {
-        return Vec::new();
-    }
+    // Eligibility for Local FS is handled by the standard trusted
+    // storage match. No obsolete "scope" or global-disks aliases.
     let Some(modes) = contribution.get("modes").and_then(Value::as_array) else {
-        return vec![SearchMode::Name];
+        return Vec::new();
     };
     let mut out = Vec::new();
     for mode in modes.iter().filter_map(Value::as_str) {
@@ -97,11 +90,10 @@ fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
     out
 }
 
-fn input(request: &PluginSearchInput) -> Value {
-    let resources =
-        crate::plugins::resource::resource_context::ResourceSnapshot::resolve(&request.root)
-            .map(|resource| vec![resource])
-            .unwrap_or_default();
+fn input(
+    request: &PluginSearchInput,
+    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
+) -> Value {
     json!({
         "query": request.query,
         "root": resources.first().map(|resource| &resource.reference),
@@ -124,11 +116,11 @@ fn resources(
 /// the builtin walker last by default priority.
 pub fn engines(request: &PluginSearchInput) -> Vec<SearchEngineInfo> {
     let resources = resources(request);
-    let providers = crate::plugins::events::EventRouter::providers(
+    let providers = crate::plugins::provider_registry::candidates(
         "search.query",
         &crate::plugins::events::resource_metadata(&resources),
         &request.root,
-        vec![Resolver::builtin(BUILTIN_SEARCH, BUILTIN_PRIORITY)],
+        native::candidates(),
     );
     providers
         .into_iter()
@@ -138,43 +130,6 @@ pub fn engines(request: &PluginSearchInput) -> Vec<SearchEngineInfo> {
         })
         .filter(|engine| !engine.modes.is_empty())
         .collect()
-}
-
-/// Invoke exactly one plugin engine and return its validated entries.
-pub fn run(
-    engine: &SearchEngineInfo,
-    request: &PluginSearchInput,
-    cancelled: impl Fn() -> bool,
-) -> Result<(Vec<Entry>, bool), String> {
-    if engine.is_builtin() {
-        return Err("builtin search engine runs in Core".into());
-    }
-    if !engine.supports(request.mode) {
-        return Err(format!(
-            "{} 不支持{}搜索",
-            engine.resolver.name,
-            match request.mode {
-                SearchMode::Name => "文件名",
-                SearchMode::Content => "文件内容",
-            }
-        ));
-    }
-    if cancelled() {
-        return Err("search cancelled".into());
-    }
-    let resources = resources(request);
-    let response = crate::plugins::events::invoke_resources(
-        match &engine.resolver.handler {
-            Handler::Plugin(plugin) => plugin,
-            Handler::Builtin(_) => return Err("builtin search engine runs in Core".into()),
-        },
-        "search.query",
-        input(request),
-        &resources,
-        Some(&request.root),
-    )?;
-    let entries = validated(&engine.resolver, response, request)?;
-    Ok((entries, false))
 }
 
 /// Shared result validation: ownership, root confinement, hidden/ignore rules,
@@ -236,67 +191,4 @@ fn validated(
         values.push(entry);
     }
     Ok(values)
-}
-
-fn dedupe(groups: Vec<Vec<Entry>>, limit: usize) -> Vec<Entry> {
-    let mut seen = std::collections::HashSet::new();
-    let mut entries = Vec::new();
-    for values in groups {
-        for entry in values {
-            let remote = crate::plugins::mounts::handles(&entry.path);
-            let key = if remote {
-                let uri = crate::plugins::mounts::parse(&entry.path).expect("validated search URI");
-                format!("{}/{}", uri.mount_id, uri.relative)
-            } else {
-                dunce::canonicalize(&entry.path)
-                    .unwrap_or_else(|_| entry.path.clone().into())
-                    .to_string_lossy()
-                    .into_owned()
-            };
-            let key = if cfg!(windows) && !remote {
-                key.to_lowercase()
-            } else {
-                key
-            };
-            if seen.insert(key) {
-                entries.push(entry);
-            }
-        }
-    }
-    entries.truncate(limit);
-    entries
-}
-
-/// Legacy merge path used by `plugin_search`: every provider may contribute.
-pub fn resolve(
-    request: &PluginSearchInput,
-    mut builtin: impl FnMut() -> Result<Value, String>,
-    cancelled: impl Fn() -> bool,
-) -> Vec<Entry> {
-    let limit = request.limit();
-    let mut groups = Vec::new();
-    for engine in engines(request) {
-        if cancelled() {
-            return Vec::new();
-        }
-        if engine.is_builtin() {
-            if let Ok(value) = builtin() {
-                if let Ok(entries) = validated(&engine.resolver, value, request) {
-                    groups.push(entries);
-                }
-            }
-            continue;
-        }
-        if !engine.supports(request.mode) {
-            continue;
-        }
-        if let Ok((entries, _)) = run(&engine, request, &cancelled) {
-            groups.push(entries);
-        }
-    }
-    dedupe(groups, limit)
-}
-
-pub fn query(request: &PluginSearchInput) -> Vec<Entry> {
-    resolve(request, || Ok(json!({"entries":[]})), || false)
 }

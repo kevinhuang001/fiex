@@ -7,14 +7,18 @@
 //! plugin that supports `rename` for one account can still restrict a single
 //! node through `allowedOps`; user grants and the Operation Scope are checked
 //! independently by the permission layer.
+mod event_candidates;
+pub(crate) mod native;
+mod vfs_instances;
+pub use event_candidates::candidates;
 use serde_json::Value;
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     sync::{Mutex, OnceLock},
 };
 
 /// The SDK and Core use the same operation vocabulary and wire mapping.
-pub use crate::plugin_sdk::filesystem::FsOperation;
+pub use fiex_provider_contracts::FsOperation;
 
 /// One plugin's declaration. `reported` distinguishes "declared nothing" from
 /// "never handshook": only the former is an authoritative empty set.
@@ -25,6 +29,7 @@ pub struct RegisteredProvider {
     pub reported: bool,
     pub discovery: bool,
     pub preflight: bool,
+    instances: BTreeMap<String, vfs_instances::VfsInstance>,
 }
 
 impl RegisteredProvider {
@@ -69,6 +74,17 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
         .pointer("/vfs/discovery")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    match vfs_instances::read(reply, &provider.operations, provider.preflight) {
+        Ok(instances) => provider.instances = instances,
+        Err(error) => {
+            // A malformed handshake never grants the union capability set.
+            eprintln!("VFS capability handshake rejected for {plugin_id}: {error}");
+            provider.reported = false;
+            provider.operations.clear();
+            provider.preflight = false;
+            provider.discovery = false;
+        }
+    }
     if let Ok(mut registry) = registry().lock() {
         registry.insert(plugin_id.to_string(), provider.clone());
     }
@@ -90,6 +106,26 @@ pub fn get(plugin_id: &str) -> Option<RegisteredProvider> {
 
 pub fn supports(plugin_id: &str, operation: FsOperation) -> bool {
     get(plugin_id).is_some_and(|provider| provider.declares(operation))
+}
+
+/// Bind a named VFS implementation to the actual registered Core mount,
+/// not to the providerId supplied by an arbitrary JSON request.
+pub fn bind_fs_instance(plugin_id: &str, params: &mut Value) -> Result<(), String> {
+    vfs_instances::bind(plugin_id, params)
+}
+
+pub fn supports_mount(plugin_id: &str, mount_id: &str, operation: FsOperation) -> bool {
+    vfs_instances::supports(plugin_id, mount_id, operation)
+}
+
+/// A verified mount's declared operations, for one consistent UI capability
+/// snapshot. Unlike operations(plugin_id), this never returns a package union.
+pub fn operations_mount(plugin_id: &str, mount_id: &str) -> Option<Vec<FsOperation>> {
+    vfs_instances::operations(plugin_id, mount_id)
+}
+
+pub fn preflight_mount(plugin_id: &str, mount_id: &str) -> bool {
+    vfs_instances::preflight(plugin_id, mount_id)
 }
 
 /// Gate one outgoing method against the declaration. Non-file methods pass.

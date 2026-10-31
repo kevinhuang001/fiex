@@ -8,6 +8,7 @@ use crate::{
     core::files::{entry, Entry},
     core::ignores::IgnoreSet,
 };
+mod adapter_content;
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -30,22 +31,8 @@ const CONTENT_BYTE_BUDGET: u64 = 64 * 1024 * 1024;
 const CONTENT_FILE_BUDGET: usize = 5000;
 const BINARY_PROBE: usize = 8192;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SearchMode {
-    #[default]
-    Name,
-    Content,
-}
-
-impl SearchMode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Name => "name",
-            Self::Content => "content",
-        }
-    }
-}
+/// Search mode is shared with SDK VFS and provider DTOs.
+pub use fiex_provider_contracts::SearchMode;
 
 /// Which engine the user asked for. `Auto` picks the first available provider
 /// that declares the mode and falls back to the builtin walker last.
@@ -181,12 +168,6 @@ impl<'a> BatchSink<'a> {
         self.buffer.push(entry);
         if self.buffer.len() >= BATCH_SIZE || self.last.elapsed() >= BATCH_INTERVAL {
             self.flush(false);
-        }
-    }
-
-    fn extend(&mut self, entries: Vec<Entry>) {
-        for entry in entries {
-            self.push(entry);
         }
     }
 
@@ -360,16 +341,34 @@ fn search_root(
             .cloned(),
     };
     if let Some(engine) = selected {
-        match crate::plugins::resolvers::search::run(&engine, &input, cancelled) {
-            Ok((entries, truncated)) => {
-                sink.engine = Some(engine.resolver.name.clone());
+        sink.engine = Some(engine.resolver.name.clone());
+        let mut emitted = false;
+        let result = crate::plugins::resolvers::search::run_stream(
+            &engine,
+            &input,
+            cancelled,
+            &mut |entry| {
+                emitted = true;
+                sink.push(entry);
+            },
+        );
+        match result {
+            Ok(truncated) => {
                 sink.truncated |= truncated;
-                sink.extend(entries);
                 return Ok(());
             }
             Err(error) => {
+                if cancelled() {
+                    return Ok(());
+                }
                 if matches!(request.engine, SearchEngine::Auto) {
                     sink.warning = Some(format!("{}: {error}", engine.resolver.name));
+                    if emitted {
+                        // Partial pages were already streamed. Do not append
+                        // a different engine's results into the same session.
+                        sink.incomplete = true;
+                        return Ok(());
+                    }
                 } else {
                     return Err(error);
                 }
@@ -501,13 +500,11 @@ fn search_adapter(
     cancelled: &dyn Fn() -> bool,
     sink: &mut BatchSink<'_>,
 ) -> Result<(), String> {
-    let resource = crate::core::fs::trusted(root, "core:search")?;
-    if request.mode == SearchMode::Content {
-        // Remote content fallback must confirm a network budget first; until
-        // that flow exists, refuse instead of silently downloading content.
-        return Err("暂不支持在远程连接中搜索文件内容".into());
-    }
     sink.engine = Some("builtin".into());
+    if request.mode == SearchMode::Content {
+        return adapter_content::run(root, request, cancelled, sink);
+    }
+    let resource = crate::core::fs::trusted(root, "core:search")?;
     let limit = sink.limit;
     let (truncated, skipped) = resource.search_stream(
         &request.query,

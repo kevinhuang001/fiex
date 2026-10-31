@@ -2,7 +2,7 @@
 use super::{event, ResourceSnapshot};
 use serde_json::{json, Value};
 
-pub(super) fn matches(
+pub(crate) fn matches(
     method: &str,
     extensions: &Value,
     metadata: &[Value],
@@ -13,11 +13,6 @@ pub(super) fn matches(
     };
     if !contribution.is_object() && contribution.as_bool() != Some(true) {
         return false;
-    }
-    // Connection menus describe a connection, not file targets; the plugin
-    // receives the connection summary and decides which items fit it.
-    if method.starts_with("connectionContextMenu.") {
-        return true;
     }
     let Ok(rules) = crate::plugins::match_rules::MatchRules::from_contribution(contribution) else {
         return false;
@@ -66,6 +61,16 @@ pub fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
                     .allows(*op))
                 .map(|op| op.as_str())
                 .collect::<Vec<_>>());
+            // Only the trusted Core mount and view registries may establish
+            // owner identities. Never accept a provider-supplied owner in
+            // resource metadata or allow it to change the IO route.
+            let (view, storage) = crate::plugins::match_rules::locations_for(&resource.display);
+            if let Some(view) = view {
+                metadata["view"] = view;
+            }
+            if let Some(storage) = storage {
+                metadata["storage"] = storage;
+            }
             metadata
         })
         .collect()
@@ -144,6 +149,47 @@ mod tests {
             let extensions = json!({feature: {"match": {"extensions": "zip"}}});
             assert!(!matches(method, &extensions, &[], ""), "{method}");
         }
+    }
+
+    #[test]
+    fn core_assigns_view_and_storage_before_plugin_candidate_matching() {
+        let path = crate::core::volumes::applications::URI;
+        let resource = ResourceSnapshot::from_metadata(
+            path,
+            crate::plugins::contracts::ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        );
+        let selected_metadata = metadata(&[resource]);
+        assert_eq!(
+            selected_metadata[0]["view"]["providerId"],
+            "core:applications"
+        );
+        assert_eq!(selected_metadata[0]["storage"]["type"], "vfs");
+        let extensions = json!({"contextMenus":{"match":{
+            "view":{"providerIds":["core:applications"]},
+            "kinds":["directory"]
+        }}});
+        assert!(matches(
+            "contextMenu.resolve",
+            &extensions,
+            &selected_metadata,
+            path
+        ));
+        let local = ResourceSnapshot::from_metadata(
+            "/tmp/fiex-matcher-local",
+            crate::plugins::contracts::ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        );
+        assert!(!matches(
+            "contextMenu.resolve",
+            &extensions,
+            &metadata(&[local]),
+            "/tmp"
+        ));
     }
 
     #[test]

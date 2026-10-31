@@ -80,12 +80,13 @@ impl FileCapabilities {
     }
 }
 
-/// What a mount's provider declared. `None` means "not a mount" only for local
-/// paths; callers distinguish the two cases before asking.
+/// Resolve the effective operation ceiling for the *selected mount*, not
+/// the union announced by every instance in the owning plugin package.
+/// A stale or forged mount never inherits another account's capabilities.
 fn declared_operations(path: &str) -> Option<Vec<FsOperation>> {
-    crate::plugins::resolvers::fs::mount_plugin_id(path)
-        .ok()
-        .and_then(|plugin_id| crate::plugins::provider_registry::operations(&plugin_id))
+    let uri = crate::plugins::mounts::parse(path).ok()?;
+    let plugin_id = crate::plugins::resolvers::fs::mount_plugin_id(path).ok()?;
+    crate::plugins::provider_registry::operations_mount(&plugin_id, &uri.mount_id)
 }
 
 /// One node entry resolved through the right adapter (connection or view).
@@ -119,19 +120,6 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
 }
 
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::view_for(path)
-        .is_some_and(|p| p.id() == "core:trash")
-    {
-        // Trash supports metadata and root enumeration, not generic
-        // content reads, mutations or permanent deletion.
-        return FileCapabilities {
-            stat: true,
-            list: path == crate::core::volumes::recycle::URI
-                || crate::core::volumes::trash_path()
-                    .is_some_and(|root| root.to_string_lossy() == path),
-            ..FileCapabilities::default()
-        };
-    }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         let declared = crate::core::volumes::virtual_resolvers::view_for(path)
             .map(|provider| {
@@ -168,6 +156,14 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
         return FileCapabilities::READ_ONLY;
     }
     if !crate::plugins::mounts::handles(path) {
+        // Match the ResourceBroker's owner decision. An unknown URI scheme
+        // must not inherit local FS permissions from a synthetic Entry.
+        if !matches!(
+            crate::core::fs::provider_registry::identity(path),
+            Some(("fs", provider, _)) if provider == "core:local-fs"
+        ) {
+            return FileCapabilities::default();
+        }
         return FileCapabilities {
             list: entry.is_dir,
             stat: true,
@@ -189,19 +185,6 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
 /// Capabilities of a single path. Local paths are unrestricted; a mount is the
 /// provider's declared operations narrowed by the node's entry.
 pub fn for_path(path: &str) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::view_for(path)
-        .is_some_and(|p| p.id() == "core:trash")
-    {
-        // Trash supports metadata and root enumeration, not generic
-        // content reads, mutations or permanent deletion.
-        return FileCapabilities {
-            stat: true,
-            list: path == crate::core::volumes::recycle::URI
-                || crate::core::volumes::trash_path()
-                    .is_some_and(|root| root.to_string_lossy() == path),
-            ..FileCapabilities::default()
-        };
-    }
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         return crate::core::volumes::virtual_resolvers::resource_entry(path)
             .map(|entry| for_entry(path, &entry))
@@ -213,6 +196,12 @@ pub fn for_path(path: &str) -> FileCapabilities {
             .unwrap_or_default();
     }
     if !crate::plugins::mounts::handles(path) {
+        if !matches!(
+            crate::core::fs::provider_registry::identity(path),
+            Some(("fs", provider, _)) if provider == "core:local-fs"
+        ) {
+            return FileCapabilities::default();
+        }
         return crate::core::files::entry(std::path::Path::new(path))
             .map(|entry| for_entry(path, &entry))
             .unwrap_or_default();
@@ -319,6 +308,38 @@ mod tests {
     }
 
     #[test]
+    fn native_virtual_search_is_advertised_only_for_listable_directories() {
+        let recent = for_path("recent://");
+        assert!(recent.list && recent.search && recent.stat);
+        assert!(!recent.read && !recent.remove && !recent.write);
+        let applications = for_path("applications://");
+        assert!(applications.list && applications.search && applications.create);
+        assert!(!applications.remove);
+
+        let mut folder = entry(
+            "trash://Zm9sZGVy",
+            &["list", "stat", "search", "remove"],
+            false,
+        );
+        folder.is_dir = true;
+        let capabilities = for_entry(&folder.path, &folder);
+        assert!(capabilities.list && capabilities.search && capabilities.stat);
+        assert!(!capabilities.remove && !capabilities.write);
+        let file = entry("trash://ZmlsZQ", &["stat", "search", "remove"], false);
+        let capabilities = for_entry(&file.path, &file);
+        assert!(capabilities.stat && !capabilities.search && !capabilities.remove);
+    }
+
+    #[test]
+    fn unsupported_uri_never_inherits_local_capabilities() {
+        for path in ["unknown://forged.txt", "unknown:opaque-file"] {
+            let forged = entry(path, &["read", "write", "remove"], false);
+            assert_eq!(for_entry(path, &forged), FileCapabilities::default());
+            assert_eq!(for_path(path), FileCapabilities::default());
+        }
+    }
+
+    #[test]
     fn unknown_mounts_offer_no_operation() {
         let path = "fiex://mount/test-capability-missing/file.txt";
         assert_eq!(for_path(path), FileCapabilities::default());
@@ -345,11 +366,20 @@ mod tests {
 
     #[test]
     fn trash_does_not_grant_generic_delete() {
-        let trashed = entry("recyclebin://an-item", &["remove"], false);
-        assert!(!for_entry("recyclebin://an-item", &trashed).remove);
+        let trashed = entry("recyclebin://an-item", &["stat", "remove"], false);
+        let capabilities = for_entry("recyclebin://an-item", &trashed);
+        assert!(capabilities.stat);
+        assert!(!capabilities.list && !capabilities.read && !capabilities.remove);
+        // Nonexistent opaque nodes fail closed, even though their provider is
+        // registered and supports stat on actual items.
         assert!(!for_path("recyclebin://an-item").remove);
-        assert!(for_path("recyclebin://an-item").stat);
+        assert!(!for_path("recyclebin://an-item").stat);
         assert!(for_path("recyclebin://").list);
+        let mut nested = entry("trash://opaque-folder", &["stat", "list", "remove"], false);
+        nested.is_dir = true;
+        let capabilities = for_entry(&nested.path, &nested);
+        assert!(capabilities.stat && capabilities.list);
+        assert!(!capabilities.remove && !capabilities.write);
     }
 
     #[test]

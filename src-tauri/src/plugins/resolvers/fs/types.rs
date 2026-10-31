@@ -9,13 +9,8 @@ pub struct WriteRequest<'a> {
     pub if_revision: Option<&'a str>,
 }
 
-/// Kind of node as reported by a provider.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FsKind {
-    File,
-    Directory,
-    Symlink,
-}
+/// Core and SDK use the same VFS node kind from the shared contract.
+pub use fiex_provider_contracts::FsKind;
 
 /// One provider entry after validation. Paths never appear on the wire; Core
 /// binds `node_id` to its own mount-relative location.

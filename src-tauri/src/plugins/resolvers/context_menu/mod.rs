@@ -2,7 +2,10 @@
 mod actions;
 mod builtin;
 mod connection_cache;
+mod endpoint;
 mod file_ops;
+mod native_views;
+mod proxy;
 pub use actions::execute_remote;
 #[cfg(test)]
 mod tests;
@@ -10,6 +13,7 @@ mod validation;
 
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -20,6 +24,9 @@ use validation::{root_menu_valid, submenu_depths, validated_submenu};
 
 struct Session {
     provider: Resolver,
+    /// Remote SDK session is private to its owning plugin; never use it as the
+    /// Core/UI session key or allow it to overwrite another provider's state.
+    remote_session_id: Option<String>,
     directory: String,
     paths: Vec<String>,
     resources: Arc<Vec<ResourceSnapshot>>,
@@ -42,11 +49,29 @@ fn sessions() -> &'static Mutex<HashMap<String, Session>> {
 fn allowed(session: &Session) -> bool {
     match &session.provider.handler {
         Handler::Builtin(_) => true,
-        Handler::Plugin(plugin) => {
-            crate::plugins::events::menu_allowed(&plugin.id, &session.resources, &session.directory)
-        }
+        Handler::Plugin(plugin) => crate::plugins::events::menu_allowed(
+            &plugin.id,
+            &session.provider.id,
+            &session.resources,
+            &session.directory,
+        ),
     }
 }
+/// Generate an independent Core session ID for every menu, regardless of
+/// which provider created it. Only IPC providers retain their transport token.
+fn session_ids(result: &Value, is_plugin: bool) -> Result<(String, Option<String>), String> {
+    let remote = if is_plugin {
+        let id = result["menuSessionId"]
+            .as_str()
+            .filter(|id| !id.is_empty() && id.len() <= 128)
+            .ok_or("plugin menu session ID is missing or invalid")?;
+        Some(id.to_owned())
+    } else {
+        None
+    };
+    Ok((crate::plugins::mounts::new_id()?, remote))
+}
+
 fn register(
     provider: &Resolver,
     ctx: &builtin::Context,
@@ -58,10 +83,8 @@ fn register(
     if items.is_empty() {
         return Ok(json!({"items":[]}));
     }
-    let session_id = result["menuSessionId"]
-        .as_str()
-        .map(str::to_owned)
-        .unwrap_or(crate::plugins::mounts::new_id()?);
+    let (session_id, remote_session_id) =
+        session_ids(&result, matches!(&provider.handler, Handler::Plugin(_)))?;
     let mut registry = sessions().lock().map_err(|_| "menu registry unavailable")?;
     registry.retain(|_, session| session.created.elapsed().as_secs() < 90);
     // Bound memory while allowing fast menu navigation with multiple builtin providers.
@@ -78,6 +101,7 @@ fn register(
         session_id.clone(),
         Session {
             provider: provider.clone(),
+            remote_session_id,
             directory: ctx.directory.clone(),
             paths: ctx.paths.clone(),
             resources: resources.clone(),
@@ -124,7 +148,7 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
             .collect::<Vec<_>>(),
     );
     let metadata = crate::plugins::events::resource_metadata(&resources);
-    let mut providers = EventRouter::providers(
+    let mut providers = crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
         &metadata,
         directory,
@@ -139,21 +163,27 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
     if scope == MenuScope::Core {
         providers.retain(|provider| matches!(&provider.handler, Handler::Builtin(_)));
     }
+    let request = ProviderRequest {
+        method: "contextMenu.resolve".into(),
+        params: json!({}),
+    };
     Ok(EventRouter::resolve(
         "contextMenu.resolve",
         providers,
-        |_, id| builtin::resolve(id, &ctx),
-        |plugin| {
-            let session_id = crate::plugins::mounts::new_id()?;
-            let mut result = crate::plugins::events::invoke_resources(
-                plugin,
-                "contextMenu.resolve",
-                json!({"menuSessionId":session_id,"interactionId":crate::plugins::mounts::new_id()?}),
-                &resources,
-                Some(directory),
-            )?;
-            result["menuSessionId"] = json!(session_id);
-            Ok(result)
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint + '_> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(endpoint::NativeMenuEndpoint {
+                    id: (*id).into(),
+                    context: &ctx,
+                }),
+                Handler::Plugin(plugin) => Box::new(proxy::ScopedMenuProxy::new(
+                    (**plugin).clone(),
+                    directory.into(),
+                    resources.clone(),
+                )?),
+            };
+            Ok(endpoint)
         },
         |provider, result| register(provider, &ctx, &resources, result),
         |_| true,
@@ -171,8 +201,9 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
         },
     ))
 }
+
 pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
-    let (plugin_id, directory, resources, depth) = {
+    let (plugin_id, instance_id, remote_session_id, directory, resources, depth) = {
         let registry = sessions().lock().map_err(|_| "menu registry unavailable")?;
         let session = registry.get(session_id).ok_or("menu session expired")?;
         if session.created.elapsed().as_secs() >= 90 || !allowed(session) {
@@ -183,15 +214,29 @@ pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
         };
         (
             plugin.id.clone(),
+            session
+                .provider
+                .id
+                .strip_prefix(&format!("plugin:{}:", plugin.id))
+                .map(str::to_owned),
+            session
+                .remote_session_id
+                .clone()
+                .ok_or("plugin session missing")?,
             session.directory.clone(),
             session.resources.clone(),
             *session.submenus.get(parent_id).ok_or("unknown submenu")?,
         )
     };
+    let mut params = json!({"menuSessionId":remote_session_id,"parentId":parent_id,
+        "interactionId":crate::plugins::mounts::new_id()?});
+    if let Some(id) = instance_id {
+        params["providerId"] = json!(id);
+    }
     let result = crate::plugins::events::call_owner(
         "contextMenu.resolve",
         &plugin_id,
-        json!({"menuSessionId":session_id,"parentId":parent_id,"interactionId":crate::plugins::mounts::new_id()?}),
+        params,
         &resources,
         Some(&directory),
     )?;
@@ -236,38 +281,32 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
     {
         return Err("menu session expired or item was not offered".into());
     }
+    let ctx = builtin::Context::load(&session.directory, &session.paths)?;
+    let request = ProviderRequest {
+        method: "contextMenu.execute".into(),
+        params: json!({
+            "menuSessionId": session.remote_session_id.as_deref().unwrap_or(session_id),
+            "itemId": item_id,
+            "interactionId": crate::plugins::mounts::new_id()?,
+        }),
+    };
     EventRouter::resolve(
         "contextMenu.execute",
         vec![session.provider.clone()],
-        |_, id| {
-            builtin::execute(
-                id,
-                item_id,
-                &builtin::Context::load(&session.directory, &session.paths)?,
-            )
-        },
-        |plugin| {
-            let params = json!({"menuSessionId":session_id,"itemId":item_id,"interactionId":crate::plugins::mounts::new_id()?});
-            let mut result = crate::plugins::events::call_owner(
-                "contextMenu.execute",
-                &plugin.id,
-                params,
-                &session.resources,
-                Some(&session.directory),
-            )?;
-            if matches!(result["kind"].as_str(), Some("coreAction" | "remoteAction")) {
-                return Err("plugin returned a reserved action kind".into());
-            }
-            if result["kind"] == "panel" {
-                let entry = result["entry"]
-                    .as_str()
-                    .ok_or("panel result missing entry")?;
-                let asset = crate::plugins::host::plugin_view_asset(&plugin.id, entry)?;
-                let object = result.as_object_mut().ok_or("invalid panel result")?;
-                object.remove("entry");
-                object.insert("assetPath".into(), json!(asset));
-            }
-            Ok(result)
+        &request,
+        |resolver| {
+            let endpoint: Box<dyn ProviderEndpoint + '_> = match &resolver.handler {
+                Handler::Builtin(id) => Box::new(endpoint::NativeMenuEndpoint {
+                    id: (*id).into(),
+                    context: &ctx,
+                }),
+                Handler::Plugin(plugin) => Box::new(proxy::ScopedMenuProxy::new(
+                    (**plugin).clone(),
+                    session.directory.clone(),
+                    session.resources.clone(),
+                )?),
+            };
+            Ok(endpoint)
         },
         |_, result| Ok(result),
         |_| true,
@@ -279,4 +318,25 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
                 .1
         },
     )
+}
+
+#[cfg(test)]
+mod session_identity_tests {
+    use super::*;
+
+    #[test]
+    fn plugin_session_tokens_never_become_core_menu_handles() {
+        let reply = json!({"menuSessionId":"the-same-remote-session"});
+        let (first, remote_first) = session_ids(&reply, true).unwrap();
+        let (second, remote_second) = session_ids(&reply, true).unwrap();
+        assert_ne!(first, second);
+        assert_ne!(first, "the-same-remote-session");
+        assert_eq!(remote_first.as_deref(), Some("the-same-remote-session"));
+        assert_eq!(remote_second.as_deref(), Some("the-same-remote-session"));
+        let (_, native) = session_ids(&reply, false).unwrap();
+        assert!(native.is_none());
+        assert!(session_ids(&json!({}), true).is_err());
+        assert!(session_ids(&json!({"menuSessionId":""}), true).is_err());
+        assert!(session_ids(&json!({"menuSessionId":"x".repeat(129)}), true).is_err());
+    }
 }

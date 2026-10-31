@@ -20,69 +20,17 @@ impl BuiltinFsAdapter<'_> {
         }
         applications::candidate_path(self.path())
     }
-    fn application_capability(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
-        let path = self.application_file()?;
-        let exists = path.exists();
-        let directory = path.is_dir();
-        if create {
-            if !matches!(op, FsOperation::Write | FsOperation::Mkdir) {
-                return Err("Unsupported: invalid application create operation".into());
-            }
-            let parent = path.parent().ok_or("missing application parent")?;
-            if !parent.is_dir() || exists {
-                return Err("Conflict: application destination is unavailable".into());
-            }
-            return Ok(());
-        }
-        if !exists {
-            return Err("NotFound: application item missing".into());
-        }
-        let allowed = match op {
-            FsOperation::Stat => true,
-            FsOperation::List | FsOperation::Search | FsOperation::Mkdir => directory,
-            FsOperation::Read | FsOperation::Write => !directory,
-            FsOperation::Rename | FsOperation::Remove => true,
-        };
-        if allowed {
-            Ok(())
-        } else {
-            Err(FsError::new(
-                FsErrorKind::Unsupported,
-                format!("Unsupported: {}", op.as_str()),
-            ))
-        }
-    }
 }
 impl FsAdapter for BuiltinFsAdapter<'_> {
     fn preflight(
         &self,
-        request: &crate::plugin_sdk::filesystem::TransferPreflight,
+        request: &fiex_provider_contracts::TransferPreflight,
     ) -> Result<(), FsError> {
-        use crate::plugin_sdk::filesystem::TransferDirection;
-        if matches!(request.direction, TransferDirection::Import)
-            && self.path().starts_with(virtual_resolvers::RECENT_URI)
-        {
-            return Err("PermissionDenied: Recent does not accept imports".into());
-        }
-        if virtual_resolvers::view_for(self.path()).is_some_and(|view| view.id() == "core:trash") {
-            return Err(
-                "PermissionDenied: Trash requires its dedicated restore/delete actions".into(),
-            );
-        }
-        if !self.path().starts_with(applications::URI) {
-            return Ok(());
-        }
-        match request.direction {
-            TransferDirection::Export if request.metadata.system && !request.same_mount => Err(
-                "PermissionDenied: system applications cannot leave the Applications view".into(),
-            ),
-            TransferDirection::Import
-                if !request.same_mount && request.metadata.executable_shortcut != Some(true) =>
-            {
-                Err("PermissionDenied: Applications accepts only executable shortcuts".into())
-            }
-            _ => Ok(()),
-        }
+        let provider = virtual_resolvers::view_for(self.path())
+            .ok_or("Unsupported: unregistered native VFS provider")?;
+        provider
+            .preflight(self.path(), request)
+            .map_err(FsError::from)
     }
     fn desktop_listing(
         &self,
@@ -158,9 +106,12 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
                 {
                     continue;
                 }
+                // Traverse only entries whose storage provider declares
+                // list support. No per-view URI or directory-tree special case.
                 if entry.is_dir
                     && !entry.is_symlink
-                    && virtual_storage::is_virtual_tree_path(&entry.path)
+                    && crate::plugins::resource::file_capabilities::for_entry(&entry.path, &entry)
+                        .list
                 {
                     pending.push(entry.path.clone());
                 }
@@ -181,65 +132,11 @@ impl FsAdapter for BuiltinFsAdapter<'_> {
     }
 
     fn require(&self, op: FsOperation, create: bool) -> Result<(), FsError> {
-        if self.path() == applications::URI {
-            return if matches!(
-                op,
-                FsOperation::Stat | FsOperation::List | FsOperation::Mkdir | FsOperation::Search
-            ) {
-                Ok(())
-            } else {
-                Err("Unsupported: applications root has no file stream".into())
-            };
-        }
-        if applications::is_user(self.path()) {
-            return self.application_capability(op, create);
-        }
-        if virtual_resolvers::view_for(self.path())
-            .is_some_and(|resolver| resolver.id() == "core:applications")
-        {
-            return if op == FsOperation::Stat {
-                Ok(())
-            } else {
-                Err("Unsupported: system application is launch-only".into())
-            };
-        }
-        if virtual_resolvers::view_for(self.path())
-            .is_some_and(|resolver| resolver.id() == "core:trash")
-        {
-            let listable = virtual_storage::is_virtual_tree_path(self.path())
-                && virtual_storage::entry(self.path())
-                    .is_ok_and(|entry| entry.is_dir && !entry.is_symlink);
-            return if op == FsOperation::Stat
-                || (matches!(op, FsOperation::List | FsOperation::Search) && listable)
-            {
-                Ok(())
-            } else {
-                Err("PermissionDenied: Trash requires a dedicated Core action".into())
-            };
-        }
-        if self.path() == virtual_resolvers::RECENT_URI
-            && matches!(
-                op,
-                FsOperation::List | FsOperation::Stat | FsOperation::Search
-            )
-        {
-            return Ok(());
-        }
-        if self.path().starts_with(virtual_resolvers::RECENT_URI) {
-            let source = recent::source_for(self.path())?;
-            if op == FsOperation::Stat {
-                return Ok(());
-            }
-            if op == FsOperation::Read {
-                let original = super::binding::trusted(&source, &self.0.owner)?;
-                return original.require(FsOperation::Read, false);
-            }
-            return Err("PermissionDenied: Recent is a read-only view".into());
-        }
-        Err(FsError::new(
-            FsErrorKind::Unsupported,
-            format!("Unsupported: {}", op.as_str()),
-        ))
+        let provider = virtual_resolvers::view_for(self.path())
+            .ok_or("Unsupported: unregistered native VFS provider")?;
+        provider
+            .require(self.path(), &self.0.owner, op, create)
+            .map_err(FsError::from)
     }
     fn open_read(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         self.require(FsOperation::Read, false)?;

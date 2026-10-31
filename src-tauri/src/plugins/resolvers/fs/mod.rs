@@ -33,29 +33,12 @@ pub struct Mount {
 }
 
 impl Mount {
-    fn invoke(&self, method: &str, mut params: Value) -> Result<Value, String> {
-        let object = params
-            .as_object_mut()
-            .ok_or("file-system parameters must be an object")?;
-        object.insert("mountId".into(), json!(self.mount_id));
-        match &self.source {
-            Source::Connection(config) => {
-                object.insert("connection".into(), config.clone());
-            }
-            Source::View {
-                contribution_id,
-                view_context,
-            } => {
-                object.insert("contributionId".into(), json!(contribution_id));
-                object.insert("viewContext".into(), view_context.clone());
-            }
-        }
-        crate::plugins::host::global().invoke_fs(
-            &self.plugin_id,
-            method,
+    fn invoke(&self, method: &str, params: Value) -> Result<Value, String> {
+        use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+        endpoint::PluginFsEndpoint { mount: self }.invoke(&ProviderRequest {
+            method: method.into(),
             params,
-            self.scope.clone(),
-        )
+        })
     }
 
     pub fn list(
@@ -67,6 +50,7 @@ impl Mount {
         let mut cursor: Option<String> = None;
         let mut entries = Vec::new();
         let mut warnings = Vec::new();
+        let mut truncated = false;
         let mut cursors = std::collections::HashSet::new();
         for _ in 0..MAX_PAGES {
             let page = self.invoke(
@@ -79,32 +63,26 @@ impl Mount {
                     "limit": PAGE_LIMIT,
                 }),
             )?;
-            let items = page
-                .get("entries")
-                .and_then(Value::as_array)
-                .ok_or("provider listing is missing entries")?;
-            if items.len() > PAGE_LIMIT {
-                return Err("provider exceeded the page limit".into());
-            }
-            for item in items {
-                entries.push(FsEntry::parse(item.clone())?);
+            // The same bounded pagination DTO is accepted by Core and
+            // emitted by SDK VFS implementations.
+            let page: fiex_provider_contracts::VfsPage = serde_json::from_value(page)
+                .map_err(|error| format!("invalid VFS listing page: {error}"))?;
+            page.validate_page(PAGE_LIMIT)?;
+            truncated |= page.truncated;
+            for item in page.entries {
+                entries.push(FsEntry::parse(item)?);
                 if entries.len() > MAX_ENTRIES {
                     return Err("provider returned too many entries".into());
                 }
             }
-            if let Some(values) = page.get("warnings").and_then(Value::as_array) {
-                warnings.extend(values.iter().filter_map(Value::as_str).map(str::to_owned));
-            }
-            let next = page
-                .get("nextCursor")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
+            warnings.extend(page.warnings);
+            let next = page.next_cursor;
             match next {
                 None => {
                     return Ok(FsListing {
                         entries,
                         warnings,
-                        truncated: false,
+                        truncated,
                     })
                 }
                 Some(next) if !cursors.insert(next.clone()) => {
@@ -120,9 +98,7 @@ impl Mount {
         &self,
         request: &crate::plugin_sdk::filesystem::TransferPreflight,
     ) -> Result<(), String> {
-        if !crate::plugins::provider_registry::get(&self.plugin_id)
-            .is_some_and(|provider| provider.preflight)
-        {
+        if !crate::plugins::provider_registry::preflight_mount(&self.plugin_id, &self.mount_id) {
             return Ok(());
         }
         let reply = self.invoke(
@@ -178,22 +154,20 @@ impl Mount {
                     "ignores": ignores, "limit": remaining.min(PAGE_LIMIT), "cursor": cursor,
                 }),
             )?;
-            let items = page["entries"]
-                .as_array()
-                .ok_or("provider search is missing entries")?;
-            if items.len() > remaining.min(PAGE_LIMIT) {
-                return Err("provider exceeded the search limit".into());
-            }
-            for item in items {
+            let page: fiex_provider_contracts::SearchResults = serde_json::from_value(page)
+                .map_err(|error| format!("invalid VFS search page: {error}"))?;
+            page.validate_page(remaining.min(PAGE_LIMIT))?;
+            for item in page.entries {
                 if cancelled() {
                     return Ok(true);
                 }
-                emit(FsEntry::parse(item.clone())?)?;
+                emit(FsEntry::parse(item)?)?;
                 count += 1;
             }
-            let next = page["nextCursor"].as_str().map(str::to_owned);
+            let truncated = page.truncated;
+            let next = page.next_cursor;
             match next {
-                None => return Ok(page["truncated"].as_bool().unwrap_or(false)),
+                None => return Ok(truncated),
                 Some(next) if !seen.insert(next.clone()) => {
                     return Err("search pagination cursor did not advance".into())
                 }
@@ -272,7 +246,11 @@ impl Mount {
 
     /// Whether the provider declared an operation, for UI decisions.
     pub fn supports(&self, operation: FsOperation) -> bool {
-        crate::plugins::provider_registry::supports(&self.plugin_id, operation)
+        crate::plugins::provider_registry::supports_mount(
+            &self.plugin_id,
+            &self.mount_id,
+            operation,
+        )
     }
 }
 
@@ -314,6 +292,7 @@ pub fn mount_for_path(path: &str) -> Result<Mount, String> {
     }
 }
 
+mod endpoint;
 mod streams;
 mod types;
 pub use streams::{FsStream, FsWriteStream};

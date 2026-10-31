@@ -1,4 +1,4 @@
-//! Cross-repository test for the Core-owned plugin search aggregator.
+//! Cross-repository test for one explicitly selected SearchProvider.
 use fiex_lib::{
     core::search::SearchMode, plugins::host as plugin_host,
     plugins::resolvers::search::PluginSearchInput,
@@ -30,16 +30,25 @@ fn main() {
     .unwrap();
     let root = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("fiex-mock-search.txt"), "mock result").unwrap();
-    let entries = fiex_lib::plugins::resolvers::search::query(&PluginSearchInput {
+    let request = PluginSearchInput {
         query: "mock".into(),
         root: root.path().to_string_lossy().into_owned(),
         hidden: false,
         mode: SearchMode::Name,
         ignores: Vec::new(),
         limit: Some(50),
-    });
+    };
+    let engine = fiex_lib::plugins::resolvers::search::engines(&request)
+        .into_iter()
+        .find(|engine| engine.resolver.id == "plugin:org.fiex.mock")
+        .expect("the activated mock must advertise filename search");
+    assert!(engine.supports(SearchMode::Name));
+    let (entries, truncated) =
+        fiex_lib::plugins::resolvers::search::run(&engine, &request, || false)
+            .expect("single-provider search query");
+    assert!(!truncated);
     assert_eq!(entries.len(), 1, "{entries:?}");
     assert_eq!(entries[0].name, "fiex-mock-search.txt");
     plugin_host::global().stop(id);
-    println!("PASS: plugin search aggregation");
+    println!("PASS: direct typed SearchProvider integration");
 }

@@ -30,3 +30,18 @@ fn builtins_are_ordered_and_fallback_is_last() {
     assert_eq!(unknown.len(), 1);
     assert_eq!(unknown[0].id, "builtin:fallback");
 }
+
+#[test]
+fn preview_size_ceiling_applies_to_remote_resource_metadata() {
+    let virtual_file = ResourceSnapshot::from_metadata(
+        "fiex://mount/remote/example.bin",
+        crate::plugins::contracts::ResourceMetadata {
+            kind: "file".into(),
+            size: Some(64 * 1024 * 1024),
+            ..Default::default()
+        },
+    );
+    assert!(virtual_file.stat.is_none());
+    assert_eq!(resource_size(&virtual_file), Some(64 * 1024 * 1024));
+    assert!(resource_size(&virtual_file).unwrap() > 16 * 1024 * 1024);
+}

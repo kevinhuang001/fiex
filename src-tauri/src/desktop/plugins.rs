@@ -2,8 +2,6 @@
 //! marketplace installation, decorations, themes, errors, search sources and
 //! the host-owned native file dialogs.
 
-use crate::core::files;
-
 #[macro_use]
 mod invoke;
 pub(crate) use invoke::*;

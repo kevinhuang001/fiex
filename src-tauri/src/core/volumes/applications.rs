@@ -327,6 +327,7 @@ pub fn stored_entry(uri: &str) -> Result<Entry, String> {
         vec![
             "stat".into(),
             "list".into(),
+            "search".into(),
             "mkdir".into(),
             "rename".into(),
             "remove".into(),

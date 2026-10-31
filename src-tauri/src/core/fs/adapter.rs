@@ -20,7 +20,7 @@ pub trait FsAdapter: Send {
     }
     fn preflight(
         &self,
-        _request: &crate::plugin_sdk::filesystem::TransferPreflight,
+        _request: &fiex_provider_contracts::TransferPreflight,
     ) -> Result<(), FsError> {
         Ok(())
     }

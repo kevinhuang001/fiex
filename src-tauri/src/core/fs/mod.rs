@@ -20,6 +20,7 @@ pub use transfer::transfer;
 mod local;
 pub use export::{export as export_for_external_drag, initialize as initialize_exports};
 mod plugin;
+pub(crate) mod provider_registry;
 mod streams;
 mod usb;
 use crate::plugins::provider_registry::FsOperation;
@@ -77,18 +78,7 @@ impl ResourceBroker {
         })
     }
     fn adapter(&self) -> Result<Box<dyn FsAdapter + '_>, FsError> {
-        if crate::plugins::mounts::handles(&self.path) {
-            return Ok(Box::new(plugin::PluginFsAdapter::new(self)?));
-        }
-        if let Some(route) = crate::usbfs::route(&self.path) {
-            return Ok(Box::new(usb::UsbFsAdapter::new(route)));
-        }
-        // Core-owned views are in-process storage adapters, never host paths.
-        if crate::core::volumes::virtual_resolvers::view_for(&self.path).is_some() {
-            return Ok(Box::new(builtin::BuiltinFsAdapter(self)));
-        }
-        self.scope.authorize(&self.path)?;
-        Ok(Box::new(local::LocalFsAdapter(self)))
+        provider_registry::adapter(self)
     }
     pub fn require(&self, operation: FsOperation, create: bool) -> Result<(), FsError> {
         if crate::usbfs::route(&self.path).is_some() {
@@ -100,15 +90,6 @@ impl ResourceBroker {
             if current.reference != self.reference {
                 return Err("StaleRef: USB mount generation changed".into());
             }
-        }
-        // Unix Trash is a physical directory, not an opaque URI. Do not let
-        // its local filesystem adapter bypass the view policy: restore and
-        // permanent deletion must remain explicit Core-only actions.
-        if crate::core::volumes::virtual_resolvers::view_for(&self.path)
-            .is_some_and(|resolver| resolver.id() == "core:trash")
-            && !matches!(operation, FsOperation::Stat | FsOperation::List)
-        {
-            return Err("PermissionDenied: Trash requires a dedicated Core action".into());
         }
         self.adapter()?.require(operation, create)
     }

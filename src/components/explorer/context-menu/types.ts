@@ -46,6 +46,7 @@ export type ContextMenuProps = Pick<
   | 'create'
   | 'createFile'
   | 'deletePermanently'
+  | 'emptyTrash'
   | 'restoreFromTrash'
   | 'inTrash'
   | 'setMenu'

@@ -3,36 +3,37 @@
 //! `virtual_storage`; these views never cross plugin IPC.
 use super::{applications, recycle, trash_vfs};
 use crate::core::files::Entry;
-use serde_json::json;
+use fiex_provider_contracts::{TransferDirection, TransferPreflight};
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use crate::plugins::provider_registry::FsOperation;
+use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use std::sync::{Arc, OnceLock};
+
+mod storage;
 
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 
-#[derive(Clone, Debug)]
-pub struct VirtualMenuItem {
-    pub id: &'static str,
-    pub title: String,
-    pub icon: &'static str,
-    pub danger: bool,
-    pub tail: bool,
-}
-
-#[derive(Clone, Debug)]
-pub struct VirtualAction {
-    pub command: &'static str,
-    pub paths: Vec<String>,
-}
-
-/// A builtin view contributes menus, icons and dedicated actions. It does not
-/// own list/stat/read/remove: those are storage operations on the adapter.
-pub trait VirtualView: Send + Sync {
+/// A Core-native VFS provider owns only storage capabilities, icons and platform
+/// launch/reveal operations; menu contributions live in native_views.
+pub trait NativeVfsProvider: Send + Sync {
+    /// Provider-owned URI recognition; never infer that an unknown URI is local.
+    fn handles(&self, path: &str) -> bool;
     fn id(&self) -> &'static str;
     fn readonly(&self) -> bool;
+    /// Native VFS providers implement the same list/stat operations as
+    /// plugin VFS instances; no generic storage layer knows their URI names.
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String>;
+    fn stat(&self, path: &str) -> Result<Entry, String>;
     /// Explicit storage-operation ceiling. Presentation and dispatch must not
     /// infer write support from an adapter name or from readonly=false.
     fn operations(&self, path: &str) -> Vec<&'static str>;
-    fn menu(&self, path: &str) -> Vec<VirtualMenuItem>;
-    fn execute(&self, action: &str, paths: &[String]) -> Result<VirtualAction, String>;
+    /// Enforce the current native instance's policy at invocation time.
+    /// ResourceBroker has already authorized the scope; no generic adapter
+    /// may identify a builtin view by its URI or provider ID.
+    fn require(&self, path: &str, owner: &str, op: FsOperation, create: bool)
+        -> Result<(), String>;
+    fn preflight(&self, path: &str, request: &TransferPreflight) -> Result<(), String>;
     fn icon(&self, path: &str) -> Option<String>;
     fn default_view(&self) -> Option<&'static str> {
         None
@@ -51,7 +52,7 @@ pub trait VirtualView: Send + Sync {
 /// A Recent alias can be revealed only when its original resource still exists
 /// on a local filesystem. Remote, USBFS and plugin-mount sources are excluded:
 /// their display paths are not locations a host file manager can select.
-fn recent_reveal_source(alias: &str) -> Option<String> {
+pub(crate) fn recent_reveal_source(alias: &str) -> Option<String> {
     let source = crate::core::recent::source_for(alias).ok()?;
     revealable_source(&source).then_some(source)
 }
@@ -66,66 +67,68 @@ fn revealable_source(source: &str) -> bool {
         && path.is_file()
 }
 
-fn recent_menu_items(reveal: bool) -> Vec<VirtualMenuItem> {
-    let mut items = vec![VirtualMenuItem {
-        id: "open",
-        title: crate::i18n::t("打开").into(),
-        icon: "open",
-        danger: false,
-        tail: false,
-    }];
-    // The reveal row is part of the first Core snapshot: whether a Recent
-    // source is a real local file is decided here, not by plugin IPC.
-    if reveal {
-        items.push(VirtualMenuItem {
-            id: "reveal",
-            title: crate::i18n::t("打开文件所在位置").into(),
-            icon: "reveal",
-            danger: false,
-            tail: false,
-        });
-    }
-    items
-}
-
 struct RecentView;
-impl VirtualView for RecentView {
+impl NativeVfsProvider for RecentView {
+    fn handles(&self, path: &str) -> bool {
+        path.starts_with(RECENT_URI)
+    }
+
     fn id(&self) -> &'static str {
         "core:recent"
     }
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String> {
+        storage::recent_list(path)
+    }
+
+    fn stat(&self, path: &str) -> Result<Entry, String> {
+        storage::recent_stat(self, path)
+    }
+
     fn readonly(&self) -> bool {
         true
     }
-    fn operations(&self, _path: &str) -> Vec<&'static str> {
-        vec!["list", "stat", "read"]
-    }
-    fn menu(&self, path: &str) -> Vec<VirtualMenuItem> {
-        recent_menu_items(recent_reveal_source(path).is_some())
-    }
-    fn execute(&self, action: &str, paths: &[String]) -> Result<VirtualAction, String> {
-        match action {
-            "open" => Ok(VirtualAction {
-                command: "open",
-                paths: paths
-                    .iter()
-                    .map(|path| crate::core::recent::source_for(path))
-                    .collect::<Result<Vec<_>, _>>()?,
-            }),
-            "reveal" => {
-                for path in paths {
-                    recent_reveal_source(path).ok_or_else(|| {
-                        crate::i18n::t("无法在文件管理器中显示该位置").to_string()
-                    })?;
-                }
-                Ok(VirtualAction {
-                    command: "reveal",
-                    // Keep aliases across IPC; `reveal_path` resolves them in
-                    // Core and never hands the source path to the webview.
-                    paths: paths.to_vec(),
-                })
-            }
-            _ => Err("unknown recent action".into()),
+    fn operations(&self, path: &str) -> Vec<&'static str> {
+        if path == RECENT_URI {
+            // Recent's root is an enumerable directory, not readable content.
+            vec!["list", "stat", "search"]
+        } else {
+            // An alias is a read-only file; its actual source permissions are
+            // further narrowed by Recent's entry_for_alias implementation.
+            vec!["stat", "read"]
         }
+    }
+    fn require(
+        &self,
+        path: &str,
+        owner: &str,
+        op: FsOperation,
+        _create: bool,
+    ) -> Result<(), String> {
+        if path == RECENT_URI {
+            return if matches!(
+                op,
+                FsOperation::List | FsOperation::Stat | FsOperation::Search
+            ) {
+                Ok(())
+            } else {
+                Err("Unsupported: Recent root is read-only".into())
+            };
+        }
+        let source = crate::core::recent::source_for(path)?;
+        match op {
+            FsOperation::Stat => Ok(()),
+            FsOperation::Read => crate::core::fs::trusted(&source, owner)
+                .map_err(|error| error.to_string())?
+                .require(FsOperation::Read, false)
+                .map_err(|error| error.to_string()),
+            _ => Err("PermissionDenied: Recent is a read-only view".into()),
+        }
+    }
+    fn preflight(&self, _path: &str, request: &TransferPreflight) -> Result<(), String> {
+        if matches!(request.direction, TransferDirection::Import) {
+            return Err("PermissionDenied: Recent does not accept imports".into());
+        }
+        Ok(())
     }
     fn icon(&self, _path: &str) -> Option<String> {
         None
@@ -141,31 +144,23 @@ impl VirtualView for RecentView {
     }
 }
 
-/// A user-store entry is an application when it is a file
-/// (shortcut/executable) or an app-bundle directory. Plain folders stay
-/// navigable and keep the "打开" verb.
-fn user_application(path: &str) -> bool {
-    applications::is_user(path)
-        && applications::stored_entry(path).is_ok_and(|entry| user_application_entry(&entry))
-}
-
-fn user_application_entry(entry: &Entry) -> bool {
-    !entry.is_dir || entry.extension == "app"
-}
-
-fn trash_title() -> &'static str {
-    if cfg!(windows) {
-        "移到回收站"
-    } else {
-        "移到废纸篓"
-    }
-}
-
 struct ApplicationView;
-impl VirtualView for ApplicationView {
+impl NativeVfsProvider for ApplicationView {
+    fn handles(&self, path: &str) -> bool {
+        path.starts_with(APPLICATIONS_URI)
+    }
+
     fn id(&self) -> &'static str {
         "core:applications"
     }
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String> {
+        storage::applications_list(path)
+    }
+
+    fn stat(&self, path: &str) -> Result<Entry, String> {
+        storage::applications_stat(self, path)
+    }
+
     fn readonly(&self) -> bool {
         // The folder itself accepts user shortcuts; each system app entry stays
         // read-only so Core's context-menu resolver can hide delete for it.
@@ -173,78 +168,79 @@ impl VirtualView for ApplicationView {
     }
     fn operations(&self, path: &str) -> Vec<&'static str> {
         if path == APPLICATIONS_URI {
-            vec!["list", "stat", "write", "mkdir"]
+            vec!["list", "stat", "search", "write", "mkdir"]
         } else if applications::is_user(path) {
-            vec!["list", "stat", "read", "write", "mkdir", "rename", "remove"]
+            vec![
+                "list", "stat", "search", "read", "write", "mkdir", "rename", "remove",
+            ]
         } else {
             vec!["stat"]
         }
     }
-    fn menu(&self, path: &str) -> Vec<VirtualMenuItem> {
-        // The user store is an application library: its files launch, rename or
-        // move to the platform Trash; its folders open, rename or move to the
-        // Trash. A system entry is launch-only until it is mapped into a folder,
-        // where delete removes the mapping and returns it to the root.
-        let user = applications::is_user(path);
-        let launch = path != APPLICATIONS_URI && (!user || user_application(path));
-        let mut items = vec![VirtualMenuItem {
-            id: "open",
-            title: if launch {
-                crate::i18n::t("启动应用").into()
+    fn require(
+        &self,
+        path: &str,
+        _owner: &str,
+        op: FsOperation,
+        create: bool,
+    ) -> Result<(), String> {
+        if path == APPLICATIONS_URI {
+            return if matches!(
+                op,
+                FsOperation::Stat | FsOperation::List | FsOperation::Mkdir | FsOperation::Search
+            ) {
+                Ok(())
             } else {
-                crate::i18n::t("打开").into()
-            },
-            icon: "open",
-            danger: false,
-            tail: false,
-        }];
-        if user {
-            items.push(VirtualMenuItem {
-                id: "rename",
-                title: crate::i18n::t("重命名").into(),
-                icon: "pencil",
-                danger: false,
-                tail: false,
-            });
-            items.push(VirtualMenuItem {
-                id: "trash",
-                title: crate::i18n::t(trash_title()).into(),
-                icon: "trash",
-                danger: true,
-                tail: true,
-            });
+                Err("Unsupported: applications root has no file stream".into())
+            };
         }
-        items
+        if !applications::is_user(path) {
+            return if op == FsOperation::Stat {
+                Ok(())
+            } else {
+                Err("Unsupported: system application is launch-only".into())
+            };
+        }
+        let file = applications::candidate_path(path)?;
+        let exists = file.exists();
+        let directory = file.is_dir();
+        if create {
+            if !matches!(op, FsOperation::Write | FsOperation::Mkdir) {
+                return Err("Unsupported: invalid application create operation".into());
+            }
+            let parent = file.parent().ok_or("missing application parent")?;
+            return if parent.is_dir() && !exists {
+                Ok(())
+            } else {
+                Err("Conflict: application destination is unavailable".into())
+            };
+        }
+        if !exists {
+            return Err("NotFound: application item missing".into());
+        }
+        let allowed = match op {
+            FsOperation::Stat => true,
+            FsOperation::List | FsOperation::Search | FsOperation::Mkdir => directory,
+            FsOperation::Read | FsOperation::Write => !directory,
+            FsOperation::Rename | FsOperation::Remove => true,
+        };
+        if allowed {
+            Ok(())
+        } else {
+            Err(format!("Unsupported: {}", op.as_str()))
+        }
     }
-    fn execute(&self, action: &str, paths: &[String]) -> Result<VirtualAction, String> {
-        match action {
-            // `open_path` forwards an Applications URI to
-            // `applications::open()`, which launches system entries through
-            // `platform_open()` and opens user shortcuts from the private store.
-            "open" => Ok(VirtualAction {
-                command: "open",
-                paths: paths.to_vec(),
-            }),
-            "rename" => {
-                if paths.iter().any(|path| !applications::is_user(path)) {
-                    return Err("only stored application entries can be renamed".into());
-                }
-                Ok(VirtualAction {
-                    command: "rename",
-                    paths: paths.to_vec(),
-                })
+    fn preflight(&self, _path: &str, request: &TransferPreflight) -> Result<(), String> {
+        match request.direction {
+            TransferDirection::Export if request.metadata.system && !request.same_mount => Err(
+                "PermissionDenied: system applications cannot leave the Applications view".into(),
+            ),
+            TransferDirection::Import
+                if !request.same_mount && request.metadata.executable_shortcut != Some(true) =>
+            {
+                Err("PermissionDenied: Applications accepts only executable shortcuts".into())
             }
-            "trash" => {
-                if paths.iter().any(|path| !applications::is_user(path)) {
-                    return Err("only stored application entries can move to the Trash".into());
-                }
-                Ok(VirtualAction {
-                    command: "trashApplications",
-                    paths: paths.to_vec(),
-                })
-            }
-            "delete" => Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into()),
-            _ => Err("unknown application action".into()),
+            _ => Ok(()),
         }
     }
     fn default_view(&self) -> Option<&'static str> {
@@ -265,49 +261,52 @@ impl VirtualView for ApplicationView {
 }
 
 struct TrashView;
-impl VirtualView for TrashView {
+impl NativeVfsProvider for TrashView {
+    fn handles(&self, path: &str) -> bool {
+        recycle::is_virtual(path) || trash_vfs::handles(path)
+    }
+
     fn id(&self) -> &'static str {
         "core:trash"
     }
+    fn list(&self, path: &str) -> Result<Vec<Entry>, String> {
+        storage::trash_list(path)
+    }
+
+    fn stat(&self, path: &str) -> Result<Entry, String> {
+        storage::trash_stat(self, path)
+    }
+
     fn readonly(&self) -> bool {
-        false
+        // Generic FS mutations are forbidden; dedicated menu actions are separate.
+        true
     }
     fn operations(&self, _path: &str) -> Vec<&'static str> {
-        vec!["list", "stat", "remove"]
+        // Trash is enumerated and inspected through VFS. Restore and purge
+        // are dedicated, session-validated menu actions, never generic remove.
+        // A specific node's allowed_ops determines whether list/search is possible.
+        vec!["list", "stat", "search"]
     }
-    fn menu(&self, path: &str) -> Vec<VirtualMenuItem> {
-        if path == trash_vfs::URI || path == recycle::URI {
-            return vec![];
+    fn require(
+        &self,
+        path: &str,
+        _owner: &str,
+        op: FsOperation,
+        _create: bool,
+    ) -> Result<(), String> {
+        let entry = self.stat(path)?;
+        if op == FsOperation::Stat
+            || (matches!(op, FsOperation::List | FsOperation::Search)
+                && entry.is_dir
+                && !entry.is_symlink)
+        {
+            Ok(())
+        } else {
+            Err("PermissionDenied: Trash requires a dedicated Core action".into())
         }
-        vec![
-            VirtualMenuItem {
-                id: "restore",
-                title: crate::i18n::t("放回原处").into(),
-                icon: "restore",
-                danger: false,
-                tail: false,
-            },
-            VirtualMenuItem {
-                id: "delete",
-                title: crate::i18n::t("彻底删除").into(),
-                icon: "trash",
-                danger: true,
-                tail: true,
-            },
-        ]
     }
-    fn execute(&self, action: &str, paths: &[String]) -> Result<VirtualAction, String> {
-        match action {
-            "restore" => Ok(VirtualAction {
-                command: "restore",
-                paths: paths.to_vec(),
-            }),
-            "delete" => Ok(VirtualAction {
-                command: "delete",
-                paths: paths.to_vec(),
-            }),
-            _ => Err("unknown trash action".into()),
-        }
+    fn preflight(&self, _path: &str, _request: &TransferPreflight) -> Result<(), String> {
+        Err("PermissionDenied: Trash requires dedicated restore/delete actions".into())
     }
     fn icon(&self, _path: &str) -> Option<String> {
         None
@@ -317,61 +316,39 @@ impl VirtualView for TrashView {
     }
 }
 
-static RECENT: RecentView = RecentView;
-static APPLICATIONS: ApplicationView = ApplicationView;
-static TRASH: TrashView = TrashView;
+/// Three Core-owned VFS instances are registered through the exact shared
+/// ProviderDescriptor/ProviderInstances rules used by SDK plugin providers.
+fn registry() -> &'static NativeProviderRegistry<dyn NativeVfsProvider> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeVfsProvider>> = OnceLock::new();
+    REGISTERED.get_or_init(|| {
+        let mut registry: NativeProviderRegistry<dyn NativeVfsProvider> =
+            NativeProviderRegistry::new(ProviderKind::Vfs);
+        let providers: [Arc<dyn NativeVfsProvider>; 3] = [
+            Arc::new(RecentView),
+            Arc::new(ApplicationView),
+            Arc::new(TrashView),
+        ];
+        for provider in providers {
+            registry
+                .register(provider.id(), 100, ProviderMatchRule::default(), provider)
+                .expect("invalid native VFS registration");
+        }
+        registry
+    })
+}
 
-pub fn view_for(path: &str) -> Option<&'static dyn VirtualView> {
-    if path.starts_with(RECENT_URI) {
-        return Some(&RECENT);
-    }
-    if path == APPLICATIONS_URI || path.starts_with(applications::URI) {
-        return Some(&APPLICATIONS);
-    }
-    if recycle::is_virtual(path) {
-        return Some(&TRASH);
-    }
-    if trash_vfs::handles(path) {
-        return Some(&TRASH);
-    }
-    None
+pub fn view_for(path: &str) -> Option<&'static dyn NativeVfsProvider> {
+    registry().find(|provider| provider.handles(path))
 }
 
 pub fn icon_for(path: &str) -> Option<String> {
     view_for(path).and_then(|view| view.icon(path))
 }
 
-/// One menu contract for Core-owned and plugin-owned VFS adapters.
-pub fn menu_json(view: &dyn VirtualView, paths: &[String]) -> serde_json::Value {
-    let items = if paths.is_empty() {
-        vec![]
-    } else {
-        view.menu(&paths[0])
-            .into_iter()
-            .filter(|item| {
-                paths
-                    .iter()
-                    .all(|path| view.menu(path).iter().any(|other| other.id == item.id))
-            })
-            .map(|item| {
-                json!({
-                    "id": item.id, "kind": "action", "title": item.title,
-                    "icon": item.icon, "danger": item.danger,
-                    "placement": if item.tail { Some("tail") } else { None },
-                })
-            })
-            .collect::<Vec<_>>()
-    };
-    json!({"items": items})
-}
-
 /// URI-backed resources have no host path. Never canonicalize or materialize
 /// these identifiers as files, even for metadata-only extension calls.
 pub fn opaque(path: &str) -> bool {
-    path.starts_with(RECENT_URI)
-        || path.starts_with(APPLICATIONS_URI)
-        || recycle::is_virtual(path)
-        || trash_vfs::handles(path)
+    view_for(path).is_some()
 }
 
 pub fn resource_entry(path: &str) -> Result<Entry, String> {
@@ -382,107 +359,80 @@ pub fn resource_entry(path: &str) -> Result<Entry, String> {
 mod tests {
     use super::*;
 
-    fn system_path() -> String {
-        format!("{}c3lzdGVtLWFwcA", applications::URI)
-    }
-
-    fn user_path() -> String {
-        format!("{}user/dXNlci1hcHA", applications::URI)
-    }
-
     #[test]
-    fn system_application_entry_offers_an_explicit_launch_verb() {
-        let path = system_path();
-        let items = ApplicationView.menu(&path);
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].id, "open");
-        assert_eq!(items[0].title, crate::i18n::t("启动应用"));
-        assert_eq!(items[0].icon, "open");
-        assert!(!items[0].danger);
-        assert!(!items[0].tail);
-        // The Core action keeps the URI: `open_path` forwards it to
-        // `applications::open()`/`platform_open()`.
-        let action = ApplicationView
-            .execute("open", std::slice::from_ref(&path))
-            .unwrap();
-        assert_eq!(action.command, "open");
-        assert_eq!(action.paths, vec![path]);
-    }
-
-    #[test]
-    fn user_application_entry_offers_launch_rename_and_trash() {
-        let path = user_path();
-        let items = ApplicationView.menu(&path);
+    fn native_vfs_instances_use_shared_contracts_and_claim_only_owned_paths() {
+        assert_eq!(registry().len(), 3);
+        for descriptor in registry().descriptors() {
+            assert_eq!(descriptor.kind, ProviderKind::Vfs);
+            descriptor.validate().unwrap();
+        }
+        assert_eq!(view_for("recent://item").unwrap().id(), "core:recent");
         assert_eq!(
-            items.iter().map(|item| item.id).collect::<Vec<_>>(),
-            ["open", "rename", "trash"]
+            view_for("applications://item").unwrap().id(),
+            "core:applications"
         );
-        assert_eq!(items[0].title, crate::i18n::t("打开"));
-        assert_eq!(items[1].title, crate::i18n::t("重命名"));
-        assert_eq!(items[2].title, crate::i18n::t(trash_title()));
-        assert!(items[2].danger);
-        assert!(items[2].tail);
-        let action = ApplicationView
-            .execute("open", std::slice::from_ref(&path))
-            .unwrap();
-        assert_eq!(action.command, "open");
-        assert_eq!(action.paths, vec![path.clone()]);
+        assert!(view_for("unknown://item").is_none());
+        assert!(view_for("fiex://mount/not-a-native-view").is_none());
+        assert!(!opaque("unknown://item"));
+        assert!(view_for(RECENT_URI).unwrap().stat(RECENT_URI).is_ok());
+        assert!(view_for(RECENT_URI).unwrap().list(RECENT_URI).is_ok());
+        assert!(view_for(RECENT_URI).unwrap().list("recent://bad").is_err());
+    }
+
+    #[test]
+    fn source_view_identities_remain_stable() {
+        assert_eq!(view_for("recent://").unwrap().id(), "core:recent");
         assert_eq!(
-            ApplicationView
-                .execute("rename", std::slice::from_ref(&path))
-                .unwrap()
-                .command,
-            "rename"
+            view_for("applications://").unwrap().id(),
+            "core:applications"
         );
-        assert_eq!(
-            ApplicationView
-                .execute("trash", std::slice::from_ref(&path))
-                .unwrap()
-                .command,
-            "trashApplications"
-        );
+        assert_eq!(view_for(trash_vfs::URI).unwrap().id(), "core:trash");
     }
 
     #[test]
-    fn applications_root_is_a_folder_not_an_installed_application() {
-        let items = ApplicationView.menu(APPLICATIONS_URI);
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].title, crate::i18n::t("打开"));
-    }
+    fn native_vfs_operation_policy_is_owned_by_each_registered_instance() {
+        let recent = view_for(RECENT_URI).unwrap();
+        assert!(recent
+            .require(RECENT_URI, "core:test", FsOperation::List, false)
+            .is_ok());
+        assert!(recent
+            .require(RECENT_URI, "core:test", FsOperation::Search, false)
+            .is_ok());
+        assert!(recent
+            .require(RECENT_URI, "core:test", FsOperation::Write, true)
+            .is_err());
+        assert!(recent
+            .require("recent://missing", "core:test", FsOperation::Read, false)
+            .is_err());
 
-    #[test]
-    fn stored_user_entries_launch_only_files_or_app_bundles() {
-        let shortcut = Entry::default();
-        assert!(user_application_entry(&shortcut));
+        let applications = view_for(APPLICATIONS_URI).unwrap();
+        assert!(applications
+            .require(APPLICATIONS_URI, "core:test", FsOperation::Mkdir, true)
+            .is_ok());
+        assert!(applications
+            .require(APPLICATIONS_URI, "core:test", FsOperation::Remove, false)
+            .is_err());
+        assert!(applications
+            .require(APPLICATIONS_URI, "core:test", FsOperation::Read, false)
+            .is_err());
 
-        let folder = Entry {
-            is_dir: true,
-            ..Default::default()
-        };
-        assert!(!user_application_entry(&folder));
-
-        let bundle = Entry {
-            is_dir: true,
-            extension: "app".into(),
-            ..Default::default()
-        };
-        assert!(user_application_entry(&bundle));
-
-        assert!(!user_application(&format!(
-            "{}loose",
-            applications::USER_PREFIX
-        )));
-        assert!(!user_application("applications://c3lzdGVt"));
-    }
-
-    #[test]
-    fn a_mixed_selection_keeps_the_shared_open_item() {
-        let system = system_path();
-        let user = user_path();
-        let menu = menu_json(&ApplicationView, &[system, user]);
-        let items = menu["items"].as_array().unwrap();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0]["id"], "open");
+        let trash = view_for(trash_vfs::URI).unwrap();
+        assert!(trash
+            .require(
+                "trash://not-a-valid-node",
+                "core:test",
+                FsOperation::Remove,
+                false
+            )
+            .is_err());
+        assert!(trash
+            .require(
+                "trash://not-a-valid-node",
+                "core:test",
+                FsOperation::Write,
+                true
+            )
+            .is_err());
     }
 
     #[test]
@@ -490,46 +440,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let file = directory.path().join("recent.txt");
         std::fs::write(&file, b"x").unwrap();
-        let file = file.to_string_lossy().into_owned();
-        assert!(revealable_source(&file));
-        // Directories, missing files, plugin mounts and opaque Recent aliases
-        // cannot be selected by a host file manager.
+        assert!(revealable_source(&file.to_string_lossy()));
         assert!(!revealable_source(&directory.path().to_string_lossy()));
-        assert!(!revealable_source("/fiex/definitely/missing/recent.txt"));
         assert!(!revealable_source("fiex://mount/example/recent.txt"));
-        assert!(!revealable_source(&format!("{}missing", RECENT_URI)));
-    }
-
-    #[test]
-    fn recent_reveal_row_has_the_expected_contract() {
-        let items = recent_menu_items(true);
-        assert_eq!(
-            items.iter().map(|item| item.id).collect::<Vec<_>>(),
-            ["open", "reveal"]
-        );
-        assert_eq!(items[1].title, crate::i18n::t("打开文件所在位置"));
-        assert_eq!(items[1].icon, "reveal");
-        assert!(!items[1].danger);
-        assert!(!items[1].tail);
-        let plain = recent_menu_items(false);
-        assert_eq!(
-            plain.iter().map(|item| item.id).collect::<Vec<_>>(),
-            ["open"]
-        );
-    }
-
-    #[test]
-    fn an_unregistered_recent_alias_has_no_reveal_action() {
-        let alias = format!("{}missing-{}", RECENT_URI, std::process::id());
-        let items = RecentView.menu(&alias);
-        assert_eq!(
-            items.iter().map(|item| item.id).collect::<Vec<_>>(),
-            ["open"]
-        );
-        assert!(recent_reveal_source(&alias).is_none());
-        assert!(RecentView
-            .execute("reveal", std::slice::from_ref(&alias))
-            .is_err());
-        assert!(RecentView.reveal(&alias).is_err());
+        assert!(!revealable_source("recent://invalid"));
     }
 }

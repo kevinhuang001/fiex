@@ -1,13 +1,41 @@
 use super::*;
+use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+
 pub struct EventRouter;
 impl EventRouter {
-    /// Every provider gets its own invocation/authorization. Validators admit
-    /// one provider atomically; the feature supplies only its combination rule.
-    pub fn resolve<T, R>(
+    /// Core native providers and SDK-backed IPC proxies expose
+    /// the same transport-neutral endpoint, with one validation/merge policy.
+    /// An endpoint factory only chooses the registered implementation; it does
+    /// not select a different execution API based on where it runs.
+    pub fn resolve<'a, T, R>(
         method: &str,
         providers: Vec<Resolver>,
-        mut builtin: impl FnMut(&Resolver, &str) -> Result<Value, String>,
-        mut plugin: impl FnMut(&crate::plugins::host::PluginInfo) -> Result<Value, String>,
+        request: &ProviderRequest,
+        mut endpoint: impl FnMut(&Resolver) -> Result<Box<dyn ProviderEndpoint + 'a>, String>,
+        validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
+        supported: impl FnMut(&T) -> bool,
+        collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
+    ) -> R {
+        Self::dispatch_resolvers(
+            method,
+            providers,
+            |provider| {
+                if request.method != method {
+                    return Err("provider request method does not match routed event".into());
+                }
+                let routed = super::registry::bind_request(provider, request)?;
+                endpoint(provider)?.invoke(&routed)
+            },
+            validate,
+            supported,
+            collect,
+        )
+    }
+
+    fn dispatch_resolvers<T, R>(
+        method: &str,
+        providers: Vec<Resolver>,
+        mut invoke: impl FnMut(&Resolver) -> Result<Value, String>,
         mut validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
         mut supported: impl FnMut(&T) -> bool,
         collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
@@ -19,10 +47,7 @@ impl EventRouter {
         for provider in providers {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 require_event(method)?;
-                let value = match &provider.handler {
-                    Handler::Builtin(id) => builtin(&provider, id)?,
-                    Handler::Plugin(p) => plugin(p)?,
-                };
+                let value = invoke(&provider)?;
                 validate_result(method, &value)?;
                 validate(&provider, value)
             }))

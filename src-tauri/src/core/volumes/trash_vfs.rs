@@ -122,7 +122,7 @@ pub fn list(uri: &str) -> Result<Vec<Entry>, String> {
                 );
                 entry.link_target = None;
                 entry.allowed_ops = if entry.is_dir && !entry.is_symlink {
-                    vec!["stat".into(), "list".into()]
+                    vec!["stat".into(), "list".into(), "search".into()]
                 } else {
                     vec!["stat".into()]
                 };
@@ -137,7 +137,8 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
             path: URI.into(),
             name: crate::i18n::t("废纸篓").into(),
             is_dir: true,
-            allowed_ops: vec!["list".into(), "stat".into()],
+            readonly: true,
+            allowed_ops: vec!["list".into(), "stat".into(), "search".into()],
             ..Default::default()
         });
     }
@@ -153,6 +154,13 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
         let mut entry = files::entry(&physical(uri)?)?;
         entry.path = uri.into();
         entry.link_target = None;
+        // Native VFS items state their actual supported operations. Never
+        // inherit mutations from the physical file or its filesystem ACL.
+        entry.allowed_ops = if entry.is_dir && !entry.is_symlink {
+            vec!["stat".into(), "list".into(), "search".into()]
+        } else {
+            vec!["stat".into()]
+        };
         Ok(entry)
     }
 }
