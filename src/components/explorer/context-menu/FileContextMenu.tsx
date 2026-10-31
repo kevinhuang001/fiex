@@ -64,11 +64,12 @@ export function FileContextMenu(props: ContextMenuProps) {
     if (error) setError(error)
   }, [error, setError])
   const position = useMenuPosition(menu?.x ?? 0, menu?.y ?? 0, ref, Boolean(menu) && ready)
-  const virtual = props.x.path === 'applications://' || props.x.path === 'recyclebin://'
-  const pluginEntry =
-    !virtual &&
-    paths.length > 0 &&
-    plugins.some((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+  // Core decides eligible providers from trusted view/storage identities.
+  // Never suppress IPC providers just because a resource is a Core-owned VFS;
+  // plugins can also opt in to blank-canvas selection via match.selection=zero.
+  const pluginEntry = plugins.some(
+    (plugin) => plugin.enabled && !!plugin.extensions?.contextMenus,
+  )
   const populated = menus.some((group) => group.items.length > 0) || pluginEntry
   if (!menu) return null
   // Wait for the Core-only snapshot: the menu must appear with its final
@@ -111,7 +112,7 @@ export function FileContextMenu(props: ContextMenuProps) {
             .filter((item) => item.placement !== 'tail')
             .map((item) => render(group, item)),
         )}
-        {!virtual && pluginEntry && (
+        {pluginEntry && (
           <PluginContextActions
             paths={paths}
             path={x.path}
