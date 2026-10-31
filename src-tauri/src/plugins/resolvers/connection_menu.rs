@@ -8,9 +8,9 @@ use crate::plugin_sdk::provider_contracts::ProviderRequest;
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 mod endpoint;
 mod validation;
-use validation::valid_items;
 use crate::remote::ConnectionInfo;
 use serde_json::{json, Value};
+use validation::valid_items;
 
 struct Context {
     info: ConnectionInfo,
