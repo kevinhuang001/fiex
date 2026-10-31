@@ -79,8 +79,15 @@ impl VirtualView for RecentView {
     fn readonly(&self) -> bool {
         true
     }
-    fn operations(&self, _path: &str) -> Vec<&'static str> {
-        vec!["list", "stat", "read"]
+    fn operations(&self, path: &str) -> Vec<&'static str> {
+        if path == RECENT_URI {
+            // Recent's root is an enumerable directory, not readable content.
+            vec!["list", "stat"]
+        } else {
+            // An alias is a read-only file; its actual source permissions are
+            // further narrowed by Recent's entry_for_alias implementation.
+            vec!["stat", "read"]
+        }
     }
     fn icon(&self, _path: &str) -> Option<String> {
         None
