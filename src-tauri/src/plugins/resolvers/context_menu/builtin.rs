@@ -67,7 +67,6 @@ impl Context {
             paths: &self.paths,
             entries: &self.entries,
             read_only: self.read_only,
-            in_trash: self.in_trash,
             all_local: self.all_local,
         }
     }
@@ -106,7 +105,6 @@ impl Context {
             paths,
             entries,
             read_only,
-            in_trash,
             all_local,
             capabilities,
         }
