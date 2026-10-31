@@ -4,9 +4,10 @@
 //! inside the EventRouter or the per-request endpoint.
 use super::{media::media_sections, metadata::metadata_section, InfoSection};
 use crate::plugins::events::Resolver;
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{ProviderDescriptor, ProviderKind, ProviderMatchRule};
-use std::{collections::BTreeMap, sync::{Arc, OnceLock}};
+use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use std::sync::{Arc, OnceLock};
 
 trait NativeInfoProvider: Send + Sync {
     fn eligible(&self, _resource: &ResourceSnapshot) -> bool {
@@ -50,43 +51,34 @@ impl NativeInfoProvider for MediaInfo {
     }
 }
 
-struct NativeInfoRegistration {
-    descriptor: ProviderDescriptor,
-    implementation: Arc<dyn NativeInfoProvider>,
-}
-
 /// Each registered native implementation has one persistent, typed Arc.
 /// The request-scoped ResourceSnapshot never enters this global registry.
-fn registry() -> &'static BTreeMap<&'static str, NativeInfoRegistration> {
-    static REGISTRY: OnceLock<BTreeMap<&'static str, NativeInfoRegistration>> = OnceLock::new();
+fn registry() -> &'static NativeProviderRegistry<dyn NativeInfoProvider> {
+    static REGISTRY: OnceLock<NativeProviderRegistry<dyn NativeInfoProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut values = BTreeMap::new();
-        for (id, priority, implementation) in [
-            ("core.metadata", 1000, Arc::new(MetadataInfo) as Arc<dyn NativeInfoProvider>),
-            ("core.media", 100, Arc::new(MediaInfo) as Arc<dyn NativeInfoProvider>),
-        ] {
-            let descriptor = ProviderDescriptor {
-                id: id.into(),
-                kind: ProviderKind::Info,
-                priority,
-                r#match: ProviderMatchRule::default(),
-            };
-            descriptor.validate().expect("invalid native InfoProvider registration");
-            assert!(values.insert(id, NativeInfoRegistration {
-                descriptor,
-                implementation,
-            }).is_none(), "duplicate native InfoProvider");
-        }
+        let mut values = NativeProviderRegistry::new(ProviderKind::Info);
+        values
+            .register(
+                "core.metadata",
+                1000,
+                ProviderMatchRule::default(),
+                Arc::new(MetadataInfo),
+            )
+            .expect("invalid metadata InfoProvider");
+        values
+            .register(
+                "core.media",
+                100,
+                ProviderMatchRule::default(),
+                Arc::new(MediaInfo),
+            )
+            .expect("invalid media InfoProvider");
         values
     })
 }
 
 pub(super) fn candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
-    registry()
-        .iter()
-        .filter(|(_, registration)| registration.implementation.eligible(resource))
-        .map(|(id, registration)| Resolver::builtin(id, registration.descriptor.priority))
-        .collect()
+    registry().candidates(|provider| provider.eligible(resource))
 }
 
 pub(super) fn invoke(
@@ -95,10 +87,10 @@ pub(super) fn invoke(
     resource: &ResourceSnapshot,
 ) -> Result<Vec<InfoSection>, String> {
     let provider = registry().get(id).ok_or("unknown native Info provider")?;
-    if !provider.implementation.eligible(resource) {
+    if !provider.eligible(resource) {
         return Err("native Info provider does not match resource".into());
     }
-    provider.implementation.resolve(display, resource)
+    provider.resolve(display, resource)
 }
 
 #[cfg(test)]
@@ -109,10 +101,9 @@ mod tests {
     fn info_registry_keeps_distinct_typed_handlers_and_rejects_ineligible_media() {
         let values = registry();
         assert_eq!(values.len(), 2);
-        for (id, value) in values {
-            assert_eq!(value.descriptor.id, *id);
-            assert_eq!(value.descriptor.kind, ProviderKind::Info);
-            value.descriptor.validate().unwrap();
+        for descriptor in values.descriptors() {
+            assert_eq!(descriptor.kind, ProviderKind::Info);
+            descriptor.validate().unwrap();
         }
         let directory = ResourceSnapshot::from_metadata(
             "/no-such-directory",
