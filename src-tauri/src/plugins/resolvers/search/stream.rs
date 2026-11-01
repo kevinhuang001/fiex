@@ -2,7 +2,7 @@
 //! EventRouter and operation scope used by single-page requests.
 use super::*;
 use crate::plugins::events::EventRouter;
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::ProviderRequest;
 use std::collections::HashSet;
 
 const MAX_PAGES: usize = 64;
@@ -67,29 +67,26 @@ pub fn run_stream(
             method: "search.query".into(),
             params,
         };
-        let (entries, page_truncated, next) = EventRouter::resolve(
+        let (entries, page_truncated, next) = EventRouter::resolve_typed(
             "search.query",
             vec![engine.resolver.clone()],
             &call,
-            |resolver| {
+            |resolver, routed| {
                 let Handler::Plugin(plugin) = &resolver.handler else {
                     return Err("native search runs through the streaming walker".into());
                 };
-                Ok(Box::new(proxy::ScopedSearchProxy::new(
+                let proxy = proxy::ScopedSearchProxy::new(
                     (**plugin).clone(),
                     &resources,
                     &request.root,
-                )?) as Box<dyn ProviderEndpoint + '_>)
-            },
-            |resolver, response| {
-                // Decode the same strict page DTO used by the SDK.
-                let page: fiex_provider_contracts::SearchResults =
-                    serde_json::from_value(response.clone())
-                        .map_err(|error| format!("invalid search page: {error}"))?;
+                )?;
+                let page = proxy.query_typed(routed)?;
                 page.validate_page(remaining)?;
+                let response = serde_json::to_value(&page).map_err(|error| error.to_string())?;
                 let entries = validated(resolver, response, request)?;
                 Ok((entries, page.truncated, page.next_cursor))
             },
+            |_, result| Ok(result),
             |_| true,
             |results| {
                 results
