@@ -34,9 +34,9 @@ use crate::plugins::resource::file_capabilities::FileCapabilities;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 #[cfg(test)]
 use fiex_provider_contracts::ProviderKind;
+use fiex_provider_contracts::{ContextMenuProvider, MatchResource};
 #[cfg(test)]
 use fiex_provider_contracts::{ProviderError, ProviderInvocation};
-use fiex_provider_contracts::{ContextMenuProvider, MatchResource};
 use serde_json::{json, Value};
 use std::sync::Arc;
 

@@ -9,11 +9,11 @@ use crate::core::fs::directory_cache;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
+pub(super) use store::list_user;
 pub use store::{
     after_rename, candidate_path, create_stored, is_user, list_at, remove_user, rename_stored,
     stored_entry, stored_path, stored_uri, validate_child,
 };
-pub(super) use store::list_user;
 #[cfg(test)]
 pub(super) use store::{folder_listing, user_encoded};
 

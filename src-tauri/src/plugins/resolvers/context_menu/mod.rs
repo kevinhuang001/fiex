@@ -33,9 +33,9 @@ use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
 use serde_json::{json, Value};
-use session::{allowed, register, sessions, MenuScope};
 #[cfg(test)]
 use session::session_ids;
+use session::{allowed, register, sessions, MenuScope};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
