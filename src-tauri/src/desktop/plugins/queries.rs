@@ -21,7 +21,9 @@ pub(crate) async fn file_info_details(
             .and_then(|metadata| {
                 serde_json::to_string(&(
                     &resource.reference,
-                    crate::core::fs::changes::revision(),
+                    crate::core::fs::changes::revision(
+                        &crate::core::fs::parent_path(&path).unwrap_or_else(|_| path.clone()),
+                    ),
                     metadata.modified,
                     metadata.size,
                     metadata.mime.as_str(),

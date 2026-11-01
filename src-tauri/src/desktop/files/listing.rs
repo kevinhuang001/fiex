@@ -51,7 +51,9 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
                     &resource.reference,
                     entry.modified,
                     entry.size,
-                    crate::core::fs::changes::revision(),
+                    crate::core::fs::changes::revision(
+                        &crate::core::fs::parent_path(&path).unwrap_or_else(|_| path.clone()),
+                    ),
                 ))
                 .ok()
             })
