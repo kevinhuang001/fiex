@@ -2,9 +2,11 @@
 //! Session creation, HTML validation and capability checks remain exclusively
 //! in Core's established preview session service.
 use super::session::open_plugin_resource;
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule, ProviderRequest,
+    PreviewProvider, PreviewView, ProviderDescriptor, ProviderError, ProviderInstances,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,
 };
 use serde_json::Value;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -95,6 +97,28 @@ impl ScopedPreviewProxy {
 
     pub fn open(&self, request: &ProviderRequest) -> Result<Value, String> {
         self.handler.open(&self.plugin, &self.resource, request)
+    }
+
+    pub fn open_typed(&self, request: &ProviderRequest) -> Result<PreviewView, ProviderError> {
+        let invocation = NativeProviderInvocation::new(
+            request.method.clone(),
+            request.params.clone(),
+            std::slice::from_ref(self.resource.as_ref()),
+            None,
+        );
+        PreviewProvider::open(self, &invocation)
+    }
+}
+
+impl PreviewProvider for ScopedPreviewProxy {
+    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<PreviewView, ProviderError> {
+        let request = ProviderRequest {
+            method: ctx.method().to_owned(),
+            params: ctx.params().clone(),
+        };
+        let value = ScopedPreviewProxy::open(self, &request)
+            .map_err(ProviderError::internal)?;
+        serde_json::from_value(value).map_err(|error| ProviderError::internal(error.to_string()))
     }
 }
 

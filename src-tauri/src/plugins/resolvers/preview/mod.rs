@@ -5,12 +5,11 @@
 //! and return a package-confined `PreviewView`.
 use crate::plugins::contracts::PreviewView;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::ProviderRequest;
 use serde_json::Value;
 use std::{fs, sync::Arc};
 
 mod builtin;
-mod endpoint;
 mod native;
 mod proxy;
 mod session;
@@ -135,31 +134,27 @@ fn resolve_preview(
         method: "preview.open".into(),
         params: serde_json::json!({}),
     };
-    EventRouter::resolve(
+    EventRouter::resolve_typed(
         "preview.open",
         providers,
         &request,
-        |resolver| {
-            let endpoint: Box<dyn ProviderEndpoint> = match &resolver.handler {
-                Handler::Builtin(id) => Box::new(endpoint::NativePreviewEndpoint {
-                    id: (*id).into(),
-                    resource: resource.clone(),
-                }),
-                Handler::Plugin(plugin) => Box::new(proxy::ScopedPreviewProxy::new(
-                    (**plugin).clone(),
-                    resource.clone(),
-                )?),
-            };
-            Ok(endpoint)
-        },
-        |provider, mut view| {
-            if let Some(object) = view.as_object_mut() {
-                object.insert("providerId".into(), Value::String(provider.id.clone()));
-                object.insert("provider".into(), Value::String(provider.name.clone()));
+        |resolver, request| match &resolver.handler {
+            Handler::Builtin(id) => {
+                native::open(id, &resource).map_err(|error| error.to_string())
             }
+            Handler::Plugin(plugin) => {
+                let request = crate::plugins::events::bind_provider_request(resolver, request)?;
+                proxy::ScopedPreviewProxy::new((**plugin).clone(), resource.clone())?
+                    .open_typed(&request)
+                    .map_err(|error| error.to_string())
+            }
+        },
+        |_, view| {
+            let value = serde_json::to_value(&view).map_err(|error| error.to_string())?;
+            crate::plugins::events::validate_result("preview.open", &value)?;
             Ok(view)
         },
-        |_| true,
+        |view| view.kind != "unsupported",
         move |outcomes| {
             // Every plugin failure is worth keeping: the in-memory error log is
             // shown in Settings, where a bare "no preview provider succeeded"
@@ -190,7 +185,17 @@ fn resolve_preview(
                     }
                 }
             }
-            outcomes.into_iter().find_map(|(provider,result)|result.ok().map(|view|serde_json::json!({"providerId":provider.id,"provider":provider.name,"priority":provider.priority,"view":view}))).ok_or_else(||"no preview provider succeeded".into())
+            let (provider, view) = outcomes
+                .into_iter()
+                .find_map(|(provider, result)| result.ok().map(|view| (provider, view)))
+                .ok_or_else(|| "no preview provider succeeded".to_string())?;
+            let view = serde_json::to_value(view).map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({
+                "providerId": provider.id,
+                "provider": provider.name,
+                "priority": provider.priority,
+                "view": view,
+            }))
         },
     )
 }

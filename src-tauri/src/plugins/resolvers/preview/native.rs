@@ -3,30 +3,40 @@
 //! as its IPC peer; only the transport-specific adapter differs.
 use super::builtin::{builtin_candidates, builtin_view, Builtin};
 use crate::plugins::events::Resolver;
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
-use serde_json::{json, Value};
+use fiex_provider_contracts::{
+    PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
+    ProviderMatchRule,
+};
+use serde_json::json;
 use std::sync::{Arc, OnceLock};
 
-trait NativePreviewProvider: Send + Sync {
+trait NativePreviewProvider: PreviewProvider {
     fn supports(&self, kinds: &[Builtin]) -> bool;
-    fn open(&self, resource: &ResourceSnapshot) -> Result<Value, String>;
 }
 
 struct BuiltinPreview(Builtin);
-impl NativePreviewProvider for BuiltinPreview {
-    fn supports(&self, kinds: &[Builtin]) -> bool {
-        kinds.contains(&self.0)
-    }
-
-    fn open(&self, resource: &ResourceSnapshot) -> Result<Value, String> {
+impl PreviewProvider for BuiltinPreview {
+    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<PreviewView, ProviderError> {
+        let resource = NativeProviderInvocation::resource(ctx, 0)?;
         let path = if self.0 == Builtin::Fallback {
             resource.local.clone()
         } else {
-            resource.export_path()?
+            resource
+                .export_path()
+                .map_err(ProviderError::internal)?
         };
-        builtin_view(self.0, &path, &resource.display)
+        let view = builtin_view(self.0, &path, &resource.display)
+            .map_err(ProviderError::internal)?;
+        serde_json::from_value(view).map_err(|error| ProviderError::internal(error.to_string()))
+    }
+}
+
+impl NativePreviewProvider for BuiltinPreview {
+    fn supports(&self, kinds: &[Builtin]) -> bool {
+        kinds.contains(&self.0)
     }
 }
 
@@ -80,11 +90,17 @@ pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
         .collect()
 }
 
-pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<Value, String> {
-    registry()
+pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView, ProviderError> {
+    let provider = registry()
         .get(id)
-        .ok_or("unknown native PreviewProvider")?
-        .open(resource)
+        .ok_or_else(|| ProviderError::method_not_found("preview.open"))?;
+    let invocation = NativeProviderInvocation::new(
+        "preview.open",
+        json!({}),
+        std::slice::from_ref(resource),
+        None,
+    );
+    provider.open(&invocation)
 }
 
 #[cfg(test)]
@@ -105,9 +121,6 @@ mod tests {
         assert_eq!(directory[0].id, "builtin:fallback");
         let resource = ResourceSnapshot::from_metadata("/unavailable", Default::default());
         assert!(open("not-registered", &resource).is_err());
-        assert_eq!(
-            open("builtin:fallback", &resource).unwrap()["kind"],
-            "fallback"
-        );
+        assert_eq!(open("builtin:fallback", &resource).unwrap().kind, "fallback");
     }
 }
