@@ -15,6 +15,7 @@ import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
 import { call, asset, native } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { date, kind, size } from '@/lib/files'
 import { highlightCode } from '@/lib/highlight'
 import {
@@ -125,6 +126,7 @@ export function Preview({
       .catch((cause) => {
         if (active) {
           setError(String(cause))
+          reportError(cause, 'preview:candidates')
           setReadyToShow(true)
         }
       })
@@ -214,6 +216,7 @@ export function Preview({
       .catch((cause) => {
         if (!active) return
         setError(String(cause))
+        reportError(cause, 'preview:open')
         setLoadingPage(null)
       })
       .finally(() => {
@@ -315,7 +318,7 @@ export function Preview({
             {error ? (
               <div className="preview-fallback">
                 <AlertCircle />
-                <p>{error}</p>
+                <p>{t('无法预览')}</p>
                 <FileIcon entry={entry} size={90} />
               </div>
             ) : loadingPage && !resolved ? (
@@ -388,7 +391,11 @@ export function Preview({
                     height: event.currentTarget.naturalHeight,
                   })
                 }
-                onError={() => setError(t('此图片格式无法预览，可用默认应用打开。'))}
+                onError={() => {
+                  const message = t('此图片格式无法预览，可用默认应用打开。')
+                  setError(message)
+                  reportError(message, 'preview:media')
+                }}
               />
             ) : view?.kind === 'media' && view.media === 'video' ? (
               <video
@@ -401,7 +408,11 @@ export function Preview({
                     height: event.currentTarget.videoHeight,
                   })
                 }
-                onError={() => setError(t('系统不支持此视频编码，可用默认应用打开。'))}
+                onError={() => {
+                  const message = t('系统不支持此视频编码，可用默认应用打开。')
+                  setError(message)
+                  reportError(message, 'preview:media')
+                }}
               />
             ) : view?.kind === 'media' ? (
               <div className="preview-fallback">
@@ -410,7 +421,11 @@ export function Preview({
                   controls
                   autoPlay
                   src={fileSource}
-                  onError={() => setError(t('系统不支持此音频编码，可用默认应用打开。'))}
+                  onError={() => {
+                    const message = t('系统不支持此音频编码，可用默认应用打开。')
+                    setError(message)
+                    reportError(message, 'preview:media')
+                  }}
                 />
               </div>
             ) : view?.kind === 'pdf' && fileSource ? (

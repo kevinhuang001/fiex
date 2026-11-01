@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { PluginPanelHost } from '@/components/plugins/PluginPanelHost'
 import { FilePickerDialog } from '@/components/FilePickerDialog'
 import { ConflictDialog } from '@/components/ConflictDialog'
@@ -38,7 +39,6 @@ export function ExplorerDialogs({
   dialogValue,
   x,
   setDialogValue,
-  dialogError,
   info,
   setInfo,
   tagOpen,
@@ -76,7 +76,6 @@ export function ExplorerDialogs({
   | 'dialogValue'
   | 'x'
   | 'setDialogValue'
-  | 'dialogError'
   | 'info'
   | 'setInfo'
   | 'tagOpen'
@@ -130,7 +129,7 @@ export function ExplorerDialogs({
               await dialog.action(dialogValue)
               setDialog(null)
             } catch (err) {
-              setDialogError(String(err))
+              reportError(err, 'explorer:dialog')
               x.reload()
             } finally {
               setDialogBusy(false)
@@ -148,11 +147,6 @@ export function ExplorerDialogs({
                 onChange={(e) => setDialogValue(e.target.value)}
               />
             </label>
-          )}
-          {dialogError && (
-            <p className="error" role="alert">
-              {dialogError}
-            </p>
           )}
           <div className="dialog-actions">
             <Button

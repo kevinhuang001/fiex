@@ -20,7 +20,6 @@ export function MarketplaceList({
   onClose,
   query,
   setQuery,
-  error,
   message,
   loading,
   entries,
@@ -33,7 +32,6 @@ export function MarketplaceList({
   onClose: () => void
   query: string
   setQuery: Dispatch<SetStateAction<string>>
-  error: string
   message: string
   loading: boolean
   entries: MarketplacePlugin[]
@@ -81,11 +79,6 @@ export function MarketplaceList({
           </label>
         </div>
         <PluginCategoryFilter categories={categories} value={category} onChange={setCategory} />
-        {error && (
-          <p role="alert" className="connection-error">
-            {error}
-          </p>
-        )}
         {message && (
           <p role="status" className="plugin-store-message">
             {message}

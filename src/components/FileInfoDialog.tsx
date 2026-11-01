@@ -6,6 +6,7 @@ import { FileIcon } from './FileIcon'
 import { date, displayAddress, parent, kind, size } from '@/lib/files'
 import { tagHex } from '@/lib/tags'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import type { Entry } from '@/lib/types'
 
 interface InfoRow {
@@ -25,7 +26,6 @@ interface InfoSection {
 export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose: () => void }) {
   const [sections, setSections] = useState<InfoSection[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [copied, setCopied] = useState('')
   const copiedTimer = useRef<number | null>(null)
 
@@ -40,7 +40,6 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     if (!info) return
     let alive = true
     setSections([])
-    setError('')
     setLoading(true)
     const timeout = new Promise<InfoSection[]>((_, reject) =>
       window.setTimeout(
@@ -53,7 +52,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
         if (alive) setSections(Array.isArray(value) ? value : [])
       })
       .catch((cause) => {
-        if (alive) setError(String(cause))
+        if (alive) reportError(cause, 'file-info')
       })
       .finally(() => {
         if (alive) setLoading(false)
@@ -146,7 +145,6 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
               ))}
             </dl>
             {loading && <p className="file-info-status">{t('正在读取媒体与插件信息…')}</p>}
-            {!loading && error && <p className="file-info-status">{error}</p>}
             {info.tags.length > 0 && (
               <div className="file-info-tags">
                 {info.tags.map((tag) => (

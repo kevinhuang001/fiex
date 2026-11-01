@@ -97,8 +97,8 @@ export function PanelView({
           </div>
         )}
         {error ? (
-          <p role="alert" className="connection-error">
-            {error}
+          <p role="status" className="plugin-panel-loading">
+            {t('插件面板无法加载')}
           </p>
         ) : sourceUrl ? (
           <iframe

@@ -7,6 +7,7 @@ import { attachFiexPanel } from '../../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../../sdk/ui/src/index'
 import { themeSnapshot } from '@/lib/themes'
 import { call, native } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { openFilePicker } from '@/lib/filePicker'
 import {
   beginActivity,
@@ -43,7 +44,11 @@ export interface PanelBridgeOptions {
 
 function reportPluginError(pluginId: string, source: string, message: string) {
   if (!message) return
-  void call('ui_error_report', { pluginId, source, message: message.slice(0, 500) }).catch(() => {})
+  void call('ui_error_report', { pluginId, source, message: message.slice(0, 500) }).catch(() => {
+    // Desktop normally replays the persisted error through ErrorDialogHost.
+    // Fall back locally if the diagnostic service is unavailable.
+    reportError(message, `plugins:${source}`)
+  })
 }
 
 /** Loads one plugin panel document and connects its iframe to the sandboxed
@@ -417,6 +422,7 @@ export function usePanelBridge({
         })
       } catch (cause) {
         setError(String(cause))
+        reportPluginError(current.pluginId, 'bridge', String(cause))
       }
     }
     connect()

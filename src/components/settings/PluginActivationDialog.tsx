@@ -1,6 +1,7 @@
 import { t } from '@/i18n'
 import { useState } from 'react'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import type { PluginInfo } from '@/lib/plugins'
 import {
   activationConsent,
@@ -29,7 +30,6 @@ export function PluginActivationDialog({
   const [index, setIndex] = useState(0)
   const [selected, setSelected] = useState<ActivationConsent>(() => activationConsent(plugin))
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
   const group = groups[Math.min(index, Math.max(0, groups.length - 1))]
   const last = index + 1 >= groups.length
 
@@ -73,12 +73,11 @@ export function PluginActivationDialog({
   const activate = async () => {
     if (busy) return
     setBusy(true)
-    setError('')
     try {
       await call('plugin_activate', { pluginId: plugin.id, consent: selected })
       onActivated()
     } catch (cause) {
-      setError(String(cause))
+      reportError(cause, 'plugins:activation')
     } finally {
       setBusy(false)
     }
@@ -86,7 +85,6 @@ export function PluginActivationDialog({
 
   const next = () => {
     if (busy) return
-    setError('')
     if (last) void activate()
     else setIndex(index + 1)
   }
@@ -108,7 +106,6 @@ export function PluginActivationDialog({
       step={index + 1}
       total={Math.max(1, groups.length)}
       busy={busy}
-      error={error}
       allowLabel={last ? t('激活') : t('继续')}
       denyLabel={t('取消')}
       onAllow={next}

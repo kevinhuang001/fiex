@@ -1,6 +1,7 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { openPresentedDirectory } from '@/lib/listing'
 import { useMenuPosition } from '@/lib/menuPosition'
 import { usePreferences } from '@/hooks/usePreferences'
@@ -194,6 +195,7 @@ export function usePicker(request: FilePickerRequest) {
         return
       }
       setError(String(cause))
+      reportError(cause, 'file-picker')
     })
     return () => {
       alive = false
@@ -379,6 +381,7 @@ export function usePicker(request: FilePickerRequest) {
       setReload((value) => value + 1)
     } catch (cause) {
       setError(String(cause))
+      reportError(cause, 'file-picker')
     } finally {
       setBusy(false)
     }

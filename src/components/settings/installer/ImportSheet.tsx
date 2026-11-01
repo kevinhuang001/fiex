@@ -27,13 +27,11 @@ const permissionIcons: Record<string, typeof Info> = {
  *  decision stays short and readable. */
 export function ImportSheet({
   preview,
-  error,
   installing,
   onDiscard,
   onConfirm,
 }: {
   preview: InstallPreview | null
-  error: string
   installing: boolean
   onDiscard: () => void
   onConfirm: () => void
@@ -116,12 +114,6 @@ export function ImportSheet({
             </p>
           )}
         </section>
-
-        {error && (
-          <p role="alert" className="connection-error">
-            {error}
-          </p>
-        )}
 
         <footer className="plugin-consent-actions">
           <Button variant="outline" type="button" disabled={installing} onClick={onDiscard}>

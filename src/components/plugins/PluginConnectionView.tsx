@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { LoaderCircle } from 'lucide-react'
 import { call, native } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import { themeSnapshot } from '@/lib/themes'
 import { attachFiexPanel } from '../../../sdk/ui/src/host'
 import type { JsonValue } from '../../../sdk/ui/src/index'
@@ -51,7 +52,10 @@ export function PluginConnectionView({
         }
       })
       .catch((cause) => {
-        if (active) setError(String(cause))
+        if (active) {
+          setError(String(cause))
+          reportError(cause, 'plugins:connection-view')
+        }
       })
     return () => {
       active = false
@@ -81,7 +85,10 @@ export function PluginConnectionView({
           'navigation.open',
         ]),
         onReady: () => emit.current?.('theme.changed', themeSnapshot()),
-        onError: (message) => setError(message),
+        onError: (message) => {
+          setError(message)
+          reportError(message, 'plugins:connection-view')
+        },
         subscribe: (send) => {
           emit.current = send
           const changed = () => send('theme.changed', themeSnapshot())
@@ -155,8 +162,8 @@ export function PluginConnectionView({
 
   if (error)
     return (
-      <div className="plugin-connection-message" role="alert">
-        {error}
+      <div className="plugin-connection-message" role="status">
+        {t('无法打开连接')}
       </div>
     )
   if (!view)

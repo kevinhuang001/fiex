@@ -1,5 +1,6 @@
 import { t, getLocale } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportError } from '@/lib/errorCenter'
 import {
   Search,
   Eye,
@@ -61,7 +62,6 @@ export function ProviderSettings() {
   const [preferences, setPreferences] = useState<Preferences>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
-  const [error, setError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -74,7 +74,9 @@ export function ProviderSettings() {
         setCatalog(nextCatalog?.features ?? {})
         setPreferences(nextPreferences ?? {})
       })
-      .catch((reason) => active && setError(String(reason)))
+      .catch((reason) => {
+        if (active) reportError(reason, 'plugins:providers')
+      })
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -94,7 +96,6 @@ export function ProviderSettings() {
 
   const save = async (feature: string, order: string[], disabled: string[]) => {
     setSaving(feature)
-    setError('')
     try {
       const next = await call<Preferences>('set_provider_preference', {
         feature,
@@ -103,7 +104,7 @@ export function ProviderSettings() {
       })
       setPreferences(next ?? {})
     } catch (reason) {
-      setError(String(reason))
+      reportError(reason, 'plugins:providers')
     } finally {
       setSaving('')
     }
@@ -130,11 +131,10 @@ export function ProviderSettings() {
 
   const reset = async (feature: string) => {
     setSaving(feature)
-    setError('')
     try {
       setPreferences((await call<Preferences>('reset_provider_preference', { feature })) ?? {})
     } catch (reason) {
-      setError(String(reason))
+      reportError(reason, 'plugins:providers')
     } finally {
       setSaving('')
     }
@@ -229,11 +229,6 @@ export function ProviderSettings() {
             </button>
           </div>
         </div>
-        {error && (
-          <p className="settings-error" role="alert">
-            {error}
-          </p>
-        )}
         {list.length === 0 && (
           <div className="provider-empty">
             <Workflow size={28} />

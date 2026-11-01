@@ -22,7 +22,7 @@ export interface LocalPreview {
   fingerprint?: string
 }
 
-/** Inline status line for import/install results and host errors. */
+/** Success messages only. Operational failures go through ErrorDialogHost. */
 export function PluginMessage({ message }: { message: string }) {
   if (!message) return null
   return (

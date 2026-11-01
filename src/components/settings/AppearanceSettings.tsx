@@ -4,6 +4,7 @@ import { installedThemes, type Theme } from '@/lib/themes'
 import { SelectField } from '../ui/SelectField'
 import { demo } from '@/lib/api'
 import { openFilePicker } from '@/lib/filePicker'
+import { reportError } from '@/lib/errorCenter'
 import type { Preferences } from '@/lib/types'
 import { Image as ImageIcon, Languages, Palette, SlidersHorizontal, Sun } from 'lucide-react'
 
@@ -15,9 +16,7 @@ export function AppearanceSettings({
   update: (p: Partial<Preferences>) => void
 }) {
   const [themes, setThemes] = useState<Theme[]>([])
-  const [backgroundError, setBackgroundError] = useState('')
   const pickBackground = async () => {
-    setBackgroundError('')
     try {
       const picked = demo
         ? '/demo/background.svg'
@@ -31,7 +30,7 @@ export function AppearanceSettings({
         update({ backgroundImage: path })
       }
     } catch (error) {
-      setBackgroundError(String(error))
+      reportError(error, 'appearance:background')
     }
   }
   useEffect(() => {
@@ -180,7 +179,6 @@ export function AppearanceSettings({
             </div>
           </div>
         )}
-        {backgroundError && <p className="settings-inline-error">{backgroundError}</p>}
         <div className="settings-row">
           <div className="settings-row-label">
             <span className="settings-row-icon" style={{ background: '#6366f1' }}>

@@ -1,5 +1,6 @@
 import { RenamePreview } from './rename/RenamePreview'
 import { t, getLocale } from '@/i18n'
+import { reportError } from '@/lib/errorCenter'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Hash, CaseSensitive, Replace, RotateCcw, Wand2 } from 'lucide-react'
 import { Modal } from './ui/Modal'
@@ -29,13 +30,11 @@ export function BatchRenameDialog({
 }) {
   const [options, setOptions] = useState<RenameOptions>(DEFAULT_RENAME_OPTIONS)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
 
   useEffect(() => {
     if (!entries) return
     setOptions(DEFAULT_RENAME_OPTIONS)
     setBusy(false)
-    setError('')
   }, [entries])
 
   const update = (patch: Partial<RenameOptions>) => setOptions((value) => ({ ...value, ...patch }))
@@ -59,11 +58,10 @@ export function BatchRenameDialog({
   async function submit() {
     if (!canApply) return
     setBusy(true)
-    setError('')
     try {
       await onApply(changed)
     } catch (cause) {
-      setError(String(cause))
+      reportError(cause, 'file-operations:batch-rename')
       setBusy(false)
     }
   }
@@ -261,11 +259,6 @@ export function BatchRenameDialog({
             </button>
           </header>
           <RenamePreview entries={entries || []} names={built.names} validation={validation} />
-          {error && (
-            <p className="batch-rename-error" role="alert">
-              {error}
-            </p>
-          )}
           <footer className="batch-rename-footer">
             <span>
               {validation.size > 0
