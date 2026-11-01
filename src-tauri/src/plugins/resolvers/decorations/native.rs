@@ -1,20 +1,17 @@
 //! Persistent Core decorations, routed through the same verified Provider
 //! Descriptor and EventRouter as SDK-backed DecorationProviders.
-use super::{
-    builtin::{self, NativeKind},
-    invocation,
-    types::{Decoration, DecorationEntry},
-};
+use super::{builtin::{self, NativeKind}, invocation};
+#[cfg(test)]
+use super::types::{Decoration, DecorationEntry};
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
     DecorationProvider, LocationMatch, ProviderError, ProviderInvocation, ProviderKind,
     ProviderMatchRule,
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, OnceLock},
-};
+#[cfg(test)]
+use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 
 struct BuiltinDecoration(NativeKind);
 impl DecorationProvider for BuiltinDecoration {
