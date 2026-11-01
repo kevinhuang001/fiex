@@ -61,7 +61,6 @@ fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
     super::native_registry()
 }
 
-#[cfg(test)]
 fn context(
     directory: &str,
     paths: &[String],
