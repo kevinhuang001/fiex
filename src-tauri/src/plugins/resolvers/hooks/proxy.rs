@@ -2,8 +2,7 @@
 //! current trusted plugin record and an operation-scoped resource snapshot.
 //! In particular, no mount, selection, permission grant or path is cached.
 use crate::plugins::{
-    host::PluginInfo,
-    native_invocation::NativeProviderInvocation,
+    host::PluginInfo, native_invocation::NativeProviderInvocation,
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
