@@ -139,9 +139,7 @@ fn resolve_preview(
         providers,
         &request,
         |resolver, request| match &resolver.handler {
-            Handler::Builtin(id) => {
-                native::open(id, &resource).map_err(|error| error.to_string())
-            }
+            Handler::Builtin(id) => native::open(id, &resource).map_err(|error| error.to_string()),
             Handler::Plugin(plugin) => {
                 let request = crate::plugins::events::bind_provider_request(resolver, request)?;
                 proxy::ScopedPreviewProxy::new((**plugin).clone(), resource.clone())?
