@@ -3,8 +3,9 @@
 //! Core retains static IDs solely to construct native EventRouter candidates.
 use crate::plugins::events::Resolver;
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule,
+    ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule, ProviderMatcher,
 };
+use serde_json::Value;
 use std::sync::Arc;
 
 pub(crate) struct NativeProviderRegistry<T: ?Sized + Send + Sync> {
@@ -64,6 +65,33 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
                 let implementation = self.entries.get(id)?;
                 let descriptor = self.entries.descriptor(id)?;
                 eligible(implementation).then(|| Resolver::builtin(id, descriptor.priority))
+            })
+            .collect::<Vec<_>>();
+        providers.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));
+        providers
+    }
+
+    /// Select native providers with the same declarative rule evaluator used
+    /// for plugin manifests. `directory` is a trusted Core snapshot used only
+    /// when there is no selected target (for example, blank-canvas menus).
+    pub fn matched_candidates(
+        &self,
+        targets: &[Value],
+        directory: Option<&Value>,
+        selection_count: usize,
+    ) -> Vec<Resolver> {
+        let mut providers = self
+            .ids
+            .iter()
+            .filter_map(|id| {
+                let descriptor = self.entries.descriptor(id)?;
+                ProviderMatcher::matches(
+                    &descriptor.r#match,
+                    targets,
+                    directory,
+                    selection_count,
+                )
+                .then(|| Resolver::builtin(id, descriptor.priority))
             })
             .collect::<Vec<_>>();
         providers.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));

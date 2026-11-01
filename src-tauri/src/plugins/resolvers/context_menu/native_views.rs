@@ -3,7 +3,9 @@
 //! View-specific actions live in implementations, not in EventRouter.
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{
+    LocationMatch, ProviderKind, ProviderMatchRule, ProviderMatcher,
+};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
@@ -97,21 +99,6 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
     let Some(descriptor) = registry().descriptor(provider.id()) else {
         return false;
     };
-    let rule = &descriptor.r#match;
-    let (directory_view, directory_storage) = crate::plugins::match_rules::locations_for(directory);
-    // Match the real directory view and storage independently, including
-    // an empty selection. Recent can have a different source storage owner.
-    if !rule.matches_targets(
-        &[json!({"view": directory_view, "storage": directory_storage})],
-        paths.len(),
-    ) {
-        return false;
-    }
-    if paths.is_empty() {
-        return true;
-    }
-    // A mixed-source selection must match *every* target. Never inherit
-    // elevated actions from the first item or from a plugin-supplied path.
     let targets = paths
         .iter()
         .map(|path| {
@@ -119,7 +106,13 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
             json!({"view": view, "storage": storage})
         })
         .collect::<Vec<_>>();
-    rule.matches_targets(&targets, paths.len())
+    let directory_context = crate::plugins::match_rules::directory_metadata(directory);
+    ProviderMatcher::matches(
+        &descriptor.r#match,
+        &targets,
+        directory_context.as_ref(),
+        paths.len(),
+    )
 }
 
 fn provider(
@@ -134,7 +127,24 @@ fn provider(
 }
 
 pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
-    registry().candidates(|implementation| eligible(implementation, directory, paths))
+    let targets = paths
+        .iter()
+        .map(|path| {
+            let (view, storage) = crate::plugins::match_rules::locations_for(path);
+            json!({"view": view, "storage": storage})
+        })
+        .collect::<Vec<_>>();
+    let directory_context = crate::plugins::match_rules::directory_metadata(directory);
+    registry()
+        .matched_candidates(&targets, directory_context.as_ref(), paths.len())
+        .into_iter()
+        .filter(|candidate| {
+            paths.len() > 0
+                || registry()
+                    .get(&candidate.id)
+                    .is_some_and(|provider| !provider.blank_items(directory).is_empty())
+        })
+        .collect()
 }
 
 pub(super) fn owns(id: &str) -> bool {

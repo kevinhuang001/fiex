@@ -6,7 +6,7 @@ use super::{
 };
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock},
@@ -47,11 +47,35 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeDecorationProvider> {
             ),
             ("builtin:application-icon", -9, NativeKind::ApplicationIcon),
         ] {
+            let rule = match kind {
+                NativeKind::Tags => ProviderMatchRule {
+                    storage: Some(LocationMatch {
+                        types: Some(vec!["fs".into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                NativeKind::ConnectionStatus => ProviderMatchRule {
+                    storage: Some(LocationMatch {
+                        types: Some(vec!["vfs".into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                NativeKind::ApplicationIcon => ProviderMatchRule {
+                    view: Some(LocationMatch {
+                        provider_ids: Some(vec!["core:applications".into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                NativeKind::Readonly => ProviderMatchRule::default(),
+            };
             values
                 .register(
                     id,
                     priority,
-                    ProviderMatchRule::default(),
+                    rule,
                     Arc::new(BuiltinDecoration(kind)),
                 )
                 .expect("invalid native DecorationProvider");
@@ -60,8 +84,9 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeDecorationProvider> {
     })
 }
 
-pub(super) fn providers() -> Vec<Resolver> {
-    registry().candidates(|_| true)
+pub(super) fn providers(targets: &[serde_json::Value], directory: &str) -> Vec<Resolver> {
+    let directory = crate::plugins::match_rules::directory_metadata(directory);
+    registry().matched_candidates(targets, directory.as_ref(), targets.len())
 }
 
 pub(super) fn resolve(
@@ -88,10 +113,18 @@ mod tests {
             assert_eq!(descriptor.kind, ProviderKind::Decoration);
             descriptor.validate().unwrap();
         }
-        let ordered = providers();
-        assert_eq!(ordered.len(), 4);
-        assert_eq!(ordered[0].id, "builtin:application-icon");
-        assert_eq!(ordered[3].id, "builtin:tags");
+        let local = providers(&[], "/tmp");
+        assert_eq!(local.len(), 2);
+        assert_eq!(local[0].id, "builtin:readonly");
+        assert_eq!(local[1].id, "builtin:tags");
+        let applications = providers(
+            &[],
+            crate::core::volumes::applications::URI,
+        );
+        assert!(applications
+            .iter()
+            .any(|provider| provider.id == "builtin:application-icon"));
+        assert!(!applications.iter().any(|provider| provider.id == "builtin:tags"));
     }
 
     #[test]

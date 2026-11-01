@@ -72,7 +72,7 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
         "connectionContextMenu.resolve",
         &metadata,
         &ctx.info.mount_path,
-        providers(),
+        providers(&metadata),
     );
     let request = ProviderRequest {
         method: "connectionContextMenu.resolve".into(),
@@ -142,7 +142,7 @@ pub async fn execute(
         "connectionContextMenu.execute",
         &metadata,
         &ctx.info.mount_path,
-        providers(),
+        providers(&metadata),
     )
     .into_iter()
     .find(|provider| provider.id == provider_id)

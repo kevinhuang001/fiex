@@ -4,7 +4,8 @@
 use super::{SearchMode, BUILTIN_SEARCH};
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
+use serde_json::Value;
 use std::sync::{Arc, OnceLock};
 
 trait NativeSearchProvider: Send + Sync {
@@ -27,7 +28,15 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeSearchProvider> {
             .register(
                 BUILTIN_SEARCH,
                 10,
-                ProviderMatchRule::default(),
+                ProviderMatchRule {
+                    storage: Some(LocationMatch {
+                        types: Some(vec!["fs".into()]),
+                        ..Default::default()
+                    }),
+                    kinds: vec!["directory".into()],
+                    required_ops: vec![crate::plugins::provider_registry::FsOperation::List],
+                    ..Default::default()
+                },
                 Arc::new(Walker),
             )
             .expect("invalid builtin SearchProvider");
@@ -35,8 +44,15 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeSearchProvider> {
     })
 }
 
-pub(super) fn candidates() -> Vec<Resolver> {
-    registry().candidates(|provider| !provider.modes().is_empty())
+pub(super) fn candidates(targets: &[Value]) -> Vec<Resolver> {
+    registry()
+        .matched_candidates(targets, None, targets.len())
+        .into_iter()
+        .filter(|resolver| {
+            registry()
+                .get(&resolver.id)
+                .is_some_and(|provider| !provider.modes().is_empty())
+        })
 }
 
 pub(super) fn modes(id: &str) -> Vec<SearchMode> {
@@ -53,7 +69,13 @@ mod tests {
     #[test]
     fn walker_is_registered_once_with_exact_search_modes() {
         assert_eq!(registry().len(), 1);
-        assert_eq!(candidates()[0].id, BUILTIN_SEARCH);
+        let target = serde_json::json!({
+            "kind":"directory",
+            "view":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
+            "storage":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
+            "operations":["list"]
+        });
+        assert_eq!(candidates(&[target])[0].id, BUILTIN_SEARCH);
         assert_eq!(
             modes(BUILTIN_SEARCH),
             vec![SearchMode::Name, SearchMode::Content]

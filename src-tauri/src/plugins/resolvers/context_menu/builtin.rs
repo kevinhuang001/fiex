@@ -64,6 +64,7 @@ impl Context {
 
     pub(super) fn selection(&self) -> Selection<'_> {
         Selection {
+            directory: &self.directory,
             paths: &self.paths,
             entries: &self.entries,
             read_only: self.read_only,

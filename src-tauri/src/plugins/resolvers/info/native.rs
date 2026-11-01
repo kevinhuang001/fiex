@@ -10,9 +10,6 @@ use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
 use std::sync::{Arc, OnceLock};
 
 trait NativeInfoProvider: Send + Sync {
-    fn eligible(&self, _resource: &ResourceSnapshot) -> bool {
-        true
-    }
     fn resolve(
         &self,
         display: &str,
@@ -38,10 +35,6 @@ impl NativeInfoProvider for MetadataInfo {
 
 struct MediaInfo;
 impl NativeInfoProvider for MediaInfo {
-    fn eligible(&self, resource: &ResourceSnapshot) -> bool {
-        !resource.is_dir
-            && (resource.mime.starts_with("audio/") || resource.mime.starts_with("video/"))
-    }
     fn resolve(
         &self,
         _display: &str,
@@ -70,7 +63,11 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeInfoProvider> {
             .register(
                 "core.media",
                 100,
-                ProviderMatchRule::default(),
+                ProviderMatchRule {
+                    mime_types: vec!["audio/*".into(), "video/*".into()],
+                    kinds: vec!["file".into()],
+                    ..Default::default()
+                },
                 Arc::new(MediaInfo),
             )
             .expect("invalid media InfoProvider");
@@ -79,7 +76,8 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeInfoProvider> {
 }
 
 pub(super) fn candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
-    registry().candidates(|provider| provider.eligible(resource))
+    let targets = crate::plugins::events::resource_metadata(std::slice::from_ref(resource));
+    registry().matched_candidates(&targets, None, 1)
 }
 
 pub(super) fn invoke(
@@ -88,9 +86,6 @@ pub(super) fn invoke(
     resource: &ResourceSnapshot,
 ) -> Result<Vec<InfoSection>, String> {
     let provider = registry().get(id).ok_or("unknown native Info provider")?;
-    if !provider.eligible(resource) {
-        return Err("native Info provider does not match resource".into());
-    }
     provider.resolve(display, resource)
 }
 
@@ -114,7 +109,7 @@ mod tests {
             },
         );
         assert_eq!(candidates(&directory).len(), 1);
-        assert!(invoke("core.media", "/no-such-directory", &directory).is_err());
+        assert!(!candidates(&directory).iter().any(|provider| provider.id == "core.media"));
         assert!(invoke("unknown", "/no-such-directory", &directory).is_err());
         assert_eq!(
             invoke("core.metadata", "/no-such-directory", &directory)

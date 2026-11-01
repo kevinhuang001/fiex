@@ -2,6 +2,7 @@
 //! Metadata is retrieved once, then projected separately for each provider.
 //! The snapshot never crosses the plugin process boundary.
 use crate::plugins::contracts::{EventContext, ResourceContext, ResourceMetadata, ResourceRef};
+use fiex_provider_contracts::{ResourceCapabilities, ResourceLocation};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -204,9 +205,29 @@ impl ResourceSnapshot {
         metadata_allowed: bool,
         _read_allowed: bool,
     ) -> ResourceContext {
+        let (view, storage) = crate::plugins::match_rules::locations_for(&self.display);
+        let decode_location = |value: Option<serde_json::Value>| {
+            value.and_then(|value| serde_json::from_value::<ResourceLocation>(value).ok())
+        };
+        let capabilities = if metadata_allowed {
+            let effective = self.operations.unwrap_or_else(|| {
+                crate::plugins::resource::file_capabilities::for_path(&self.display)
+            });
+            ResourceCapabilities {
+                operations: crate::plugins::provider_registry::FsOperation::ALL
+                    .into_iter()
+                    .filter(|operation| effective.allows(*operation))
+                    .collect(),
+            }
+        } else {
+            ResourceCapabilities::default()
+        };
         ResourceContext {
             reference: self.reference.clone(),
             metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
+            view: decode_location(view),
+            storage: decode_location(storage),
+            capabilities,
         }
     }
     pub fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext {
@@ -245,6 +266,37 @@ mod tests {
             with_meta.targets[0].metadata.as_ref().unwrap().size,
             Some(3)
         );
+    }
+
+    #[test]
+    fn projected_context_carries_trusted_view_storage_and_effective_operations() {
+        let resource = ResourceSnapshot::from_metadata(
+            crate::core::volumes::applications::URI,
+            ResourceMetadata {
+                name: "Applications".into(),
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        );
+        let projected = resource.project("org.example", "", true, false);
+        assert_eq!(
+            projected.view.as_ref().map(|location| location.provider_id.as_str()),
+            Some("core:applications")
+        );
+        assert_eq!(
+            projected.storage.as_ref().map(|location| location.provider_id.as_str()),
+            Some("core:applications")
+        );
+        assert!(projected
+            .capabilities
+            .allows(crate::plugins::provider_registry::FsOperation::Mkdir));
+        let wire = serde_json::to_value(&projected).unwrap();
+        assert!(wire.get("path").is_none());
+
+        let metadata_hidden = resource.project("org.example", "", false, false);
+        assert!(metadata_hidden.metadata.is_none());
+        assert!(metadata_hidden.capabilities.operations.is_empty());
+        assert!(metadata_hidden.view.is_some());
     }
 }
 

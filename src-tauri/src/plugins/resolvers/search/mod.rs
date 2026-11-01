@@ -116,11 +116,12 @@ fn resources(
 /// the builtin walker last by default priority.
 pub fn engines(request: &PluginSearchInput) -> Vec<SearchEngineInfo> {
     let resources = resources(request);
+    let metadata = crate::plugins::events::resource_metadata(&resources);
     let providers = crate::plugins::provider_registry::candidates(
         "search.query",
-        &crate::plugins::events::resource_metadata(&resources),
+        &metadata,
         &request.root,
-        native::candidates(),
+        native::candidates(&metadata),
     );
     providers
         .into_iter()

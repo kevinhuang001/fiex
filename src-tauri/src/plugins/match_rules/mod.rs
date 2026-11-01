@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::ops::Deref;
 
 mod location;
-pub use location::locations_for;
+pub use location::{directory_metadata, locations_for};
 
 /// Core uses the SDK's one authoritative manifest predicate and DTO.
 /// This thin adapter only supplies a trusted directory snapshot for blank
@@ -36,12 +36,12 @@ impl MatchRules {
         let blank = (metadata.is_empty() && !directory.is_empty())
             .then(|| location::directory_metadata(directory))
             .flatten();
-        let targets = if metadata.is_empty() {
-            blank.as_slice()
-        } else {
-            metadata
-        };
-        self.0.matches_targets(targets, metadata.len())
+        fiex_provider_contracts::ProviderMatcher::matches(
+            &self.0,
+            metadata,
+            blank.as_ref(),
+            metadata.len(),
+        )
     }
 }
 

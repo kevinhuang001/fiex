@@ -27,14 +27,16 @@
 //! re-checks the same call on execute.
 use super::connection_cache::ConnectionCache;
 use crate::core::files::Entry;
+use crate::plugins::provider_registry::FsOperation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
-use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
 /// The selection a menu is resolved for.
 pub(super) struct Selection<'a> {
+    pub(super) directory: &'a str,
     pub(super) paths: &'a [String],
     pub(super) entries: &'a [Entry],
     pub(super) read_only: bool,
@@ -74,11 +76,28 @@ fn registry() -> &'static NativeProviderRegistry<dyn BuiltinResolver> {
             Arc::new(Trash),
         ];
         for implementation in implementations {
+            let rule = match implementation.id() {
+                "builtin:tags" | "builtin:terminal" => ProviderMatchRule {
+                    storage: Some(LocationMatch {
+                        provider_ids: Some(vec!["core:local-fs".into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                "builtin:connection-cache" => ProviderMatchRule {
+                    storage: Some(LocationMatch {
+                        types: Some(vec!["vfs".into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                _ => ProviderMatchRule::default(),
+            };
             values
                 .register(
                     implementation.id(),
                     implementation.priority(),
-                    ProviderMatchRule::default(),
+                    rule,
                     implementation,
                 )
                 .expect("invalid builtin menu registration");
@@ -91,10 +110,37 @@ pub(super) fn available(
     selection: &Selection<'_>,
     capabilities: &FileCapabilities,
 ) -> Vec<&'static dyn BuiltinResolver> {
+    let targets = selection
+        .paths
+        .iter()
+        .enumerate()
+        .map(|(index, path)| {
+            let entry = selection.entries.get(index);
+            let (view, storage) = crate::plugins::match_rules::locations_for(path);
+            let operations = entry
+                .map(|entry| crate::plugins::resource::file_capabilities::for_entry(path, entry))
+                .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(path));
+            let operations = FsOperation::ALL
+                .into_iter()
+                .filter(|operation| operations.allows(*operation))
+                .map(FsOperation::as_str)
+                .collect::<Vec<_>>();
+            json!({
+                "kind": entry.map(|entry| if entry.is_dir { "directory" } else { "file" }),
+                "extension": entry.map(|entry| entry.extension.as_str()),
+                "mime": entry.map(|entry| entry.mime.as_str()),
+                "view": view,
+                "storage": storage,
+                "operations": operations,
+            })
+        })
+        .collect::<Vec<_>>();
+    let directory = crate::plugins::match_rules::directory_metadata(selection.directory);
     registry()
-        .candidates(|implementation| implementation.available(selection, capabilities))
+        .matched_candidates(&targets, directory.as_ref(), selection.paths.len())
         .iter()
         .filter_map(|candidate| registry().get(&candidate.id))
+        .filter(|implementation| implementation.available(selection, capabilities))
         .collect()
 }
 
@@ -340,6 +386,7 @@ mod registry_tests {
         let no_paths: Vec<String> = Vec::new();
         let entries: Vec<Entry> = Vec::new();
         let selection = Selection {
+            directory: "/tmp",
             paths: &no_paths,
             entries: &entries,
             read_only: false,

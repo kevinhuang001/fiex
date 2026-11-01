@@ -135,8 +135,8 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeConnectionMenu> {
     })
 }
 
-pub(super) fn providers() -> Vec<Resolver> {
-    registry().candidates(|_| true)
+pub(super) fn providers(targets: &[Value]) -> Vec<Resolver> {
+    registry().matched_candidates(targets, None, targets.len())
 }
 
 pub(super) fn items(id: &str, ctx: &Context) -> Result<Vec<Value>, String> {

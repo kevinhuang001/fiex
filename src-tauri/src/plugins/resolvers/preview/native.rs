@@ -6,7 +6,7 @@ use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
 trait NativePreviewProvider: Send + Sync {
@@ -46,7 +46,14 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
                 .register(
                     kind.id(),
                     kind.priority(),
-                    ProviderMatchRule::default(),
+                    if kind == Builtin::Fallback {
+                        ProviderMatchRule::default()
+                    } else {
+                        ProviderMatchRule {
+                            kinds: vec!["file".into()],
+                            ..Default::default()
+                        }
+                    },
                     Arc::new(BuiltinPreview(kind)),
                 )
                 .expect("invalid native PreviewProvider");
@@ -57,11 +64,20 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
 
 pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let selected = builtin_candidates(ext, mime, is_dir);
-    registry().candidates(|provider| {
-        // BuiltinPreview is the registered implementation; its eligibility
-        // remains a native capability, never a supplied provider identity.
-        provider.supports(&selected)
-    })
+    let targets = [json!({
+        "extension": ext,
+        "mime": mime,
+        "kind": if is_dir { "directory" } else { "file" }
+    })];
+    registry()
+        .matched_candidates(&targets, None, 1)
+        .into_iter()
+        .filter(|resolver| {
+            registry()
+                .get(&resolver.id)
+                .is_some_and(|provider| provider.supports(&selected))
+        })
+        .collect()
 }
 
 pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<Value, String> {
