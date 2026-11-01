@@ -215,7 +215,11 @@ mod registry_tests {
             assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
             descriptor.validate().unwrap();
         }
-        let sorted = registered.candidates(|descriptor| descriptor.id.starts_with("builtin:"));
+        let sorted = registered
+            .candidates(|_| true)
+            .into_iter()
+            .filter(|candidate| candidate.id.starts_with("builtin:"))
+            .collect::<Vec<_>>();
         assert_eq!(sorted[0].id, "builtin:opening");
         assert_eq!(sorted.last().unwrap().id, "builtin:trash");
         assert!(sorted
