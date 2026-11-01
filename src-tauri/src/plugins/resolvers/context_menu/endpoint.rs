@@ -49,15 +49,9 @@ mod tests {
             id: "builtin:opening".into(),
             context: &ctx,
         };
-        let unknown =
-            NativeProviderInvocation::new("fs.read", json!({}), &[], None);
+        let unknown = NativeProviderInvocation::new("fs.read", json!({}), &[], None);
         assert!(ContextMenuProvider::resolve(&endpoint, &unknown).is_err());
-        let invalid = NativeProviderInvocation::new(
-            "contextMenu.execute",
-            json!({}),
-            &[],
-            None,
-        );
+        let invalid = NativeProviderInvocation::new("contextMenu.execute", json!({}), &[], None);
         assert!(ContextMenuProvider::execute(&endpoint, &invalid).is_err());
     }
 }
