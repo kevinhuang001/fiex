@@ -99,7 +99,10 @@ fn connection_matches_are_core_owned_and_storage_sensitive() {
     );
     let metadata = connection.matcher_metadata();
     assert_eq!(metadata.metadata.as_ref().unwrap().kind, "connection");
-    assert_eq!(metadata.view.as_ref().unwrap().provider_id, "plugin:org.fiex.drive:drive");
+    assert_eq!(
+        metadata.view.as_ref().unwrap().provider_id,
+        "plugin:org.fiex.drive:drive"
+    );
     let matched = json!({"connectionContextMenus":{"match":{
         "kinds":["connection"],"view":{"providerIds":["plugin:org.fiex.drive:drive"]}
     }}});

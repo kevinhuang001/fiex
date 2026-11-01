@@ -35,7 +35,12 @@ pub(super) fn matches_resources(
     resources: &[ResourceSnapshot],
     directory: Option<&str>,
 ) -> bool {
-    matches(method, extensions, &match_resources(resources), directory.unwrap_or(""))
+    matches(
+        method,
+        extensions,
+        &match_resources(resources),
+        directory.unwrap_or(""),
+    )
 }
 
 /// Build matcher input from Core's resolved resource and capability registries.
@@ -43,7 +48,8 @@ pub fn match_resources(resources: &[ResourceSnapshot]) -> Vec<MatchResource> {
     resources
         .iter()
         .map(|resource| {
-            let (view, storage) = crate::plugins::match_rules::typed_locations_for(&resource.display);
+            let (view, storage) =
+                crate::plugins::match_rules::typed_locations_for(&resource.display);
             let effective = resource.operations.unwrap_or_else(|| {
                 crate::plugins::resource::file_capabilities::for_path(&resource.display)
             });
@@ -138,7 +144,8 @@ mod tests {
         };
         let absent = std::env::temp_dir().join("fiex-match-must-not-open.txt");
         let resource = ResourceSnapshot::new(absent.to_str().unwrap(), &absent);
-        let result = super::super::invoke_resources(&plugin, "info.resolve", json!({}), &[resource], None);
+        let result =
+            super::super::invoke_resources(&plugin, "info.resolve", json!({}), &[resource], None);
         assert_eq!(result.unwrap_err(), "provider does not match event targets");
     }
 
@@ -155,10 +162,17 @@ mod tests {
             ("hooks", "hooks.invoke"),
             ("search", "search.query"),
         ] {
-            let extensions = json!({feature: {"match": {"extensions": ["zip"], "kinds": ["file"]}}});
-            assert!(!matches(method, &extensions, std::slice::from_ref(&txt), ""), "{method}");
+            let extensions =
+                json!({feature: {"match": {"extensions": ["zip"], "kinds": ["file"]}}});
+            assert!(
+                !matches(method, &extensions, std::slice::from_ref(&txt), ""),
+                "{method}"
+            );
             assert!(!matches(method, &extensions, &[], ""), "{method}");
-            assert!(matches(method, &extensions, std::slice::from_ref(&zip), ""), "{method}");
+            assert!(
+                matches(method, &extensions, std::slice::from_ref(&zip), ""),
+                "{method}"
+            );
             let extensions = json!({feature: {"match": {"extensions": "zip"}}});
             assert!(!matches(method, &extensions, &[], ""), "{method}");
         }
@@ -169,28 +183,60 @@ mod tests {
         let path = crate::core::volumes::applications::URI;
         let resource = ResourceSnapshot::from_metadata(
             path,
-            ResourceMetadata { kind: "directory".into(), ..Default::default() },
+            ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            },
         );
         let selected = match_resources(&[resource]);
-        assert_eq!(selected[0].view.as_ref().unwrap().provider_id, "core:applications");
-        assert_eq!(selected[0].storage.as_ref().unwrap().resource_type, ResourceType::Vfs);
+        assert_eq!(
+            selected[0].view.as_ref().unwrap().provider_id,
+            "core:applications"
+        );
+        assert_eq!(
+            selected[0].storage.as_ref().unwrap().resource_type,
+            ResourceType::Vfs
+        );
         let extensions = json!({"contextMenus":{"match":{
             "view":{"providerIds":["core:applications"]}, "kinds":["directory"]
         }}});
         assert!(matches("contextMenu.resolve", &extensions, &selected, path));
         let local = ResourceSnapshot::from_metadata(
             "/tmp/fiex-matcher-local",
-            ResourceMetadata { kind: "directory".into(), ..Default::default() },
+            ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            },
         );
-        assert!(!matches("contextMenu.resolve", &extensions, &match_resources(&[local]), "/tmp"));
+        assert!(!matches(
+            "contextMenu.resolve",
+            &extensions,
+            &match_resources(&[local]),
+            "/tmp"
+        ));
     }
 
     #[test]
     fn blank_context_menus_require_an_explicit_zero_selection() {
         let directory = crate::plugins::match_rules::directory_match_resource("/tmp");
-        assert!(!matches("contextMenu.resolve", &json!({"contextMenus": true}), &[], "/tmp"));
-        assert!(!matches("contextMenu.resolve", &json!({"contextMenus": {"match": {"selection": "any"}}}), &[], "/tmp"));
-        assert!(matches("contextMenu.resolve", &json!({"contextMenus": {"match": {"selection": "zero"}}}), &[], "/tmp"));
+        assert!(!matches(
+            "contextMenu.resolve",
+            &json!({"contextMenus": true}),
+            &[],
+            "/tmp"
+        ));
+        assert!(!matches(
+            "contextMenu.resolve",
+            &json!({"contextMenus": {"match": {"selection": "any"}}}),
+            &[],
+            "/tmp"
+        ));
+        assert!(matches(
+            "contextMenu.resolve",
+            &json!({"contextMenus": {"match": {"selection": "zero"}}}),
+            &[],
+            "/tmp"
+        ));
         assert!(directory.is_some());
     }
 }

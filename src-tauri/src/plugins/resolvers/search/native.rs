@@ -7,8 +7,8 @@ use crate::plugins::{
     provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{
-    LocationMatch, MatchResource, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
-    SearchProvider, SearchResults,
+    LocationMatch, MatchResource, ProviderError, ProviderInvocation, ProviderKind,
+    ProviderMatchRule, SearchProvider, SearchResults,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};

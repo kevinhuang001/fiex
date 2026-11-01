@@ -6,8 +6,8 @@ use crate::plugins::{
     native_invocation::NativeProviderInvocation,
 };
 use fiex_provider_contracts::{
-    ConnectionProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    MatchResource, ProviderKind, ProviderMatchRule, ProviderRequest, ResourceCapabilities,
+    ConnectionProvider, MatchResource, ProviderDescriptor, ProviderError, ProviderInstances,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest, ResourceCapabilities,
     ResourceLocation, ResourceMetadata, ResourceType,
 };
 use serde_json::{json, Value};

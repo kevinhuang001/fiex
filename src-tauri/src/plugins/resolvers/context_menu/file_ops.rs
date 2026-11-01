@@ -127,7 +127,9 @@ pub(super) fn available(
                 .filter(|operation| operations.allows(*operation))
                 .collect::<Vec<_>>();
             MatchResource {
-                metadata: entry.map(crate::plugins::resource::resource_context::ResourceSnapshot::entry_metadata),
+                metadata: entry.map(
+                    crate::plugins::resource::resource_context::ResourceSnapshot::entry_metadata,
+                ),
                 view,
                 storage,
                 capabilities: ResourceCapabilities { operations },

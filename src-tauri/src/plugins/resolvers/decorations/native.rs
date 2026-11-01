@@ -10,8 +10,8 @@ use super::{
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
-    DecorationProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation, ProviderKind,
-    ProviderMatchRule,
+    DecorationProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
+    ProviderKind, ProviderMatchRule,
 };
 #[cfg(test)]
 use std::collections::HashMap;

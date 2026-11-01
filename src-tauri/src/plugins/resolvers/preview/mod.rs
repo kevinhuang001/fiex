@@ -33,12 +33,7 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
         }),
         ..Default::default()
     }];
-    crate::plugins::provider_registry::candidates(
-        "preview.open",
-        &targets,
-        "",
-        builtin,
-    )
+    crate::plugins::provider_registry::candidates("preview.open", &targets, "", builtin)
 }
 
 fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {

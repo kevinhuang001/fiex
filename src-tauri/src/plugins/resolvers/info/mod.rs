@@ -31,11 +31,11 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
     use crate::plugins::events::{EventRouter, Handler};
-    let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
+    let targets =
+        crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
     let builtin = native::candidates(&resource);
-    let providers = crate::plugins::provider_registry::candidates(
-        "info.resolve", &targets, "", builtin,
-    );
+    let providers =
+        crate::plugins::provider_registry::candidates("info.resolve", &targets, "", builtin);
     let resource = Arc::new(resource);
     let request = ProviderRequest {
         method: "info.resolve".into(),

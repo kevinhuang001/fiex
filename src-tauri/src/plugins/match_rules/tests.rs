@@ -27,16 +27,25 @@ fn test_target(value: &Value) -> MatchResource {
         Some(ResourceLocation {
             resource_type,
             provider_id: value.get("providerId")?.as_str()?.into(),
-            mount_id: value.get("mountId").and_then(Value::as_str).map(str::to_owned),
+            mount_id: value
+                .get("mountId")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
         })
     };
     MatchResource {
-        metadata: value.get("kind").and_then(Value::as_str).map(|kind| ResourceMetadata {
-            kind: kind.into(),
-            extension: value.get("extension").and_then(Value::as_str).map(str::to_owned),
-            mime: value.get("mime").and_then(Value::as_str).map(str::to_owned),
-            ..Default::default()
-        }),
+        metadata: value
+            .get("kind")
+            .and_then(Value::as_str)
+            .map(|kind| ResourceMetadata {
+                kind: kind.into(),
+                extension: value
+                    .get("extension")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                mime: value.get("mime").and_then(Value::as_str).map(str::to_owned),
+                ..Default::default()
+            }),
         view: value.get("view").and_then(location),
         storage: value.get("storage").and_then(location),
         capabilities: ResourceCapabilities {
@@ -52,12 +61,7 @@ fn test_target(value: &Value) -> MatchResource {
     }
 }
 
-fn matches_file(
-    rules: &MatchRules,
-    extension: &str,
-    mime: &str,
-    is_dir: bool,
-) -> bool {
+fn matches_file(rules: &MatchRules, extension: &str, mime: &str, is_dir: bool) -> bool {
     let target = MatchResource {
         metadata: Some(ResourceMetadata {
             kind: if is_dir { "directory" } else { "file" }.into(),

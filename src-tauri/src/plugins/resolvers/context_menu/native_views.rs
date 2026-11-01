@@ -143,13 +143,14 @@ fn match_targets(paths: &[String]) -> Option<Vec<MatchResource>> {
     paths
         .iter()
         .map(|path| {
-            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
-                .map(|resource| {
+            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path).map(
+                |resource| {
                     crate::plugins::events::matching::match_resources(&[resource])
                         .into_iter()
                         .next()
                         .expect("one matcher target per resource")
-                })
+                },
+            )
         })
         .collect::<Result<Vec<_>, _>>()
         .ok()
