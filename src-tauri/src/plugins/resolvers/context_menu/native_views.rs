@@ -10,9 +10,7 @@ use fiex_provider_contracts::{
     ContextMenuProvider, LocationMatch, ProviderMatchRule, ResourceMetadata,
 };
 #[cfg(test)]
-use fiex_provider_contracts::{
-    MatchResource, ProviderError, ProviderInvocation, ProviderMatcher,
-};
+use fiex_provider_contracts::{MatchResource, ProviderError, ProviderInvocation, ProviderMatcher};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
