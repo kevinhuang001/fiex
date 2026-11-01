@@ -5,6 +5,7 @@ use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
     LocationMatch, MatchResource, ProviderKind, ProviderMatchRule, ProviderMatcher,
+    ResourceMetadata,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
@@ -143,14 +144,28 @@ fn match_targets(paths: &[String]) -> Option<Vec<MatchResource>> {
     paths
         .iter()
         .map(|path| {
-            crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path).map(
-                |resource| {
-                    crate::plugins::events::matching::match_resources(&[resource])
-                        .into_iter()
-                        .next()
-                        .expect("one matcher target per resource")
-                },
-            )
+            let resource = match crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path) {
+                Ok(resource) => resource,
+                Err(error) => {
+                    // Some platform views expose opaque IDs whose metadata is
+                    // unavailable in headless contexts. Their registered VFS
+                    // identity is still trusted; absent metadata/capabilities
+                    // keep content and operation rules fail-closed.
+                    if crate::core::volumes::virtual_resolvers::view_for(path).is_none() {
+                        return Err(error);
+                    }
+                    let mut resource = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                        path,
+                        ResourceMetadata::default(),
+                    );
+                    resource.operations = Some(Default::default());
+                    resource
+                }
+            };
+            Ok(crate::plugins::events::matching::match_resources(&[resource])
+                .into_iter()
+                .next()
+                .expect("one matcher target per resource"))
         })
         .collect::<Result<Vec<_>, _>>()
         .ok()
