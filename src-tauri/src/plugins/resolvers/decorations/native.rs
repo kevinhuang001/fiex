@@ -10,8 +10,8 @@ use super::{
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
-    DecorationProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
-    ProviderKind, ProviderMatchRule,
+    DecorationContribution, DecorationProvider, LocationMatch, MatchResource, ProviderError,
+    ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
 #[cfg(test)]
 use std::collections::HashMap;
@@ -22,13 +22,30 @@ impl DecorationProvider for BuiltinDecoration {
     fn resolve(
         &self,
         ctx: &dyn ProviderInvocation,
-    ) -> Result<Vec<serde_json::Value>, ProviderError> {
+    ) -> Result<Vec<DecorationContribution>, ProviderError> {
         let services = invocation::services(ctx).map_err(ProviderError::internal)?;
         builtin::resolve_in(self.0, &services.directory, services.entries.as_ref())
             .into_iter()
             .map(|decoration| {
-                serde_json::to_value(decoration).map_err(|error| {
-                    ProviderError::internal(format!("invalid native decoration: {error}"))
+                let target = services
+                    .resources
+                    .iter()
+                    .find(|resource| resource.display == decoration.path)
+                    .ok_or_else(|| {
+                        ProviderError::invalid_params(
+                            "native decoration target is outside the scoped request",
+                        )
+                    })?;
+                Ok(DecorationContribution {
+                    target: target.reference.clone(),
+                    native_badges: decoration.native_badges,
+                    badges: decoration.badges,
+                    label: decoration.label,
+                    description: decoration.description,
+                    style: decoration.style,
+                    fields: decoration.fields,
+                    icon: decoration.icon,
+                    icon_path: decoration.icon_path,
                 })
             })
             .collect()
@@ -120,11 +137,29 @@ pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decor
     let provider = registry()
         .get(id)
         .ok_or("unknown native DecorationProvider")?;
-    provider
-        .resolve(ctx)
-        .map_err(|error| error.to_string())?
+    let values = provider.resolve(ctx).map_err(|error| error.to_string())?;
+    let services = invocation::services(ctx)?;
+    values
         .into_iter()
-        .map(|value| serde_json::from_value(value).map_err(|error| error.to_string()))
+        .map(|value| {
+            let target = services
+                .resources
+                .iter()
+                .find(|resource| resource.reference == value.target)
+                .ok_or("native decoration target is outside the scoped request")?;
+            Ok(Decoration {
+                path: target.display.clone(),
+                native_badges: value.native_badges,
+                badges: value.badges,
+                label: value.label,
+                description: value.description,
+                style: value.style,
+                fields: value.fields,
+                icon: value.icon,
+                icon_path: value.icon_path,
+                providers: Vec::new(),
+            })
+        })
         .collect()
 }
 

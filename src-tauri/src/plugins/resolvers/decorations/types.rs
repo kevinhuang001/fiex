@@ -4,6 +4,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub use fiex_provider_contracts::{DecorationBadge, DecorationField, DecorationStyle};
+pub type NativeBadge = fiex_provider_contracts::NativeDecorationBadge;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[derive(Default)]
@@ -40,55 +43,6 @@ pub struct DecorationTag {
     pub color: u8,
     #[serde(default)]
     pub hex: Option<String>,
-}
-
-/// Presentation metadata emitted only by Core builtin providers. Plugin
-/// decoding never accepts this field, so plugins cannot forge native status.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct NativeBadge {
-    pub text: String,
-    pub color: String,
-    pub tooltip: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String>,
-    pub dot: bool,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecorationBadge {
-    #[serde(default)]
-    pub text: String,
-    #[serde(default)]
-    pub color: String,
-    #[serde(default)]
-    pub tooltip: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecorationStyle {
-    #[serde(default)]
-    pub color: Option<String>,
-    #[serde(default)]
-    pub font_weight: Option<String>,
-    #[serde(default)]
-    pub font_style: Option<String>,
-    #[serde(default)]
-    pub background_light: Option<String>,
-    #[serde(default)]
-    pub background_dark: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DecorationField {
-    #[serde(default)]
-    pub badges: Vec<DecorationBadge>,
-    #[serde(default)]
-    pub style: DecorationStyle,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

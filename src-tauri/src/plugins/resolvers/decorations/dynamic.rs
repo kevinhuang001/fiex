@@ -9,7 +9,7 @@ use super::types::{
     Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle,
 };
 use crate::plugins::host::PluginManifest;
-use serde_json::Value;
+use fiex_provider_contracts::DecorationContribution;
 use std::collections::HashMap;
 
 fn allowed_color(value: &str) -> bool {
@@ -193,67 +193,46 @@ pub(super) fn merge(
 
 pub(super) fn decode(
     entries: &HashMap<String, DecorationEntry>,
+    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
     manifest: &PluginManifest,
     folder: &std::path::Path,
-    response: Value,
+    contributions: Vec<DecorationContribution>,
 ) -> Result<Vec<Decoration>, String> {
-    let items = response["decorations"]
-        .as_array()
-        .filter(|a| a.len() <= entries.len().max(1) * 8)
-        .ok_or("invalid decorations response")?;
+    if contributions.len() > entries.len().max(1) * 8 {
+        return Err("too many decoration contributions".into());
+    }
     let mut result = HashMap::new();
-    for item in items.iter().take(entries.len().max(1)) {
-        // The caller has already replaced a validated ResourceRef with a
-        // Core-owned path. Never fall back to a plugin-supplied name or path.
-        let path = item
-            .get("path")
-            .and_then(Value::as_str)
-            .filter(|path| entries.contains_key(*path))
-            .map(str::to_owned);
-        let Some(path) = path else {
-            continue;
-        };
-        let mut badges = Vec::new();
-        if let Some(badge) = item.get("badge").cloned() {
-            if let Ok(badge) = serde_json::from_value::<DecorationBadge>(badge) {
-                badges.push(badge);
-            }
+    for item in contributions.into_iter().take(entries.len().max(1)) {
+        if !item.native_badges.is_empty() || item.icon_path.is_some() {
+            return Err("plugins cannot set Core-owned decoration fields".into());
         }
-        if let Some(values) = item.get("badges").and_then(Value::as_array) {
-            badges.extend(
-                values
-                    .iter()
-                    .cloned()
-                    .filter_map(|value| serde_json::from_value(value).ok()),
-            );
+        let target = resources
+            .iter()
+            .find(|resource| resource.reference == item.target)
+            .ok_or("decoration target is outside the scoped request")?;
+        let path = target.display.clone();
+        if !entries.contains_key(&path) || result.contains_key(&path) {
+            return Err("invalid or duplicate decoration target".into());
         }
-        let style = item
-            .get("style")
-            .cloned()
-            .and_then(|value| serde_json::from_value(value).ok())
-            .unwrap_or_default();
-        let mut fields = HashMap::new();
-        if let Some(values) = item.get("fields").and_then(Value::as_object) {
-            for (key, value) in values {
-                if let Ok(field) = serde_json::from_value::<DecorationField>(value.clone()) {
-                    fields.insert(key.clone(), field);
-                }
-            }
-        }
+        let badges = item
+            .badges
+            .into_iter()
+            .filter_map(safe_badge)
+            .take(8)
+            .collect();
+        let style = safe_style(item.style);
+        let fields = safe_fields(item.fields);
         let (icon, icon_path) = item
-            .get("icon")
-            .and_then(Value::as_str)
+            .icon
+            .as_deref()
             .and_then(|reference| crate::plugins::resources::resolve(manifest, folder, reference))
             .map(|(namespace, path)| (Some(namespace), Some(path)))
             .unwrap_or((None, None));
         let value = Decoration {
             path: path.clone(),
             badges,
-            label: item.get("label").and_then(Value::as_str).map(str::to_owned),
-            description: item
-                .get("description")
-                .and_then(Value::as_str)
-                .map(str::to_owned),
+            label: safe_text(item.label.as_deref(), 120),
+            description: safe_text(item.description.as_deref(), 200),
             style,
             fields,
             icon,
@@ -261,9 +240,9 @@ pub(super) fn decode(
             providers: vec![],
             native_badges: vec![],
         };
-        merge(&mut result, entries, &path, 0, &manifest.name, value);
+        result.insert(path, value);
     }
-    Ok(result.into_values().map(|pending| pending.value).collect())
+    Ok(result.into_values().collect())
 }
 
 #[cfg(test)]
