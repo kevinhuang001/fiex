@@ -4,12 +4,15 @@
 //! own the shell actions (edit, session, sync, close); plugins declaring
 //! `extensions.connectionContextMenus` add their own flat action list.
 
-use crate::plugins::events::{EventRouter, Handler};
+use crate::plugins::{
+    events::{EventRouter, Handler},
+    native_invocation::NativeProviderInvocation,
+};
 mod endpoint;
 mod native;
 mod validation;
 use crate::remote::ConnectionInfo;
-use fiex_provider_contracts::ProviderRequest;
+use fiex_provider_contracts::{ConnectionContextMenuProvider, ProviderRequest};
 use native::{items as builtin_items, providers};
 use serde_json::{json, Value};
 use validation::valid_items;
@@ -78,12 +81,25 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
         method: "connectionContextMenu.resolve".into(),
         params: json!({}),
     };
-    Ok(EventRouter::resolve(
+    Ok(EventRouter::resolve_typed(
         "connectionContextMenu.resolve",
         providers,
         &request,
-        |provider| Ok(endpoint::from_resolver(provider, &ctx, &session)),
+        |provider, request| {
+            let request = crate::plugins::events::bind_provider_request(provider, request)?;
+            let endpoint = endpoint::from_resolver(provider, &ctx, &session);
+            let invocation = NativeProviderInvocation::new(
+                request.method.clone(),
+                request.params.clone(),
+                &[],
+                None,
+            );
+            let items = ConnectionContextMenuProvider::resolve(endpoint.as_ref(), &invocation)
+                .map_err(|error| error.to_string())?;
+            Ok(json!({"items":items}))
+        },
         |provider, response| {
+            crate::plugins::events::validate_result("connectionContextMenu.resolve", &response)?;
             let items = valid_items(&response)?;
             if items.is_empty() {
                 return Ok(None);
@@ -155,12 +171,26 @@ pub async fn execute(
         method: "connectionContextMenu.execute".into(),
         params: json!({"itemId":item_id}),
     };
-    let result = EventRouter::resolve(
+    let result = EventRouter::resolve_typed(
         "connectionContextMenu.execute",
         vec![owner],
         &request,
-        |provider| Ok(endpoint::from_resolver(provider, &ctx, &session)),
-        |_, result| Ok(result),
+        |provider, request| {
+            let request = crate::plugins::events::bind_provider_request(provider, request)?;
+            let endpoint = endpoint::from_resolver(provider, &ctx, &session);
+            let invocation = NativeProviderInvocation::new(
+                request.method.clone(),
+                request.params.clone(),
+                &[],
+                None,
+            );
+            ConnectionContextMenuProvider::execute(endpoint.as_ref(), &invocation)
+                .map_err(|error| error.to_string())
+        },
+        |_, result| {
+            crate::plugins::events::validate_result("connectionContextMenu.execute", &result)?;
+            Ok(result)
+        },
         |_| true,
         |results| {
             results
