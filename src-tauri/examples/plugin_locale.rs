@@ -29,11 +29,7 @@ fn main() {
                 .invoke(id, "mock.locale", params.clone())
                 .unwrap();
             assert_eq!(response["locale"], locale);
-            let mut echoed = response["params"].clone();
-            if let Some(value) = echoed.as_object_mut() {
-                value.remove("networkDomains");
-            }
-            assert_eq!(echoed, params);
+            assert_eq!(response["params"], params);
         }
     }
     plugin_host::global().stop(id);
