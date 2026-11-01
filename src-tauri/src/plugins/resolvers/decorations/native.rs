@@ -137,17 +137,18 @@ pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decor
     let provider = registry()
         .get(id)
         .ok_or("unknown native DecorationProvider")?;
-    provider
+    let values = provider
         .resolve(ctx)
-        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())?;
+    let services = invocation::services(ctx)?;
+    values
         .into_iter()
         .map(|value| {
-            let services = invocation::services(ctx)?;
             let target = services
                 .resources
                 .iter()
                 .find(|resource| resource.reference == value.target)
-                .ok_or_else(|| "native decoration target is outside the scoped request")?;
+                .ok_or("native decoration target is outside the scoped request")?;
             Ok(Decoration {
                 path: target.display.clone(),
                 native_badges: value.native_badges,
