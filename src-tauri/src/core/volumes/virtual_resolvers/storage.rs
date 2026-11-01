@@ -13,7 +13,7 @@ pub(super) fn root_entry(view: &dyn NativeVfsProvider, path: &str) -> Entry {
         allowed_ops: view
             .operations(path)
             .into_iter()
-            .map(str::to_owned)
+            .map(|operation| operation.as_str().to_owned())
             .collect(),
         ..Default::default()
     }
