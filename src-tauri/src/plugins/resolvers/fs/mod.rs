@@ -34,11 +34,42 @@ pub struct Mount {
 
 impl Mount {
     fn invoke(&self, method: &str, params: Value) -> Result<Value, String> {
-        use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
-        endpoint::PluginFsEndpoint { mount: self }.invoke(&ProviderRequest {
-            method: method.into(),
+        proxy::invoke(self, method, params)
+    }
+
+    pub(super) fn invoke_remote(&self, method: &str, mut params: Value) -> Result<Value, String> {
+        if !endpoint::method_allowed(self, method) {
+            return Err("unsupported or unregistered VFS operation for this mount".into());
+        }
+        let object = params
+            .as_object_mut()
+            .ok_or("file-system parameters must be an object")?;
+        object.insert("mountId".into(), json!(self.mount_id));
+        match &self.source {
+            Source::Connection(config) => {
+                object.remove("contributionId");
+                object.remove("viewContext");
+                object.insert("connection".into(), config.clone());
+            }
+            Source::View {
+                contribution_id,
+                view_context,
+            } => {
+                object.remove("connection");
+                object.insert("contributionId".into(), json!(contribution_id));
+                object.insert("viewContext".into(), view_context.clone());
+            }
+        }
+        crate::plugins::host::global().invoke_fs(
+            &self.plugin_id,
+            method,
             params,
-        })
+            self.scope.clone(),
+        )
+    }
+
+    pub(super) fn operations(&self) -> Option<Vec<FsOperation>> {
+        crate::plugins::provider_registry::operations_mount(&self.plugin_id, &self.mount_id)
     }
 
     pub fn list(
@@ -203,45 +234,22 @@ impl Mount {
     }
 
     pub fn open_read(&self, node_id: &str) -> Result<FsStream, String> {
-        let value = self.invoke("vfs.openRead", json!({"nodeId": node_id}))?;
-        let stream_id = value
-            .get("streamId")
-            .and_then(Value::as_str)
-            .ok_or("provider did not return a stream id")?
-            .to_string();
-        Ok(FsStream {
-            mount: self.clone(),
-            stream_id,
-            size: value.get("size").and_then(Value::as_u64),
-            closed: false,
-        })
+        proxy::open_read(self, json!({"nodeId": node_id}))
+            .map(FsStream::new)
     }
 
     pub fn begin_write(&self, request: WriteRequest<'_>) -> Result<FsWriteStream, String> {
         if let Some(name) = request.name {
             crate::plugins::mounts::segment(name)?;
         }
-        let value = self.invoke(
-            "vfs.beginWrite",
-            json!({
+        let write = proxy::begin_write(self, json!({
                 "nodeId": request.node_id,
                 "parentId": request.parent_id,
                 "name": request.name,
                 "size": request.size,
                 "ifRevision": request.if_revision,
-            }),
-        )?;
-        let stream_id = value
-            .get("streamId")
-            .and_then(Value::as_str)
-            .ok_or("provider did not return a write stream id")?
-            .to_string();
-        Ok(FsWriteStream {
-            mount: self.clone(),
-            stream_id,
-            offset: 0,
-            finished: false,
-        })
+            }))?;
+        Ok(FsWriteStream::new(write))
     }
 
     /// Whether the provider declared an operation, for UI decisions.
@@ -293,6 +301,7 @@ pub fn mount_for_path(path: &str) -> Result<Mount, String> {
 }
 
 mod endpoint;
+mod proxy;
 mod streams;
 mod types;
 pub use streams::{FsStream, FsWriteStream};
