@@ -51,8 +51,7 @@ fn proxy_for(plugin_id: &str) -> Result<Arc<dyn ConnectionProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing plugin identity for ConnectionProvider".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ConnectionProvider>>> =
-        OnceLock::new();
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ConnectionProvider>>> = OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Connection)));
     let mut providers = registry
@@ -133,9 +132,7 @@ pub fn invoke(
                     "connection.validate" => {
                         ConnectionProvider::validate(provider.as_ref(), &invocation)
                     }
-                    "connection.open" => {
-                        ConnectionProvider::open(provider.as_ref(), &invocation)
-                    }
+                    "connection.open" => ConnectionProvider::open(provider.as_ref(), &invocation),
                     "connection.create" => {
                         ConnectionProvider::create(provider.as_ref(), &invocation)
                     }
