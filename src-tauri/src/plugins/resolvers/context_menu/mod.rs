@@ -206,10 +206,10 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
             .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
             .collect::<Vec<_>>(),
     );
-    let metadata = crate::plugins::events::resource_metadata(&resources);
+    let match_targets = crate::plugins::events::matching::match_resources(&resources);
     let mut providers = crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
-        &metadata,
+        &match_targets,
         directory,
         if scope == MenuScope::Plugins {
             Vec::new()

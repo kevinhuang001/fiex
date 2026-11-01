@@ -2,7 +2,7 @@
 //! Metadata is retrieved once, then projected separately for each provider.
 //! The snapshot never crosses the plugin process boundary.
 use crate::plugins::contracts::{EventContext, ResourceContext, ResourceMetadata, ResourceRef};
-use fiex_provider_contracts::{ResourceCapabilities, ResourceLocation};
+use fiex_provider_contracts::ResourceCapabilities;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -205,10 +205,7 @@ impl ResourceSnapshot {
         metadata_allowed: bool,
         _read_allowed: bool,
     ) -> ResourceContext {
-        let (view, storage) = crate::plugins::match_rules::locations_for(&self.display);
-        let decode_location = |value: Option<serde_json::Value>| {
-            value.and_then(|value| serde_json::from_value::<ResourceLocation>(value).ok())
-        };
+        let (view, storage) = crate::plugins::match_rules::typed_locations_for(&self.display);
         let capabilities = if metadata_allowed {
             let effective = self.operations.unwrap_or_else(|| {
                 crate::plugins::resource::file_capabilities::for_path(&self.display)
@@ -225,8 +222,8 @@ impl ResourceSnapshot {
         ResourceContext {
             reference: self.reference.clone(),
             metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
-            view: decode_location(view),
-            storage: decode_location(storage),
+            view,
+            storage,
             capabilities,
         }
     }

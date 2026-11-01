@@ -12,7 +12,10 @@ mod endpoint;
 mod native;
 mod validation;
 use crate::remote::ConnectionInfo;
-use fiex_provider_contracts::{ConnectionContextMenuProvider, ProviderRequest};
+use fiex_provider_contracts::{
+    ConnectionContextMenuProvider, MatchResource, ProviderRequest, ResourceCapabilities,
+    ResourceLocation, ResourceMetadata, ResourceType,
+};
 use native::{items as builtin_items, providers};
 use serde_json::{json, Value};
 use validation::valid_items;
@@ -51,19 +54,22 @@ impl Context {
     /// Verified connection identity for the common ProviderMatchRule.
     /// The saved connection is authoritative; plugin JSON never supplies the
     /// view owner, storage owner, mount or effective operations.
-    fn matcher_metadata(&self) -> Value {
+    fn matcher_metadata(&self) -> MatchResource {
         let owner = format!("plugin:{}:{}", self.info.plugin_id, self.info.kind);
-        let (_, storage) = crate::plugins::match_rules::locations_for(&self.info.mount_path);
-        json!({
-            "kind":"connection",
-            "view":{
-                "type":"vfs",
-                "providerId":owner,
-                "mountId":self.info.id
-            },
-            "storage":storage,
-            "operations":[]
-        })
+        let (_, storage) = crate::plugins::match_rules::typed_locations_for(&self.info.mount_path);
+        MatchResource {
+            metadata: Some(ResourceMetadata {
+                kind: "connection".into(),
+                ..Default::default()
+            }),
+            view: Some(ResourceLocation {
+                resource_type: ResourceType::Vfs,
+                provider_id: owner,
+                mount_id: Some(self.info.id.clone()),
+            }),
+            storage,
+            capabilities: ResourceCapabilities::default(),
+        }
     }
 }
 

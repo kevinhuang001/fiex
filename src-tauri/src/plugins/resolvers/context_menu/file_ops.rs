@@ -30,7 +30,9 @@ use crate::core::files::Entry;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::provider_registry::FsOperation;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
-use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{
+    LocationMatch, MatchResource, ProviderKind, ProviderMatchRule, ResourceCapabilities,
+};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
@@ -116,26 +118,23 @@ pub(super) fn available(
         .enumerate()
         .map(|(index, path)| {
             let entry = selection.entries.get(index);
-            let (view, storage) = crate::plugins::match_rules::locations_for(path);
+            let (view, storage) = crate::plugins::match_rules::typed_locations_for(path);
             let operations = entry
                 .map(|entry| crate::plugins::resource::file_capabilities::for_entry(path, entry))
                 .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(path));
             let operations = FsOperation::ALL
                 .into_iter()
                 .filter(|operation| operations.allows(*operation))
-                .map(FsOperation::as_str)
                 .collect::<Vec<_>>();
-            json!({
-                "kind": entry.map(|entry| if entry.is_dir { "directory" } else { "file" }),
-                "extension": entry.map(|entry| entry.extension.as_str()),
-                "mime": entry.map(|entry| entry.mime.as_str()),
-                "view": view,
-                "storage": storage,
-                "operations": operations,
-            })
+            MatchResource {
+                metadata: entry.map(crate::plugins::resource::resource_context::ResourceSnapshot::entry_metadata),
+                view,
+                storage,
+                capabilities: ResourceCapabilities { operations },
+            }
         })
         .collect::<Vec<_>>();
-    let directory = crate::plugins::match_rules::directory_metadata(selection.directory);
+    let directory = crate::plugins::match_rules::directory_match_resource(selection.directory);
     registry()
         .matched_candidates(&targets, directory.as_ref(), selection.paths.len())
         .iter()

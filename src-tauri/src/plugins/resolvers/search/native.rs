@@ -7,7 +7,7 @@ use crate::plugins::{
     provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{
-    LocationMatch, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
+    LocationMatch, MatchResource, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
     SearchProvider, SearchResults,
 };
 use serde_json::{json, Value};
@@ -116,7 +116,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn SearchProvider> {
     })
 }
 
-pub(super) fn candidates(targets: &[Value]) -> Vec<Resolver> {
+pub(super) fn candidates(targets: &[MatchResource]) -> Vec<Resolver> {
     registry()
         .matched_candidates(targets, None, targets.len())
         .into_iter()
@@ -149,12 +149,22 @@ mod tests {
     #[test]
     fn walker_is_registered_once_with_exact_search_modes() {
         assert_eq!(registry().len(), 1);
-        let target = serde_json::json!({
-            "kind":"directory",
-            "view":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
-            "storage":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
-            "operations":["list"]
-        });
+        let location = fiex_provider_contracts::ResourceLocation {
+            resource_type: fiex_provider_contracts::ResourceType::Fs,
+            provider_id: "core:local-fs".into(),
+            mount_id: Some("local".into()),
+        };
+        let target = MatchResource {
+            metadata: Some(fiex_provider_contracts::ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            }),
+            view: Some(location.clone()),
+            storage: Some(location),
+            capabilities: fiex_provider_contracts::ResourceCapabilities {
+                operations: vec![crate::plugins::provider_registry::FsOperation::List],
+            },
+        };
         assert_eq!(candidates(&[target])[0].id, BUILTIN_SEARCH);
         assert_eq!(
             modes(BUILTIN_SEARCH),

@@ -59,7 +59,7 @@ pub fn menu_allowed(
 ) -> bool {
     crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
-        &matching::metadata(resources),
+        &matching::match_resources(resources),
         directory,
         Vec::new(),
     )
@@ -77,10 +77,10 @@ pub fn call_owner(
     resources: &[ResourceSnapshot],
     directory: Option<&str>,
 ) -> Result<Value, String> {
-    let metadata = matching::metadata(resources);
+    let targets = matching::match_resources(resources);
     let providers = crate::plugins::provider_registry::candidates(
         method,
-        &metadata,
+        &targets,
         directory.unwrap_or(""),
         Vec::new(),
     )

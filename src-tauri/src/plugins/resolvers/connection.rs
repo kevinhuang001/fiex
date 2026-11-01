@@ -7,7 +7,8 @@ use crate::plugins::{
 };
 use fiex_provider_contracts::{
     ConnectionProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderRequest,
+    MatchResource, ProviderKind, ProviderMatchRule, ProviderRequest, ResourceCapabilities,
+    ResourceLocation, ResourceMetadata, ResourceType,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -103,22 +104,26 @@ pub fn invoke(
     ) {
         return Err("unregistered connection event".into());
     }
-    let owner = json!({
-        "type":"vfs",
-        "providerId":format!("plugin:{plugin_id}:{kind}"),
-        "mountId":mount_id,
-    });
-    let metadata = [json!({
-        "kind":"connection",
-        "view": owner,
-        "storage": owner,
-        "operations":[]
-    })];
-    let selected = crate::plugins::provider_registry::candidates(
-        method, &metadata, "", Vec::new()
-    ).into_iter().filter(|resolver|
-        matches!(&resolver.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
-    ).collect();
+    let owner = ResourceLocation {
+        resource_type: ResourceType::Vfs,
+        provider_id: format!("plugin:{plugin_id}:{kind}"),
+        mount_id: Some(mount_id.into()),
+    };
+    let targets = [MatchResource {
+        metadata: Some(ResourceMetadata {
+            kind: "connection".into(),
+            ..Default::default()
+        }),
+        view: Some(owner.clone()),
+        storage: Some(owner),
+        capabilities: ResourceCapabilities::default(),
+    }];
+    let selected = crate::plugins::provider_registry::candidates(method, &targets, "", Vec::new())
+        .into_iter()
+        .filter(|resolver| {
+            matches!(&resolver.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
+        })
+        .collect();
     let request = ProviderRequest {
         method: method.into(),
         params,

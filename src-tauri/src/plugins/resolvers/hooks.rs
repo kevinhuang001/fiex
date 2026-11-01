@@ -15,9 +15,9 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
 
 pub fn before_open(path: &str) -> Result<Value, String> {
     let resource = ResourceSnapshot::resolve(path)?;
-    let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(&resource));
+    let match_targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
     let providers =
-        crate::plugins::provider_registry::candidates("hooks.invoke", &metadata, "", Vec::new())
+        crate::plugins::provider_registry::candidates("hooks.invoke", &match_targets, "", Vec::new())
             .into_iter()
             .filter(|provider| {
                 matches!(&provider.handler, Handler::Plugin(plugin)
