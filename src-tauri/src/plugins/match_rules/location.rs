@@ -5,7 +5,6 @@ use fiex_provider_contracts::{
     FsOperation, MatchResource, ResourceCapabilities, ResourceLocation, ResourceMetadata,
     ResourceType,
 };
-use serde_json::Value;
 
 fn descriptor(kind: &str, provider_id: &str, mount_id: &str) -> Option<ResourceLocation> {
     let resource_type = match kind {
@@ -59,16 +58,6 @@ pub fn typed_locations_for(path: &str) -> (Option<ResourceLocation>, Option<Reso
     (storage.clone(), storage)
 }
 
-/// JSON projection used only at the plugin protocol boundary. Matching and
-/// authorization consume `typed_locations_for` directly.
-pub fn locations_for(path: &str) -> (Option<Value>, Option<Value>) {
-    let (view, storage) = typed_locations_for(path);
-    (
-        view.and_then(|location| serde_json::to_value(location).ok()),
-        storage.and_then(|location| serde_json::to_value(location).ok()),
-    )
-}
-
 /// Typed Core snapshot for blank-canvas matching. No host path or plugin
 /// supplied location can enter this matcher input.
 pub fn directory_match_resource(directory: &str) -> Option<MatchResource> {
@@ -102,22 +91,29 @@ mod tests {
         for path in ["/tmp/fiex-storage", "applications://"] {
             let (kind, provider, mount) =
                 crate::core::fs::provider_registry::identity(path).unwrap();
-            let (_, storage) = locations_for(path);
+            let (_, storage) = typed_locations_for(path);
             let storage = storage.unwrap();
-            assert_eq!(storage["type"], kind);
-            assert_eq!(storage["providerId"], provider);
-            assert_eq!(storage["mountId"], mount);
+            assert_eq!(
+                storage.resource_type,
+                match kind {
+                    "fs" => ResourceType::Fs,
+                    "vfs" => ResourceType::Vfs,
+                    _ => unreachable!(),
+                }
+            );
+            assert_eq!(storage.provider_id, provider);
+            assert_eq!(storage.mount_id.as_deref(), Some(mount.as_str()));
         }
     }
 
     #[test]
     fn trusted_view_owner_is_not_inferred_from_plugin_payloads() {
-        let (view, storage) = locations_for("applications://");
-        assert_eq!(view.as_ref().unwrap()["providerId"], "core:applications");
-        assert_eq!(storage.as_ref().unwrap()["type"], "vfs");
-        let (view, storage) = locations_for("/tmp/fiex-location-test");
-        assert_eq!(view.as_ref().unwrap()["providerId"], "core:local-fs");
-        assert_eq!(storage.as_ref().unwrap()["type"], "fs");
+        let (view, storage) = typed_locations_for("applications://");
+        assert_eq!(view.as_ref().unwrap().provider_id, "core:applications");
+        assert_eq!(storage.as_ref().unwrap().resource_type, ResourceType::Vfs);
+        let (view, storage) = typed_locations_for("/tmp/fiex-location-test");
+        assert_eq!(view.as_ref().unwrap().provider_id, "core:local-fs");
+        assert_eq!(storage.as_ref().unwrap().resource_type, ResourceType::Fs);
     }
 
     #[test]
@@ -127,17 +123,17 @@ mod tests {
         assert!(projected_storage_location(&path.to_string_lossy()).is_none());
         std::fs::write(&path, b"data").unwrap();
         let live = projected_storage_location(&path.to_string_lossy()).unwrap();
-        assert_eq!(live["type"], "fs");
-        assert_eq!(live["providerId"], "core:local-fs");
+        assert_eq!(live.resource_type, ResourceType::Fs);
+        assert_eq!(live.provider_id, "core:local-fs");
         assert!(projected_storage_location("unregistered://file").is_none());
     }
 
     #[test]
     fn unknown_mount_never_becomes_local_storage() {
         let (view, storage) =
-            locations_for("fiex://mount/00000000000000000000000000000000/resource");
+            typed_locations_for("fiex://mount/00000000000000000000000000000000/resource");
         assert!(view.is_none() && storage.is_none());
-        let (view, storage) = locations_for("unrecognized://something");
+        let (view, storage) = typed_locations_for("unrecognized://something");
         assert!(view.is_none() && storage.is_none());
     }
 }
