@@ -96,7 +96,10 @@ pub fn query_with_plugins(
             if values.len() > entries.len().max(1) {
                 return Err("DecorationProvider returned too many items".into());
             }
-            if values.iter().any(|value| !entries.contains_key(&value.path)) {
+            if values
+                .iter()
+                .any(|value| !entries.contains_key(&value.path))
+            {
                 return Err("DecorationProvider target is outside the scoped request".into());
             }
             Ok(values)
@@ -162,8 +165,7 @@ mod ref_target_tests {
             ..DecorationContribution::new(target.reference.clone())
         };
         assert_eq!(
-            contribution.target,
-            target.reference,
+            contribution.target, target.reference,
             "only the Core-provided opaque reference identifies a target"
         );
         assert!(entries.contains_key(&target.display));
