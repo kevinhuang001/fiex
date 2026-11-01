@@ -63,9 +63,6 @@ mod tests {
 
     #[test]
     fn rejects_legacy_hook_reply_fields() {
-        assert!(
-            serde_json::from_value::<HookResult>(json!({"handled":true,"preview":false}))
-                .is_err()
-        );
+        assert!(serde_json::from_value::<HookResult>(json!({"handled":true,"preview":false})).is_err());
     }
 }

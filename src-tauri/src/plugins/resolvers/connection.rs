@@ -32,7 +32,10 @@ impl PluginConnection {
     }
 }
 impl ConnectionProvider for PluginConnection {
-    fn validate(&self, ctx: &dyn ProviderInvocation) -> Result<ConnectionValidation, ProviderError> {
+    fn validate(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<ConnectionValidation, ProviderError> {
         serde_json::from_value(self.invoke_event(ctx, "connection.validate")?)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
@@ -182,22 +185,8 @@ mod tests {
     use serde_json::json;
     #[test]
     fn lifecycle_requires_registered_method_and_connection_identity() {
-        assert!(invoke(
-            "",
-            "drive",
-            "mount",
-            "connection.open",
-            json!({})
-        )
-        .is_err());
-        assert!(invoke(
-            "org.example",
-            "drive",
-            "mount",
-            "vfs.list",
-            json!({})
-        )
-        .is_err());
+        assert!(invoke("", "drive", "mount", "connection.open", json!({})).is_err());
+        assert!(invoke("org.example", "drive", "mount", "vfs.list", json!({})).is_err());
     }
 
     #[test]
