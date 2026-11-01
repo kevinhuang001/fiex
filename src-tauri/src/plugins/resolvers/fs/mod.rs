@@ -306,6 +306,11 @@ mod endpoint;
 mod proxy;
 mod streams;
 mod types;
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 pub use streams::{FsStream, FsWriteStream};
 pub use types::{FsEntry, FsKind, FsListing, WriteRequest};
 #[cfg(test)]

@@ -3,6 +3,10 @@
 //! Only the current selection snapshot crosses the operation boundary.
 mod proxy;
 
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 use crate::plugins::{
     events::{EventRouter, Handler, Resolver},
     resource::resource_context::ResourceSnapshot,

@@ -23,6 +23,11 @@ mod metadata;
 mod native;
 mod proxy;
 pub use media::media_sections;
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
     use crate::plugins::events::{EventRouter, Handler};

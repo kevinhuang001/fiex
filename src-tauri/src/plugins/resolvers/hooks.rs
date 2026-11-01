@@ -9,6 +9,10 @@ use serde_json::{json, Value};
 
 mod proxy;
 
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 pub fn before_open(path: &str) -> Result<Value, String> {
     let resource = ResourceSnapshot::resolve(path)?;
     let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(&resource));

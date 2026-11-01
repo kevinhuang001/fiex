@@ -91,12 +91,13 @@ pub fn run_stream(
                 };
                 let page = match &resolver.handler {
                     Handler::Builtin(_) => {
-                        let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
-                            routed.method.clone(),
-                            routed.params.clone(),
-                            &resources,
-                            None,
-                        );
+                        let invocation =
+                            crate::plugins::native_invocation::NativeProviderInvocation::new(
+                                routed.method.clone(),
+                                routed.params.clone(),
+                                &resources,
+                                None,
+                            );
                         native::provider(&resolver.id)
                             .ok_or_else(|| "native SearchProvider is not registered".to_string())?
                             .query_stream(&invocation, &cancelled, &mut stream_entry)
@@ -113,7 +114,9 @@ pub fn run_stream(
                 };
                 page.validate_page(remaining)?;
                 if !page.entries.is_empty() {
-                    return Err("streaming SearchProvider returned entries outside its stream".into());
+                    return Err(
+                        "streaming SearchProvider returned entries outside its stream".into(),
+                    );
                 }
                 Ok((page.truncated, page.next_cursor))
             },

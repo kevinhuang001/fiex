@@ -11,6 +11,15 @@ pub use actions::execute_remote;
 mod tests;
 mod validation;
 
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+    if let Ok(mut sessions) = sessions().lock() {
+        sessions.retain(|_, session| {
+            !matches!(&session.provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
+        });
+    }
+}
+
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 use crate::plugins::{
     native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot,

@@ -91,14 +91,22 @@ impl ToolbarProvider for IpcToolbar {
     }
 }
 
+fn registry() -> &'static Mutex<ProviderInstances<dyn ToolbarProvider>> {
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ToolbarProvider>>> = OnceLock::new();
+    REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Toolbar)))
+}
+
+pub(super) fn forget_plugin(plugin_id: &str) {
+    if let Ok(mut providers) = registry().lock() {
+        providers.unregister(&format!("plugin:{plugin_id}"));
+    }
+}
+
 fn proxy(plugin_id: &str) -> Result<Arc<dyn ToolbarProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing ToolbarProvider plugin identity".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ToolbarProvider>>> = OnceLock::new();
-    let registry =
-        REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Toolbar)));
-    let mut providers = registry
+    let mut providers = registry()
         .lock()
         .map_err(|_| "ToolbarProvider registry unavailable".to_string())?;
     let id = format!("plugin:{plugin_id}");

@@ -3,8 +3,7 @@
 //! streaming inside the process.
 use super::{SearchMode, BUILTIN_SEARCH};
 use crate::plugins::{
-    events::Resolver,
-    native_invocation::NativeProviderInvocation,
+    events::Resolver, native_invocation::NativeProviderInvocation,
     provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{
@@ -37,17 +36,18 @@ impl SearchProvider for Walker {
         emit: &mut dyn FnMut(Value) -> Result<(), ProviderError>,
     ) -> Result<SearchResults, ProviderError> {
         if ctx.method() != "search.query" {
-            return Err(ProviderError::invalid_params("SearchProvider method mismatch"));
+            return Err(ProviderError::invalid_params(
+                "SearchProvider method mismatch",
+            ));
         }
         let params = ctx.params();
         let query = params
             .get("query")
             .and_then(Value::as_str)
             .ok_or_else(|| ProviderError::invalid_params("missing search query"))?;
-        let mode: SearchMode = serde_json::from_value(
-            params.get("mode").cloned().unwrap_or_else(|| json!("name")),
-        )
-        .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
+        let mode: SearchMode =
+            serde_json::from_value(params.get("mode").cloned().unwrap_or_else(|| json!("name")))
+                .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
         if !self.supports(mode) {
             return Err(ProviderError::invalid_params("unsupported search mode"));
         }
@@ -55,13 +55,9 @@ impl SearchProvider for Walker {
             .get("hidden")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let ignores: Vec<String> = serde_json::from_value(
-            params
-                .get("ignores")
-                .cloned()
-                .unwrap_or_else(|| json!([])),
-        )
-        .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
+        let ignores: Vec<String> =
+            serde_json::from_value(params.get("ignores").cloned().unwrap_or_else(|| json!([])))
+                .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
         let limit = params
             .get("limit")
             .and_then(Value::as_u64)

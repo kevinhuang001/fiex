@@ -723,9 +723,7 @@ pub(crate) fn run_native_search_stream(
 ) -> Result<bool, String> {
     let failed = std::sync::atomic::AtomicBool::new(false);
     let failure = Mutex::new(None::<String>);
-    let should_cancel = || {
-        cancelled() || failed.load(std::sync::atomic::Ordering::Relaxed)
-    };
+    let should_cancel = || cancelled() || failed.load(std::sync::atomic::Ordering::Relaxed);
     let mut emit_batches = |batch: SearchBatch| {
         for entry in batch.entries {
             if should_cancel() {
@@ -740,7 +738,11 @@ pub(crate) fn run_native_search_stream(
             }
         }
     };
-    let mut sink = BatchSink::new(&mut emit_batches, Instant::now(), limit.clamp(1, RESULT_LIMIT));
+    let mut sink = BatchSink::new(
+        &mut emit_batches,
+        Instant::now(),
+        limit.clamp(1, RESULT_LIMIT),
+    );
     sink.engine = Some("builtin".into());
     walk_root(
         root,
@@ -755,7 +757,10 @@ pub(crate) fn run_native_search_stream(
     let truncated = sink.truncated || sink.incomplete;
     drop(sink);
     drop(emit_batches);
-    if let Some(error) = failure.into_inner().unwrap_or_else(|error| error.into_inner()) {
+    if let Some(error) = failure
+        .into_inner()
+        .unwrap_or_else(|error| error.into_inner())
+    {
         return Err(error);
     }
     Ok(truncated)

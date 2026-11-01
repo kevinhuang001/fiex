@@ -14,6 +14,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 pub use stream::{run, run_stream};
 
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 pub const BUILTIN_SEARCH: &str = "core.search";
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

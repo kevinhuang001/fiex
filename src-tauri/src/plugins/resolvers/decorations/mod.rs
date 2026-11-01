@@ -11,6 +11,10 @@ mod proxy;
 mod query;
 mod types;
 
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 pub use query::{query, query_with_plugins};
 pub use types::{Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle};
 

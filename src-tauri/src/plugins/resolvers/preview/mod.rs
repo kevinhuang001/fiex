@@ -13,6 +13,10 @@ mod builtin;
 mod native;
 mod proxy;
 mod session;
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
 use crate::plugins::events::{EventRouter, Handler, Resolver};
 pub use session::session_scope;
 use session::UNSUPPORTED;

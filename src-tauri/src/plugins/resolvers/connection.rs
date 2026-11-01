@@ -47,14 +47,22 @@ impl ConnectionProvider for PluginConnection {
 /// Persistent IPC proxies contain only plugin identity, never cached grants,
 /// mount IDs or credentials. The candidate registry and Host verify all of
 /// those anew before each operation. No lock survives the IPC invocation.
+fn proxy_registry() -> &'static Mutex<ProviderInstances<dyn ConnectionProvider>> {
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ConnectionProvider>>> = OnceLock::new();
+    REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Connection)))
+}
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    if let Ok(mut providers) = proxy_registry().lock() {
+        providers.unregister(&format!("plugin:{plugin_id}"));
+    }
+}
+
 fn proxy_for(plugin_id: &str) -> Result<Arc<dyn ConnectionProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing plugin identity for ConnectionProvider".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ConnectionProvider>>> = OnceLock::new();
-    let registry =
-        REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Connection)));
-    let mut providers = registry
+    let mut providers = proxy_registry()
         .lock()
         .map_err(|_| "connection provider registry unavailable".to_string())?;
     let id = format!("plugin:{plugin_id}");

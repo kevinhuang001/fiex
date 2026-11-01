@@ -41,14 +41,22 @@ impl DecorationProvider for IpcDecoration {
     }
 }
 
+fn registry() -> &'static Mutex<ProviderInstances<dyn DecorationProvider>> {
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn DecorationProvider>>> = OnceLock::new();
+    REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Decoration)))
+}
+
+pub(super) fn forget_plugin(plugin_id: &str) {
+    if let Ok(mut providers) = registry().lock() {
+        providers.unregister(&format!("plugin:{plugin_id}"));
+    }
+}
+
 fn proxy(plugin_id: &str) -> Result<Arc<dyn DecorationProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing DecorationProvider plugin identity".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn DecorationProvider>>> = OnceLock::new();
-    let registry =
-        REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Decoration)));
-    let mut registry = registry
+    let mut registry = registry()
         .lock()
         .map_err(|_| "DecorationProvider registry unavailable".to_string())?;
     let id = format!("plugin:{plugin_id}");
