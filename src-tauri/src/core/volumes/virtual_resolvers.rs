@@ -406,6 +406,34 @@ mod tests {
     }
 
     #[test]
+    fn native_root_operations_are_typed_and_executable_without_overclaiming() {
+        let roots = [RECENT_URI, APPLICATIONS_URI, trash_vfs::URI];
+        for root in roots {
+            let provider = view_for(root).unwrap();
+            let declared = provider.operations(root);
+            let entry = provider.stat(root).unwrap();
+            let from_entry = entry
+                .allowed_ops
+                .iter()
+                .filter_map(|value| FsOperation::parse(value))
+                .collect::<Vec<_>>();
+            assert_eq!(declared, from_entry, "operation DTO mismatch: {root}");
+            for op in FsOperation::ALL {
+                assert_eq!(
+                    provider.require(root, "core:test", op, false).is_ok(),
+                    declared.contains(&op),
+                    "root {root} overclaims or loses {}",
+                    op.as_str()
+                );
+            }
+        }
+        assert!(!view_for(APPLICATIONS_URI)
+            .unwrap()
+            .operations(APPLICATIONS_URI)
+            .contains(&FsOperation::Write));
+    }
+
+    #[test]
     fn native_vfs_operation_policy_is_owned_by_each_registered_instance() {
         let recent = view_for(RECENT_URI).unwrap();
         assert!(recent
