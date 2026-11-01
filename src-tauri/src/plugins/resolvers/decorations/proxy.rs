@@ -45,8 +45,7 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn DecorationProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing DecorationProvider plugin identity".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn DecorationProvider>>> =
-        OnceLock::new();
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn DecorationProvider>>> = OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Decoration)));
     let mut registry = registry
