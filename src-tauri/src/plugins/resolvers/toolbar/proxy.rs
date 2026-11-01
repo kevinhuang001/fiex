@@ -1,8 +1,7 @@
 //! A Toolbar proxy persists the plugin identity, not the current selection,
 //! operation scope, or installation permissions. Scoped requests are fresh.
 use crate::plugins::{
-    host::PluginInfo,
-    native_invocation::NativeProviderInvocation,
+    host::PluginInfo, native_invocation::NativeProviderInvocation,
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
