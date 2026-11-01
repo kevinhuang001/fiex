@@ -1,8 +1,11 @@
 //! Persistent Core decorations, routed through the same verified Provider
 //! Descriptor and EventRouter as SDK-backed DecorationProviders.
-use super::{builtin::{self, NativeKind}, invocation};
 #[cfg(test)]
 use super::types::{Decoration, DecorationEntry};
+use super::{
+    builtin::{self, NativeKind},
+    invocation,
+};
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
