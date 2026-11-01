@@ -34,7 +34,7 @@ Core 负责 Resolve，SDK 负责 Provide：
 | Preview     | `PreviewProvider` registry + `IpcPreview`         | `PreviewProvider`               |
 | 右键菜单    | `ContextMenuProvider` registry + `IpcContextMenu` | `ContextMenuProvider`           |
 | 连接菜单    | `ConnectionContextMenuProvider` registry + IPC    | `ConnectionContextMenuProvider` |
-| Decorations | `DecorationProvider` registry + IPC              | `DecorationProvider`            |
+| Decorations | `DecorationProvider` registry + IPC               | `DecorationProvider`            |
 | Search      | `SearchProvider` registry + `IpcSearch`           | `SearchProvider`                |
 | Toolbar     | `ToolbarProvider` registry + `IpcToolbar`         | `ToolbarProvider`               |
 | VFS         | shared `VfsProvider` native registry + `IpcVfs`   | `VfsProvider`                   |

@@ -15,7 +15,7 @@ Core 与 native 插件进程使用双向 JSON-RPC 2.0：
 
 | 方法                                                              | 参数                                                  | 返回                                                      |
 | ----------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
-| `plugin.initialize`                                               | `protocolVersion, hostVersion?`                       | `pluginId, ready, vfs.operations[], vfs.discovery`                       |
+| `plugin.initialize`                                               | `protocolVersion, hostVersion?`                       | `pluginId, ready, vfs.operations[], vfs.discovery`        |
 | `plugin.ping` / `plugin.shutdown`                                 | 空                                                    | `alive` / `null`                                          |
 | `connection.validate`                                             | `connection`                                          | `valid`                                                   |
 | `connection.open` / `connection.create`                           | `connectionId/factoryId/connection…`                  | `NavigationTarget`                                        |
@@ -83,22 +83,22 @@ Decorations 必须用本次请求中的 `ref` 关联目标；徽标和样式只�
 
 ## 插件 → Core
 
-| 方法                                                    | 关键参数             | 许可                              |
-| ------------------------------------------------------- | -------------------- | --------------------------------- |
-| `host.fs.stat` / `host.fs.statBatch`                     | refs                 | `metadata` + Scope                |
-| `host.fs.list`                                           | directory ref        | `folders.read` + Scope            |
-| `host.fs.child`                                          | parent ref, child name | `metadata` + Scope              |
-| `host.fs.openRead` / `host.fs.readChunk`                 | ref / handle, offset, length | `files.read` + Scope       |
-| `host.fs.beginWrite` / `seekWrite` / `writeChunk` / `writeBuffer` | ref / handle / buffer | `files.write` 或 `files.create` |
-| `host.fs.commit` / `host.fs.abort`                       | write handle         | 对应写入 Scope                    |
-| `host.fs.mkdir`                                          | directory ref        | `folders.create`                  |
-| `host.fs.remove` / `host.fs.rename`                      | target / source+destination | 按实际对象类型检查对应权限 |
-| `host.net.http.*`                                       | URL/headers/body     | 已批准 Network host               |
-| `host.net.tcp.open/readBytes/writeBytes/shutdown/close` | host/port/stream     | 已批准 Network host，读写独立推进 |
-| `host.process.run`                                      | 已声明命令           | `commands`                        |
-| `host.storage.*` / `host.secret.*`                      | 插件命名空间键       | 插件进程身份                      |
-| `host.vfs.openView`                                     | VFS 资源             | 已注册 `vfs` + MountRegistry      |
-| `host.task.*`                                           | 任务/进度/取消       | 当前 operation/task 授权          |
+| 方法                                                              | 关键参数                     | 许可                              |
+| ----------------------------------------------------------------- | ---------------------------- | --------------------------------- |
+| `host.fs.stat` / `host.fs.statBatch`                              | refs                         | `metadata` + Scope                |
+| `host.fs.list`                                                    | directory ref                | `folders.read` + Scope            |
+| `host.fs.child`                                                   | parent ref, child name       | `metadata` + Scope                |
+| `host.fs.openRead` / `host.fs.readChunk`                          | ref / handle, offset, length | `files.read` + Scope              |
+| `host.fs.beginWrite` / `seekWrite` / `writeChunk` / `writeBuffer` | ref / handle / buffer        | `files.write` 或 `files.create`   |
+| `host.fs.commit` / `host.fs.abort`                                | write handle                 | 对应写入 Scope                    |
+| `host.fs.mkdir`                                                   | directory ref                | `folders.create`                  |
+| `host.fs.remove` / `host.fs.rename`                               | target / source+destination  | 按实际对象类型检查对应权限        |
+| `host.net.http.*`                                                 | URL/headers/body             | 已批准 Network host               |
+| `host.net.tcp.open/readBytes/writeBytes/shutdown/close`           | host/port/stream             | 已批准 Network host，读写独立推进 |
+| `host.process.run`                                                | 已声明命令                   | `commands`                        |
+| `host.storage.*` / `host.secret.*`                                | 插件命名空间键               | 插件进程身份                      |
+| `host.vfs.openView`                                               | VFS 资源                     | 已注册 `vfs` + MountRegistry      |
+| `host.task.*`                                                     | 任务/进度/取消               | 当前 operation/task 授权          |
 
 权限被用户关闭时，`host.*` 调用会等待 Core 统一弹出的授权请求（同一插件/权限/目标合并为一个弹窗）。允许后 Core 先持久化授权再继续；拒绝、超时或插件停止会返回 `permission_denied`，调用方不会收到部分结果。Manifest 未声明或超出已批准声明快照的权限不会触发弹窗，直接拒绝。
 
