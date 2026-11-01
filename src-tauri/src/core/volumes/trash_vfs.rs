@@ -121,6 +121,7 @@ pub fn list(uri: &str) -> Result<Vec<Entry>, String> {
                     URL_SAFE_NO_PAD.encode(relative.to_string_lossy().as_bytes())
                 );
                 entry.link_target = None;
+                entry.readonly = true;
                 entry.allowed_ops = if entry.is_dir && !entry.is_symlink {
                     vec!["stat".into(), "list".into(), "search".into()]
                 } else {
@@ -154,6 +155,7 @@ pub fn entry(uri: &str) -> Result<Entry, String> {
         let mut entry = files::entry(&physical(uri)?)?;
         entry.path = uri.into();
         entry.link_target = None;
+        entry.readonly = true;
         // Native VFS items state their actual supported operations. Never
         // inherit mutations from the physical file or its filesystem ACL.
         entry.allowed_ops = if entry.is_dir && !entry.is_symlink {
