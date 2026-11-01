@@ -5,7 +5,6 @@
 //! requested mode, or the builtin walker as the last candidate. Every result
 //! is validated against the authorized root before it leaves this module.
 use crate::core::files::Entry;
-mod endpoint;
 mod native;
 mod proxy;
 mod stream;
