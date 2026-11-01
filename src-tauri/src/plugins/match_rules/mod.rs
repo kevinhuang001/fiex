@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::ops::Deref;
 
 mod location;
-pub use location::{directory_match_resource, locations_for, typed_locations_for};
+pub use location::{directory_match_resource, typed_locations_for};
 
 /// Core uses the SDK's one authoritative manifest predicate and DTO.
 /// This thin adapter only supplies a trusted directory snapshot for blank
