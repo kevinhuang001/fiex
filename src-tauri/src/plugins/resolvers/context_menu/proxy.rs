@@ -1,9 +1,6 @@
 //! Persistent ContextMenu IPC identity; trusted selection, directory and
 //! menu session belong to each short-lived invocation, never the registry.
-use crate::plugins::{
-    host::PluginInfo,
-    resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
     ContextMenuProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
     ProviderKind, ProviderMatchRule, ProviderRequest, ProviderRequestContext,
@@ -30,24 +27,19 @@ impl ScopedMenuInvocation {
         request: &ProviderRequest,
     ) -> Result<Self, String> {
         let mut params = request.params.clone();
-        let remote_session_id = if request.method == "contextMenu.resolve"
-            && params.get("parentId").is_none()
-        {
-            let session_id = crate::plugins::mounts::new_id()?;
-            let object = params
-                .as_object_mut()
-                .ok_or("invalid menu parameters")?;
-            object.insert("menuSessionId".into(), json!(session_id));
-            Some(session_id)
-        } else {
-            params
-                .get("menuSessionId")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        };
-        let object = params
-            .as_object_mut()
-            .ok_or("invalid menu parameters")?;
+        let remote_session_id =
+            if request.method == "contextMenu.resolve" && params.get("parentId").is_none() {
+                let session_id = crate::plugins::mounts::new_id()?;
+                let object = params.as_object_mut().ok_or("invalid menu parameters")?;
+                object.insert("menuSessionId".into(), json!(session_id));
+                Some(session_id)
+            } else {
+                params
+                    .get("menuSessionId")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            };
+        let object = params.as_object_mut().ok_or("invalid menu parameters")?;
         object.insert(
             "interactionId".into(),
             json!(crate::plugins::mounts::new_id()?),
@@ -149,7 +141,8 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ContextMenuProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing ContextMenuProvider plugin identity".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ContextMenuProvider>>> = OnceLock::new();
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ContextMenuProvider>>> =
+        OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::ContextMenu)));
     let mut providers = registry
