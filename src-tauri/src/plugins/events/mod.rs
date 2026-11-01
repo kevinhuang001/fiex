@@ -16,6 +16,15 @@ pub use router::EventRouter;
 use scope::action_folders;
 pub use scope::{prepare, resource_scope};
 pub use validation::validate_result;
+
+/// Bind a selected plugin provider's trusted instance identity at the proxy
+/// construction boundary. Typed EventRouter dispatch remains transport-blind.
+pub(crate) fn bind_provider_request(
+    provider: &Resolver,
+    request: &fiex_provider_contracts::ProviderRequest,
+) -> Result<fiex_provider_contracts::ProviderRequest, String> {
+    registry::bind_request(provider, request)
+}
 /// Core-owned system events are not exposed through the plugin UI bridge.
 /// Unknown methods remain legal plugin-local business methods.
 pub fn is_protected_method(method: &str) -> bool {

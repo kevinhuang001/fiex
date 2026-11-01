@@ -210,7 +210,7 @@ fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing()
 }
 
 #[test]
-fn typed_event_router_merges_native_and_ipc_trait_results() {
+fn typed_event_router_merges_provider_results_without_json_endpoints() {
     use fiex_provider_contracts::ProviderRequest;
 
     let outcomes = EventRouter::resolve_typed(

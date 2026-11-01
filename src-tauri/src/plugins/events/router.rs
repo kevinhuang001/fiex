@@ -55,8 +55,7 @@ impl EventRouter {
                 if request.method != method {
                     return Err("provider request method does not match routed event".into());
                 }
-                let routed = super::registry::bind_request(provider, request)?;
-                invoke(provider, &routed)
+                invoke(provider, request)
             },
             validate,
             supported,

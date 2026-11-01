@@ -45,8 +45,9 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
                 native::invoke(id, &resource).map_err(|error| error.to_string())
             }
             Handler::Plugin(plugin) => {
+                let request = crate::plugins::events::bind_provider_request(resolver, request)?;
                 proxy::ScopedInfoProxy::new((**plugin).clone(), resource.clone())?
-                    .resolve_typed(request)
+                    .resolve_typed(&request)
                     .map_err(|error| error.to_string())
             }
         },
