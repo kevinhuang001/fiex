@@ -280,11 +280,17 @@ mod tests {
         );
         let projected = resource.project("org.example", "", true, false);
         assert_eq!(
-            projected.view.as_ref().map(|location| location.provider_id.as_str()),
+            projected
+                .view
+                .as_ref()
+                .map(|location| location.provider_id.as_str()),
             Some("core:applications")
         );
         assert_eq!(
-            projected.storage.as_ref().map(|location| location.provider_id.as_str()),
+            projected
+                .storage
+                .as_ref()
+                .map(|location| location.provider_id.as_str()),
             Some("core:applications")
         );
         assert!(projected

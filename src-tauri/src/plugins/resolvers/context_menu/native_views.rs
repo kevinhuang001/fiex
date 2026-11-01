@@ -3,9 +3,7 @@
 //! View-specific actions live in implementations, not in EventRouter.
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{
-    LocationMatch, ProviderKind, ProviderMatchRule, ProviderMatcher,
-};
+use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule, ProviderMatcher};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 

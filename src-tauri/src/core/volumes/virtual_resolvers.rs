@@ -186,7 +186,12 @@ impl NativeVfsProvider for ApplicationView {
     }
     fn operations(&self, path: &str) -> Vec<FsOperation> {
         if path == APPLICATIONS_URI {
-            vec![FsOperation::List, FsOperation::Stat, FsOperation::Search, FsOperation::Mkdir]
+            vec![
+                FsOperation::List,
+                FsOperation::Stat,
+                FsOperation::Search,
+                FsOperation::Mkdir,
+            ]
         } else if applications::is_user(path) {
             vec![
                 FsOperation::List,

@@ -72,12 +72,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeDecorationProvider> {
                 NativeKind::Readonly => ProviderMatchRule::default(),
             };
             values
-                .register(
-                    id,
-                    priority,
-                    rule,
-                    Arc::new(BuiltinDecoration(kind)),
-                )
+                .register(id, priority, rule, Arc::new(BuiltinDecoration(kind)))
                 .expect("invalid native DecorationProvider");
         }
         values
@@ -117,14 +112,13 @@ mod tests {
         assert_eq!(local.len(), 2);
         assert_eq!(local[0].id, "builtin:readonly");
         assert_eq!(local[1].id, "builtin:tags");
-        let applications = providers(
-            &[],
-            crate::core::volumes::applications::URI,
-        );
+        let applications = providers(&[], crate::core::volumes::applications::URI);
         assert!(applications
             .iter()
             .any(|provider| provider.id == "builtin:application-icon"));
-        assert!(!applications.iter().any(|provider| provider.id == "builtin:tags"));
+        assert!(!applications
+            .iter()
+            .any(|provider| provider.id == "builtin:tags"));
     }
 
     #[test]

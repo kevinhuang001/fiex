@@ -85,13 +85,8 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
             .iter()
             .filter_map(|id| {
                 let descriptor = self.entries.descriptor(id)?;
-                ProviderMatcher::matches(
-                    &descriptor.r#match,
-                    targets,
-                    directory,
-                    selection_count,
-                )
-                .then(|| Resolver::builtin(id, descriptor.priority))
+                ProviderMatcher::matches(&descriptor.r#match, targets, directory, selection_count)
+                    .then(|| Resolver::builtin(id, descriptor.priority))
             })
             .collect::<Vec<_>>();
         providers.sort_by(|a, b| b.priority.cmp(&a.priority).then_with(|| a.id.cmp(&b.id)));

@@ -27,8 +27,8 @@
 //! re-checks the same call on execute.
 use super::connection_cache::ConnectionCache;
 use crate::core::files::Entry;
-use crate::plugins::provider_registry::FsOperation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use crate::plugins::provider_registry::FsOperation;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};

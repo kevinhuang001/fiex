@@ -109,7 +109,9 @@ mod tests {
             },
         );
         assert_eq!(candidates(&directory).len(), 1);
-        assert!(!candidates(&directory).iter().any(|provider| provider.id == "core.media"));
+        assert!(!candidates(&directory)
+            .iter()
+            .any(|provider| provider.id == "core.media"));
         assert!(invoke("unknown", "/no-such-directory", &directory).is_err());
         assert_eq!(
             invoke("core.metadata", "/no-such-directory", &directory)

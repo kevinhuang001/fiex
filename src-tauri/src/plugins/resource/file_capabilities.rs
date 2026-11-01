@@ -122,10 +122,7 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
     if crate::core::volumes::virtual_resolvers::opaque(path) {
         let declared = crate::core::volumes::virtual_resolvers::view_for(path)
-            .map(|provider| {
-                provider
-                    .operations(path)
-            })
+            .map(|provider| provider.operations(path))
             .unwrap_or_default();
         return from_entry(&declared, entry);
     }

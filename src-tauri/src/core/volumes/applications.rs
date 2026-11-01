@@ -1093,7 +1093,13 @@ mod folder_listing_tests {
         );
         assert!(protected.readonly);
         assert_eq!(protected.allowed_ops, vec!["stat"]);
-        let user = entry("Shortcut".into(), "applications://~dXNlcg".into(), "app", 0, false);
+        let user = entry(
+            "Shortcut".into(),
+            "applications://~dXNlcg".into(),
+            "app",
+            0,
+            false,
+        );
         assert!(!user.readonly);
         assert!(user.allowed_ops.iter().any(|op| op == "remove"));
     }
