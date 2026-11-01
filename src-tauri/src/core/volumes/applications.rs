@@ -32,7 +32,7 @@ fn entry(name: String, path: String, extension: &str, modified: u64, readonly: b
         created: modified,
         extension: extension.into(),
         mime: "application/x-fiex-application".into(),
-        readonly: false,
+        readonly,
         link_target: None,
         allowed_ops: if readonly {
             vec!["stat".into()]
