@@ -1,6 +1,6 @@
 use super::*;
-use fiex_provider_contracts::ProviderKind;
 use crate::core::volumes::{applications, recycle, trash_vfs};
+use fiex_provider_contracts::ProviderKind;
 
 #[test]
 fn view_descriptors_are_disjoint_and_not_plugin_privileged() {

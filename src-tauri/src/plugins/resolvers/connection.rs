@@ -7,8 +7,9 @@ use crate::plugins::{
 };
 use fiex_provider_contracts::{
     ConnectionOpenResult, ConnectionProvider, ConnectionValidation, MatchResource,
-    ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation, ProviderKind, ProviderRequest,
-    ProviderMatchRule, ResourceCapabilities, ResourceLocation, ResourceMetadata, ResourceType,
+    ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation, ProviderKind,
+    ProviderMatchRule, ProviderRequest, ResourceCapabilities, ResourceLocation, ResourceMetadata,
+    ResourceType,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex, OnceLock};

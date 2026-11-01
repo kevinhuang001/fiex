@@ -5,8 +5,9 @@ use crate::{
     plugins::provider_registry::{native::NativeProviderRegistry, FsOperation},
 };
 use fiex_provider_contracts::{
-    FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, SearchCapabilities, TransferDirection, TransferPreflight, VfsProvider,
+    FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, SearchCapabilities, TransferDirection, TransferPreflight,
+    VfsProvider,
 };
 use serde_json::{json, Value};
 use std::{

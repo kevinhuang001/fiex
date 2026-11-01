@@ -1,6 +1,7 @@
 //! Persistent user-created items stored under the private Applications directory.
 use super::{
-    application_folders, decode, directory_cache, encode, list, system_entries, system_entry, URI, USER_PREFIX,
+    application_folders, decode, directory_cache, encode, list, system_entries, system_entry, URI,
+    USER_PREFIX,
 };
 use crate::core::files::Entry;
 use std::path::{Path, PathBuf};
