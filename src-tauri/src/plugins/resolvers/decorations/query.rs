@@ -2,33 +2,8 @@ use super::dynamic::{decode, merge};
 use super::types::{Decoration, DecorationEntry};
 use crate::plugins::host as plugin_host;
 use fiex_provider_contracts::ProviderRequest;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
-
-fn bind_targets(
-    response: &mut Value,
-    resources: &[crate::plugins::resource::resource_context::ResourceSnapshot],
-) {
-    if let Some(items) = response["decorations"].as_array_mut() {
-        for item in items {
-            let target = item.get("ref").and_then(|reference| {
-                resources.iter().find(|resource| {
-                    serde_json::to_value(&resource.reference).ok().as_ref() == Some(reference)
-                })
-            });
-            if let Some(target) = target {
-                let path = target.display.clone();
-                if let Some(object) = item.as_object_mut() {
-                    object.remove("name");
-                    object.remove("path");
-                }
-                item["path"] = json!(path);
-            } else {
-                *item = json!({});
-            }
-        }
-    }
-}
 
 pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> {
     query_with_plugins(directory, entries, true)
@@ -90,63 +65,48 @@ pub fn query_with_plugins(
         "decorations.resolve",
         providers,
         &request,
-        |resolver, request| {
-            let items = match &resolver.handler {
-                Handler::Builtin(id) => {
-                    let invocation = super::invocation::CoreDecorationInvocation::native(
-                        directory.into(),
-                        entries.clone(),
-                        resources.clone(),
-                    );
-                    serde_json::to_value(super::native::invoke(id, &invocation)?)
-                        .map_err(|error| error.to_string())?
-                        .as_array()
-                        .cloned()
-                        .ok_or_else(|| "invalid native DecorationProvider result".to_string())?
-                }
-                Handler::Plugin(plugin) => {
-                    let response = super::proxy::ScopedDecorationProxy::new(
-                        (**plugin).clone(),
-                        directory,
-                        entries.clone(),
-                        resources.clone(),
-                    )?
-                    .resolve(request)?;
-                    serde_json::from_value::<Vec<Value>>(response)
-                        .map_err(|error| error.to_string())?
-                }
-            };
-            Ok(items)
-        },
-        |provider, items| {
-            let mut response = json!({"decorations": items});
-            crate::plugins::events::validate_result("decorations.resolve", &response)?;
-            let values = if matches!(provider.handler, Handler::Builtin(_)) {
-                serde_json::from_value::<Vec<Decoration>>(response["decorations"].clone())
-                    .map_err(|error| error.to_string())?
-            } else {
-                let Handler::Plugin(plugin) = &provider.handler else {
-                    unreachable!()
-                };
+        |resolver, request| match &resolver.handler {
+            Handler::Builtin(id) => {
+                let invocation = super::invocation::CoreDecorationInvocation::native(
+                    directory.into(),
+                    entries.clone(),
+                    resources.clone(),
+                );
+                super::native::invoke(id, &invocation)
+            }
+            Handler::Plugin(plugin) => {
+                let contributions = super::proxy::ScopedDecorationProxy::new(
+                    (**plugin).clone(),
+                    directory,
+                    entries.clone(),
+                    resources.clone(),
+                )?
+                .resolve(request)?;
                 let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
-                bind_targets(&mut response, resources.as_slice());
-                decode(entries.as_ref(), manifest, folder, response)?
-            };
-            serde_json::to_value(values)
-                .map_err(|error| error.to_string())?
-                .as_array()
-                .cloned()
-                .ok_or_else(|| "invalid DecorationProvider result".into())
+                decode(
+                    entries.as_ref(),
+                    resources.as_slice(),
+                    manifest,
+                    folder,
+                    contributions,
+                )
+            }
+        },
+        |_, values| {
+            if values.len() > entries.len().max(1) {
+                return Err("DecorationProvider returned too many items".into());
+            }
+            if values.iter().any(|value| !entries.contains_key(&value.path)) {
+                return Err("DecorationProvider target is outside the scoped request".into());
+            }
+            Ok(values)
         },
         |_| true,
         |outcomes| {
             let mut merged = HashMap::new();
             for (provider, result) in outcomes.into_iter().rev() {
                 if let Ok(values) = result {
-                    for raw in values {
-                        let Ok(value) = serde_json::from_value::<Decoration>(raw) else {
-                            continue;
-                        };
+                    for value in values {
                         let path = value.path.clone();
                         merge(
                             &mut merged,
@@ -176,26 +136,42 @@ mod ref_target_tests {
     use crate::plugins::{
         contracts::ResourceMetadata, resource::resource_context::ResourceSnapshot,
     };
+    use fiex_provider_contracts::{DecorationBadge, DecorationContribution};
 
     #[test]
-    fn plugin_names_and_paths_never_select_decoration_targets() {
+    fn plugin_contributions_are_bound_only_by_core_resource_reference() {
         let target = ResourceSnapshot::from_metadata(
             "/authorized/matching-name",
             ResourceMetadata::default(),
         );
-        let reference = serde_json::to_value(&target.reference).unwrap();
-        let mut payload = json!({"decorations":[
-            {"name":"matching-name","path":"/authorized/matching-name","badge":{"text":"X"}},
-            {"ref":{"mountId":"forged","nodeId":"forged"},"badge":{"text":"X"}},
-            {"ref":reference,"name":"different-name","path":"/forged/other","badge":{"text":"Y"}}
-        ]});
-        bind_targets(&mut payload, &[target]);
-        assert_eq!(payload["decorations"][0], json!({}));
-        assert_eq!(payload["decorations"][1], json!({}));
-        assert_eq!(
-            payload["decorations"][2]["path"],
-            json!("/authorized/matching-name")
+        let mut entries = HashMap::new();
+        entries.insert(
+            target.display.clone(),
+            DecorationEntry {
+                path: target.display.clone(),
+                ..Default::default()
+            },
         );
-        assert!(payload["decorations"][2].get("name").is_none());
+        let contribution = DecorationContribution {
+            target: target.reference.clone(),
+            badges: vec![DecorationBadge {
+                text: "Y".into(),
+                color: "blue".into(),
+                tooltip: None,
+            }],
+            ..DecorationContribution::new(target.reference.clone())
+        };
+        assert_eq!(
+            contribution.target,
+            target.reference,
+            "only the Core-provided opaque reference identifies a target"
+        );
+        assert!(entries.contains_key(&target.display));
+        assert!(serde_json::from_value::<DecorationContribution>(json!({
+            "ref":{"mountId":"forged","nodeId":"forged"},
+            "name":"matching-name",
+            "badge":{"text":"X"}
+        }))
+        .is_err());
     }
 }

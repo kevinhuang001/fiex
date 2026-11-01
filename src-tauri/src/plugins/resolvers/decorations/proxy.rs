@@ -4,10 +4,9 @@ use super::invocation::{self, CoreDecorationInvocation};
 use super::types::DecorationEntry;
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    DecorationProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderRequest,
+    DecorationContribution, DecorationProvider, ProviderDescriptor, ProviderError,
+    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,
 };
-use serde_json::Value;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
@@ -17,7 +16,10 @@ struct IpcDecoration {
     plugin_id: String,
 }
 impl DecorationProvider for IpcDecoration {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<Value>, ProviderError> {
+    fn resolve(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<DecorationContribution>, ProviderError> {
         let services = invocation::services(ctx).map_err(ProviderError::internal)?;
         let plugin = services
             .plugin
@@ -102,7 +104,10 @@ impl ScopedDecorationProxy {
         })
     }
 
-    pub fn resolve(&self, request: &ProviderRequest) -> Result<Value, String> {
+    pub fn resolve(
+        &self,
+        request: &ProviderRequest,
+    ) -> Result<Vec<DecorationContribution>, String> {
         let invocation = CoreDecorationInvocation::plugin(
             self.directory.clone(),
             self.entries.clone(),
@@ -113,9 +118,6 @@ impl ScopedDecorationProxy {
         self.handler
             .resolve(&invocation)
             .map_err(|error| error.to_string())
-            .and_then(|decorations| {
-                serde_json::to_value(decorations).map_err(|error| error.to_string())
-            })
     }
 }
 
