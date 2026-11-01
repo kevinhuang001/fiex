@@ -41,14 +41,14 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
         providers,
         &request,
         |resolver, request| match &resolver.handler {
-            Handler::Builtin(id) => native::invoke(id, &resource)
-                .map_err(|error| error.to_string()),
-            Handler::Plugin(plugin) => proxy::ScopedInfoProxy::new(
-                (**plugin).clone(),
-                resource.clone(),
-            )?
-            .resolve_typed(request)
-            .map_err(|error| error.to_string()),
+            Handler::Builtin(id) => {
+                native::invoke(id, &resource).map_err(|error| error.to_string())
+            }
+            Handler::Plugin(plugin) => {
+                proxy::ScopedInfoProxy::new((**plugin).clone(), resource.clone())?
+                    .resolve_typed(request)
+                    .map_err(|error| error.to_string())
+            }
         },
         |provider, mut sections| {
             let value = json!({"sections": &sections});
