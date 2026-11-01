@@ -80,7 +80,7 @@ pub(super) fn action_folders(
     if let Some(folder) = directory.filter(|value| {
         !crate::plugins::mounts::handles(value)
             && crate::usbfs::route(value).is_none()
-            && !crate::core::volumes::virtual_resolvers::opaque(value)
+            && !crate::core::volumes::native_vfs::opaque(value)
     }) {
         folders.push(crate::plugins::resource::fs_access::canonical_selection(
             Path::new(folder),
@@ -143,7 +143,7 @@ pub fn resource_scope(
         .filter(|r| {
             !crate::plugins::mounts::handles(&r.display)
                 && crate::usbfs::route(&r.display).is_none()
-                && crate::core::volumes::virtual_resolvers::view_for(&r.display).is_none()
+                && crate::core::volumes::native_vfs::view_for(&r.display).is_none()
         })
         .map(|r| crate::plugins::resource::fs_access::canonical_selection(&r.local))
         .collect::<Result<Vec<_>, _>>()?;
@@ -166,10 +166,10 @@ pub fn resource_scope(
     }
     params["location"] = json!({
         "kind": if directory.is_some_and(|location| {
-            crate::core::volumes::virtual_resolvers::opaque(location)
+            crate::core::volumes::native_vfs::opaque(location)
                 || crate::plugins::mounts::handles(location)
         }) { "vfs" } else { "fs" },
-        "providerId": directory.and_then(|d| crate::core::volumes::virtual_resolvers::view_for(d).map(|p| p.id().to_owned())
+        "providerId": directory.and_then(|d| crate::core::volumes::native_vfs::provider_id(d).map(str::to_owned)
             .or_else(|| crate::plugins::resolvers::fs::mount_plugin_id(d).ok())),
         "selectionCount": resources.len(),
     });
@@ -180,14 +180,9 @@ pub fn resource_scope(
         if policy.allowed(crate::plugins::security::policy::Capability::Metadata)
             && target["metadata"].is_object()
         {
-            let mut caps = resource.operations.unwrap_or_else(|| {
+            let caps = resource.operations.unwrap_or_else(|| {
                 crate::plugins::resource::file_capabilities::for_path(&resource.display)
             });
-            if directory == Some("recent://") {
-                caps = caps.intersect(
-                    crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
-                );
-            }
             target["metadata"]["operations"] = json!({"stat":caps.stat,"list":caps.list,"search":caps.search,"read":caps.read,"write":caps.write,"mkdir":caps.create,"rename":caps.rename,"remove":caps.remove});
         }
     }
@@ -214,7 +209,7 @@ pub fn resource_scope(
     for (resource, target) in resources.iter().zip(params["targets"].as_array().unwrap()) {
         let local = if !crate::plugins::mounts::handles(&resource.display)
             && crate::usbfs::route(&resource.display).is_none()
-            && crate::core::volumes::virtual_resolvers::view_for(&resource.display).is_none()
+            && crate::core::volumes::native_vfs::view_for(&resource.display).is_none()
         {
             Some(crate::plugins::resource::fs_access::canonical_selection(
                 &resource.local,
@@ -226,7 +221,7 @@ pub fn resource_scope(
         if (content || directory_event)
             && (crate::plugins::mounts::handles(&resource.display)
                 || crate::usbfs::route(&resource.display).is_some()
-                || crate::core::volumes::virtual_resolvers::view_for(&resource.display).is_some())
+                || crate::core::volumes::native_vfs::view_for(&resource.display).is_some())
         {
             scope.bind_remote(target, resource)?;
         }
@@ -236,7 +231,7 @@ pub fn resource_scope(
         if let Some(dir) = directory.filter(|d| {
             !crate::plugins::mounts::handles(d)
                 && crate::usbfs::route(d).is_none()
-                && !crate::core::volumes::virtual_resolvers::opaque(d)
+                && !crate::core::volumes::native_vfs::opaque(d)
         }) {
             scope = crate::plugins::resource::fs_access::Scope::new(Path::new(dir))?;
             for (r, target) in resources.iter().zip(params["targets"].as_array().unwrap()) {
@@ -252,14 +247,31 @@ pub fn resource_scope(
         resources,
         directory,
     )?;
-    if directory == Some("recent://") {
+    let read_only_vfs = resources
+        .iter()
+        .any(|resource| read_only_vfs(&resource.display, resource.operations))
+        || (resources.is_empty() && directory.is_some_and(|path| read_only_vfs(path, None)));
+    if read_only_vfs {
         scope.restrict_to_readonly();
     }
-    if directory
-        .and_then(crate::core::volumes::virtual_resolvers::view_for)
-        .is_some_and(|p| p.id() == "core:trash")
-    {
-        scope.restrict_to_metadata();
-    }
     Ok((params, scope))
+}
+
+/// A VFS view can restrict general Host APIs such as process execution in
+/// addition to the per-operation checks enforced by ResourceBroker. Derive
+/// that policy from the trusted view and its effective capability snapshot,
+/// never from a special URI or provider name.
+fn read_only_vfs(
+    path: &str,
+    capabilities: Option<crate::plugins::resource::file_capabilities::FileCapabilities>,
+) -> bool {
+    let (view, _) = crate::plugins::match_rules::typed_locations_for(path);
+    if view.is_none_or(|location| {
+        location.resource_type != fiex_provider_contracts::ResourceType::Vfs
+    }) {
+        return false;
+    }
+    capabilities
+        .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(path))
+        .is_read_only()
 }

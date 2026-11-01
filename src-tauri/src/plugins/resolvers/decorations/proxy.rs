@@ -4,8 +4,8 @@ use super::invocation::{self, CoreDecorationInvocation};
 use super::types::DecorationEntry;
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    DecorationContribution, DecorationProvider, ProviderDescriptor, ProviderError,
-    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,
+    DecorationContribution, DecorationProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
 use std::{
     collections::HashMap,
@@ -16,10 +16,7 @@ struct IpcDecoration {
     plugin_id: String,
 }
 impl DecorationProvider for IpcDecoration {
-    fn resolve(
-        &self,
-        ctx: &dyn ProviderInvocation,
-    ) -> Result<Vec<DecorationContribution>, ProviderError> {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<DecorationContribution>, ProviderError> {
         let services = invocation::services(ctx).map_err(ProviderError::internal)?;
         let plugin = services
             .plugin
@@ -33,7 +30,7 @@ impl DecorationProvider for IpcDecoration {
         let result = crate::plugins::events::invoke_resources(
             plugin,
             ctx.method(),
-            ctx.params().clone(),
+            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
             services.resources.as_slice(),
             Some(services.directory.as_str()),
         )
@@ -84,6 +81,7 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn DecorationProvider>, String> {
 pub(super) struct ScopedDecorationProxy {
     handler: Arc<dyn DecorationProvider>,
     plugin: PluginInfo,
+    provider_id: String,
     directory: String,
     entries: Arc<HashMap<String, DecorationEntry>>,
     resources: Arc<Vec<ResourceSnapshot>>,
@@ -91,6 +89,7 @@ pub(super) struct ScopedDecorationProxy {
 impl ScopedDecorationProxy {
     pub fn new(
         plugin: PluginInfo,
+        provider_id: &str,
         directory: &str,
         entries: Arc<HashMap<String, DecorationEntry>>,
         resources: Arc<Vec<ResourceSnapshot>>,
@@ -98,16 +97,28 @@ impl ScopedDecorationProxy {
         Ok(Self {
             handler: proxy(&plugin.id)?,
             plugin,
+            provider_id: provider_id.into(),
             directory: directory.into(),
             entries,
             resources,
         })
     }
 
-    pub fn resolve(
-        &self,
-        request: &ProviderRequest,
-    ) -> Result<Vec<DecorationContribution>, String> {
+}
+
+impl DecorationProvider for ScopedDecorationProxy {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<DecorationContribution>, ProviderError> {
+        if ctx.method() != "decorations.resolve" {
+            return Err(ProviderError::invalid_params(
+                "DecorationProvider method mismatch",
+            ));
+        }
+        let request = crate::plugins::events::bind_provider_context(
+            &self.plugin.id,
+            &self.provider_id,
+            ctx.request(),
+        )
+        .map_err(ProviderError::invalid_params)?;
         let invocation = CoreDecorationInvocation::plugin(
             self.directory.clone(),
             self.entries.clone(),
@@ -117,7 +128,7 @@ impl ScopedDecorationProxy {
         );
         self.handler
             .resolve(&invocation)
-            .map_err(|error| error.to_string())
+            .map_err(|error| ProviderError::internal(error.to_string()))
     }
 }
 

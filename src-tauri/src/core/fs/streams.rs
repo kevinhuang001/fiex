@@ -85,10 +85,10 @@ pub fn stream_call(owner: &str, method: &str, params: &Value) -> Result<Value, S
     let id = params["handle"].as_str().ok_or("missing handle")?;
     let stream = get(owner, id)?;
     let mut state = stream.state.lock().map_err(|_| "stream unavailable")?;
-    if matches!(method, "fs.closeRead" | "fs.abort") {
+    if matches!(method, "host.fs.closeRead" | "host.fs.abort") {
         let valid = matches!(
             (method, state.as_ref()),
-            ("fs.closeRead", Some(State::Read(_))) | ("fs.abort", Some(State::Write(_)))
+            ("host.fs.closeRead", Some(State::Read(_))) | ("host.fs.abort", Some(State::Write(_)))
         );
         if !valid {
             return Err("invalid stream method".into());
@@ -102,7 +102,7 @@ pub fn stream_call(owner: &str, method: &str, params: &Value) -> Result<Value, S
     }
     stream.resource.scope.authorize_method(method)?;
     match state.as_mut().ok_or("stream closed")? {
-        State::Read(read) if method == "fs.readOpen" => {
+        State::Read(read) if method == "host.fs.readOpen" => {
             stream.resource.require(FsOperation::Read, false)?;
             let offset = params["offset"].as_u64().ok_or("missing offset")?;
             let length: usize = params["length"]
@@ -125,12 +125,12 @@ pub fn stream_call(owner: &str, method: &str, params: &Value) -> Result<Value, S
                 .resource
                 .require(FsOperation::Write, stream.permission == "files.create")?;
             match method {
-                "fs.seekWrite" => Ok(json!(write.seek(
+                "host.fs.seekWrite" => Ok(json!(write.seek(
                     params["kind"].as_str().ok_or("missing seek kind")?,
                     params["offset"].as_i64().ok_or("missing offset")?
                 )?)),
-                "fs.writeChunk" | "fs.writeBuffer" => {
-                    let bytes = if method == "fs.writeBuffer" {
+                "host.fs.writeChunk" | "host.fs.writeBuffer" => {
+                    let bytes = if method == "host.fs.writeBuffer" {
                         let size = params["size"]
                             .as_u64()
                             .filter(|n| *n <= CHUNK as u64)
@@ -154,7 +154,7 @@ pub fn stream_call(owner: &str, method: &str, params: &Value) -> Result<Value, S
                     write.write(&bytes)?;
                     Ok(Value::Null)
                 }
-                "fs.commit" => {
+                "host.fs.commit" => {
                     let Some(State::Write(write)) = state.take() else {
                         return Err("write stream closed".into());
                     };
@@ -231,7 +231,7 @@ impl std::io::Read for HttpBody {
         stream
             .resource
             .scope
-            .authorize_method("fs.readOpen")
+            .authorize_method("host.fs.readOpen")
             .map_err(std::io::Error::other)?;
         let plugin_id = self
             .owner

@@ -411,7 +411,7 @@ fn virtual_search_root(root: &str) -> bool {
     if crate::plugins::mounts::handles(root) {
         return false;
     }
-    crate::core::volumes::virtual_storage::is_virtual_tree_path(root)
+    crate::core::volumes::native_vfs::is_tree_path(root)
 }
 
 fn search_cached_vfs(

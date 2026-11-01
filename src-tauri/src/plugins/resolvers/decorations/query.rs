@@ -1,9 +1,22 @@
-use super::dynamic::{decode, merge};
+use super::dynamic::{decode, merge, path_for_target};
 use super::types::{Decoration, DecorationEntry};
 use crate::plugins::host as plugin_host;
-use fiex_provider_contracts::ProviderRequest;
+use fiex_provider_contracts::{
+    DecorationContribution, DecorationProvider, ProviderError, ProviderInvocation,
+};
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
+
+struct FailedDecorationProvider(String);
+
+impl DecorationProvider for FailedDecorationProvider {
+    fn resolve(
+        &self,
+        _ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<DecorationContribution>, ProviderError> {
+        Err(ProviderError::internal(self.0.clone()))
+    }
+}
 
 pub fn query(directory: &str, entries: Vec<DecorationEntry>) -> Vec<Decoration> {
     query_with_plugins(directory, entries, true)
@@ -18,7 +31,7 @@ pub fn query_with_plugins(
         .into_iter()
         .map(|entry| (entry.path.clone(), entry))
         .collect::<HashMap<_, _>>();
-    use crate::plugins::events::{EventRouter, Handler};
+    use crate::plugins::events::{EventRouter, ProviderCandidate};
     let mut ordered = entries.values().collect::<Vec<_>>();
     ordered.sort_by(|a, b| a.path.cmp(&b.path));
     let resources = ordered
@@ -39,12 +52,12 @@ pub fn query_with_plugins(
             )
         })
         .collect::<Vec<_>>();
-    let match_targets = crate::plugins::events::matching::match_resources(&resources);
-    let builtins = super::native::providers(&match_targets, directory);
+    let targets = crate::plugins::events::matching::match_resources(&resources);
+    let builtins = super::native::providers(&targets, directory);
     let providers = if include_plugins {
         crate::plugins::provider_registry::candidates(
             "decorations.resolve",
-            &match_targets,
+            &targets,
             directory,
             builtins,
         )
@@ -57,51 +70,78 @@ pub fn query_with_plugins(
         .collect::<HashMap<_, _>>();
     let entries = Arc::new(entries);
     let resources = Arc::new(resources);
-    let request = ProviderRequest {
-        method: "decorations.resolve".into(),
-        params: json!({}),
-    };
-    let result = EventRouter::resolve_typed(
-        "decorations.resolve",
-        providers,
-        &request,
-        |resolver, request| match &resolver.handler {
-            Handler::Builtin(id) => {
-                let invocation = super::invocation::CoreDecorationInvocation::native(
-                    directory.into(),
-                    entries.clone(),
-                    resources.clone(),
-                );
-                super::native::invoke(id, &invocation)
-            }
-            Handler::Plugin(plugin) => {
-                let contributions = super::proxy::ScopedDecorationProxy::new(
-                    (**plugin).clone(),
+    let providers = providers
+        .into_iter()
+        .map(|resolver| {
+            let implementation: Arc<dyn DecorationProvider> = match resolver.plugin.as_deref() {
+                None => super::native::provider(&resolver.id).unwrap_or_else(|| {
+                    Arc::new(FailedDecorationProvider(
+                        "registered native DecorationProvider disappeared".into(),
+                    ))
+                }),
+                Some(plugin) => match super::proxy::ScopedDecorationProxy::new(
+                    plugin.clone(),
+                    &resolver.id,
                     directory,
                     entries.clone(),
                     resources.clone(),
-                )?
-                .resolve(request)?;
+                ) {
+                    Ok(proxy) => Arc::new(proxy),
+                    Err(error) => Arc::new(FailedDecorationProvider(error)),
+                },
+            };
+            ProviderCandidate {
+                resolver,
+                implementation,
+            }
+        })
+        .collect();
+    let invocation = super::invocation::CoreDecorationInvocation::native(
+        directory.into(),
+        entries.clone(),
+        resources.clone(),
+    );
+    let result = EventRouter::resolve_shared(
+        "decorations.resolve",
+        providers,
+        &invocation,
+        |_, provider, context| provider.resolve(context).map_err(|error| error.to_string()),
+        |provider, items| {
+            let response = json!({"decorations": items});
+            crate::plugins::events::validate_result("decorations.resolve", &response)?;
+            let values = if provider.plugin.is_none() {
+                items
+                    .into_iter()
+                    .filter_map(|contribution| {
+                        let path = path_for_target(
+                            &contribution.target,
+                            entries.as_ref(),
+                            resources.as_slice(),
+                        )?
+                        .to_owned();
+                        Some(Decoration {
+                            path,
+                            native_badges: contribution.native_badges,
+                            label: contribution.label,
+                            description: contribution.description,
+                            fields: contribution.fields,
+                            icon: contribution.icon,
+                            icon_path: contribution.icon_path,
+                            providers: Vec::new(),
+                        })
+                    })
+                    .collect()
+            } else {
+                let plugin = provider.plugin.as_deref().ok_or("missing DecorationProvider plugin")?;
                 let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
                 decode(
                     entries.as_ref(),
                     resources.as_slice(),
                     manifest,
                     folder,
-                    contributions,
-                )
-            }
-        },
-        |_, values| {
-            if values.len() > entries.len().max(1) {
-                return Err("DecorationProvider returned too many items".into());
-            }
-            if values
-                .iter()
-                .any(|value| !entries.contains_key(&value.path))
-            {
-                return Err("DecorationProvider target is outside the scoped request".into());
-            }
+                    items,
+                )?
+            };
             Ok(values)
         },
         |_| true,
@@ -139,41 +179,29 @@ mod ref_target_tests {
     use crate::plugins::{
         contracts::ResourceMetadata, resource::resource_context::ResourceSnapshot,
     };
-    use fiex_provider_contracts::{DecorationBadge, DecorationContribution};
 
     #[test]
-    fn plugin_contributions_are_bound_only_by_core_resource_reference() {
+    fn only_core_issued_resource_refs_select_decoration_targets() {
+        let mut entries = HashMap::new();
+        entries.insert(
+            "/authorized/matching-name".into(),
+            DecorationEntry {
+                path: "/authorized/matching-name".into(),
+                ..Default::default()
+            },
+        );
         let target = ResourceSnapshot::from_metadata(
             "/authorized/matching-name",
             ResourceMetadata::default(),
         );
-        let mut entries = HashMap::new();
-        entries.insert(
-            target.display.clone(),
-            DecorationEntry {
-                path: target.display.clone(),
-                ..Default::default()
-            },
-        );
-        let contribution = DecorationContribution {
-            target: target.reference.clone(),
-            badges: vec![DecorationBadge {
-                text: "Y".into(),
-                color: "blue".into(),
-                tooltip: None,
-            }],
-            ..DecorationContribution::new(target.reference.clone())
-        };
         assert_eq!(
-            contribution.target, target.reference,
-            "only the Core-provided opaque reference identifies a target"
+            path_for_target(&target.reference, &entries, &[target.clone()]),
+            Some("/authorized/matching-name")
         );
-        assert!(entries.contains_key(&target.display));
-        assert!(serde_json::from_value::<DecorationContribution>(json!({
-            "ref":{"mountId":"forged","nodeId":"forged"},
-            "name":"matching-name",
-            "badge":{"text":"X"}
-        }))
-        .is_err());
+        let forged = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+            "/forged/path",
+            ResourceMetadata::default(),
+        );
+        assert_eq!(path_for_target(&forged.reference, &entries, &[target]), None);
     }
 }

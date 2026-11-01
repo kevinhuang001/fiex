@@ -1,4 +1,10 @@
-# Builtin VFS, filesystem and presentation contract
+# Historical builtin VFS and presentation contract
+
+> Historical architecture snapshot. This document predates the Unified Provider
+> Architecture migration and still describes `VirtualResolver`, `FsResolver`,
+> adapter dispatch, and name-based decoration fallback. Those are not current
+> interfaces or accepted compatibility paths. See the unified Provider plan
+> and shared `VfsProvider` contracts for the current source architecture.
 
 This is the current behavior contract for Recent, Applications, Trash, plugin VFS/connection mounts and local/USB filesystems. Core owns routing, resource identity, scopes and result validation. An adapter implements storage operations; a resolver selects and combines presentation contributions. Official plugins have exactly the same permissions and interfaces as third-party plugins.
 

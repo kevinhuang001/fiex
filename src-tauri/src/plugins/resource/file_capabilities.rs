@@ -120,10 +120,8 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
 }
 
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::opaque(path) {
-        let declared = crate::core::volumes::virtual_resolvers::view_for(path)
-            .map(|provider| provider.operations(path))
-            .unwrap_or_default();
+    if crate::core::volumes::native_vfs::opaque(path) {
+        let declared = crate::core::volumes::native_vfs::operations(path);
         return from_entry(&declared, entry);
     }
     if let Some(route) = crate::usbfs::route(path) {
@@ -179,8 +177,8 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
 /// Capabilities of a single path. Local paths are unrestricted; a mount is the
 /// provider's declared operations narrowed by the node's entry.
 pub fn for_path(path: &str) -> FileCapabilities {
-    if crate::core::volumes::virtual_resolvers::opaque(path) {
-        return crate::core::volumes::virtual_resolvers::resource_entry(path)
+    if crate::core::volumes::native_vfs::opaque(path) {
+        return crate::core::volumes::native_vfs::resource_entry(path)
             .map(|entry| for_entry(path, &entry))
             .unwrap_or_default();
     }

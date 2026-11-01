@@ -95,8 +95,8 @@ impl ResourceSnapshot {
                         crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into())
                     );
                 }
-                crate::core::volumes::virtual_resolvers::view_for(display)
-                    .map(|provider| provider.id().to_owned())
+                crate::core::volumes::native_vfs::provider_id(display)
+                    .map(str::to_owned)
                     .unwrap_or_else(|| "local".into())
             });
         let mut digest = Sha256::new();
@@ -115,8 +115,8 @@ impl ResourceSnapshot {
     }
 
     pub fn resolve(display: &str) -> Result<Self, String> {
-        if crate::core::volumes::virtual_resolvers::opaque(display) {
-            let entry = crate::core::volumes::virtual_resolvers::resource_entry(display)?;
+        if crate::core::volumes::native_vfs::opaque(display) {
+            let entry = crate::core::volumes::native_vfs::resource_entry(display)?;
             return Ok(Self::from_entry(display, &entry));
         }
         if let Some(route) = crate::usbfs::route(display) {
@@ -319,7 +319,7 @@ pub fn bind_selected(
     for binding in bindings {
         if crate::plugins::mounts::handles(&binding.path)
             || crate::usbfs::route(&binding.path).is_some()
-            || crate::core::volumes::virtual_resolvers::opaque(&binding.path)
+            || crate::core::volumes::native_vfs::opaque(&binding.path)
         {
             let snapshot = ResourceSnapshot::resolve(&binding.path)?;
             if snapshot.reference != binding.reference {

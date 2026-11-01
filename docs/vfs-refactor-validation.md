@@ -1,3 +1,5 @@
+> Historical validation snapshot. This describes the pre-migration VFS contribution and connection routing implementation; it is not the current protocol or architecture. Current contracts are documented in [Unified FS](plugins/10-UNIFIED-FS.md) and the shared provider plan.
+
 # VFS Contribution / Connection routing refactor validation
 
 ## Result

@@ -7,7 +7,7 @@ use crate::plugins::{
     provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{
-    LocationMatch, MatchResource, ProviderError, ProviderInvocation, ProviderKind,
+    LocationMatch, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
     ProviderMatchRule, SearchProvider, SearchResults,
 };
 use serde_json::{json, Value};
@@ -33,36 +33,25 @@ impl SearchProvider for Walker {
         &self,
         ctx: &dyn ProviderInvocation,
         cancelled: &dyn Fn() -> bool,
-        emit: &mut dyn FnMut(Value) -> Result<(), ProviderError>,
+        emit: &mut dyn FnMut(fiex_provider_contracts::SearchEntry) -> Result<(), ProviderError>,
     ) -> Result<SearchResults, ProviderError> {
         if ctx.method() != "search.query" {
             return Err(ProviderError::invalid_params(
                 "SearchProvider method mismatch",
             ));
         }
-        let params = ctx.params();
-        let query = params
-            .get("query")
-            .and_then(Value::as_str)
-            .ok_or_else(|| ProviderError::invalid_params("missing search query"))?;
-        let mode: SearchMode =
-            serde_json::from_value(params.get("mode").cloned().unwrap_or_else(|| json!("name")))
-                .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
+        let request = match ctx.input()? {
+            ProviderInput::Search(request) => request,
+            _ => return Err(ProviderError::invalid_params("missing search request")),
+        };
+        let query = request.query.trim();
+        let mode = request.mode;
         if !self.supports(mode) {
             return Err(ProviderError::invalid_params("unsupported search mode"));
         }
-        let hidden = params
-            .get("hidden")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let ignores: Vec<String> =
-            serde_json::from_value(params.get("ignores").cloned().unwrap_or_else(|| json!([])))
-                .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
-        let limit = params
-            .get("limit")
-            .and_then(Value::as_u64)
-            .map(|limit| limit.clamp(1, 500) as usize)
-            .unwrap_or(500);
+        let hidden = request.hidden;
+        let ignores = &request.ignores;
+        let limit = request.bounded_limit();
         let root = NativeProviderInvocation::resource(ctx, 0)?;
         if !root.is_dir {
             return Err(ProviderError::invalid_params(
@@ -74,12 +63,11 @@ impl SearchProvider for Walker {
             query,
             mode,
             hidden,
-            &ignores,
+            ignores,
             limit,
             cancelled,
             &mut |entry| {
-                let value = serde_json::to_value(entry).map_err(|error| error.to_string())?;
-                emit(value).map_err(|error| error.to_string())
+                emit(super::search_entry(entry)).map_err(|error| error.to_string())
             },
         )
         .map_err(ProviderError::internal)?;
@@ -116,7 +104,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn SearchProvider> {
     })
 }
 
-pub(super) fn candidates(targets: &[MatchResource]) -> Vec<Resolver> {
+pub(super) fn candidates(targets: &[fiex_provider_contracts::MatchResource]) -> Vec<Resolver> {
     registry()
         .matched_candidates(targets, None, targets.len())
         .into_iter()
@@ -130,6 +118,10 @@ pub(super) fn candidates(targets: &[MatchResource]) -> Vec<Resolver> {
 
 pub(super) fn provider(id: &str) -> Option<&'static dyn SearchProvider> {
     registry().get(id)
+}
+
+pub(super) fn provider_arc(id: &str) -> Option<Arc<dyn SearchProvider>> {
+    registry().get_arc(id)
 }
 
 pub(super) fn modes(id: &str) -> Vec<SearchMode> {
@@ -149,22 +141,12 @@ mod tests {
     #[test]
     fn walker_is_registered_once_with_exact_search_modes() {
         assert_eq!(registry().len(), 1);
-        let location = fiex_provider_contracts::ResourceLocation {
-            resource_type: fiex_provider_contracts::ResourceType::Fs,
-            provider_id: "core:local-fs".into(),
-            mount_id: Some("local".into()),
-        };
-        let target = MatchResource {
-            metadata: Some(fiex_provider_contracts::ResourceMetadata {
-                kind: "directory".into(),
-                ..Default::default()
-            }),
-            view: Some(location.clone()),
-            storage: Some(location),
-            capabilities: fiex_provider_contracts::ResourceCapabilities {
-                operations: vec![crate::plugins::provider_registry::FsOperation::List],
-            },
-        };
+        let target = serde_json::json!({
+            "kind":"directory",
+            "view":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
+            "storage":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
+            "operations":["list"]
+        });
         assert_eq!(candidates(&[target])[0].id, BUILTIN_SEARCH);
         assert_eq!(
             modes(BUILTIN_SEARCH),

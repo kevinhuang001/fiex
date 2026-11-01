@@ -5,7 +5,7 @@ use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
     FsOperation, FsRequest, ProviderDescriptor, ProviderError, ProviderInstances,
     ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
-    SearchCapabilities, SearchResults, TransferPreflight, VfsProvider,
+    SearchCapabilities, TransferPreflight, VfsPage, VfsProvider,
 };
 use serde_json::{json, Value};
 use std::{
@@ -114,7 +114,7 @@ impl VfsProvider for IpcVfsProvider {
         &self,
         request: &FsRequest<'_>,
     ) -> Result<fiex_provider_contracts::FsListing, ProviderError> {
-        let result = self.invoke(request.ctx(), "vfs.list", request.params().clone())?;
+        let result = self.invoke(request.ctx(), "vfs.list", request.to_params()?)?;
         let limit = request.limit();
         let page: fiex_provider_contracts::VfsPage = serde_json::from_value(result.clone())
             .map_err(|error| ProviderError::invalid_params(format!("invalid VFS page: {error}")))?;
@@ -128,7 +128,7 @@ impl VfsProvider for IpcVfsProvider {
         &self,
         request: &FsRequest<'_>,
     ) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
-        let result = self.invoke(request.ctx(), "vfs.stat", request.params().clone())?;
+        let result = self.invoke(request.ctx(), "vfs.stat", request.to_params()?)?;
         serde_json::from_value(result)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
@@ -137,7 +137,7 @@ impl VfsProvider for IpcVfsProvider {
         &self,
         request: &FsRequest<'_>,
     ) -> Result<fiex_provider_contracts::FsRead, ProviderError> {
-        let result = self.invoke(request.ctx(), "vfs.openRead", request.params().clone())?;
+        let result = self.invoke(request.ctx(), "vfs.openRead", request.to_params()?)?;
         let stream_id = result["streamId"]
             .as_str()
             .filter(|id| !id.is_empty())
@@ -161,7 +161,7 @@ impl VfsProvider for IpcVfsProvider {
         &self,
         request: &FsRequest<'_>,
     ) -> Result<fiex_provider_contracts::FsWrite, ProviderError> {
-        let result = self.invoke(request.ctx(), "vfs.beginWrite", request.params().clone())?;
+        let result = self.invoke(request.ctx(), "vfs.beginWrite", request.to_params()?)?;
         let stream_id = result["streamId"]
             .as_str()
             .filter(|id| !id.is_empty())
@@ -197,7 +197,7 @@ impl VfsProvider for IpcVfsProvider {
         &self,
         request: &FsRequest<'_>,
     ) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
-        let result = self.invoke(request.ctx(), "vfs.mkdir", request.params().clone())?;
+        let result = self.invoke(request.ctx(), "vfs.mkdir", request.to_params()?)?;
         serde_json::from_value(result)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
@@ -206,13 +206,13 @@ impl VfsProvider for IpcVfsProvider {
         &self,
         request: &FsRequest<'_>,
     ) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
-        let result = self.invoke(request.ctx(), "vfs.rename", request.params().clone())?;
+        let result = self.invoke(request.ctx(), "vfs.rename", request.to_params()?)?;
         serde_json::from_value(result)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 
     fn remove(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
-        self.invoke(request.ctx(), "vfs.remove", request.params().clone())?;
+        self.invoke(request.ctx(), "vfs.remove", request.to_params()?)?;
         Ok(())
     }
 
@@ -220,8 +220,8 @@ impl VfsProvider for IpcVfsProvider {
         &self,
         request: &FsRequest<'_>,
     ) -> Result<fiex_provider_contracts::FsListing, ProviderError> {
-        let result = self.invoke(request.ctx(), "vfs.search", request.params().clone())?;
-        let page: SearchResults = serde_json::from_value(result)
+        let result = self.invoke(request.ctx(), "vfs.search", request.to_params()?)?;
+        let page: VfsPage = serde_json::from_value(result)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
         page.validate_page(request.limit())
             .map_err(ProviderError::invalid_params)?;
@@ -284,7 +284,7 @@ pub(super) fn open_read(
 ) -> Result<fiex_provider_contracts::FsRead, String> {
     let provider = provider(&mount.plugin_id)?;
     let invocation = MountInvocation::new(mount.clone(), "vfs.openRead", params);
-    let request = FsRequest::new(&invocation, FsOperation::Read);
+    let request = FsRequest::new(&invocation, FsOperation::Read).map_err(|error| error.to_string())?;
     provider.read(&request).map_err(|error| error.to_string())
 }
 
@@ -294,7 +294,7 @@ pub(super) fn begin_write(
 ) -> Result<fiex_provider_contracts::FsWrite, String> {
     let provider = provider(&mount.plugin_id)?;
     let invocation = MountInvocation::new(mount.clone(), "vfs.beginWrite", params);
-    let request = FsRequest::new(&invocation, FsOperation::Write);
+    let request = FsRequest::new(&invocation, FsOperation::Write).map_err(|error| error.to_string())?;
     provider.write(&request).map_err(|error| error.to_string())
 }
 
@@ -303,17 +303,17 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
     let invocation = MountInvocation::new(mount.clone(), method, params.clone());
     let result = match method {
         "vfs.list" => {
-            let request = FsRequest::new(&invocation, FsOperation::List);
+            let request = FsRequest::new(&invocation, FsOperation::List).map_err(|error| error.to_string())?;
             serde_json::to_value(provider.list(&request).map_err(|error| error.to_string())?)
                 .map_err(|error| error.to_string())
         }
         "vfs.stat" => {
-            let request = FsRequest::new(&invocation, FsOperation::Stat);
+            let request = FsRequest::new(&invocation, FsOperation::Stat).map_err(|error| error.to_string())?;
             serde_json::to_value(provider.stat(&request).map_err(|error| error.to_string())?)
                 .map_err(|error| error.to_string())
         }
         "vfs.mkdir" => {
-            let request = FsRequest::new(&invocation, FsOperation::Mkdir);
+            let request = FsRequest::new(&invocation, FsOperation::Mkdir).map_err(|error| error.to_string())?;
             serde_json::to_value(
                 provider
                     .mkdir(&request)
@@ -322,7 +322,7 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
             .map_err(|error| error.to_string())
         }
         "vfs.rename" => {
-            let request = FsRequest::new(&invocation, FsOperation::Rename);
+            let request = FsRequest::new(&invocation, FsOperation::Rename).map_err(|error| error.to_string())?;
             serde_json::to_value(
                 provider
                     .rename(&request)
@@ -331,14 +331,14 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
             .map_err(|error| error.to_string())
         }
         "vfs.remove" => {
-            let request = FsRequest::new(&invocation, FsOperation::Remove);
+            let request = FsRequest::new(&invocation, FsOperation::Remove).map_err(|error| error.to_string())?;
             provider
                 .remove(&request)
                 .map_err(|error| error.to_string())?;
             Ok(Value::Null)
         }
         "vfs.search" => {
-            let request = FsRequest::new(&invocation, FsOperation::Search);
+            let request = FsRequest::new(&invocation, FsOperation::Search).map_err(|error| error.to_string())?;
             serde_json::to_value(
                 provider
                     .search(&request)

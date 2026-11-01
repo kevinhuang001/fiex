@@ -6,7 +6,7 @@ use crate::plugins::{
 };
 use fiex_provider_contracts::{
     ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, ProviderRequest, ProviderRequestContext, ToolbarProvider, ToolbarResult,
+    ProviderMatchRule, ProviderRequestContext, ToolbarProvider, ToolbarResult,
 };
 use std::{
     any::Any,
@@ -29,7 +29,7 @@ impl CoreToolbarInvocation {
         plugin: PluginInfo,
         resources: &[ResourceSnapshot],
         directory: &str,
-        request: &ProviderRequest,
+        request: ProviderRequestContext,
     ) -> Self {
         let directory_resource = ResourceSnapshot::from_metadata(
             directory,
@@ -39,9 +39,8 @@ impl CoreToolbarInvocation {
             },
         );
         Self {
-            base: NativeProviderInvocation::new(
-                request.method.clone(),
-                request.params.clone(),
+            base: NativeProviderInvocation::from_request_context(
+                request,
                 resources,
                 Some(&directory_resource),
             ),
@@ -82,7 +81,7 @@ impl ToolbarProvider for IpcToolbar {
         let response = crate::plugins::events::invoke_resources(
             &services.plugin,
             ctx.method(),
-            ctx.params().clone(),
+            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
             &services.resources,
             Some(services.directory.as_str()),
         )
@@ -130,15 +129,47 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ToolbarProvider>, String> {
         .ok_or_else(|| "ToolbarProvider registration failed".into())
 }
 
-pub(super) fn invoke(
-    plugin: &PluginInfo,
-    resources: &[ResourceSnapshot],
-    directory: &str,
-    request: &ProviderRequest,
-) -> Result<ToolbarResult, String> {
-    let invocation = CoreToolbarInvocation::new(plugin.clone(), resources, directory, request);
-    ToolbarProvider::invoke(proxy(&plugin.id)?.as_ref(), &invocation)
-        .map_err(|error| error.to_string())
+pub(super) struct ScopedToolbarProxy {
+    handler: Arc<dyn ToolbarProvider>,
+    plugin: PluginInfo,
+    resources: Vec<ResourceSnapshot>,
+    directory: String,
+    provider_id: String,
+}
+
+impl ScopedToolbarProxy {
+    pub fn new(
+        plugin: PluginInfo,
+        resources: &[ResourceSnapshot],
+        directory: &str,
+        provider_id: String,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            handler: proxy(&plugin.id)?,
+            plugin,
+            resources: resources.to_vec(),
+            directory: directory.into(),
+            provider_id,
+        })
+    }
+}
+
+impl ToolbarProvider for ScopedToolbarProxy {
+    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<ToolbarResult, ProviderError> {
+        let request = crate::plugins::events::bind_provider_context(
+            &self.plugin.id,
+            &self.provider_id,
+            ctx.request(),
+        )
+        .map_err(ProviderError::invalid_params)?;
+        let invocation = CoreToolbarInvocation::new(
+            self.plugin.clone(),
+            &self.resources,
+            &self.directory,
+            request,
+        );
+        self.handler.invoke(&invocation)
+    }
 }
 
 #[cfg(test)]

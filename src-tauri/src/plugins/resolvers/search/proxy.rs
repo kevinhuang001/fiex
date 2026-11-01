@@ -6,10 +6,9 @@ use crate::plugins::{
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, ProviderRequest, SearchProvider, SearchResults,
+    ProviderDescriptor, ProviderError, ProviderInput, ProviderInstances, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, SearchProvider, SearchResults,
 };
-use serde_json::Value;
 use std::{
     any::Any,
     sync::{Arc, Mutex, OnceLock},
@@ -50,19 +49,17 @@ impl SearchProvider for IpcSearch {
         let response = crate::plugins::events::invoke_resources(
             &invocation.plugin,
             "search.query",
-            ctx.params().clone(),
+            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
             &invocation.resources,
             Some(&invocation.directory),
         )
         .map_err(ProviderError::internal)?;
         let page: SearchResults = serde_json::from_value(response)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
-        let limit = ctx
-            .params()
-            .get("limit")
-            .and_then(Value::as_u64)
-            .map(|value| value.clamp(1, 500) as usize)
-            .unwrap_or(500);
+        let limit = match ctx.input()? {
+            ProviderInput::Search(request) => request.bounded_limit(),
+            _ => return Err(ProviderError::invalid_params("missing search request")),
+        };
         page.validate_page(limit)
             .map_err(ProviderError::invalid_params)?;
         Ok(page)
@@ -107,46 +104,71 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn SearchProvider>, String> {
         .ok_or_else(|| "SearchProvider registration failed".into())
 }
 
-pub(super) struct ScopedSearchProxy<'a> {
+pub(super) struct ScopedSearchProxy {
     handler: Arc<dyn SearchProvider>,
     plugin: PluginInfo,
-    resources: &'a [ResourceSnapshot],
-    directory: &'a str,
+    resources: Vec<ResourceSnapshot>,
+    directory: String,
+    provider_id: String,
 }
 
-impl<'a> ScopedSearchProxy<'a> {
+impl ScopedSearchProxy {
     pub fn new(
         plugin: PluginInfo,
-        resources: &'a [ResourceSnapshot],
-        directory: &'a str,
+        resources: &[ResourceSnapshot],
+        directory: &str,
+        provider_id: String,
     ) -> Result<Self, String> {
         Ok(Self {
             handler: proxy(&plugin.id)?,
             plugin,
-            resources,
-            directory,
+            resources: resources.to_vec(),
+            directory: directory.into(),
+            provider_id,
         })
     }
 
-    pub fn query_stream_typed(
+    fn invocation(
         &self,
-        request: &ProviderRequest,
-        cancelled: &dyn Fn() -> bool,
-        emit: &mut dyn FnMut(Value) -> Result<(), ProviderError>,
-    ) -> Result<SearchResults, String> {
-        let invocation = ScopedSearchInvocation {
-            base: NativeProviderInvocation::new(
-                request.method.clone(),
-                request.params.clone(),
-                self.resources,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<ScopedSearchInvocation, ProviderError> {
+        let request = crate::plugins::events::bind_provider_context(
+            &self.plugin.id,
+            &self.provider_id,
+            ctx.request(),
+        )
+        .map_err(ProviderError::invalid_params)?;
+        Ok(ScopedSearchInvocation {
+            base: NativeProviderInvocation::from_request_context(
+                request,
+                self.resources.as_slice(),
                 None,
             ),
             plugin: self.plugin.clone(),
-            resources: self.resources.to_vec(),
-            directory: self.directory.to_owned(),
-        };
+            resources: self.resources.clone(),
+            directory: self.directory.clone(),
+        })
+    }
+}
+
+impl SearchProvider for ScopedSearchProxy {
+    fn query(&self, ctx: &dyn ProviderInvocation) -> Result<SearchResults, ProviderError> {
+        let mut entries = Vec::new();
+        let page = self.query_stream(ctx, &|| false, &mut |entry| {
+            entries.push(entry);
+            Ok(())
+        })?;
+        Ok(SearchResults { entries, ..page })
+    }
+
+    fn query_stream(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(fiex_provider_contracts::SearchEntry) -> Result<(), ProviderError>,
+    ) -> Result<SearchResults, ProviderError> {
+        let invocation = self.invocation(ctx)?;
         SearchProvider::query_stream(self.handler.as_ref(), &invocation, cancelled, emit)
-            .map_err(|error| error.to_string())
     }
 }
 

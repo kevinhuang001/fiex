@@ -1,4 +1,9 @@
-FS/VFS review against Agent_Plan(2), 2026-10-29
+Historical FS/VFS review against Agent_Plan(2), 2026-10-29
+
+This file records the 2026-10-29 implementation snapshot. Its references to
+FsAdapter, VirtualView, and virtual_storage were superseded by the Unified
+Provider Architecture migration; do not use them to infer the current routing
+or treat the old acceptance matrix as current verification evidence.
 
 Scope: Core PR #21, SDK PR #9, official plugins PR #19, actual latest branch heads.
 Protocol: 6.0. Rust SDK: 0.3.0. Browser SDK: 0.1.1.

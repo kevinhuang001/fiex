@@ -9,20 +9,34 @@ mod router;
 mod scope;
 mod validation;
 use fiex_provider_contracts::{event, Dispatch};
-pub use registry::{Handler, Resolver};
-pub use router::EventRouter;
+pub use registry::Resolver;
+pub use router::{EventRouter, ProviderCandidate};
 #[cfg(test)]
 use scope::action_folders;
 pub use scope::{prepare, resource_scope};
 pub use validation::validate_result;
 
-/// Bind a selected plugin provider's trusted instance identity at the proxy
-/// construction boundary. Typed EventRouter dispatch remains transport-blind.
-pub(crate) fn bind_provider_request(
-    provider: &Resolver,
-    request: &fiex_provider_contracts::ProviderRequest,
-) -> Result<fiex_provider_contracts::ProviderRequest, String> {
-    registry::bind_request(provider, request)
+pub(crate) fn bind_provider_input(
+    plugin_id: &str,
+    registered_id: &str,
+    input: &fiex_provider_contracts::ProviderInput,
+) -> Result<fiex_provider_contracts::ProviderInput, String> {
+    registry::bound_plugin_input(plugin_id, registered_id, input)
+}
+
+pub(crate) fn bind_provider_context(
+    plugin_id: &str,
+    registered_id: &str,
+    context: &fiex_provider_contracts::ProviderRequestContext,
+) -> Result<fiex_provider_contracts::ProviderRequestContext, String> {
+    let mut bound = context.clone();
+    bound.input = bind_provider_input(
+        plugin_id,
+        registered_id,
+        context.input().map_err(|error| error.to_string())?,
+    )?;
+    bound.input_error = None;
+    Ok(bound)
 }
 /// Core-owned system events are not exposed through the plugin UI bridge.
 /// Unknown methods remain legal plugin-local business methods.
@@ -66,68 +80,8 @@ pub fn menu_allowed(
     .iter()
     .any(|provider| {
         provider.id == provider_id
-            && matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
+            && provider.plugin.as_deref().is_some_and(|plugin| plugin.id == plugin_id)
     })
-}
-
-pub fn call_owner(
-    method: &str,
-    plugin_id: &str,
-    params: Value,
-    resources: &[ResourceSnapshot],
-    directory: Option<&str>,
-) -> Result<Value, String> {
-    let targets = matching::match_resources(resources);
-    let providers = crate::plugins::provider_registry::candidates(
-        method,
-        &targets,
-        directory.unwrap_or(""),
-        Vec::new(),
-    )
-    .into_iter()
-    .filter(|p| {
-        let Handler::Plugin(plugin) = &p.handler else {
-            return false;
-        };
-        if plugin.id != plugin_id {
-            return false;
-        }
-        match params.get("providerId") {
-            Some(value) => value
-                .as_str()
-                .is_some_and(|instance| p.id == format!("plugin:{plugin_id}:{instance}")),
-            None => p.id == format!("plugin:{plugin_id}"),
-        }
-    })
-    .collect();
-    let request = fiex_provider_contracts::ProviderRequest {
-        method: method.into(),
-        params,
-    };
-    EventRouter::resolve_typed(
-        method,
-        providers,
-        &request,
-        |provider, request| match &provider.handler {
-            Handler::Plugin(plugin) => invoke_resources(
-                plugin,
-                &request.method,
-                request.params.clone(),
-                resources,
-                directory,
-            ),
-            Handler::Builtin(_) => Err("native owner is not registered".into()),
-        },
-        |_, value| Ok(value),
-        |_| true,
-        |results| {
-            results
-                .into_iter()
-                .next()
-                .ok_or_else(|| "event owner unavailable or does not match targets".to_string())?
-                .1
-        },
-    )
 }
 
 pub fn invoke(plugin: &str, method: &str, params: Value) -> Result<Value, String> {

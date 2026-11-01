@@ -5,21 +5,27 @@
 //! `extensions.connectionContextMenus` add their own flat action list.
 
 use crate::plugins::{
-    events::{EventRouter, Handler},
+    events::{EventRouter, ProviderCandidate, Resolver},
     native_invocation::NativeProviderInvocation,
 };
-mod endpoint;
 mod native;
+mod proxy;
 mod validation;
 use crate::remote::ConnectionInfo;
 use fiex_provider_contracts::{
-    ConnectionContextMenuProvider, MatchResource, ProviderRequest, ResourceCapabilities,
+    ConnectionContextMenuProvider, MatchResource, MenuExecuteResult, MenuItem,
+    ProviderError, ProviderInvocation, ProviderRequest, ResourceCapabilities,
     ResourceLocation, ResourceMetadata, ResourceType,
 };
-use native::{items as builtin_items, providers};
+use native::providers;
 use serde_json::{json, Value};
 use validation::valid_items;
+use std::sync::Arc;
 
+#[cfg(test)]
+use native::items as builtin_items;
+
+#[derive(Clone)]
 struct Context {
     info: ConnectionInfo,
     can_sync: bool,
@@ -54,9 +60,10 @@ impl Context {
     /// Verified connection identity for the common ProviderMatchRule.
     /// The saved connection is authoritative; plugin JSON never supplies the
     /// view owner, storage owner, mount or effective operations.
-    fn matcher_metadata(&self) -> MatchResource {
+    fn matcher_resource(&self) -> MatchResource {
         let owner = format!("plugin:{}:{}", self.info.plugin_id, self.info.kind);
-        let (_, storage) = crate::plugins::match_rules::typed_locations_for(&self.info.mount_path);
+        let (_, storage) =
+            crate::plugins::match_rules::typed_locations_for(&self.info.mount_path);
         MatchResource {
             metadata: Some(ResourceMetadata {
                 kind: "connection".into(),
@@ -73,36 +80,71 @@ impl Context {
     }
 }
 
+fn implementation_for(
+    resolver: &Resolver,
+    context: &Context,
+    session: &str,
+) -> Arc<dyn ConnectionContextMenuProvider> {
+    match resolver.plugin.as_deref() {
+        None => native::provider(&resolver.id).unwrap_or_else(|| {
+            Arc::new(FailedConnectionMenuProvider(
+                "registered native connection-menu provider disappeared".into(),
+            ))
+        }),
+        Some(plugin) => match proxy::from_plugin(plugin, context, session, &resolver.id) {
+            Ok(proxy) => Arc::new(proxy),
+            Err(error) => Arc::new(FailedConnectionMenuProvider(error)),
+        },
+    }
+}
+
+struct FailedConnectionMenuProvider(String);
+impl ConnectionContextMenuProvider for FailedConnectionMenuProvider {
+    fn resolve(&self, _ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        Err(ProviderError::internal(self.0.clone()))
+    }
+    fn execute(&self, _ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+        Err(ProviderError::internal(self.0.clone()))
+    }
+}
+
 pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
     let ctx = Context::load(connection_id)?;
     let session = crate::plugins::mounts::new_id()?;
-    let metadata = [ctx.matcher_metadata()];
+    let targets = [ctx.matcher_resource()];
     let providers = crate::plugins::provider_registry::candidates(
         "connectionContextMenu.resolve",
-        &metadata,
+        &targets,
         &ctx.info.mount_path,
-        providers(&metadata),
+        providers(&targets),
     );
     let request = ProviderRequest {
         method: "connectionContextMenu.resolve".into(),
         params: json!({}),
     };
-    Ok(EventRouter::resolve_typed(
+    let providers = providers
+        .into_iter()
+        .map(|resolver| ProviderCandidate {
+            implementation: implementation_for(&resolver, &ctx, &session),
+            resolver,
+        })
+        .collect();
+    let invocation = NativeProviderInvocation::new(
+        request.method.clone(),
+        request.params.clone(),
+        &[],
+        None,
+    )
+    .with_local_data(Arc::new(ctx.clone()));
+    Ok(EventRouter::resolve_shared(
         "connectionContextMenu.resolve",
         providers,
-        &request,
-        |provider, request| {
-            let request = crate::plugins::events::bind_provider_request(provider, request)?;
-            let endpoint = endpoint::from_resolver(provider, &ctx, &session);
-            let invocation = NativeProviderInvocation::new(
-                request.method.clone(),
-                request.params.clone(),
-                &[],
-                None,
-            );
-            let items = ConnectionContextMenuProvider::resolve(endpoint.as_ref(), &invocation)
-                .map_err(|error| error.to_string())?;
-            Ok(Some(json!({"items":items})))
+        &invocation,
+        |_, implementation, invocation| {
+            implementation
+                .resolve(invocation)
+                .map(|items| Some(json!({"items":items})))
+                .map_err(|error| error.to_string())
         },
         |provider, response| {
             let Some(response) = response else {
@@ -113,14 +155,14 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
             if items.is_empty() {
                 return Ok(None);
             }
-            let value = match &provider.handler {
-                Handler::Builtin(_) => json!({
+            let value = match provider.plugin.as_deref() {
+                None => json!({
                     "kind":"builtin",
                     "providerId":provider.id,
                     "menuSessionId":session,
                     "items":items
                 }),
-                Handler::Plugin(plugin) => json!({
+                Some(plugin) => json!({
                     "kind":"plugin",
                     "providerId":provider.id,
                     "pluginId":plugin.id,
@@ -141,16 +183,28 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
     ))
 }
 
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 /// A plugin result is never authority to run a privileged native command.
 /// Only an already-matched Core builtin may return the private nativeAction
 /// marker, and the action must be identical to the one Core revalidated.
-fn native_action_authorized(builtin: bool, item_id: &str, result: &Value) -> Result<bool, String> {
-    match (builtin, result["kind"].as_str()) {
-        (true, Some("nativeAction")) if result["itemId"] == item_id => Ok(true),
+fn native_action_authorized(
+    builtin: bool,
+    item_id: &str,
+    result: &MenuExecuteResult,
+) -> Result<bool, String> {
+    match (builtin, result) {
+        (true, MenuExecuteResult::NativeAction(action)) if action.item_id == item_id => Ok(true),
         (true, _) => Err("invalid native connection menu response".into()),
-        (false, Some("nativeAction" | "coreAction")) => {
-            Err("plugin cannot execute native connection actions".into())
-        }
+        (
+            false,
+            MenuExecuteResult::NativeAction(_)
+            | MenuExecuteResult::CoreAction(_)
+            | MenuExecuteResult::ConnectionCoreAction(_)
+            | MenuExecuteResult::RemoteAction(_),
+        ) => Err("plugin cannot execute native connection actions".into()),
         (false, _) => Ok(false),
     }
 }
@@ -162,17 +216,17 @@ pub async fn execute(
     menu_session_id: Option<&str>,
 ) -> Result<Value, String> {
     let ctx = Context::load(connection_id)?;
-    let metadata = [ctx.matcher_metadata()];
+    let targets = [ctx.matcher_resource()];
     let owner = crate::plugins::provider_registry::candidates(
         "connectionContextMenu.execute",
-        &metadata,
+        &targets,
         &ctx.info.mount_path,
-        providers(&metadata),
+        providers(&targets),
     )
     .into_iter()
     .find(|provider| provider.id == provider_id)
     .ok_or("menu provider is disabled or does not match connection")?;
-    let builtin_owner = matches!(&owner.handler, Handler::Builtin(_));
+    let builtin_owner = owner.plugin.is_none();
     let session = menu_session_id
         .map(str::to_owned)
         .unwrap_or(crate::plugins::mounts::new_id()?);
@@ -180,24 +234,26 @@ pub async fn execute(
         method: "connectionContextMenu.execute".into(),
         params: json!({"itemId":item_id}),
     };
-    let result = EventRouter::resolve_typed(
+    let implementation = implementation_for(&owner, &ctx, &session);
+    let candidate = ProviderCandidate {
+        resolver: owner,
+        implementation,
+    };
+    let invocation = NativeProviderInvocation::new(
+        request.method.clone(),
+        request.params.clone(),
+        &[],
+        None,
+    )
+    .with_local_data(Arc::new(ctx.clone()));
+    let result = EventRouter::resolve_shared(
         "connectionContextMenu.execute",
-        vec![owner],
-        &request,
-        |provider, request| {
-            let request = crate::plugins::events::bind_provider_request(provider, request)?;
-            let endpoint = endpoint::from_resolver(provider, &ctx, &session);
-            let invocation = NativeProviderInvocation::new(
-                request.method.clone(),
-                request.params.clone(),
-                &[],
-                None,
-            );
-            ConnectionContextMenuProvider::execute(endpoint.as_ref(), &invocation)
-                .map_err(|error| error.to_string())
-        },
+        vec![candidate],
+        &invocation,
+        |_, implementation, invocation| implementation.execute(invocation).map_err(|error| error.to_string()),
         |_, result| {
-            crate::plugins::events::validate_result("connectionContextMenu.execute", &result)?;
+            let wire = serde_json::to_value(&result).map_err(|error| error.to_string())?;
+            crate::plugins::events::validate_result("connectionContextMenu.execute", &wire)?;
             Ok(result)
         },
         |_| true,
@@ -212,26 +268,7 @@ pub async fn execute(
     if native_action_authorized(builtin_owner, item_id, &result)? {
         return native::execute(provider_id, &ctx, item_id).await;
     }
-    Ok(result)
-}
-
-fn plugin_items(
-    plugin: &crate::plugins::host::PluginInfo,
-    ctx: &Context,
-    session: &str,
-    provider_id: Option<&str>,
-) -> Result<Vec<Value>, String> {
-    let mut params = json!({
-        "menuSessionId": session,
-        "interactionId": crate::plugins::mounts::new_id()?,
-        "connection": ctx.summary(),
-    });
-    if let Some(id) = provider_id {
-        params["providerId"] = json!(id);
-    }
-    crate::plugins::host::global()
-        .invoke(&plugin.id, "connectionContextMenu.resolve", params)
-        .and_then(|value| valid_items(&value))
+    serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

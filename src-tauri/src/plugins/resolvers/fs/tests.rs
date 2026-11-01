@@ -1,7 +1,7 @@
 use super::*;
 
 fn entry(value: Value) -> Result<FsEntry, String> {
-    FsEntry::parse(value)
+    super::types::parse_entry(value)
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn malformed_node_restrictions_cannot_become_unrestricted() {
 
 #[test]
 fn vfs_pagination_requires_canonical_bounded_shared_pages() {
-    use fiex_provider_contracts::{SearchResults, VfsPage};
+    use fiex_provider_contracts::VfsPage;
 
     let listing: VfsPage = serde_json::from_value(json!({"entries":[]})).unwrap();
     assert!(!listing.truncated);
@@ -91,7 +91,7 @@ fn vfs_pagination_requires_canonical_bounded_shared_pages() {
     let oversize: VfsPage = serde_json::from_value(json!({"entries":[{},{}]})).unwrap();
     assert!(oversize.validate_page(1).is_err());
 
-    let search: SearchResults =
+    let search: VfsPage =
         serde_json::from_value(json!({"entries":[],"nextCursor":"bad\n"})).unwrap();
     assert!(search.validate_page(500).is_err());
 }

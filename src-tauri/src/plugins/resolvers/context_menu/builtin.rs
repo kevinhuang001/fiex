@@ -1,11 +1,14 @@
 //! Builtin menu policy. The frontend receives data, never provider closures.
-use super::file_ops::{available, BuiltinResolver, Selection};
+use super::file_ops::{self, Selection};
 use crate::plugins::events::Resolver;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
+use fiex_provider_contracts::{MenuExecuteResult, MenuItem};
 use serde_json::{json, Value};
 
+#[derive(Clone)]
 pub(super) struct Context {
     pub directory: String,
+    pub directory_entry: Option<crate::core::files::Entry>,
     pub paths: Vec<String>,
     pub entries: Vec<crate::core::files::Entry>,
     pub read_only: bool,
@@ -38,7 +41,8 @@ impl Context {
             .collect::<Result<Vec<_>, _>>()?;
         // Read-only status comes from the selected storage provider's entry,
         // including Core-native views. The menu does not special-case a view.
-        let read_only = entry(directory)?.readonly;
+        let directory_entry = entry(directory)?;
+        let read_only = directory_entry.readonly;
         // A blank-canvas menu has no selection: capabilities come from the
         // directory itself so "new folder/file" follows the same grant.
         let mut capabilities = if paths.is_empty() {
@@ -54,6 +58,7 @@ impl Context {
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         Ok(Self {
             directory: directory.into(),
+            directory_entry: Some(directory_entry),
             paths: paths.to_vec(),
             entries,
             read_only,
@@ -64,7 +69,6 @@ impl Context {
 
     pub(super) fn selection(&self) -> Selection<'_> {
         Selection {
-            directory: &self.directory,
             paths: &self.paths,
             entries: &self.entries,
             read_only: self.read_only,
@@ -72,10 +76,8 @@ impl Context {
         }
     }
 
-    /// Resolvers whose capability exists for this selection.
-    pub(super) fn resolvers(&self) -> Vec<&'static dyn BuiltinResolver> {
-        let selection = self.selection();
-        available(&selection, &self.capabilities)
+    pub(super) fn capabilities(&self) -> FileCapabilities {
+        self.capabilities
     }
 
     /// Tests build menus without touching the mount registry.
@@ -103,6 +105,7 @@ impl Context {
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         Self {
             directory: directory.into(),
+            directory_entry: None,
             paths,
             entries,
             read_only,
@@ -113,11 +116,11 @@ impl Context {
 }
 
 /// Only groups this selection can actually use become menu providers.
-fn retain_unclaimed(ctx: &Context, items: Vec<Value>) -> Vec<Value> {
+pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuItem> {
     let claimed = super::native_views::claimed_actions(&ctx.directory, &ctx.paths);
     items
         .into_iter()
-        .filter(|item| !claimed.iter().any(|id| item["id"].as_str() == Some(*id)))
+        .filter(|item| !claimed.iter().any(|id| item.id == *id))
         .collect()
 }
 
@@ -126,34 +129,19 @@ fn retain_unclaimed(ctx: &Context, items: Vec<Value>) -> Vec<Value> {
 /// entire menu. Generic providers still contribute independent actions.
 pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
     let mut candidates = super::native_views::providers(&ctx.directory, &ctx.paths);
-    let selection = ctx.selection();
-    candidates.extend(
-        ctx.resolvers()
-            .into_iter()
-            .filter(|resolver| {
-                !retain_unclaimed(ctx, resolver.items(&selection, &ctx.capabilities)).is_empty()
-            })
-            .map(|resolver| Resolver::builtin(resolver.id(), resolver.priority())),
-    );
+    candidates.extend(file_ops::providers(ctx));
     candidates
 }
 
+#[cfg(test)]
 pub(super) fn resolve(id: &str, ctx: &Context) -> Result<Value, String> {
     if super::native_views::owns(id) {
         return super::native_views::resolve(id, &ctx.directory, &ctx.paths);
     }
-    let resolver = ctx
-        .resolvers()
-        .into_iter()
-        .find(|resolver| resolver.id() == id)
-        .ok_or("unknown or unavailable builtin menu provider")?;
-    let selection = ctx.selection();
-    Ok(json!({"items": retain_unclaimed(
-        ctx,
-        resolver.items(&selection, &ctx.capabilities),
-    )}))
+    file_ops::resolve(id, ctx)
 }
 
+#[cfg(test)]
 pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, String> {
     let offered = resolve(id, ctx)?;
     if !offered["items"].as_array().is_some_and(|items| {
@@ -164,12 +152,12 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
         return Err("menu action is no longer available".into());
     }
     if super::native_views::owns(id) {
-        let action = super::native_views::execute(id, item_id, &ctx.directory, &ctx.paths)?;
-        return Ok(json!({
-            "kind":"coreAction", "command":action.command, "paths":action.paths,
-            "path":ctx.paths.first().cloned().unwrap_or_default(), "directory":ctx.directory
-        }));
+        return super::native_views::execute(id, item_id, &ctx.directory, &ctx.paths);
     }
+    file_ops::execute(id, item_id, ctx)
+}
+
+pub(super) fn action_result(item_id: &str, ctx: &Context) -> MenuExecuteResult {
     let paths = if matches!(item_id, "remote.keepLocal" | "remote.keepRemote") {
         ctx.entries
             .iter()
@@ -179,10 +167,21 @@ pub(super) fn execute(id: &str, item_id: &str, ctx: &Context) -> Result<Value, S
     } else {
         ctx.paths.clone()
     };
-    Ok(
-        json!({"kind":if item_id.starts_with("remote.") { "remoteAction" } else { "coreAction" },
-        "command":item_id,"paths":paths,"path":ctx.paths.first().cloned().unwrap_or_default(),"directory":ctx.directory}),
-    )
+    if item_id.starts_with("remote.") {
+        MenuExecuteResult::remote_action(
+            item_id,
+            paths,
+            ctx.paths.first().cloned().unwrap_or_default(),
+            ctx.directory.clone(),
+        )
+    } else {
+        MenuExecuteResult::core_action(
+            item_id,
+            paths,
+            ctx.paths.first().cloned().unwrap_or_default(),
+            ctx.directory.clone(),
+        )
+    }
 }
 
 #[cfg(test)]

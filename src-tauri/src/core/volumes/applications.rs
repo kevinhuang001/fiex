@@ -13,9 +13,6 @@ pub const URI: &str = "applications://";
 /// The `~` marker keeps them distinct from system application identities,
 /// which are base64-encoded host paths.
 pub const USER_PREFIX: &str = "applications://~";
-/// Older builds used a visible `user/` segment. Keep decoding those URIs so
-/// saved folders, bookmarks and tabs survive the upgrade.
-const LEGACY_USER_PREFIX: &str = "applications://user/";
 
 pub fn is_virtual(path: &str) -> bool {
     path == URI
@@ -223,7 +220,6 @@ pub fn open(encoded: &str) -> Result<(), String> {
 
 fn user_encoded(uri: &str) -> Option<&str> {
     uri.strip_prefix(USER_PREFIX)
-        .or_else(|| uri.strip_prefix(LEGACY_USER_PREFIX))
 }
 
 pub fn is_user(path: &str) -> bool {
@@ -422,7 +418,7 @@ pub fn rename_stored(uri: &str, name: &str) -> Result<String, String> {
 }
 
 /// Keep persisted folder mappings and the parent cache coherent after a folder
-/// rename. `BuiltinFsAdapter::rename` calls this too, because it renames the
+/// rename. The native VFS provider calls this after its rename commit, because it renames the
 /// backing store directly.
 pub fn after_rename(old_uri: &str, new_uri: &str, directory: bool) -> Result<(), String> {
     if directory {
@@ -1130,11 +1126,10 @@ mod folder_listing_tests {
     }
 
     #[test]
-    fn user_uris_use_one_segment_and_keep_legacy_links_working() {
+    fn user_uris_use_the_canonical_store_prefix() {
         assert_eq!(user_encoded("applications://~abc"), Some("abc"));
-        assert_eq!(user_encoded("applications://user/abc"), Some("abc"));
         assert!(is_user("applications://~abc"));
-        assert!(is_user("applications://user/abc"));
+        assert!(!is_user("applications://user/abc"));
         // System application identities are never user-store nodes.
         assert!(!is_user("applications://YWJj"));
     }
@@ -1152,7 +1147,7 @@ mod folder_listing_tests {
     fn mapped_system_apps_leave_the_root_and_appear_once_in_the_folder() {
         let app = item("Editor", "applications://YXBw", false);
         let other = item("Browser", "applications://YnJvd3Nlcg", false);
-        let folder = item("Work", "applications://user/d29yaw", true);
+        let folder = item("Work", "applications://~d29yaw", true);
         let mapped = HashSet::from([app.path.clone()]);
         let root = root_listing(
             vec![app.clone(), other.clone()],

@@ -5,7 +5,7 @@ use crate::plugins::{
     host::PluginInfo, native_invocation::NativeProviderInvocation,
     resource::resource_context::ResourceSnapshot,
 };
-use fiex_provider_contracts::{ProviderInvocation, ProviderRequest, ProviderRequestContext};
+use fiex_provider_contracts::{ProviderInvocation, ProviderRequestContext};
 use std::{any::Any, collections::HashMap, sync::Arc};
 
 pub(crate) struct DecorationServices {
@@ -34,7 +34,7 @@ impl CoreDecorationInvocation {
         entries: Arc<HashMap<String, DecorationEntry>>,
         resources: Arc<Vec<ResourceSnapshot>>,
         plugin: PluginInfo,
-        request: &ProviderRequest,
+        request: ProviderRequestContext,
     ) -> Self {
         Self::new(directory, entries, resources, Some(plugin), Some(request))
     }
@@ -44,7 +44,7 @@ impl CoreDecorationInvocation {
         entries: Arc<HashMap<String, DecorationEntry>>,
         resources: Arc<Vec<ResourceSnapshot>>,
         plugin: Option<PluginInfo>,
-        request: Option<&ProviderRequest>,
+        request: Option<ProviderRequestContext>,
     ) -> Self {
         let directory_resource = ResourceSnapshot::from_metadata(
             &directory,
@@ -53,11 +53,22 @@ impl CoreDecorationInvocation {
                 ..Default::default()
             },
         );
-        let base = NativeProviderInvocation::new(
-            request.map_or("decorations.resolve", |request| request.method.as_str()),
-            request.map_or_else(|| serde_json::json!({}), |request| request.params.clone()),
-            resources.as_slice(),
-            Some(&directory_resource),
+        let base = request.map_or_else(
+            || {
+                NativeProviderInvocation::new(
+                    "decorations.resolve",
+                    serde_json::json!({}),
+                    resources.as_slice(),
+                    Some(&directory_resource),
+                )
+            },
+            |request| {
+                NativeProviderInvocation::from_request_context(
+                    request,
+                    resources.as_slice(),
+                    Some(&directory_resource),
+                )
+            },
         );
         Self {
             base,

@@ -9,7 +9,8 @@ use super::types::{
     Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle,
 };
 use crate::plugins::host::PluginManifest;
-use fiex_provider_contracts::DecorationContribution;
+use fiex_provider_contracts::{DecorationContribution, ResourceRef};
+use crate::plugins::resource::resource_context::ResourceSnapshot;
 use std::collections::HashMap;
 
 fn allowed_color(value: &str) -> bool {
@@ -189,6 +190,19 @@ pub(super) fn merge(
         }
     }
     pending.priority = pending.priority.max(priority);
+}
+
+pub(super) fn path_for_target<'a>(
+    target: &ResourceRef,
+    entries: &HashMap<String, DecorationEntry>,
+    resources: &'a [ResourceSnapshot],
+) -> Option<&'a str> {
+    let resource = resources
+        .iter()
+        .find(|resource| &resource.reference == target)?;
+    entries
+        .contains_key(&resource.display)
+        .then_some(resource.display.as_str())
 }
 
 pub(super) fn decode(

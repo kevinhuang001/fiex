@@ -95,17 +95,20 @@ impl Scope {
         self.read_only = true;
     }
     pub fn authorize_method(&self, method: &str) -> Result<(), String> {
+        if method.starts_with("fs.") {
+            return Err("unsupported filesystem method namespace".into());
+        }
         if self.read_only
             && matches!(
                 method,
-                "fs.mkdir"
-                    | "fs.seekWrite"
-                    | "fs.beginWrite"
-                    | "fs.writeChunk"
-                    | "fs.writeBuffer"
-                    | "fs.commit"
-                    | "fs.remove"
-                    | "fs.rename"
+                "host.fs.mkdir"
+                    | "host.fs.seekWrite"
+                    | "host.fs.beginWrite"
+                    | "host.fs.writeChunk"
+                    | "host.fs.writeBuffer"
+                    | "host.fs.commit"
+                    | "host.fs.remove"
+                    | "host.fs.rename"
                     | "host.process.run"
                     | "host.vfs.openView"
             )
@@ -113,7 +116,7 @@ impl Scope {
             return Err("PermissionDenied: view does not support writes".into());
         }
         if self.metadata_only
-            && ((method.starts_with("fs.") && !matches!(method, "fs.stat" | "fs.statBatch"))
+            && ((method.starts_with("host.fs.") && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
                 || matches!(method, "host.process.run" | "host.vfs.openView"))
         {
             return Err("discovery scope permits metadata only".into());
@@ -192,7 +195,7 @@ impl Scope {
                     .filter(|snapshot| {
                         crate::plugins::mounts::handles(&snapshot.display)
                             || crate::usbfs::route(&snapshot.display).is_some()
-                            || crate::core::volumes::virtual_resolvers::view_for(&snapshot.display)
+                            || crate::core::volumes::native_vfs::view_for(&snapshot.display)
                                 .is_some()
                     })
                     .cloned()
@@ -260,7 +263,7 @@ impl Scope {
             {
                 return Err("child outside selected resource".into());
             }
-        } else if parent_path == crate::core::volumes::virtual_resolvers::RECENT_URI {
+        } else if parent_path == crate::core::volumes::native_vfs::RECENT_URI {
             let _ = crate::core::recent::source_for(display)?;
         } else if parent_path == crate::core::volumes::applications::URI
             || crate::core::volumes::applications::is_user(&parent_path)

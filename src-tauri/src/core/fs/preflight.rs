@@ -40,7 +40,7 @@ impl ResourceBroker {
         if same_mount {
             return Ok(());
         }
-        self.adapter()?.preflight(&TransferPreflight {
+        provider_registry::preflight(self, &TransferPreflight {
             node_id: self.reference.node_id.clone(),
             direction,
             action,

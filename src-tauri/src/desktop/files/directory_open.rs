@@ -54,7 +54,7 @@ pub(crate) async fn directory_open(
         });
         crate::infrastructure::logging::record_core(
             "debug",
-            "fs.list",
+            "host.fs.list",
             &format!(
                 "Directory \"{}\" listed {} entries with presentation in {} ms (cache_hit={}, hidden={})",
                 path,

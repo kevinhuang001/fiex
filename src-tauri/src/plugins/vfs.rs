@@ -209,7 +209,7 @@ pub fn stat(path: &str) -> Result<Entry, String> {
     bound_entry(&mount, &uri, &uri.relative, entry)
 }
 
-pub(crate) fn adapter_node(path: &str) -> Result<(Mount, String), String> {
+pub(crate) fn provider_node(path: &str) -> Result<(Mount, String), String> {
     let (uri, view, node_id) = node(path)?;
     Ok((mount_for(&uri, &view), node_id))
 }

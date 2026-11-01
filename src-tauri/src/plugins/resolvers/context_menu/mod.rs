@@ -2,7 +2,6 @@
 mod actions;
 mod builtin;
 mod connection_cache;
-mod endpoint;
 mod file_ops;
 mod native_views;
 mod proxy;
@@ -15,16 +14,16 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
     if let Ok(mut sessions) = sessions().lock() {
         sessions.retain(|_, session| {
-            !matches!(&session.provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
+            session.provider.plugin.as_deref().is_none_or(|plugin| plugin.id != plugin_id)
         });
     }
 }
 
-use crate::plugins::events::{EventRouter, Handler, Resolver};
+use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
 use crate::plugins::{
     native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot,
 };
-use fiex_provider_contracts::{ContextMenuProvider, ProviderRequest};
+use fiex_provider_contracts::{ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderRequest};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -58,9 +57,9 @@ fn sessions() -> &'static Mutex<HashMap<String, Session>> {
     SESSIONS.get_or_init(Default::default)
 }
 fn allowed(session: &Session) -> bool {
-    match &session.provider.handler {
-        Handler::Builtin(_) => true,
-        Handler::Plugin(plugin) => crate::plugins::events::menu_allowed(
+    match session.provider.plugin.as_deref() {
+        None => true,
+        Some(plugin) => crate::plugins::events::menu_allowed(
             &plugin.id,
             &session.provider.id,
             &session.resources,
@@ -94,8 +93,7 @@ fn register(
     if items.is_empty() {
         return Ok(json!({"items":[]}));
     }
-    let (session_id, remote_session_id) =
-        session_ids(&result, matches!(&provider.handler, Handler::Plugin(_)))?;
+    let (session_id, remote_session_id) = session_ids(&result, provider.plugin.is_some())?;
     let mut registry = sessions().lock().map_err(|_| "menu registry unavailable")?;
     registry.retain(|_, session| session.created.elapsed().as_secs() < 90);
     // Bound memory while allowing fast menu navigation with multiple builtin providers.
@@ -121,61 +119,98 @@ fn register(
             created: Instant::now(),
         },
     );
-    match &provider.handler {
-        Handler::Builtin(_) => Ok(
+    match provider.plugin.as_deref() {
+        None => Ok(
             json!({"kind":"builtin","providerId":provider.id,"menuSessionId":session_id,"items":items}),
         ),
-        Handler::Plugin(plugin) => Ok(
+        Some(plugin) => Ok(
             json!({"kind":"plugin","providerId":provider.id,"pluginId":plugin.id,"menuSessionId":session_id,"items":items}),
         ),
     }
 }
 
-fn invoke_provider(
-    provider: &Resolver,
-    request: &ProviderRequest,
-    context: Option<&builtin::Context>,
-    resources: &Arc<Vec<ResourceSnapshot>>,
+fn provider_for(
+    resolver: &Resolver,
     directory: &str,
-) -> Result<Value, String> {
-    let request = crate::plugins::events::bind_provider_request(provider, request)?;
-    match &provider.handler {
-        Handler::Builtin(id) => {
-            let context = context.ok_or("native menu context is unavailable")?;
-            let endpoint = endpoint::NativeMenuEndpoint {
-                id: (*id).into(),
-                context,
-            };
-            let invocation = NativeProviderInvocation::new(
-                request.method.clone(),
-                request.params.clone(),
-                resources,
-                None,
-            );
-            match request.method.as_str() {
-                "contextMenu.resolve" => {
-                    let items = ContextMenuProvider::resolve(&endpoint, &invocation)
-                        .map_err(|error| error.to_string())?;
-                    Ok(json!({"items":items}))
-                }
-                "contextMenu.execute" => ContextMenuProvider::execute(&endpoint, &invocation)
-                    .map_err(|error| error.to_string()),
-                _ => Err("unsupported ContextMenu event".into()),
-            }
-        }
-        Handler::Plugin(plugin) => {
+    resources: &Arc<Vec<ResourceSnapshot>>,
+) -> (Arc<dyn ContextMenuProvider>, Option<Arc<Mutex<Option<String>>>>) {
+    match resolver.plugin.as_deref() {
+        None => (file_ops::provider(&resolver.id)
+            .or_else(|| native_views::provider(&resolver.id))
+            .unwrap_or_else(|| {
+                Arc::new(FailedMenuProvider(
+                    "registered native ContextMenuProvider disappeared".into(),
+                ))
+            }), None),
+        Some(plugin) => {
             let proxy = proxy::ScopedMenuProxy::new(
-                (**plugin).clone(),
+                plugin.clone(),
+                resolver.id.clone(),
                 directory.into(),
                 resources.clone(),
-            )?;
-            match request.method.as_str() {
-                "contextMenu.resolve" => proxy.resolve_typed(&request),
-                "contextMenu.execute" => proxy.execute_typed(&request),
-                _ => Err("unsupported ContextMenu event".into()),
+            );
+            match proxy {
+                Ok(proxy) => {
+                    let remote_session = proxy.remote_session_slot();
+                    (Arc::new(proxy), Some(remote_session))
+                }
+                Err(error) => (Arc::new(FailedMenuProvider(error)), None),
             }
         }
     }
+}
+
+struct FailedMenuProvider(String);
+impl ContextMenuProvider for FailedMenuProvider {
+    fn resolve(
+        &self,
+        _ctx: &dyn fiex_provider_contracts::ProviderInvocation,
+    ) -> Result<Vec<MenuItem>, fiex_provider_contracts::ProviderError> {
+        Err(fiex_provider_contracts::ProviderError::internal(self.0.clone()))
+    }
+
+    fn execute(
+        &self,
+        _ctx: &dyn fiex_provider_contracts::ProviderInvocation,
+    ) -> Result<MenuExecuteResult, fiex_provider_contracts::ProviderError> {
+        Err(fiex_provider_contracts::ProviderError::internal(self.0.clone()))
+    }
+}
+
+fn validate_plugin_action(
+    plugin: &crate::plugins::host::PluginInfo,
+    result: &mut MenuExecuteResult,
+) -> Result<(), String> {
+    match result {
+        MenuExecuteResult::CoreAction(_)
+        | MenuExecuteResult::ConnectionCoreAction(_)
+        | MenuExecuteResult::RemoteAction(_)
+        | MenuExecuteResult::NativeAction(_) => {
+            Err("plugin returned a reserved action kind".into())
+        }
+        MenuExecuteResult::Panel(panel) => {
+            let entry = panel.entry.as_deref().ok_or("panel result missing entry")?;
+            let asset = crate::plugins::host::plugin_view_asset(&plugin.id, entry)?;
+            panel.entry = None;
+            panel.asset_path = Some(asset);
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn execute_provider(
+    resolver: &Resolver,
+    implementation: &dyn ContextMenuProvider,
+    invocation: &dyn fiex_provider_contracts::ProviderInvocation,
+) -> Result<MenuExecuteResult, String> {
+    let mut result = implementation
+        .execute(invocation)
+        .map_err(|error| error.to_string())?;
+    if let Some(plugin) = resolver.plugin.as_deref() {
+        validate_plugin_action(plugin, &mut result)?;
+    }
+    Ok(result)
 }
 
 pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
@@ -220,17 +255,48 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
     // Never invoke a plugin while resolving the Core-only top-level menu. For a
     // plugin-only request the empty seed above already excludes builtin rows.
     if scope == MenuScope::Core {
-        providers.retain(|provider| matches!(&provider.handler, Handler::Builtin(_)));
+        providers.retain(|provider| provider.plugin.is_none());
     }
     let request = ProviderRequest {
         method: "contextMenu.resolve".into(),
         params: json!({}),
     };
-    Ok(EventRouter::resolve_typed(
+    let mut remote_sessions = HashMap::new();
+    let providers = providers
+        .into_iter()
+        .map(|resolver| {
+            let (implementation, remote_session) = provider_for(&resolver, directory, &resources);
+            if let Some(remote_session) = remote_session {
+                remote_sessions.insert(resolver.id.clone(), remote_session);
+            }
+            ProviderCandidate {
+                resolver,
+                implementation,
+            }
+        })
+        .collect();
+    let invocation = file_ops::invocation(&ctx, &request.method, request.params.clone());
+    Ok(EventRouter::resolve_shared(
         "contextMenu.resolve",
         providers,
-        &request,
-        |resolver, request| invoke_provider(resolver, request, Some(&ctx), &resources, directory),
+        &invocation,
+        |resolver, provider, invocation| {
+            let items = provider
+                .resolve(invocation)
+                .map_err(|error| error.to_string())?;
+            let mut result = json!({"items":items});
+            if resolver.plugin.is_some() {
+                let session = remote_sessions
+                    .get(&resolver.id)
+                    .ok_or("plugin menu session unavailable")?
+                    .lock()
+                    .map_err(|_| "plugin menu session unavailable")?
+                    .clone()
+                    .ok_or("plugin menu session ID is missing")?;
+                result["menuSessionId"] = json!(session);
+            }
+            Ok(result)
+        },
         |provider, result| {
             crate::plugins::events::validate_result("contextMenu.resolve", &result)?;
             register(provider, &ctx, &resources, result)
@@ -258,7 +324,7 @@ pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
         if session.created.elapsed().as_secs() >= 90 || !allowed(session) {
             return Err("menu session expired".into());
         }
-        if !matches!(&session.provider.handler, Handler::Plugin(_)) {
+        if session.provider.plugin.is_none() {
             return Err("builtin submenu is not lazy".into());
         }
         (
@@ -278,11 +344,38 @@ pub fn children(session_id: &str, parent_id: &str) -> Result<Value, String> {
         method: "contextMenu.resolve".into(),
         params,
     };
-    let result = EventRouter::resolve_typed(
+    let (implementation, remote_session) = provider_for(&provider, &directory, &resources);
+    let candidate = ProviderCandidate {
+        resolver: provider.clone(),
+        implementation,
+    };
+    let invocation = NativeProviderInvocation::new(
+        request.method.clone(),
+        request.params.clone(),
+        resources.as_slice(),
+        None,
+    );
+    let result = EventRouter::resolve_shared(
         "contextMenu.resolve",
-        vec![provider.clone()],
-        &request,
-        |resolver, request| invoke_provider(resolver, request, None, &resources, &directory),
+        vec![candidate],
+        &invocation,
+        |resolver, implementation, invocation| {
+            let items = implementation
+                .resolve(invocation)
+                .map_err(|error| error.to_string())?;
+            let mut result = json!({"items":items});
+            if resolver.plugin.is_some() {
+                let session = remote_session
+                    .as_ref()
+                    .ok_or("plugin menu session unavailable")?
+                    .lock()
+                    .map_err(|_| "plugin menu session unavailable")?
+                    .clone()
+                    .ok_or("plugin menu session ID is missing")?;
+                result["menuSessionId"] = json!(session);
+            }
+            Ok(result)
+        },
         |_, result| {
             crate::plugins::events::validate_result("contextMenu.resolve", &result)?;
             Ok(result)
@@ -346,21 +439,24 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
             "interactionId": crate::plugins::mounts::new_id()?,
         }),
     };
-    EventRouter::resolve_typed(
+    let (implementation, _) = provider_for(
+        &session.provider,
+        &session.directory,
+        &session.resources,
+    );
+    let candidate = ProviderCandidate {
+        resolver: session.provider.clone(),
+        implementation,
+    };
+    let invocation = file_ops::invocation(&ctx, &request.method, request.params.clone());
+    let result = EventRouter::resolve_shared(
         "contextMenu.execute",
-        vec![session.provider.clone()],
-        &request,
-        |resolver, request| {
-            invoke_provider(
-                resolver,
-                request,
-                Some(&ctx),
-                &session.resources,
-                &session.directory,
-            )
-        },
+        vec![candidate],
+        &invocation,
+        |resolver, provider, invocation| execute_provider(resolver, provider, invocation),
         |_, result| {
-            crate::plugins::events::validate_result("contextMenu.execute", &result)?;
+            let wire = serde_json::to_value(&result).map_err(|error| error.to_string())?;
+            crate::plugins::events::validate_result("contextMenu.execute", &wire)?;
             Ok(result)
         },
         |_| true,
@@ -371,7 +467,8 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
                 .ok_or_else(|| "menu owner unavailable".to_string())?
                 .1
         },
-    )
+    )?;
+    serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

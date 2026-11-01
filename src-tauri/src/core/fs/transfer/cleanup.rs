@@ -24,7 +24,7 @@ pub(super) fn validate(steps: &[Step], cancel: &AtomicBool) -> Result<(), String
                 .filter_map(|child| Path::new(&child.source.path).file_name())
                 .map(|name| name.to_string_lossy().into_owned())
                 .collect::<BTreeSet<_>>();
-            // Local adapters return scoped relative paths. Child names are
+            // Local providers return scoped relative paths. Child names are
             // compared within their already bound parent, never across mounts.
             let actual = children
                 .iter()

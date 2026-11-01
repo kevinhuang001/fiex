@@ -15,6 +15,7 @@ pub mod toolbar;
 /// proxy only after the plugin is installed and authorized again.
 pub(crate) fn forget_plugin(plugin_id: &str) {
     connection::forget_plugin(plugin_id);
+    connection_menu::forget_plugin(plugin_id);
     context_menu::forget_plugin(plugin_id);
     decorations::forget_plugin(plugin_id);
     fs::forget_plugin(plugin_id);

@@ -39,7 +39,7 @@ fn save(list: &[String]) {
 }
 
 pub fn record(state: &Recent, path: &str) {
-    if crate::core::volumes::virtual_resolvers::opaque(path) {
+    if crate::core::volumes::native_vfs::opaque(path) {
         return;
     }
     if crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path).map_or(

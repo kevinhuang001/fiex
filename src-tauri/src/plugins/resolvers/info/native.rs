@@ -86,6 +86,10 @@ pub(super) fn invoke(
     provider.resolve(&invocation)
 }
 
+pub(super) fn provider(id: &str) -> Option<Arc<dyn InfoProvider>> {
+    registry().get_arc(id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

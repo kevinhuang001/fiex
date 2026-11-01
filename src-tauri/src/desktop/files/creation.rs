@@ -6,7 +6,7 @@ use std::path::PathBuf;
 fn undoable(path: &str) -> bool {
     !crate::plugins::mounts::handles(path)
         && crate::usbfs::route(path).is_none()
-        && !crate::core::volumes::virtual_resolvers::opaque(path)
+        && !crate::core::volumes::native_vfs::opaque(path)
 }
 
 #[tauri::command]

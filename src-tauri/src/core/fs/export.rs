@@ -47,7 +47,7 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
             },
             false,
         )?;
-        let native = resource.adapter()?.native_export_path();
+        let native = provider_registry::native_export_path(&resource);
         if let Some(local) = native {
             result[index] = local.to_string_lossy().into_owned();
         } else {
@@ -194,7 +194,7 @@ fn export_node(
     // Export is a read operation, not merely a metadata lookup. Check the
     // current node capability before opening the provider stream.
     source.require(FsOperation::Read, false)?;
-    let mut read = source.adapter()?.open_read()?;
+    let mut read = source.open_read_handle()?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

@@ -1,7 +1,7 @@
 //! Incremental local SearchProvider pagination through the same verified
 //! EventRouter and operation scope used by single-page requests.
 use super::*;
-use crate::plugins::events::EventRouter;
+use crate::plugins::events::{EventRouter, ProviderCandidate};
 use fiex_provider_contracts::{ProviderError, ProviderRequest};
 use std::collections::HashSet;
 
@@ -64,14 +64,23 @@ pub fn run_stream(
             method: "search.query".into(),
             params,
         };
-        let (page_truncated, next) = EventRouter::resolve_typed(
+        let candidate = ProviderCandidate {
+            resolver: engine.resolver.clone(),
+            implementation: engine.implementation.clone(),
+        };
+        let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+            call.method.clone(),
+            call.params.clone(),
+            &resources,
+            None,
+        );
+        let (page_truncated, next) = EventRouter::resolve_shared(
             "search.query",
-            vec![engine.resolver.clone()],
-            &call,
-            |resolver, routed| {
-                let routed = crate::plugins::events::bind_provider_request(resolver, routed)?;
+            vec![candidate],
+            &invocation,
+            |_resolver, provider, context| {
                 let mut page_count = 0usize;
-                let mut stream_entry = |value: Value| -> Result<(), ProviderError> {
+                let mut stream_entry = |value: fiex_provider_contracts::SearchEntry| -> Result<(), ProviderError> {
                     if cancelled() {
                         return Err(ProviderError::cancelled());
                     }
@@ -80,7 +89,7 @@ pub fn run_stream(
                             "search provider exceeded requested page limit",
                         ));
                     }
-                    let entries = validated(resolver, json!({"entries":[value]}), request)
+                    let entries = validated(vec![value], request)
                         .map_err(ProviderError::invalid_params)?;
                     for entry in entries {
                         emit(entry);
@@ -89,29 +98,9 @@ pub fn run_stream(
                     }
                     Ok(())
                 };
-                let page = match &resolver.handler {
-                    Handler::Builtin(_) => {
-                        let invocation =
-                            crate::plugins::native_invocation::NativeProviderInvocation::new(
-                                routed.method.clone(),
-                                routed.params.clone(),
-                                &resources,
-                                None,
-                            );
-                        native::provider(&resolver.id)
-                            .ok_or_else(|| "native SearchProvider is not registered".to_string())?
-                            .query_stream(&invocation, &cancelled, &mut stream_entry)
-                            .map_err(|error| error.to_string())?
-                    }
-                    Handler::Plugin(plugin) => {
-                        let proxy = proxy::ScopedSearchProxy::new(
-                            (**plugin).clone(),
-                            &resources,
-                            &request.root,
-                        )?;
-                        proxy.query_stream_typed(&routed, &cancelled, &mut stream_entry)?
-                    }
-                };
+                let page = provider
+                    .query_stream(context, &cancelled, &mut stream_entry)
+                    .map_err(|error| error.to_string())?;
                 page.validate_page(remaining)?;
                 if !page.entries.is_empty() {
                     return Err(

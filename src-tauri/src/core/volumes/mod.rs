@@ -9,13 +9,12 @@
 pub mod application_folders;
 pub mod application_policy;
 pub mod applications;
+pub mod native_vfs;
 mod mounts;
 pub mod recycle;
 mod roots;
 mod trash;
 pub mod trash_vfs;
-pub mod virtual_resolvers;
-pub mod virtual_storage;
 #[cfg(target_os = "windows")]
 mod windows_shell;
 

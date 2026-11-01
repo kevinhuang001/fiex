@@ -24,9 +24,6 @@ fn storage_location(path: &str) -> Option<ResourceLocation> {
     descriptor(kind, &provider, &mount)
 }
 
-/// Recent storage matching must not advertise an invalid or revoked source.
-/// Resolve the owning registered mount once; only local paths require an OS
-/// existence probe. This never tries remote IO to guess source identity.
 fn projected_storage_location(source: &str) -> Option<ResourceLocation> {
     let (kind, provider, mount) = crate::core::fs::provider_registry::identity(source)?;
     if provider == "core:local-fs" && std::fs::symlink_metadata(source).is_err() {
@@ -42,13 +39,11 @@ fn projected_storage_location(source: &str) -> Option<ResourceLocation> {
 /// Recent aliases retain their view identity but resolve storage only while
 /// their source remains available and authorized.
 pub fn typed_locations_for(path: &str) -> (Option<ResourceLocation>, Option<ResourceLocation>) {
-    if let Some(view) = crate::core::volumes::virtual_resolvers::view_for(path) {
-        let current = descriptor("vfs", view.id(), view.id());
-        let storage = match view.storage_projection(path) {
-            crate::core::volumes::virtual_resolvers::NativeStorageProjection::Owned => {
-                current.clone()
-            }
-            crate::core::volumes::virtual_resolvers::NativeStorageProjection::Projected(source) => {
+    if let Some(provider_id) = crate::core::volumes::native_vfs::provider_id(path) {
+        let current = descriptor("vfs", provider_id, provider_id);
+        let storage = match crate::core::volumes::native_vfs::storage_projection(path) {
+            crate::core::volumes::native_vfs::NativeStorageProjection::Owned => current.clone(),
+            crate::core::volumes::native_vfs::NativeStorageProjection::Projected(source) => {
                 source.as_deref().and_then(projected_storage_location)
             }
         };
@@ -76,7 +71,7 @@ pub fn directory_match_resource(directory: &str) -> Option<MatchResource> {
         capabilities: ResourceCapabilities {
             operations: FsOperation::ALL
                 .into_iter()
-                .filter(|op| allowed.allows(*op))
+                .filter(|operation| allowed.allows(*operation))
                 .collect(),
         },
     })
@@ -111,9 +106,6 @@ mod tests {
         let (view, storage) = typed_locations_for("applications://");
         assert_eq!(view.as_ref().unwrap().provider_id, "core:applications");
         assert_eq!(storage.as_ref().unwrap().resource_type, ResourceType::Vfs);
-        let (view, storage) = typed_locations_for("/tmp/fiex-location-test");
-        assert_eq!(view.as_ref().unwrap().provider_id, "core:local-fs");
-        assert_eq!(storage.as_ref().unwrap().resource_type, ResourceType::Fs);
     }
 
     #[test]

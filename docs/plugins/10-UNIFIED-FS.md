@@ -117,7 +117,8 @@ Core 保存该集合；未声明的操作用 `method_not_found` 拒绝，不会�
 
 连接与独立视图统一使用 protocol 6 的 `vfs.*` 方法和初始化回复的 `vfs` 能力块。
 旧 protocol 4 的小文件读取、快照上传接口已删除；先前 `fs.*` 拼写不作为兼容别名保留。
-`host.vfs.openView` 创建导航视图；`fs.*` 仍是插件访问 Core 授权资源的宿主服务，名称不变。
+`host.vfs.openView` 创建导航视图；插件访问 Core 已授权资源的宿主服务统一使用
+`host.fs.*`。旧的裸 `fs.*` 方法名已拒绝，不保留兼容别名。
 
 新建文件夹使用 `vfs.mkdir`；新建空文件使用 `vfs.beginWrite` 的 `parentId` 和 `name`，
 然后提交空写入。覆盖已有文件使用 `nodeId` 和 `ifRevision`，并通过流式写入完成。
@@ -128,7 +129,7 @@ SDK 使用普通 `VfsProvider` trait，不再使用过程宏。`operations()` �
 操作上限，`discover(ctx)` 按当前连接与资源返回服务器允许的子集。
 初始化回复中的 `vfs.discovery: true` 启用 `vfs.discover`；请求携带与目标操作相同的
 mount、connection/view 和 node/parent 参数，返回 `{operations: [...]}`。
-Core 与 SDK 均检查此集合；未报告 discovery 的旧协议 5 插件保留静态能力行为。
+Core 与 SDK 均检查此集合。当前协议要求每个声明 VFS 操作的插件同时声明 `vfs.discovery: true`；缺少该字段的静态能力握手会被拒绝，不存在静态能力降级。
 完整接口规范见 SDK 的 `docs/fs-provider-discovery.md`。
 
 ## Core builtin VFS and presentation policy

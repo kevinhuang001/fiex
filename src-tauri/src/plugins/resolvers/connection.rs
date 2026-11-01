@@ -2,16 +2,31 @@
 //! ConnectionProvider trait. Credential projection, stored ownership and
 //! navigation validation remain in remote/store.
 use crate::plugins::{
-    events::{EventRouter, Handler},
+    events::{EventRouter, ProviderCandidate},
     native_invocation::NativeProviderInvocation,
 };
 use fiex_provider_contracts::{
-    ConnectionProvider, ConnectionValidation, MatchResource, ProviderDescriptor, ProviderError,
-    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,
-    ResourceCapabilities, ResourceLocation, ResourceMetadata, ResourceType,
+    ConnectionOpenResult, ConnectionProvider, ConnectionValidation, MatchResource,
+    ProviderDescriptor,
+    ProviderError, ProviderInstances, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, ResourceCapabilities, ResourceLocation,
+    ResourceMetadata, ResourceType,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::sync::{Arc, Mutex, OnceLock};
+
+struct FailedConnectionProvider(String);
+impl ConnectionProvider for FailedConnectionProvider {
+    fn validate(&self, _ctx: &dyn ProviderInvocation) -> Result<ConnectionValidation, ProviderError> {
+        Err(ProviderError::internal(self.0.clone()))
+    }
+    fn open(&self, _ctx: &dyn ProviderInvocation) -> Result<ConnectionOpenResult, ProviderError> {
+        Err(ProviderError::internal(self.0.clone()))
+    }
+    fn create(&self, _ctx: &dyn ProviderInvocation) -> Result<ConnectionOpenResult, ProviderError> {
+        Err(ProviderError::internal(self.0.clone()))
+    }
+}
 
 struct PluginConnection {
     plugin_id: String,
@@ -27,25 +42,24 @@ impl PluginConnection {
                 "ConnectionProvider method mismatch",
             ));
         }
-        crate::plugins::events::invoke(&self.plugin_id, method, ctx.params().clone())
+        crate::plugins::events::invoke(&self.plugin_id, method, ctx.input()?.to_params().map_err(ProviderError::invalid_params)?)
             .map_err(ProviderError::internal)
     }
 }
 impl ConnectionProvider for PluginConnection {
-    fn validate(
-        &self,
-        ctx: &dyn ProviderInvocation,
-    ) -> Result<ConnectionValidation, ProviderError> {
+    fn validate(&self, ctx: &dyn ProviderInvocation) -> Result<ConnectionValidation, ProviderError> {
         serde_json::from_value(self.invoke_event(ctx, "connection.validate")?)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 
-    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
-        self.invoke_event(ctx, "connection.open")
+    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<ConnectionOpenResult, ProviderError> {
+        serde_json::from_value(self.invoke_event(ctx, "connection.open")?)
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 
-    fn create(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
-        self.invoke_event(ctx, "connection.create")
+    fn create(&self, ctx: &dyn ProviderInvocation) -> Result<ConnectionOpenResult, ProviderError> {
+        serde_json::from_value(self.invoke_event(ctx, "connection.create")?)
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 }
 
@@ -90,6 +104,46 @@ fn proxy_for(plugin_id: &str) -> Result<Arc<dyn ConnectionProvider>, String> {
         .ok_or_else(|| "connection proxy registration failed".into())
 }
 
+struct ScopedConnectionProxy {
+    handler: Arc<dyn ConnectionProvider>,
+    plugin_id: String,
+    provider_id: String,
+}
+
+impl ScopedConnectionProxy {
+    fn new(plugin_id: &str, provider_id: &str) -> Result<Self, String> {
+        Ok(Self {
+            handler: proxy_for(plugin_id)?,
+            plugin_id: plugin_id.into(),
+            provider_id: provider_id.into(),
+        })
+    }
+
+    fn invocation(&self, ctx: &dyn ProviderInvocation) -> Result<NativeProviderInvocation, ProviderError> {
+        let request = crate::plugins::events::bind_provider_context(
+            &self.plugin_id,
+            &self.provider_id,
+            ctx.request(),
+        )
+        .map_err(ProviderError::invalid_params)?;
+        Ok(NativeProviderInvocation::from_request_context(request, &[], None))
+    }
+}
+
+impl ConnectionProvider for ScopedConnectionProxy {
+    fn validate(&self, ctx: &dyn ProviderInvocation) -> Result<ConnectionValidation, ProviderError> {
+        self.handler.validate(&self.invocation(ctx)?)
+    }
+
+    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<ConnectionOpenResult, ProviderError> {
+        self.handler.open(&self.invocation(ctx)?)
+    }
+
+    fn create(&self, ctx: &dyn ProviderInvocation) -> Result<ConnectionOpenResult, ProviderError> {
+        self.handler.create(&self.invocation(ctx)?)
+    }
+}
+
 /// The record and mount were validated and allocated by Core; its identity
 /// and provider kind never come from a plugin response or opaque UI metadata.
 pub fn invoke(
@@ -122,48 +176,51 @@ pub fn invoke(
         storage: Some(owner),
         capabilities: ResourceCapabilities::default(),
     }];
-    let selected = crate::plugins::provider_registry::candidates(method, &targets, "", Vec::new())
-        .into_iter()
-        .filter(|resolver| {
-            matches!(&resolver.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
-        })
-        .collect();
+    let selected = crate::plugins::provider_registry::candidates(
+        method, &targets, "", Vec::new()
+    ).into_iter().filter(|resolver|
+        resolver.plugin.as_deref().is_some_and(|plugin| plugin.id == plugin_id)
+    ).map(|resolver| {
+        let implementation: Arc<dyn ConnectionProvider> = match resolver.plugin.as_deref() {
+            Some(plugin) => ScopedConnectionProxy::new(&plugin.id, &resolver.id)
+                .map(|proxy| Arc::new(proxy) as Arc<dyn ConnectionProvider>)
+                .unwrap_or_else(|error| Arc::new(FailedConnectionProvider(error))),
+            None => Arc::new(FailedConnectionProvider(
+                "unregistered native ConnectionProvider".into(),
+            )),
+        };
+        ProviderCandidate { resolver, implementation }
+    }).collect::<Vec<_>>();
     let request = ProviderRequest {
         method: method.into(),
         params,
     };
-    EventRouter::resolve_typed(
+    let invocation = NativeProviderInvocation::new(
+        request.method.clone(),
+        request.params.clone(),
+        &[],
+        None,
+    );
+    EventRouter::resolve_shared(
         method,
         selected,
-        &request,
-        |resolver, request| match &resolver.handler {
-            Handler::Plugin(plugin) => {
-                let invocation = NativeProviderInvocation::new(
-                    request.method.clone(),
-                    request.params.clone(),
-                    &[],
-                    None,
-                );
-                let provider = proxy_for(&plugin.id)?;
-                match request.method.as_str() {
-                    "connection.validate" => {
-                        ConnectionProvider::validate(provider.as_ref(), &invocation).and_then(
-                            |result| {
-                                serde_json::to_value(result)
-                                    .map_err(|error| ProviderError::internal(error.to_string()))
-                            },
-                        )
-                    }
-                    "connection.open" => ConnectionProvider::open(provider.as_ref(), &invocation),
-                    "connection.create" => {
-                        ConnectionProvider::create(provider.as_ref(), &invocation)
-                    }
-                    _ => Err(ProviderError::method_not_found(&request.method)),
-                }
-                .map_err(|error| error.to_string())
-            }
-            Handler::Builtin(_) => Err("unknown Core connection provider".into()),
-        },
+        &invocation,
+        |_, provider, invocation| match invocation.method() {
+            "connection.validate" => provider.validate(invocation).and_then(|result| {
+                serde_json::to_value(result)
+                    .map_err(|error| ProviderError::internal(error.to_string()))
+            }),
+            "connection.open" => provider.open(invocation).and_then(|result| {
+                serde_json::to_value(result)
+                    .map_err(|error| ProviderError::internal(error.to_string()))
+            }),
+            "connection.create" => provider.create(invocation).and_then(|result| {
+                serde_json::to_value(result)
+                    .map_err(|error| ProviderError::internal(error.to_string()))
+            }),
+            method => Err(ProviderError::method_not_found(method)),
+        }
+        .map_err(|error| error.to_string()),
         |_, value| {
             crate::plugins::events::validate_result(method, &value)?;
             Ok(value)
@@ -182,7 +239,6 @@ pub fn invoke(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     #[test]
     fn lifecycle_requires_registered_method_and_connection_identity() {
         assert!(invoke("", "drive", "mount", "connection.open", json!({})).is_err());

@@ -132,7 +132,7 @@ fn virtual_roots_are_recognized_without_host_paths() {
     assert!(virtual_search_root("applications://"));
     assert!(virtual_search_root("recyclebin://"));
     assert!(virtual_search_root("trash://"));
-    assert!(virtual_search_root("applications://user/QnV6ei50eHQ"));
+    assert!(virtual_search_root("applications://~QnV6ei50eHQ"));
     assert!(!virtual_search_root("/tmp"));
     assert!(!virtual_search_root("fiex-plugin-view://example"));
     if let Some(root) = crate::core::volumes::trash_path() {

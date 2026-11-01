@@ -2,23 +2,29 @@ use super::*;
 
 #[test]
 fn preview_skips_invalid_provider_and_stops_after_success() {
-    use fiex_provider_contracts::ProviderRequest;
     use std::sync::{Arc, Mutex};
 
     let providers = vec![
-        Resolver::builtin("invalid", 100),
-        Resolver::builtin("working", 50),
-        Resolver::builtin("unused", 0),
-    ];
+        "invalid", "working", "unused",
+    ]
+    .into_iter()
+    .map(|id| ProviderCandidate {
+        resolver: Resolver::builtin(id, 100),
+        implementation: Arc::new(id.to_owned()),
+    })
+    .collect();
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        "preview.open",
+        json!({}),
+        &[],
+        None,
+    );
     let calls = Arc::new(Mutex::new(Vec::new()));
-    let result = EventRouter::resolve_typed(
+    let result = EventRouter::resolve_shared(
         "preview.open",
         providers,
-        &ProviderRequest {
-            method: "preview.open".into(),
-            params: json!({}),
-        },
-        |provider, _| {
+        &invocation,
+        |provider, _, _| {
             calls.lock().unwrap().push(provider.id.clone());
             Ok(if provider.id == "invalid" {
                 json!({"kind":"external-url"})
@@ -66,15 +72,16 @@ fn resource_identity_is_not_an_operation_grant() {
     assert!(other.resolve_reference(&value["ref"]).is_err());
     operation.restrict_to_metadata();
     for method in [
-        "fs.openRead",
-        "fs.beginWrite",
+        "host.fs.openRead",
+        "host.fs.beginWrite",
         "host.process.run",
         "host.process.run",
         "host.vfs.openView",
     ] {
         assert!(operation.clone().authorize_method(method).is_err());
     }
-    assert!(operation.authorize_method("fs.stat").is_ok());
+    assert!(operation.authorize_method("host.fs.stat").is_ok());
+    assert!(operation.authorize_method("fs.stat").is_err());
 }
 
 #[test]
@@ -166,22 +173,27 @@ fn fixed_events_are_core_owned_custom_methods_remain_available() {
 }
 
 #[test]
-fn typed_router_merges_native_and_proxy_results_and_rejects_method_spoofing() {
-    use fiex_provider_contracts::ProviderRequest;
+fn shared_router_merges_native_and_proxy_candidates_and_rejects_method_spoofing() {
+    use std::sync::Arc;
 
-    let providers = vec![
-        Resolver::builtin("native", 100),
-        Resolver::builtin("ipc-proxy", 50),
-    ];
-    let request = ProviderRequest {
-        method: "contextMenu.resolve".into(),
-        params: json!({}),
-    };
-    let outcomes = EventRouter::resolve_typed(
+    let providers = vec!["native", "ipc-proxy"]
+        .into_iter()
+        .map(|id| ProviderCandidate {
+            resolver: Resolver::builtin(id, 100),
+            implementation: Arc::new(id.to_owned()),
+        })
+        .collect::<Vec<_>>();
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        "contextMenu.resolve",
+        json!({}),
+        &[],
+        None,
+    );
+    let outcomes = EventRouter::resolve_shared(
         "contextMenu.resolve",
         providers.clone(),
-        &request,
-        |provider, _| {
+        &invocation,
+        |provider, _, _| {
             Ok(json!({"items":[{
                 "id": provider.id, "kind": "action", "title": provider.name
             }]}))
@@ -193,15 +205,17 @@ fn typed_router_merges_native_and_proxy_results_and_rejects_method_spoofing() {
     assert_eq!(outcomes.len(), 2);
     assert!(outcomes.iter().all(|(_, result)| result.is_ok()));
 
-    let spoof = ProviderRequest {
-        method: "contextMenu.execute".into(),
-        params: json!({}),
-    };
-    let outcomes = EventRouter::resolve_typed(
+    let spoof = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        "contextMenu.execute",
+        json!({}),
+        &[],
+        None,
+    );
+    let outcomes = EventRouter::resolve_shared(
         "contextMenu.resolve",
         providers,
         &spoof,
-        |_, _| Ok(json!({"items":[]})),
+        |_, _, _| Ok(json!({"items":[]})),
         |_, value| Ok(value),
         |_| true,
         |results| results,
@@ -211,19 +225,28 @@ fn typed_router_merges_native_and_proxy_results_and_rejects_method_spoofing() {
 
 #[test]
 fn typed_event_router_merges_provider_results_without_json_endpoints() {
-    use fiex_provider_contracts::ProviderRequest;
+    use std::sync::Arc;
 
-    let outcomes = EventRouter::resolve_typed(
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        "info.resolve",
+        json!({}),
+        &[],
+        None,
+    );
+    let outcomes = EventRouter::resolve_shared(
         "info.resolve",
         vec![
             Resolver::builtin("core.metadata", 100),
             Resolver::builtin("plugin:org.example:metadata", 50),
-        ],
-        &ProviderRequest {
-            method: "info.resolve".into(),
-            params: json!({}),
-        },
-        |provider, _| Ok(provider.id.clone()),
+        ]
+        .into_iter()
+        .map(|resolver| ProviderCandidate {
+            implementation: Arc::new(resolver.id.clone()),
+            resolver,
+        })
+        .collect(),
+        &invocation,
+        |provider, _, _| Ok(provider.id.clone()),
         |_, result| Ok(result),
         |_| true,
         |results| {

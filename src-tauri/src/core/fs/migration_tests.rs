@@ -30,7 +30,7 @@ fn filesystem_root_can_be_captured_as_directory() {
 }
 
 #[test]
-fn adapter_symlink_projection_is_not_lost() {
+fn provider_symlink_projection_is_not_lost() {
     let item = super::presentation::entry(json!({"name":"link", "symlink":true})).unwrap();
     assert!(item.is_symlink);
 }
@@ -221,7 +221,7 @@ fn selected_local_path_cannot_be_relabelled_with_a_forged_reference() {
 }
 
 #[test]
-fn desktop_create_rename_and_delete_use_the_owning_adapter() {
+fn desktop_create_rename_and_delete_use_the_owning_provider() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().to_string_lossy().into_owned();
     let folder = super::binding::create(&root, "folder", true, "core:test-create").unwrap();
@@ -254,7 +254,7 @@ fn applications_root_creation_uses_the_same_broker_contract() {
 }
 
 #[test]
-fn desktop_search_runs_through_the_same_adapter_and_honors_cancellation() {
+fn desktop_search_runs_through_the_same_provider_and_honors_cancellation() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir(dir.path().join("nested")).unwrap();
     std::fs::write(dir.path().join("nested").join("needle.txt"), b"x").unwrap();
@@ -269,9 +269,9 @@ fn desktop_search_runs_through_the_same_adapter_and_honors_cancellation() {
 }
 
 #[test]
-fn virtual_adapter_search_reads_the_cached_view() {
+fn vfs_search_reads_the_cached_view() {
     let root = super::binding::trusted(
-        crate::core::volumes::virtual_resolvers::RECENT_URI,
+        crate::core::volumes::native_vfs::RECENT_URI,
         "core:test-virtual-search",
     )
     .unwrap();
@@ -285,16 +285,14 @@ fn virtual_adapter_search_reads_the_cached_view() {
 
 #[test]
 fn builtin_view_storage_and_presentation_are_separate() {
-    use crate::core::volumes::{applications, virtual_resolvers, virtual_storage};
-    let root = virtual_storage::entry(applications::URI).unwrap();
+    use crate::core::volumes::{applications, native_vfs};
+    let root = native_vfs::resource_entry(applications::URI).unwrap();
     assert!(root.is_dir);
     assert_eq!(root.name, "core:applications");
     assert!(root.allowed_ops.iter().any(|op| op == "mkdir"));
     assert_eq!(
-        virtual_resolvers::view_for(applications::URI)
-            .map(|view| view.id())
-            .unwrap(),
-        "core:applications"
+        native_vfs::provider_id(applications::URI),
+        Some("core:applications")
     );
-    assert!(virtual_storage::list(virtual_resolvers::RECENT_URI).is_ok());
+    assert!(native_vfs::list(native_vfs::RECENT_URI).is_ok());
 }

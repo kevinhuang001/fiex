@@ -1,9 +1,7 @@
 //! Typed event candidate discovery lives beside the VFS capability registry.
 //! Matching and permission checks run before creating any IPC proxy.
-use crate::plugins::events::{matching, Handler, Resolver};
-use fiex_provider_contracts::{
-    event, MatchResource, ProviderDescriptor, ProviderKind, ProviderMatchRule,
-};
+use crate::plugins::events::{matching, Resolver};
+use fiex_provider_contracts::{event, MatchResource, ProviderDescriptor, ProviderKind, ProviderMatchRule};
 use serde_json::Value;
 
 /// Candidate identity and priority obey the same contract as native entries.
@@ -103,7 +101,7 @@ pub fn candidates(
                 },
                 name: plugin.name.clone(),
                 priority,
-                handler: Handler::Plugin(Box::new(plugin)),
+                plugin: Some(Box::new(plugin)),
             });
         }
     }

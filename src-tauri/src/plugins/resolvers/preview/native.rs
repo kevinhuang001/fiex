@@ -1,21 +1,17 @@
 //! Persistent, typed native PreviewProvider registrations. Every Core
 //! preview implementation lives behind the same validated descriptor shape
 //! as its IPC peer; only the transport-specific adapter differs.
-use super::builtin::{builtin_candidates, builtin_view, Builtin};
+use super::builtin::{builtin_view, Builtin};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
-    MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
-    ProviderMatchRule,
+    MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, ResourceMetadata,
 };
 use serde_json::json;
 use std::sync::{Arc, OnceLock};
-
-trait NativePreviewProvider: PreviewProvider {
-    fn supports(&self, kinds: &[Builtin]) -> bool;
-}
 
 struct BuiltinPreview(Builtin);
 impl PreviewProvider for BuiltinPreview {
@@ -32,16 +28,10 @@ impl PreviewProvider for BuiltinPreview {
     }
 }
 
-impl NativePreviewProvider for BuiltinPreview {
-    fn supports(&self, kinds: &[Builtin]) -> bool {
-        kinds.contains(&self.0)
-    }
-}
-
-fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
-    static REGISTRY: OnceLock<NativeProviderRegistry<dyn NativePreviewProvider>> = OnceLock::new();
+fn registry() -> &'static NativeProviderRegistry<dyn PreviewProvider> {
+    static REGISTRY: OnceLock<NativeProviderRegistry<dyn PreviewProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn NativePreviewProvider> =
+        let mut values: NativeProviderRegistry<dyn PreviewProvider> =
             NativeProviderRegistry::new(ProviderKind::Preview);
         for kind in [
             Builtin::Text,
@@ -50,18 +40,39 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
             Builtin::Pdf,
             Builtin::Fallback,
         ] {
+            let rule = match kind {
+                Builtin::Text => ProviderMatchRule {
+                    mime_types: vec![
+                        "text/*".into(),
+                        "application/json".into(),
+                        "application/xml".into(),
+                        "application/javascript".into(),
+                    ],
+                    kinds: vec!["file".into()],
+                    ..Default::default()
+                },
+                Builtin::Image => ProviderMatchRule {
+                    mime_types: vec!["image/*".into()],
+                    kinds: vec!["file".into()],
+                    ..Default::default()
+                },
+                Builtin::Media => ProviderMatchRule {
+                    mime_types: vec!["audio/*".into(), "video/*".into()],
+                    kinds: vec!["file".into()],
+                    ..Default::default()
+                },
+                Builtin::Pdf => ProviderMatchRule {
+                    mime_types: vec!["application/pdf".into()],
+                    kinds: vec!["file".into()],
+                    ..Default::default()
+                },
+                Builtin::Fallback => ProviderMatchRule::default(),
+            };
             values
                 .register(
                     kind.id(),
                     kind.priority(),
-                    if kind == Builtin::Fallback {
-                        ProviderMatchRule::default()
-                    } else {
-                        ProviderMatchRule {
-                            kinds: vec!["file".into()],
-                            ..Default::default()
-                        }
-                    },
+                    rule,
                     Arc::new(BuiltinPreview(kind)),
                 )
                 .expect("invalid native PreviewProvider");
@@ -71,25 +82,28 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
 }
 
 pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
-    let selected = builtin_candidates(ext, mime, is_dir);
+    let inferred_mime = if mime.is_empty() || mime == "application/octet-stream" {
+        crate::plugins::match_rules::mime_for(ext)
+    } else {
+        mime.to_owned()
+    };
     let targets = [MatchResource {
-        metadata: Some(fiex_provider_contracts::ResourceMetadata {
-            kind: if is_dir { "directory" } else { "file" }.into(),
+        metadata: Some(ResourceMetadata {
             extension: Some(ext.into()),
-            mime: Some(mime.into()),
+            mime: Some(inferred_mime),
+            kind: if is_dir { "directory" } else { "file" }.into(),
             ..Default::default()
         }),
         ..Default::default()
     }];
-    registry()
-        .matched_candidates(&targets, None, 1)
-        .into_iter()
-        .filter(|resolver| {
-            registry()
-                .get(&resolver.id)
-                .is_some_and(|provider| provider.supports(&selected))
-        })
-        .collect()
+    let mut candidates = registry().matched_candidates(&targets, None, 1);
+    if candidates
+        .iter()
+        .any(|provider| provider.id != "builtin:fallback")
+    {
+        candidates.retain(|provider| provider.id != "builtin:fallback");
+    }
+    candidates
 }
 
 pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView, ProviderError> {
@@ -103,6 +117,10 @@ pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView,
         None,
     );
     provider.open(&invocation)
+}
+
+pub(super) fn provider(id: &str) -> Option<Arc<dyn PreviewProvider>> {
+    registry().get_arc(id)
 }
 
 #[cfg(test)]

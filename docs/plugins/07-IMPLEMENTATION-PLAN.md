@@ -1,4 +1,8 @@
-# 07 · 实现状态
+# 07 · 历史实现快照
+
+> 本文记录早期插件实现阶段，早于 Unified Provider Architecture 全量迁移；
+> 其中 `FsResolver`、`plugin_fs_access` 等旧模块名及完成状态不代表当前代码。
+> 当前 Provider 接口与调用结构以共享 SDK Contracts 和 Core Provider Registry 为准。
 
 ## 已完成
 

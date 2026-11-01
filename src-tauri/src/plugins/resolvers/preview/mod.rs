@@ -5,7 +5,7 @@
 //! and return a package-confined `PreviewView`.
 use crate::plugins::contracts::PreviewView;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{FsOperation, ProviderRequest};
+use fiex_provider_contracts::{PreviewProvider, ProviderInvocation, ProviderRequest};
 use serde_json::Value;
 use std::{fs, sync::Arc};
 
@@ -17,23 +17,29 @@ mod session;
 pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }
-use crate::plugins::events::{EventRouter, Handler, Resolver};
+use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
 pub use session::session_scope;
 use session::UNSUPPORTED;
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
-    let builtin = native::candidates(&ext, mime, is_dir);
-    let targets = [fiex_provider_contracts::MatchResource {
+    let target = fiex_provider_contracts::MatchResource {
         metadata: Some(fiex_provider_contracts::ResourceMetadata {
             kind: if is_dir { "directory" } else { "file" }.into(),
-            extension: Some(ext),
+            extension: Some(ext.clone()),
             mime: Some(mime.into()),
             ..Default::default()
         }),
         ..Default::default()
-    }];
-    crate::plugins::provider_registry::candidates("preview.open", &targets, "", builtin)
+    };
+    let targets = [target];
+    let builtin = native::candidates(&ext, mime, is_dir);
+    crate::plugins::provider_registry::candidates(
+        "preview.open",
+        &targets,
+        "",
+        builtin,
+    )
 }
 
 fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {
@@ -46,7 +52,12 @@ fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {
 
 fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(resource));
-    let readable = targets[0].capabilities.allows(FsOperation::Read);
+    let readable = targets.first().is_some_and(|target| {
+        target
+            .capabilities
+            .operations
+            .contains(&fiex_provider_contracts::FsOperation::Read)
+    });
     let builtin = native::candidates(&resource.ext, &resource.mime, resource.is_dir)
         .into_iter()
         .filter(|provider| readable || provider.id == "builtin:fallback")
@@ -61,7 +72,7 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     // Failing to inspect that size bypasses maxBytes for remote previews.
     let size = resource_size(resource);
     providers.retain(|provider| {
-        let crate::plugins::events::Handler::Plugin(plugin) = &provider.handler else {
+        let Some(plugin) = provider.plugin.as_deref() else {
             return true;
         };
         plugin
@@ -81,7 +92,7 @@ fn project_candidates(providers: Vec<Resolver>) -> Vec<Value> {
         .iter()
         .map(|provider| {
             let mut value = provider.json();
-            if let crate::plugins::events::Handler::Plugin(plugin) = &provider.handler {
+            if let Some(plugin) = provider.plugin.as_deref() {
                 if crate::plugins::host::preview_loading_entry(&plugin.extensions).is_some() {
                     value["loading"] = Value::Bool(true);
                 }
@@ -138,18 +149,44 @@ fn resolve_preview(
         method: "preview.open".into(),
         params: serde_json::json!({}),
     };
-    EventRouter::resolve_typed(
+    let providers = providers
+        .into_iter()
+        .filter_map(|resolver| {
+            let implementation: Arc<dyn PreviewProvider> = match resolver.plugin.as_deref() {
+                None => native::provider(&resolver.id)?,
+                Some(plugin) => Arc::new(
+                    proxy::ScopedPreviewProxy::new(
+                        plugin.clone(),
+                        resource.clone(),
+                        resolver.id.clone(),
+                    )
+                    .ok()?,
+                ),
+            };
+            Some(ProviderCandidate {
+                resolver,
+                implementation,
+            })
+        })
+        .collect();
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        request.method.clone(),
+        request.params.clone(),
+        std::slice::from_ref(resource.as_ref()),
+        None,
+    );
+    EventRouter::resolve_shared(
         "preview.open",
         providers,
-        &request,
-        |resolver, request| match &resolver.handler {
-            Handler::Builtin(id) => native::open(id, &resource).map_err(|error| error.to_string()),
-            Handler::Plugin(plugin) => {
-                let request = crate::plugins::events::bind_provider_request(resolver, request)?;
-                proxy::ScopedPreviewProxy::new((**plugin).clone(), resource.clone())?
-                    .open_typed(&request)
-                    .map_err(|error| error.to_string())
-            }
+        &invocation,
+        |_, provider, context| {
+            provider.open(context).map_err(|error| {
+                if error.message == UNSUPPORTED {
+                    UNSUPPORTED.to_string()
+                } else {
+                    error.to_string()
+                }
+            })
         },
         |_, view| {
             let value = serde_json::to_value(&view).map_err(|error| error.to_string())?;
@@ -162,7 +199,7 @@ fn resolve_preview(
             // shown in Settings, where a bare "no preview provider succeeded"
             // message would hide crashes, handshake and sandbox failures.
             for (provider, result) in &outcomes {
-                let (Handler::Plugin(plugin), Err(error)) = (&provider.handler, result) else {
+                let (Some(plugin), Err(error)) = (provider.plugin.as_deref(), result) else {
                     continue;
                 };
                 if error != UNSUPPORTED {
@@ -182,7 +219,7 @@ fn resolve_preview(
                 if let Some((provider, Err(error))) =
                     outcomes.iter().find(|(provider, _)| provider.id == id)
                 {
-                    if matches!(&provider.handler, Handler::Plugin(_)) && error != UNSUPPORTED {
+                    if provider.plugin.is_some() && error != UNSUPPORTED {
                         return Err(format!("{} preview failed: {error}", provider.name));
                     }
                 }

@@ -1,4 +1,4 @@
-//! FsResolver: the one Core-side path to a provider's `vfs.*` methods.
+//! Core bridge for plugin-owned shared `VfsProvider` implementations.
 //!
 //! Connection mounts and standalone views differ only in the identity block
 //! they send; method names, DTO validation, pagination, stream handling and
@@ -101,7 +101,7 @@ impl Mount {
             page.validate_page(PAGE_LIMIT)?;
             truncated |= page.truncated;
             for item in page.entries {
-                entries.push(FsEntry::parse(item)?);
+                entries.push(types::parse_entry(item)?);
                 if entries.len() > MAX_ENTRIES {
                     return Err("provider returned too many entries".into());
                 }
@@ -114,6 +114,7 @@ impl Mount {
                         entries,
                         warnings,
                         truncated,
+                        ..Default::default()
                     })
                 }
                 Some(next) if !cursors.insert(next.clone()) => {
@@ -153,7 +154,7 @@ impl Mount {
 
     pub fn stat(&self, node_id: &str) -> Result<FsEntry, String> {
         let value = self.invoke("vfs.stat", json!({"nodeId": node_id}))?;
-        FsEntry::parse(value)
+        types::parse_entry(value)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -185,14 +186,14 @@ impl Mount {
                     "ignores": ignores, "limit": remaining.min(PAGE_LIMIT), "cursor": cursor,
                 }),
             )?;
-            let page: fiex_provider_contracts::SearchResults = serde_json::from_value(page)
+            let page: fiex_provider_contracts::VfsPage = serde_json::from_value(page)
                 .map_err(|error| format!("invalid VFS search page: {error}"))?;
             page.validate_page(remaining.min(PAGE_LIMIT))?;
             for item in page.entries {
                 if cancelled() {
                     return Ok(true);
                 }
-                emit(FsEntry::parse(item)?)?;
+                emit(types::parse_entry(item)?)?;
                 count += 1;
             }
             let truncated = page.truncated;
@@ -211,7 +212,7 @@ impl Mount {
     pub fn mkdir(&self, parent_id: &str, name: &str) -> Result<FsEntry, String> {
         crate::plugins::mounts::segment(name)?;
         let value = self.invoke("vfs.mkdir", json!({"parentId": parent_id, "name": name}))?;
-        FsEntry::parse(value)
+        types::parse_entry(value)
     }
 
     pub fn rename(
@@ -225,7 +226,7 @@ impl Mount {
             "vfs.rename",
             json!({"nodeId": node_id, "name": name, "parentId": parent_id}),
         )?;
-        FsEntry::parse(value)
+        types::parse_entry(value)
     }
 
     pub fn remove(&self, node_id: &str) -> Result<(), String> {

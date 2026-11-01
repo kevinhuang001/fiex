@@ -9,8 +9,8 @@ const entry = { name: 'b.7z', path: '/a/b.7z', extension: '7z', isDir: false } a
 
 describe('before-open event router', () => {
   it('passes only the resource path to the Core-owned hook entrypoint', async () => {
-    invoke.mockResolvedValueOnce({ handled: true, preview: true })
-    await expect(runBeforeOpenHooks(entry)).resolves.toEqual({ handled: true, preview: true })
+    invoke.mockResolvedValueOnce({ handled: true })
+    await expect(runBeforeOpenHooks(entry)).resolves.toEqual({ handled: true })
     expect(invoke).toHaveBeenCalledWith('plugin_before_open', { path: '/a/b.7z' })
   })
 

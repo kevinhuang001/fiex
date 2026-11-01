@@ -123,10 +123,8 @@ export type DecorationTarget = 'name' | 'modified' | 'size' | 'kind' | 'row'
 export interface EntryDecoration {
   nativeBadges?: DecorationBadge[]
   path: string
-  badges: DecorationBadge[]
   label?: string
   description?: string
-  style?: DecorationStyle
   fields?: Partial<Record<DecorationTarget, DecorationField>>
   icon?: string
   iconPath?: string

@@ -105,7 +105,7 @@ impl FsWriteStream {
             .map(|entry| {
                 serde_json::to_value(entry)
                     .map_err(|error| error.to_string())
-                    .and_then(FsEntry::parse)
+                    .and_then(super::types::parse_entry)
             })
             .transpose()
     }

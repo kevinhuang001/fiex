@@ -6,8 +6,8 @@ use crate::plugins::{
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
-    HookProvider, HookResult, ProviderDescriptor, ProviderError, ProviderInstances,
-    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest, ProviderRequestContext,
+    HookProvider, HookResult, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
 use std::{
     any::Any,
@@ -25,11 +25,14 @@ struct CoreHookInvocation {
 }
 
 impl CoreHookInvocation {
-    fn new(plugin: PluginInfo, resource: &ResourceSnapshot, request: &ProviderRequest) -> Self {
+    fn new(
+        plugin: PluginInfo,
+        resource: &ResourceSnapshot,
+        request: ProviderRequestContext,
+    ) -> Self {
         Self {
-            base: NativeProviderInvocation::new(
-                request.method.clone(),
-                request.params.clone(),
+            base: NativeProviderInvocation::from_request_context(
+                request,
                 std::slice::from_ref(resource),
                 None,
             ),
@@ -66,15 +69,15 @@ impl HookProvider for IpcHook {
                 "HookProvider identity or event mismatch",
             ));
         }
-        let value = crate::plugins::events::invoke_resources(
+        let response = crate::plugins::events::invoke_resources(
             &services.plugin,
             ctx.method(),
-            ctx.params().clone(),
+            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
             std::slice::from_ref(&services.resource),
             None,
         )
         .map_err(ProviderError::internal)?;
-        serde_json::from_value(value)
+        serde_json::from_value(response)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 }
@@ -117,14 +120,39 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn HookProvider>, String> {
         .ok_or_else(|| "HookProvider registration failed".into())
 }
 
-pub(super) fn invoke(
-    plugin: &PluginInfo,
-    resource: &ResourceSnapshot,
-    request: &ProviderRequest,
-) -> Result<HookResult, String> {
-    let invocation = CoreHookInvocation::new(plugin.clone(), resource, request);
-    HookProvider::invoke(proxy(&plugin.id)?.as_ref(), &invocation)
-        .map_err(|error| error.to_string())
+pub(super) struct ScopedHookProxy {
+    handler: Arc<dyn HookProvider>,
+    plugin: PluginInfo,
+    resource: ResourceSnapshot,
+    provider_id: String,
+}
+
+impl ScopedHookProxy {
+    pub fn new(
+        plugin: PluginInfo,
+        resource: ResourceSnapshot,
+        provider_id: String,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            handler: proxy(&plugin.id)?,
+            plugin,
+            resource,
+            provider_id,
+        })
+    }
+}
+
+impl HookProvider for ScopedHookProxy {
+    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<HookResult, ProviderError> {
+        let request = crate::plugins::events::bind_provider_context(
+            &self.plugin.id,
+            &self.provider_id,
+            ctx.request(),
+        )
+        .map_err(ProviderError::invalid_params)?;
+        let invocation = CoreHookInvocation::new(self.plugin.clone(), &self.resource, request);
+        self.handler.invoke(&invocation)
+    }
 }
 
 #[cfg(test)]

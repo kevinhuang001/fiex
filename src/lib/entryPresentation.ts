@@ -16,7 +16,7 @@ export function cachePresentations(entries: Entry[], decorations: EntryDecoratio
   for (const entry of entries) {
     const key = presentationKey(entry)
     values.delete(key)
-    values.set(key, byPath.get(entry.path) ?? { path: entry.path, badges: [] })
+    values.set(key, byPath.get(entry.path) ?? { path: entry.path })
   }
   while (values.size > 10_000) values.delete(values.keys().next().value!)
 }

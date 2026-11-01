@@ -45,6 +45,10 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         self.entries.get(id)
     }
 
+    pub fn get_arc(&self, id: &str) -> Option<Arc<T>> {
+        self.entries.get_arc(id)
+    }
+
     /// Select by an implementation-owned resource match, not a URI switch
     /// in the generic broker. A rejected or unknown resource has no owner.
     pub fn find(&self, mut matches: impl FnMut(&T) -> bool) -> Option<&T> {

@@ -33,7 +33,7 @@ impl PluginHost {
                 let path = path.to_string_lossy();
                 !crate::plugins::mounts::handles(&path)
                     && crate::usbfs::route(&path).is_none()
-                    && !crate::core::volumes::virtual_resolvers::opaque(&path)
+                    && !crate::core::volumes::native_vfs::opaque(&path)
             })
             .cloned()
             .collect::<Vec<_>>();

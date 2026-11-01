@@ -27,7 +27,6 @@ pub struct RegisteredProvider {
     pub plugin_id: String,
     pub operations: BTreeSet<FsOperation>,
     pub reported: bool,
-    pub discovery: bool,
     pub preflight: bool,
     instances: BTreeMap<String, vfs_instances::VfsInstance>,
 }
@@ -70,10 +69,18 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
         .pointer("/vfs/preflight")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    provider.discovery = reply
+    let discovery = reply
         .pointer("/vfs/discovery")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    if provider.reported && !discovery {
+        // Static handshake capabilities are the retired protocol path. Never
+        // let a plugin without per-resource discovery reach the VFS proxy.
+        eprintln!("VFS capability handshake rejected for {plugin_id}: discovery is required");
+        provider.reported = false;
+        provider.operations.clear();
+        provider.preflight = false;
+    }
     match vfs_instances::read(reply, &provider.operations, provider.preflight) {
         Ok(instances) => provider.instances = instances,
         Err(error) => {
@@ -82,7 +89,6 @@ pub fn register(plugin_id: &str, reply: &Value) -> RegisteredProvider {
             provider.reported = false;
             provider.operations.clear();
             provider.preflight = false;
-            provider.discovery = false;
         }
     }
     if let Ok(mut registry) = registry().lock() {
@@ -148,14 +154,14 @@ pub fn authorize_method(plugin_id: &str, method: &str) -> Result<(), String> {
     }
 }
 
-/// Discovery is negotiated and only precedes new logical operations. Existing
+/// Per-resource discovery precedes each new logical operation. Existing
 /// streams must always be able to release their handles with close/abort.
 pub fn needs_discovery(plugin_id: &str, method: &str) -> bool {
     !matches!(
         method,
         "vfs.readStream" | "vfs.closeRead" | "vfs.writeStream" | "vfs.commit" | "vfs.abort"
     ) && FsOperation::from_method(method).is_some()
-        && get(plugin_id).is_some_and(|provider| provider.discovery)
+        && get(plugin_id).is_some_and(|provider| provider.reported)
 }
 
 pub fn authorize_discovered(method: &str, reply: &Value) -> Result<(), String> {
@@ -194,7 +200,7 @@ mod tests {
     fn declaration_follows_the_handshake() {
         let provider = register(
             "org.example.drive",
-            &json!({"pluginId":"org.example.drive","ready":true,"vfs":{"operations":["list","stat","read"]}}),
+            &json!({"pluginId":"org.example.drive","ready":true,"vfs":{"discovery":true,"operations":["list","stat","read"]}}),
         );
         assert!(provider.reported);
         assert_eq!(provider.operations.len(), 3);
@@ -208,7 +214,7 @@ mod tests {
     fn unknown_operations_are_ignored() {
         let provider = register(
             "org.example.future",
-            &json!({"vfs":{"operations":["list","teleport"]}}),
+            &json!({"vfs":{"discovery":true,"operations":["list","teleport"]}}),
         );
         assert_eq!(
             provider.operations.into_iter().collect::<Vec<_>>(),
@@ -228,6 +234,19 @@ mod tests {
         assert!(authorize_method("org.example.legacy", "vfs.list").is_err());
         assert!(authorize_method("org.example.legacy", "connection.open").is_ok());
         forget("org.example.legacy");
+    }
+
+    #[test]
+    fn static_capability_handshakes_are_rejected_without_discovery() {
+        let plugin = "org.example.static-vfs";
+        let provider = register(
+            plugin,
+            &json!({"vfs":{"operations":["list","read"]}}),
+        );
+        assert!(!provider.reported);
+        assert!(provider.operations.is_empty());
+        assert!(authorize_method(plugin, "vfs.list").is_err());
+        forget(plugin);
     }
 
     #[test]

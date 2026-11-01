@@ -38,7 +38,7 @@ fn system_app_is_launch_only_and_user_entries_are_protected() {
     assert_eq!(
         execute("core.applications.menu", "trash", "applications://", &user)
             .unwrap()
-            .command,
+            ["command"],
         "trashApplications"
     );
 }
@@ -61,7 +61,12 @@ fn native_view_menus_use_validated_shared_descriptors() {
     for descriptor in registered.descriptors() {
         assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
         descriptor.validate().unwrap();
-        let owner = registered.get(&descriptor.id).unwrap().owner();
+        let owner = match descriptor.id.as_str() {
+            "core.recent.menu" => "core:recent",
+            "core.applications.menu" => "core:applications",
+            "core.trash.menu" => "core:trash",
+            other => panic!("unexpected native menu provider: {other}"),
+        };
         let matching = MatchResource {
             view: Some(fiex_provider_contracts::ResourceLocation {
                 resource_type: fiex_provider_contracts::ResourceType::Vfs,
@@ -71,14 +76,9 @@ fn native_view_menus_use_validated_shared_descriptors() {
             ..Default::default()
         };
         assert!(descriptor.r#match.matches_targets(&[matching], 1));
-        let foreign = MatchResource {
-            view: Some(fiex_provider_contracts::ResourceLocation {
-                resource_type: fiex_provider_contracts::ResourceType::Fs,
-                provider_id: "core:local-fs".into(),
-                mount_id: Some("local".into()),
-            }),
-            ..Default::default()
-        };
+        let foreign = json!({
+            "view": {"type":"fs","providerId":"core:local-fs","mountId":"local"}
+        });
         assert!(!descriptor.r#match.matches_targets(&[foreign], 1));
     }
 }
@@ -107,8 +107,8 @@ fn native_menu_executes_only_actions_offered_for_this_exact_selection() {
         &system_app,
     )
     .unwrap();
-    assert_eq!(launched.command, "open");
-    assert_eq!(launched.paths, system_app);
+    assert_eq!(launched["command"], "open");
+    assert_eq!(launched["paths"], json!(system_app));
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn blank_trash_canvas_offers_empty_without_selection() {
         assert_eq!(
             execute("core.trash.menu", "emptyTrash", directory, &blank)
                 .unwrap()
-                .command,
+                ["command"],
             "emptyTrash"
         );
         assert!(execute("core.trash.menu", "delete", directory, &blank).is_err());
@@ -150,8 +150,8 @@ fn trash_selection_deletes_exactly_the_offered_nodes() {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["id"], "delete");
     let effect = execute("core.trash.menu", "delete", trash_vfs::URI, &paths).unwrap();
-    assert_eq!(effect.command, "delete");
-    assert_eq!(effect.paths, paths);
+    assert_eq!(effect["command"], "delete");
+    assert_eq!(effect["paths"], json!(paths));
     assert!(execute("core.trash.menu", "restore", trash_vfs::URI, &paths).is_err());
     assert!(execute("core.trash.menu", "emptyTrash", trash_vfs::URI, &paths).is_err());
     assert!(providers(trash_vfs::URI, &["/tmp/not-in-trash".into()]).is_empty());

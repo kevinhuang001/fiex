@@ -1,5 +1,4 @@
-//! Decoration value types shared by declarative rules, dynamic plugin
-//! responses and the renderer.
+//! Decoration value types shared by declarative rules and the renderer.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -7,9 +6,8 @@ use std::collections::HashMap;
 pub use fiex_provider_contracts::{DecorationBadge, DecorationField, DecorationStyle};
 pub type NativeBadge = fiex_provider_contracts::NativeDecorationBadge;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[derive(Default)]
 pub struct DecorationEntry {
     pub path: String,
     pub name: String,
@@ -45,6 +43,8 @@ pub struct DecorationTag {
     pub hex: Option<String>,
 }
 
+/// Core presentation result. Plugins contribute through the shared typed DTO;
+/// this renderer shape adds only Core-owned paths, provenance and native badges.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Decoration {
@@ -52,21 +52,13 @@ pub struct Decoration {
     pub native_badges: Vec<NativeBadge>,
     pub path: String,
     #[serde(default)]
-    pub badges: Vec<DecorationBadge>,
-    #[serde(default)]
     pub label: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub style: DecorationStyle,
-    /// Per-column decorations keyed by `name`, `modified`, `size`, `kind`
-    /// or `row`. `row` only accepts `style`.
-    #[serde(default)]
     pub fields: HashMap<String, DecorationField>,
-    /// Namespaced reference (`fiex-resource://<plugin-id>/<resource-id>`).
     #[serde(default)]
     pub icon: Option<String>,
-    /// Resolved absolute path for the renderer's asset protocol.
     #[serde(default)]
     pub icon_path: Option<String>,
     #[serde(default)]

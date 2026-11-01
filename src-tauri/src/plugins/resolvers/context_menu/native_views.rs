@@ -1,11 +1,18 @@
-//! Native ContextMenu providers use the same registered descriptor, view
-//! matcher, execution and session validation pipeline as external providers.
-//! View-specific actions live in implementations, not in EventRouter.
-use crate::plugins::events::Resolver;
-use crate::plugins::provider_registry::native::NativeProviderRegistry;
+//! Native view menus are registered directly as shared ContextMenuProviders.
+//! Their view-specific rules live in descriptors, using the same matcher as
+//! plugin contributions.
+use crate::{
+    plugins::{
+        events::Resolver,
+        native_invocation::NativeProviderInvocation,
+        provider_registry::native::NativeProviderRegistry,
+        resource::resource_context::ResourceSnapshot,
+    },
+    core::files::Entry,
+};
 use fiex_provider_contracts::{
-    LocationMatch, MatchResource, ProviderKind, ProviderMatchRule, ProviderMatcher,
-    ResourceMetadata,
+    ContextMenuProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, ProviderMatcher, ResourceMetadata,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
@@ -13,70 +20,31 @@ use std::sync::{Arc, OnceLock};
 mod implementations;
 use implementations::{ApplicationsMenu, RecentMenu, TrashMenu};
 
-trait NativeViewMenuProvider: Send + Sync {
-    fn id(&self) -> &'static str;
-    fn owner(&self) -> &'static str;
-    fn claimed_actions(&self) -> &'static [&'static str];
-    fn items(&self, path: &str) -> Vec<Value>;
-    /// A provider may contribute actions for the directory when selection is
-    /// empty. Generic dispatch never needs to know which view owns them.
-    fn blank_items(&self, _directory: &str) -> Vec<Value> {
-        Vec::new()
-    }
-    fn selection_items(&self, directory: &str, paths: &[String]) -> Vec<Value> {
-        if paths.is_empty() {
-            self.blank_items(directory)
-        } else {
-            intersection(self, paths)
-        }
-    }
-    fn execute(&self, item_id: &str, paths: &[String]) -> Result<NativeAction, String>;
-}
-
-/// Compute an action intersection using the same native provider for every
-/// selected node. The empty selection is a valid directory target.
-fn intersection<P: NativeViewMenuProvider + ?Sized>(
-    implementation: &P,
-    paths: &[String],
-) -> Vec<Value> {
-    let Some(first) = paths.first() else {
-        return Vec::new();
-    };
-    implementation
-        .items(first)
-        .into_iter()
-        .filter(|item| {
-            paths.iter().skip(1).all(|path| {
-                implementation
-                    .items(path)
-                    .iter()
-                    .any(|other| other["id"] == item["id"])
-            })
-        })
-        .collect()
-}
-
-pub(super) struct NativeAction {
-    pub command: &'static str,
-    pub paths: Vec<String>,
-}
-
-fn registry() -> &'static NativeProviderRegistry<dyn NativeViewMenuProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn NativeViewMenuProvider>> =
-        OnceLock::new();
+fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn NativeViewMenuProvider> =
+        let mut values: NativeProviderRegistry<dyn ContextMenuProvider> =
             NativeProviderRegistry::new(ProviderKind::ContextMenu);
-        let implementations: [Arc<dyn NativeViewMenuProvider>; 3] = [
-            Arc::new(RecentMenu),
-            Arc::new(ApplicationsMenu),
-            Arc::new(TrashMenu),
-        ];
-        for implementation in implementations {
-            let owner = implementation.owner();
+        for (id, owner, implementation) in [
+            (
+                "core.recent.menu",
+                "core:recent",
+                Arc::new(RecentMenu) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "core.applications.menu",
+                "core:applications",
+                Arc::new(ApplicationsMenu) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "core.trash.menu",
+                "core:trash",
+                Arc::new(TrashMenu) as Arc<dyn ContextMenuProvider>,
+            ),
+        ] {
             values
                 .register(
-                    implementation.id(),
+                    id,
                     100,
                     ProviderMatchRule {
                         view: Some(LocationMatch {
@@ -87,125 +55,162 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeViewMenuProvider> {
                     },
                     implementation,
                 )
-                .expect("invalid native ViewMenu provider");
+                .expect("invalid native ContextMenuProvider registration");
         }
         values
     })
 }
 
-fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[String]) -> bool {
-    if paths.is_empty() && provider.blank_items(directory).is_empty() {
-        return false;
-    }
-    let Some(descriptor) = registry().descriptor(provider.id()) else {
-        return false;
-    };
-    let Some(targets) = match_targets(paths) else {
-        return false;
-    };
-    let directory_context = crate::plugins::match_rules::directory_match_resource(directory);
-    ProviderMatcher::matches(
-        &descriptor.r#match,
+#[cfg(test)]
+fn context(directory: &str, paths: &[String], method: &str, params: Value) -> NativeProviderInvocation {
+    let targets = paths
+        .iter()
+        .map(|path| {
+            ResourceSnapshot::from_metadata(
+                path,
+                ResourceMetadata {
+                    kind: "file".into(),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let directory_resource = ResourceSnapshot::from_metadata(
+        directory,
+        ResourceMetadata {
+            kind: "directory".into(),
+            ..Default::default()
+        },
+    );
+    NativeProviderInvocation::new(
+        method,
+        params,
         &targets,
-        directory_context.as_ref(),
-        paths.len(),
+        Some(&directory_resource),
     )
 }
 
-fn provider(
-    id: &str,
-    directory: &str,
-    paths: &[String],
-) -> Result<&'static dyn NativeViewMenuProvider, String> {
-    registry()
-        .get(id)
-        .filter(|implementation| eligible(*implementation, directory, paths))
-        .ok_or_else(|| "native menu provider does not match selection".into())
+fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
+    let snapshots = paths
+        .iter()
+        .map(|path| {
+            ResourceSnapshot::from_metadata(
+                path,
+                ResourceMetadata {
+                    kind: "file".into(),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let targets = crate::plugins::events::matching::match_resources(&snapshots);
+    let directory_context = crate::plugins::match_rules::directory_match_resource(directory);
+    registry().matched_candidates(&targets, directory_context.as_ref(), paths.len())
 }
 
 pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
-    let Some(targets) = match_targets(paths) else {
-        return Vec::new();
-    };
-    let directory_context = crate::plugins::match_rules::directory_match_resource(directory);
-    registry()
-        .matched_candidates(&targets, directory_context.as_ref(), paths.len())
+    let invocation = context(directory, paths, "contextMenu.resolve", json!({}));
+    matched(directory, paths)
         .into_iter()
         .filter(|candidate| {
-            !paths.is_empty()
-                || registry()
-                    .get(&candidate.id)
-                    .is_some_and(|provider| !provider.blank_items(directory).is_empty())
+            registry().get(&candidate.id).is_some_and(|provider| {
+                provider
+                    .resolve(&invocation)
+                    .is_ok_and(|items| !items.is_empty())
+            })
         })
         .collect()
-}
-
-fn match_targets(paths: &[String]) -> Option<Vec<MatchResource>> {
-    paths
-        .iter()
-        .map(|path| {
-            let resource = match crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path) {
-                Ok(resource) => resource,
-                Err(error) => {
-                    // Some platform views expose opaque IDs whose metadata is
-                    // unavailable in headless contexts. Their registered VFS
-                    // identity is still trusted; absent metadata/capabilities
-                    // keep content and operation rules fail-closed.
-                    if crate::core::volumes::virtual_resolvers::view_for(path).is_none() {
-                        return Err(error);
-                    }
-                    let mut resource = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-                        path,
-                        ResourceMetadata::default(),
-                    );
-                    resource.operations = Some(Default::default());
-                    resource
-                }
-            };
-            Ok(crate::plugins::events::matching::match_resources(&[resource])
-                .into_iter()
-                .next()
-                .expect("one matcher target per resource"))
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .ok()
 }
 
 pub(super) fn owns(id: &str) -> bool {
     registry().get(id).is_some()
 }
 
-/// Native providers only claim the identifiers they actually own. Common
-/// actions such as Info and Preview remain available from generic providers.
-pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> &'static [&'static str] {
+pub(super) fn provider(id: &str) -> Option<Arc<dyn ContextMenuProvider>> {
+    registry().get_arc(id)
+}
+
+pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> Vec<String> {
+    let invocation = context(directory, paths, "contextMenu.resolve", json!({}));
     providers(directory, paths)
-        .first()
-        .and_then(|candidate| registry().get(&candidate.id))
-        .map_or(&[], |provider| provider.claimed_actions())
+        .into_iter()
+        .filter_map(|candidate| registry().get(&candidate.id))
+        .filter_map(|provider| provider.resolve(&invocation).ok())
+        .flatten()
+        .map(|item| item.id)
+        .collect()
 }
 
+#[cfg(test)]
 pub(super) fn resolve(id: &str, directory: &str, paths: &[String]) -> Result<Value, String> {
-    let implementation = provider(id, directory, paths)?;
-    Ok(json!({"items": implementation.selection_items(directory, paths)}))
+    let invocation = context(directory, paths, "contextMenu.resolve", json!({}));
+    invoke(id, &invocation)
 }
 
+pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Value, String> {
+    let provider = registry().get(id).ok_or("unknown native ContextMenuProvider")?;
+    let resources = NativeProviderInvocation::resources(invocation)
+        .map_err(|error| error.to_string())?;
+    let targets = crate::plugins::events::matching::match_resources(resources);
+    let directory_context = NativeProviderInvocation::directory(invocation)
+        .ok()
+        .and_then(|directory| crate::plugins::match_rules::directory_match_resource(&directory.display));
+    let descriptor = registry().descriptor(id).ok_or("missing native menu descriptor")?;
+    if !ProviderMatcher::matches(
+        &descriptor.r#match,
+        &targets,
+        directory_context.as_ref(),
+        invocation.request().selection_count,
+    ) {
+        return Err("native ContextMenuProvider does not match selection".into());
+    }
+    match invocation.method() {
+        "contextMenu.resolve" => provider
+            .resolve(invocation)
+            .map(|items| json!({"items": items}))
+            .map_err(|error| error.to_string()),
+        "contextMenu.execute" => provider
+            .execute(invocation)
+            .and_then(|result| serde_json::to_value(result).map_err(|error| ProviderError::internal(error.to_string())))
+            .map_err(|error| error.to_string()),
+        method => Err(ProviderError::method_not_found(method).to_string()),
+    }
+}
+
+#[cfg(test)]
 pub(super) fn execute(
     id: &str,
     item_id: &str,
     directory: &str,
     paths: &[String],
-) -> Result<NativeAction, String> {
-    // The caller's session already checks what was offered; still enforce
-    // this invariant at the native provider boundary for direct invocations.
+) -> Result<Value, String> {
     let offered = resolve(id, directory, paths)?;
     if !offered["items"].as_array().is_some_and(|items| {
-        items
-            .iter()
-            .any(|item| item["id"] == item_id && item["disabled"] != true)
+        items.iter().any(|item| item["id"] == item_id && item["disabled"] != true)
     }) {
         return Err("native menu action was not offered".into());
     }
-    provider(id, directory, paths)?.execute(item_id, paths)
+    let invocation = context(
+        directory,
+        paths,
+        "contextMenu.execute",
+        json!({"itemId": item_id}),
+    );
+    invoke(id, &invocation)
+}
+
+/// Construct the same shared invocation for a real menu request after Core has
+/// resolved and authorized its selected entries.
+pub(super) fn invocation_from_entries(
+    method: &str,
+    params: Value,
+    resources: &[ResourceSnapshot],
+    directory: &str,
+    directory_entry: Option<&Entry>,
+) -> NativeProviderInvocation {
+    let resolved_directory = directory_entry
+        .map(|entry| ResourceSnapshot::from_entry(directory, entry));
+    NativeProviderInvocation::new(method, params, resources, resolved_directory.as_ref())
 }
 
 #[cfg(test)]

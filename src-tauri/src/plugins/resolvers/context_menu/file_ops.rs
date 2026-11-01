@@ -26,19 +26,22 @@
 //! menu, never emitted as a disabled item. [`crate::plugins::resource::file_capabilities`]
 //! re-checks the same call on execute.
 use super::connection_cache::ConnectionCache;
+use super::builtin::Context;
 use crate::core::files::Entry;
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use crate::plugins::provider_registry::FsOperation;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
+use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
-    LocationMatch, MatchResource, ProviderKind, ProviderMatchRule, ResourceCapabilities,
+    ContextMenuProvider, LocationMatch, MatchResource, MenuExecuteResult, MenuItem,
+    MenuPlacement, ProviderError,
+    ProviderInput, ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
 /// The selection a menu is resolved for.
 pub(super) struct Selection<'a> {
-    pub(super) directory: &'a str,
     pub(super) paths: &'a [String],
     pub(super) entries: &'a [Entry],
     pub(super) read_only: bool,
@@ -51,34 +54,67 @@ impl Selection<'_> {
     }
 }
 
-pub(super) trait BuiltinResolver: Send + Sync {
-    fn id(&self) -> &'static str;
-    fn priority(&self) -> i64;
-    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool;
-    fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value>;
-}
-
-/// Every generic Core menu group is a registered typed provider instance.
-/// Capabilities determine eligibility; no per-request provider ID switch.
-fn registry() -> &'static NativeProviderRegistry<dyn BuiltinResolver> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn BuiltinResolver>> = OnceLock::new();
+/// Every generic Core menu group is registered as the same shared provider
+/// trait used by SDK plugins. Native implementations run directly in Core.
+fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
     REGISTERED.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn BuiltinResolver> =
+        let mut values: NativeProviderRegistry<dyn ContextMenuProvider> =
             NativeProviderRegistry::new(ProviderKind::ContextMenu);
-        let implementations: [Arc<dyn BuiltinResolver>; 10] = [
-            Arc::new(Opening),
-            Arc::new(Tags),
-            Arc::new(Create),
-            Arc::new(ConnectionCache),
-            Arc::new(Rename),
-            Arc::new(BatchRename),
-            Arc::new(Clipboard),
-            Arc::new(Terminal),
-            Arc::new(CopyPath),
-            Arc::new(Trash),
+        let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 10] = [
+            (
+                "builtin:opening",
+                100,
+                Arc::new(Opening) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:tags",
+                99,
+                Arc::new(Tags) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:create",
+                98,
+                Arc::new(Create) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:connection-cache",
+                98,
+                Arc::new(ConnectionCache) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:rename",
+                96,
+                Arc::new(Rename) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:batch-rename",
+                95,
+                Arc::new(BatchRename) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:clipboard",
+                94,
+                Arc::new(Clipboard) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:terminal",
+                93,
+                Arc::new(Terminal) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:copy-path",
+                92,
+                Arc::new(CopyPath) as Arc<dyn ContextMenuProvider>,
+            ),
+            (
+                "builtin:trash",
+                91,
+                Arc::new(Trash) as Arc<dyn ContextMenuProvider>,
+            ),
         ];
-        for implementation in implementations {
-            let rule = match implementation.id() {
+        for (id, priority, implementation) in implementations {
+            let rule = match id {
                 "builtin:tags" | "builtin:terminal" => ProviderMatchRule {
                     storage: Some(LocationMatch {
                         provider_ids: Some(vec!["core:local-fs".into()]),
@@ -96,67 +132,186 @@ fn registry() -> &'static NativeProviderRegistry<dyn BuiltinResolver> {
                 _ => ProviderMatchRule::default(),
             };
             values
-                .register(
-                    implementation.id(),
-                    implementation.priority(),
-                    rule,
-                    implementation,
-                )
+                .register(id, priority, rule, implementation)
                 .expect("invalid builtin menu registration");
         }
         values
     })
 }
 
-pub(super) fn available(
-    selection: &Selection<'_>,
-    capabilities: &FileCapabilities,
-) -> Vec<&'static dyn BuiltinResolver> {
-    let targets = selection
-        .paths
+pub(super) fn invocation(context: &Context, method: &str, params: Value) -> NativeProviderInvocation {
+    let targets = context
+        .entries
         .iter()
-        .enumerate()
-        .map(|(index, path)| {
-            let entry = selection.entries.get(index);
-            let (view, storage) = crate::plugins::match_rules::typed_locations_for(path);
-            let operations = entry
-                .map(|entry| crate::plugins::resource::file_capabilities::for_entry(path, entry))
-                .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(path));
-            let operations = FsOperation::ALL
-                .into_iter()
-                .filter(|operation| operations.allows(*operation))
-                .collect::<Vec<_>>();
-            MatchResource {
-                metadata: entry.map(
-                    crate::plugins::resource::resource_context::ResourceSnapshot::entry_metadata,
-                ),
-                view,
-                storage,
-                capabilities: ResourceCapabilities { operations },
-            }
-        })
+        .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
         .collect::<Vec<_>>();
-    let directory = crate::plugins::match_rules::directory_match_resource(selection.directory);
-    registry()
-        .matched_candidates(&targets, directory.as_ref(), selection.paths.len())
+    let directory = context
+        .directory_entry
+        .as_ref()
+        .map(|entry| ResourceSnapshot::from_entry(&context.directory, entry));
+    NativeProviderInvocation::new(method, params, &targets, directory.as_ref())
+        .with_local_data(Arc::new(context.clone()))
+}
+
+fn matcher_targets(context: &Context) -> Vec<MatchResource> {
+    let targets = context
+        .entries
         .iter()
-        .filter_map(|candidate| registry().get(&candidate.id))
-        .filter(|implementation| implementation.available(selection, capabilities))
+        .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
+        .collect::<Vec<_>>();
+    crate::plugins::events::matching::match_resources(&targets)
+}
+
+pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolver> {
+    let targets = matcher_targets(context);
+    let directory = crate::plugins::match_rules::directory_match_resource(&context.directory);
+    let invocation = invocation(context, "contextMenu.resolve", json!({}));
+    registry()
+        .matched_candidates(&targets, directory.as_ref(), context.paths.len())
+        .into_iter()
+        .filter(|candidate| {
+            registry().get(&candidate.id).is_some_and(|provider| {
+                provider
+                    .resolve(&invocation)
+                    .is_ok_and(|items| !items.is_empty())
+            })
+        })
         .collect()
 }
 
+pub(super) fn owns(id: &str) -> bool {
+    registry().get(id).is_some()
+}
+
+pub(super) fn provider(id: &str) -> Option<Arc<dyn ContextMenuProvider>> {
+    registry().get_arc(id)
+}
+
+#[cfg(test)]
+pub(super) fn resolve(id: &str, context: &Context) -> Result<Value, String> {
+    let provider = registry().get(id).ok_or("unknown native ContextMenuProvider")?;
+    let invocation = invocation(context, "contextMenu.resolve", json!({}));
+    let descriptor = registry().descriptor(id).ok_or("missing native menu descriptor")?;
+    let targets = matcher_targets(context);
+    let directory = crate::plugins::match_rules::directory_match_resource(&context.directory);
+    if !fiex_provider_contracts::ProviderMatcher::matches(
+        &descriptor.r#match,
+        &targets,
+        directory.as_ref(),
+        context.paths.len(),
+    ) {
+        return Err("native ContextMenuProvider does not match selection".into());
+    }
+    let items = provider
+        .resolve(&invocation)
+        .map_err(|error| error.to_string())?;
+    Ok(json!({"items": items}))
+}
+
+pub(super) fn invoke(
+    id: &str,
+    invocation: &dyn ProviderInvocation,
+) -> Result<Value, String> {
+    let provider = registry().get(id).ok_or("unknown native ContextMenuProvider")?;
+    let descriptor = registry().descriptor(id).ok_or("missing native menu descriptor")?;
+    let resources = NativeProviderInvocation::resources(invocation)
+        .map_err(|error| error.to_string())?;
+    let targets = crate::plugins::events::matching::match_resources(resources);
+    let directory = NativeProviderInvocation::directory(invocation)
+        .ok()
+        .and_then(|resource| crate::plugins::match_rules::directory_match_resource(&resource.display));
+    if !fiex_provider_contracts::ProviderMatcher::matches(
+        &descriptor.r#match,
+        &targets,
+        directory.as_ref(),
+        invocation.request().selection_count,
+    ) {
+        return Err("native ContextMenuProvider does not match selection".into());
+    }
+    match invocation.method() {
+        "contextMenu.resolve" => provider
+            .resolve(invocation)
+            .map(|items| json!({"items": items}))
+            .map_err(|error| error.to_string()),
+        "contextMenu.execute" => provider
+            .execute(invocation)
+            .and_then(|result| serde_json::to_value(result).map_err(|error| ProviderError::internal(error.to_string())))
+            .map_err(|error| error.to_string()),
+        method => Err(ProviderError::method_not_found(method).to_string()),
+    }
+}
+
+#[cfg(test)]
+pub(super) fn execute(id: &str, item_id: &str, context: &Context) -> Result<Value, String> {
+    let invocation = invocation(
+        context,
+        "contextMenu.execute",
+        json!({"itemId": item_id}),
+    );
+    invoke(id, &invocation)
+}
+
+macro_rules! impl_context_menu_provider {
+    ($($provider:ty),+ $(,)?) => {
+        $(
+            impl ContextMenuProvider for $provider {
+                fn resolve(
+                    &self,
+                    invocation: &dyn ProviderInvocation,
+                ) -> Result<Vec<MenuItem>, ProviderError> {
+                    if invocation.method() != "contextMenu.resolve" {
+                        return Err(ProviderError::method_not_found(invocation.method()));
+                    }
+                    let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
+                    let selection = context.selection();
+                    let capabilities = context.capabilities();
+                    if self.available(&selection, &capabilities) {
+                        Ok(super::builtin::retain_unclaimed(
+                            context,
+                            self.items(&selection, &capabilities),
+                        ))
+                    } else {
+                        Ok(Vec::new())
+                    }
+                }
+
+                fn execute(
+                    &self,
+                    invocation: &dyn ProviderInvocation,
+                ) -> Result<MenuExecuteResult, ProviderError> {
+                    if invocation.method() != "contextMenu.execute" {
+                        return Err(ProviderError::method_not_found(invocation.method()));
+                    }
+                    let items = <Self as ContextMenuProvider>::resolve(
+                        self,
+                        &NativeProviderInvocation::context_menu_resolve(invocation)?
+                            .with_local_data(Arc::new(
+                                NativeProviderInvocation::local_data::<Context>(invocation)?.clone(),
+                            )),
+                    )?;
+                    let item_id = match invocation.input()? {
+                        ProviderInput::ContextMenuExecute(request) => request.item_id.as_deref(),
+                        _ => None,
+                    }.ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
+                    if !items.iter().any(|item| item.id == item_id && !item.disabled) {
+                        return Err(ProviderError::invalid_params("native menu action was not offered"));
+                    }
+                    Ok(super::builtin::action_result(
+                        item_id,
+                        NativeProviderInvocation::local_data::<Context>(invocation)?,
+                    ))
+                }
+            }
+        )+
+    };
+}
+
 struct Opening;
-impl BuiltinResolver for Opening {
-    fn id(&self) -> &'static str {
-        "builtin:opening"
-    }
-    fn priority(&self) -> i64 {
-        100
-    }
+impl Opening {
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
         !selection.paths.is_empty()
     }
-    fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
         // Directories navigate without reading; a file needs `read` to open.
         let navigable = selection
             .entries
@@ -177,17 +332,11 @@ impl BuiltinResolver for Opening {
 }
 
 struct Tags;
-impl BuiltinResolver for Tags {
-    fn id(&self) -> &'static str {
-        "builtin:tags"
-    }
-    fn priority(&self) -> i64 {
-        99
-    }
+impl Tags {
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
         selection.all_local && !selection.paths.is_empty()
     }
-    fn items(&self, _selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, _selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         if cfg!(target_os = "macos") {
             vec![item("tags", "标签…", "tags", "")]
         } else {
@@ -200,17 +349,11 @@ impl BuiltinResolver for Tags {
 /// meaningful. Both items are capability-gated: `mkdir` for a folder and the
 /// provider's `write` (parentId + name) for an empty file.
 struct Create;
-impl BuiltinResolver for Create {
-    fn id(&self) -> &'static str {
-        "builtin:create"
-    }
-    fn priority(&self) -> i64 {
-        98
-    }
+impl Create {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
         selection.paths.is_empty() && (capabilities.create || capabilities.write)
     }
-    fn items(&self, _selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, _selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
         let mut items = Vec::new();
         if capabilities.create {
             items.push(item("newFolder", "新建文件夹…", "folder-plus", "newFolder"));
@@ -223,17 +366,11 @@ impl BuiltinResolver for Create {
 }
 
 struct Rename;
-impl BuiltinResolver for Rename {
-    fn id(&self) -> &'static str {
-        "builtin:rename"
-    }
-    fn priority(&self) -> i64 {
-        96
-    }
+impl Rename {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
         capabilities.rename && !selection.read_only && !selection.paths.is_empty()
     }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         if selection.many() {
             Vec::new()
         } else {
@@ -243,17 +380,11 @@ impl BuiltinResolver for Rename {
 }
 
 struct BatchRename;
-impl BuiltinResolver for BatchRename {
-    fn id(&self) -> &'static str {
-        "builtin:batch-rename"
-    }
-    fn priority(&self) -> i64 {
-        95
-    }
+impl BatchRename {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
         capabilities.rename && !selection.read_only && !selection.paths.is_empty()
     }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         if selection.many() {
             vec![item("batchRename", "批量重命名…", "pencil", "")]
         } else {
@@ -263,19 +394,13 @@ impl BuiltinResolver for BatchRename {
 }
 
 struct Clipboard;
-impl BuiltinResolver for Clipboard {
-    fn id(&self) -> &'static str {
-        "builtin:clipboard"
-    }
-    fn priority(&self) -> i64 {
-        94
-    }
+impl Clipboard {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
         !selection.paths.is_empty()
             && (capabilities.read
                 || (capabilities.read && capabilities.remove && !selection.read_only))
     }
-    fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
         let mut items = Vec::new();
         if capabilities.read {
             items.push(item("copy", "复制", "copy", "copy"));
@@ -291,49 +416,31 @@ impl BuiltinResolver for Clipboard {
 }
 
 struct Terminal;
-impl BuiltinResolver for Terminal {
-    fn id(&self) -> &'static str {
-        "builtin:terminal"
-    }
-    fn priority(&self) -> i64 {
-        93
-    }
+impl Terminal {
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
         selection.all_local && !selection.paths.is_empty()
     }
-    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         vec![item("terminal", "Open in Terminal", "terminal", "")]
     }
 }
 
 struct CopyPath;
-impl BuiltinResolver for CopyPath {
-    fn id(&self) -> &'static str {
-        "builtin:copy-path"
-    }
-    fn priority(&self) -> i64 {
-        92
-    }
+impl CopyPath {
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
         !selection.paths.is_empty()
     }
-    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         vec![item("copyPath", "复制路径", "copy", "")]
     }
 }
 
 struct Trash;
-impl BuiltinResolver for Trash {
-    fn id(&self) -> &'static str {
-        "builtin:trash"
-    }
-    fn priority(&self) -> i64 {
-        91
-    }
+impl Trash {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
         capabilities.remove && !selection.read_only && !selection.paths.is_empty()
     }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         let mut items = if selection.all_local {
             // The platform Trash only accepts local paths. Windows exposes the
             // Recycle Bin under that name; the rest keep the Trash wording.
@@ -349,16 +456,31 @@ impl BuiltinResolver for Trash {
             vec![item("delete", "彻底删除", "trash", "")]
         };
         for item in &mut items {
-            item["placement"] = json!("tail");
-            item["danger"] = json!(true);
+            item.placement = Some(MenuPlacement::Tail);
+            item.danger = true;
         }
         items
     }
 }
 
-pub(super) fn item(id: &str, title: &'static str, icon: &str, shortcut: &str) -> Value {
+impl_context_menu_provider!(
+    Opening,
+    Tags,
+    Create,
+    Rename,
+    BatchRename,
+    Clipboard,
+    Terminal,
+    CopyPath,
+    Trash,
+);
+
+pub(super) fn item(id: &str, title: &'static str, icon: &str, shortcut: &str) -> MenuItem {
     // Availability decides presence; a builtin item is never greyed out.
-    json!({"id":id,"kind":"action","title":crate::i18n::t(title),"icon":icon,"shortcut":shortcut,"disabled":false})
+    let mut item = MenuItem::action(id, crate::i18n::t(title));
+    item.icon = Some(icon.into());
+    item.shortcut = (!shortcut.is_empty()).then(|| shortcut.into());
+    item
 }
 
 #[cfg(test)]
@@ -384,18 +506,28 @@ mod registry_tests {
 
     #[test]
     fn capabilities_are_checked_by_each_registered_native_menu() {
-        let no_paths: Vec<String> = Vec::new();
-        let entries: Vec<Entry> = Vec::new();
-        let selection = Selection {
-            directory: "/tmp",
-            paths: &no_paths,
-            entries: &entries,
-            read_only: false,
-            all_local: true,
-        };
-        assert!(available(&selection, &FileCapabilities::default()).is_empty());
-        let allowed = available(&selection, &FileCapabilities::ALL);
-        assert_eq!(allowed.len(), 1);
-        assert_eq!(allowed[0].id(), "builtin:create");
+        let ctx = Context::for_test_caps(
+            "/tmp",
+            Vec::new(),
+            Vec::new(),
+            false,
+            FileCapabilities::default(),
+        );
+        assert!(providers(&ctx).is_empty());
+
+        let ctx = Context::for_test_caps(
+            "/tmp",
+            Vec::new(),
+            Vec::new(),
+            false,
+            FileCapabilities::ALL,
+        );
+        assert_eq!(
+            providers(&ctx)
+                .into_iter()
+                .map(|provider| provider.id)
+                .collect::<Vec<_>>(),
+            vec!["builtin:create".to_owned()]
+        );
     }
 }

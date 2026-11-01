@@ -63,6 +63,10 @@ pub fn mime_for(ext: &str) -> String {
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
         "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "tif" | "tiff" => "image/tiff",
+        "avif" => "image/avif",
+        "heic" => "image/heic",
         "pdf" => "application/pdf",
         "zip" => "application/zip",
         "7z" => "application/x-7z-compressed",
@@ -88,11 +92,17 @@ pub fn mime_for(ext: &str) -> String {
         "xml" => "application/xml",
         "html" | "htm" => "text/html",
         "css" => "text/css",
+        "scss" => "text/x-scss",
+        "less" => "text/x-less",
         "csv" => "text/csv",
         "tsv" => "text/tab-separated-values",
         "md" | "markdown" => "text/markdown",
-        "txt" | "log" | "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "java" | "c" | "cpp"
-        | "h" | "sh" | "toml" | "yaml" | "yml" | "ini" => "text/plain",
+        "txt" | "log" | "rst" | "json5" | "toml" | "yaml" | "yml" | "ini" | "conf"
+        | "cfg" | "env" | "sh" | "bat" | "ps1" | "py" | "rs" | "go" | "java" | "kt"
+        | "c" | "cc" | "cpp" | "h" | "hpp" | "cs" | "php" | "rb" | "swift" | "sql"
+        | "js" | "jsx" | "ts" | "tsx" | "vue" | "svelte" | "dart" | "lua" | "r" | "tex" => {
+            "text/plain"
+        }
         _ => "application/octet-stream",
     }
     .into()

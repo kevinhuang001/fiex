@@ -8,18 +8,24 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
 }
 
 use crate::plugins::{
-    events::{EventRouter, Handler, Resolver},
+    events::{EventRouter, ProviderCandidate, Resolver},
     resource::resource_context::ResourceSnapshot,
 };
-use fiex_provider_contracts::ProviderRequest;
+use fiex_provider_contracts::{ProviderError, ProviderInvocation, ProviderRequest, ToolbarProvider, ToolbarResult};
 use serde_json::{json, Value};
+use std::sync::Arc;
+
+struct FailedToolbarProvider(String);
+impl ToolbarProvider for FailedToolbarProvider {
+    fn invoke(&self, _ctx: &dyn ProviderInvocation) -> Result<ToolbarResult, ProviderError> {
+        Err(ProviderError::internal(self.0.clone()))
+    }
+}
 
 fn belongs_to_default_owner(provider: &Resolver, plugin_id: &str) -> bool {
-    matches!(
-        &provider.handler,
-        Handler::Plugin(plugin)
-            if plugin.id == plugin_id && provider.id == format!("plugin:{plugin_id}")
-    )
+    provider.plugin.as_deref().is_some_and(|plugin| {
+        plugin.id == plugin_id && provider.id == format!("plugin:{plugin_id}")
+    })
 }
 
 /// Invoked from the native toolbar; never directly dispatch an unregistered
@@ -37,31 +43,54 @@ pub fn invoke(plugin_id: &str, directory: &str, paths: &[String]) -> Result<Valu
         .iter()
         .map(|path| ResourceSnapshot::resolve(path))
         .collect::<Result<Vec<_>, _>>()?;
-    let match_targets = crate::plugins::events::matching::match_resources(&resources);
+    let targets = crate::plugins::events::matching::match_resources(&resources);
     let providers = crate::plugins::provider_registry::candidates(
         "toolbar.invoke",
-        &match_targets,
+        &targets,
         directory,
         Vec::new(),
     )
     .into_iter()
     .filter(|provider| belongs_to_default_owner(provider, plugin_id))
+    .map(|resolver| {
+        let implementation: Arc<dyn ToolbarProvider> = match resolver.plugin.as_deref() {
+            Some(plugin) => match proxy::ScopedToolbarProxy::new(
+                plugin.clone(),
+                &resources,
+                directory,
+                resolver.id.clone(),
+            ) {
+                Ok(proxy) => Arc::new(proxy),
+                Err(error) => Arc::new(FailedToolbarProvider(error)),
+            },
+            None => Arc::new(FailedToolbarProvider(
+                "unregistered native ToolbarProvider".into(),
+            )),
+        };
+        ProviderCandidate {
+            resolver,
+            implementation,
+        }
+    })
     .collect();
     let request = ProviderRequest {
         method: "toolbar.invoke".into(),
         params: json!({}),
     };
-    EventRouter::resolve_typed(
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        request.method.clone(),
+        request.params.clone(),
+        &resources,
+        None,
+    );
+    let result = EventRouter::resolve_shared(
         "toolbar.invoke",
         providers,
-        &request,
-        |provider, request| match &provider.handler {
-            Handler::Plugin(plugin) => proxy::invoke(plugin, &resources, directory, request)
-                .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
-            Handler::Builtin(_) => Err("native ToolbarProvider not registered".into()),
-        },
+        &invocation,
+        |_, provider, context| provider.invoke(context).map_err(|error| error.to_string()),
         |_, result| {
-            crate::plugins::events::validate_result("toolbar.invoke", &result)?;
+            let wire = serde_json::to_value(result).map_err(|error| error.to_string())?;
+            crate::plugins::events::validate_result("toolbar.invoke", &wire)?;
             Ok(result)
         },
         |_| true,
@@ -74,7 +103,8 @@ pub fn invoke(plugin_id: &str, directory: &str, paths: &[String]) -> Result<Valu
                 })?
                 .1
         },
-    )
+    );
+    serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

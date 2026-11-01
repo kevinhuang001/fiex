@@ -1,4 +1,5 @@
 use super::*;
+use fiex_provider_contracts::ConnectionOpenResult;
 /// Resolve a saved Connection via its owning plugin. The returned destination
 /// can only be a registered VFS mount or vetted HTML from the plugin package.
 pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
@@ -19,12 +20,10 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             "connection": provider_config(&connection),
         }),
     )?;
-    match target.get("kind").and_then(serde_json::Value::as_str) {
-        Some("vfs") => {
-            let mount_id = target
-                .get("mountId")
-                .and_then(serde_json::Value::as_str)
-                .ok_or("VFS navigation missing mountId")?;
+    let target: ConnectionOpenResult =
+        serde_json::from_value(target).map_err(|error| format!("invalid connection navigation: {error}"))?;
+    match target {
+        ConnectionOpenResult::Vfs { mount_id, node_ref } => {
             if mount_id != connection.mount_id {
                 return Err("PermissionDenied: foreign connection mount".into());
             }
@@ -36,35 +35,24 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             if !registered {
                 return Err("PermissionDenied: VFS extension not registered".into());
             }
-            let node_ref = target
-                .get("nodeRef")
-                .ok_or("VFS navigation missing nodeRef")?;
-            if node_ref.get("mountId").and_then(serde_json::Value::as_str)
-                != Some(connection.mount_id.as_str())
-            {
+            if node_ref.mount_id != connection.mount_id {
                 return Err("PermissionDenied: foreign nodeRef mount".into());
             }
-            let node_id = node_ref
-                .get("nodeId")
-                .and_then(serde_json::Value::as_str)
-                .ok_or("VFS navigation missing nodeId")?;
             Ok(serde_json::json!({
                 "kind": "vfs",
-                "path": crate::plugins::mounts::uri(&connection.mount_id, node_id)?,
+                "path": crate::plugins::mounts::uri(&connection.mount_id, &node_ref.node_id)?,
             }))
         }
-        Some("pluginView") => {
-            let view = target.get("view").ok_or("pluginView missing view")?;
-            if view.get("source").and_then(serde_json::Value::as_str) != Some("package") {
+        ConnectionOpenResult::PluginView {
+            view,
+            state,
+            tab_title,
+        } => {
+            if view.source != "package" {
                 return Err("pluginView source must be its plugin package".into());
             }
-            let entry = view
-                .get("entry")
-                .and_then(serde_json::Value::as_str)
-                .ok_or("pluginView missing package entry")?;
-            let tab_title = target
-                .get("tabTitle")
-                .and_then(serde_json::Value::as_str)
+            let tab_title = tab_title
+                .as_deref()
                 .map(str::trim)
                 .filter(|value| {
                     !value.is_empty()
@@ -72,10 +60,6 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                         && !value.chars().any(char::is_control)
                 })
                 .map(str::to_owned);
-            let state = target
-                .get("state")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null);
             if serde_json::to_vec(&state)
                 .map_err(|error| error.to_string())?
                 .len()
@@ -83,7 +67,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             {
                 return Err("pluginView state exceeds size limit".into());
             }
-            let asset_path = crate::plugins::host::plugin_view_asset(&plugin_id, entry)?;
+            let asset_path = crate::plugins::host::plugin_view_asset(&plugin_id, &view.entry)?;
             Ok(serde_json::json!({
                 "kind": "pluginView",
                 "pluginId": plugin_id,
@@ -93,6 +77,5 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
                 "tabTitle": tab_title,
             }))
         }
-        _ => Err("Connection must return vfs or pluginView navigation".into()),
     }
 }

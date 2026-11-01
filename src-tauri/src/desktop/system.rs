@@ -137,13 +137,17 @@ pub(crate) async fn open_path(
     path: String,
     recent: tauri::State<'_, recent::Recent>,
 ) -> Result<(), String> {
-    if let Some(provider) = crate::core::volumes::virtual_resolvers::view_for(&path) {
-        if path.starts_with(crate::core::volumes::applications::URI) {
-            return provider.launch(&path);
-        }
-        if crate::core::volumes::recycle::is_virtual(&path) {
-            return provider.launch(&path);
-        }
+    if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:applications") {
+        return crate::core::volumes::applications::open(
+            path.strip_prefix(crate::core::volumes::applications::URI).unwrap_or(&path),
+        );
+    }
+    if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:trash") {
+        return Err(crate::i18n::t("回收站项目请使用“放回原处”或“彻底删除”").into());
+    }
+    if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:recent") {
+        let source = crate::core::recent::source_for(&path)?;
+        return crate::core::terminals::open_path(&source);
     }
     recent::record(&recent, &path);
     tauri::async_runtime::spawn_blocking(move || {
@@ -157,10 +161,10 @@ pub(crate) async fn open_path(
 pub(crate) fn reveal_path(path: String) -> Result<(), String> {
     // Recent aliases are opaque to the host OS. Resolve the original local
     // source inside Core and reveal that, without exposing it to the webview.
-    if path.starts_with(crate::core::volumes::virtual_resolvers::RECENT_URI) {
-        if let Some(provider) = crate::core::volumes::virtual_resolvers::view_for(&path) {
-            return provider.reveal(&path);
-        }
+    if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:recent") {
+        let source = crate::core::volumes::native_vfs::recent_reveal_source(&path)
+            .ok_or_else(|| crate::i18n::t("无法在文件管理器中显示该位置").to_string())?;
+        return terminals::reveal(&source);
     }
     crate::plugins::mounts::reject_local(&path)?;
     terminals::reveal(&path)

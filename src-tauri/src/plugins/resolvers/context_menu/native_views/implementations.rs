@@ -1,40 +1,77 @@
-//! Native view-owned ContextMenu behavior. Each view implements the same
-//! ContextMenu contract and no generic menu dispatcher knows its URI scheme.
-use super::{intersection, NativeAction, NativeViewMenuProvider};
+//! Native view menus implement the shared ContextMenuProvider contract.
+use super::NativeProviderInvocation;
 use crate::core::files::Entry;
-use crate::core::volumes::{applications, recycle, trash_vfs, virtual_resolvers};
+use crate::core::volumes::{applications, recycle, trash_vfs, native_vfs};
+use fiex_provider_contracts::{
+    ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
+    ProviderInput, ProviderInvocation,
+};
 use serde_json::{json, Value};
 
-fn item(id: &str, title: String, icon: &str, danger: bool, tail: bool) -> Value {
-    json!({
-        "id": id, "kind": "action", "title": title, "icon": icon,
-        "danger": danger, "placement": if tail { Some("tail") } else { None }
-    })
+fn selection(ctx: &dyn ProviderInvocation) -> Result<(String, Vec<String>), ProviderError> {
+    let directory = NativeProviderInvocation::directory(ctx)?.display.clone();
+    let paths = (0..ctx.targets().len())
+        .map(|index| {
+            NativeProviderInvocation::resource(ctx, index)
+                .map(|resource| resource.display.clone())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((directory, paths))
+}
+
+fn intersection(paths: &[String], mut items: impl FnMut(&str) -> Vec<MenuItem>) -> Vec<MenuItem> {
+    let Some(first) = paths.first() else {
+        return Vec::new();
+    };
+    items(first)
+        .into_iter()
+        .filter(|item| {
+            paths.iter().skip(1).all(|path| {
+                items(path)
+                    .iter()
+                    .any(|other| other.id == item.id)
+            })
+        })
+        .collect()
+}
+
+fn offered<'a>(
+    ctx: &'a dyn ProviderInvocation,
+    items: &[MenuItem],
+) -> Result<&'a str, ProviderError> {
+    let id = match ctx.input()? {
+        ProviderInput::ContextMenuExecute(request) => request.item_id.as_deref(),
+        _ => None,
+    }
+    .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
+    if items
+        .iter()
+        .any(|item| item.id == id && !item.disabled)
+    {
+        Ok(id)
+    } else {
+        Err(ProviderError::invalid_params(
+            "native menu action was not offered",
+        ))
+    }
+}
+
+fn item(id: &str, title: String, icon: &str, danger: bool, tail: bool) -> MenuItem {
+    let mut item = MenuItem::action(id, title);
+    item.icon = Some(icon.into());
+    item.danger = danger;
+    item.placement = tail.then_some(MenuPlacement::Tail);
+    item
+}
+
+fn core_action(command: &str, paths: Vec<String>, directory: &str) -> MenuExecuteResult {
+    let path = paths.first().cloned().unwrap_or_default();
+    MenuExecuteResult::core_action(command, paths, path, directory)
 }
 
 pub(super) struct RecentMenu;
-impl NativeViewMenuProvider for RecentMenu {
-    fn id(&self) -> &'static str {
-        "core.recent.menu"
-    }
-
-    fn owner(&self) -> &'static str {
-        "core:recent"
-    }
-
-    fn claimed_actions(&self) -> &'static [&'static str] {
-        &[
-            "open",
-            "reveal",
-            "rename",
-            "trash",
-            "delete",
-            "cut",
-            "duplicate",
-        ]
-    }
-
-    fn items(&self, path: &str) -> Vec<Value> {
+impl RecentMenu {
+    fn items(path: &str) -> Vec<MenuItem> {
         let mut items = vec![item(
             "open",
             crate::i18n::t("打开").into(),
@@ -42,7 +79,7 @@ impl NativeViewMenuProvider for RecentMenu {
             false,
             false,
         )];
-        if virtual_resolvers::recent_reveal_source(path).is_some() {
+        if native_vfs::recent_reveal_source(path).is_some() {
             items.push(item(
                 "reveal",
                 crate::i18n::t("打开文件所在位置").into(),
@@ -53,47 +90,44 @@ impl NativeViewMenuProvider for RecentMenu {
         }
         items
     }
+}
 
-    fn execute(&self, id: &str, paths: &[String]) -> Result<NativeAction, String> {
+impl ContextMenuProvider for RecentMenu {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        let (_, paths) = selection(ctx)?;
+        Ok(intersection(&paths, Self::items))
+    }
+
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+        let (directory, paths) = selection(ctx)?;
+        let id = offered(ctx, &Self::resolve(self, ctx)?)?;
         match id {
-            "open" => Ok(NativeAction {
-                command: "open",
-                paths: paths
+            "open" => {
+                let source_paths = paths
                     .iter()
                     .map(|path| crate::core::recent::source_for(path))
-                    .collect::<Result<Vec<_>, _>>()?,
-            }),
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(ProviderError::internal)?;
+                Ok(core_action("open", source_paths, &directory))
+            }
             "reveal" => {
-                for path in paths {
-                    virtual_resolvers::recent_reveal_source(path).ok_or_else(|| {
-                        crate::i18n::t("无法在文件管理器中显示该位置").to_string()
+                for path in &paths {
+                    native_vfs::recent_reveal_source(path).ok_or_else(|| {
+                        ProviderError::internal(
+                            crate::i18n::t("无法在文件管理器中显示该位置").to_string(),
+                        )
                     })?;
                 }
-                Ok(NativeAction {
-                    command: "reveal",
-                    paths: paths.to_vec(),
-                })
+                Ok(core_action("reveal", paths, &directory))
             }
-            _ => Err("unknown Recent menu action".into()),
+            _ => Err(ProviderError::invalid_params("unknown Recent menu action")),
         }
     }
 }
 
 pub(super) struct ApplicationsMenu;
-impl NativeViewMenuProvider for ApplicationsMenu {
-    fn id(&self) -> &'static str {
-        "core.applications.menu"
-    }
-
-    fn owner(&self) -> &'static str {
-        "core:applications"
-    }
-
-    fn claimed_actions(&self) -> &'static [&'static str] {
-        &["open", "rename", "trash", "delete"]
-    }
-
-    fn items(&self, path: &str) -> Vec<Value> {
+impl ApplicationsMenu {
+    fn items(path: &str) -> Vec<MenuItem> {
         let user = applications::is_user(path);
         let launch = path != applications::URI && (!user || user_application(path));
         let mut items = vec![item(
@@ -121,28 +155,41 @@ impl NativeViewMenuProvider for ApplicationsMenu {
         }
         items
     }
+}
 
-    fn execute(&self, id: &str, paths: &[String]) -> Result<NativeAction, String> {
+impl ContextMenuProvider for ApplicationsMenu {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        let (_, paths) = selection(ctx)?;
+        Ok(intersection(&paths, Self::items))
+    }
+
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+        let (directory, paths) = selection(ctx)?;
+        let id = offered(ctx, &Self::resolve(self, ctx)?)?;
         match id {
-            "open" => Ok(NativeAction {
-                command: "open",
-                paths: paths.to_vec(),
-            }),
+            "open" => Ok(core_action("open", paths, &directory)),
             "rename" | "trash" => {
                 if paths.iter().any(|path| !applications::is_user(path)) {
-                    return Err("only stored application entries can be modified".into());
+                    return Err(ProviderError::invalid_params(
+                        "only stored application entries can be modified",
+                    ));
                 }
-                Ok(NativeAction {
-                    command: if id == "rename" {
+                Ok(core_action(
+                    if id == "rename" {
                         "rename"
                     } else {
                         "trashApplications"
                     },
-                    paths: paths.to_vec(),
-                })
+                    paths,
+                    &directory,
+                ))
             }
-            "delete" => Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into()),
-            _ => Err("unknown Applications menu action".into()),
+            "delete" => Err(ProviderError::invalid_params(
+                crate::i18n::t("系统应用不能在 Fiex 中删除").to_string(),
+            )),
+            _ => Err(ProviderError::invalid_params(
+                "unknown Applications menu action",
+            )),
         }
     }
 }
@@ -164,29 +211,8 @@ fn trash_title() -> &'static str {
 }
 
 pub(super) struct TrashMenu;
-impl NativeViewMenuProvider for TrashMenu {
-    fn id(&self) -> &'static str {
-        "core.trash.menu"
-    }
-
-    fn owner(&self) -> &'static str {
-        "core:trash"
-    }
-
-    fn claimed_actions(&self) -> &'static [&'static str] {
-        &[
-            "open",
-            "restore",
-            "delete",
-            "trash",
-            "rename",
-            "cut",
-            "duplicate",
-            "copyPath",
-        ]
-    }
-
-    fn blank_items(&self, directory: &str) -> Vec<Value> {
+impl TrashMenu {
+    fn blank_items(directory: &str) -> Vec<MenuItem> {
         if directory == trash_vfs::URI || directory == recycle::URI {
             vec![item(
                 "emptyTrash",
@@ -205,7 +231,7 @@ impl NativeViewMenuProvider for TrashMenu {
         }
     }
 
-    fn items(&self, _path: &str) -> Vec<Value> {
+    fn items(_path: &str) -> Vec<MenuItem> {
         vec![
             item(
                 "restore",
@@ -223,35 +249,31 @@ impl NativeViewMenuProvider for TrashMenu {
             ),
         ]
     }
+}
 
-    fn selection_items(&self, directory: &str, paths: &[String]) -> Vec<Value> {
+impl ContextMenuProvider for TrashMenu {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        let (directory, paths) = selection(ctx)?;
         if paths.is_empty() {
-            return self.blank_items(directory);
+            return Ok(Self::blank_items(&directory));
         }
-        let mut items = intersection(self, paths);
+        let mut items = intersection(&paths, Self::items);
         if paths.len() > 1 {
             // Multi-selection can only permanently delete the exact offered
-            // nodes. Never turn that into an empty-the-entire-bin action.
-            items.retain(|item| item["id"] == "delete");
+            // nodes, never empty the whole bin.
+            items.retain(|item| item.id == "delete");
         }
-        items
+        Ok(items)
     }
 
-    fn execute(&self, id: &str, paths: &[String]) -> Result<NativeAction, String> {
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+        let (directory, paths) = selection(ctx)?;
+        let id = offered(ctx, &Self::resolve(self, ctx)?)?;
         match id {
-            "emptyTrash" if paths.is_empty() => Ok(NativeAction {
-                command: "emptyTrash",
-                paths: Vec::new(),
-            }),
-            "restore" if paths.len() == 1 => Ok(NativeAction {
-                command: "restore",
-                paths: paths.to_vec(),
-            }),
-            "delete" if !paths.is_empty() => Ok(NativeAction {
-                command: "delete",
-                paths: paths.to_vec(),
-            }),
-            _ => Err("unknown Trash menu action".into()),
+            "emptyTrash" if paths.is_empty() => Ok(core_action("emptyTrash", paths, &directory)),
+            "restore" if paths.len() == 1 => Ok(core_action("restore", paths, &directory)),
+            "delete" if !paths.is_empty() => Ok(core_action("delete", paths, &directory)),
+            _ => Err(ProviderError::invalid_params("unknown Trash menu action")),
         }
     }
 }

@@ -45,11 +45,10 @@ pub(super) fn execute(
                 }
                 let create = !step.existing || optional_stat(&step.target)?.is_none();
                 step.target.require(FsOperation::Write, create)?;
-                let mut reader = step.source.adapter()?.open_read()?;
+                let mut reader = step.source.open_read_handle()?;
                 let mut writer = step
                     .target
-                    .adapter()?
-                    .begin_write_sized(create, Some(reader.size()))?;
+                    .begin_write_handle_sized(create, Some(reader.size()))?;
                 let mut offset = 0u64;
                 loop {
                     check_cancelled(cancel)?;

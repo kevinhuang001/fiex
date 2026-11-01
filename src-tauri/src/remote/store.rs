@@ -59,7 +59,7 @@ pub struct ConnectionInput {
     pub settings: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionInfo {
     pub id: String,

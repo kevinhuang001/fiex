@@ -1,19 +1,21 @@
 //! Connection-cache menu group. Remote selections only; the action set is
 //! owned by the connection adapter and unchanged by capability gating.
 
-use super::file_ops::{item, BuiltinResolver, Selection};
+use super::{
+    builtin::Context,
+    file_ops::{item, Selection},
+};
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
+use fiex_provider_contracts::{
+    ContextMenuProvider, MenuActivity, MenuActivityKind, MenuExecuteResult, MenuItem,
+    ProviderError, ProviderInput, ProviderInvocation,
+};
 use serde_json::{json, Value};
 
 pub(super) struct ConnectionCache;
 
-impl BuiltinResolver for ConnectionCache {
-    fn id(&self) -> &'static str {
-        "builtin:connection-cache"
-    }
-    fn priority(&self) -> i64 {
-        98
-    }
+impl ConnectionCache {
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
         !selection.paths.is_empty()
             && selection
@@ -21,7 +23,7 @@ impl BuiltinResolver for ConnectionCache {
                 .iter()
                 .all(|path| crate::remote::is_remote(path))
     }
-    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
+    fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         let entries = selection.entries;
         let pinned = entries.iter().all(|entry| entry.pinned);
         let cached = entries.iter().all(|entry| entry.has_cache);
@@ -37,12 +39,17 @@ impl BuiltinResolver for ConnectionCache {
             .map(|(connection, _)| crate::i18n::t("{0} 触发同步").replace("{0}", &connection.name))
             .unwrap_or_else(|| crate::i18n::t("触发同步").into());
         if !pinned {
-            activity(&mut pin, &label, "sync", true);
+            activity(&mut pin, &label, MenuActivityKind::Sync, true);
         }
         let mut items = vec![pin];
         if !cached {
             let mut cache = item("remote.cache", "缓存到本地", "cloud-download", "");
-            activity(&mut cache, crate::i18n::t("正在缓存…"), "transfer", false);
+            activity(
+                &mut cache,
+                crate::i18n::t("正在缓存…"),
+                MenuActivityKind::Transfer,
+                false,
+            );
             items.push(cache);
         } else if !entries.iter().any(|entry| {
             entry.pinned || matches!(entry.sync.as_deref(), Some("conflict" | "pending"))
@@ -67,6 +74,53 @@ impl BuiltinResolver for ConnectionCache {
     }
 }
 
-fn activity(item: &mut Value, label: &str, kind: &str, quiet: bool) {
-    item["activity"] = json!({"label":label,"kind":kind,"quiet":quiet});
+impl ContextMenuProvider for ConnectionCache {
+    fn resolve(&self, invocation: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        if invocation.method() != "contextMenu.resolve" {
+            return Err(ProviderError::method_not_found(invocation.method()));
+        }
+        let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
+        let selection = context.selection();
+        let capabilities = context.capabilities();
+        if self.available(&selection, &capabilities) {
+            Ok(super::builtin::retain_unclaimed(
+                context,
+                self.items(&selection, &capabilities),
+            ))
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    fn execute(
+        &self,
+        invocation: &dyn ProviderInvocation,
+    ) -> Result<MenuExecuteResult, ProviderError> {
+        if invocation.method() != "contextMenu.execute" {
+            return Err(ProviderError::method_not_found(invocation.method()));
+        }
+        let context = NativeProviderInvocation::local_data::<Context>(invocation)?;
+        let item_id = match invocation.input()? {
+            ProviderInput::ContextMenuExecute(request) => request.item_id.as_deref(),
+            _ => None,
+        }
+        .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
+        let resolve = NativeProviderInvocation::context_menu_resolve(invocation)?
+            .with_local_data(std::sync::Arc::new(context.clone()));
+        if !ContextMenuProvider::resolve(self, &resolve)?
+            .iter()
+            .any(|item| item.id == item_id && !item.disabled)
+        {
+            return Err(ProviderError::invalid_params("native menu action was not offered"));
+        }
+        Ok(super::builtin::action_result(item_id, context))
+    }
+}
+
+fn activity(item: &mut MenuItem, label: &str, kind: MenuActivityKind, quiet: bool) {
+    item.activity = Some(MenuActivity {
+        label: label.into(),
+        kind,
+        quiet,
+    });
 }

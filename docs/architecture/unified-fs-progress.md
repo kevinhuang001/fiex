@@ -1,8 +1,15 @@
-# Protocol 6 FS/VFS audit and implementation status
+# Historical Protocol 6 FS/VFS audit (2026-10-29)
 
-Reviewed against `Fiex_Unified_FS_VFS_Architecture_Agent_Plan(2).md` using Core
-PR #21, SDK PR #9 and official plugins PR #19. This is a current implementation
-report, not a declaration that all A01–A25 scenarios have passed.
+> Historical snapshot only. Its `FsAdapter`, `VirtualView`, `virtual_storage`,
+> and provider-routing descriptions below predate the Unified Provider
+> Architecture migration and do not describe the current source tree. For the
+> current implementation, follow the Provider architecture plan and inspect the
+> shared `VfsProvider` contracts and Core registries.
+
+This snapshot reviewed `Fiex_Unified_FS_VFS_Architecture_Agent_Plan(2).md` using
+Core PR #21, SDK PR #9 and official plugins PR #19. It is retained as audit
+history, not as a current implementation report or declaration that all
+A01–A25 scenarios passed.
 
 ## Implemented and hardened
 

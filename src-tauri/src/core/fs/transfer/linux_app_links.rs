@@ -76,7 +76,7 @@ pub(super) fn import(
     let mut result = OperationResult::default();
     for (target, content) in planned {
         check_cancelled(cancel)?;
-        let mut writer = target.adapter()?.begin_write(true)?;
+        let mut writer = target.begin_write_handle(true)?;
         writer.write(content.as_bytes())?;
         writer.commit()?;
         crate::core::volumes::application_policy::finish_import(&target.path, true)?;

@@ -5,17 +5,17 @@ use std::path::Path;
 
 pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String> {
     let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)?;
-    let virtual_storage = crate::plugins::mounts::handles(path)
+    let provider_owned = crate::plugins::mounts::handles(path)
         || crate::usbfs::route(path).is_some()
-        || crate::core::volumes::virtual_resolvers::view_for(path).is_some();
-    let mut scope = if virtual_storage {
+        || crate::core::volumes::native_vfs::view_for(path).is_some();
+    let mut scope = if provider_owned {
         Scope::selected(&std::env::temp_dir(), &[])?
     } else {
         let local = Path::new(path);
         Scope::selected(local.parent().unwrap_or(local), &[local.to_path_buf()])?
     };
     let target = serde_json::json!({"ref":snapshot.reference,"metadata":snapshot.metadata()});
-    if virtual_storage {
+    if provider_owned {
         scope.bind_remote(&target, &snapshot)?;
     } else {
         scope.bind_resource(&target, Some(Path::new(path)))?;
@@ -23,8 +23,8 @@ pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String>
     ResourceBroker::resolve(&scope, owner, &target["ref"]).map_err(String::from)
 }
 
-/// Desktop file operations enter through the same adapter surface as plugin
-/// calls. None of these helpers branch on local/USB/plugin/builtin storage.
+/// Desktop file operations enter through the same provider surface as plugin
+/// calls. Storage selection stays inside the VFS registry.
 #[cfg(any(feature = "desktop", test))]
 pub(crate) fn create(
     path: &str,
@@ -41,7 +41,7 @@ pub(crate) fn create(
 pub(crate) fn rename_path(path: &str, name: &str, owner: &str) -> Result<String, String> {
     if !crate::plugins::mounts::handles(path)
         && crate::usbfs::route(path).is_none()
-        && !crate::core::volumes::virtual_resolvers::opaque(path)
+        && !crate::core::volumes::native_vfs::opaque(path)
     {
         return local_rename(path, name, owner);
     }
@@ -169,7 +169,7 @@ pub(crate) fn parent_path(path: &str) -> Result<String, String> {
         }
         return crate::core::volumes::applications::stored_uri(parent);
     }
-    if crate::core::volumes::virtual_resolvers::opaque(path) {
+    if crate::core::volumes::native_vfs::opaque(path) {
         return Err("view has no writable parent".into());
     }
     Path::new(path)

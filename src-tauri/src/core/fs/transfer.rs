@@ -179,7 +179,7 @@ fn plan(
         }
     }
     // Replacing a file with a directory (or the inverse) would first
-    // destroy the existing target. Reject the type change until the adapter
+    // destroy the existing target. Reject the type change until the provider
     // can guarantee an atomic replacement with rollback.
     if existing
         .as_ref()

@@ -1,40 +1,86 @@
-//! Persistent Preview IPC identities with ephemeral trusted resources.
-//! Session creation, HTML validation and capability checks remain exclusively
-//! in Core's established preview session service.
-use super::session::open_plugin_resource;
-use crate::plugins::native_invocation::NativeProviderInvocation;
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+//! Persistent PreviewProvider IPC identity with invocation-scoped resources.
+use super::session::{open_plugin_resource, UNSUPPORTED};
+use crate::plugins::{
+    host::PluginInfo, resource::resource_context::ResourceSnapshot,
+};
 use fiex_provider_contracts::{
     PreviewProvider, PreviewView, ProviderDescriptor, ProviderError, ProviderInstances,
-    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,
+    ProviderInput, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
-use serde_json::Value;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex, OnceLock},
+};
 
-trait ScopedPreview: Send + Sync {
-    fn open(
-        &self,
-        plugin: &PluginInfo,
-        resource: &ResourceSnapshot,
-        request: &ProviderRequest,
-    ) -> Result<Value, String>;
+struct PreviewServices {
+    plugin: PluginInfo,
+    resource: ResourceSnapshot,
+}
+
+struct CorePreviewInvocation {
+    request: ProviderRequestContext,
+    services: PreviewServices,
+}
+
+impl CorePreviewInvocation {
+    fn new(
+        ctx: &dyn ProviderInvocation,
+        plugin: PluginInfo,
+        resource: ResourceSnapshot,
+        registered_id: &str,
+    ) -> Result<Self, ProviderError> {
+        let input = crate::plugins::events::bind_provider_input(
+            &plugin.id,
+            registered_id,
+            ctx.input()?,
+        )
+        .map_err(ProviderError::invalid_params)?;
+        let mut request = ctx.request().clone();
+        request.input = input;
+        request.input_error = None;
+        Ok(Self {
+            request,
+            services: PreviewServices { plugin, resource },
+        })
+    }
+}
+
+impl ProviderInvocation for CorePreviewInvocation {
+    fn request(&self) -> &ProviderRequestContext {
+        &self.request
+    }
+
+    fn local_service_handle(&self) -> Option<&dyn Any> {
+        Some(&self.services)
+    }
 }
 
 struct IpcPreview {
     plugin_id: String,
 }
-impl ScopedPreview for IpcPreview {
-    fn open(
-        &self,
-        plugin: &PluginInfo,
-        resource: &ResourceSnapshot,
-        request: &ProviderRequest,
-    ) -> Result<Value, String> {
-        if self.plugin_id != plugin.id || request.method != "preview.open" {
-            return Err("PreviewProvider identity or event mismatch".into());
+
+impl PreviewProvider for IpcPreview {
+    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<PreviewView, ProviderError> {
+        let services = ctx
+            .local_service_handle()
+            .and_then(|value| value.downcast_ref::<PreviewServices>())
+            .ok_or_else(|| ProviderError::internal("PreviewProvider requires a Core invocation"))?;
+        if services.plugin.id != self.plugin_id || ctx.method() != "preview.open" {
+            return Err(ProviderError::invalid_params(
+                "PreviewProvider identity or event mismatch",
+            ));
         }
-        let response =
-            open_plugin_resource(resource, plugin, request.params["providerId"].as_str())?;
+        let provider_id = match ctx.input()? {
+            ProviderInput::Resource(request) => request.provider_id.as_deref(),
+            _ => None,
+        };
+        let response = match open_plugin_resource(&services.resource, &services.plugin, provider_id) {
+            Ok(response) => response,
+            Err(error) if error == UNSUPPORTED => {
+                return Err(ProviderError::invalid_params(UNSUPPORTED));
+            }
+            Err(error) => return Err(ProviderError::internal(error)),
+        };
         let mut view = response["view"].clone();
         if let Some(object) = view.as_object_mut() {
             for key in [
@@ -47,12 +93,14 @@ impl ScopedPreview for IpcPreview {
                 object.insert(key.into(), response[key].clone());
             }
         }
-        Ok(view)
+        serde_json::from_value(view).map_err(|error| {
+            ProviderError::invalid_params(format!("invalid PreviewView: {error}"))
+        })
     }
 }
 
-fn registry() -> &'static Mutex<ProviderInstances<dyn ScopedPreview>> {
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ScopedPreview>>> = OnceLock::new();
+fn registry() -> &'static Mutex<ProviderInstances<dyn PreviewProvider>> {
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn PreviewProvider>>> = OnceLock::new();
     REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Preview)))
 }
 
@@ -62,7 +110,7 @@ pub(super) fn forget_plugin(plugin_id: &str) {
     }
 }
 
-fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedPreview>, String> {
+fn proxy(plugin_id: &str) -> Result<Arc<dyn PreviewProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing PreviewProvider plugin identity".into());
     }
@@ -90,42 +138,41 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedPreview>, String> {
 }
 
 pub(super) struct ScopedPreviewProxy {
-    handler: Arc<dyn ScopedPreview>,
+    handler: Arc<dyn PreviewProvider>,
     plugin: PluginInfo,
+    provider_id: String,
     resource: Arc<ResourceSnapshot>,
 }
+
 impl ScopedPreviewProxy {
-    pub fn new(plugin: PluginInfo, resource: Arc<ResourceSnapshot>) -> Result<Self, String> {
+    pub fn new(
+        plugin: PluginInfo,
+        resource: Arc<ResourceSnapshot>,
+        provider_id: String,
+    ) -> Result<Self, String> {
         Ok(Self {
             handler: proxy(&plugin.id)?,
             plugin,
+            provider_id,
             resource,
         })
-    }
-
-    pub fn open(&self, request: &ProviderRequest) -> Result<Value, String> {
-        self.handler.open(&self.plugin, &self.resource, request)
-    }
-
-    pub fn open_typed(&self, request: &ProviderRequest) -> Result<PreviewView, ProviderError> {
-        let invocation = NativeProviderInvocation::new(
-            request.method.clone(),
-            request.params.clone(),
-            std::slice::from_ref(self.resource.as_ref()),
-            None,
-        );
-        PreviewProvider::open(self, &invocation)
     }
 }
 
 impl PreviewProvider for ScopedPreviewProxy {
     fn open(&self, ctx: &dyn ProviderInvocation) -> Result<PreviewView, ProviderError> {
-        let request = ProviderRequest {
-            method: ctx.method().to_owned(),
-            params: ctx.params().clone(),
-        };
-        let value = ScopedPreviewProxy::open(self, &request).map_err(ProviderError::internal)?;
-        serde_json::from_value(value).map_err(|error| ProviderError::internal(error.to_string()))
+        if ctx.method() != "preview.open" {
+            return Err(ProviderError::invalid_params(
+                "PreviewProvider method mismatch",
+            ));
+        }
+        let invocation = CorePreviewInvocation::new(
+            ctx,
+            self.plugin.clone(),
+            self.resource.as_ref().clone(),
+            &self.provider_id,
+        )?;
+        self.handler.open(&invocation)
     }
 }
 

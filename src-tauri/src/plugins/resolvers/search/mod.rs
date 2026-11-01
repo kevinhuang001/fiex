@@ -9,9 +9,11 @@ mod native;
 mod proxy;
 mod stream;
 use crate::core::search::SearchMode;
-use crate::plugins::events::{Handler, Resolver};
+use crate::plugins::events::Resolver;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use fiex_provider_contracts::{SearchEntry, SearchProvider, SearchTag};
+use std::sync::Arc;
 pub use stream::{run, run_stream};
 
 pub(crate) fn forget_plugin(plugin_id: &str) {
@@ -44,6 +46,7 @@ impl PluginSearchInput {
 pub struct SearchEngineInfo {
     pub resolver: Resolver,
     pub modes: Vec<SearchMode>,
+    pub implementation: Arc<dyn SearchProvider>,
 }
 
 impl SearchEngineInfo {
@@ -51,7 +54,7 @@ impl SearchEngineInfo {
         self.modes.contains(&mode)
     }
     pub fn is_builtin(&self) -> bool {
-        matches!(self.resolver.handler, Handler::Builtin(_))
+        self.resolver.plugin.is_none()
     }
     pub fn json(&self) -> Value {
         let mut value = self.resolver.json();
@@ -68,7 +71,7 @@ impl SearchEngineInfo {
 /// Explicitly declared modes for one provider. Missing or invalid mode
 /// declarations never silently grant search capabilities.
 fn modes_of(provider: &Resolver) -> Vec<SearchMode> {
-    let Handler::Plugin(plugin) = &provider.handler else {
+    let Some(plugin) = provider.plugin.as_deref() else {
         return native::modes(&provider.id);
     };
     let Some(contribution) = plugin.extensions.get("search") else {
@@ -107,6 +110,64 @@ fn input(
     })
 }
 
+pub(crate) fn search_entry(entry: Entry) -> SearchEntry {
+    SearchEntry {
+        path: entry.path,
+        name: entry.name,
+        is_dir: entry.is_dir,
+        is_symlink: entry.is_symlink,
+        size: entry.size,
+        modified: entry.modified,
+        created: entry.created,
+        extension: entry.extension,
+        mime: entry.mime,
+        readonly: entry.readonly,
+        link_target: entry.link_target,
+        allowed_ops: entry.allowed_ops,
+        tags: entry
+            .tags
+            .into_iter()
+            .map(|tag| SearchTag {
+                name: tag.name,
+                color: tag.color,
+            })
+            .collect(),
+        has_cache: entry.has_cache,
+        pinned: entry.pinned,
+        uploaded: entry.uploaded,
+        sync: entry.sync,
+    }
+}
+
+fn core_entry(entry: SearchEntry) -> Entry {
+    Entry {
+        path: entry.path,
+        name: entry.name,
+        is_dir: entry.is_dir,
+        is_symlink: entry.is_symlink,
+        size: entry.size,
+        modified: entry.modified,
+        created: entry.created,
+        extension: entry.extension,
+        mime: entry.mime,
+        readonly: entry.readonly,
+        link_target: entry.link_target,
+        allowed_ops: entry.allowed_ops,
+        tags: entry
+            .tags
+            .into_iter()
+            .map(|tag| crate::core::tags::Tag {
+                name: tag.name,
+                color: tag.color,
+            })
+            .collect(),
+        has_cache: entry.has_cache,
+        pinned: entry.pinned,
+        uploaded: entry.uploaded,
+        sync: entry.sync,
+    }
+}
+
 fn resources(
     request: &PluginSearchInput,
 ) -> Vec<crate::plugins::resource::resource_context::ResourceSnapshot> {
@@ -128,35 +189,41 @@ pub fn engines(request: &PluginSearchInput) -> Vec<SearchEngineInfo> {
     );
     providers
         .into_iter()
-        .map(|resolver| SearchEngineInfo {
-            modes: modes_of(&resolver),
-            resolver,
+        .filter_map(|resolver| {
+            let modes = modes_of(&resolver);
+            if modes.is_empty() {
+                return None;
+            }
+            let implementation: Arc<dyn SearchProvider> = match resolver.plugin.as_deref() {
+                None => native::provider_arc(&resolver.id)?,
+                Some(plugin) => Arc::new(
+                    proxy::ScopedSearchProxy::new(
+                        plugin.clone(),
+                        &resources,
+                        &request.root,
+                        resolver.id.clone(),
+                    )
+                    .ok()?,
+                ),
+            };
+            Some(SearchEngineInfo {
+                resolver,
+                modes,
+                implementation,
+            })
         })
-        .filter(|engine| !engine.modes.is_empty())
         .collect()
 }
 
 /// Shared result validation: ownership, root confinement, hidden/ignore rules,
 /// and bounded size. A provider can never widen the authorized search scope.
-fn validated(
-    provider: &Resolver,
-    response: Value,
-    request: &PluginSearchInput,
-) -> Result<Vec<Entry>, String> {
+fn validated(entries: Vec<SearchEntry>, request: &PluginSearchInput) -> Result<Vec<Entry>, String> {
     let limit = request.limit();
     let ignores = crate::core::ignores::IgnoreSet::new(&request.ignores);
-    let items = response["entries"]
-        .as_array()
-        .ok_or("invalid search entries")?;
     let mut values = Vec::new();
-    for value in items.iter().take(limit) {
-        let mut entry = match provider.handler {
-            Handler::Builtin(_) => {
-                serde_json::from_value::<Entry>(value.clone()).map_err(|e| e.to_string())?
-            }
-            Handler::Plugin(_) => crate::plugins::vfs::entry_from(value.clone())?,
-        };
-        if crate::plugins::mounts::handles(&request.root) {
+    for item in entries.into_iter().take(limit) {
+        let mut entry = core_entry(item);
+        let relative = if crate::plugins::mounts::handles(&request.root) {
             let root = crate::plugins::mounts::parse(&request.root)?;
             let path = crate::plugins::mounts::parse(&entry.path)?;
             if root.mount_id != path.mount_id
@@ -164,6 +231,10 @@ fn validated(
             {
                 return Err("search result outside requested mount".into());
             }
+            std::path::Path::new(&path.relative)
+                .strip_prefix(&root.relative)
+                .unwrap_or_else(|_| std::path::Path::new(&entry.name))
+                .to_path_buf()
         } else {
             let root = dunce::canonicalize(&request.root).map_err(|e| e.to_string())?;
             // Providers receive the root as an opaque ref. A local provider may
@@ -180,16 +251,14 @@ fn validated(
                 return Err("search result outside requested root".into());
             }
             entry.path = path.to_string_lossy().into_owned();
-        }
+            path.strip_prefix(&root)
+                .unwrap_or_else(|_| std::path::Path::new(&entry.name))
+                .to_path_buf()
+        };
         if !request.hidden && entry.name.starts_with('.') {
             continue;
         }
-        let relative = entry
-            .path
-            .strip_prefix(&request.root)
-            .unwrap_or(&entry.name)
-            .trim_start_matches(['/', '\\']);
-        if ignores.is_ignored(std::path::Path::new(relative)) {
+        if ignores.is_ignored(&relative) {
             continue;
         }
         values.push(entry);

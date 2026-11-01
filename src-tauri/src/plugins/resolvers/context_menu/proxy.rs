@@ -2,10 +2,9 @@
 //! menu session belong to each short-lived invocation, never the registry.
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    ContextMenuProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderRequest, ProviderRequestContext,
+    ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderDescriptor, ProviderError,
+    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
-use serde_json::{json, Value};
 use std::{
     any::Any,
     sync::{Arc, Mutex, OnceLock},
@@ -24,32 +23,33 @@ impl ScopedMenuInvocation {
         plugin: PluginInfo,
         directory: String,
         resources: Arc<Vec<ResourceSnapshot>>,
-        request: &ProviderRequest,
+        request: &ProviderRequestContext,
     ) -> Result<Self, String> {
-        let mut params = request.params.clone();
-        let remote_session_id =
-            if request.method == "contextMenu.resolve" && params.get("parentId").is_none() {
-                let session_id = crate::plugins::mounts::new_id()?;
-                let object = params.as_object_mut().ok_or("invalid menu parameters")?;
-                object.insert("menuSessionId".into(), json!(session_id));
-                Some(session_id)
-            } else {
-                params
-                    .get("menuSessionId")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            };
-        let object = params.as_object_mut().ok_or("invalid menu parameters")?;
-        object.insert(
-            "interactionId".into(),
-            json!(crate::plugins::mounts::new_id()?),
-        );
+        let mut request = request.clone();
+        let (root_resolve, existing_session) = match request
+            .input()
+            .map_err(|error| error.to_string())?
+        {
+            fiex_provider_contracts::ProviderInput::ContextMenuResolve(input) => {
+                (input.parent_id.is_none(), input.menu_session_id.clone())
+            }
+            fiex_provider_contracts::ProviderInput::ContextMenuExecute(input) => {
+                (false, input.menu_session_id.clone())
+            }
+            _ => return Err("invalid context menu request".into()),
+        };
+        let root_session = if root_resolve {
+            Some(crate::plugins::mounts::new_id()?)
+        } else {
+            None
+        };
+        let remote_session_id = root_session.clone().or(existing_session);
+        request
+            .input
+            .set_context_menu_interaction(root_session, crate::plugins::mounts::new_id()?)?;
+        request.input_error = None;
         Ok(Self {
-            request: ProviderRequestContext::from_params(
-                request.method.clone(),
-                params,
-                crate::i18n::locale(),
-            ),
+            request,
             plugin,
             directory,
             resources,
@@ -92,12 +92,12 @@ impl IpcContextMenu {
 }
 
 impl ContextMenuProvider for IpcContextMenu {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<Value>, ProviderError> {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
         let invocation = self.invocation(ctx, "contextMenu.resolve")?;
         let result = crate::plugins::events::invoke_resources(
             &invocation.plugin,
             "contextMenu.resolve",
-            ctx.params().clone(),
+            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
             &invocation.resources,
             Some(&invocation.directory),
         )
@@ -106,34 +106,18 @@ impl ContextMenuProvider for IpcContextMenu {
             .map_err(|error| ProviderError::internal(error.to_string()))
     }
 
-    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
         let invocation = self.invocation(ctx, "contextMenu.execute")?;
-        let mut result = crate::plugins::events::call_owner(
+        let result = crate::plugins::events::invoke_resources(
+            &invocation.plugin,
             "contextMenu.execute",
-            &invocation.plugin.id,
-            ctx.params().clone(),
+            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
             &invocation.resources,
             Some(&invocation.directory),
         )
         .map_err(ProviderError::internal)?;
-        if matches!(result["kind"].as_str(), Some("coreAction" | "remoteAction")) {
-            return Err(ProviderError::invalid_params(
-                "plugin returned a reserved action kind",
-            ));
-        }
-        if result["kind"] == "panel" {
-            let entry = result["entry"]
-                .as_str()
-                .ok_or_else(|| ProviderError::invalid_params("panel result missing entry"))?;
-            let asset = crate::plugins::host::plugin_view_asset(&invocation.plugin.id, entry)
-                .map_err(ProviderError::internal)?;
-            let object = result
-                .as_object_mut()
-                .ok_or_else(|| ProviderError::invalid_params("invalid panel result"))?;
-            object.remove("entry");
-            object.insert("assetPath".into(), json!(asset));
-        }
-        Ok(result)
+        serde_json::from_value(result)
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 }
 
@@ -179,49 +163,71 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ContextMenuProvider>, String> {
 pub(super) struct ScopedMenuProxy {
     handler: Arc<dyn ContextMenuProvider>,
     plugin: PluginInfo,
+    provider_id: String,
     directory: String,
     resources: Arc<Vec<ResourceSnapshot>>,
+    remote_session_id: Arc<Mutex<Option<String>>>,
 }
 
 impl ScopedMenuProxy {
     pub fn new(
         plugin: PluginInfo,
+        provider_id: String,
         directory: String,
         resources: Arc<Vec<ResourceSnapshot>>,
     ) -> Result<Self, String> {
         Ok(Self {
             handler: proxy(&plugin.id)?,
             plugin,
+            provider_id,
             directory,
             resources,
+            remote_session_id: Arc::new(Mutex::new(None)),
         })
     }
 
-    pub fn resolve_typed(&self, request: &ProviderRequest) -> Result<Value, String> {
+    pub fn remote_session_slot(&self) -> Arc<Mutex<Option<String>>> {
+        Arc::clone(&self.remote_session_id)
+    }
+}
+
+impl ContextMenuProvider for ScopedMenuProxy {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
+        let request = crate::plugins::events::bind_provider_context(
+            &self.plugin.id,
+            &self.provider_id,
+            ctx.request(),
+        )
+        .map_err(ProviderError::invalid_params)?;
         let invocation = ScopedMenuInvocation::new(
             self.plugin.clone(),
             self.directory.clone(),
             self.resources.clone(),
-            request,
-        )?;
-        let items = ContextMenuProvider::resolve(self.handler.as_ref(), &invocation)
-            .map_err(|error| error.to_string())?;
-        let session_id = invocation
-            .remote_session_id
-            .as_deref()
-            .ok_or("plugin menu session ID is missing")?;
-        Ok(json!({"items":items,"menuSessionId":session_id}))
+            &request,
+        )
+        .map_err(ProviderError::internal)?;
+        let items = self.handler.resolve(&invocation)?;
+        if let Ok(mut current) = self.remote_session_id.lock() {
+            *current = invocation.remote_session_id.clone();
+        }
+        Ok(items)
     }
 
-    pub fn execute_typed(&self, request: &ProviderRequest) -> Result<Value, String> {
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+        let request = crate::plugins::events::bind_provider_context(
+            &self.plugin.id,
+            &self.provider_id,
+            ctx.request(),
+        )
+        .map_err(ProviderError::invalid_params)?;
         let invocation = ScopedMenuInvocation::new(
             self.plugin.clone(),
             self.directory.clone(),
             self.resources.clone(),
-            request,
-        )?;
-        ContextMenuProvider::execute(self.handler.as_ref(), &invocation)
-            .map_err(|error| error.to_string())
+            &request,
+        )
+        .map_err(ProviderError::internal)?;
+        self.handler.execute(&invocation)
     }
 }
 

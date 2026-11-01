@@ -143,7 +143,7 @@ pub fn cached_path(path: &str) -> Result<String, String> {
 }
 
 /// Resolve the provider's opaque ID, never a local download-cache path.
-pub(crate) fn adapter_node(
+pub(crate) fn provider_node(
     path: &str,
 ) -> Result<(crate::plugins::resolvers::fs::Mount, String), String> {
     let (conn, relative) = connection_for_path(path).ok_or("StaleRef: connection removed")?;
@@ -175,7 +175,7 @@ pub(crate) fn adapter_node(
 
 /// Bind a committed opaque provider ID to the exact scoped destination. This
 /// is also needed for newly created directories before their first listing.
-pub(crate) fn remember_adapter_entry(
+pub(crate) fn remember_provider_entry(
     path: &str,
     entry: &crate::plugins::resolvers::fs::FsEntry,
 ) -> Result<(), String> {
