@@ -234,21 +234,23 @@ impl Mount {
     }
 
     pub fn open_read(&self, node_id: &str) -> Result<FsStream, String> {
-        proxy::open_read(self, json!({"nodeId": node_id}))
-            .map(FsStream::new)
+        proxy::open_read(self, json!({"nodeId": node_id})).map(FsStream::new)
     }
 
     pub fn begin_write(&self, request: WriteRequest<'_>) -> Result<FsWriteStream, String> {
         if let Some(name) = request.name {
             crate::plugins::mounts::segment(name)?;
         }
-        let write = proxy::begin_write(self, json!({
+        let write = proxy::begin_write(
+            self,
+            json!({
                 "nodeId": request.node_id,
                 "parentId": request.parent_id,
                 "name": request.name,
                 "size": request.size,
                 "ifRevision": request.if_revision,
-            }))?;
+            }),
+        )?;
         Ok(FsWriteStream::new(write))
     }
 

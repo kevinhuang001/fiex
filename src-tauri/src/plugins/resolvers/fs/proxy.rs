@@ -4,11 +4,14 @@ use super::Mount;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
     FsOperation, FsRequest, ProviderDescriptor, ProviderError, ProviderInstances,
-    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext, SearchCapabilities,
-    SearchResults, TransferPreflight, VfsProvider,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
+    SearchCapabilities, SearchResults, TransferPreflight, VfsProvider,
 };
 use serde_json::{json, Value};
-use std::{any::Any, sync::{Arc, Mutex, OnceLock}};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex, OnceLock},
+};
 
 pub(super) struct MountInvocation {
     base: NativeProviderInvocation,
@@ -104,10 +107,7 @@ impl VfsProvider for IpcVfsProvider {
     }
 
     fn discover(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<FsOperation>, ProviderError> {
-        Ok(self
-            .mount(ctx)?
-            .operations()
-            .unwrap_or_default())
+        Ok(self.mount(ctx)?.operations().unwrap_or_default())
     }
 
     fn list(
@@ -124,22 +124,20 @@ impl VfsProvider for IpcVfsProvider {
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 
-    fn stat(&self, request: &FsRequest<'_>) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
-        let result = self.invoke(
-            request.ctx(),
-            "vfs.stat",
-            request.params().clone(),
-        )?;
+    fn stat(
+        &self,
+        request: &FsRequest<'_>,
+    ) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
+        let result = self.invoke(request.ctx(), "vfs.stat", request.params().clone())?;
         serde_json::from_value(result)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 
-    fn read(&self, request: &FsRequest<'_>) -> Result<fiex_provider_contracts::FsRead, ProviderError> {
-        let result = self.invoke(
-            request.ctx(),
-            "vfs.openRead",
-            request.params().clone(),
-        )?;
+    fn read(
+        &self,
+        request: &FsRequest<'_>,
+    ) -> Result<fiex_provider_contracts::FsRead, ProviderError> {
+        let result = self.invoke(request.ctx(), "vfs.openRead", request.params().clone())?;
         let stream_id = result["streamId"]
             .as_str()
             .filter(|id| !id.is_empty())
@@ -159,16 +157,17 @@ impl VfsProvider for IpcVfsProvider {
         ))
     }
 
-    fn write(&self, request: &FsRequest<'_>) -> Result<fiex_provider_contracts::FsWrite, ProviderError> {
-        let result = self.invoke(
-            request.ctx(),
-            "vfs.beginWrite",
-            request.params().clone(),
-        )?;
+    fn write(
+        &self,
+        request: &FsRequest<'_>,
+    ) -> Result<fiex_provider_contracts::FsWrite, ProviderError> {
+        let result = self.invoke(request.ctx(), "vfs.beginWrite", request.params().clone())?;
         let stream_id = result["streamId"]
             .as_str()
             .filter(|id| !id.is_empty())
-            .ok_or_else(|| ProviderError::invalid_params("provider did not return a write stream id"))?
+            .ok_or_else(|| {
+                ProviderError::invalid_params("provider did not return a write stream id")
+            })?
             .to_owned();
         let mount = self.mount(request.ctx())?.clone();
         let finished = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -178,26 +177,35 @@ impl VfsProvider for IpcVfsProvider {
             offset: 0,
             finished: finished.clone(),
         };
-        Ok(fiex_provider_contracts::FsWrite::with_commit(writer, move || {
-            let result = mount
-                .invoke_remote("vfs.commit", json!({"streamId":stream_id}))
-                .map_err(ProviderError::internal)?;
-            finished.store(true, std::sync::atomic::Ordering::Release);
-            if result.is_null() || result.as_object().is_some_and(|object| object.is_empty()) {
-                return Ok(fiex_provider_contracts::FsEntry::default());
-            }
-            serde_json::from_value(result)
-                .map_err(|error| ProviderError::invalid_params(error.to_string()))
-        }))
+        Ok(fiex_provider_contracts::FsWrite::with_commit(
+            writer,
+            move || {
+                let result = mount
+                    .invoke_remote("vfs.commit", json!({"streamId":stream_id}))
+                    .map_err(ProviderError::internal)?;
+                finished.store(true, std::sync::atomic::Ordering::Release);
+                if result.is_null() || result.as_object().is_some_and(|object| object.is_empty()) {
+                    return Ok(fiex_provider_contracts::FsEntry::default());
+                }
+                serde_json::from_value(result)
+                    .map_err(|error| ProviderError::invalid_params(error.to_string()))
+            },
+        ))
     }
 
-    fn mkdir(&self, request: &FsRequest<'_>) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
+    fn mkdir(
+        &self,
+        request: &FsRequest<'_>,
+    ) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
         let result = self.invoke(request.ctx(), "vfs.mkdir", request.params().clone())?;
         serde_json::from_value(result)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 
-    fn rename(&self, request: &FsRequest<'_>) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
+    fn rename(
+        &self,
+        request: &FsRequest<'_>,
+    ) -> Result<fiex_provider_contracts::FsEntry, ProviderError> {
         let result = self.invoke(request.ctx(), "vfs.rename", request.params().clone())?;
         serde_json::from_value(result)
             .map_err(|error| ProviderError::invalid_params(error.to_string()))
@@ -268,9 +276,7 @@ pub(super) fn open_read(
     let provider = provider(&mount.plugin_id)?;
     let invocation = MountInvocation::new(mount.clone(), "vfs.openRead", params);
     let request = FsRequest::new(&invocation, FsOperation::Read);
-    provider
-        .read(&request)
-        .map_err(|error| error.to_string())
+    provider.read(&request).map_err(|error| error.to_string())
 }
 
 pub(super) fn begin_write(
@@ -280,9 +286,7 @@ pub(super) fn begin_write(
     let provider = provider(&mount.plugin_id)?;
     let invocation = MountInvocation::new(mount.clone(), "vfs.beginWrite", params);
     let request = FsRequest::new(&invocation, FsOperation::Write);
-    provider
-        .write(&request)
-        .map_err(|error| error.to_string())
+    provider.write(&request).map_err(|error| error.to_string())
 }
 
 pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value, String> {
@@ -301,13 +305,21 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
         }
         "vfs.mkdir" => {
             let request = FsRequest::new(&invocation, FsOperation::Mkdir);
-            serde_json::to_value(provider.mkdir(&request).map_err(|error| error.to_string())?)
-                .map_err(|error| error.to_string())
+            serde_json::to_value(
+                provider
+                    .mkdir(&request)
+                    .map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())
         }
         "vfs.rename" => {
             let request = FsRequest::new(&invocation, FsOperation::Rename);
-            serde_json::to_value(provider.rename(&request).map_err(|error| error.to_string())?)
-                .map_err(|error| error.to_string())
+            serde_json::to_value(
+                provider
+                    .rename(&request)
+                    .map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())
         }
         "vfs.remove" => {
             let request = FsRequest::new(&invocation, FsOperation::Remove);
@@ -318,8 +330,12 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
         }
         "vfs.search" => {
             let request = FsRequest::new(&invocation, FsOperation::Search);
-            serde_json::to_value(provider.search(&request).map_err(|error| error.to_string())?)
-                .map_err(|error| error.to_string())
+            serde_json::to_value(
+                provider
+                    .search(&request)
+                    .map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())
         }
         "vfs.preflight" => {
             let request: TransferPreflight = serde_json::from_value(params)
@@ -342,9 +358,7 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
         // turns open/begin operations into Rust Read/Write streams below; the
         // chunk protocol is retained only as the proxy's IPC transport.
         "vfs.openRead" | "vfs.beginWrite" | "vfs.readStream" | "vfs.closeRead"
-        | "vfs.writeStream" | "vfs.commit" | "vfs.abort" => {
-            mount.invoke_remote(method, params)
-        }
+        | "vfs.writeStream" | "vfs.commit" | "vfs.abort" => mount.invoke_remote(method, params),
         _ => Err("unsupported VfsProvider method".into()),
     };
     result
@@ -376,13 +390,17 @@ impl std::io::Read for RemoteReader {
             .as_str()
             .ok_or_else(|| std::io::Error::other("provider stream reply is missing data"))?;
         if encoded.len() > limit.div_ceil(3) * 4 {
-            return Err(std::io::Error::other("provider exceeded the requested chunk size"));
+            return Err(std::io::Error::other(
+                "provider exceeded the requested chunk size",
+            ));
         }
         let bytes = STANDARD
             .decode(encoded)
             .map_err(|_| std::io::Error::other("provider returned invalid base64 data"))?;
         if bytes.len() > limit {
-            return Err(std::io::Error::other("provider exceeded the requested chunk size"));
+            return Err(std::io::Error::other(
+                "provider exceeded the requested chunk size",
+            ));
         }
         let count = bytes.len();
         buffer[..count].copy_from_slice(&bytes);
@@ -395,10 +413,9 @@ impl std::io::Read for RemoteReader {
 impl Drop for RemoteReader {
     fn drop(&mut self) {
         if !self.closed {
-            let _ = self.mount.invoke_remote(
-                "vfs.closeRead",
-                json!({"streamId":self.stream_id}),
-            );
+            let _ = self
+                .mount
+                .invoke_remote("vfs.closeRead", json!({"streamId":self.stream_id}));
             self.closed = true;
         }
     }
@@ -425,11 +442,13 @@ impl std::io::Write for RemoteWriter {
                 json!({"streamId":self.stream_id,"offset":self.offset,"base64":STANDARD.encode(chunk)}),
             )
             .map_err(std::io::Error::other)?;
-        let written = reply["written"]
-            .as_u64()
-            .ok_or_else(|| std::io::Error::other("provider write reply is missing written count"))?;
+        let written = reply["written"].as_u64().ok_or_else(|| {
+            std::io::Error::other("provider write reply is missing written count")
+        })?;
         if written == 0 || written > chunk.len() as u64 {
-            return Err(std::io::Error::other("provider returned an invalid written count"));
+            return Err(std::io::Error::other(
+                "provider returned an invalid written count",
+            ));
         }
         self.offset = self
             .offset
@@ -446,11 +465,11 @@ impl std::io::Write for RemoteWriter {
 impl Drop for RemoteWriter {
     fn drop(&mut self) {
         if !self.finished.load(std::sync::atomic::Ordering::Acquire) {
-            let _ = self.mount.invoke_remote(
-                "vfs.abort",
-                json!({"streamId":self.stream_id}),
-            );
-            self.finished.store(true, std::sync::atomic::Ordering::Release);
+            let _ = self
+                .mount
+                .invoke_remote("vfs.abort", json!({"streamId":self.stream_id}));
+            self.finished
+                .store(true, std::sync::atomic::Ordering::Release);
         }
     }
 }

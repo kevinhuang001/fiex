@@ -59,8 +59,7 @@ impl FsStream {
         Ok((bytes, read == 0))
     }
 
-    pub fn close(self) {
-    }
+    pub fn close(self) {}
 }
 
 /// An open write stream. Content becomes visible only after `commit`.

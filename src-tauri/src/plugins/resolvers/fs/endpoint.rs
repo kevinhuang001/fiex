@@ -22,8 +22,8 @@ pub(super) fn method_allowed(mount: &Mount, method: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::Source;
+    use super::*;
     use serde_json::json;
 
     #[test]
