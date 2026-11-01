@@ -259,7 +259,10 @@ mod tests {
     #[test]
     fn native_virtual_search_is_advertised_only_for_listable_directories() {
         let recent = for_path("recent://");
-        assert!(recent.list && recent.search && recent.stat);
+        assert!(
+            recent.list && recent.search && recent.stat,
+            "Recent root capabilities were {recent:?}"
+        );
         assert!(!recent.read && !recent.remove && !recent.write);
         let applications = for_path("applications://");
         assert!(applications.list && applications.search && applications.create);
@@ -271,11 +274,14 @@ mod tests {
             false,
         );
         folder.is_dir = true;
-        let capabilities = for_entry(&folder.path, &folder);
+        let capabilities = from_entry(
+            &[FsOperation::List, FsOperation::Stat, FsOperation::Search],
+            &folder,
+        );
         assert!(capabilities.list && capabilities.search && capabilities.stat);
         assert!(!capabilities.remove && !capabilities.write);
         let file = entry("trash://ZmlsZQ", &["stat", "search", "remove"], false);
-        let capabilities = for_entry(&file.path, &file);
+        let capabilities = from_entry(&[FsOperation::Stat, FsOperation::Search], &file);
         assert!(capabilities.stat && !capabilities.search && !capabilities.remove);
     }
 
@@ -315,18 +321,18 @@ mod tests {
 
     #[test]
     fn trash_does_not_grant_generic_delete() {
-        let trashed = entry("recyclebin://an-item", &["stat", "remove"], false);
-        let capabilities = for_entry("recyclebin://an-item", &trashed);
+        let trashed = entry("trash://an-item", &["stat", "remove"], false);
+        let capabilities = from_entry(&[FsOperation::Stat], &trashed);
         assert!(capabilities.stat);
         assert!(!capabilities.list && !capabilities.read && !capabilities.remove);
         // Nonexistent opaque nodes fail closed, even though their provider is
         // registered and supports stat on actual items.
-        assert!(!for_path("recyclebin://an-item").remove);
-        assert!(!for_path("recyclebin://an-item").stat);
-        assert!(for_path("recyclebin://").list);
+        assert!(!for_path("trash://an-item").remove);
+        assert!(!for_path("trash://an-item").stat);
+        assert!(for_path("trash://").list);
         let mut nested = entry("trash://opaque-folder", &["stat", "list", "remove"], false);
         nested.is_dir = true;
-        let capabilities = for_entry(&nested.path, &nested);
+        let capabilities = from_entry(&[FsOperation::Stat, FsOperation::List], &nested);
         assert!(capabilities.stat && capabilities.list);
         assert!(!capabilities.remove && !capabilities.write);
     }

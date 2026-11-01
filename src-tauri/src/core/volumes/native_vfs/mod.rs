@@ -207,6 +207,14 @@ pub fn operations(path: &str) -> Vec<FsOperation> {
     provider.discover(&invocation).unwrap_or_default()
 }
 
+fn provider_error_text(error: ProviderError) -> String {
+    if error.code == -32601 {
+        format!("Unsupported: {}", error.message)
+    } else {
+        error.message
+    }
+}
+
 pub fn require(
     path: &str,
     owner: &str,
@@ -231,7 +239,7 @@ pub fn require(
     let invocation = target_invocation(path, owner, "vfs.discover", json!({}));
     provider
         .authorize(&invocation, operation, create)
-        .map_err(|error| error.to_string())?;
+        .map_err(provider_error_text)?;
     Ok(())
 }
 
@@ -239,22 +247,22 @@ pub fn stat(path: &str, owner: &str) -> Result<Entry, String> {
     let provider = view_for(path).ok_or("Unsupported: unknown builtin node")?;
     let invocation = target_invocation(path, owner, "vfs.stat", json!({"nodeId":path}));
     let request =
-        FsRequest::new(&invocation, FsOperation::Stat).map_err(|error| error.to_string())?;
+        FsRequest::new(&invocation, FsOperation::Stat).map_err(provider_error_text)?;
     provider
         .stat(&request)
         .map(core_entry)
-        .map_err(|error| error.to_string())
+        .map_err(provider_error_text)
 }
 
 pub fn list(path: &str, owner: &str) -> Result<Vec<Entry>, String> {
     let provider = view_for(path).ok_or("Unsupported: builtin node has no children")?;
     let invocation = target_invocation(path, owner, "vfs.list", json!({"nodeId":path}));
     let request =
-        FsRequest::new(&invocation, FsOperation::List).map_err(|error| error.to_string())?;
+        FsRequest::new(&invocation, FsOperation::List).map_err(provider_error_text)?;
     provider
         .list(&request)
         .map(|listing| listing.entries.into_iter().map(core_entry).collect())
-        .map_err(|error| error.to_string())
+        .map_err(provider_error_text)
 }
 
 fn basename(path: &str) -> Result<String, String> {
@@ -279,11 +287,11 @@ pub fn stat_for(broker: &crate::core::fs::ResourceBroker) -> Result<Entry, Strin
         json!({"nodeId":broker.path.as_str()}),
     );
     let request =
-        FsRequest::new(&invocation, FsOperation::Stat).map_err(|error| error.to_string())?;
+        FsRequest::new(&invocation, FsOperation::Stat).map_err(provider_error_text)?;
     provider
         .stat(&request)
         .map(core_entry)
-        .map_err(|error| error.to_string())
+        .map_err(provider_error_text)
 }
 
 pub fn list_for(broker: &crate::core::fs::ResourceBroker) -> Result<Vec<Entry>, String> {
@@ -296,11 +304,11 @@ pub fn list_for(broker: &crate::core::fs::ResourceBroker) -> Result<Vec<Entry>, 
         json!({"nodeId":broker.path.as_str(),"hidden":true}),
     );
     let request =
-        FsRequest::new(&invocation, FsOperation::List).map_err(|error| error.to_string())?;
+        FsRequest::new(&invocation, FsOperation::List).map_err(provider_error_text)?;
     provider
         .list(&request)
         .map(|listing| listing.entries.into_iter().map(core_entry).collect())
-        .map_err(|error| error.to_string())
+        .map_err(provider_error_text)
 }
 
 pub fn require_for(
@@ -321,7 +329,7 @@ pub fn require_for(
     );
     provider
         .authorize(&invocation, operation, create)
-        .map_err(|error| error.to_string())?;
+        .map_err(provider_error_text)?;
     Ok(())
 }
 
@@ -334,7 +342,7 @@ pub fn preflight_for(
     let invocation = shared::broker_invocation(broker, None, "vfs.preflight", json!({}));
     let result = provider
         .preflight(&invocation, request)
-        .map_err(|error| error.to_string())?;
+        .map_err(provider_error_text)?;
     if result.allowed {
         Ok(())
     } else {
@@ -354,8 +362,8 @@ pub fn read_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsRead, Stri
         json!({"nodeId":broker.path.as_str()}),
     );
     let request =
-        FsRequest::new(&invocation, FsOperation::Read).map_err(|error| error.to_string())?;
-    provider.read(&request).map_err(|error| error.to_string())
+        FsRequest::new(&invocation, FsOperation::Read).map_err(provider_error_text)?;
+    provider.read(&request).map_err(provider_error_text)
 }
 
 pub fn write_sized_for(
@@ -374,8 +382,8 @@ pub fn write_sized_for(
     };
     let invocation = shared::broker_invocation(broker, None, "vfs.beginWrite", params);
     let request =
-        FsRequest::new(&invocation, FsOperation::Write).map_err(|error| error.to_string())?;
-    provider.write(&request).map_err(|error| error.to_string())
+        FsRequest::new(&invocation, FsOperation::Write).map_err(provider_error_text)?;
+    provider.write(&request).map_err(provider_error_text)
 }
 
 pub fn mkdir_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsEntry, String> {
@@ -390,8 +398,8 @@ pub fn mkdir_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsEntry, St
         json!({"parentId":parent,"name":name}),
     );
     let request =
-        FsRequest::new(&invocation, FsOperation::Mkdir).map_err(|error| error.to_string())?;
-    provider.mkdir(&request).map_err(|error| error.to_string())
+        FsRequest::new(&invocation, FsOperation::Mkdir).map_err(provider_error_text)?;
+    provider.mkdir(&request).map_err(provider_error_text)
 }
 
 pub fn rename_for(
@@ -415,8 +423,8 @@ pub fn rename_for(
         json!({"nodeId":source.path.as_str(),"parentId":parent,"name":name}),
     );
     let request =
-        FsRequest::new(&invocation, FsOperation::Rename).map_err(|error| error.to_string())?;
-    provider.rename(&request).map_err(|error| error.to_string())
+        FsRequest::new(&invocation, FsOperation::Rename).map_err(provider_error_text)?;
+    provider.rename(&request).map_err(provider_error_text)
 }
 
 pub fn remove_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String> {
@@ -429,8 +437,8 @@ pub fn remove_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String
         json!({"nodeId":broker.path.as_str()}),
     );
     let request =
-        FsRequest::new(&invocation, FsOperation::Remove).map_err(|error| error.to_string())?;
-    provider.remove(&request).map_err(|error| error.to_string())
+        FsRequest::new(&invocation, FsOperation::Remove).map_err(provider_error_text)?;
+    provider.remove(&request).map_err(provider_error_text)
 }
 
 pub fn search_for(
@@ -450,10 +458,10 @@ pub fn search_for(
         json!({"nodeId":broker.path.as_str(),"query":query,"hidden":hidden,"ignores":ignores,"limit":limit}),
     );
     let request =
-        FsRequest::new(&invocation, FsOperation::Search).map_err(|error| error.to_string())?;
+        FsRequest::new(&invocation, FsOperation::Search).map_err(provider_error_text)?;
     let listing = provider
         .search_cancellable(&request, cancelled)
-        .map_err(|error| error.to_string())?;
+        .map_err(provider_error_text)?;
     Ok((
         listing.entries.into_iter().map(core_entry).collect(),
         listing.truncated,

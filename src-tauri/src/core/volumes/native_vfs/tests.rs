@@ -1,7 +1,7 @@
 use super::*;
 #[test]
 fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() {
-    assert_eq!(registry().len(), 3);
+    assert_eq!(registry().len(), 5);
     for descriptor in registry().descriptors() {
         assert_eq!(descriptor.kind, ProviderKind::Vfs);
         descriptor.validate().unwrap();

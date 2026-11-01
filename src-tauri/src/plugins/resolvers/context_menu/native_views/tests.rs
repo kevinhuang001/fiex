@@ -33,7 +33,7 @@ fn system_app_is_launch_only_and_user_entries_are_protected() {
         &system
     )
     .is_err());
-    let user = vec![format!("{}user/dXNlci1hcHA", applications::URI)];
+    let user = vec![format!("{}dXNlci1hcHA", applications::USER_PREFIX)];
     let value = resolve("core.applications.menu", "applications://", &user).unwrap();
     assert_eq!(value["items"].as_array().unwrap().len(), 3);
     assert_eq!(
@@ -56,8 +56,17 @@ fn mixed_app_selections_have_only_shared_actions() {
 #[test]
 fn native_view_menus_use_validated_shared_descriptors() {
     let registered = registry();
-    assert_eq!(registered.len(), 3);
-    for descriptor in registered.descriptors() {
+    let native = registered
+        .descriptors()
+        .filter(|descriptor| {
+            matches!(
+                descriptor.id.as_str(),
+                "core.recent.menu" | "core.applications.menu" | "core.trash.menu"
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(native.len(), 3);
+    for descriptor in native {
         assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
         descriptor.validate().unwrap();
         let owner = match descriptor.id.as_str() {

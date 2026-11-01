@@ -206,12 +206,16 @@ mod registry_tests {
     #[test]
     fn generic_native_menus_are_distinct_registered_context_menu_providers() {
         let registered = registry();
-        assert_eq!(registered.len(), 10);
-        for descriptor in registered.descriptors() {
+        let generic = registered
+            .descriptors()
+            .filter(|descriptor| descriptor.id.starts_with("builtin:"))
+            .collect::<Vec<_>>();
+        assert_eq!(generic.len(), 10);
+        for descriptor in generic {
             assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
             descriptor.validate().unwrap();
         }
-        let sorted = registered.candidates(|_| true);
+        let sorted = registered.candidates(|descriptor| descriptor.id.starts_with("builtin:"));
         assert_eq!(sorted[0].id, "builtin:opening");
         assert_eq!(sorted.last().unwrap().id, "builtin:trash");
         assert!(sorted

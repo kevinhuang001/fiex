@@ -29,6 +29,27 @@ impl VfsProvider for TrashView {
         Ok(trash_operations(path(ctx)?))
     }
 
+    fn authorize(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        operation: FsOperation,
+        _create: bool,
+    ) -> Result<(), ProviderError> {
+        if matches!(
+            operation,
+            FsOperation::Write | FsOperation::Mkdir | FsOperation::Rename | FsOperation::Remove
+        ) {
+            return Err(ProviderError::invalid_params(
+                "PermissionDenied: Trash requires dedicated restore/delete actions",
+            ));
+        }
+        if trash_operations(path(ctx)?).contains(&operation) {
+            Ok(())
+        } else {
+            Err(ProviderError::method_not_found("vfs.operation"))
+        }
+    }
+
     fn stat(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
         let path = path(request.ctx())?;
         storage::trash_stat(path, &trash_operations(path))

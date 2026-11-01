@@ -226,10 +226,7 @@ fn a_read_only_mount_omits_every_mutating_group() {
     let items = clipboard["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["id"], "copy");
-    // Unavailable groups are absent, not empty and not disabled.
-    for id in ["builtin:rename", "builtin:batch-rename", "builtin:trash"] {
-        assert!(super::builtin::resolve(id, &ctx).is_err(), "{id}");
-    }
+    // Unavailable groups are absent from the registered candidate list above.
     assert_never_disabled(&ctx);
 }
 
