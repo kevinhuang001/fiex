@@ -2,8 +2,7 @@
 //! Trusted paths and rich native metadata stay behind the process-local handle.
 use super::types::DecorationEntry;
 use crate::plugins::{
-    host::PluginInfo,
-    native_invocation::NativeProviderInvocation,
+    host::PluginInfo, native_invocation::NativeProviderInvocation,
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{ProviderInvocation, ProviderRequest, ProviderRequestContext};
@@ -37,13 +36,7 @@ impl CoreDecorationInvocation {
         plugin: PluginInfo,
         request: &ProviderRequest,
     ) -> Self {
-        Self::new(
-            directory,
-            entries,
-            resources,
-            Some(plugin),
-            Some(request),
-        )
+        Self::new(directory, entries, resources, Some(plugin), Some(request))
     }
 
     fn new(
