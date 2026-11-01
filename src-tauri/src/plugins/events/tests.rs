@@ -2,43 +2,40 @@ use super::*;
 
 #[test]
 fn preview_skips_invalid_provider_and_stops_after_success() {
-    use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+    use fiex_provider_contracts::ProviderRequest;
     use std::sync::{Arc, Mutex};
 
-    struct TestPreview {
-        name: String,
-        calls: Arc<Mutex<Vec<String>>>,
-    }
-    impl ProviderEndpoint for TestPreview {
-        fn invoke(&self, _request: &ProviderRequest) -> Result<Value, String> {
-            self.calls.lock().unwrap().push(self.name.clone());
-            Ok(if self.name == "invalid" {
-                json!({"kind":"external-url"})
-            } else {
-                json!({"kind":"text","text":"ok"})
-            })
-        }
-    }
     let providers = vec![
         Resolver::builtin("invalid", 100),
         Resolver::builtin("working", 50),
         Resolver::builtin("unused", 0),
     ];
     let calls = Arc::new(Mutex::new(Vec::new()));
-    let result = EventRouter::resolve(
+    let result = EventRouter::resolve_typed(
         "preview.open",
         providers,
         &ProviderRequest {
             method: "preview.open".into(),
             params: json!({}),
         },
-        |provider| {
-            Ok(Box::new(TestPreview {
-                name: provider.id.clone(),
-                calls: calls.clone(),
-            }) as Box<dyn ProviderEndpoint>)
+        |provider, _| {
+            calls.lock().unwrap().push(provider.id.clone());
+            Ok(if provider.id == "invalid" {
+                json!({"kind":"external-url"})
+            } else {
+                json!({"kind":"text","text":"ok"})
+            })
         },
-        |_, value| Ok(value),
+        |_, value| {
+            if matches!(
+                value["kind"].as_str(),
+                Some("text" | "image" | "media" | "pdf" | "fallback")
+            ) {
+                Ok(value)
+            } else {
+                Err("unsupported preview kind".into())
+            }
+        },
         |_| true,
         |outcomes| {
             outcomes
@@ -158,15 +155,8 @@ fn fixed_events_are_core_owned_custom_methods_remain_available() {
 }
 
 #[test]
-fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing() {
-    use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
-
-    struct Response(Value);
-    impl ProviderEndpoint for Response {
-        fn invoke(&self, _request: &ProviderRequest) -> Result<Value, String> {
-            Ok(self.0.clone())
-        }
-    }
+fn typed_router_merges_native_and_proxy_results_and_rejects_method_spoofing() {
+    use fiex_provider_contracts::ProviderRequest;
 
     let providers = vec![
         Resolver::builtin("native", 100),
@@ -176,15 +166,14 @@ fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing()
         method: "contextMenu.resolve".into(),
         params: json!({}),
     };
-    let outcomes = EventRouter::resolve(
+    let outcomes = EventRouter::resolve_typed(
         "contextMenu.resolve",
         providers.clone(),
         &request,
-        |provider| {
-            let value = json!({"items":[{
+        |provider, _| {
+            Ok(json!({"items":[{
                 "id": provider.id, "kind": "action", "title": provider.name
-            }]});
-            Ok(Box::new(Response(value)) as Box<dyn ProviderEndpoint>)
+            }]}))
         },
         |_, value| Ok(value),
         |_| true,
@@ -197,11 +186,11 @@ fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing()
         method: "contextMenu.execute".into(),
         params: json!({}),
     };
-    let outcomes = EventRouter::resolve(
+    let outcomes = EventRouter::resolve_typed(
         "contextMenu.resolve",
         providers,
         &spoof,
-        |_| Ok(Box::new(Response(json!({"items":[]}))) as Box<dyn ProviderEndpoint>),
+        |_, _| Ok(json!({"items":[]})),
         |_, value| Ok(value),
         |_| true,
         |results| results,

@@ -9,7 +9,6 @@ use std::any::Any;
 pub(crate) struct NativeProviderInvocation {
     request: ProviderRequestContext,
     targets: Vec<ResourceSnapshot>,
-    directory: Option<ResourceSnapshot>,
 }
 
 impl NativeProviderInvocation {
@@ -39,7 +38,6 @@ impl NativeProviderInvocation {
         Self {
             request,
             targets: targets.to_vec(),
-            directory: directory.cloned(),
         }
     }
 
@@ -54,16 +52,6 @@ impl NativeProviderInvocation {
             .ok_or_else(|| ProviderError::invalid_params("missing native resource context"))
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn directory(
-        invocation: &dyn ProviderInvocation,
-    ) -> Result<&ResourceSnapshot, ProviderError> {
-        invocation
-            .local_service_handle()
-            .and_then(|value| value.downcast_ref::<Self>())
-            .and_then(|native| native.directory.as_ref())
-            .ok_or_else(|| ProviderError::invalid_params("missing native directory context"))
-    }
 }
 
 impl ProviderInvocation for NativeProviderInvocation {

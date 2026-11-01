@@ -1,40 +1,8 @@
 use super::*;
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::ProviderRequest;
 
 pub struct EventRouter;
 impl EventRouter {
-    /// Core native providers and SDK-backed IPC proxies expose
-    /// the same transport-neutral endpoint, with one validation/merge policy.
-    /// An endpoint factory only chooses the registered implementation; it does
-    /// not select a different execution API based on where it runs.
-    pub fn resolve<'a, T, R>(
-        method: &str,
-        providers: Vec<Resolver>,
-        request: &ProviderRequest,
-        mut endpoint: impl FnMut(&Resolver) -> Result<Box<dyn ProviderEndpoint + 'a>, String>,
-        mut validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
-        supported: impl FnMut(&T) -> bool,
-        collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
-    ) -> R {
-        Self::dispatch_resolvers(
-            method,
-            providers,
-            |provider| {
-                if request.method != method {
-                    return Err("provider request method does not match routed event".into());
-                }
-                let routed = super::registry::bind_request(provider, request)?;
-                endpoint(provider)?.invoke(&routed)
-            },
-            |provider, value| {
-                validate_result(method, &value)?;
-                validate(provider, value)
-            },
-            supported,
-            collect,
-        )
-    }
-
     /// Dispatch already typed native and IPC provider implementations through
     /// the same ordering, panic boundary and owner/merge policy. Provider
     /// families keep their own shared Trait method and response DTO; this

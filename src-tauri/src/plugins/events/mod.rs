@@ -4,7 +4,6 @@ use serde_json::{json, Value};
 pub(crate) mod matching;
 pub use matching::metadata as resource_metadata;
 mod directory_scope;
-mod owner;
 mod registry;
 mod router;
 mod scope;
@@ -105,17 +104,18 @@ pub fn call_owner(
         method: method.into(),
         params,
     };
-    EventRouter::resolve(
+    EventRouter::resolve_typed(
         method,
         providers,
         &request,
-        |provider| match &provider.handler {
-            Handler::Plugin(plugin) => Ok(Box::new(owner::PluginOwner {
-                plugin: (**plugin).clone(),
+        |provider, request| match &provider.handler {
+            Handler::Plugin(plugin) => invoke_resources(
+                plugin,
+                &request.method,
+                request.params.clone(),
                 resources,
                 directory,
-            })
-                as Box<dyn fiex_provider_contracts::ProviderEndpoint + '_>),
+            ),
             Handler::Builtin(_) => Err("native owner is not registered".into()),
         },
         |_, value| Ok(value),
