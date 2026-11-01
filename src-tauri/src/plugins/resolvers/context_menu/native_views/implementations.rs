@@ -7,7 +7,6 @@ use fiex_provider_contracts::{
     ProviderInvocation,
 };
 
-
 fn selection(ctx: &dyn ProviderInvocation) -> Result<(String, Vec<String>), ProviderError> {
     let directory = NativeProviderInvocation::directory(ctx)?.display.clone();
     let paths = (0..ctx.targets().len())

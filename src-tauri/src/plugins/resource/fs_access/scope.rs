@@ -270,10 +270,9 @@ impl Scope {
                     kind: "file".into(),
                     ..Default::default()
                 });
-        let snapshot =
-            crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-                display, meta,
-            );
+        let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+            display, meta,
+        );
         let reference =
             serde_json::to_value(&snapshot.reference).map_err(|error| error.to_string())?;
         self.issued

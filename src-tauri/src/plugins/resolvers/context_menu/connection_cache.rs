@@ -12,7 +12,6 @@ use fiex_provider_contracts::{
     ProviderError, ProviderInput, ProviderInvocation,
 };
 
-
 pub(super) struct ConnectionCache;
 
 impl ConnectionCache {

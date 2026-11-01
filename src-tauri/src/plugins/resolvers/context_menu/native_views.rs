@@ -1,12 +1,10 @@
 //! Native view menus are registered directly as shared ContextMenuProviders.
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
-use crate::{
-    plugins::{
-        events::Resolver, native_invocation::NativeProviderInvocation,
-        provider_registry::native::NativeProviderRegistry,
-        resource::resource_context::ResourceSnapshot,
-    },
+use crate::plugins::{
+    events::Resolver, native_invocation::NativeProviderInvocation,
+    provider_registry::native::NativeProviderRegistry,
+    resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
     ContextMenuProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
