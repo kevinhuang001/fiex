@@ -116,8 +116,7 @@ impl PreviewProvider for ScopedPreviewProxy {
             method: ctx.method().to_owned(),
             params: ctx.params().clone(),
         };
-        let value = ScopedPreviewProxy::open(self, &request)
-            .map_err(ProviderError::internal)?;
+        let value = ScopedPreviewProxy::open(self, &request).map_err(ProviderError::internal)?;
         serde_json::from_value(value).map_err(|error| ProviderError::internal(error.to_string()))
     }
 }
