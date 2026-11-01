@@ -96,9 +96,12 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
             );
             let items = ConnectionContextMenuProvider::resolve(endpoint.as_ref(), &invocation)
                 .map_err(|error| error.to_string())?;
-            Ok(json!({"items":items}))
+            Ok(Some(json!({"items":items})))
         },
         |provider, response| {
+            let Some(response) = response else {
+                return Ok(None);
+            };
             crate::plugins::events::validate_result("connectionContextMenu.resolve", &response)?;
             let items = valid_items(&response)?;
             if items.is_empty() {
