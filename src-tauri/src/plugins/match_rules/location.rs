@@ -15,7 +15,7 @@ fn storage_location(path: &str) -> Option<Value> {
 /// Recent storage matching must not advertise an invalid or revoked source.
 /// Resolve the owning registered mount once; only local paths require an OS
 /// existence probe. This never tries remote IO to guess source identity.
-fn recent_storage_location(source: &str) -> Option<Value> {
+fn projected_storage_location(source: &str) -> Option<Value> {
     let (kind, provider, mount) = crate::core::fs::provider_registry::identity(source)?;
     if provider == "core:local-fs" && std::fs::symlink_metadata(source).is_err() {
         return None;
@@ -32,12 +32,15 @@ fn recent_storage_location(source: &str) -> Option<Value> {
 pub fn locations_for(path: &str) -> (Option<Value>, Option<Value>) {
     if let Some(view) = crate::core::volumes::virtual_resolvers::view_for(path) {
         let current = Some(descriptor("vfs", view.id(), view.id()));
-        if view.id() == "core:recent" {
-            let source = crate::core::recent::source_for(path).ok();
-            let storage = source.as_deref().and_then(recent_storage_location);
-            return (current, storage);
-        }
-        return (current.clone(), current);
+        let storage = match view.storage_projection(path) {
+            crate::core::volumes::virtual_resolvers::NativeStorageProjection::Owned => {
+                current.clone()
+            }
+            crate::core::volumes::virtual_resolvers::NativeStorageProjection::Projected(source) => {
+                source.as_deref().and_then(projected_storage_location)
+            }
+        };
+        return (current, storage);
     }
     let storage = storage_location(path);
     (storage.clone(), storage)
@@ -91,12 +94,12 @@ mod tests {
     fn stale_recent_local_source_never_advertises_storage_owner() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("recent.txt");
-        assert!(recent_storage_location(&path.to_string_lossy()).is_none());
+        assert!(projected_storage_location(&path.to_string_lossy()).is_none());
         std::fs::write(&path, b"data").unwrap();
-        let live = recent_storage_location(&path.to_string_lossy()).unwrap();
+        let live = projected_storage_location(&path.to_string_lossy()).unwrap();
         assert_eq!(live["type"], "fs");
         assert_eq!(live["providerId"], "core:local-fs");
-        assert!(recent_storage_location("unregistered://file").is_none());
+        assert!(projected_storage_location("unregistered://file").is_none());
     }
 
     #[test]
