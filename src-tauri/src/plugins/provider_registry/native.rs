@@ -51,6 +51,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
 
     /// Select by an implementation-owned resource match, not a URI switch
     /// in the generic broker. A rejected or unknown resource has no owner.
+    #[cfg(test)]
     pub fn descriptor(&self, id: &str) -> Option<&ProviderDescriptor> {
         self.entries.descriptor(id)
     }

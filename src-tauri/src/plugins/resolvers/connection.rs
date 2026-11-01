@@ -11,7 +11,9 @@ use fiex_provider_contracts::{
     ProviderMatchRule, ProviderRequest, ResourceCapabilities, ResourceLocation, ResourceMetadata,
     ResourceType,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
+#[cfg(test)]
+use serde_json::json;
 use std::sync::{Arc, Mutex, OnceLock};
 
 struct FailedConnectionProvider(String);

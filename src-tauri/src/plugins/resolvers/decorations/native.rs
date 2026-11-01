@@ -137,6 +137,7 @@ pub(super) fn resolve(
     invoke(id, &invocation)
 }
 
+#[cfg(test)]
 pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decoration>, String> {
     let provider = registry()
         .get(id)

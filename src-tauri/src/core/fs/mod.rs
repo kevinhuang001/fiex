@@ -254,6 +254,7 @@ impl ResourceBroker {
         provider_registry::begin_write_sized(self, create, size)
     }
 
+    #[cfg(target_os = "linux")]
     pub(crate) fn begin_write_handle(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError> {
         provider_registry::begin_write(self, create)
     }

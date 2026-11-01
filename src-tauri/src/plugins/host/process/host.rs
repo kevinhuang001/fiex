@@ -2,7 +2,7 @@
 use super::super::catalog::{discover, executable};
 use super::super::manifest::declared;
 use super::rpc::Running;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;

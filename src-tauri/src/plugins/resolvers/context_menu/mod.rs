@@ -33,7 +33,9 @@ use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
 use serde_json::{json, Value};
-use session::{allowed, register, session_ids, sessions, MenuScope};
+use session::{allowed, register, sessions, MenuScope};
+#[cfg(test)]
+use session::session_ids;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
@@ -53,14 +55,16 @@ pub(super) fn native_registry() -> &'static NativeProviderRegistry<dyn ContextMe
     })
 }
 
+type ResolvedProvider = (
+    Arc<dyn ContextMenuProvider>,
+    Option<Arc<Mutex<Option<String>>>>,
+);
+
 fn provider_for(
     resolver: &Resolver,
     directory: &str,
     resources: &Arc<Vec<ResourceSnapshot>>,
-) -> (
-    Arc<dyn ContextMenuProvider>,
-    Option<Arc<Mutex<Option<String>>>>,
-) {
+) -> ResolvedProvider {
     match resolver.plugin.as_deref() {
         None => (
             native_registry().get_arc(&resolver.id).unwrap_or_else(|| {

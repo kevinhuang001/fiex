@@ -9,7 +9,9 @@ use fiex_provider_contracts::{
     MenuPlacement, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
     ProviderMatchRule,
 };
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(test)]
+use serde_json::Value;
 use std::sync::{Arc, OnceLock};
 
 fn context(invocation: &dyn ProviderInvocation) -> Result<&Context, ProviderError> {

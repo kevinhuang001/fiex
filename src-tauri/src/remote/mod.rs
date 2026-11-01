@@ -5,8 +5,6 @@ mod cache;
 mod config;
 mod credentials;
 mod files;
-#[cfg(feature = "desktop")]
-mod mutate;
 mod reconcile;
 mod store;
 mod sync;
@@ -48,8 +46,6 @@ pub use files::{
     stat, ProgressFn, TransferOptions,
 };
 pub(crate) use files::{provider_node, remember_provider_entry};
-#[cfg(feature = "desktop")]
-pub(crate) use mutate::{remove, rename};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 pub(crate) use store::load_stored_public;
 pub use store::{

@@ -29,13 +29,14 @@ use super::builtin::Context;
 use crate::core::files::Entry;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
+#[cfg(test)]
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 #[cfg(test)]
 use fiex_provider_contracts::ProviderKind;
-use fiex_provider_contracts::{
-    ContextMenuProvider, MatchResource, ProviderError, ProviderInvocation,
-};
+#[cfg(test)]
+use fiex_provider_contracts::{ProviderError, ProviderInvocation};
+use fiex_provider_contracts::{ContextMenuProvider, MatchResource};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -154,6 +155,7 @@ pub(super) fn resolve(id: &str, context: &Context) -> Result<Value, String> {
     Ok(json!({"items": items}))
 }
 
+#[cfg(test)]
 pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Value, String> {
     let provider = registry()
         .get(id)

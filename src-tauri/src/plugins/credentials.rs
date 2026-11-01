@@ -187,7 +187,7 @@ pub fn secret_get(plugin: &str, scope: &str, key: &str) -> Result<String, String
         .lock()
         .map_err(|_| "credential store locked")?;
     let id = fallback_key(plugin, scope, key);
-    let mut items = state.load()?;
+    let items = state.load()?;
     if let Some(value) = items.get(&id) {
         return Ok(value.clone());
     }

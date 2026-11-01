@@ -70,6 +70,7 @@ pub(super) fn candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     registry().matched_candidates(&targets, None, 1)
 }
 
+#[cfg(test)]
 pub(super) fn invoke(
     id: &str,
     resource: &ResourceSnapshot,

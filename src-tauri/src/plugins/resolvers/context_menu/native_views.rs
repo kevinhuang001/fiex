@@ -7,9 +7,10 @@ use crate::plugins::{
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
-    ContextMenuProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
-    ProviderMatchRule, ProviderMatcher, ResourceMetadata,
+    ContextMenuProvider, LocationMatch, ProviderMatchRule, ResourceMetadata,
 };
+#[cfg(test)]
+use fiex_provider_contracts::{ProviderError, ProviderInvocation, ProviderMatcher};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -125,6 +126,7 @@ pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
         .collect()
 }
 
+#[cfg(test)]
 pub(super) fn owns(id: &str) -> bool {
     PROVIDER_IDS.contains(&id)
 }
@@ -146,6 +148,7 @@ pub(super) fn resolve(id: &str, directory: &str, paths: &[String]) -> Result<Val
     invoke(id, &invocation)
 }
 
+#[cfg(test)]
 pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Value, String> {
     let provider = registry()
         .get(id)

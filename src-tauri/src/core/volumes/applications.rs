@@ -13,7 +13,9 @@ pub use store::{
     after_rename, candidate_path, create_stored, is_user, list_at, remove_user, rename_stored,
     stored_entry, stored_path, stored_uri, validate_child,
 };
-pub(super) use store::{folder_listing, list_user, user_encoded};
+pub(super) use store::list_user;
+#[cfg(test)]
+pub(super) use store::{folder_listing, user_encoded};
 
 pub const URI: &str = "applications://";
 /// User-created application-store nodes live directly under the view root.

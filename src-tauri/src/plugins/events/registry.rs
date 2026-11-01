@@ -1,5 +1,7 @@
 use super::*;
-use fiex_provider_contracts::{ProviderInput, ResourceEventRequest};
+use fiex_provider_contracts::ProviderInput;
+#[cfg(test)]
+use fiex_provider_contracts::ResourceEventRequest;
 
 #[derive(Clone)]
 pub struct Resolver {

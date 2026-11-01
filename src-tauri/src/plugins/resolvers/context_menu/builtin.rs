@@ -3,6 +3,7 @@ use super::file_ops::{self, Selection};
 use crate::plugins::events::Resolver;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use fiex_provider_contracts::{MenuExecuteResult, MenuItem};
+#[cfg(test)]
 use serde_json::Value;
 
 #[derive(Clone)]
@@ -120,7 +121,7 @@ pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuI
     let claimed = super::native_views::claimed_actions(&ctx.directory, &ctx.paths);
     items
         .into_iter()
-        .filter(|item| !claimed.iter().any(|id| item.id == *id))
+        .filter(|item| !claimed.contains(&item.id))
         .collect()
 }
 

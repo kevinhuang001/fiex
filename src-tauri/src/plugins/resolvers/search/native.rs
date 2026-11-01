@@ -7,9 +7,11 @@ use crate::plugins::{
     provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{
-    LocationMatch, MatchResource, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, ResourceCapabilities, ResourceMetadata, SearchProvider, SearchResults,
+    LocationMatch, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
+    ProviderMatchRule, SearchProvider, SearchResults,
 };
+#[cfg(test)]
+use fiex_provider_contracts::{MatchResource, ResourceCapabilities, ResourceMetadata};
 
 use std::sync::{Arc, OnceLock};
 

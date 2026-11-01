@@ -8,6 +8,9 @@ use std::{
 };
 
 const MAX_SPOOL: u64 = 100 * 1024 * 1024 * 1024;
+type ProviderReadAt = Box<
+    dyn FnMut(u64, usize) -> Result<(Vec<u8>, bool), fiex_provider_contracts::ProviderError> + Send,
+>;
 static RESERVED: AtomicU64 = AtomicU64::new(0);
 
 pub trait ReadHandle: Send {
@@ -27,12 +30,7 @@ pub trait WriteHandle: Send {
 pub struct ProviderReadHandle {
     reader: Box<dyn Read + Send>,
     spool: std::fs::File,
-    read_at: Option<
-        Box<
-            dyn FnMut(u64, usize) -> Result<(Vec<u8>, bool), fiex_provider_contracts::ProviderError>
-                + Send,
-        >,
-    >,
+    read_at: Option<ProviderReadAt>,
     size: u64,
     cached: u64,
     eof: bool,

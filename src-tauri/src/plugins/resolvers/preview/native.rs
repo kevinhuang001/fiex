@@ -106,6 +106,7 @@ pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     candidates
 }
 
+#[cfg(test)]
 pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView, ProviderError> {
     let provider = registry()
         .get(id)
