@@ -106,63 +106,71 @@ pub fn query_with_plugins(
         providers,
         &invocation,
         |_, provider, context| provider.resolve(context).map_err(|error| error.to_string()),
-        |provider, items| {
+        |_, items| {
             let response = json!({"decorations": items});
             crate::plugins::events::validate_result("decorations.resolve", &response)?;
-            let values = if provider.plugin.is_none() {
-                items
-                    .into_iter()
-                    .filter_map(|contribution| {
-                        let path = path_for_target(
-                            &contribution.target,
-                            entries.as_ref(),
-                            resources.as_slice(),
-                        )?
-                        .to_owned();
-                        Some(Decoration {
-                            path,
-                            native_badges: contribution.native_badges,
-                            label: contribution.label,
-                            description: contribution.description,
-                            fields: contribution.fields,
-                            icon: contribution.icon,
-                            icon_path: contribution.icon_path,
-                            providers: Vec::new(),
-                        })
-                    })
-                    .collect()
-            } else {
-                let plugin = provider
-                    .plugin
-                    .as_deref()
-                    .ok_or("missing DecorationProvider plugin")?;
-                let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
-                decode(
-                    entries.as_ref(),
-                    resources.as_slice(),
-                    manifest,
-                    folder,
-                    items,
-                )?
-            };
-            Ok(values)
+            Ok(items)
         },
         |_| true,
         |outcomes| {
             let mut merged = HashMap::new();
             for (provider, result) in outcomes.into_iter().rev() {
-                if let Ok(values) = result {
-                    for value in values {
-                        let path = value.path.clone();
-                        merge(
-                            &mut merged,
-                            entries.as_ref(),
-                            &path,
-                            provider.priority.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
-                            &provider.name,
-                            value,
-                        );
-                    }
+                let Ok(items) = result else {
+                    continue;
+                };
+                let values = if let Some(plugin) = provider.plugin.as_deref() {
+                    manifests
+                        .get(&plugin.id)
+                        .ok_or_else(|| "provider removed".to_owned())
+                        .and_then(|(manifest, folder)| {
+                            decode(
+                                entries.as_ref(),
+                                resources.as_slice(),
+                                manifest,
+                                folder,
+                                items,
+                            )
+                        })
+                } else {
+                    Ok(items
+                        .into_iter()
+                        .filter_map(|contribution| {
+                            let path = path_for_target(
+                                &contribution.target,
+                                entries.as_ref(),
+                                resources.as_slice(),
+                            )?
+                            .to_owned();
+                            Some(Decoration {
+                                path,
+                                native_badges: contribution.native_badges,
+                                label: contribution.label,
+                                description: contribution.description,
+                                fields: super::dynamic::fields_with_name_contribution(
+                                    contribution.fields,
+                                    contribution.badges,
+                                    contribution.style,
+                                ),
+                                icon: contribution.icon,
+                                icon_path: contribution.icon_path,
+                                providers: Vec::new(),
+                            })
+                        })
+                        .collect::<Vec<_>>())
+                };
+                let Ok(values) = values else {
+                    continue;
+                };
+                for value in values {
+                    let path = value.path.clone();
+                    merge(
+                        &mut merged,
+                        entries.as_ref(),
+                        &path,
+                        provider.priority.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
+                        &provider.name,
+                        value,
+                    );
                 }
             }
             merged
