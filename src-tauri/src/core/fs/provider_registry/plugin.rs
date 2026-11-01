@@ -4,7 +4,7 @@ use crate::core::volumes::native_vfs;
 use crate::plugins::mounts;
 use fiex_provider_contracts::{FsEntry, FsRead, FsWrite};
 use std::{
-    io::{Read, Write},
+    io::Read,
     sync::{Arc, Mutex},
 };
 
