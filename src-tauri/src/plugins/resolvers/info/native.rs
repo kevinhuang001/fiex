@@ -66,7 +66,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn InfoProvider> {
 }
 
 pub(super) fn candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
-    let targets = crate::plugins::events::resource_metadata(std::slice::from_ref(resource));
+    let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(resource));
     registry().matched_candidates(&targets, None, 1)
 }
 

@@ -62,13 +62,23 @@ fn native_view_menus_use_validated_shared_descriptors() {
         assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
         descriptor.validate().unwrap();
         let owner = registered.get(&descriptor.id).unwrap().owner();
-        let matching = json!({
-            "view": {"type":"vfs","providerId":owner,"mountId":owner}
-        });
+        let matching = MatchResource {
+            view: Some(fiex_provider_contracts::ResourceLocation {
+                resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                provider_id: owner.into(),
+                mount_id: Some(owner.into()),
+            }),
+            ..Default::default()
+        };
         assert!(descriptor.r#match.matches_targets(&[matching], 1));
-        let foreign = json!({
-            "view": {"type":"fs","providerId":"core:local-fs","mountId":"local"}
-        });
+        let foreign = MatchResource {
+            view: Some(fiex_provider_contracts::ResourceLocation {
+                resource_type: fiex_provider_contracts::ResourceType::Fs,
+                provider_id: "core:local-fs".into(),
+                mount_id: Some("local".into()),
+            }),
+            ..Default::default()
+        };
         assert!(!descriptor.r#match.matches_targets(&[foreign], 1));
     }
 }

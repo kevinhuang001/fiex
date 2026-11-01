@@ -10,8 +10,8 @@ use super::{
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{
-    DecorationProvider, LocationMatch, ProviderError, ProviderInvocation, ProviderKind,
-    ProviderMatchRule,
+    DecorationProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
+    ProviderKind, ProviderMatchRule,
 };
 #[cfg(test)]
 use std::collections::HashMap;
@@ -82,8 +82,8 @@ fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
     })
 }
 
-pub(super) fn providers(targets: &[serde_json::Value], directory: &str) -> Vec<Resolver> {
-    let directory = crate::plugins::match_rules::directory_metadata(directory);
+pub(super) fn providers(targets: &[MatchResource], directory: &str) -> Vec<Resolver> {
+    let directory = crate::plugins::match_rules::directory_match_resource(directory);
     registry().matched_candidates(targets, directory.as_ref(), targets.len())
 }
 

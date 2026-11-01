@@ -17,10 +17,10 @@ pub(super) struct Context {
 /// of "fs" alone is not enough: raw USBFS is also FS but must not be
 /// accidentally passed to local operating-system commands.
 fn plain_local(path: &str) -> bool {
-    let (view, storage) = crate::plugins::match_rules::locations_for(path);
+    let (view, storage) = crate::plugins::match_rules::typed_locations_for(path);
     matches!((view, storage),
         (Some(view), Some(storage))
-            if view == storage && storage["providerId"] == "core:local-fs")
+            if view == storage && storage.provider_id == "core:local-fs")
 }
 
 impl Context {

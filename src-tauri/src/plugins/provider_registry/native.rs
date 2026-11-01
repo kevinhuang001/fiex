@@ -3,9 +3,9 @@
 //! Core retains static IDs solely to construct native EventRouter candidates.
 use crate::plugins::events::Resolver;
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule, ProviderMatcher,
+    MatchResource, ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule,
+    ProviderMatcher,
 };
-use serde_json::Value;
 use std::sync::Arc;
 
 pub(crate) struct NativeProviderRegistry<T: ?Sized + Send + Sync> {
@@ -77,8 +77,8 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
     /// when there is no selected target (for example, blank-canvas menus).
     pub fn matched_candidates(
         &self,
-        targets: &[Value],
-        directory: Option<&Value>,
+        targets: &[MatchResource],
+        directory: Option<&MatchResource>,
         selection_count: usize,
     ) -> Vec<Resolver> {
         let mut providers = self

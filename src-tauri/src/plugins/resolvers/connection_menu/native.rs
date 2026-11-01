@@ -3,7 +3,7 @@
 use super::Context;
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{MatchResource, ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
@@ -135,7 +135,7 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativeConnectionMenu> {
     })
 }
 
-pub(super) fn providers(targets: &[Value]) -> Vec<Resolver> {
+pub(super) fn providers(targets: &[MatchResource]) -> Vec<Resolver> {
     registry().matched_candidates(targets, None, targets.len())
 }
 
@@ -198,7 +198,13 @@ mod tests {
             assert_eq!(descriptor.kind, ProviderKind::ConnectionContextMenu);
             descriptor.validate().unwrap();
         }
-        let candidates = providers(&[json!({"kind":"connection"})]);
+        let candidates = providers(&[MatchResource {
+            metadata: Some(fiex_provider_contracts::ResourceMetadata {
+                kind: "connection".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }]);
         assert_eq!(candidates.len(), 4);
         assert_eq!(candidates[0].id, "builtin:connection-edit");
         assert_eq!(candidates[3].id, "builtin:connection-close");

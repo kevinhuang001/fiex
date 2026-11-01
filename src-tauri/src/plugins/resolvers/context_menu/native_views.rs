@@ -3,7 +3,10 @@
 //! View-specific actions live in implementations, not in EventRouter.
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule, ProviderMatcher};
+use fiex_provider_contracts::{
+    LocationMatch, MatchResource, ProviderKind, ProviderMatchRule, ProviderMatcher,
+    ResourceMetadata,
+};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 
@@ -97,14 +100,10 @@ fn eligible(provider: &dyn NativeViewMenuProvider, directory: &str, paths: &[Str
     let Some(descriptor) = registry().descriptor(provider.id()) else {
         return false;
     };
-    let targets = paths
-        .iter()
-        .map(|path| {
-            let (view, storage) = crate::plugins::match_rules::locations_for(path);
-            json!({"view": view, "storage": storage})
-        })
-        .collect::<Vec<_>>();
-    let directory_context = crate::plugins::match_rules::directory_metadata(directory);
+    let Some(targets) = match_targets(paths) else {
+        return false;
+    };
+    let directory_context = crate::plugins::match_rules::directory_match_resource(directory);
     ProviderMatcher::matches(
         &descriptor.r#match,
         &targets,
@@ -125,14 +124,10 @@ fn provider(
 }
 
 pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
-    let targets = paths
-        .iter()
-        .map(|path| {
-            let (view, storage) = crate::plugins::match_rules::locations_for(path);
-            json!({"view": view, "storage": storage})
-        })
-        .collect::<Vec<_>>();
-    let directory_context = crate::plugins::match_rules::directory_metadata(directory);
+    let Some(targets) = match_targets(paths) else {
+        return Vec::new();
+    };
+    let directory_context = crate::plugins::match_rules::directory_match_resource(directory);
     registry()
         .matched_candidates(&targets, directory_context.as_ref(), paths.len())
         .into_iter()
@@ -143,6 +138,37 @@ pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
                     .is_some_and(|provider| !provider.blank_items(directory).is_empty())
         })
         .collect()
+}
+
+fn match_targets(paths: &[String]) -> Option<Vec<MatchResource>> {
+    paths
+        .iter()
+        .map(|path| {
+            let resource = match crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path) {
+                Ok(resource) => resource,
+                Err(error) => {
+                    // Some platform views expose opaque IDs whose metadata is
+                    // unavailable in headless contexts. Their registered VFS
+                    // identity is still trusted; absent metadata/capabilities
+                    // keep content and operation rules fail-closed.
+                    if crate::core::volumes::virtual_resolvers::view_for(path).is_none() {
+                        return Err(error);
+                    }
+                    let mut resource = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                        path,
+                        ResourceMetadata::default(),
+                    );
+                    resource.operations = Some(Default::default());
+                    resource
+                }
+            };
+            Ok(crate::plugins::events::matching::match_resources(&[resource])
+                .into_iter()
+                .next()
+                .expect("one matcher target per resource"))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .ok()
 }
 
 pub(super) fn owns(id: &str) -> bool {

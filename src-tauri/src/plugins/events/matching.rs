@@ -1,11 +1,12 @@
-//! The same predicate gates discovery and scope preparation before native IPC.
+//! The same typed predicate gates discovery and scope preparation before native IPC.
 use super::{event, ResourceSnapshot};
+use fiex_provider_contracts::{FsOperation, MatchResource, ResourceCapabilities};
 use serde_json::{json, Value};
 
 pub(crate) fn matches(
     method: &str,
     extensions: &Value,
-    metadata: &[Value],
+    targets: &[MatchResource],
     directory: &str,
 ) -> bool {
     let Some(contribution) = event(method).and_then(|event| extensions.get(event.extension)) else {
@@ -20,12 +21,12 @@ pub(crate) fn matches(
     // The blank canvas is selection 0. A plugin must opt into it explicitly;
     // "any" and the default predicate keep meaning a non-empty selection.
     if method == "contextMenu.resolve"
-        && metadata.is_empty()
+        && targets.is_empty()
         && rules.selection.as_deref() != Some("zero")
     {
         return false;
     }
-    rules.matches_event(metadata, directory)
+    rules.matches_resources(targets, directory)
 }
 
 pub(super) fn matches_resources(
@@ -37,41 +38,60 @@ pub(super) fn matches_resources(
     matches(
         method,
         extensions,
-        &metadata(resources),
+        &match_resources(resources),
         directory.unwrap_or(""),
     )
 }
 
-pub fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
+/// Build matcher input from Core's resolved resource and capability registries.
+pub fn match_resources(resources: &[ResourceSnapshot]) -> Vec<MatchResource> {
     resources
         .iter()
         .map(|resource| {
-            let mut metadata =
-                serde_json::to_value(resource.metadata()).unwrap_or_else(|_| json!({}));
-            if !metadata.is_object() {
-                metadata = json!({});
+            let (view, storage) =
+                crate::plugins::match_rules::typed_locations_for(&resource.display);
+            let effective = resource.operations.unwrap_or_else(|| {
+                crate::plugins::resource::file_capabilities::for_path(&resource.display)
+            });
+            MatchResource {
+                metadata: resource.metadata().cloned(),
+                view,
+                storage,
+                capabilities: ResourceCapabilities {
+                    operations: FsOperation::ALL
+                        .into_iter()
+                        .filter(|operation| effective.allows(*operation))
+                        .collect(),
+                },
             }
-            metadata["operations"] = json!(crate::plugins::provider_registry::FsOperation::ALL
-                .into_iter()
-                .filter(|op| resource
-                    .operations
-                    .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(
-                        &resource.display
-                    ))
-                    .allows(*op))
-                .map(|op| op.as_str())
+        })
+        .collect()
+}
+
+/// Protocol projection. Provider metadata remains storage-specific JSON, but
+/// candidate matching never consumes this value.
+pub fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
+    match_resources(resources)
+        .into_iter()
+        .map(|target| {
+            let mut value = target
+                .metadata
+                .map(|metadata| serde_json::to_value(metadata).unwrap_or_else(|_| json!({})))
+                .filter(Value::is_object)
+                .unwrap_or_else(|| json!({}));
+            value["operations"] = json!(target
+                .capabilities
+                .operations
+                .iter()
+                .map(|operation| operation.as_str())
                 .collect::<Vec<_>>());
-            // Only the trusted Core mount and view registries may establish
-            // owner identities. Never accept a provider-supplied owner in
-            // resource metadata or allow it to change the IO route.
-            let (view, storage) = crate::plugins::match_rules::locations_for(&resource.display);
-            if let Some(view) = view {
-                metadata["view"] = view;
+            if let Some(view) = target.view {
+                value["view"] = serde_json::to_value(view).unwrap_or(Value::Null);
             }
-            if let Some(storage) = storage {
-                metadata["storage"] = storage;
+            if let Some(storage) = target.storage {
+                value["storage"] = serde_json::to_value(storage).unwrap_or(Value::Null);
             }
-            metadata
+            value
         })
         .collect()
 }
@@ -79,6 +99,23 @@ pub fn metadata(resources: &[ResourceSnapshot]) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fiex_provider_contracts::{ResourceLocation, ResourceMetadata, ResourceType};
+
+    fn target(kind: &str, extension: &str, view: Option<ResourceLocation>) -> MatchResource {
+        MatchResource {
+            metadata: Some(ResourceMetadata {
+                kind: kind.into(),
+                extension: Some(extension.into()),
+                mime: Some(crate::plugins::match_rules::mime_for(extension)),
+                ..Default::default()
+            }),
+            storage: view.clone(),
+            view,
+            capabilities: ResourceCapabilities {
+                operations: vec![FsOperation::Read, FsOperation::List],
+            },
+        }
+    }
 
     #[test]
     fn unmatched_provider_is_rejected_before_scope_or_ipc() {
@@ -105,8 +142,6 @@ mod tests {
             allowed_commands: vec![],
             missing_commands: vec![],
         };
-        // A scope would fail to canonicalize this absent file. The mismatch
-        // must be returned first without touching the path or starting a host.
         let absent = std::env::temp_dir().join("fiex-match-must-not-open.txt");
         let resource = ResourceSnapshot::new(absent.to_str().unwrap(), &absent);
         let result =
@@ -116,6 +151,8 @@ mod tests {
 
     #[test]
     fn every_resource_event_rejects_nonmatching_targets() {
+        let txt = target("file", "txt", None);
+        let zip = target("file", "zip", None);
         for (feature, method) in [
             ("info", "info.resolve"),
             ("preview", "preview.open"),
@@ -128,22 +165,12 @@ mod tests {
             let extensions =
                 json!({feature: {"match": {"extensions": ["zip"], "kinds": ["file"]}}});
             assert!(
-                !matches(
-                    method,
-                    &extensions,
-                    &[json!({"extension":"txt", "kind":"file"})],
-                    ""
-                ),
+                !matches(method, &extensions, std::slice::from_ref(&txt), ""),
                 "{method}"
             );
             assert!(!matches(method, &extensions, &[], ""), "{method}");
             assert!(
-                matches(
-                    method,
-                    &extensions,
-                    &[json!({"extension":"zip", "kind":"file"})],
-                    ""
-                ),
+                matches(method, &extensions, std::slice::from_ref(&zip), ""),
                 "{method}"
             );
             let extensions = json!({feature: {"match": {"extensions": "zip"}}});
@@ -156,30 +183,27 @@ mod tests {
         let path = crate::core::volumes::applications::URI;
         let resource = ResourceSnapshot::from_metadata(
             path,
-            crate::plugins::contracts::ResourceMetadata {
+            ResourceMetadata {
                 kind: "directory".into(),
                 ..Default::default()
             },
         );
-        let selected_metadata = metadata(&[resource]);
+        let selected = match_resources(&[resource]);
         assert_eq!(
-            selected_metadata[0]["view"]["providerId"],
+            selected[0].view.as_ref().unwrap().provider_id,
             "core:applications"
         );
-        assert_eq!(selected_metadata[0]["storage"]["type"], "vfs");
+        assert_eq!(
+            selected[0].storage.as_ref().unwrap().resource_type,
+            ResourceType::Vfs
+        );
         let extensions = json!({"contextMenus":{"match":{
-            "view":{"providerIds":["core:applications"]},
-            "kinds":["directory"]
+            "view":{"providerIds":["core:applications"]}, "kinds":["directory"]
         }}});
-        assert!(matches(
-            "contextMenu.resolve",
-            &extensions,
-            &selected_metadata,
-            path
-        ));
+        assert!(matches("contextMenu.resolve", &extensions, &selected, path));
         let local = ResourceSnapshot::from_metadata(
             "/tmp/fiex-matcher-local",
-            crate::plugins::contracts::ResourceMetadata {
+            ResourceMetadata {
                 kind: "directory".into(),
                 ..Default::default()
             },
@@ -187,31 +211,32 @@ mod tests {
         assert!(!matches(
             "contextMenu.resolve",
             &extensions,
-            &metadata(&[local]),
+            &match_resources(&[local]),
             "/tmp"
         ));
     }
 
     #[test]
     fn blank_context_menus_require_an_explicit_zero_selection() {
-        let directory = "/tmp";
+        let directory = crate::plugins::match_rules::directory_match_resource("/tmp");
         assert!(!matches(
             "contextMenu.resolve",
             &json!({"contextMenus": true}),
             &[],
-            directory
+            "/tmp"
         ));
         assert!(!matches(
             "contextMenu.resolve",
             &json!({"contextMenus": {"match": {"selection": "any"}}}),
             &[],
-            directory
+            "/tmp"
         ));
         assert!(matches(
             "contextMenu.resolve",
             &json!({"contextMenus": {"match": {"selection": "zero"}}}),
             &[],
-            directory
+            "/tmp"
         ));
+        assert!(directory.is_some());
     }
 }

@@ -3,11 +3,12 @@
 //! `match` is an inclusion predicate: Core only invokes the provider when the
 //! resource (or directory/selection) satisfies it. Missing or empty rules match
 //! everything.
+use fiex_provider_contracts::MatchResource;
 use serde_json::Value;
 use std::ops::Deref;
 
 mod location;
-pub use location::{directory_metadata, locations_for};
+pub use location::{directory_match_resource, typed_locations_for};
 
 /// Core uses the SDK's one authoritative manifest predicate and DTO.
 /// This thin adapter only supplies a trusted directory snapshot for blank
@@ -32,15 +33,15 @@ impl MatchRules {
             .unwrap_or_else(|| Ok(Self::default()))
     }
 
-    pub fn matches_event(&self, metadata: &[Value], directory: &str) -> bool {
-        let blank = (metadata.is_empty() && !directory.is_empty())
-            .then(|| location::directory_metadata(directory))
+    pub fn matches_resources(&self, targets: &[MatchResource], directory: &str) -> bool {
+        let blank = (targets.is_empty() && !directory.is_empty())
+            .then(|| location::directory_match_resource(directory))
             .flatten();
         fiex_provider_contracts::ProviderMatcher::matches(
             &self.0,
-            metadata,
+            targets,
             blank.as_ref(),
-            metadata.len(),
+            targets.len(),
         )
     }
 }

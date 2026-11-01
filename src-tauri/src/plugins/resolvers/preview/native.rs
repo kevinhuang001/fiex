@@ -7,7 +7,7 @@ use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
-    PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
+    MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
     ProviderMatchRule,
 };
 use serde_json::json;
@@ -72,11 +72,15 @@ fn registry() -> &'static NativeProviderRegistry<dyn NativePreviewProvider> {
 
 pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let selected = builtin_candidates(ext, mime, is_dir);
-    let targets = [json!({
-        "extension": ext,
-        "mime": mime,
-        "kind": if is_dir { "directory" } else { "file" }
-    })];
+    let targets = [MatchResource {
+        metadata: Some(fiex_provider_contracts::ResourceMetadata {
+            kind: if is_dir { "directory" } else { "file" }.into(),
+            extension: Some(ext.into()),
+            mime: Some(mime.into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }];
     registry()
         .matched_candidates(&targets, None, 1)
         .into_iter()

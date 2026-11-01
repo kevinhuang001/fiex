@@ -37,10 +37,10 @@ pub fn invoke(plugin_id: &str, directory: &str, paths: &[String]) -> Result<Valu
         .iter()
         .map(|path| ResourceSnapshot::resolve(path))
         .collect::<Result<Vec<_>, _>>()?;
-    let metadata = crate::plugins::events::resource_metadata(&resources);
+    let match_targets = crate::plugins::events::matching::match_resources(&resources);
     let providers = crate::plugins::provider_registry::candidates(
         "toolbar.invoke",
-        &metadata,
+        &match_targets,
         directory,
         Vec::new(),
     )

@@ -6,10 +6,11 @@ use crate::plugins::{
     native_invocation::NativeProviderInvocation,
 };
 use fiex_provider_contracts::{
-    ConnectionProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderRequest,
+    ConnectionProvider, MatchResource, ProviderDescriptor, ProviderError, ProviderInstances,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest, ResourceCapabilities,
+    ResourceLocation, ResourceMetadata, ResourceType,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::{Arc, Mutex, OnceLock};
 
 struct PluginConnection {
@@ -103,22 +104,26 @@ pub fn invoke(
     ) {
         return Err("unregistered connection event".into());
     }
-    let owner = json!({
-        "type":"vfs",
-        "providerId":format!("plugin:{plugin_id}:{kind}"),
-        "mountId":mount_id,
-    });
-    let metadata = [json!({
-        "kind":"connection",
-        "view": owner,
-        "storage": owner,
-        "operations":[]
-    })];
-    let selected = crate::plugins::provider_registry::candidates(
-        method, &metadata, "", Vec::new()
-    ).into_iter().filter(|resolver|
-        matches!(&resolver.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
-    ).collect();
+    let owner = ResourceLocation {
+        resource_type: ResourceType::Vfs,
+        provider_id: format!("plugin:{plugin_id}:{kind}"),
+        mount_id: Some(mount_id.into()),
+    };
+    let targets = [MatchResource {
+        metadata: Some(ResourceMetadata {
+            kind: "connection".into(),
+            ..Default::default()
+        }),
+        view: Some(owner.clone()),
+        storage: Some(owner),
+        capabilities: ResourceCapabilities::default(),
+    }];
+    let selected = crate::plugins::provider_registry::candidates(method, &targets, "", Vec::new())
+        .into_iter()
+        .filter(|resolver| {
+            matches!(&resolver.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
+        })
+        .collect();
     let request = ProviderRequest {
         method: method.into(),
         params,
@@ -170,8 +175,22 @@ mod tests {
     use super::*;
     #[test]
     fn lifecycle_requires_registered_method_and_connection_identity() {
-        assert!(invoke("", "drive", "mount", "connection.open", json!({})).is_err());
-        assert!(invoke("org.example", "drive", "mount", "vfs.list", json!({})).is_err());
+        assert!(invoke(
+            "",
+            "drive",
+            "mount",
+            "connection.open",
+            serde_json::json!({})
+        )
+        .is_err());
+        assert!(invoke(
+            "org.example",
+            "drive",
+            "mount",
+            "vfs.list",
+            serde_json::json!({})
+        )
+        .is_err());
     }
 
     #[test]

@@ -5,7 +5,7 @@
 //! and return a package-confined `PreviewView`.
 use crate::plugins::contracts::PreviewView;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::ProviderRequest;
+use fiex_provider_contracts::{FsOperation, ProviderRequest};
 use serde_json::Value;
 use std::{fs, sync::Arc};
 
@@ -24,14 +24,16 @@ use session::UNSUPPORTED;
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
     let builtin = native::candidates(&ext, mime, is_dir);
-    crate::plugins::provider_registry::candidates(
-        "preview.open",
-        &[
-            serde_json::json!({"extension":ext,"mime":mime,"kind":if is_dir{"directory"}else{"file"}}),
-        ],
-        "",
-        builtin,
-    )
+    let targets = [fiex_provider_contracts::MatchResource {
+        metadata: Some(fiex_provider_contracts::ResourceMetadata {
+            kind: if is_dir { "directory" } else { "file" }.into(),
+            extension: Some(ext),
+            mime: Some(mime.into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }];
+    crate::plugins::provider_registry::candidates("preview.open", &targets, "", builtin)
 }
 
 fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {
@@ -43,16 +45,14 @@ fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {
 }
 
 fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
-    let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(resource));
-    let readable = metadata[0]["operations"]
-        .as_array()
-        .is_some_and(|ops| ops.iter().any(|op| op == "read"));
+    let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(resource));
+    let readable = targets[0].capabilities.allows(FsOperation::Read);
     let builtin = native::candidates(&resource.ext, &resource.mime, resource.is_dir)
         .into_iter()
         .filter(|provider| readable || provider.id == "builtin:fallback")
         .collect();
     let mut providers =
-        crate::plugins::provider_registry::candidates("preview.open", &metadata, "", builtin);
+        crate::plugins::provider_registry::candidates("preview.open", &targets, "", builtin);
     // A provider that declares a preview byte ceiling must not be selected for
     // a file above it. This is also the cheapest way to avoid opening a huge
     // archive/Office document only to fail inside the plugin.

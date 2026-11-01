@@ -133,12 +133,15 @@ fn feature_discovery_receives_independent_operation_capabilities() {
     });
     let rules: crate::plugins::match_rules::MatchRules =
         serde_json::from_value(json!({"requiredOps":["read"]})).unwrap();
-    assert!(!rules.matches_event(
-        &crate::plugins::events::resource_metadata(&[resource.clone()]),
+    assert!(!rules.matches_resources(
+        &crate::plugins::events::matching::match_resources(&[resource.clone()]),
         ""
     ));
     resource.operations.as_mut().unwrap().read = true;
-    assert!(rules.matches_event(&crate::plugins::events::resource_metadata(&[resource]), ""));
+    assert!(rules.matches_resources(
+        &crate::plugins::events::matching::match_resources(&[resource]),
+        ""
+    ));
 }
 
 #[cfg(unix)]
