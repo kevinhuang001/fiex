@@ -108,9 +108,9 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
                 .any(|value| value == operation.as_str())
     };
     FileCapabilities {
-        list: allows(FsOperation::List),
+        list: entry.is_dir && allows(FsOperation::List),
         stat: allows(FsOperation::Stat),
-        search: allows(FsOperation::Search),
+        search: entry.is_dir && allows(FsOperation::Search),
         read: allows(FsOperation::Read),
         write: allows(FsOperation::Write),
         create: entry.is_dir && allows(FsOperation::Mkdir),
