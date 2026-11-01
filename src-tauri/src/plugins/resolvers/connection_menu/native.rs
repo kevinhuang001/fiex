@@ -198,7 +198,7 @@ mod tests {
             assert_eq!(descriptor.kind, ProviderKind::ConnectionContextMenu);
             descriptor.validate().unwrap();
         }
-        let candidates = providers();
+        let candidates = providers(&[json!({"kind":"connection"})]);
         assert_eq!(candidates.len(), 4);
         assert_eq!(candidates[0].id, "builtin:connection-edit");
         assert_eq!(candidates[3].id, "builtin:connection-close");
