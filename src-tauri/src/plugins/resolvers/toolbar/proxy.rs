@@ -1,53 +1,102 @@
 //! A Toolbar proxy persists the plugin identity, not the current selection,
 //! operation scope, or installation permissions. Scoped requests are fresh.
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use crate::plugins::{
+    host::PluginInfo,
+    native_invocation::NativeProviderInvocation,
+    resource::resource_context::ResourceSnapshot,
+};
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderEndpoint, ProviderInstances, ProviderKind, ProviderMatchRule,
-    ProviderRequest,
+    ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation, ProviderKind,
+    ProviderMatchRule, ProviderRequest, ProviderRequestContext, ToolbarProvider,
 };
 use serde_json::Value;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex, OnceLock},
+};
 
-trait ScopedToolbar: Send + Sync {
-    fn invoke(
-        &self,
-        plugin: &PluginInfo,
+struct ToolbarServices {
+    plugin: PluginInfo,
+    resources: Vec<ResourceSnapshot>,
+    directory: String,
+}
+
+struct CoreToolbarInvocation {
+    base: NativeProviderInvocation,
+    services: ToolbarServices,
+}
+
+impl CoreToolbarInvocation {
+    fn new(
+        plugin: PluginInfo,
         resources: &[ResourceSnapshot],
         directory: &str,
         request: &ProviderRequest,
-    ) -> Result<Value, String>;
+    ) -> Self {
+        let directory_resource = ResourceSnapshot::from_metadata(
+            directory,
+            crate::plugins::contracts::ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        );
+        Self {
+            base: NativeProviderInvocation::new(
+                request.method.clone(),
+                request.params.clone(),
+                resources,
+                Some(&directory_resource),
+            ),
+            services: ToolbarServices {
+                plugin,
+                resources: resources.to_vec(),
+                directory: directory.into(),
+            },
+        }
+    }
+}
+
+impl ProviderInvocation for CoreToolbarInvocation {
+    fn request(&self) -> &ProviderRequestContext {
+        self.base.request()
+    }
+
+    fn local_service_handle(&self) -> Option<&dyn Any> {
+        Some(&self.services)
+    }
 }
 
 struct IpcToolbar {
     plugin_id: String,
 }
 
-impl ScopedToolbar for IpcToolbar {
-    fn invoke(
-        &self,
-        plugin: &PluginInfo,
-        resources: &[ResourceSnapshot],
-        directory: &str,
-        request: &ProviderRequest,
-    ) -> Result<Value, String> {
-        if plugin.id != self.plugin_id || request.method != "toolbar.invoke" {
-            return Err("ToolbarProvider identity or method mismatch".into());
+impl ToolbarProvider for IpcToolbar {
+    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+        let services = ctx
+            .local_service_handle()
+            .and_then(|value| value.downcast_ref::<ToolbarServices>())
+            .ok_or_else(|| ProviderError::internal("ToolbarProvider requires a Core invocation"))?;
+        if services.plugin.id != self.plugin_id || ctx.method() != "toolbar.invoke" {
+            return Err(ProviderError::invalid_params(
+                "ToolbarProvider identity or method mismatch",
+            ));
         }
         crate::plugins::events::invoke_resources(
-            plugin,
-            &request.method,
-            request.params.clone(),
-            resources,
-            Some(directory),
+            &services.plugin,
+            ctx.method(),
+            ctx.params().clone(),
+            &services.resources,
+            Some(services.directory.as_str()),
         )
+        .map_err(ProviderError::internal)
     }
 }
 
-fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedToolbar>, String> {
+fn proxy(plugin_id: &str) -> Result<Arc<dyn ToolbarProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing ToolbarProvider plugin identity".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ScopedToolbar>>> = OnceLock::new();
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ToolbarProvider>>> = OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Toolbar)));
     let mut providers = registry
@@ -73,31 +122,15 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedToolbar>, String> {
         .ok_or_else(|| "ToolbarProvider registration failed".into())
 }
 
-struct ToolbarEndpoint<'a> {
-    handler: Arc<dyn ScopedToolbar>,
-    plugin: PluginInfo,
-    resources: &'a [ResourceSnapshot],
-    directory: &'a str,
-}
-
-impl ProviderEndpoint for ToolbarEndpoint<'_> {
-    fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        self.handler
-            .invoke(&self.plugin, self.resources, self.directory, request)
-    }
-}
-
-pub(super) fn endpoint<'a>(
+pub(super) fn invoke(
     plugin: &PluginInfo,
-    resources: &'a [ResourceSnapshot],
-    directory: &'a str,
-) -> Result<Box<dyn ProviderEndpoint + 'a>, String> {
-    Ok(Box::new(ToolbarEndpoint {
-        handler: proxy(&plugin.id)?,
-        plugin: plugin.clone(),
-        resources,
-        directory,
-    }))
+    resources: &[ResourceSnapshot],
+    directory: &str,
+    request: &ProviderRequest,
+) -> Result<Value, String> {
+    let invocation = CoreToolbarInvocation::new(plugin.clone(), resources, directory, request);
+    ToolbarProvider::invoke(proxy(&plugin.id)?.as_ref(), &invocation)
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

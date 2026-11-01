@@ -1,52 +1,89 @@
 //! The Hook IPC proxy is persistent, but each invocation receives the
 //! current trusted plugin record and an operation-scoped resource snapshot.
 //! In particular, no mount, selection, permission grant or path is cached.
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use crate::plugins::{
+    host::PluginInfo,
+    native_invocation::NativeProviderInvocation,
+    resource::resource_context::ResourceSnapshot,
+};
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderEndpoint, ProviderInstances, ProviderKind, ProviderMatchRule,
-    ProviderRequest,
+    HookProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, ProviderRequest, ProviderRequestContext,
 };
 use serde_json::Value;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex, OnceLock},
+};
 
-trait ScopedHook: Send + Sync {
-    fn invoke(
-        &self,
-        plugin: &PluginInfo,
-        resource: &ResourceSnapshot,
-        request: &ProviderRequest,
-    ) -> Result<Value, String>;
+struct HookServices {
+    plugin: PluginInfo,
+    resource: ResourceSnapshot,
+}
+
+struct CoreHookInvocation {
+    base: NativeProviderInvocation,
+    services: HookServices,
+}
+
+impl CoreHookInvocation {
+    fn new(plugin: PluginInfo, resource: &ResourceSnapshot, request: &ProviderRequest) -> Self {
+        Self {
+            base: NativeProviderInvocation::new(
+                request.method.clone(),
+                request.params.clone(),
+                std::slice::from_ref(resource),
+                None,
+            ),
+            services: HookServices {
+                plugin,
+                resource: resource.clone(),
+            },
+        }
+    }
+}
+
+impl ProviderInvocation for CoreHookInvocation {
+    fn request(&self) -> &ProviderRequestContext {
+        self.base.request()
+    }
+
+    fn local_service_handle(&self) -> Option<&dyn Any> {
+        Some(&self.services)
+    }
 }
 
 struct IpcHook {
     plugin_id: String,
 }
 
-impl ScopedHook for IpcHook {
-    fn invoke(
-        &self,
-        plugin: &PluginInfo,
-        resource: &ResourceSnapshot,
-        request: &ProviderRequest,
-    ) -> Result<Value, String> {
-        if plugin.id != self.plugin_id || request.method != "hooks.invoke" {
-            return Err("HookProvider identity or event mismatch".into());
+impl HookProvider for IpcHook {
+    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+        let services = ctx
+            .local_service_handle()
+            .and_then(|value| value.downcast_ref::<HookServices>())
+            .ok_or_else(|| ProviderError::internal("HookProvider requires a Core invocation"))?;
+        if services.plugin.id != self.plugin_id || ctx.method() != "hooks.invoke" {
+            return Err(ProviderError::invalid_params(
+                "HookProvider identity or event mismatch",
+            ));
         }
         crate::plugins::events::invoke_resources(
-            plugin,
-            &request.method,
-            request.params.clone(),
-            std::slice::from_ref(resource),
+            &services.plugin,
+            ctx.method(),
+            ctx.params().clone(),
+            std::slice::from_ref(&services.resource),
             None,
         )
+        .map_err(ProviderError::internal)
     }
 }
 
-fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedHook>, String> {
+fn proxy(plugin_id: &str) -> Result<Arc<dyn HookProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing HookProvider plugin identity".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ScopedHook>>> = OnceLock::new();
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn HookProvider>>> = OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Hook)));
     let mut providers = registry
@@ -72,27 +109,14 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedHook>, String> {
         .ok_or_else(|| "HookProvider registration failed".into())
 }
 
-struct HookEndpoint<'a> {
-    handler: Arc<dyn ScopedHook>,
-    plugin: PluginInfo,
-    resource: &'a ResourceSnapshot,
-}
-
-impl ProviderEndpoint for HookEndpoint<'_> {
-    fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        self.handler.invoke(&self.plugin, self.resource, request)
-    }
-}
-
-pub(super) fn endpoint<'a>(
+pub(super) fn invoke(
     plugin: &PluginInfo,
-    resource: &'a ResourceSnapshot,
-) -> Result<Box<dyn ProviderEndpoint + 'a>, String> {
-    Ok(Box::new(HookEndpoint {
-        handler: proxy(&plugin.id)?,
-        plugin: plugin.clone(),
-        resource,
-    }))
+    resource: &ResourceSnapshot,
+    request: &ProviderRequest,
+) -> Result<Value, String> {
+    let invocation = CoreHookInvocation::new(plugin.clone(), resource, request);
+    HookProvider::invoke(proxy(&plugin.id)?.as_ref(), &invocation)
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

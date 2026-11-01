@@ -24,15 +24,18 @@ pub fn before_open(path: &str) -> Result<Value, String> {
         method: "hooks.invoke".into(),
         params: json!({"event":"beforeOpen"}),
     };
-    Ok(EventRouter::resolve(
+    Ok(EventRouter::resolve_typed(
         "hooks.invoke",
         providers,
         &call,
-        |resolver| match &resolver.handler {
-            Handler::Plugin(plugin) => proxy::endpoint(plugin, &resource),
+        |resolver, request| match &resolver.handler {
+            Handler::Plugin(plugin) => proxy::invoke(plugin, &resource, request),
             Handler::Builtin(_) => Err("unregistered native HookProvider".into()),
         },
-        |_, value| validate_hook_reply(value),
+        |_, value| {
+            crate::plugins::events::validate_result("hooks.invoke", &value)?;
+            validate_hook_reply(value)
+        },
         |value| value["handled"] == true,
         |results| {
             results

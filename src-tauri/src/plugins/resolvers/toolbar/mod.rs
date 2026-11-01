@@ -47,15 +47,18 @@ pub fn invoke(plugin_id: &str, directory: &str, paths: &[String]) -> Result<Valu
         method: "toolbar.invoke".into(),
         params: json!({}),
     };
-    EventRouter::resolve(
+    EventRouter::resolve_typed(
         "toolbar.invoke",
         providers,
         &request,
-        |provider| match &provider.handler {
-            Handler::Plugin(plugin) => proxy::endpoint(plugin, &resources, directory),
+        |provider, request| match &provider.handler {
+            Handler::Plugin(plugin) => proxy::invoke(plugin, &resources, directory, request),
             Handler::Builtin(_) => Err("native ToolbarProvider not registered".into()),
         },
-        |_, result| Ok(result),
+        |_, result| {
+            crate::plugins::events::validate_result("toolbar.invoke", &result)?;
+            Ok(result)
+        },
         |_| true,
         |results| {
             results
