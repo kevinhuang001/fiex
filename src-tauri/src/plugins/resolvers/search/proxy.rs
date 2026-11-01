@@ -1,52 +1,83 @@
-//! Persistent scoped SearchProvider IPC identity. Each page is dispatched
-//! with fresh Core-verified resources; cursors and cancellation live in the
-//! streaming resolver rather than in this shared proxy.
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+//! Persistent, shared-trait SearchProvider IPC identity. Each invocation
+//! supplies fresh Core-verified resources; cursors and cancellation remain
+//! request-scoped in the streaming resolver.
+use crate::plugins::{
+    host::PluginInfo,
+    native_invocation::NativeProviderInvocation,
+    resource::resource_context::ResourceSnapshot,
+};
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule, ProviderRequest,
+    ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation, ProviderKind,
+    ProviderMatchRule, ProviderRequest, SearchProvider, SearchResults,
 };
 use serde_json::Value;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex, OnceLock},
+};
 
-trait ScopedSearch: Send + Sync {
-    fn query(
-        &self,
-        plugin: &PluginInfo,
-        resources: &[ResourceSnapshot],
-        directory: &str,
-        request: &ProviderRequest,
-    ) -> Result<Value, String>;
+struct ScopedSearchInvocation {
+    base: NativeProviderInvocation,
+    plugin: PluginInfo,
+    resources: Vec<ResourceSnapshot>,
+    directory: String,
+}
+
+impl ProviderInvocation for ScopedSearchInvocation {
+    fn request(&self) -> &fiex_provider_contracts::ProviderRequestContext {
+        self.base.request()
+    }
+
+    fn local_service_handle(&self) -> Option<&dyn Any> {
+        Some(self)
+    }
 }
 
 struct IpcSearch {
     plugin_id: String,
 }
-impl ScopedSearch for IpcSearch {
+
+impl SearchProvider for IpcSearch {
     fn query(
         &self,
-        plugin: &PluginInfo,
-        resources: &[ResourceSnapshot],
-        directory: &str,
-        request: &ProviderRequest,
-    ) -> Result<Value, String> {
-        if self.plugin_id != plugin.id || request.method != "search.query" {
-            return Err("SearchProvider identity or method mismatch".into());
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<SearchResults, ProviderError> {
+        let invocation = ctx
+            .local_service_handle()
+            .and_then(|value| value.downcast_ref::<ScopedSearchInvocation>())
+            .ok_or_else(|| ProviderError::invalid_params("missing scoped search context"))?;
+        if self.plugin_id != invocation.plugin.id || ctx.method() != "search.query" {
+            return Err(ProviderError::invalid_params(
+                "SearchProvider identity or method mismatch",
+            ));
         }
-        crate::plugins::events::invoke_resources(
-            plugin,
+        let response = crate::plugins::events::invoke_resources(
+            &invocation.plugin,
             "search.query",
-            request.params.clone(),
-            resources,
-            Some(directory),
+            ctx.params().clone(),
+            &invocation.resources,
+            Some(&invocation.directory),
         )
+        .map_err(ProviderError::internal)?;
+        let page: SearchResults = serde_json::from_value(response)
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))?;
+        let limit = ctx
+            .params()
+            .get("limit")
+            .and_then(Value::as_u64)
+            .map(|value| value.clamp(1, 500) as usize)
+            .unwrap_or(500);
+        page.validate_page(limit)
+            .map_err(ProviderError::invalid_params)?;
+        Ok(page)
     }
 }
 
-fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedSearch>, String> {
+fn proxy(plugin_id: &str) -> Result<Arc<dyn SearchProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing SearchProvider plugin identity".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ScopedSearch>>> = OnceLock::new();
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn SearchProvider>>> = OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Search)));
     let mut registry = registry
@@ -73,11 +104,12 @@ fn proxy(plugin_id: &str) -> Result<Arc<dyn ScopedSearch>, String> {
 }
 
 pub(super) struct ScopedSearchProxy<'a> {
-    handler: Arc<dyn ScopedSearch>,
+    handler: Arc<dyn SearchProvider>,
     plugin: PluginInfo,
     resources: &'a [ResourceSnapshot],
     directory: &'a str,
 }
+
 impl<'a> ScopedSearchProxy<'a> {
     pub fn new(
         plugin: PluginInfo,
@@ -92,9 +124,19 @@ impl<'a> ScopedSearchProxy<'a> {
         })
     }
 
-    pub fn query(&self, request: &ProviderRequest) -> Result<Value, String> {
-        self.handler
-            .query(&self.plugin, self.resources, self.directory, request)
+    pub fn query_typed(&self, request: &ProviderRequest) -> Result<SearchResults, String> {
+        let invocation = ScopedSearchInvocation {
+            base: NativeProviderInvocation::new(
+                request.method.clone(),
+                request.params.clone(),
+                self.resources,
+                None,
+            ),
+            plugin: self.plugin.clone(),
+            resources: self.resources.to_vec(),
+            directory: self.directory.to_owned(),
+        };
+        SearchProvider::query(self.handler.as_ref(), &invocation).map_err(|error| error.to_string())
     }
 }
 
