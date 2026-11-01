@@ -137,7 +137,7 @@ pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
         .matched_candidates(&targets, directory_context.as_ref(), paths.len())
         .into_iter()
         .filter(|candidate| {
-            paths.len() > 0
+            !paths.is_empty()
                 || registry()
                     .get(&candidate.id)
                     .is_some_and(|provider| !provider.blank_items(directory).is_empty())

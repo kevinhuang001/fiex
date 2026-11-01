@@ -711,6 +711,7 @@ pub(crate) fn search_directory(
 /// Stream the Core-native search walker through the shared SearchProvider
 /// contract while preserving cancellation, result limits and incremental UI
 /// delivery. Provider implementations never receive the host path over IPC.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_native_search_stream(
     root: &Path,
     query: &str,

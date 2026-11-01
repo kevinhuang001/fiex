@@ -2,7 +2,7 @@
 //! EventRouter and operation scope used by single-page requests.
 use super::*;
 use crate::plugins::events::EventRouter;
-use fiex_provider_contracts::{ProviderError, ProviderRequest, SearchProvider};
+use fiex_provider_contracts::{ProviderError, ProviderRequest};
 use std::collections::HashSet;
 
 const MAX_PAGES: usize = 64;

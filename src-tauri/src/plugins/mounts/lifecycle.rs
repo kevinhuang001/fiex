@@ -217,7 +217,8 @@ pub fn forget_plugin(plugin_id: &str) {
         let removed = state
             .views
             .iter()
-            .filter_map(|(id, view)| (view.descriptor.plugin_id == plugin_id).then(|| id.clone()))
+            .filter(|&(id, view)| view.descriptor.plugin_id == plugin_id)
+            .map(|(id, _)| id.clone())
             .collect::<HashSet<_>>();
         state.views.retain(|id, _| !removed.contains(id));
         for (live, durable) in state.references.values_mut() {

@@ -57,6 +57,7 @@ impl<T: ?Sized + Send + Sync> NativeProviderRegistry<T> {
         self.entries.descriptor(id)
     }
 
+    #[cfg(test)]
     pub fn candidates(&self, mut eligible: impl FnMut(&T) -> bool) -> Vec<Resolver> {
         let mut providers = self
             .ids

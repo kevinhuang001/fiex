@@ -86,6 +86,7 @@ pub(super) fn providers(targets: &[serde_json::Value], directory: &str) -> Vec<R
     registry().matched_candidates(targets, directory.as_ref(), targets.len())
 }
 
+#[cfg(test)]
 pub(super) fn resolve(
     id: &str,
     directory: &str,
