@@ -2,7 +2,7 @@
 //! EventRouter and operation scope used by single-page requests.
 use super::*;
 use crate::plugins::events::EventRouter;
-use fiex_provider_contracts::ProviderRequest;
+use fiex_provider_contracts::{ProviderError, ProviderRequest, SearchProvider};
 use std::collections::HashSet;
 
 const MAX_PAGES: usize = 64;
@@ -26,9 +26,6 @@ pub fn run_stream(
     cancelled: impl Fn() -> bool,
     emit: &mut dyn FnMut(Entry),
 ) -> Result<bool, String> {
-    if engine.is_builtin() {
-        return Err("builtin search engine runs in Core".into());
-    }
     if !engine.supports(request.mode) {
         return Err(format!(
             "{} 不支持{}搜索",
@@ -67,22 +64,58 @@ pub fn run_stream(
             method: "search.query".into(),
             params,
         };
-        let (entries, page_truncated, next) = EventRouter::resolve_typed(
+        let (page_truncated, next) = EventRouter::resolve_typed(
             "search.query",
             vec![engine.resolver.clone()],
             &call,
             |resolver, routed| {
-                let Handler::Plugin(plugin) = &resolver.handler else {
-                    return Err("native search runs through the streaming walker".into());
-                };
                 let routed = crate::plugins::events::bind_provider_request(resolver, routed)?;
-                let proxy =
-                    proxy::ScopedSearchProxy::new((**plugin).clone(), &resources, &request.root)?;
-                let page = proxy.query_typed(&routed)?;
+                let mut page_count = 0usize;
+                let mut stream_entry = |value: Value| -> Result<(), ProviderError> {
+                    if cancelled() {
+                        return Err(ProviderError::cancelled());
+                    }
+                    if page_count >= remaining || count >= request.limit() {
+                        return Err(ProviderError::invalid_params(
+                            "search provider exceeded requested page limit",
+                        ));
+                    }
+                    let entries = validated(resolver, json!({"entries":[value]}), request)
+                        .map_err(ProviderError::invalid_params)?;
+                    for entry in entries {
+                        emit(entry);
+                        page_count += 1;
+                        count += 1;
+                    }
+                    Ok(())
+                };
+                let page = match &resolver.handler {
+                    Handler::Builtin(_) => {
+                        let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+                            routed.method.clone(),
+                            routed.params.clone(),
+                            &resources,
+                            None,
+                        );
+                        native::provider(&resolver.id)
+                            .ok_or_else(|| "native SearchProvider is not registered".to_string())?
+                            .query_stream(&invocation, &cancelled, &mut stream_entry)
+                            .map_err(|error| error.to_string())?
+                    }
+                    Handler::Plugin(plugin) => {
+                        let proxy = proxy::ScopedSearchProxy::new(
+                            (**plugin).clone(),
+                            &resources,
+                            &request.root,
+                        )?;
+                        proxy.query_stream_typed(&routed, &cancelled, &mut stream_entry)?
+                    }
+                };
                 page.validate_page(remaining)?;
-                let response = serde_json::to_value(&page).map_err(|error| error.to_string())?;
-                let entries = validated(resolver, response, request)?;
-                Ok((entries, page.truncated, page.next_cursor))
+                if !page.entries.is_empty() {
+                    return Err("streaming SearchProvider returned entries outside its stream".into());
+                }
+                Ok((page.truncated, page.next_cursor))
             },
             |_, result| Ok(result),
             |_| true,
@@ -95,13 +128,6 @@ pub fn run_stream(
             },
         )?;
         truncated |= page_truncated;
-        for entry in entries {
-            if cancelled() {
-                return Err("search cancelled".into());
-            }
-            emit(entry);
-            count += 1;
-        }
         match next {
             None => return Ok(truncated),
             Some(next) if !seen.insert(next.clone()) => {

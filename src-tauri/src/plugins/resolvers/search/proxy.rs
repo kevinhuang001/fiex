@@ -120,7 +120,12 @@ impl<'a> ScopedSearchProxy<'a> {
         })
     }
 
-    pub fn query_typed(&self, request: &ProviderRequest) -> Result<SearchResults, String> {
+    pub fn query_stream_typed(
+        &self,
+        request: &ProviderRequest,
+        cancelled: &dyn Fn() -> bool,
+        emit: &mut dyn FnMut(Value) -> Result<(), ProviderError>,
+    ) -> Result<SearchResults, String> {
         let invocation = ScopedSearchInvocation {
             base: NativeProviderInvocation::new(
                 request.method.clone(),
@@ -132,7 +137,8 @@ impl<'a> ScopedSearchProxy<'a> {
             resources: self.resources.to_vec(),
             directory: self.directory.to_owned(),
         };
-        SearchProvider::query(self.handler.as_ref(), &invocation).map_err(|error| error.to_string())
+        SearchProvider::query_stream(self.handler.as_ref(), &invocation, cancelled, emit)
+            .map_err(|error| error.to_string())
     }
 }
 

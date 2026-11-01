@@ -125,7 +125,7 @@ pub struct SearchBatch {
 /// Streams bounded batches. Intermediate batches never claim completion; the
 /// final batch carries the accumulated counters exactly once.
 struct BatchSink<'a> {
-    emit: &'a (dyn Fn(SearchBatch) + Send + Sync),
+    emit: &'a mut dyn FnMut(SearchBatch),
     started: Instant,
     last: Instant,
     buffer: Vec<Entry>,
@@ -141,7 +141,7 @@ struct BatchSink<'a> {
 }
 
 impl<'a> BatchSink<'a> {
-    fn new(emit: &'a (dyn Fn(SearchBatch) + Send + Sync), started: Instant, limit: usize) -> Self {
+    fn new(emit: &'a mut dyn FnMut(SearchBatch), started: Instant, limit: usize) -> Self {
         Self {
             emit,
             started,
@@ -263,7 +263,8 @@ impl SearchState {
         let ticket = generation.fetch_add(1, Ordering::SeqCst) + 1;
         let cancelled = || generation.load(Ordering::Relaxed) != ticket;
         let limit = request.limit.clamp(1, RESULT_LIMIT);
-        let mut sink = BatchSink::new(&emit, started, limit);
+        let mut emit = emit;
+        let mut sink = BatchSink::new(&mut emit, started, limit);
         if request.query.trim().is_empty() {
             sink.finish();
             return Ok(());
@@ -319,8 +320,12 @@ fn search_root(
         limit: Some(sink.limit),
     };
     let engines = crate::plugins::resolvers::search::engines(&input);
+    let builtin = engines
+        .iter()
+        .find(|engine| engine.is_builtin() && engine.supports(request.mode))
+        .cloned();
     let selected = match &request.engine {
-        SearchEngine::Builtin => None,
+        SearchEngine::Builtin => builtin.clone(),
         SearchEngine::Provider(id) => {
             let engine = engines
                 .iter()
@@ -375,16 +380,27 @@ fn search_root(
             }
         }
     }
-    sink.engine = Some("builtin".into());
-    walk_root(
-        Path::new(root),
-        &request.query,
-        request.mode,
-        request.hidden,
-        &request.ignores,
-        cancelled,
-        sink,
-    );
+    if let Some(engine) = builtin {
+        sink.engine = Some("builtin".into());
+        let mut emitted = false;
+        match crate::plugins::resolvers::search::run_stream(
+            &engine,
+            &input,
+            cancelled,
+            &mut |entry| {
+                emitted = true;
+                sink.push(entry);
+            },
+        ) {
+            Ok(truncated) => sink.truncated |= truncated,
+            Err(_error) if cancelled() => return Ok(()),
+            Err(error) if emitted => {
+                sink.incomplete = true;
+                sink.warning = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
     Ok(())
 }
 
@@ -434,8 +450,8 @@ fn search_cached_vfs(
     // The live pass emits additions/metadata updates as they arrive; old hits
     // stay visible until the final authoritative set can remove stale hits.
     let live: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
-    let upstream = sink.emit;
-    let emit = |mut batch: SearchBatch| {
+    let upstream = &mut *sink.emit;
+    let mut emit = |mut batch: SearchBatch| {
         {
             let mut live = live.lock().unwrap_or_else(|e| e.into_inner());
             for entry in &batch.entries {
@@ -456,13 +472,15 @@ fn search_cached_vfs(
             (upstream)(batch);
         }
     };
-    let mut fresh = BatchSink::new(&emit, sink.started, sink.limit);
+    let mut fresh = BatchSink::new(&mut emit, sink.started, sink.limit);
     let result = search_adapter(root, request, cancelled, &mut fresh);
     fresh.flush(false);
     if cancelled() {
         return Ok(());
     }
     if let Err(error) = result {
+        drop(fresh);
+        drop(emit);
         sink.warning = Some(error);
         sink.incomplete = true;
         sink.emit_snapshot(Vec::new(), true, false, false, 0, 0);
@@ -474,6 +492,7 @@ fn search_cached_vfs(
     let skipped = fresh.skipped;
     let scanned = fresh.scanned;
     drop(fresh);
+    drop(emit);
     sink.emit_snapshot(
         if same { Vec::new() } else { entries },
         true,
@@ -667,12 +686,12 @@ pub(crate) fn search_directory(
     let found = Mutex::new(Vec::new());
     let (truncated, skipped);
     {
-        let emit = |batch: SearchBatch| {
+        let mut emit = |batch: SearchBatch| {
             if let Ok(mut found) = found.lock() {
                 found.extend(batch.entries);
             }
         };
-        let mut sink = BatchSink::new(&emit, Instant::now(), limit);
+        let mut sink = BatchSink::new(&mut emit, Instant::now(), limit);
         walk_root(
             root,
             query,
@@ -687,6 +706,59 @@ pub(crate) fn search_directory(
         skipped = sink.skipped;
     }
     (found.into_inner().unwrap_or_default(), truncated, skipped)
+}
+
+/// Stream the Core-native search walker through the shared SearchProvider
+/// contract while preserving cancellation, result limits and incremental UI
+/// delivery. Provider implementations never receive the host path over IPC.
+pub(crate) fn run_native_search_stream(
+    root: &Path,
+    query: &str,
+    mode: SearchMode,
+    hidden: bool,
+    ignores: &[String],
+    limit: usize,
+    cancelled: &dyn Fn() -> bool,
+    emit: &mut dyn FnMut(Entry) -> Result<(), String>,
+) -> Result<bool, String> {
+    let failed = std::sync::atomic::AtomicBool::new(false);
+    let failure = Mutex::new(None::<String>);
+    let should_cancel = || {
+        cancelled() || failed.load(std::sync::atomic::Ordering::Relaxed)
+    };
+    let mut emit_batches = |batch: SearchBatch| {
+        for entry in batch.entries {
+            if should_cancel() {
+                break;
+            }
+            if let Err(error) = emit(entry) {
+                if let Ok(mut failure) = failure.lock() {
+                    *failure = Some(error);
+                }
+                failed.store(true, std::sync::atomic::Ordering::Relaxed);
+                break;
+            }
+        }
+    };
+    let mut sink = BatchSink::new(&mut emit_batches, Instant::now(), limit.clamp(1, RESULT_LIMIT));
+    sink.engine = Some("builtin".into());
+    walk_root(
+        root,
+        query,
+        mode,
+        hidden,
+        ignores,
+        &should_cancel,
+        &mut sink,
+    );
+    sink.flush(false);
+    let truncated = sink.truncated || sink.incomplete;
+    drop(sink);
+    drop(emit_batches);
+    if let Some(error) = failure.into_inner().unwrap_or_else(|error| error.into_inner()) {
+        return Err(error);
+    }
+    Ok(truncated)
 }
 
 /// Only filesystem roots readable with the application's own user token are
