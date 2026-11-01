@@ -99,6 +99,7 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
         )
         if (removed === undefined) return
         x.setSelected([])
+        x.reload()
       },
     })
   }

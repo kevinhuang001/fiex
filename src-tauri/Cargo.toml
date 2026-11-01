@@ -39,6 +39,7 @@ tauri-build = { version = "2", optional = true , features = [] }
 [dependencies]
 futures = "0.3"
 fiex-plugin-sdk = { path = "../sdk/rust" }
+fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
 tauri-plugin-drag = { version = "2.1.1", optional = true }
 rust-fs-ntfs = { version = "0.10", optional = true }

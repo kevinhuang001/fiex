@@ -10,6 +10,7 @@ pub mod installer;
 pub mod ipc;
 pub mod match_rules;
 pub mod mounts;
+pub(crate) mod native_invocation;
 pub mod net;
 pub(crate) mod oauth;
 pub mod preferences;

@@ -165,6 +165,9 @@ pub fn uninstall(id: &str) -> Result<(), String> {
     plugin_host::global().stop(id);
     // Remove approval FIRST: even on deletion failure, plugin cannot launch.
     plugin_permissions::revoke_install(id)?;
+    crate::plugins::provider_registry::forget(id);
+    crate::plugins::resolvers::forget_plugin(id);
+    crate::plugins::mounts::forget_plugin(id);
     fs::remove_dir_all(directory).map_err(|e| e.to_string())?;
     plugin_host::invalidate_discovery();
     Ok(())

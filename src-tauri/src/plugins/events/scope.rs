@@ -124,6 +124,20 @@ pub fn resource_scope(
             false
         ))
         .collect::<Vec<_>>());
+    // The trusted target count is separate from the metadata projection so
+    // blank-canvas actions and multi-selection policies keep exact semantics.
+    params["selectionCount"] = json!(resources.len());
+    if method == "contextMenu.resolve" && resources.is_empty() {
+        if let Some(directory) = directory {
+            let snapshot = ResourceSnapshot::resolve(directory)?;
+            params["directory"] = json!(snapshot.project(
+                &plugin.id,
+                "",
+                policy.allowed(crate::plugins::security::policy::Capability::Metadata),
+                false,
+            ));
+        }
+    }
     let mut paths = resources
         .iter()
         .filter(|r| {

@@ -2,6 +2,7 @@
 //! Metadata is retrieved once, then projected separately for each provider.
 //! The snapshot never crosses the plugin process boundary.
 use crate::plugins::contracts::{EventContext, ResourceContext, ResourceMetadata, ResourceRef};
+use fiex_provider_contracts::{ResourceCapabilities, ResourceLocation};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -123,6 +124,15 @@ impl ResourceSnapshot {
             return Ok(Self::from_entry(display, &entry));
         }
         if !crate::plugins::mounts::handles(display) {
+            // Share ResourceBroker's trusted owner resolution. Unsupported
+            // schemes may not masquerade as OS-local files during metadata
+            // discovery or provider candidate matching.
+            if !matches!(
+                crate::core::fs::provider_registry::identity(display),
+                Some(("fs", provider, _)) if provider == "core:local-fs"
+            ) {
+                return Err("Unsupported: unregistered filesystem URI".into());
+            }
             return Ok(Self::new(display, Path::new(display)));
         }
         let entry = if crate::remote::is_remote(display) {
@@ -195,9 +205,29 @@ impl ResourceSnapshot {
         metadata_allowed: bool,
         _read_allowed: bool,
     ) -> ResourceContext {
+        let (view, storage) = crate::plugins::match_rules::locations_for(&self.display);
+        let decode_location = |value: Option<serde_json::Value>| {
+            value.and_then(|value| serde_json::from_value::<ResourceLocation>(value).ok())
+        };
+        let capabilities = if metadata_allowed {
+            let effective = self.operations.unwrap_or_else(|| {
+                crate::plugins::resource::file_capabilities::for_path(&self.display)
+            });
+            ResourceCapabilities {
+                operations: crate::plugins::provider_registry::FsOperation::ALL
+                    .into_iter()
+                    .filter(|operation| effective.allows(*operation))
+                    .collect(),
+            }
+        } else {
+            ResourceCapabilities::default()
+        };
         ResourceContext {
             reference: self.reference.clone(),
             metadata: metadata_allowed.then(|| self.metadata.clone()).flatten(),
+            view: decode_location(view),
+            storage: decode_location(storage),
+            capabilities,
         }
     }
     pub fn context(&self, owner: &str, metadata_allowed: bool, read_allowed: bool) -> EventContext {
@@ -212,6 +242,13 @@ impl ResourceSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unknown_schemes_fail_before_local_metadata_discovery() {
+        for path in ["unknown://not-registered", "unknown:opaque-reference"] {
+            assert!(ResourceSnapshot::resolve(path).is_err(), "{path}");
+        }
+    }
+
     #[test]
     fn metadata_projection_does_not_grant_read_and_reuses_identity() {
         let dir = tempfile::tempdir().unwrap();
@@ -229,6 +266,43 @@ mod tests {
             with_meta.targets[0].metadata.as_ref().unwrap().size,
             Some(3)
         );
+    }
+
+    #[test]
+    fn projected_context_carries_trusted_view_storage_and_effective_operations() {
+        let resource = ResourceSnapshot::from_metadata(
+            crate::core::volumes::applications::URI,
+            ResourceMetadata {
+                name: "Applications".into(),
+                kind: "directory".into(),
+                ..Default::default()
+            },
+        );
+        let projected = resource.project("org.example", "", true, false);
+        assert_eq!(
+            projected
+                .view
+                .as_ref()
+                .map(|location| location.provider_id.as_str()),
+            Some("core:applications")
+        );
+        assert_eq!(
+            projected
+                .storage
+                .as_ref()
+                .map(|location| location.provider_id.as_str()),
+            Some("core:applications")
+        );
+        assert!(projected
+            .capabilities
+            .allows(crate::plugins::provider_registry::FsOperation::Mkdir));
+        let wire = serde_json::to_value(&projected).unwrap();
+        assert!(wire.get("path").is_none());
+
+        let metadata_hidden = resource.project("org.example", "", false, false);
+        assert!(metadata_hidden.metadata.is_none());
+        assert!(metadata_hidden.capabilities.operations.is_empty());
+        assert!(metadata_hidden.view.is_some());
     }
 }
 
@@ -259,6 +333,14 @@ pub fn bind_selected(
                 &snapshot,
             )?;
             continue;
+        }
+        // An attacker-controlled resource binding is never promoted to a
+        // local path merely because its scheme has no registered mount.
+        if !matches!(
+            crate::core::fs::provider_registry::identity(&binding.path),
+            Some(("fs", provider, _)) if provider == "core:local-fs"
+        ) {
+            return Err("ScopeDenied: unsupported resource owner".into());
         }
         let path = std::path::Path::new(&binding.path);
         scope.authorize(&binding.path)?;

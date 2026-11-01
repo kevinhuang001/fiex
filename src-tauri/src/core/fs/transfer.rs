@@ -7,7 +7,7 @@ use crate::core::{
 };
 use std::sync::atomic::AtomicBool;
 
-use crate::plugin_sdk::filesystem::{TransferAction, TransferDirection};
+use fiex_provider_contracts::{TransferAction, TransferDirection};
 mod rollback;
 use rollback::UndoLog;
 mod cleanup;

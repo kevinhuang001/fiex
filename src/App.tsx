@@ -87,7 +87,6 @@ export default function App() {
         prefs={app.prefs}
         update={app.update}
         onTrash={app.openTrash}
-        onEmptyTrash={app.emptyTrash}
         onApplications={app.openApplications}
         onAddConnection={() => app.openConnectionDialog()}
         onEditConnection={(connection) => app.openConnectionDialog(connection)}

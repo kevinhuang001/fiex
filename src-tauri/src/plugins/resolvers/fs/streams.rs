@@ -1,114 +1,119 @@
 use super::*;
+use fiex_provider_contracts::{FsRead, FsWrite};
+use std::{io::Read, sync::Mutex};
 
 const MAX_CHUNK: usize = 4 * 1024 * 1024;
 
 /// An open read stream. Dropping it releases the provider-side handle.
 pub struct FsStream {
-    pub(super) mount: Mount,
-    pub(super) stream_id: String,
-    pub(super) size: Option<u64>,
-    pub(super) closed: bool,
+    reader: Mutex<Box<dyn Read + Send>>,
+    offset: Mutex<u64>,
+    size: Option<u64>,
 }
 
 impl FsStream {
+    pub(super) fn new(read: FsRead) -> Self {
+        Self {
+            reader: Mutex::new(read.reader),
+            offset: Mutex::new(0),
+            size: read.size,
+        }
+    }
+
     pub fn size(&self) -> Option<u64> {
         self.size
     }
 
     /// Read up to `max_bytes` starting at the absolute `offset`.
     pub fn read_at(&self, offset: u64, max_bytes: usize) -> Result<(Vec<u8>, bool), String> {
-        use base64::{engine::general_purpose::STANDARD, Engine};
         if max_bytes == 0 {
             return Ok((Vec::new(), false));
         }
         let max_bytes = max_bytes.min(MAX_CHUNK);
-        let value = self.mount.invoke(
-            "vfs.readStream",
-            json!({
-                "streamId": self.stream_id,
-                "offset": offset,
-                "maxBytes": max_bytes,
-            }),
-        )?;
-        let encoded = value
-            .get("base64")
-            .and_then(Value::as_str)
-            .ok_or("provider stream reply is missing data")?;
-        if encoded.len() > max_bytes.div_ceil(3) * 4 {
-            return Err("provider exceeded the requested chunk size".into());
+        let mut cursor = self
+            .offset
+            .lock()
+            .map_err(|_| "read stream unavailable".to_string())?;
+        if offset < *cursor {
+            return Err("stream cannot seek backwards".into());
         }
-        let bytes = STANDARD
-            .decode(encoded)
-            .map_err(|_| "provider returned invalid base64 data".to_string())?;
-        if bytes.len() > max_bytes {
-            return Err("provider exceeded the requested chunk size".into());
+        let mut reader = self
+            .reader
+            .lock()
+            .map_err(|_| "read stream unavailable".to_string())?;
+        let mut discard = [0u8; 8192];
+        while *cursor < offset {
+            let remaining = (offset - *cursor).min(discard.len() as u64) as usize;
+            let read = reader
+                .read(&mut discard[..remaining])
+                .map_err(|error| error.to_string())?;
+            if read == 0 {
+                return Ok((Vec::new(), true));
+            }
+            *cursor += read as u64;
         }
-        let eof = value.get("eof").and_then(Value::as_bool).unwrap_or(false) || bytes.is_empty();
-        Ok((bytes, eof))
+        let mut bytes = vec![0; max_bytes];
+        let read = reader.read(&mut bytes).map_err(|error| error.to_string())?;
+        bytes.truncate(read);
+        *cursor += read as u64;
+        Ok((bytes, read == 0))
     }
 
-    pub fn close(mut self) {
-        self.release();
-    }
-
-    fn release(&mut self) {
-        if self.closed {
-            return;
-        }
-        self.closed = true;
-        let _ = self
-            .mount
-            .invoke("vfs.closeRead", json!({"streamId": self.stream_id}));
-    }
-}
-
-impl Drop for FsStream {
-    fn drop(&mut self) {
-        self.release();
-    }
+    pub fn close(self) {}
 }
 
 /// An open write stream. Content becomes visible only after `commit`.
 pub struct FsWriteStream {
-    pub(super) mount: Mount,
-    pub(super) stream_id: String,
-    pub(super) offset: u64,
-    pub(super) finished: bool,
+    write: Option<FsWrite>,
+    offset: u64,
+    finished: bool,
 }
 
 impl FsWriteStream {
+    pub(super) fn new(write: FsWrite) -> Self {
+        Self {
+            write: Some(write),
+            offset: 0,
+            finished: false,
+        }
+    }
+
     pub fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        use base64::{engine::general_purpose::STANDARD, Engine};
-        write_chunks(bytes, &mut self.offset, |offset, chunk| {
-            let value = self.mount.invoke(
-                "vfs.writeStream",
-                json!({
-                    "streamId": self.stream_id,
-                    "offset": offset,
-                    "base64": STANDARD.encode(chunk),
-                }),
-            )?;
-            value
-                .get("written")
-                .and_then(Value::as_u64)
-                .ok_or_else(|| "provider write reply is missing written count".into())
+        use std::io::Write;
+        let write = self
+            .write
+            .as_mut()
+            .ok_or_else(|| "write stream is already finished".to_string())?;
+        let writer = &mut write.writer;
+        write_chunks(bytes, &mut self.offset, |_, chunk| {
+            writer
+                .write(chunk)
+                .map(|written| written as u64)
+                .map_err(|error| error.to_string())
         })
     }
 
     pub fn commit(mut self) -> Result<Option<FsEntry>, String> {
-        let value = self
-            .mount
-            .invoke("vfs.commit", json!({"streamId": self.stream_id}))?;
+        let write = self
+            .write
+            .take()
+            .ok_or_else(|| "write stream is already finished".to_string())?;
+        let entry = write.commit().map_err(|error| error.to_string())?;
         self.finished = true;
-        if value.is_null() || value.as_object().is_some_and(|object| object.is_empty()) {
-            return Ok(None);
-        }
-        FsEntry::parse(value).map(Some)
+        entry
+            .filter(|entry| !entry.node_id.is_empty())
+            .map(|entry| {
+                serde_json::to_value(entry)
+                    .map_err(|error| error.to_string())
+                    .and_then(FsEntry::parse)
+            })
+            .transpose()
     }
 
     pub fn abort(mut self) -> Result<(), String> {
-        self.mount
-            .invoke("vfs.abort", json!({"streamId": self.stream_id}))?;
+        if let Some(write) = self.write.take() {
+            write.abort();
+        }
         self.finished = true;
         Ok(())
     }
@@ -117,9 +122,9 @@ impl FsWriteStream {
 impl Drop for FsWriteStream {
     fn drop(&mut self) {
         if !self.finished {
-            let _ = self
-                .mount
-                .invoke("vfs.abort", json!({"streamId": self.stream_id}));
+            if let Some(write) = self.write.take() {
+                write.abort();
+            }
             self.finished = true;
         }
     }

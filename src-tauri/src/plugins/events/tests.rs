@@ -2,25 +2,40 @@ use super::*;
 
 #[test]
 fn preview_skips_invalid_provider_and_stops_after_success() {
+    use fiex_provider_contracts::ProviderRequest;
+    use std::sync::{Arc, Mutex};
+
     let providers = vec![
         Resolver::builtin("invalid", 100),
         Resolver::builtin("working", 50),
         Resolver::builtin("unused", 0),
     ];
-    let mut calls = Vec::new();
-    let result = EventRouter::resolve(
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let result = EventRouter::resolve_typed(
         "preview.open",
         providers,
-        |_, id| {
-            calls.push(id.to_string());
-            Ok(if id == "invalid" {
+        &ProviderRequest {
+            method: "preview.open".into(),
+            params: json!({}),
+        },
+        |provider, _| {
+            calls.lock().unwrap().push(provider.id.clone());
+            Ok(if provider.id == "invalid" {
                 json!({"kind":"external-url"})
             } else {
                 json!({"kind":"text","text":"ok"})
             })
         },
-        |_| unreachable!(),
-        |_, value| Ok(value),
+        |_, value| {
+            if matches!(
+                value["kind"].as_str(),
+                Some("text" | "image" | "media" | "pdf" | "fallback")
+            ) {
+                Ok(value)
+            } else {
+                Err("unsupported preview kind".into())
+            }
+        },
         |_| true,
         |outcomes| {
             outcomes
@@ -30,7 +45,7 @@ fn preview_skips_invalid_provider_and_stops_after_success() {
         },
     );
     assert_eq!(result["text"], "ok");
-    assert_eq!(calls, vec!["invalid", "working"]);
+    assert_eq!(*calls.lock().unwrap(), vec!["invalid", "working"]);
 }
 
 #[test]
@@ -137,4 +152,79 @@ fn fixed_events_are_core_owned_custom_methods_remain_available() {
     ] {
         assert!(!is_protected_method(method), "{method}");
     }
+}
+
+#[test]
+fn typed_router_merges_native_and_proxy_results_and_rejects_method_spoofing() {
+    use fiex_provider_contracts::ProviderRequest;
+
+    let providers = vec![
+        Resolver::builtin("native", 100),
+        Resolver::builtin("ipc-proxy", 50),
+    ];
+    let request = ProviderRequest {
+        method: "contextMenu.resolve".into(),
+        params: json!({}),
+    };
+    let outcomes = EventRouter::resolve_typed(
+        "contextMenu.resolve",
+        providers.clone(),
+        &request,
+        |provider, _| {
+            Ok(json!({"items":[{
+                "id": provider.id, "kind": "action", "title": provider.name
+            }]}))
+        },
+        |_, value| Ok(value),
+        |_| true,
+        |results| results,
+    );
+    assert_eq!(outcomes.len(), 2);
+    assert!(outcomes.iter().all(|(_, result)| result.is_ok()));
+
+    let spoof = ProviderRequest {
+        method: "contextMenu.execute".into(),
+        params: json!({}),
+    };
+    let outcomes = EventRouter::resolve_typed(
+        "contextMenu.resolve",
+        providers,
+        &spoof,
+        |_, _| Ok(json!({"items":[]})),
+        |_, value| Ok(value),
+        |_| true,
+        |results| results,
+    );
+    assert!(outcomes.iter().all(|(_, result)| result.is_err()));
+}
+
+#[test]
+fn typed_event_router_merges_provider_results_without_json_endpoints() {
+    use fiex_provider_contracts::ProviderRequest;
+
+    let outcomes = EventRouter::resolve_typed(
+        "info.resolve",
+        vec![
+            Resolver::builtin("core.metadata", 100),
+            Resolver::builtin("plugin:org.example:metadata", 50),
+        ],
+        &ProviderRequest {
+            method: "info.resolve".into(),
+            params: json!({}),
+        },
+        |provider, _| Ok(provider.id.clone()),
+        |_, result| Ok(result),
+        |_| true,
+        |results| {
+            results
+                .into_iter()
+                .map(|(_, result)| result.unwrap())
+                .collect::<Vec<_>>()
+        },
+    );
+
+    assert_eq!(
+        outcomes,
+        vec!["core.metadata", "plugin:org.example:metadata"]
+    );
 }

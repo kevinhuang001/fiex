@@ -209,3 +209,50 @@ pub fn forget_window(window: &str) {
         collect(&mut state);
     }
 }
+
+/// Revoke transient and retained mount identities owned by an uninstalled
+/// plugin. Their URIs fail closed immediately and cannot survive a restart.
+pub fn forget_plugin(plugin_id: &str) {
+    let removed = if let Ok(mut state) = registry().lock() {
+        let removed = state
+            .views
+            .iter()
+            .filter(|&(_, view)| view.descriptor.plugin_id == plugin_id)
+            .map(|(id, _)| id.clone())
+            .collect::<HashSet<_>>();
+        state.views.retain(|id, _| !removed.contains(id));
+        for (live, durable) in state.references.values_mut() {
+            live.retain(|id| !removed.contains(id));
+            durable.retain(|id| !removed.contains(id));
+        }
+        collect(&mut state);
+        removed
+    } else {
+        HashSet::new()
+    };
+    let path = saved_path();
+    let Ok(bytes) = std::fs::read(&path) else {
+        return;
+    };
+    let Ok(mut saved) = serde_json::from_slice::<HashMap<String, Descriptor>>(&bytes) else {
+        return;
+    };
+    saved.retain(|id, descriptor| descriptor.plugin_id != plugin_id && !removed.contains(id));
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if std::fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let Ok(mut file) = tempfile::NamedTempFile::new_in(parent) else {
+        return;
+    };
+    use std::io::Write;
+    let Ok(bytes) = serde_json::to_vec(&saved) else {
+        return;
+    };
+    if file.write_all(&bytes).is_err() {
+        return;
+    }
+    let _ = file.persist(path);
+}

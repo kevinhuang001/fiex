@@ -1,5 +1,4 @@
 import { t } from '@/i18n'
-import { isWindows } from '@/lib/platform'
 import { Button } from '@/components/ui/button'
 import type { AppController } from '@/hooks/useAppController'
 import { ArrowsClockwiseIcon as RefreshCw } from '@phosphor-icons/react/dist/csr/ArrowsClockwise'
@@ -13,7 +12,6 @@ import { SidebarSimpleIcon as PanelLeft } from '@phosphor-icons/react/dist/csr/S
 import { SlidersHorizontalIcon as Settings2 } from '@phosphor-icons/react/dist/csr/SlidersHorizontal'
 import { TerminalWindowIcon as TerminalSquare } from '@phosphor-icons/react/dist/csr/TerminalWindow'
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
-import { Trash2 } from 'lucide-react'
 import { useActivity } from '@/hooks/useActivity'
 import { PinnedTools } from './toolbar/PinnedTools'
 import { ToolbarPickerMenu, useToolbarPicker } from './toolbar/ToolbarMenus'
@@ -36,8 +34,6 @@ export function ExplorerToolbar({
   setSettings,
   setPluginManager,
   refreshAll,
-  inTrash,
-  emptyTrash,
   split,
   onToggleSplit,
 }: Pick<
@@ -56,8 +52,6 @@ export function ExplorerToolbar({
   | 'terminal'
   | 'setSettings'
   | 'refreshAll'
-  | 'inTrash'
-  | 'emptyTrash'
   | 'setSettings'
   | 'setPluginManager'
 > & { split: boolean; onToggleSplit: () => void }) {
@@ -247,17 +241,6 @@ export function ExplorerToolbar({
         <h1 data-tauri-drag-region>{x.query ? t('搜索') : displayName(x.path) || 'Fiex'}</h1>
         <div className="toolbar-spacer" data-tauri-drag-region />
         <ViewSwitch prefs={prefs} update={update} />
-        {inTrash && (
-          <Button
-            variant="ghost"
-            size="icon"
-            title={t(isWindows() ? '清空回收站' : '清空废纸篓')}
-            aria-label={t(isWindows() ? '清空回收站' : '清空废纸篓')}
-            onClick={emptyTrash}
-          >
-            <Trash2 size={20} />
-          </Button>
-        )}
         <div
           className="toolbar-order"
           ref={leftOrder.container}

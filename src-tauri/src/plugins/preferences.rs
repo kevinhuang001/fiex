@@ -164,8 +164,7 @@ fn search_modes(contribution: &serde_json::Value) -> Vec<&str> {
             .filter_map(serde_json::Value::as_str)
             .filter(|mode| matches!(*mode, "name" | "content"))
             .collect(),
-        // A legacy single-RPC search contribution is filename search only.
-        None => vec!["name"],
+        None => Vec::new(),
     }
 }
 

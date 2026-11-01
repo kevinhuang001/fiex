@@ -135,27 +135,28 @@ fn expired_sessions_and_disabled_actions_are_rejected() {
         .unwrap()
         .created = std::time::Instant::now() - std::time::Duration::from_secs(91);
     assert!(super::execute(&session_id, "copy").is_err());
-    let ctx = super::builtin::Context::for_test(&directory, paths, vec![], true, false);
+    let ctx = super::builtin::Context::for_test(&directory, paths, vec![], true);
     assert!(super::builtin::execute("builtin:rename", "rename", &ctx).is_err());
 }
 #[test]
-fn trash_group_and_multi_selection_are_provider_owned() {
+fn generic_trash_menu_only_uses_normal_remove_capability() {
     let ctx = super::builtin::Context::for_test_caps(
-        "/trash",
-        vec!["/trash/a".into()],
+        "/tmp",
+        vec!["/tmp/item".into()],
         vec![],
         false,
-        true,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             remove: true,
             ..Default::default()
         },
     );
-    let result = super::builtin::resolve("builtin:trash", &ctx).unwrap();
-    assert_eq!(result["items"][0]["id"], "restore");
-    assert_eq!(result["items"][0]["placement"], "tail");
-    assert_eq!(result["items"][1]["id"], "delete");
-    // The connection cache group only exists for a connection selection.
+    let items = super::builtin::resolve("builtin:trash", &ctx).unwrap()["items"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], "trash");
+    assert_eq!(items[0]["placement"], "tail");
     assert!(!super::builtin::providers(&ctx)
         .iter()
         .any(|provider| provider.id == "builtin:connection-cache"));
@@ -179,14 +180,12 @@ fn provider_ids(ctx: &super::builtin::Context) -> Vec<String> {
 fn mount_selection(
     path: &str,
     is_dir: bool,
-    read_only: bool,
     capabilities: crate::plugins::resource::file_capabilities::FileCapabilities,
 ) -> super::builtin::Context {
     super::builtin::Context::for_test_caps(
         path.rsplit_once('/').map_or(path, |(parent, _)| parent),
         vec![path.into()],
         vec![mount_entry(path, is_dir)],
-        read_only,
         false,
         capabilities,
     )
@@ -210,7 +209,6 @@ fn assert_never_disabled(ctx: &super::builtin::Context) {
 fn a_read_only_mount_omits_every_mutating_group() {
     let ctx = mount_selection(
         "fiex://mount/gating-mount/report.txt",
-        false,
         false,
         crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
     );
@@ -240,7 +238,6 @@ fn an_unreadable_file_hides_open_but_keeps_info() {
     let ctx = mount_selection(
         "fiex://mount/gating-mount/report.txt",
         false,
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities::default(),
     );
     let opening = super::builtin::resolve("builtin:opening", &ctx).unwrap();
@@ -256,7 +253,6 @@ fn a_directory_without_read_still_opens_by_navigation() {
     let ctx = mount_selection(
         "fiex://mount/gating-mount/folder",
         true,
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities::default(),
     );
     let opening = super::builtin::resolve("builtin:opening", &ctx).unwrap();
@@ -274,36 +270,21 @@ fn remove_adds_trash_and_delete_forever() {
         remove: true,
         ..Default::default()
     };
-    let ctx = mount_selection(
-        "fiex://mount/gating-mount/a.txt",
-        false,
-        false,
-        capabilities,
-    );
+    let ctx = mount_selection("fiex://mount/gating-mount/a.txt", false, capabilities);
     assert!(provider_ids(&ctx).contains(&"builtin:trash".to_string()));
     let trash = super::builtin::resolve("builtin:trash", &ctx).unwrap();
     // Mounts have no Trash: the provider's `remove` is a permanent delete.
     assert_eq!(trash["items"][0]["id"], "delete");
     assert_eq!(trash["items"][0]["placement"], "tail");
     assert_eq!(trash["items"][0]["danger"], true);
-    // Inside the trash both restore and permanent delete are offered.
-    let in_trash = super::builtin::Context::for_test_caps(
-        "fiex://mount/gating-mount",
-        vec!["fiex://mount/gating-mount/a.txt".into()],
-        vec![mount_entry("fiex://mount/gating-mount/a.txt", false)],
-        false,
-        true,
-        capabilities,
-    );
-    let items = super::builtin::resolve("builtin:trash", &in_trash).unwrap()["items"].clone();
-    assert_eq!(items[0]["id"], "restore");
-    assert_eq!(items[1]["id"], "delete");
-    assert_eq!(items[1]["danger"], true);
-    assert_never_disabled(&in_trash);
+    // A VFS remove capability never implies restore or empty-the-bin.
+    let items = trash["items"].as_array().unwrap();
+    assert!(items
+        .iter()
+        .all(|item| item["id"] != "restore" && item["id"] != "emptyTrash"));
     // A write-only mount keeps the trash group out.
     let without_remove = mount_selection(
         "fiex://mount/gating-mount/a.txt",
-        false,
         false,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             read: true,
@@ -327,12 +308,7 @@ fn create_capability_never_adds_a_menu_group() {
         remove: false,
         ..Default::default()
     };
-    let ctx = mount_selection(
-        "fiex://mount/gating-mount/a.txt",
-        false,
-        false,
-        capabilities,
-    );
+    let ctx = mount_selection("fiex://mount/gating-mount/a.txt", false, capabilities);
     let ids = provider_ids(&ctx);
     assert!(ids.contains(&"builtin:rename".to_string()));
     assert!(ids.contains(&"builtin:clipboard".to_string()));
@@ -353,7 +329,6 @@ fn create_capability_never_adds_a_menu_group() {
         vec!["fiex://mount/gating-mount/a.txt".into()],
         vec![mount_entry("fiex://mount/gating-mount/a.txt", false)],
         false,
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             read: true,
             rename: true,
@@ -372,7 +347,6 @@ fn a_read_only_directory_drops_mutating_items_entirely() {
         vec!["fiex://mount/gating-mount/a.txt".into()],
         vec![mount_entry("fiex://mount/gating-mount/a.txt", false)],
         true,
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities::ALL,
     );
     let ids = provider_ids(&ctx);
@@ -428,14 +402,8 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         create: true,
         ..Default::default()
     };
-    let ctx = super::builtin::Context::for_test_caps(
-        "/tmp/blank",
-        vec![],
-        vec![],
-        false,
-        false,
-        capabilities,
-    );
+    let ctx =
+        super::builtin::Context::for_test_caps("/tmp/blank", vec![], vec![], false, capabilities);
     assert_eq!(provider_ids(&ctx), ["builtin:create"]);
     let menu = super::builtin::resolve("builtin:create", &ctx).unwrap();
     let items = menu["items"].as_array().unwrap();
@@ -447,7 +415,6 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         "/tmp/blank",
         vec![],
         vec![],
-        false,
         false,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             read: true,
@@ -465,8 +432,34 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         vec![],
         vec![],
         false,
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities::default(),
     );
     assert!(!provider_ids(&empty).contains(&"builtin:create".to_string()));
+}
+
+#[test]
+fn applications_menu_uses_descriptor_and_generic_info_without_duplicate_open() {
+    let path = "applications://c3lzdGVtLWFwcA";
+    let ctx = super::builtin::Context::for_test_caps(
+        "applications://",
+        vec![path.into()],
+        vec![mount_entry(path, false)],
+        false,
+        crate::plugins::resource::file_capabilities::FileCapabilities {
+            read: true,
+            stat: true,
+            ..Default::default()
+        },
+    );
+    let ids = provider_ids(&ctx);
+    assert!(ids.contains(&"core.applications.menu".to_string()));
+    assert!(ids.contains(&"builtin:opening".to_string()));
+    let native = super::builtin::resolve("core.applications.menu", &ctx).unwrap();
+    assert_eq!(native["items"][0]["id"], "open");
+    let generic = super::builtin::resolve("builtin:opening", &ctx).unwrap();
+    let items = generic["items"].as_array().unwrap();
+    assert!(items.iter().any(|item| item["id"] == "info"));
+    assert!(items.iter().any(|item| item["id"] == "preview"));
+    assert!(!items.iter().any(|item| item["id"] == "open"));
+    assert!(super::builtin::execute("core.applications.menu", "delete", &ctx).is_err());
 }

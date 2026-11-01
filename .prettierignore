@@ -1,6 +1,8 @@
 node_modules
 dist
 src-tauri/target
+sdk/docs/
+sdk/rust/fixtures/
 sdk/**/target
 sdk/**/dist
 src-tauri/gen

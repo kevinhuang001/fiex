@@ -5,23 +5,26 @@
 //! and return a package-confined `PreviewView`.
 use crate::plugins::contracts::PreviewView;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::ProviderRequest;
 use serde_json::Value;
-use std::fs;
+use std::{fs, sync::Arc};
 
 mod builtin;
+mod native;
+mod proxy;
 mod session;
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
 use crate::plugins::events::{EventRouter, Handler, Resolver};
-use builtin::{builtin_candidates, builtin_view, Builtin};
 pub use session::session_scope;
-use session::{open_plugin_resource, UNSUPPORTED};
+use session::UNSUPPORTED;
 
 fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     let ext = ext.trim_start_matches('.').to_ascii_lowercase();
-    let builtin = builtin_candidates(&ext, mime, is_dir)
-        .into_iter()
-        .map(|b| Resolver::builtin(b.id(), b.priority()))
-        .collect();
-    EventRouter::providers(
+    let builtin = native::candidates(&ext, mime, is_dir);
+    crate::plugins::provider_registry::candidates(
         "preview.open",
         &[
             serde_json::json!({"extension":ext,"mime":mime,"kind":if is_dir{"directory"}else{"file"}}),
@@ -31,21 +34,32 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     )
 }
 
+fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {
+    resource
+        .stat
+        .as_ref()
+        .map(|stat| stat.len())
+        .or_else(|| resource.metadata().and_then(|metadata| metadata.size))
+}
+
 fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     let metadata = crate::plugins::events::resource_metadata(std::slice::from_ref(resource));
     let readable = metadata[0]["operations"]
         .as_array()
         .is_some_and(|ops| ops.iter().any(|op| op == "read"));
-    let builtin = builtin_candidates(&resource.ext, &resource.mime, resource.is_dir)
+    let builtin = native::candidates(&resource.ext, &resource.mime, resource.is_dir)
         .into_iter()
-        .filter(|kind| readable || *kind == Builtin::Fallback)
-        .map(|kind| Resolver::builtin(kind.id(), kind.priority()))
+        .filter(|provider| readable || provider.id == "builtin:fallback")
         .collect();
-    let mut providers = EventRouter::providers("preview.open", &metadata, "", builtin);
+    let mut providers =
+        crate::plugins::provider_registry::candidates("preview.open", &metadata, "", builtin);
     // A provider that declares a preview byte ceiling must not be selected for
     // a file above it. This is also the cheapest way to avoid opening a huge
     // archive/Office document only to fail inside the plugin.
-    let size = resource.stat.as_ref().map(|stat| stat.len());
+    // Local files have OS metadata; virtual files and plugin VFS entries
+    // carry their size in the trusted Core ResourceSnapshot metadata instead.
+    // Failing to inspect that size bypasses maxBytes for remote previews.
+    let size = resource_size(resource);
     providers.retain(|provider| {
         let crate::plugins::events::Handler::Plugin(plugin) = &provider.handler else {
             return true;
@@ -119,52 +133,30 @@ fn resolve_preview(
     // The final fallback is a label-only renderer; it never reads/downloads content.
     providers.retain(|p| p.id != "builtin:fallback");
     providers.push(Resolver::builtin("builtin:fallback", i64::MIN));
-    EventRouter::resolve(
+    let resource = Arc::new(resource);
+    let request = ProviderRequest {
+        method: "preview.open".into(),
+        params: serde_json::json!({}),
+    };
+    EventRouter::resolve_typed(
         "preview.open",
         providers,
-        |_, id| {
-            let kind = [
-                Builtin::Text,
-                Builtin::Image,
-                Builtin::Media,
-                Builtin::Pdf,
-                Builtin::Fallback,
-            ]
-            .into_iter()
-            .find(|b| b.id() == id)
-            .ok_or("unknown preview builtin")?;
-            let path = if kind == Builtin::Fallback {
-                resource.local.clone()
-            } else {
-                resource.export_path()?
-            };
-            builtin_view(kind, &path, &resource.display)
-        },
-        |plugin| {
-            open_plugin_resource(&resource, plugin).map(|response| {
-                let mut view = response["view"].clone();
-                if let Some(object) = view.as_object_mut() {
-                    for key in [
-                        "sessionId",
-                        "context",
-                        "pluginId",
-                        "contributionId",
-                        "timeoutMs",
-                    ] {
-                        object.insert(key.into(), response[key].clone());
-                    }
-                }
-                view
-            })
-        },
-        |provider, mut view| {
-            if let Some(object) = view.as_object_mut() {
-                object.insert("providerId".into(), Value::String(provider.id.clone()));
-                object.insert("provider".into(), Value::String(provider.name.clone()));
+        &request,
+        |resolver, request| match &resolver.handler {
+            Handler::Builtin(id) => native::open(id, &resource).map_err(|error| error.to_string()),
+            Handler::Plugin(plugin) => {
+                let request = crate::plugins::events::bind_provider_request(resolver, request)?;
+                proxy::ScopedPreviewProxy::new((**plugin).clone(), resource.clone())?
+                    .open_typed(&request)
+                    .map_err(|error| error.to_string())
             }
+        },
+        |_, view| {
+            let value = serde_json::to_value(&view).map_err(|error| error.to_string())?;
+            crate::plugins::events::validate_result("preview.open", &value)?;
             Ok(view)
         },
-        |_| true,
+        |view| view.kind != "unsupported",
         move |outcomes| {
             // Every plugin failure is worth keeping: the in-memory error log is
             // shown in Settings, where a bare "no preview provider succeeded"
@@ -195,7 +187,17 @@ fn resolve_preview(
                     }
                 }
             }
-            outcomes.into_iter().find_map(|(provider,result)|result.ok().map(|view|serde_json::json!({"providerId":provider.id,"provider":provider.name,"priority":provider.priority,"view":view}))).ok_or_else(||"no preview provider succeeded".into())
+            let (provider, view) = outcomes
+                .into_iter()
+                .find_map(|(provider, result)| result.ok().map(|view| (provider, view)))
+                .ok_or_else(|| "no preview provider succeeded".to_string())?;
+            let view = serde_json::to_value(view).map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({
+                "providerId": provider.id,
+                "provider": provider.name,
+                "priority": provider.priority,
+                "view": view,
+            }))
         },
     )
 }

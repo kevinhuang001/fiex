@@ -1,22 +1,15 @@
 //! Builtin decorations share EventRouter and Collector with plugin providers.
 use super::types::{Decoration, DecorationEntry, NativeBadge};
-use crate::plugins::events::Resolver;
-use serde_json::{json, Value};
 use std::collections::HashMap;
 
-pub(super) fn providers() -> Vec<Resolver> {
-    [
-        "builtin:tags",
-        "builtin:readonly",
-        "builtin:connection-status",
-        "builtin:application-icon",
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, id)| Resolver::builtin(id, -12 + index as i64))
-    .rev()
-    .collect()
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum NativeKind {
+    Tags,
+    Readonly,
+    ConnectionStatus,
+    ApplicationIcon,
 }
+
 fn badge(text: &'static str, color: &str, status: Option<&str>, icon: Option<&str>) -> NativeBadge {
     let text = crate::i18n::t(text).to_string();
     NativeBadge {
@@ -52,13 +45,13 @@ fn connection(entry: &DecorationEntry) -> Vec<NativeBadge> {
     badges
 }
 pub(super) fn resolve_in(
-    id: &str,
+    kind: NativeKind,
     directory: &str,
     entries: &HashMap<String, DecorationEntry>,
-) -> Result<Value, String> {
+) -> Vec<Decoration> {
     let mut decorations = Vec::new();
     for entry in entries.values() {
-        if id == "builtin:application-icon" {
+        if kind == NativeKind::ApplicationIcon {
             let recognized = directory == crate::core::volumes::applications::URI
                 && entry.mime == "application/x-fiex-application"
                 && !crate::core::volumes::applications::is_user(&entry.path);
@@ -80,11 +73,11 @@ pub(super) fn resolve_in(
             decorations.push(decoration);
             continue;
         }
-        let native_badges = match id {
-            "builtin:connection-status" => connection(entry),
-            "builtin:readonly" if entry.readonly => vec![badge("只读", "gray", None, None)],
-            "builtin:readonly" => vec![],
-            "builtin:tags" => entry
+        let native_badges = match kind {
+            NativeKind::ConnectionStatus => connection(entry),
+            NativeKind::Readonly if entry.readonly => vec![badge("只读", "gray", None, None)],
+            NativeKind::Readonly => vec![],
+            NativeKind::Tags => entry
                 .tags
                 .iter()
                 .take(5)
@@ -113,7 +106,7 @@ pub(super) fn resolve_in(
                     }
                 })
                 .collect(),
-            _ => return Err("unknown builtin decoration provider".into()),
+            NativeKind::ApplicationIcon => unreachable!("application icon handled above"),
         };
         if !native_badges.is_empty() {
             decorations.push(Decoration {
@@ -123,7 +116,7 @@ pub(super) fn resolve_in(
             });
         }
     }
-    Ok(json!({"decorations":decorations}))
+    decorations
 }
 
 fn application_icon(entry: &DecorationEntry) -> Option<String> {

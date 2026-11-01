@@ -6,6 +6,9 @@
 //! metadata and media probes.
 pub use crate::plugins::contracts::{InfoRow, InfoSection};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::ProviderRequest;
+use serde_json::json;
+use std::sync::Arc;
 
 fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     InfoRow {
@@ -17,48 +20,45 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
 
 mod media;
 mod metadata;
+mod native;
+mod proxy;
 pub use media::media_sections;
-use metadata::metadata_section;
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
-fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
-    use crate::plugins::events::{EventRouter, Handler, Resolver};
+fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
+    use crate::plugins::events::{EventRouter, Handler};
     let metadata =
         crate::plugins::events::resource_metadata(std::slice::from_ref(&resource)).remove(0);
-    let mut builtin = vec![Resolver::builtin("core.metadata", 1000)];
-    if !resource.is_dir
-        && (resource.mime.starts_with("audio/") || resource.mime.starts_with("video/"))
-    {
-        builtin.push(Resolver::builtin("core.media", 100));
-    }
-    let providers = EventRouter::providers("info.resolve", &[metadata], "", builtin);
-    EventRouter::resolve(
+    let builtin = native::candidates(&resource);
+    let providers =
+        crate::plugins::provider_registry::candidates("info.resolve", &[metadata], "", builtin);
+    let resource = Arc::new(resource);
+    let request = ProviderRequest {
+        method: "info.resolve".into(),
+        params: serde_json::json!({}),
+    };
+    EventRouter::resolve_typed(
         "info.resolve",
         providers,
-        |_, id| {
-            let sections = match id {
-                "core.metadata" => vec![metadata_section(
-                    display,
-                    &resource.local,
-                    resource.stat.as_ref(),
-                    resource.metadata(),
-                )],
-                "core.media" => media_sections(&resource.export_path()?),
-                _ => return Err("unknown info builtin".into()),
-            };
-            Ok(serde_json::json!({"sections":sections}))
+        &request,
+        |resolver, request| match &resolver.handler {
+            Handler::Builtin(id) => {
+                native::invoke(id, &resource).map_err(|error| error.to_string())
+            }
+            Handler::Plugin(plugin) => {
+                let request = crate::plugins::events::bind_provider_request(resolver, request)?;
+                proxy::ScopedInfoProxy::new((**plugin).clone(), resource.clone())?
+                    .resolve_typed(&request)
+                    .map_err(|error| error.to_string())
+            }
         },
-        |plugin| {
-            crate::plugins::events::invoke_resources(
-                plugin,
-                "info.resolve",
-                serde_json::json!({}),
-                std::slice::from_ref(&resource),
-                None,
-            )
-        },
-        |provider, value| {
-            let mut sections: Vec<InfoSection> =
-                serde_json::from_value(value["sections"].clone()).map_err(|e| e.to_string())?;
+        |provider, mut sections| {
+            let value = json!({"sections": &sections});
+            crate::plugins::events::validate_result("info.resolve", &value)?;
             for section in &mut sections {
                 match &provider.handler {
                     Handler::Plugin(plugin) => {
@@ -111,7 +111,7 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
 
 /// Remote metadata is matched directly; content providers materialize lazily.
 pub fn file_info_resource(display: &str) -> Result<Vec<InfoSection>, String> {
-    Ok(resolve_info(display, ResourceSnapshot::resolve(display)?))
+    Ok(resolve_info(ResourceSnapshot::resolve(display)?))
 }
 
 #[cfg(test)]

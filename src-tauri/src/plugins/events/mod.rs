@@ -1,21 +1,29 @@
 //! Core event pipeline: discover → dispatch → validate → collect.
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use serde_json::{json, Value};
-mod contract;
-mod matching;
+pub(crate) mod matching;
 pub use matching::metadata as resource_metadata;
 mod directory_scope;
 mod registry;
 mod router;
 mod scope;
 mod validation;
-use contract::{event, Dispatch};
+use fiex_provider_contracts::{event, Dispatch};
 pub use registry::{Handler, Resolver};
 pub use router::EventRouter;
 #[cfg(test)]
 use scope::action_folders;
 pub use scope::{prepare, resource_scope};
 pub use validation::validate_result;
+
+/// Bind a selected plugin provider's trusted instance identity at the proxy
+/// construction boundary. Typed EventRouter dispatch remains transport-blind.
+pub(crate) fn bind_provider_request(
+    provider: &Resolver,
+    request: &fiex_provider_contracts::ProviderRequest,
+) -> Result<fiex_provider_contracts::ProviderRequest, String> {
+    registry::bind_request(provider, request)
+}
 /// Core-owned system events are not exposed through the plugin UI bridge.
 /// Unknown methods remain legal plugin-local business methods.
 pub fn is_protected_method(method: &str) -> bool {
@@ -43,15 +51,23 @@ fn require_event(method: &str) -> Result<(), String> {
 }
 
 /// Recheck a stored menu session using its actual targets, never empty placeholders.
-pub fn menu_allowed(plugin_id: &str, resources: &[ResourceSnapshot], directory: &str) -> bool {
-    EventRouter::providers(
+pub fn menu_allowed(
+    plugin_id: &str,
+    provider_id: &str,
+    resources: &[ResourceSnapshot],
+    directory: &str,
+) -> bool {
+    crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
         &matching::metadata(resources),
         directory,
         Vec::new(),
     )
     .iter()
-    .any(|provider| matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id))
+    .any(|provider| {
+        provider.id == provider_id
+            && matches!(&provider.handler, Handler::Plugin(plugin) if plugin.id == plugin_id)
+    })
 }
 
 pub fn call_owner(
@@ -62,15 +78,46 @@ pub fn call_owner(
     directory: Option<&str>,
 ) -> Result<Value, String> {
     let metadata = matching::metadata(resources);
-    let providers = EventRouter::providers(method, &metadata, directory.unwrap_or(""), Vec::new())
-        .into_iter()
-        .filter(|p| matches!(&p.handler,Handler::Plugin(plugin) if plugin.id==plugin_id))
-        .collect();
-    EventRouter::resolve(
+    let providers = crate::plugins::provider_registry::candidates(
+        method,
+        &metadata,
+        directory.unwrap_or(""),
+        Vec::new(),
+    )
+    .into_iter()
+    .filter(|p| {
+        let Handler::Plugin(plugin) = &p.handler else {
+            return false;
+        };
+        if plugin.id != plugin_id {
+            return false;
+        }
+        match params.get("providerId") {
+            Some(value) => value
+                .as_str()
+                .is_some_and(|instance| p.id == format!("plugin:{plugin_id}:{instance}")),
+            None => p.id == format!("plugin:{plugin_id}"),
+        }
+    })
+    .collect();
+    let request = fiex_provider_contracts::ProviderRequest {
+        method: method.into(),
+        params,
+    };
+    EventRouter::resolve_typed(
         method,
         providers,
-        |_, _| Err("builtin owner not registered".into()),
-        |plugin| invoke_resources(plugin, method, params.clone(), resources, directory),
+        &request,
+        |provider, request| match &provider.handler {
+            Handler::Plugin(plugin) => invoke_resources(
+                plugin,
+                &request.method,
+                request.params.clone(),
+                resources,
+                directory,
+            ),
+            Handler::Builtin(_) => Err("native owner is not registered".into()),
+        },
         |_, value| Ok(value),
         |_| true,
         |results| {

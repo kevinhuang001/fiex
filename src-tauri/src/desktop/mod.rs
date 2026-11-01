@@ -181,7 +181,6 @@ pub fn run() {
             pick_folder,
             plugin_file_dialog,
             plugin_files_dialog,
-            plugin_search,
             search_providers,
             provider_catalog,
             provider_preferences,

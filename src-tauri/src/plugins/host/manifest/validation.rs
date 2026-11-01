@@ -50,6 +50,20 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
     if !value.is_null() && !value.is_object() {
         return Err("extensions must be an object".into());
     }
+    for feature in [
+        "info",
+        "preview",
+        "decorations",
+        "contextMenus",
+        "search",
+        "hooks",
+        "toolbar",
+        "connectionContextMenus",
+    ] {
+        if let Some(object) = value.get(feature).and_then(Value::as_object) {
+            super::provider_instances::validate(feature, object)?;
+        }
+    }
     if let Some(enabled) = value.get("contextMenus") {
         match enabled {
             Value::Bool(_) => {}
@@ -70,8 +84,15 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
                         );
                     }
                 }
-                if object.keys().any(|key| key != "priority") {
-                    return Err("extensions.connectionContextMenus accepts only priority".into());
+                crate::plugins::match_rules::validate(object.get("match"), false, false)?;
+                if object
+                    .keys()
+                    .any(|key| !matches!(key.as_str(), "priority" | "match" | "providers"))
+                {
+                    return Err(
+                        "extensions.connectionContextMenus accepts priority, match and providers"
+                            .into(),
+                    );
                 }
             }
             _ => return Err("extensions.connectionContextMenus must be true or {priority}".into()),
@@ -233,6 +254,7 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             return Err("extensions.connections.fields must be an array".into());
         }
         if key == "connections" {
+            crate::plugins::match_rules::validate(object.get("match"), false, false)?;
             connections::validate(object)?;
         }
 

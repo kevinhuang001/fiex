@@ -1,14 +1,41 @@
 use super::*;
+use fiex_provider_contracts::ProviderRequest;
+
 pub struct EventRouter;
 impl EventRouter {
-    /// Every provider gets its own invocation/authorization. Validators admit
-    /// one provider atomically; the feature supplies only its combination rule.
-    pub fn resolve<T, R>(
+    /// Dispatch already typed native and IPC provider implementations through
+    /// the same ordering, panic boundary and owner/merge policy. Provider
+    /// families keep their own shared Trait method and response DTO; this
+    /// generic helper only owns event scheduling.
+    pub fn resolve_typed<T, R>(
         method: &str,
         providers: Vec<Resolver>,
-        mut builtin: impl FnMut(&Resolver, &str) -> Result<Value, String>,
-        mut plugin: impl FnMut(&crate::plugins::host::PluginInfo) -> Result<Value, String>,
-        mut validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
+        request: &ProviderRequest,
+        mut invoke: impl FnMut(&Resolver, &ProviderRequest) -> Result<T, String>,
+        validate: impl FnMut(&Resolver, T) -> Result<T, String>,
+        supported: impl FnMut(&T) -> bool,
+        collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
+    ) -> R {
+        Self::dispatch_resolvers(
+            method,
+            providers,
+            |provider| {
+                if request.method != method {
+                    return Err("provider request method does not match routed event".into());
+                }
+                invoke(provider, request)
+            },
+            validate,
+            supported,
+            collect,
+        )
+    }
+
+    fn dispatch_resolvers<I, T, R>(
+        method: &str,
+        providers: Vec<Resolver>,
+        mut invoke: impl FnMut(&Resolver) -> Result<I, String>,
+        mut validate: impl FnMut(&Resolver, I) -> Result<T, String>,
         mut supported: impl FnMut(&T) -> bool,
         collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
     ) -> R {
@@ -19,11 +46,7 @@ impl EventRouter {
         for provider in providers {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 require_event(method)?;
-                let value = match &provider.handler {
-                    Handler::Builtin(id) => builtin(&provider, id)?,
-                    Handler::Plugin(p) => plugin(p)?,
-                };
-                validate_result(method, &value)?;
+                let value = invoke(&provider)?;
                 validate(&provider, value)
             }))
             .unwrap_or_else(|_| Err("provider panicked".into()));

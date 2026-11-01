@@ -1,6 +1,6 @@
 //! Transfer review is additional policy, never a replacement for capabilities.
 use super::*;
-use crate::plugin_sdk::filesystem::{
+use fiex_provider_contracts::{
     TransferAction, TransferDirection, TransferMetadata, TransferPreflight,
 };
 

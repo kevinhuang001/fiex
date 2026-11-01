@@ -1,8 +1,9 @@
 use super::dynamic::{decode, merge};
 use super::types::{Decoration, DecorationEntry};
 use crate::plugins::host as plugin_host;
+use fiex_provider_contracts::ProviderRequest;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 fn bind_targets(
     response: &mut Value,
@@ -64,9 +65,14 @@ pub fn query_with_plugins(
         })
         .collect::<Vec<_>>();
     let metadata = crate::plugins::events::resource_metadata(&resources);
-    let builtins = super::builtin::providers();
+    let builtins = super::native::providers(&metadata, directory);
     let providers = if include_plugins {
-        EventRouter::providers("decorations.resolve", &metadata, directory, builtins)
+        crate::plugins::provider_registry::candidates(
+            "decorations.resolve",
+            &metadata,
+            directory,
+            builtins,
+        )
     } else {
         builtins
     };
@@ -74,42 +80,77 @@ pub fn query_with_plugins(
         .into_iter()
         .map(|(m, f)| (m.id.clone(), (m, f)))
         .collect::<HashMap<_, _>>();
-    let result = EventRouter::resolve(
+    let entries = Arc::new(entries);
+    let resources = Arc::new(resources);
+    let request = ProviderRequest {
+        method: "decorations.resolve".into(),
+        params: json!({}),
+    };
+    let result = EventRouter::resolve_typed(
         "decorations.resolve",
         providers,
-        |_, id| super::builtin::resolve_in(id, directory, &entries),
-        |plugin| {
-            crate::plugins::events::invoke_resources(
-                plugin,
-                "decorations.resolve",
-                json!({}),
-                &resources,
-                Some(directory),
-            )
-        },
-        |provider, response| {
-            if matches!(provider.handler, Handler::Builtin(_)) {
-                return serde_json::from_value::<Vec<Decoration>>(response["decorations"].clone())
-                    .map_err(|error| error.to_string());
-            }
-            let Handler::Plugin(plugin) = &provider.handler else {
-                unreachable!()
+        &request,
+        |resolver, request| {
+            let items = match &resolver.handler {
+                Handler::Builtin(id) => {
+                    let invocation = super::invocation::CoreDecorationInvocation::native(
+                        directory.into(),
+                        entries.clone(),
+                        resources.clone(),
+                    );
+                    serde_json::to_value(super::native::invoke(id, &invocation)?)
+                        .map_err(|error| error.to_string())?
+                        .as_array()
+                        .cloned()
+                        .ok_or_else(|| "invalid native DecorationProvider result".to_string())?
+                }
+                Handler::Plugin(plugin) => {
+                    let response = super::proxy::ScopedDecorationProxy::new(
+                        (**plugin).clone(),
+                        directory,
+                        entries.clone(),
+                        resources.clone(),
+                    )?
+                    .resolve(request)?;
+                    serde_json::from_value::<Vec<Value>>(response)
+                        .map_err(|error| error.to_string())?
+                }
             };
-            let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
-            let mut response = response;
-            bind_targets(&mut response, &resources);
-            decode(&entries, manifest, folder, response)
+            Ok(items)
+        },
+        |provider, items| {
+            let mut response = json!({"decorations": items});
+            crate::plugins::events::validate_result("decorations.resolve", &response)?;
+            let values = if matches!(provider.handler, Handler::Builtin(_)) {
+                serde_json::from_value::<Vec<Decoration>>(response["decorations"].clone())
+                    .map_err(|error| error.to_string())?
+            } else {
+                let Handler::Plugin(plugin) = &provider.handler else {
+                    unreachable!()
+                };
+                let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
+                bind_targets(&mut response, resources.as_slice());
+                decode(entries.as_ref(), manifest, folder, response)?
+            };
+            serde_json::to_value(values)
+                .map_err(|error| error.to_string())?
+                .as_array()
+                .cloned()
+                .ok_or_else(|| "invalid DecorationProvider result".into())
         },
         |_| true,
         |outcomes| {
             let mut merged = HashMap::new();
             for (provider, result) in outcomes.into_iter().rev() {
                 if let Ok(values) = result {
-                    for value in values {
+                    for raw in values {
+                        let Ok(value) = serde_json::from_value::<Decoration>(raw) else {
+                            continue;
+                        };
                         let path = value.path.clone();
                         merge(
                             &mut merged,
-                            &entries,
+                            entries.as_ref(),
                             &path,
                             provider.priority.clamp(i32::MIN as i64, i32::MAX as i64) as i32,
                             &provider.name,

@@ -33,19 +33,29 @@ pub struct Mount {
 }
 
 impl Mount {
-    fn invoke(&self, method: &str, mut params: Value) -> Result<Value, String> {
+    fn invoke(&self, method: &str, params: Value) -> Result<Value, String> {
+        proxy::invoke(self, method, params)
+    }
+
+    pub(super) fn invoke_remote(&self, method: &str, mut params: Value) -> Result<Value, String> {
+        if !endpoint::method_allowed(self, method) {
+            return Err("unsupported or unregistered VFS operation for this mount".into());
+        }
         let object = params
             .as_object_mut()
             .ok_or("file-system parameters must be an object")?;
         object.insert("mountId".into(), json!(self.mount_id));
         match &self.source {
             Source::Connection(config) => {
+                object.remove("contributionId");
+                object.remove("viewContext");
                 object.insert("connection".into(), config.clone());
             }
             Source::View {
                 contribution_id,
                 view_context,
             } => {
+                object.remove("connection");
                 object.insert("contributionId".into(), json!(contribution_id));
                 object.insert("viewContext".into(), view_context.clone());
             }
@@ -58,6 +68,10 @@ impl Mount {
         )
     }
 
+    pub(super) fn operations(&self) -> Option<Vec<FsOperation>> {
+        crate::plugins::provider_registry::operations_mount(&self.plugin_id, &self.mount_id)
+    }
+
     pub fn list(
         &self,
         node_id: &str,
@@ -67,6 +81,7 @@ impl Mount {
         let mut cursor: Option<String> = None;
         let mut entries = Vec::new();
         let mut warnings = Vec::new();
+        let mut truncated = false;
         let mut cursors = std::collections::HashSet::new();
         for _ in 0..MAX_PAGES {
             let page = self.invoke(
@@ -79,32 +94,26 @@ impl Mount {
                     "limit": PAGE_LIMIT,
                 }),
             )?;
-            let items = page
-                .get("entries")
-                .and_then(Value::as_array)
-                .ok_or("provider listing is missing entries")?;
-            if items.len() > PAGE_LIMIT {
-                return Err("provider exceeded the page limit".into());
-            }
-            for item in items {
-                entries.push(FsEntry::parse(item.clone())?);
+            // The same bounded pagination DTO is accepted by Core and
+            // emitted by SDK VFS implementations.
+            let page: fiex_provider_contracts::VfsPage = serde_json::from_value(page)
+                .map_err(|error| format!("invalid VFS listing page: {error}"))?;
+            page.validate_page(PAGE_LIMIT)?;
+            truncated |= page.truncated;
+            for item in page.entries {
+                entries.push(FsEntry::parse(item)?);
                 if entries.len() > MAX_ENTRIES {
                     return Err("provider returned too many entries".into());
                 }
             }
-            if let Some(values) = page.get("warnings").and_then(Value::as_array) {
-                warnings.extend(values.iter().filter_map(Value::as_str).map(str::to_owned));
-            }
-            let next = page
-                .get("nextCursor")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
+            warnings.extend(page.warnings);
+            let next = page.next_cursor;
             match next {
                 None => {
                     return Ok(FsListing {
                         entries,
                         warnings,
-                        truncated: false,
+                        truncated,
                     })
                 }
                 Some(next) if !cursors.insert(next.clone()) => {
@@ -120,9 +129,7 @@ impl Mount {
         &self,
         request: &crate::plugin_sdk::filesystem::TransferPreflight,
     ) -> Result<(), String> {
-        if !crate::plugins::provider_registry::get(&self.plugin_id)
-            .is_some_and(|provider| provider.preflight)
-        {
+        if !crate::plugins::provider_registry::preflight_mount(&self.plugin_id, &self.mount_id) {
             return Ok(());
         }
         let reply = self.invoke(
@@ -178,22 +185,20 @@ impl Mount {
                     "ignores": ignores, "limit": remaining.min(PAGE_LIMIT), "cursor": cursor,
                 }),
             )?;
-            let items = page["entries"]
-                .as_array()
-                .ok_or("provider search is missing entries")?;
-            if items.len() > remaining.min(PAGE_LIMIT) {
-                return Err("provider exceeded the search limit".into());
-            }
-            for item in items {
+            let page: fiex_provider_contracts::SearchResults = serde_json::from_value(page)
+                .map_err(|error| format!("invalid VFS search page: {error}"))?;
+            page.validate_page(remaining.min(PAGE_LIMIT))?;
+            for item in page.entries {
                 if cancelled() {
                     return Ok(true);
                 }
-                emit(FsEntry::parse(item.clone())?)?;
+                emit(FsEntry::parse(item)?)?;
                 count += 1;
             }
-            let next = page["nextCursor"].as_str().map(str::to_owned);
+            let truncated = page.truncated;
+            let next = page.next_cursor;
             match next {
-                None => return Ok(page["truncated"].as_bool().unwrap_or(false)),
+                None => return Ok(truncated),
                 Some(next) if !seen.insert(next.clone()) => {
                     return Err("search pagination cursor did not advance".into())
                 }
@@ -229,26 +234,15 @@ impl Mount {
     }
 
     pub fn open_read(&self, node_id: &str) -> Result<FsStream, String> {
-        let value = self.invoke("vfs.openRead", json!({"nodeId": node_id}))?;
-        let stream_id = value
-            .get("streamId")
-            .and_then(Value::as_str)
-            .ok_or("provider did not return a stream id")?
-            .to_string();
-        Ok(FsStream {
-            mount: self.clone(),
-            stream_id,
-            size: value.get("size").and_then(Value::as_u64),
-            closed: false,
-        })
+        proxy::open_read(self, json!({"nodeId": node_id})).map(FsStream::new)
     }
 
     pub fn begin_write(&self, request: WriteRequest<'_>) -> Result<FsWriteStream, String> {
         if let Some(name) = request.name {
             crate::plugins::mounts::segment(name)?;
         }
-        let value = self.invoke(
-            "vfs.beginWrite",
+        let write = proxy::begin_write(
+            self,
             json!({
                 "nodeId": request.node_id,
                 "parentId": request.parent_id,
@@ -257,22 +251,16 @@ impl Mount {
                 "ifRevision": request.if_revision,
             }),
         )?;
-        let stream_id = value
-            .get("streamId")
-            .and_then(Value::as_str)
-            .ok_or("provider did not return a write stream id")?
-            .to_string();
-        Ok(FsWriteStream {
-            mount: self.clone(),
-            stream_id,
-            offset: 0,
-            finished: false,
-        })
+        Ok(FsWriteStream::new(write))
     }
 
     /// Whether the provider declared an operation, for UI decisions.
     pub fn supports(&self, operation: FsOperation) -> bool {
-        crate::plugins::provider_registry::supports(&self.plugin_id, operation)
+        crate::plugins::provider_registry::supports_mount(
+            &self.plugin_id,
+            &self.mount_id,
+            operation,
+        )
     }
 }
 
@@ -314,8 +302,15 @@ pub fn mount_for_path(path: &str) -> Result<Mount, String> {
     }
 }
 
+mod endpoint;
+mod proxy;
 mod streams;
 mod types;
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
 pub use streams::{FsStream, FsWriteStream};
 pub use types::{FsEntry, FsKind, FsListing, WriteRequest};
 #[cfg(test)]

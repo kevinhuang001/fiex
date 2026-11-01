@@ -11,8 +11,8 @@
 //! - `rename` / `batch-rename`: require `rename` in a writable directory.
 //! - `clipboard`: `copy` requires `read`, `cut` requires `rename` in a writable
 //!   directory, `duplicate` requires `read && write` in a writable directory.
-//! - `trash`: requires `remove` in a writable directory; `restore`/`delete`
-//!   keep today's in-trash behaviour.
+//! - `trash`: requires `remove` in a writable directory. View-specific
+//!   restore, purge and empty actions belong only to the registered view provider.
 //! - `terminal` / `tags`: local selections only, because Core has no remote
 //!   terminal or tag path.
 //! - `copy-path`: always; it only uses the location Core already knows.
@@ -27,15 +27,19 @@
 //! re-checks the same call on execute.
 use super::connection_cache::ConnectionCache;
 use crate::core::files::Entry;
+use crate::plugins::provider_registry::native::NativeProviderRegistry;
+use crate::plugins::provider_registry::FsOperation;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
+use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
 use serde_json::{json, Value};
+use std::sync::{Arc, OnceLock};
 
 /// The selection a menu is resolved for.
 pub(super) struct Selection<'a> {
+    pub(super) directory: &'a str,
     pub(super) paths: &'a [String],
     pub(super) entries: &'a [Entry],
     pub(super) read_only: bool,
-    pub(super) in_trash: bool,
     pub(super) all_local: bool,
 }
 
@@ -45,29 +49,99 @@ impl Selection<'_> {
     }
 }
 
-pub(super) trait BuiltinResolver {
+pub(super) trait BuiltinResolver: Send + Sync {
     fn id(&self) -> &'static str;
     fn priority(&self) -> i64;
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool;
     fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<Value>;
 }
 
-/// Canonical order; a filtered-out group keeps every later group's priority.
-const GROUPS: [&dyn BuiltinResolver; 10] = [
-    &Opening,
-    &Tags,
-    &Create,
-    &ConnectionCache,
-    &Rename,
-    &BatchRename,
-    &Clipboard,
-    &Terminal,
-    &CopyPath,
-    &Trash,
-];
+/// Every generic Core menu group is a registered typed provider instance.
+/// Capabilities determine eligibility; no per-request provider ID switch.
+fn registry() -> &'static NativeProviderRegistry<dyn BuiltinResolver> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn BuiltinResolver>> = OnceLock::new();
+    REGISTERED.get_or_init(|| {
+        let mut values: NativeProviderRegistry<dyn BuiltinResolver> =
+            NativeProviderRegistry::new(ProviderKind::ContextMenu);
+        let implementations: [Arc<dyn BuiltinResolver>; 10] = [
+            Arc::new(Opening),
+            Arc::new(Tags),
+            Arc::new(Create),
+            Arc::new(ConnectionCache),
+            Arc::new(Rename),
+            Arc::new(BatchRename),
+            Arc::new(Clipboard),
+            Arc::new(Terminal),
+            Arc::new(CopyPath),
+            Arc::new(Trash),
+        ];
+        for implementation in implementations {
+            let rule = match implementation.id() {
+                "builtin:tags" | "builtin:terminal" => ProviderMatchRule {
+                    storage: Some(LocationMatch {
+                        provider_ids: Some(vec!["core:local-fs".into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                "builtin:connection-cache" => ProviderMatchRule {
+                    storage: Some(LocationMatch {
+                        types: Some(vec!["vfs".into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                _ => ProviderMatchRule::default(),
+            };
+            values
+                .register(
+                    implementation.id(),
+                    implementation.priority(),
+                    rule,
+                    implementation,
+                )
+                .expect("invalid builtin menu registration");
+        }
+        values
+    })
+}
 
-pub(super) fn groups() -> &'static [&'static dyn BuiltinResolver] {
-    &GROUPS
+pub(super) fn available(
+    selection: &Selection<'_>,
+    capabilities: &FileCapabilities,
+) -> Vec<&'static dyn BuiltinResolver> {
+    let targets = selection
+        .paths
+        .iter()
+        .enumerate()
+        .map(|(index, path)| {
+            let entry = selection.entries.get(index);
+            let (view, storage) = crate::plugins::match_rules::locations_for(path);
+            let operations = entry
+                .map(|entry| crate::plugins::resource::file_capabilities::for_entry(path, entry))
+                .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(path));
+            let operations = FsOperation::ALL
+                .into_iter()
+                .filter(|operation| operations.allows(*operation))
+                .map(FsOperation::as_str)
+                .collect::<Vec<_>>();
+            json!({
+                "kind": entry.map(|entry| if entry.is_dir { "directory" } else { "file" }),
+                "extension": entry.map(|entry| entry.extension.as_str()),
+                "mime": entry.map(|entry| entry.mime.as_str()),
+                "view": view,
+                "storage": storage,
+                "operations": operations,
+            })
+        })
+        .collect::<Vec<_>>();
+    let directory = crate::plugins::match_rules::directory_metadata(selection.directory);
+    registry()
+        .matched_candidates(&targets, directory.as_ref(), selection.paths.len())
+        .iter()
+        .filter_map(|candidate| registry().get(&candidate.id))
+        .filter(|implementation| implementation.available(selection, capabilities))
+        .collect()
 }
 
 struct Opening;
@@ -259,12 +333,7 @@ impl BuiltinResolver for Trash {
         capabilities.remove && !selection.read_only && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<Value> {
-        let mut items = if selection.in_trash {
-            vec![
-                item("restore", "放回原处", "restore", ""),
-                item("delete", "彻底删除", "trash", ""),
-            ]
-        } else if selection.all_local {
+        let mut items = if selection.all_local {
             // The platform Trash only accepts local paths. Windows exposes the
             // Recycle Bin under that name; the rest keep the Trash wording.
             let title = if cfg!(windows) {
@@ -280,7 +349,7 @@ impl BuiltinResolver for Trash {
         };
         for item in &mut items {
             item["placement"] = json!("tail");
-            item["danger"] = json!(item["id"] != "restore");
+            item["danger"] = json!(true);
         }
         items
     }
@@ -289,4 +358,43 @@ impl BuiltinResolver for Trash {
 pub(super) fn item(id: &str, title: &'static str, icon: &str, shortcut: &str) -> Value {
     // Availability decides presence; a builtin item is never greyed out.
     json!({"id":id,"kind":"action","title":crate::i18n::t(title),"icon":icon,"shortcut":shortcut,"disabled":false})
+}
+
+#[cfg(test)]
+mod registry_tests {
+    use super::*;
+
+    #[test]
+    fn generic_native_menus_are_distinct_registered_context_menu_providers() {
+        let registered = registry();
+        assert_eq!(registered.len(), 10);
+        for descriptor in registered.descriptors() {
+            assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
+            descriptor.validate().unwrap();
+        }
+        let sorted = registered.candidates(|_| true);
+        assert_eq!(sorted[0].id, "builtin:opening");
+        assert_eq!(sorted.last().unwrap().id, "builtin:trash");
+        assert!(sorted
+            .windows(2)
+            .all(|pair| pair[0].priority >= pair[1].priority));
+        assert!(registered.get("builtin:nonexistent").is_none());
+    }
+
+    #[test]
+    fn capabilities_are_checked_by_each_registered_native_menu() {
+        let no_paths: Vec<String> = Vec::new();
+        let entries: Vec<Entry> = Vec::new();
+        let selection = Selection {
+            directory: "/tmp",
+            paths: &no_paths,
+            entries: &entries,
+            read_only: false,
+            all_local: true,
+        };
+        assert!(available(&selection, &FileCapabilities::default()).is_empty());
+        let allowed = available(&selection, &FileCapabilities::ALL);
+        assert_eq!(allowed.len(), 1);
+        assert_eq!(allowed[0].id(), "builtin:create");
+    }
 }

@@ -99,6 +99,19 @@ fn child(relative: &str, name: &str) -> Result<String, String> {
     })
 }
 
+/// Intersect the Core-verified mount ceiling with the node's restrictions.
+/// This stays pure so tests cannot accidentally grant a fake mount authority.
+fn allowed_operations(
+    entry: &FsEntry,
+    provider_supports: impl Fn(FsOperation) -> bool,
+) -> Vec<String> {
+    FsOperation::ALL
+        .into_iter()
+        .filter(|operation| provider_supports(*operation) && entry.allows(*operation))
+        .map(|operation| operation.as_str().to_string())
+        .collect()
+}
+
 fn project_entry(
     mount: &Mount,
     uri: &crate::plugins::mounts::Uri,
@@ -112,11 +125,7 @@ fn project_entry(
         return Err("provider node name does not match its location".into());
     }
     let path = crate::plugins::mounts::uri(&uri.mount_id, relative)?;
-    let allowed_ops = FsOperation::ALL
-        .into_iter()
-        .filter(|operation| mount.supports(*operation) && entry.allows(*operation))
-        .map(|operation| operation.as_str().to_string())
-        .collect::<Vec<_>>();
+    let allowed_ops = allowed_operations(&entry, |operation| mount.supports(operation));
     // Read-only is an explicit provider flag. Per-operation restrictions live
     // in `allowed_ops`: a provider that supports only `remove` must still be
     // able to delete, so the absence of the other mutating operations cannot

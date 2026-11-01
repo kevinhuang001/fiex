@@ -79,6 +79,9 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
     case 'delete':
       props.deletePermanently(effect.paths)
       break
+    case 'emptyTrash':
+      props.emptyTrash()
+      break
     case 'terminal':
       props.terminal()
       break

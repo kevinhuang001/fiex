@@ -25,9 +25,11 @@ fn entry(name: String, path: String, is_dir: bool, original: &str, deleted: &str
         created: 0,
         extension,
         mime: String::new(),
-        readonly: false,
+        readonly: true,
         link_target: (!original.is_empty()).then(|| original.to_string()),
-        allowed_ops: vec![],
+        // Recycle Bin items expose metadata; shell restore/purge are not
+        // generic storage mutations and go through dedicated menu actions.
+        allowed_ops: vec!["stat".into()],
         tags: vec![],
         has_cache: false,
         pinned: false,

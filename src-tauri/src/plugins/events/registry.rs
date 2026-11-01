@@ -1,4 +1,5 @@
 use super::*;
+use fiex_provider_contracts::ProviderRequest;
 #[derive(Clone)]
 pub enum Handler {
     Builtin(&'static str),
@@ -25,55 +26,80 @@ impl Resolver {
     }
 }
 
-impl EventRouter {
-    pub fn providers(
-        method: &str,
-        metadata: &[Value],
-        directory: &str,
-        mut providers: Vec<Resolver>,
-    ) -> Vec<Resolver> {
-        let Some(event) = event(method) else {
-            return providers;
-        };
-        for plugin in crate::plugins::host::catalog_matching(|manifest| {
-            matching::matches(method, &manifest.extensions, metadata, directory)
-        }) {
-            if !plugin.enabled || !plugin.approved || !plugin.backend_available {
-                continue;
-            }
-            let Some(contribution) = plugin.extensions.get(event.extension) else {
-                continue;
-            };
-            if !contribution.is_object() && contribution.as_bool() != Some(true) {
-                continue;
-            }
-            let declared = plugin.declared_permissions.iter().cloned().collect();
-            let policy =
-                crate::plugins::security::policy::PermissionPolicy::new(&plugin.id, &declared);
-            let required = match method {
-                "decorations.resolve" => {
-                    Some(crate::plugins::security::policy::Capability::FoldersRead)
-                }
-                "hooks.invoke" => Some(crate::plugins::security::policy::Capability::Hooks),
-                _ => None,
-            };
-            if required.is_some_and(|capability| !policy.allowed(capability)) {
-                continue;
-            }
-            providers.push(Resolver {
-                id: format!("plugin:{}", plugin.id),
-                name: plugin.name.clone(),
-                priority: contribution
-                    .get("priority")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(50),
-                handler: Handler::Plugin(Box::new(plugin)),
-            });
+/// Transport-sensitive provider identity binding happens during registry
+/// selection, never inside the EventRouter dispatch/validation policy.
+pub(super) fn bind_request(
+    resolver: &Resolver,
+    request: &ProviderRequest,
+) -> Result<ProviderRequest, String> {
+    match &resolver.handler {
+        Handler::Builtin(_) => Ok(request.clone()),
+        Handler::Plugin(plugin) => bound_plugin_request(request, &plugin.id, &resolver.id),
+    }
+}
+
+fn bound_plugin_request(
+    request: &ProviderRequest,
+    plugin_id: &str,
+    registered_id: &str,
+) -> Result<ProviderRequest, String> {
+    let mut routed = request.clone();
+    let fields = routed
+        .params
+        .as_object_mut()
+        .ok_or("provider parameters must be an object")?;
+    fields.remove("providerId");
+    let prefix = format!("plugin:{plugin_id}:");
+    if let Some(id) = registered_id.strip_prefix(&prefix) {
+        if id.is_empty() {
+            return Err("empty registered provider instance ID".into());
         }
-        providers.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.id.cmp(&b.id)));
-        // One shared preference model covers every priority-aware feature:
-        // the user's stored order wins over manifest defaults and disabled
-        // contributions are removed without disabling the whole plugin.
-        crate::plugins::preferences::apply(event.extension, providers)
+        fields.insert("providerId".into(), serde_json::json!(id));
+    } else if registered_id != format!("plugin:{plugin_id}") {
+        // Never execute an endpoint with an identity from a different plugin.
+        return Err("provider instance does not belong to selected plugin".into());
+    }
+    Ok(routed)
+}
+
+#[cfg(test)]
+mod instance_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn core_binds_selected_instance_and_erases_forged_provider_ids() {
+        let forged = ProviderRequest {
+            method: "info.resolve".into(),
+            params: json!({"providerId":"forged","other":"ok"}),
+        };
+        let named = bound_plugin_request(
+            &forged,
+            "org.example.viewer",
+            "plugin:org.example.viewer:media",
+        )
+        .unwrap();
+        assert_eq!(named.params["providerId"], "media");
+        assert_eq!(named.params["other"], "ok");
+        let single =
+            bound_plugin_request(&forged, "org.example.viewer", "plugin:org.example.viewer")
+                .unwrap();
+        assert!(single.params.get("providerId").is_none());
+        assert!(
+            bound_plugin_request(&forged, "org.example.viewer", "plugin:another.plugin:media")
+                .is_err()
+        );
+        assert!(
+            bound_plugin_request(&forged, "org.example.viewer", "plugin:org.example.viewer:")
+                .is_err()
+        );
+        assert!(bound_plugin_request(
+            &ProviderRequest {
+                method: "info.resolve".into(),
+                params: json!(null)
+            },
+            "org.example.viewer",
+            "plugin:org.example.viewer"
+        )
+        .is_err());
     }
 }

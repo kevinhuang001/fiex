@@ -12,7 +12,6 @@ export function Sidebar({
   prefs,
   update,
   onTrash,
-  onEmptyTrash,
   onApplications,
   onAddConnection,
   onEditConnection,
@@ -69,7 +68,6 @@ export function Sidebar({
         prefs={prefs}
         update={update}
         onTrash={onTrash}
-        onEmptyTrash={onEmptyTrash}
         onEject={onEject}
         onEjectDevice={onEjectDevice}
         onMount={onMount}

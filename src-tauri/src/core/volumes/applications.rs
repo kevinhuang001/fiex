@@ -32,7 +32,7 @@ fn entry(name: String, path: String, extension: &str, modified: u64, readonly: b
         created: modified,
         extension: extension.into(),
         mime: "application/x-fiex-application".into(),
-        readonly: false,
+        readonly,
         link_target: None,
         allowed_ops: if readonly {
             vec!["stat".into()]
@@ -327,6 +327,7 @@ pub fn stored_entry(uri: &str) -> Result<Entry, String> {
         vec![
             "stat".into(),
             "list".into(),
+            "search".into(),
             "mkdir".into(),
             "rename".into(),
             "remove".into(),
@@ -1080,6 +1081,28 @@ mod executable_target_tests {
 #[cfg(test)]
 mod folder_listing_tests {
     use super::*;
+
+    #[test]
+    fn system_application_metadata_is_read_only_even_before_capability_matching() {
+        let protected = entry(
+            "System App".into(),
+            "applications://c3lzdGVt".into(),
+            "app",
+            0,
+            true,
+        );
+        assert!(protected.readonly);
+        assert_eq!(protected.allowed_ops, vec!["stat"]);
+        let user = entry(
+            "Shortcut".into(),
+            "applications://~dXNlcg".into(),
+            "app",
+            0,
+            false,
+        );
+        assert!(!user.readonly);
+        assert!(user.allowed_ops.iter().any(|op| op == "remove"));
+    }
 
     #[test]
     fn user_uris_use_one_segment_and_keep_legacy_links_working() {
