@@ -75,12 +75,13 @@ pub fn run_stream(
                 let Handler::Plugin(plugin) = &resolver.handler else {
                     return Err("native search runs through the streaming walker".into());
                 };
+                let routed = crate::plugins::events::bind_provider_request(resolver, routed)?;
                 let proxy = proxy::ScopedSearchProxy::new(
                     (**plugin).clone(),
                     &resources,
                     &request.root,
                 )?;
-                let page = proxy.query_typed(routed)?;
+                let page = proxy.query_typed(&routed)?;
                 page.validate_page(remaining)?;
                 let response = serde_json::to_value(&page).map_err(|error| error.to_string())?;
                 let entries = validated(resolver, response, request)?;
