@@ -27,7 +27,7 @@ pub trait NativeVfsProvider: Send + Sync {
     fn stat(&self, path: &str) -> Result<Entry, String>;
     /// Explicit storage-operation ceiling. Presentation and dispatch must not
     /// infer write support from an adapter name or from readonly=false.
-    fn operations(&self, path: &str) -> Vec<&'static str>;
+    fn operations(&self, path: &str) -> Vec<FsOperation>;
     /// Enforce the current native instance's policy at invocation time.
     /// ResourceBroker has already authorized the scope; no generic adapter
     /// may identify a builtin view by its URI or provider ID.
@@ -87,14 +87,14 @@ impl NativeVfsProvider for RecentView {
     fn readonly(&self) -> bool {
         true
     }
-    fn operations(&self, path: &str) -> Vec<&'static str> {
+    fn operations(&self, path: &str) -> Vec<FsOperation> {
         if path == RECENT_URI {
             // Recent's root is an enumerable directory, not readable content.
-            vec!["list", "stat", "search"]
+            vec![FsOperation::List, FsOperation::Stat, FsOperation::Search]
         } else {
             // An alias is a read-only file; its actual source permissions are
             // further narrowed by Recent's entry_for_alias implementation.
-            vec!["stat", "read"]
+            vec![FsOperation::Stat, FsOperation::Read]
         }
     }
     fn require(
@@ -104,6 +104,9 @@ impl NativeVfsProvider for RecentView {
         op: FsOperation,
         _create: bool,
     ) -> Result<(), String> {
+        if !self.operations(path).contains(&op) {
+            return Err(format!("Unsupported: {}", op.as_str()));
+        }
         if path == RECENT_URI {
             return if matches!(
                 op,
@@ -166,15 +169,22 @@ impl NativeVfsProvider for ApplicationView {
         // read-only so Core's context-menu resolver can hide delete for it.
         false
     }
-    fn operations(&self, path: &str) -> Vec<&'static str> {
+    fn operations(&self, path: &str) -> Vec<FsOperation> {
         if path == APPLICATIONS_URI {
-            vec!["list", "stat", "search", "write", "mkdir"]
+            vec![FsOperation::List, FsOperation::Stat, FsOperation::Search, FsOperation::Mkdir]
         } else if applications::is_user(path) {
             vec![
-                "list", "stat", "search", "read", "write", "mkdir", "rename", "remove",
+                FsOperation::List,
+                FsOperation::Stat,
+                FsOperation::Search,
+                FsOperation::Read,
+                FsOperation::Write,
+                FsOperation::Mkdir,
+                FsOperation::Rename,
+                FsOperation::Remove,
             ]
         } else {
-            vec!["stat"]
+            vec![FsOperation::Stat]
         }
     }
     fn require(
@@ -184,6 +194,9 @@ impl NativeVfsProvider for ApplicationView {
         op: FsOperation,
         create: bool,
     ) -> Result<(), String> {
+        if !self.operations(path).contains(&op) {
+            return Err(format!("Unsupported: {}", op.as_str()));
+        }
         if path == APPLICATIONS_URI {
             return if matches!(
                 op,
@@ -281,11 +294,11 @@ impl NativeVfsProvider for TrashView {
         // Generic FS mutations are forbidden; dedicated menu actions are separate.
         true
     }
-    fn operations(&self, _path: &str) -> Vec<&'static str> {
+    fn operations(&self, _path: &str) -> Vec<FsOperation> {
         // Trash is enumerated and inspected through VFS. Restore and purge
         // are dedicated, session-validated menu actions, never generic remove.
         // A specific node's allowed_ops determines whether list/search is possible.
-        vec!["list", "stat", "search"]
+        vec![FsOperation::List, FsOperation::Stat, FsOperation::Search]
     }
     fn require(
         &self,
@@ -294,6 +307,9 @@ impl NativeVfsProvider for TrashView {
         op: FsOperation,
         _create: bool,
     ) -> Result<(), String> {
+        if !self.operations(path).contains(&op) {
+            return Err(format!("Unsupported: {}", op.as_str()));
+        }
         let entry = self.stat(path)?;
         if op == FsOperation::Stat
             || (matches!(op, FsOperation::List | FsOperation::Search)
