@@ -2,8 +2,10 @@
 //! identifier: live plugin state, scoped resources and operation grants are
 //! supplied anew on each request and never stored in the registry.
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderInstances, ProviderKind, ProviderMatchRule, ProviderRequest,
+    InfoProvider, InfoSection, ProviderDescriptor, ProviderError, ProviderInstances,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,
 };
 use serde_json::Value;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -89,6 +91,31 @@ impl ScopedInfoProxy {
 
     pub fn resolve(&self, request: &ProviderRequest) -> Result<Value, String> {
         self.handler.resolve(&self.plugin, &self.resource, request)
+    }
+
+    pub fn resolve_typed(
+        &self,
+        request: &ProviderRequest,
+    ) -> Result<Vec<InfoSection>, ProviderError> {
+        let invocation = NativeProviderInvocation::new(
+            request.method.clone(),
+            request.params.clone(),
+            std::slice::from_ref(self.resource.as_ref()),
+            None,
+        );
+        InfoProvider::resolve(self, &invocation)
+    }
+}
+
+impl InfoProvider for ScopedInfoProxy {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
+        let request = ProviderRequest {
+            method: ctx.method().to_owned(),
+            params: ctx.params().clone(),
+        };
+        let value = ScopedInfoProxy::resolve(self, &request).map_err(ProviderError::internal)?;
+        serde_json::from_value(value["sections"].clone())
+            .map_err(|error| ProviderError::internal(error.to_string()))
     }
 }
 

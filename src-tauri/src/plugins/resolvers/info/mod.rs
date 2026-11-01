@@ -24,7 +24,7 @@ mod native;
 mod proxy;
 pub use media::media_sections;
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
-fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
+fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
     use crate::plugins::events::{EventRouter, Handler};
     let metadata =
         crate::plugins::events::resource_metadata(std::slice::from_ref(&resource)).remove(0);
@@ -44,7 +44,6 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
             let endpoint: Box<dyn ProviderEndpoint> = match &resolver.handler {
                 Handler::Builtin(id) => Box::new(endpoint::NativeInfoEndpoint {
                     id: (*id).into(),
-                    display: display.into(),
                     resource: resource.clone(),
                 }),
                 Handler::Plugin(plugin) => Box::new(proxy::ScopedInfoProxy::new(
@@ -109,7 +108,7 @@ fn resolve_info(display: &str, resource: ResourceSnapshot) -> Vec<InfoSection> {
 
 /// Remote metadata is matched directly; content providers materialize lazily.
 pub fn file_info_resource(display: &str) -> Result<Vec<InfoSection>, String> {
-    Ok(resolve_info(display, ResourceSnapshot::resolve(display)?))
+    Ok(resolve_info(ResourceSnapshot::resolve(display)?))
 }
 
 #[cfg(test)]

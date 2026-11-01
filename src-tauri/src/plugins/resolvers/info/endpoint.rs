@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 pub(super) struct NativeInfoEndpoint {
     pub id: String,
-    pub display: String,
     pub resource: Arc<ResourceSnapshot>,
 }
 
@@ -18,14 +17,17 @@ impl ProviderEndpoint for NativeInfoEndpoint {
         if request.method != "info.resolve" {
             return Err("unregistered Info event".into());
         }
-        let sections = native::invoke(&self.id, &self.display, &self.resource)?;
+        let sections = native::invoke(&self.id, &self.resource).map_err(|error| error.to_string())?;
         Ok(json!({"sections": sections}))
     }
 }
 
 impl ProviderEndpoint for ScopedInfoProxy {
     fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        self.resolve(request)
+        let sections = self
+            .resolve_typed(request)
+            .map_err(|error| error.to_string())?;
+        Ok(json!({"sections": sections}))
     }
 }
 
@@ -41,7 +43,6 @@ mod tests {
         ));
         let endpoint = NativeInfoEndpoint {
             id: "core.metadata".into(),
-            display: "/opaque".into(),
             resource,
         };
         assert!(endpoint

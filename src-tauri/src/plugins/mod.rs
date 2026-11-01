@@ -14,6 +14,7 @@ pub mod net;
 pub(crate) mod oauth;
 pub mod preferences;
 pub mod provider_registry;
+pub(crate) mod native_invocation;
 pub mod resolvers;
 pub mod resource;
 pub mod resources;

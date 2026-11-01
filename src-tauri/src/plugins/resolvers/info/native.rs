@@ -4,28 +4,20 @@
 //! inside the EventRouter or the per-request endpoint.
 use super::{media::media_sections, metadata::metadata_section, InfoSection};
 use crate::plugins::events::Resolver;
+use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{
+    InfoProvider, ProviderError, ProviderInvocation, ProviderKind, ProviderMatchRule,
+};
 use std::sync::{Arc, OnceLock};
 
-trait NativeInfoProvider: Send + Sync {
-    fn resolve(
-        &self,
-        display: &str,
-        resource: &ResourceSnapshot,
-    ) -> Result<Vec<InfoSection>, String>;
-}
-
 struct MetadataInfo;
-impl NativeInfoProvider for MetadataInfo {
-    fn resolve(
-        &self,
-        display: &str,
-        resource: &ResourceSnapshot,
-    ) -> Result<Vec<InfoSection>, String> {
+impl InfoProvider for MetadataInfo {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
+        let resource = NativeProviderInvocation::resource(ctx, 0)?;
         Ok(vec![metadata_section(
-            display,
+            &resource.display,
             &resource.local,
             resource.stat.as_ref(),
             resource.metadata(),
@@ -34,22 +26,22 @@ impl NativeInfoProvider for MetadataInfo {
 }
 
 struct MediaInfo;
-impl NativeInfoProvider for MediaInfo {
-    fn resolve(
-        &self,
-        _display: &str,
-        resource: &ResourceSnapshot,
-    ) -> Result<Vec<InfoSection>, String> {
-        Ok(media_sections(&resource.export_path()?))
+impl InfoProvider for MediaInfo {
+    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
+        let resource = NativeProviderInvocation::resource(ctx, 0)?;
+        let path = resource
+            .export_path()
+            .map_err(ProviderError::internal)?;
+        Ok(media_sections(&path))
     }
 }
 
 /// Each registered native implementation has one persistent, typed Arc.
 /// The request-scoped ResourceSnapshot never enters this global registry.
-fn registry() -> &'static NativeProviderRegistry<dyn NativeInfoProvider> {
-    static REGISTRY: OnceLock<NativeProviderRegistry<dyn NativeInfoProvider>> = OnceLock::new();
+fn registry() -> &'static NativeProviderRegistry<dyn InfoProvider> {
+    static REGISTRY: OnceLock<NativeProviderRegistry<dyn InfoProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn NativeInfoProvider> =
+        let mut values: NativeProviderRegistry<dyn InfoProvider> =
             NativeProviderRegistry::new(ProviderKind::Info);
         values
             .register(
@@ -82,11 +74,18 @@ pub(super) fn candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
 
 pub(super) fn invoke(
     id: &str,
-    display: &str,
     resource: &ResourceSnapshot,
-) -> Result<Vec<InfoSection>, String> {
-    let provider = registry().get(id).ok_or("unknown native Info provider")?;
-    provider.resolve(display, resource)
+) -> Result<Vec<InfoSection>, ProviderError> {
+    let provider = registry()
+        .get(id)
+        .ok_or_else(|| ProviderError::method_not_found("info.resolve"))?;
+    let invocation = NativeProviderInvocation::new(
+        "info.resolve",
+        serde_json::json!({}),
+        std::slice::from_ref(resource),
+        None,
+    );
+    provider.resolve(&invocation)
 }
 
 #[cfg(test)]
@@ -112,9 +111,9 @@ mod tests {
         assert!(!candidates(&directory)
             .iter()
             .any(|provider| provider.id == "core.media"));
-        assert!(invoke("unknown", "/no-such-directory", &directory).is_err());
+        assert!(invoke("unknown", &directory).is_err());
         assert_eq!(
-            invoke("core.metadata", "/no-such-directory", &directory)
+            invoke("core.metadata", &directory)
                 .unwrap()
                 .len(),
             1
