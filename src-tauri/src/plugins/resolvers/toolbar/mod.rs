@@ -56,7 +56,8 @@ pub fn invoke(plugin_id: &str, directory: &str, paths: &[String]) -> Result<Valu
         providers,
         &request,
         |provider, request| match &provider.handler {
-            Handler::Plugin(plugin) => proxy::invoke(plugin, &resources, directory, request),
+            Handler::Plugin(plugin) => proxy::invoke(plugin, &resources, directory, request)
+                .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
             Handler::Builtin(_) => Err("native ToolbarProvider not registered".into()),
         },
         |_, result| {

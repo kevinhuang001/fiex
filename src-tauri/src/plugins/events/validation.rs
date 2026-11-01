@@ -67,11 +67,12 @@ pub fn validate_result(method: &str, value: &Value) -> Result<(), String> {
             array("entries", 500)?;
         }
         "hooks.invoke" => {
-            if value["handled"].as_bool().is_none()
-                || value.get("preview").is_some_and(|v| !v.is_boolean())
-            {
-                return Err("invalid hook response".into());
-            }
+            serde_json::from_value::<fiex_provider_contracts::HookResult>(value.clone())
+                .map_err(|error| format!("invalid hook response: {error}"))?;
+        }
+        "connection.validate" => {
+            serde_json::from_value::<fiex_provider_contracts::ConnectionValidation>(value.clone())
+                .map_err(|error| format!("invalid connection validation response: {error}"))?;
         }
         _ => {
             if !value.is_object() && !value.is_null() {
