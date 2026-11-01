@@ -89,11 +89,13 @@ pub(super) fn broker_invocation(
 ) -> NativeProviderInvocation {
     let mut target = ResourceSnapshot::from_metadata(&source.path, ResourceMetadata::default());
     target.reference = source.reference.clone();
+    target.operations = Some(Default::default());
     let mut targets = vec![target];
     if let Some(destination) = destination {
         let mut target =
             ResourceSnapshot::from_metadata(&destination.path, ResourceMetadata::default());
         target.reference = destination.reference.clone();
+        target.operations = Some(Default::default());
         targets.push(target);
     }
     NativeProviderInvocation::new(method, params, &targets, None).with_local_data(Arc::new(
