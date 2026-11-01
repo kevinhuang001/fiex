@@ -58,5 +58,8 @@ fn tags_readonly_and_conflict_survive_collection_without_badge_truncation() {
     let conflict = entry_at("applications://conflict", "conflict");
     let result = query_with_plugins("applications://", vec![conflict], false);
     assert_eq!(result[0].native_badges.len(), 1);
-    assert_eq!(result[0].native_badges[0].status.as_deref(), Some("conflict"));
+    assert_eq!(
+        result[0].native_badges[0].status.as_deref(),
+        Some("conflict")
+    );
 }
