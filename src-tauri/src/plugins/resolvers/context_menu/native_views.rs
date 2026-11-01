@@ -12,53 +12,59 @@ use crate::{
 };
 use fiex_provider_contracts::{
     ContextMenuProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderMatcher, ResourceMetadata,
+    ProviderMatchRule, ProviderMatcher, ResourceMetadata,
 };
 use serde_json::{json, Value};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 mod implementations;
 use implementations::{ApplicationsMenu, RecentMenu, TrashMenu};
 
-fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn ContextMenuProvider> =
-            NativeProviderRegistry::new(ProviderKind::ContextMenu);
-        for (id, owner, implementation) in [
-            (
-                "core.recent.menu",
-                "core:recent",
-                Arc::new(RecentMenu) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "core.applications.menu",
-                "core:applications",
-                Arc::new(ApplicationsMenu) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "core.trash.menu",
-                "core:trash",
-                Arc::new(TrashMenu) as Arc<dyn ContextMenuProvider>,
-            ),
-        ] {
-            values
-                .register(
-                    id,
-                    100,
-                    ProviderMatchRule {
-                        view: Some(LocationMatch {
-                            provider_ids: Some(vec![owner.into()]),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
-                    },
-                    implementation,
-                )
-                .expect("invalid native ContextMenuProvider registration");
-        }
+const PROVIDER_IDS: [&str; 3] = [
+    "core.recent.menu",
+    "core.applications.menu",
+    "core.trash.menu",
+];
+
+pub(super) fn register(
+    values: &mut NativeProviderRegistry<dyn ContextMenuProvider>,
+) {
+    for (id, owner, implementation) in [
+        (
+            "core.recent.menu",
+            "core:recent",
+            Arc::new(RecentMenu) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "core.applications.menu",
+            "core:applications",
+            Arc::new(ApplicationsMenu) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "core.trash.menu",
+            "core:trash",
+            Arc::new(TrashMenu) as Arc<dyn ContextMenuProvider>,
+        ),
+    ] {
         values
-    })
+            .register(
+                id,
+                100,
+                ProviderMatchRule {
+                    view: Some(LocationMatch {
+                        provider_ids: Some(vec![owner.into()]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                implementation,
+            )
+            .expect("invalid native ContextMenuProvider registration");
+    }
+}
+
+fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+    super::native_registry()
 }
 
 #[cfg(test)]
@@ -105,7 +111,11 @@ fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
         .collect::<Vec<_>>();
     let targets = crate::plugins::events::matching::match_resources(&snapshots);
     let directory_context = crate::plugins::match_rules::directory_match_resource(directory);
-    registry().matched_candidates(&targets, directory_context.as_ref(), paths.len())
+    registry()
+        .matched_candidates(&targets, directory_context.as_ref(), paths.len())
+        .into_iter()
+        .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
+        .collect()
 }
 
 pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
@@ -123,11 +133,7 @@ pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
 }
 
 pub(super) fn owns(id: &str) -> bool {
-    registry().get(id).is_some()
-}
-
-pub(super) fn provider(id: &str) -> Option<Arc<dyn ContextMenuProvider>> {
-    registry().get_arc(id)
+    PROVIDER_IDS.contains(&id)
 }
 
 pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> Vec<String> {

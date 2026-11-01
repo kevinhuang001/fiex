@@ -22,8 +22,11 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
 use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
 use crate::plugins::{
     native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot,
+    provider_registry::native::NativeProviderRegistry,
 };
-use fiex_provider_contracts::{ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderRequest};
+use fiex_provider_contracts::{
+    ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
+};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -31,6 +34,19 @@ use std::{
     time::Instant,
 };
 use validation::{root_menu_valid, submenu_depths, validated_submenu};
+
+/// All Core-owned context-menu providers share one typed registry. Their
+/// implementations stay grouped by feature in `file_ops` and `native_views`.
+pub(super) fn native_registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
+    REGISTERED.get_or_init(|| {
+        let mut providers: NativeProviderRegistry<dyn ContextMenuProvider> =
+            NativeProviderRegistry::new(ProviderKind::ContextMenu);
+        file_ops::register(&mut providers);
+        native_views::register(&mut providers);
+        providers
+    })
+}
 
 struct Session {
     provider: Resolver,
@@ -135,13 +151,14 @@ fn provider_for(
     resources: &Arc<Vec<ResourceSnapshot>>,
 ) -> (Arc<dyn ContextMenuProvider>, Option<Arc<Mutex<Option<String>>>>) {
     match resolver.plugin.as_deref() {
-        None => (file_ops::provider(&resolver.id)
-            .or_else(|| native_views::provider(&resolver.id))
-            .unwrap_or_else(|| {
+        None => (
+            native_registry().get_arc(&resolver.id).unwrap_or_else(|| {
                 Arc::new(FailedMenuProvider(
                     "registered native ContextMenuProvider disappeared".into(),
                 ))
-            }), None),
+            }),
+            None,
+        ),
         Some(plugin) => {
             let proxy = proxy::ScopedMenuProxy::new(
                 plugin.clone(),

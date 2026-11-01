@@ -35,10 +35,25 @@ use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
     ContextMenuProvider, LocationMatch, MatchResource, MenuExecuteResult, MenuItem,
     MenuPlacement, ProviderError,
-    ProviderInput, ProviderInvocation, ProviderKind, ProviderMatchRule,
+    ProviderInput, ProviderInvocation, ProviderMatchRule,
 };
+#[cfg(test)]
+use fiex_provider_contracts::ProviderKind;
 use serde_json::{json, Value};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
+
+const PROVIDER_IDS: [&str; 10] = [
+    "builtin:opening",
+    "builtin:tags",
+    "builtin:create",
+    "builtin:connection-cache",
+    "builtin:rename",
+    "builtin:batch-rename",
+    "builtin:clipboard",
+    "builtin:terminal",
+    "builtin:copy-path",
+    "builtin:trash",
+];
 
 /// The selection a menu is resolved for.
 pub(super) struct Selection<'a> {
@@ -56,87 +71,87 @@ impl Selection<'_> {
 
 /// Every generic Core menu group is registered as the same shared provider
 /// trait used by SDK plugins. Native implementations run directly in Core.
-fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn ContextMenuProvider> =
-            NativeProviderRegistry::new(ProviderKind::ContextMenu);
-        let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 10] = [
-            (
-                "builtin:opening",
-                100,
-                Arc::new(Opening) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:tags",
-                99,
-                Arc::new(Tags) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:create",
-                98,
-                Arc::new(Create) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:connection-cache",
-                98,
-                Arc::new(ConnectionCache) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:rename",
-                96,
-                Arc::new(Rename) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:batch-rename",
-                95,
-                Arc::new(BatchRename) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:clipboard",
-                94,
-                Arc::new(Clipboard) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:terminal",
-                93,
-                Arc::new(Terminal) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:copy-path",
-                92,
-                Arc::new(CopyPath) as Arc<dyn ContextMenuProvider>,
-            ),
-            (
-                "builtin:trash",
-                91,
-                Arc::new(Trash) as Arc<dyn ContextMenuProvider>,
-            ),
-        ];
-        for (id, priority, implementation) in implementations {
-            let rule = match id {
-                "builtin:tags" | "builtin:terminal" => ProviderMatchRule {
-                    storage: Some(LocationMatch {
-                        provider_ids: Some(vec!["core:local-fs".into()]),
-                        ..Default::default()
-                    }),
+pub(super) fn register(
+    values: &mut NativeProviderRegistry<dyn ContextMenuProvider>,
+) {
+    let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 10] = [
+        (
+            "builtin:opening",
+            100,
+            Arc::new(Opening) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:tags",
+            99,
+            Arc::new(Tags) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:create",
+            98,
+            Arc::new(Create) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:connection-cache",
+            98,
+            Arc::new(ConnectionCache) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:rename",
+            96,
+            Arc::new(Rename) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:batch-rename",
+            95,
+            Arc::new(BatchRename) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:clipboard",
+            94,
+            Arc::new(Clipboard) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:terminal",
+            93,
+            Arc::new(Terminal) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:copy-path",
+            92,
+            Arc::new(CopyPath) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:trash",
+            91,
+            Arc::new(Trash) as Arc<dyn ContextMenuProvider>,
+        ),
+    ];
+    for (id, priority, implementation) in implementations {
+        let rule = match id {
+            "builtin:tags" | "builtin:terminal" => ProviderMatchRule {
+                storage: Some(LocationMatch {
+                    provider_ids: Some(vec!["core:local-fs".into()]),
                     ..Default::default()
-                },
-                "builtin:connection-cache" => ProviderMatchRule {
-                    storage: Some(LocationMatch {
-                        types: Some(vec!["vfs".into()]),
-                        ..Default::default()
-                    }),
+                }),
+                ..Default::default()
+            },
+            "builtin:connection-cache" => ProviderMatchRule {
+                storage: Some(LocationMatch {
+                    types: Some(vec!["vfs".into()]),
                     ..Default::default()
-                },
-                _ => ProviderMatchRule::default(),
-            };
-            values
-                .register(id, priority, rule, implementation)
-                .expect("invalid builtin menu registration");
-        }
+                }),
+                ..Default::default()
+            },
+            _ => ProviderMatchRule::default(),
+        };
         values
-    })
+            .register(id, priority, rule, implementation)
+            .expect("invalid builtin menu registration");
+    }
+}
+
+fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+    super::native_registry()
 }
 
 pub(super) fn invocation(context: &Context, method: &str, params: Value) -> NativeProviderInvocation {
@@ -169,6 +184,7 @@ pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolv
     registry()
         .matched_candidates(&targets, directory.as_ref(), context.paths.len())
         .into_iter()
+        .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
         .filter(|candidate| {
             registry().get(&candidate.id).is_some_and(|provider| {
                 provider
@@ -177,14 +193,6 @@ pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolv
             })
         })
         .collect()
-}
-
-pub(super) fn owns(id: &str) -> bool {
-    registry().get(id).is_some()
-}
-
-pub(super) fn provider(id: &str) -> Option<Arc<dyn ContextMenuProvider>> {
-    registry().get_arc(id)
 }
 
 #[cfg(test)]
