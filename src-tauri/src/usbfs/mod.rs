@@ -4,6 +4,7 @@
 //! and no FUSE are involved. APFS, HFS+ and btrfs remain read-only elsewhere.
 
 mod access;
+mod capabilities;
 mod identity;
 mod mount;
 pub use identity::generation;
@@ -17,6 +18,7 @@ pub use tree::{
 };
 pub use util::{route, validate_child, virtual_root, FsKind, Route, UsbEntry};
 pub use write::{commit_staged, create, open_cached, remove, rename, write, write_path};
+pub(crate) use capabilities::{is_root, writable};
 
 #[cfg(test)]
 mod tests {

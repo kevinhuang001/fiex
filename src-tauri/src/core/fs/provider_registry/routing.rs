@@ -16,6 +16,15 @@ pub(crate) enum ResourceAccess {
     Provider,
 }
 
+pub(crate) enum ResourceOwner {
+    LocalFs,
+    PluginMount {
+        plugin_id: String,
+        mount_id: String,
+    },
+    NativeVfs(&'static str),
+}
+
 fn unregistered_scheme(path: &str) -> bool {
     let Some(index) = path.find(':') else {
         return false;
@@ -44,14 +53,33 @@ pub(super) fn resolve(path: &str) -> Result<Route, FsError> {
     Err("Unsupported: unregistered filesystem resource".into())
 }
 
-pub(crate) fn resource_access(path: &str) -> Result<ResourceAccess, FsError> {
+pub(crate) fn owner(path: &str) -> Result<ResourceOwner, FsError> {
     match resolve(path)? {
-        Route::Plugin => Ok(ResourceAccess::Provider),
+        Route::Plugin => {
+            let (uri, source) = mounts::resolve(path).map_err(FsError::from)?;
+            let plugin_id = match source {
+                mounts::Source::Connection(connection) => connection.plugin_id,
+                mounts::Source::View(view) => view.descriptor.plugin_id,
+            };
+            Ok(ResourceOwner::PluginMount {
+                plugin_id,
+                mount_id: uri.mount_id,
+            })
+        }
         Route::NativeProvider => match native_vfs::shared_provider_id(path) {
-            Some("core:local-fs") => Ok(ResourceAccess::HostPath),
-            Some(_) => Ok(ResourceAccess::Provider),
+            Some("core:local-fs") => Ok(ResourceOwner::LocalFs),
+            Some(provider) => Ok(ResourceOwner::NativeVfs(provider)),
             None => Err("Unsupported: resource owner is no longer registered".into()),
         },
+    }
+}
+
+pub(crate) fn resource_access(path: &str) -> Result<ResourceAccess, FsError> {
+    match owner(path)? {
+        ResourceOwner::LocalFs => Ok(ResourceAccess::HostPath),
+        ResourceOwner::PluginMount { .. } | ResourceOwner::NativeVfs(_) => {
+            Ok(ResourceAccess::Provider)
+        }
     }
 }
 
@@ -152,15 +180,17 @@ pub(crate) fn reference_mount_id(path: &str) -> Option<String> {
 }
 
 pub(crate) fn resource_entry(path: &str) -> Result<crate::core::files::Entry, String> {
-    match resolve(path).map_err(String::from)? {
-        Route::Plugin if crate::remote::is_remote(path) => crate::remote::stat(path),
-        Route::Plugin => crate::plugins::vfs::stat(path),
-        Route::NativeProvider
-            if native_vfs::shared_provider_id(path) == Some("core:local-fs") =>
-        {
-            crate::core::files::entry(std::path::Path::new(path))
+    match owner(path).map_err(String::from)? {
+        ResourceOwner::LocalFs => crate::core::files::entry(std::path::Path::new(path)),
+        ResourceOwner::PluginMount { .. } if crate::remote::is_remote(path) => {
+            crate::remote::stat(path)
         }
-        Route::NativeProvider => native_vfs::resource_entry(path),
+        ResourceOwner::PluginMount { .. } => crate::plugins::vfs::stat(path),
+        ResourceOwner::NativeVfs("core:usb-fs") => {
+            let route = crate::usbfs::route(path).ok_or("invalid USB resource")?;
+            crate::usbfs::entry(&route)
+        }
+        ResourceOwner::NativeVfs(_) => native_vfs::resource_entry(path),
     }
 }
 

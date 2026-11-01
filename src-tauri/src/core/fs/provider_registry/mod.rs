@@ -16,8 +16,8 @@ mod plugin;
 mod routing;
 use routing::{resolve, Route};
 pub(crate) use routing::{
-    child_path, identity, is_plugin_mount, parent_path, reference_mount_id, resource_access,
-    resource_entry, validate_child, ResourceAccess,
+    child_path, identity, is_plugin_mount, owner, parent_path, reference_mount_id,
+    resource_access, resource_entry, validate_child, ResourceAccess, ResourceOwner,
 };
 
 pub(super) fn require(

@@ -80,24 +80,6 @@ impl FileCapabilities {
     }
 }
 
-/// Resolve the effective operation ceiling for the *selected mount*, not
-/// the union announced by every instance in the owning plugin package.
-/// A stale or forged mount never inherits another account's capabilities.
-fn declared_operations(path: &str) -> Option<Vec<FsOperation>> {
-    let uri = crate::plugins::mounts::parse(path).ok()?;
-    let plugin_id = crate::plugins::resolvers::fs::mount_plugin_id(path).ok()?;
-    crate::plugins::provider_registry::operations_mount(&plugin_id, &uri.mount_id)
-}
-
-/// One node entry resolved through the right adapter (connection or view).
-fn node_entry(path: &str) -> Result<Entry, String> {
-    if crate::remote::is_remote(path) {
-        crate::remote::stat(path)
-    } else {
-        crate::plugins::vfs::stat(path)
-    }
-}
-
 /// Intersect a provider declaration with one node's own restrictions.
 fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
     let allows = |operation: FsOperation| {
@@ -120,91 +102,66 @@ fn from_entry(declared: &[FsOperation], entry: &Entry) -> FileCapabilities {
 }
 
 pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
-    if crate::core::volumes::native_vfs::opaque(path) {
-        let declared = crate::core::volumes::native_vfs::operations(path);
-        return from_entry(&declared, entry);
-    }
-    if let Some(route) = crate::usbfs::route(path) {
-        let writable = matches!(
-            route.kind,
-            crate::usbfs::FsKind::Ntfs | crate::usbfs::FsKind::Ext4
-        ) && crate::usbfs::ensure_access(&route).is_ok()
-            && std::fs::OpenOptions::new()
-                .write(true)
-                .open(&route.driver_device)
-                .is_ok();
-        return FileCapabilities {
-            list: entry.is_dir,
-            stat: true,
-            search: entry.is_dir,
-            read: !entry.is_dir,
-            write: writable && !entry.is_dir,
-            create: writable && entry.is_dir,
-            rename: writable && !route.rel.is_empty(),
-            remove: writable && !route.rel.is_empty(),
-        };
-    }
-    if crate::core::volumes::application_policy::protected(path) {
-        return FileCapabilities::READ_ONLY;
-    }
-    if !crate::plugins::mounts::handles(path) {
-        // Match the ResourceBroker's owner decision. An unknown URI scheme
-        // must not inherit local FS permissions from a synthetic Entry.
-        if !matches!(
-            crate::core::fs::provider_registry::identity(path),
-            Some(("fs", provider, _)) if provider == "core:local-fs"
-        ) {
-            return FileCapabilities::default();
+    use crate::core::fs::provider_registry::ResourceOwner;
+
+    match crate::core::fs::provider_registry::owner(path) {
+        Ok(ResourceOwner::LocalFs) => {
+            if crate::core::volumes::application_policy::protected(path) {
+                return FileCapabilities::READ_ONLY;
+            }
+            FileCapabilities {
+                list: entry.is_dir,
+                stat: true,
+                search: entry.is_dir,
+                read: !entry.is_dir,
+                write: !entry.is_dir && !entry.readonly,
+                create: entry.is_dir && !entry.readonly,
+                rename: true,
+                // On Unix deletion is governed by the parent directory, not the
+                // file's read-only metadata. The OS remains the final authority.
+                remove: !cfg!(windows) || !entry.readonly,
+            }
         }
-        return FileCapabilities {
-            list: entry.is_dir,
-            stat: true,
-            search: entry.is_dir,
-            read: !entry.is_dir,
-            write: !entry.is_dir && !entry.readonly,
-            create: entry.is_dir && !entry.readonly,
-            rename: true,
-            // On Unix deletion is governed by the parent directory, not the
-            // file's read-only metadata. The OS remains the final authority.
-            remove: !cfg!(windows) || !entry.readonly,
-        };
+        Ok(ResourceOwner::NativeVfs("core:usb-fs")) => {
+            let writable = crate::usbfs::writable(path).unwrap_or(false);
+            let is_root = crate::usbfs::is_root(path).unwrap_or(true);
+            FileCapabilities {
+                list: entry.is_dir,
+                stat: true,
+                search: entry.is_dir,
+                read: !entry.is_dir,
+                write: writable && !entry.is_dir,
+                create: writable && entry.is_dir,
+                rename: writable && !is_root,
+                remove: writable && !is_root,
+            }
+        }
+        Ok(ResourceOwner::NativeVfs(_)) => {
+            let declared = crate::core::volumes::native_vfs::operations(path);
+            from_entry(&declared, entry)
+        }
+        Ok(ResourceOwner::PluginMount {
+            plugin_id,
+            mount_id,
+        }) => crate::plugins::provider_registry::operations_mount(&plugin_id, &mount_id)
+            .map(|declared| from_entry(&declared, entry))
+            .unwrap_or_default(),
+        Err(_) => FileCapabilities::default(),
     }
-    declared_operations(path)
-        .map(|declared| from_entry(&declared, entry))
-        .unwrap_or_default()
 }
 
 /// Capabilities of a single path. Local paths are unrestricted; a mount is the
 /// provider's declared operations narrowed by the node's entry.
 pub fn for_path(path: &str) -> FileCapabilities {
-    if crate::core::volumes::native_vfs::opaque(path) {
-        return crate::core::volumes::native_vfs::resource_entry(path)
+    use crate::core::fs::provider_registry::ResourceOwner;
+
+    match crate::core::fs::provider_registry::owner(path) {
+        Ok(ResourceOwner::LocalFs) => crate::core::files::entry(std::path::Path::new(path))
             .map(|entry| for_entry(path, &entry))
-            .unwrap_or_default();
-    }
-    if let Some(route) = crate::usbfs::route(path) {
-        return crate::usbfs::entry(&route)
+            .unwrap_or_default(),
+        Ok(_) => crate::core::fs::provider_registry::resource_entry(path)
             .map(|entry| for_entry(path, &entry))
-            .unwrap_or_default();
-    }
-    if !crate::plugins::mounts::handles(path) {
-        if !matches!(
-            crate::core::fs::provider_registry::identity(path),
-            Some(("fs", provider, _)) if provider == "core:local-fs"
-        ) {
-            return FileCapabilities::default();
-        }
-        return crate::core::files::entry(std::path::Path::new(path))
-            .map(|entry| for_entry(path, &entry))
-            .unwrap_or_default();
-    }
-    let Some(declared) = declared_operations(path) else {
-        return FileCapabilities::default();
-    };
-    match node_entry(path) {
-        Ok(entry) => from_entry(&declared, &entry),
-        // An unreachable or unknown node exposes nothing; the menu omits
-        // mutating items rather than offering an operation Core cannot verify.
+            .unwrap_or_default(),
         Err(_) => FileCapabilities::default(),
     }
 }
