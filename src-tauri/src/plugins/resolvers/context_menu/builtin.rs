@@ -3,7 +3,7 @@ use super::file_ops::{self, Selection};
 use crate::plugins::events::Resolver;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use fiex_provider_contracts::{MenuExecuteResult, MenuItem};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 #[derive(Clone)]
 pub(super) struct Context {

@@ -6,7 +6,7 @@
 //! metadata and media probes.
 pub use crate::plugins::contracts::{InfoRow, InfoSection};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{InfoProvider, ProviderInvocation, ProviderRequest};
+use fiex_provider_contracts::{InfoProvider, ProviderRequest};
 use serde_json::json;
 use std::sync::Arc;
 

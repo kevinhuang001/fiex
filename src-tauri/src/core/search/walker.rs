@@ -7,7 +7,7 @@ use crate::core::{
 use ignore::WalkBuilder;
 use std::{
     path::Path,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{Arc, Mutex},
     time::Instant,
 };
 

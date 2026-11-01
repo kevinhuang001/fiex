@@ -10,7 +10,7 @@ use fiex_provider_contracts::{
     LocationMatch, MatchResource, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
     ProviderMatchRule, ResourceCapabilities, ResourceMetadata, SearchProvider, SearchResults,
 };
-use serde_json::{json, Value};
+
 use std::sync::{Arc, OnceLock};
 
 struct Walker;

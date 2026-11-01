@@ -2,7 +2,6 @@
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
 use crate::{
-    core::files::Entry,
     plugins::{
         events::Resolver, native_invocation::NativeProviderInvocation,
         provider_registry::native::NativeProviderRegistry,
@@ -215,17 +214,5 @@ pub(super) fn execute(
 
 /// Construct the same shared invocation for a real menu request after Core has
 /// resolved and authorized its selected entries.
-pub(super) fn invocation_from_entries(
-    method: &str,
-    params: Value,
-    resources: &[ResourceSnapshot],
-    directory: &str,
-    directory_entry: Option<&Entry>,
-) -> NativeProviderInvocation {
-    let resolved_directory =
-        directory_entry.map(|entry| ResourceSnapshot::from_entry(directory, entry));
-    NativeProviderInvocation::new(method, params, resources, resolved_directory.as_ref())
-}
-
 #[cfg(test)]
 mod tests;

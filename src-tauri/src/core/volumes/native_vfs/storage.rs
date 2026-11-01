@@ -25,33 +25,6 @@ pub(super) fn decorated_entry(path: &str, mut entry: Entry) -> Entry {
     entry
 }
 
-pub(super) fn listing(
-    value: serde_json::Value,
-    hidden: bool,
-    ignore_patterns: &[String],
-) -> Result<Vec<Entry>, String> {
-    let entries = value
-        .as_array()
-        .ok_or("invalid storage listing")?
-        .iter()
-        .map(|value| entry(value.clone()))
-        .collect::<Result<Vec<_>, _>>()?;
-    let ignores = crate::core::ignores::IgnoreSet::new(ignore_patterns);
-    let mut entries = entries
-        .into_iter()
-        .filter(|entry| {
-            (hidden || !entry.name.starts_with('.'))
-                && !ignores.is_ignored(std::path::Path::new(&entry.name))
-        })
-        .map(|entry| {
-            let path = entry.path.clone();
-            decorated_entry(&path, entry)
-        })
-        .collect::<Vec<_>>();
-    entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
-    Ok(entries)
-}
-
 pub(super) fn root_entry(
     id: &str,
     path: &str,

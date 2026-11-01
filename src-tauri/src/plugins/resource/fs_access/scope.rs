@@ -270,7 +270,7 @@ impl Scope {
                     kind: "file".into(),
                     ..Default::default()
                 });
-        let mut snapshot =
+        let snapshot =
             crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
                 display, meta,
             );

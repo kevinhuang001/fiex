@@ -5,7 +5,7 @@ use super::types::DecorationEntry;
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
     DecorationContribution, DecorationProvider, ProviderDescriptor, ProviderError,
-    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
+    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
 use std::{
     collections::HashMap,

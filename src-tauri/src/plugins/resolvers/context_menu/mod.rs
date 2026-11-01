@@ -33,7 +33,7 @@ use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
 use serde_json::{json, Value};
-use session::{allowed, register, session_ids, sessions, MenuScope, Session};
+use session::{allowed, register, session_ids, sessions, MenuScope};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},

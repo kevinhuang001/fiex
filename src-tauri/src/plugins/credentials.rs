@@ -174,7 +174,7 @@ pub fn secret_set(plugin: &str, scope: &str, key: &str, value: &str) -> Result<(
     let mut state = credentials()
         .lock()
         .map_err(|_| "credential store locked")?;
-    let mut items = state.load()?;
+    let items = state.load()?;
     let id = fallback_key(plugin, scope, key);
     items.remove(&format!("!deleted:{id}"));
     items.insert(id, value.into());

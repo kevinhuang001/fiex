@@ -6,7 +6,7 @@ use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
     ProviderInvocation,
 };
-use serde_json::{json, Value};
+
 
 fn selection(ctx: &dyn ProviderInvocation) -> Result<(String, Vec<String>), ProviderError> {
     let directory = NativeProviderInvocation::directory(ctx)?.display.clone();

@@ -7,7 +7,7 @@ use crate::plugins::{
 use fiex_provider_contracts::{
     FsEntry, FsKind, FsListing, FsRequest, ProviderError, ProviderInvocation, ResourceMetadata,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
 

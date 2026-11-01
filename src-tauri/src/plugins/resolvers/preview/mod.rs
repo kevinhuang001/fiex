@@ -5,7 +5,7 @@
 //! and return a package-confined `PreviewView`.
 use crate::plugins::contracts::PreviewView;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{PreviewProvider, ProviderInvocation, ProviderRequest};
+use fiex_provider_contracts::{PreviewProvider, ProviderRequest};
 use serde_json::Value;
 use std::{fs, sync::Arc};
 

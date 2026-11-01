@@ -255,26 +255,6 @@ pub(super) fn provider(id: &str) -> Option<Arc<dyn ConnectionContextMenuProvider
     registry().get_arc(id)
 }
 
-pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Value, String> {
-    let provider = registry()
-        .get(id)
-        .ok_or("unknown native connection menu provider")?;
-    match invocation.method() {
-        "connectionContextMenu.resolve" => provider
-            .resolve(invocation)
-            .map(|items| json!({"items":items}))
-            .map_err(|error| error.to_string()),
-        "connectionContextMenu.execute" => provider
-            .execute(invocation)
-            .and_then(|result| {
-                serde_json::to_value(result)
-                    .map_err(|error| ProviderError::internal(error.to_string()))
-            })
-            .map_err(|error| error.to_string()),
-        method => Err(ProviderError::method_not_found(method).to_string()),
-    }
-}
-
 /// Run an authorized native action after the shared provider revalidates it.
 pub(super) async fn execute(
     provider_id: &str,
