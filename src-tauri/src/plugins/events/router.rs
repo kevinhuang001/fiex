@@ -63,11 +63,11 @@ impl EventRouter {
         )
     }
 
-    fn dispatch_resolvers<T, R>(
+    fn dispatch_resolvers<I, T, R>(
         method: &str,
         providers: Vec<Resolver>,
-        mut invoke: impl FnMut(&Resolver) -> Result<T, String>,
-        mut validate: impl FnMut(&Resolver, T) -> Result<T, String>,
+        mut invoke: impl FnMut(&Resolver) -> Result<I, String>,
+        mut validate: impl FnMut(&Resolver, I) -> Result<T, String>,
         mut supported: impl FnMut(&T) -> bool,
         collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
     ) -> R {
