@@ -2,9 +2,7 @@
 //! plugin owners. Core keeps connection identity and rechecks every action.
 use super::{builtin_items, plugin_items, Context};
 use crate::plugins::host::PluginInfo;
-use fiex_provider_contracts::{
-    ConnectionContextMenuProvider, ProviderError, ProviderInvocation,
-};
+use fiex_provider_contracts::{ConnectionContextMenuProvider, ProviderError, ProviderInvocation};
 use serde_json::{json, Value};
 
 pub(super) struct NativeMenu<'a> {
@@ -91,8 +89,7 @@ impl ConnectionContextMenuProvider for PluginMenu<'_> {
             .invoke(
                 &self.plugin.id,
                 "connectionContextMenu.execute",
-                self.params(Some(item))
-                    .map_err(ProviderError::internal)?,
+                self.params(Some(item)).map_err(ProviderError::internal)?,
             )
             .map_err(ProviderError::internal)
     }
