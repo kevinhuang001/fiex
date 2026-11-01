@@ -51,7 +51,6 @@ impl NativeProviderInvocation {
             .and_then(|native| native.targets.get(index))
             .ok_or_else(|| ProviderError::invalid_params("missing native resource context"))
     }
-
 }
 
 impl ProviderInvocation for NativeProviderInvocation {
