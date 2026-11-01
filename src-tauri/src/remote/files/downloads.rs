@@ -57,7 +57,16 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
     } else {
         &entry.node_id
     };
-    fetch_remote(&conn, node, &local, options)?;
+    // The listing already contains content length. Forward it through the
+    // generic openRead contract; WebDAV then avoids another PROPFIND request.
+    // A zero-sized cached entry may mean "unknown" in legacy metadata.
+    fetch_remote_with_size(
+        &conn,
+        node,
+        &local,
+        options,
+        (entry.size > 0).then_some(entry.size),
+    )?;
     let file = meta.files.get_mut(&rel).unwrap();
     file.downloaded = true;
     file.uploaded = false;
