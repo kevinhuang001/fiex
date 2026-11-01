@@ -2,8 +2,7 @@
 //! supplies fresh Core-verified resources; cursors and cancellation remain
 //! request-scoped in the streaming resolver.
 use crate::plugins::{
-    host::PluginInfo,
-    native_invocation::NativeProviderInvocation,
+    host::PluginInfo, native_invocation::NativeProviderInvocation,
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
@@ -38,10 +37,7 @@ struct IpcSearch {
 }
 
 impl SearchProvider for IpcSearch {
-    fn query(
-        &self,
-        ctx: &dyn ProviderInvocation,
-    ) -> Result<SearchResults, ProviderError> {
+    fn query(&self, ctx: &dyn ProviderInvocation) -> Result<SearchResults, ProviderError> {
         let invocation = ctx
             .local_service_handle()
             .and_then(|value| value.downcast_ref::<ScopedSearchInvocation>())
