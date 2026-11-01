@@ -1,10 +1,13 @@
-//! Connection lifecycle through the same trusted provider candidate registry
-//! and SDK endpoint used by every other Core feature. Credential projection,
-//! stored ownership and navigation validation remain in remote/store.
-use crate::plugins::events::{EventRouter, Handler};
+//! Connection lifecycle through the trusted provider registry and shared
+//! ConnectionProvider trait. Credential projection, stored ownership and
+//! navigation validation remain in remote/store.
+use crate::plugins::{
+    events::{EventRouter, Handler},
+    native_invocation::NativeProviderInvocation,
+};
 use fiex_provider_contracts::{
-    ProviderDescriptor, ProviderEndpoint, ProviderInstances, ProviderKind, ProviderMatchRule,
-    ProviderRequest,
+    ConnectionProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
+    ProviderKind, ProviderMatchRule, ProviderRequest,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -12,26 +15,44 @@ use std::sync::{Arc, Mutex, OnceLock};
 struct PluginConnection {
     plugin_id: String,
 }
-impl ProviderEndpoint for PluginConnection {
-    fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        if !matches!(
-            request.method.as_str(),
-            "connection.validate" | "connection.open" | "connection.create"
-        ) {
-            return Err("unsupported connection event".into());
+impl PluginConnection {
+    fn invoke_event(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        method: &str,
+    ) -> Result<Value, ProviderError> {
+        if ctx.method() != method {
+            return Err(ProviderError::invalid_params(
+                "ConnectionProvider method mismatch",
+            ));
         }
-        crate::plugins::events::invoke(&self.plugin_id, &request.method, request.params.clone())
+        crate::plugins::events::invoke(&self.plugin_id, method, ctx.params().clone())
+            .map_err(ProviderError::internal)
+    }
+}
+impl ConnectionProvider for PluginConnection {
+    fn validate(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+        self.invoke_event(ctx, "connection.validate")
+    }
+
+    fn open(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+        self.invoke_event(ctx, "connection.open")
+    }
+
+    fn create(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+        self.invoke_event(ctx, "connection.create")
     }
 }
 
 /// Persistent IPC proxies contain only plugin identity, never cached grants,
 /// mount IDs or credentials. The candidate registry and Host verify all of
 /// those anew before each operation. No lock survives the IPC invocation.
-fn endpoint_for(plugin_id: &str) -> Result<Arc<dyn ProviderEndpoint>, String> {
+fn proxy_for(plugin_id: &str) -> Result<Arc<dyn ConnectionProvider>, String> {
     if plugin_id.is_empty() {
         return Err("missing plugin identity for ConnectionProvider".into());
     }
-    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ProviderEndpoint>>> = OnceLock::new();
+    static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ConnectionProvider>>> =
+        OnceLock::new();
     let registry =
         REGISTERED.get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::Connection)));
     let mut providers = registry
@@ -95,17 +116,39 @@ pub fn invoke(
         method: method.into(),
         params,
     };
-    EventRouter::resolve(
+    EventRouter::resolve_typed(
         method,
         selected,
         &request,
-        |resolver| match &resolver.handler {
+        |resolver, request| match &resolver.handler {
             Handler::Plugin(plugin) => {
-                Ok(Box::new(endpoint_for(&plugin.id)?) as Box<dyn ProviderEndpoint>)
+                let invocation = NativeProviderInvocation::new(
+                    request.method.clone(),
+                    request.params.clone(),
+                    &[],
+                    None,
+                );
+                let provider = proxy_for(&plugin.id)?;
+                match request.method.as_str() {
+                    "connection.validate" => {
+                        ConnectionProvider::validate(provider.as_ref(), &invocation)
+                    }
+                    "connection.open" => {
+                        ConnectionProvider::open(provider.as_ref(), &invocation)
+                    }
+                    "connection.create" => {
+                        ConnectionProvider::create(provider.as_ref(), &invocation)
+                    }
+                    _ => Err(ProviderError::method_not_found(&request.method)),
+                }
+                .map_err(|error| error.to_string())
             }
             Handler::Builtin(_) => Err("unknown Core connection provider".into()),
         },
-        |_, value| Ok(value),
+        |_, value| {
+            crate::plugins::events::validate_result(method, &value)?;
+            Ok(value)
+        },
         |_| true,
         |results| {
             results
@@ -128,10 +171,10 @@ mod tests {
 
     #[test]
     fn connection_ipc_proxy_is_registered_once_without_retaining_mount_data() {
-        let first = endpoint_for("org.example.connection-proxy").unwrap();
-        let second = endpoint_for("org.example.connection-proxy").unwrap();
+        let first = proxy_for("org.example.connection-proxy").unwrap();
+        let second = proxy_for("org.example.connection-proxy").unwrap();
         assert!(Arc::ptr_eq(&first, &second));
-        assert!(endpoint_for("invalid/plugin/id").is_err());
-        assert!(endpoint_for("").is_err());
+        assert!(proxy_for("invalid/plugin/id").is_err());
+        assert!(proxy_for("").is_err());
     }
 }
