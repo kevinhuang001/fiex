@@ -246,8 +246,7 @@ pub fn require(
 pub fn stat(path: &str, owner: &str) -> Result<Entry, String> {
     let provider = view_for(path).ok_or("Unsupported: unknown builtin node")?;
     let invocation = target_invocation(path, owner, "vfs.stat", json!({"nodeId":path}));
-    let request =
-        FsRequest::new(&invocation, FsOperation::Stat).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Stat).map_err(provider_error_text)?;
     provider
         .stat(&request)
         .map(core_entry)
@@ -257,8 +256,7 @@ pub fn stat(path: &str, owner: &str) -> Result<Entry, String> {
 pub fn list(path: &str, owner: &str) -> Result<Vec<Entry>, String> {
     let provider = view_for(path).ok_or("Unsupported: builtin node has no children")?;
     let invocation = target_invocation(path, owner, "vfs.list", json!({"nodeId":path}));
-    let request =
-        FsRequest::new(&invocation, FsOperation::List).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::List).map_err(provider_error_text)?;
     provider
         .list(&request)
         .map(|listing| listing.entries.into_iter().map(core_entry).collect())
@@ -286,8 +284,7 @@ pub fn stat_for(broker: &crate::core::fs::ResourceBroker) -> Result<Entry, Strin
         "vfs.stat",
         json!({"nodeId":broker.path.as_str()}),
     );
-    let request =
-        FsRequest::new(&invocation, FsOperation::Stat).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Stat).map_err(provider_error_text)?;
     provider
         .stat(&request)
         .map(core_entry)
@@ -303,8 +300,7 @@ pub fn list_for(broker: &crate::core::fs::ResourceBroker) -> Result<Vec<Entry>, 
         "vfs.list",
         json!({"nodeId":broker.path.as_str(),"hidden":true}),
     );
-    let request =
-        FsRequest::new(&invocation, FsOperation::List).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::List).map_err(provider_error_text)?;
     provider
         .list(&request)
         .map(|listing| listing.entries.into_iter().map(core_entry).collect())
@@ -361,8 +357,7 @@ pub fn read_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsRead, Stri
         "vfs.openRead",
         json!({"nodeId":broker.path.as_str()}),
     );
-    let request =
-        FsRequest::new(&invocation, FsOperation::Read).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Read).map_err(provider_error_text)?;
     provider.read(&request).map_err(provider_error_text)
 }
 
@@ -381,8 +376,7 @@ pub fn write_sized_for(
         json!({"nodeId":broker.path.as_str(),"size":size})
     };
     let invocation = shared::broker_invocation(broker, None, "vfs.beginWrite", params);
-    let request =
-        FsRequest::new(&invocation, FsOperation::Write).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Write).map_err(provider_error_text)?;
     provider.write(&request).map_err(provider_error_text)
 }
 
@@ -397,8 +391,7 @@ pub fn mkdir_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsEntry, St
         "vfs.mkdir",
         json!({"parentId":parent,"name":name}),
     );
-    let request =
-        FsRequest::new(&invocation, FsOperation::Mkdir).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Mkdir).map_err(provider_error_text)?;
     provider.mkdir(&request).map_err(provider_error_text)
 }
 
@@ -422,8 +415,7 @@ pub fn rename_for(
         "vfs.rename",
         json!({"nodeId":source.path.as_str(),"parentId":parent,"name":name}),
     );
-    let request =
-        FsRequest::new(&invocation, FsOperation::Rename).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Rename).map_err(provider_error_text)?;
     provider.rename(&request).map_err(provider_error_text)
 }
 
@@ -436,8 +428,7 @@ pub fn remove_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String
         "vfs.remove",
         json!({"nodeId":broker.path.as_str()}),
     );
-    let request =
-        FsRequest::new(&invocation, FsOperation::Remove).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Remove).map_err(provider_error_text)?;
     provider.remove(&request).map_err(provider_error_text)
 }
 
@@ -457,8 +448,7 @@ pub fn search_for(
         "vfs.search",
         json!({"nodeId":broker.path.as_str(),"query":query,"hidden":hidden,"ignores":ignores,"limit":limit}),
     );
-    let request =
-        FsRequest::new(&invocation, FsOperation::Search).map_err(provider_error_text)?;
+    let request = FsRequest::new(&invocation, FsOperation::Search).map_err(provider_error_text)?;
     let listing = provider
         .search_cancellable(&request, cancelled)
         .map_err(provider_error_text)?;
