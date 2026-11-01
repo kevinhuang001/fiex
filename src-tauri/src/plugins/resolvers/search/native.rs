@@ -53,6 +53,7 @@ pub(super) fn candidates(targets: &[Value]) -> Vec<Resolver> {
                 .get(&resolver.id)
                 .is_some_and(|provider| !provider.modes().is_empty())
         })
+        .collect()
 }
 
 pub(super) fn modes(id: &str) -> Vec<SearchMode> {
