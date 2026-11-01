@@ -75,7 +75,12 @@ pub(crate) fn identity(path: &str) -> Option<(&'static str, String, String)> {
         }
         Route::NativeView => {
             let view = virtual_resolvers::view_for(path)?;
-            if view.id() == "core:recent" {
+            // A projection is a view, not the storage owner. Its source
+            // identity is separately resolved by the shared matcher.
+            if !matches!(
+                view.storage_projection(path),
+                virtual_resolvers::NativeStorageProjection::Owned
+            ) {
                 return None;
             }
             Some(("vfs", view.id().into(), view.id().into()))
