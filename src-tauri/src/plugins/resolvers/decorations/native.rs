@@ -2,40 +2,43 @@
 //! Descriptor and EventRouter as SDK-backed DecorationProviders.
 use super::{
     builtin::{self, NativeKind},
+    invocation,
     types::{Decoration, DecorationEntry},
 };
 use crate::plugins::events::Resolver;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{LocationMatch, ProviderKind, ProviderMatchRule};
+use fiex_provider_contracts::{
+    DecorationProvider, LocationMatch, ProviderError, ProviderInvocation, ProviderKind,
+    ProviderMatchRule,
+};
 use std::{
     collections::HashMap,
     sync::{Arc, OnceLock},
 };
 
-trait NativeDecorationProvider: Send + Sync {
-    fn resolve(
-        &self,
-        directory: &str,
-        entries: &HashMap<String, DecorationEntry>,
-    ) -> Vec<Decoration>;
-}
-
 struct BuiltinDecoration(NativeKind);
-impl NativeDecorationProvider for BuiltinDecoration {
+impl DecorationProvider for BuiltinDecoration {
     fn resolve(
         &self,
-        directory: &str,
-        entries: &HashMap<String, DecorationEntry>,
-    ) -> Vec<Decoration> {
-        builtin::resolve_in(self.0, directory, entries)
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<serde_json::Value>, ProviderError> {
+        let services = invocation::services(ctx).map_err(ProviderError::internal)?;
+        builtin::resolve_in(self.0, &services.directory, services.entries.as_ref())
+            .into_iter()
+            .map(|decoration| {
+                serde_json::to_value(decoration).map_err(|error| {
+                    ProviderError::internal(format!("invalid native decoration: {error}"))
+                })
+            })
+            .collect()
     }
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn NativeDecorationProvider> {
-    static REGISTRY: OnceLock<NativeProviderRegistry<dyn NativeDecorationProvider>> =
+fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
+    static REGISTRY: OnceLock<NativeProviderRegistry<dyn DecorationProvider>> =
         OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut values: NativeProviderRegistry<dyn NativeDecorationProvider> =
+        let mut values: NativeProviderRegistry<dyn DecorationProvider> =
             NativeProviderRegistry::new(ProviderKind::Decoration);
         for (id, priority, kind) in [
             ("builtin:tags", -12, NativeKind::Tags),
@@ -89,10 +92,45 @@ pub(super) fn resolve(
     directory: &str,
     entries: &HashMap<String, DecorationEntry>,
 ) -> Result<Vec<Decoration>, String> {
-    Ok(registry()
+    let entries = Arc::new(entries.clone());
+    let resources = Arc::new(
+        entries
+            .values()
+            .map(|entry| {
+                crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
+                    &entry.path,
+                    crate::plugins::contracts::ResourceMetadata {
+                        name: entry.name.clone(),
+                        kind: if entry.is_dir { "directory" } else { "file" }.into(),
+                        extension: Some(entry.extension.clone()),
+                        mime: Some(entry.mime.clone()),
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect(),
+    );
+    let invocation = invocation::CoreDecorationInvocation::native(
+        directory.into(),
+        entries,
+        resources,
+    );
+    invoke(id, &invocation)
+}
+
+pub(super) fn invoke(
+    id: &str,
+    ctx: &dyn ProviderInvocation,
+) -> Result<Vec<Decoration>, String> {
+    let provider = registry()
         .get(id)
-        .ok_or("unknown native DecorationProvider")?
-        .resolve(directory, entries))
+        .ok_or("unknown native DecorationProvider")?;
+    provider
+        .resolve(ctx)
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|value| serde_json::from_value(value).map_err(|error| error.to_string()))
+        .collect()
 }
 
 #[cfg(test)]
