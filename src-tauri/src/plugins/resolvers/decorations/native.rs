@@ -35,8 +35,7 @@ impl DecorationProvider for BuiltinDecoration {
 }
 
 fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
-    static REGISTRY: OnceLock<NativeProviderRegistry<dyn DecorationProvider>> =
-        OnceLock::new();
+    static REGISTRY: OnceLock<NativeProviderRegistry<dyn DecorationProvider>> = OnceLock::new();
     REGISTRY.get_or_init(|| {
         let mut values: NativeProviderRegistry<dyn DecorationProvider> =
             NativeProviderRegistry::new(ProviderKind::Decoration);
@@ -110,18 +109,12 @@ pub(super) fn resolve(
             })
             .collect(),
     );
-    let invocation = invocation::CoreDecorationInvocation::native(
-        directory.into(),
-        entries,
-        resources,
-    );
+    let invocation =
+        invocation::CoreDecorationInvocation::native(directory.into(), entries, resources);
     invoke(id, &invocation)
 }
 
-pub(super) fn invoke(
-    id: &str,
-    ctx: &dyn ProviderInvocation,
-) -> Result<Vec<Decoration>, String> {
+pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decoration>, String> {
     let provider = registry()
         .get(id)
         .ok_or("unknown native DecorationProvider")?;
