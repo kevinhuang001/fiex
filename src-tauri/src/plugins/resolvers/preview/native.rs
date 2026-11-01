@@ -24,12 +24,10 @@ impl PreviewProvider for BuiltinPreview {
         let path = if self.0 == Builtin::Fallback {
             resource.local.clone()
         } else {
-            resource
-                .export_path()
-                .map_err(ProviderError::internal)?
+            resource.export_path().map_err(ProviderError::internal)?
         };
-        let view = builtin_view(self.0, &path, &resource.display)
-            .map_err(ProviderError::internal)?;
+        let view =
+            builtin_view(self.0, &path, &resource.display).map_err(ProviderError::internal)?;
         serde_json::from_value(view).map_err(|error| ProviderError::internal(error.to_string()))
     }
 }
@@ -121,6 +119,9 @@ mod tests {
         assert_eq!(directory[0].id, "builtin:fallback");
         let resource = ResourceSnapshot::from_metadata("/unavailable", Default::default());
         assert!(open("not-registered", &resource).is_err());
-        assert_eq!(open("builtin:fallback", &resource).unwrap().kind, "fallback");
+        assert_eq!(
+            open("builtin:fallback", &resource).unwrap().kind,
+            "fallback"
+        );
     }
 }
