@@ -14,12 +14,24 @@ mod storage;
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 
+/// Distinguishes the currently displayed VFS from the actual storage owner.
+/// A projected alias does not gain its source's IO permissions; Core resolves
+/// the source again in its authorized ResourceBroker when performing IO.
+pub enum NativeStorageProjection {
+    Owned,
+    Projected(Option<String>),
+}
+
 /// A Core-native VFS provider owns only storage capabilities, icons and platform
 /// launch/reveal operations; menu contributions live in native_views.
 pub trait NativeVfsProvider: Send + Sync {
     /// Provider-owned URI recognition; never infer that an unknown URI is local.
     fn handles(&self, path: &str) -> bool;
     fn id(&self) -> &'static str;
+    /// Whether this node is the storage owner or merely a presentation alias.
+    fn storage_projection(&self, _path: &str) -> NativeStorageProjection {
+        NativeStorageProjection::Owned
+    }
     fn readonly(&self) -> bool;
     /// Native VFS providers implement the same list/stat operations as
     /// plugin VFS instances; no generic storage layer knows their URI names.
@@ -75,6 +87,9 @@ impl NativeVfsProvider for RecentView {
 
     fn id(&self) -> &'static str {
         "core:recent"
+    }
+    fn storage_projection(&self, path: &str) -> NativeStorageProjection {
+        NativeStorageProjection::Projected(crate::core::recent::source_for(path).ok())
     }
     fn list(&self, path: &str) -> Result<Vec<Entry>, String> {
         storage::recent_list(path)
@@ -393,6 +408,26 @@ mod tests {
         assert!(view_for(RECENT_URI).unwrap().stat(RECENT_URI).is_ok());
         assert!(view_for(RECENT_URI).unwrap().list(RECENT_URI).is_ok());
         assert!(view_for(RECENT_URI).unwrap().list("recent://bad").is_err());
+    }
+
+    #[test]
+    fn storage_projection_is_declared_by_the_vfs_not_inferred_from_provider_id() {
+        assert!(matches!(
+            view_for(RECENT_URI).unwrap().storage_projection(RECENT_URI),
+            NativeStorageProjection::Projected(None)
+        ));
+        assert!(matches!(
+            view_for(APPLICATIONS_URI)
+                .unwrap()
+                .storage_projection(APPLICATIONS_URI),
+            NativeStorageProjection::Owned
+        ));
+        assert!(matches!(
+            view_for(trash_vfs::URI)
+                .unwrap()
+                .storage_projection(trash_vfs::URI),
+            NativeStorageProjection::Owned
+        ));
     }
 
     #[test]
