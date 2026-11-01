@@ -1083,6 +1083,22 @@ mod folder_listing_tests {
     use super::*;
 
     #[test]
+    fn system_application_metadata_is_read_only_even_before_capability_matching() {
+        let protected = entry(
+            "System App".into(),
+            "applications://c3lzdGVt".into(),
+            "app",
+            0,
+            true,
+        );
+        assert!(protected.readonly);
+        assert_eq!(protected.allowed_ops, vec!["stat"]);
+        let user = entry("Shortcut".into(), "applications://~dXNlcg".into(), "app", 0, false);
+        assert!(!user.readonly);
+        assert!(user.allowed_ops.iter().any(|op| op == "remove"));
+    }
+
+    #[test]
     fn user_uris_use_one_segment_and_keep_legacy_links_working() {
         assert_eq!(user_encoded("applications://~abc"), Some("abc"));
         assert_eq!(user_encoded("applications://user/abc"), Some("abc"));
