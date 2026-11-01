@@ -10,7 +10,7 @@ use fiex_provider_contracts::{
     ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest, ResourceCapabilities,
     ResourceLocation, ResourceMetadata, ResourceType,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::{Arc, Mutex, OnceLock};
 
 struct PluginConnection {
@@ -175,8 +175,8 @@ mod tests {
     use super::*;
     #[test]
     fn lifecycle_requires_registered_method_and_connection_identity() {
-        assert!(invoke("", "drive", "mount", "connection.open", json!({})).is_err());
-        assert!(invoke("org.example", "drive", "mount", "vfs.list", json!({})).is_err());
+        assert!(invoke("", "drive", "mount", "connection.open", serde_json::json!({})).is_err());
+        assert!(invoke("org.example", "drive", "mount", "vfs.list", serde_json::json!({})).is_err());
     }
 
     #[test]
