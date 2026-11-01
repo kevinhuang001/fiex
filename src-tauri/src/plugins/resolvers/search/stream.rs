@@ -80,24 +80,25 @@ pub fn run_stream(
             &invocation,
             |_resolver, provider, context| {
                 let mut page_count = 0usize;
-                let mut stream_entry = |value: fiex_provider_contracts::SearchEntry| -> Result<(), ProviderError> {
-                    if cancelled() {
-                        return Err(ProviderError::cancelled());
-                    }
-                    if page_count >= remaining || count >= request.limit() {
-                        return Err(ProviderError::invalid_params(
-                            "search provider exceeded requested page limit",
-                        ));
-                    }
-                    let entries = validated(vec![value], request)
-                        .map_err(ProviderError::invalid_params)?;
-                    for entry in entries {
-                        emit(entry);
-                        page_count += 1;
-                        count += 1;
-                    }
-                    Ok(())
-                };
+                let mut stream_entry =
+                    |value: fiex_provider_contracts::SearchEntry| -> Result<(), ProviderError> {
+                        if cancelled() {
+                            return Err(ProviderError::cancelled());
+                        }
+                        if page_count >= remaining || count >= request.limit() {
+                            return Err(ProviderError::invalid_params(
+                                "search provider exceeded requested page limit",
+                            ));
+                        }
+                        let entries = validated(vec![value], request)
+                            .map_err(ProviderError::invalid_params)?;
+                        for entry in entries {
+                            emit(entry);
+                            page_count += 1;
+                            count += 1;
+                        }
+                        Ok(())
+                    };
                 let page = provider
                     .query_stream(context, &cancelled, &mut stream_entry)
                     .map_err(|error| error.to_string())?;

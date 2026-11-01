@@ -1,11 +1,9 @@
 //! Persistent PreviewProvider IPC identity with invocation-scoped resources.
 use super::session::{open_plugin_resource, UNSUPPORTED};
-use crate::plugins::{
-    host::PluginInfo, resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    PreviewProvider, PreviewView, ProviderDescriptor, ProviderError, ProviderInstances,
-    ProviderInput, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
+    PreviewProvider, PreviewView, ProviderDescriptor, ProviderError, ProviderInput,
+    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
 use std::{
     any::Any,
@@ -29,12 +27,9 @@ impl CorePreviewInvocation {
         resource: ResourceSnapshot,
         registered_id: &str,
     ) -> Result<Self, ProviderError> {
-        let input = crate::plugins::events::bind_provider_input(
-            &plugin.id,
-            registered_id,
-            ctx.input()?,
-        )
-        .map_err(ProviderError::invalid_params)?;
+        let input =
+            crate::plugins::events::bind_provider_input(&plugin.id, registered_id, ctx.input()?)
+                .map_err(ProviderError::invalid_params)?;
         let mut request = ctx.request().clone();
         request.input = input;
         request.input_error = None;
@@ -74,7 +69,8 @@ impl PreviewProvider for IpcPreview {
             ProviderInput::Resource(request) => request.provider_id.as_deref(),
             _ => None,
         };
-        let response = match open_plugin_resource(&services.resource, &services.plugin, provider_id) {
+        let response = match open_plugin_resource(&services.resource, &services.plugin, provider_id)
+        {
             Ok(response) => response,
             Err(error) if error == UNSUPPORTED => {
                 return Err(ProviderError::invalid_params(UNSUPPORTED));
@@ -93,9 +89,8 @@ impl PreviewProvider for IpcPreview {
                 object.insert(key.into(), response[key].clone());
             }
         }
-        serde_json::from_value(view).map_err(|error| {
-            ProviderError::invalid_params(format!("invalid PreviewView: {error}"))
-        })
+        serde_json::from_value(view)
+            .map_err(|error| ProviderError::invalid_params(format!("invalid PreviewView: {error}")))
     }
 }
 

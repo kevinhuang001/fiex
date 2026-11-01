@@ -15,25 +15,29 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
     if let Ok(mut sessions) = sessions().lock() {
         sessions.retain(|_, session| {
-            session.provider.plugin.as_deref().is_none_or(|plugin| plugin.id != plugin_id)
+            session
+                .provider
+                .plugin
+                .as_deref()
+                .is_none_or(|plugin| plugin.id != plugin_id)
         });
     }
 }
 
 use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
 use crate::plugins::{
-    native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot,
-    provider_registry::native::NativeProviderRegistry,
+    native_invocation::NativeProviderInvocation, provider_registry::native::NativeProviderRegistry,
+    resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
 use serde_json::{json, Value};
+use session::{allowed, register, session_ids, sessions, MenuScope, Session};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
 };
-use session::{allowed, register, sessions, session_ids, MenuScope, Session};
 use validation::validated_submenu;
 
 /// All Core-owned context-menu providers share one typed registry. Their
@@ -53,7 +57,10 @@ fn provider_for(
     resolver: &Resolver,
     directory: &str,
     resources: &Arc<Vec<ResourceSnapshot>>,
-) -> (Arc<dyn ContextMenuProvider>, Option<Arc<Mutex<Option<String>>>>) {
+) -> (
+    Arc<dyn ContextMenuProvider>,
+    Option<Arc<Mutex<Option<String>>>>,
+) {
     match resolver.plugin.as_deref() {
         None => (
             native_registry().get_arc(&resolver.id).unwrap_or_else(|| {
@@ -87,14 +94,18 @@ impl ContextMenuProvider for FailedMenuProvider {
         &self,
         _ctx: &dyn fiex_provider_contracts::ProviderInvocation,
     ) -> Result<Vec<MenuItem>, fiex_provider_contracts::ProviderError> {
-        Err(fiex_provider_contracts::ProviderError::internal(self.0.clone()))
+        Err(fiex_provider_contracts::ProviderError::internal(
+            self.0.clone(),
+        ))
     }
 
     fn execute(
         &self,
         _ctx: &dyn fiex_provider_contracts::ProviderInvocation,
     ) -> Result<MenuExecuteResult, fiex_provider_contracts::ProviderError> {
-        Err(fiex_provider_contracts::ProviderError::internal(self.0.clone()))
+        Err(fiex_provider_contracts::ProviderError::internal(
+            self.0.clone(),
+        ))
     }
 }
 
@@ -360,11 +371,8 @@ pub fn execute(session_id: &str, item_id: &str) -> Result<Value, String> {
             "interactionId": crate::plugins::mounts::new_id()?,
         }),
     };
-    let (implementation, _) = provider_for(
-        &session.provider,
-        &session.directory,
-        &session.resources,
-    );
+    let (implementation, _) =
+        provider_for(&session.provider, &session.directory, &session.resources);
     let candidate = ProviderCandidate {
         resolver: session.provider.clone(),
         implementation,

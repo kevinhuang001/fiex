@@ -1,6 +1,6 @@
 //! Applications view implementation of the shared VFS provider contract.
-use super::*;
 use super::shared::*;
+use super::*;
 use std::{
     io::{self, Write},
     path::PathBuf,
@@ -16,7 +16,9 @@ fn application_child(parent: &str, name: &str) -> Result<(String, PathBuf), Prov
     }
     .map_err(provider_error)?;
     if !parent_path.is_dir() {
-        return Err(ProviderError::invalid_params("NotFound: application parent is not a directory"));
+        return Err(ProviderError::invalid_params(
+            "NotFound: application parent is not a directory",
+        ));
     }
     let path = parent_path.join(name);
     let uri = applications::stored_uri(&path).map_err(provider_error)?;
@@ -27,7 +29,10 @@ struct ApplicationStage(Arc<Mutex<Option<tempfile::NamedTempFile>>>);
 
 impl Write for ApplicationStage {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let mut temporary = self.0.lock().map_err(|_| io::Error::other("write stream unavailable"))?;
+        let mut temporary = self
+            .0
+            .lock()
+            .map_err(|_| io::Error::other("write stream unavailable"))?;
         temporary
             .as_mut()
             .ok_or_else(|| io::Error::other("write stream closed"))?
@@ -35,7 +40,10 @@ impl Write for ApplicationStage {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        let mut temporary = self.0.lock().map_err(|_| io::Error::other("write stream unavailable"))?;
+        let mut temporary = self
+            .0
+            .lock()
+            .map_err(|_| io::Error::other("write stream unavailable"))?;
         temporary
             .as_mut()
             .ok_or_else(|| io::Error::other("write stream closed"))?
@@ -134,18 +142,30 @@ impl VfsProvider for ApplicationView {
                 let (uri, target) = application_child(parent, name)?;
                 (uri, target, true)
             }
-            _ => return Err(ProviderError::invalid_params("write requires nodeId or parentId and name")),
+            _ => {
+                return Err(ProviderError::invalid_params(
+                    "write requires nodeId or parentId and name",
+                ))
+            }
         };
         if create {
-            let parent = target.parent().ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?;
+            let parent = target
+                .parent()
+                .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?;
             if !parent.is_dir() || target.exists() {
-                return Err(ProviderError::invalid_params("Conflict: application destination is unavailable"));
+                return Err(ProviderError::invalid_params(
+                    "Conflict: application destination is unavailable",
+                ));
             }
         } else if !target.is_file() {
-            return Err(ProviderError::invalid_params("Unsupported: application write requires a file"));
+            return Err(ProviderError::invalid_params(
+                "Unsupported: application write requires a file",
+            ));
         }
         let temporary = tempfile::NamedTempFile::new_in(
-            target.parent().ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?,
+            target
+                .parent()
+                .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?,
         )
         .map_err(provider_error)?;
         let staged = Arc::new(Mutex::new(Some(temporary)));
@@ -221,9 +241,7 @@ impl VfsProvider for ApplicationView {
     }
 
     fn remove(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
-        let uri = request
-            .node_id()
-            .unwrap_or(path(request.ctx())?);
+        let uri = request.node_id().unwrap_or(path(request.ctx())?);
         applications::remove_user(uri).map_err(provider_error)
     }
 
@@ -237,9 +255,9 @@ impl VfsProvider for ApplicationView {
         request: &TransferPreflight,
     ) -> Result<fiex_provider_contracts::PreflightDecision, ProviderError> {
         let denial = match request.direction {
-            TransferDirection::Export if request.metadata.system && !request.same_mount => Some(
-                "PermissionDenied: system applications cannot leave the Applications view",
-            ),
+            TransferDirection::Export if request.metadata.system && !request.same_mount => {
+                Some("PermissionDenied: system applications cannot leave the Applications view")
+            }
             TransferDirection::Import
                 if !request.same_mount && request.metadata.executable_shortcut != Some(true) =>
             {

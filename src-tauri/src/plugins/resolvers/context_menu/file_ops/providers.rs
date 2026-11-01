@@ -1,13 +1,12 @@
 //! Registered Core file-operation menu providers.
 use super::{Context, Selection};
 use crate::plugins::{
-    native_invocation::NativeProviderInvocation,
-    provider_registry::native::NativeProviderRegistry,
+    native_invocation::NativeProviderInvocation, provider_registry::native::NativeProviderRegistry,
     resource::file_capabilities::FileCapabilities,
 };
 use fiex_provider_contracts::{
-    ContextMenuProvider, LocationMatch, MenuExecuteResult, MenuItem, MenuPlacement,
-    ProviderError, ProviderInput, ProviderInvocation, ProviderMatchRule,
+    ContextMenuProvider, LocationMatch, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
+    ProviderInput, ProviderInvocation, ProviderMatchRule,
 };
 use std::sync::Arc;
 
@@ -15,9 +14,7 @@ use super::super::connection_cache::ConnectionCache;
 
 /// Every generic Core menu group is registered as the same shared provider
 /// trait used by SDK plugins. Native implementations run directly in Core.
-pub(super) fn register(
-    values: &mut NativeProviderRegistry<dyn ContextMenuProvider>,
-) {
+pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 10] = [
         (
             "builtin:opening",

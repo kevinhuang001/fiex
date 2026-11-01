@@ -2,7 +2,7 @@
 use super::{applications, recycle, trash_vfs};
 use crate::{
     core::files::Entry,
-    plugins::{provider_registry::{native::NativeProviderRegistry, FsOperation}},
+    plugins::provider_registry::{native::NativeProviderRegistry, FsOperation},
 };
 use fiex_provider_contracts::{
     FsEntry, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation, ProviderKind,
@@ -23,10 +23,10 @@ mod trash_provider;
 
 use application_provider::ApplicationView;
 use recent_provider::RecentView;
-use trash_provider::TrashView;
-use storage_provider::StorageProvider;
 pub use shared::core_entry;
 use shared::target_invocation;
+use storage_provider::StorageProvider;
+use trash_provider::TrashView;
 
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
@@ -237,7 +237,8 @@ pub fn require(
 pub fn stat(path: &str, owner: &str) -> Result<Entry, String> {
     let provider = view_for(path).ok_or("Unsupported: unknown builtin node")?;
     let invocation = target_invocation(path, owner, "vfs.stat", json!({"nodeId":path}));
-    let request = FsRequest::new(&invocation, FsOperation::Stat).map_err(|error| error.to_string())?;
+    let request =
+        FsRequest::new(&invocation, FsOperation::Stat).map_err(|error| error.to_string())?;
     provider
         .stat(&request)
         .map(core_entry)
@@ -247,7 +248,8 @@ pub fn stat(path: &str, owner: &str) -> Result<Entry, String> {
 pub fn list(path: &str, owner: &str) -> Result<Vec<Entry>, String> {
     let provider = view_for(path).ok_or("Unsupported: builtin node has no children")?;
     let invocation = target_invocation(path, owner, "vfs.list", json!({"nodeId":path}));
-    let request = FsRequest::new(&invocation, FsOperation::List).map_err(|error| error.to_string())?;
+    let request =
+        FsRequest::new(&invocation, FsOperation::List).map_err(|error| error.to_string())?;
     provider
         .list(&request)
         .map(|listing| listing.entries.into_iter().map(core_entry).collect())
@@ -267,15 +269,16 @@ fn basename(path: &str) -> Result<String, String> {
 }
 
 pub fn stat_for(broker: &crate::core::fs::ResourceBroker) -> Result<Entry, String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(
         broker,
         None,
         "vfs.stat",
         json!({"nodeId":broker.path.as_str()}),
     );
-    let request = FsRequest::new(&invocation, FsOperation::Stat)
-        .map_err(|error| error.to_string())?;
+    let request =
+        FsRequest::new(&invocation, FsOperation::Stat).map_err(|error| error.to_string())?;
     provider
         .stat(&request)
         .map(core_entry)
@@ -283,15 +286,16 @@ pub fn stat_for(broker: &crate::core::fs::ResourceBroker) -> Result<Entry, Strin
 }
 
 pub fn list_for(broker: &crate::core::fs::ResourceBroker) -> Result<Vec<Entry>, String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(
         broker,
         None,
         "vfs.list",
         json!({"nodeId":broker.path.as_str(),"hidden":true}),
     );
-    let request = FsRequest::new(&invocation, FsOperation::List)
-        .map_err(|error| error.to_string())?;
+    let request =
+        FsRequest::new(&invocation, FsOperation::List).map_err(|error| error.to_string())?;
     provider
         .list(&request)
         .map(|listing| listing.entries.into_iter().map(core_entry).collect())
@@ -306,7 +310,8 @@ pub fn require_for(
     if create && provider_id(&broker.path) == Some("core:applications") {
         return require(&broker.path, &broker.owner, operation, true);
     }
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(
         broker,
         None,
@@ -323,7 +328,8 @@ pub fn preflight_for(
     broker: &crate::core::fs::ResourceBroker,
     request: &TransferPreflight,
 ) -> Result<(), String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(broker, None, "vfs.preflight", json!({}));
     let result = provider
         .preflight(&invocation, request)
@@ -338,18 +344,17 @@ pub fn preflight_for(
 }
 
 pub fn read_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsRead, String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(
         broker,
         None,
         "vfs.openRead",
         json!({"nodeId":broker.path.as_str()}),
     );
-    let request = FsRequest::new(&invocation, FsOperation::Read)
-        .map_err(|error| error.to_string())?;
-    provider
-        .read(&request)
-        .map_err(|error| error.to_string())
+    let request =
+        FsRequest::new(&invocation, FsOperation::Read).map_err(|error| error.to_string())?;
+    provider.read(&request).map_err(|error| error.to_string())
 }
 
 pub fn write_sized_for(
@@ -357,7 +362,8 @@ pub fn write_sized_for(
     create: bool,
     size: Option<u64>,
 ) -> Result<FsWrite, String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let params = if create {
         let parent = crate::core::fs::parent_path(&broker.path)?;
         let name = basename(&broker.path)?;
@@ -366,15 +372,14 @@ pub fn write_sized_for(
         json!({"nodeId":broker.path.as_str(),"size":size})
     };
     let invocation = shared::broker_invocation(broker, None, "vfs.beginWrite", params);
-    let request = FsRequest::new(&invocation, FsOperation::Write)
-        .map_err(|error| error.to_string())?;
-    provider
-        .write(&request)
-        .map_err(|error| error.to_string())
+    let request =
+        FsRequest::new(&invocation, FsOperation::Write).map_err(|error| error.to_string())?;
+    provider.write(&request).map_err(|error| error.to_string())
 }
 
 pub fn mkdir_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsEntry, String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let parent = crate::core::fs::parent_path(&broker.path)?;
     let name = basename(&broker.path)?;
     let invocation = shared::broker_invocation(
@@ -383,23 +388,23 @@ pub fn mkdir_for(broker: &crate::core::fs::ResourceBroker) -> Result<FsEntry, St
         "vfs.mkdir",
         json!({"parentId":parent,"name":name}),
     );
-    let request = FsRequest::new(&invocation, FsOperation::Mkdir)
-        .map_err(|error| error.to_string())?;
-    provider
-        .mkdir(&request)
-        .map_err(|error| error.to_string())
+    let request =
+        FsRequest::new(&invocation, FsOperation::Mkdir).map_err(|error| error.to_string())?;
+    provider.mkdir(&request).map_err(|error| error.to_string())
 }
 
 pub fn rename_for(
     source: &crate::core::fs::ResourceBroker,
     destination: &crate::core::fs::ResourceBroker,
 ) -> Result<FsEntry, String> {
-    let source_id = shared_provider_id(&source.path)
-        .ok_or("Unsupported: unregistered native VFS provider")?;
+    let source_id =
+        shared_provider_id(&source.path).ok_or("Unsupported: unregistered native VFS provider")?;
     if Some(source_id) != shared_provider_id(&destination.path) {
         return Err("Unsupported: cross-provider rename requires TransferEngine".into());
     }
-    let provider = registry().get(source_id).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider = registry()
+        .get(source_id)
+        .ok_or("Unsupported: unregistered native VFS provider")?;
     let parent = crate::core::fs::parent_path(&destination.path)?;
     let name = basename(&destination.path)?;
     let invocation = shared::broker_invocation(
@@ -408,26 +413,23 @@ pub fn rename_for(
         "vfs.rename",
         json!({"nodeId":source.path.as_str(),"parentId":parent,"name":name}),
     );
-    let request = FsRequest::new(&invocation, FsOperation::Rename)
-        .map_err(|error| error.to_string())?;
-    provider
-        .rename(&request)
-        .map_err(|error| error.to_string())
+    let request =
+        FsRequest::new(&invocation, FsOperation::Rename).map_err(|error| error.to_string())?;
+    provider.rename(&request).map_err(|error| error.to_string())
 }
 
 pub fn remove_for(broker: &crate::core::fs::ResourceBroker) -> Result<(), String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(
         broker,
         None,
         "vfs.remove",
         json!({"nodeId":broker.path.as_str()}),
     );
-    let request = FsRequest::new(&invocation, FsOperation::Remove)
-        .map_err(|error| error.to_string())?;
-    provider
-        .remove(&request)
-        .map_err(|error| error.to_string())
+    let request =
+        FsRequest::new(&invocation, FsOperation::Remove).map_err(|error| error.to_string())?;
+    provider.remove(&request).map_err(|error| error.to_string())
 }
 
 pub fn search_for(
@@ -438,19 +440,23 @@ pub fn search_for(
     limit: usize,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<(Vec<Entry>, bool), String> {
-    let provider = shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
+    let provider =
+        shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(
         broker,
         None,
         "vfs.search",
         json!({"nodeId":broker.path.as_str(),"query":query,"hidden":hidden,"ignores":ignores,"limit":limit}),
     );
-    let request = FsRequest::new(&invocation, FsOperation::Search)
-        .map_err(|error| error.to_string())?;
+    let request =
+        FsRequest::new(&invocation, FsOperation::Search).map_err(|error| error.to_string())?;
     let listing = provider
         .search_cancellable(&request, cancelled)
         .map_err(|error| error.to_string())?;
-    Ok((listing.entries.into_iter().map(core_entry).collect(), listing.truncated))
+    Ok((
+        listing.entries.into_iter().map(core_entry).collect(),
+        listing.truncated,
+    ))
 }
 
 /// URI-backed resources have no host path. Never canonicalize or materialize
@@ -476,7 +482,9 @@ pub fn default_view(path: &str) -> Option<&'static str> {
 }
 
 pub fn readonly(path: &str) -> bool {
-    resource_entry(path).map(|entry| entry.readonly).unwrap_or(true)
+    resource_entry(path)
+        .map(|entry| entry.readonly)
+        .unwrap_or(true)
 }
 
 /// A Recent alias can be revealed only when its original resource still exists

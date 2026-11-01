@@ -35,8 +35,8 @@ impl NativeProviderInvocation {
             .iter()
             .map(|resource| resource.project("core", &request.session_id, true, true))
             .collect();
-        request.directory = directory
-            .map(|resource| resource.project("core", &request.session_id, true, true));
+        request.directory =
+            directory.map(|resource| resource.project("core", &request.session_id, true, true));
         request.selection_count = targets.len();
         Self {
             request,

@@ -9,8 +9,8 @@ use super::types::{
     Decoration, DecorationBadge, DecorationEntry, DecorationField, DecorationStyle,
 };
 use crate::plugins::host::PluginManifest;
-use fiex_provider_contracts::{DecorationContribution, ResourceRef};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
+use fiex_provider_contracts::{DecorationContribution, ResourceRef};
 use std::collections::HashMap;
 
 fn allowed_color(value: &str) -> bool {

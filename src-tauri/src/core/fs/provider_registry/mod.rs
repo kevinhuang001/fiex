@@ -6,19 +6,16 @@ use super::{
     handles::{ProviderReadHandle, ProviderWriteHandle},
     FsError, FsErrorKind, ReadHandle, ResourceBroker, WriteHandle,
 };
-use crate::{
-    core::volumes::native_vfs,
-    plugins::provider_registry::FsOperation,
-};
+use crate::{core::volumes::native_vfs, plugins::provider_registry::FsOperation};
 use fiex_provider_contracts::{FsWrite, TransferPreflight};
 use serde_json::{to_value, Value};
 mod plugin;
 mod routing;
-use routing::{resolve, Route};
 pub(crate) use routing::{
-    child_path, identity, is_plugin_mount, owner, parent_path, reference_mount_id,
-    resource_access, resource_entry, validate_child, ResourceAccess, ResourceOwner,
+    child_path, identity, is_plugin_mount, owner, parent_path, reference_mount_id, resource_access,
+    resource_entry, validate_child, ResourceAccess, ResourceOwner,
 };
+use routing::{resolve, Route};
 
 pub(super) fn require(
     resource: &ResourceBroker,
@@ -37,13 +34,10 @@ pub(super) fn require(
             } else {
                 plugin::plugin_node(resource)?
             };
-            let required = if create
-                && matches!(operation, FsOperation::Write | FsOperation::Mkdir)
+            let required = if create && matches!(operation, FsOperation::Write | FsOperation::Mkdir)
             {
                 FsOperation::Mkdir
-            } else if operation == FsOperation::Search
-                && !mount.supports(FsOperation::Search)
-            {
+            } else if operation == FsOperation::Search && !mount.supports(FsOperation::Search) {
                 FsOperation::List
             } else {
                 operation
@@ -114,7 +108,9 @@ pub(super) fn begin_write(
     create: bool,
 ) -> Result<Box<dyn WriteHandle>, FsError> {
     require(resource, FsOperation::Write, create)?;
-    Ok(Box::new(super::handles::StagedWriteHandle::new(resource, create)?))
+    Ok(Box::new(super::handles::StagedWriteHandle::new(
+        resource, create,
+    )?))
 }
 
 pub(super) fn begin_write_sized(
@@ -169,7 +165,9 @@ pub(super) fn rename(source: &ResourceBroker, destination: &ResourceBroker) -> R
             if mount.mount_id != destination_mount.mount_id {
                 return Err("Unsupported: cross-mount rename requires TransferEngine".into());
             }
-            let entry = mount.rename(&node, &name, Some(&parent)).map_err(FsError::from)?;
+            let entry = mount
+                .rename(&node, &name, Some(&parent))
+                .map_err(FsError::from)?;
             plugin::remember_entry(&destination.path, &entry)
         }
     }
@@ -225,10 +223,9 @@ pub(super) fn search_stream(
     require(resource, FsOperation::Search, false)?;
     match resolve(&resource.path)? {
         Route::NativeProvider => {
-            let (entries, truncated) = native_vfs::search_for(
-                resource, query, hidden, ignores, limit, cancelled,
-            )
-            .map_err(FsError::from)?;
+            let (entries, truncated) =
+                native_vfs::search_for(resource, query, hidden, ignores, limit, cancelled)
+                    .map_err(FsError::from)?;
             for entry in entries {
                 if cancelled() {
                     break;
@@ -241,8 +238,15 @@ pub(super) fn search_stream(
             let (mount, _) = plugin::plugin_node(resource)?;
             if mount.supports(FsOperation::Search) {
                 let truncated = crate::plugins::vfs::search_stream(
-                    &resource.path, query, hidden, ignores, limit, cancelled, emit,
-                ).map_err(FsError::from)?;
+                    &resource.path,
+                    query,
+                    hidden,
+                    ignores,
+                    limit,
+                    cancelled,
+                    emit,
+                )
+                .map_err(FsError::from)?;
                 return Ok((truncated, 0));
             }
             plugin::walk_search(resource, query, hidden, ignores, limit, cancelled, emit)
@@ -272,10 +276,13 @@ pub(super) fn desktop_listing(
         Route::Plugin => plugin::list(resource)?,
     };
     let filter = crate::core::ignores::IgnoreSet::new(ignores);
-    let mut entries = entries.into_iter().filter(|entry| {
-        (hidden || !entry.name.starts_with('.'))
-            && !filter.is_ignored(std::path::Path::new(&entry.name))
-    }).collect::<Vec<_>>();
+    let mut entries = entries
+        .into_iter()
+        .filter(|entry| {
+            (hidden || !entry.name.starts_with('.'))
+                && !filter.is_ignored(std::path::Path::new(&entry.name))
+        })
+        .collect::<Vec<_>>();
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
     let mutable = [
         (FsOperation::Write, false),

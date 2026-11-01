@@ -10,9 +10,9 @@ mod proxy;
 mod stream;
 use crate::core::search::SearchMode;
 use crate::plugins::events::Resolver;
+use fiex_provider_contracts::{SearchEntry, SearchProvider, SearchTag};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use fiex_provider_contracts::{SearchEntry, SearchProvider, SearchTag};
 use std::sync::Arc;
 pub use stream::{run, run_stream};
 

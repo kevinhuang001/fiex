@@ -25,11 +25,11 @@ impl StorageProvider {
 
     fn resource(&self, ctx: &dyn ProviderInvocation) -> Result<&ResourceBroker, ProviderError> {
         let resource = broker(ctx)?;
-        resource
-            .ensure_current_binding()
-            .map_err(provider_error)?;
+        resource.ensure_current_binding().map_err(provider_error)?;
         if super::shared_provider_id(&resource.path) != Some(self.id) {
-            return Err(ProviderError::invalid_params("storage provider does not own resource"));
+            return Err(ProviderError::invalid_params(
+                "storage provider does not own resource",
+            ));
         }
         Ok(resource)
     }
@@ -41,7 +41,10 @@ impl StorageProvider {
                 .map(|entry| storage::decorated_entry(&resource.path, entry))
                 .map_err(provider_error);
         }
-        resource.scope.authorize(&resource.path).map_err(provider_error)?;
+        resource
+            .scope
+            .authorize(&resource.path)
+            .map_err(provider_error)?;
         let value = fs_access::stat(&resource.scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
         Ok(storage::decorated_entry(&resource.path, entry))
@@ -50,7 +53,9 @@ impl StorageProvider {
     fn validate_node(&self, request: &FsRequest<'_>) -> Result<ResourceBroker, ProviderError> {
         let resource = self.resource(request.ctx())?.clone_binding();
         if request.node_id() != Some(resource.path.as_str()) {
-            return Err(ProviderError::invalid_params("nodeId does not match scoped resource"));
+            return Err(ProviderError::invalid_params(
+                "nodeId does not match scoped resource",
+            ));
         }
         Ok(resource)
     }
@@ -71,7 +76,9 @@ impl StorageProvider {
             .map(|value| value.to_string_lossy().into_owned())
             .ok_or_else(|| ProviderError::invalid_params("scoped resource has no name"))?;
         if request.parent_id() != Some(parent.as_str()) || request.name() != Some(name.as_str()) {
-            return Err(ProviderError::invalid_params("child identity does not match scoped resource"));
+            return Err(ProviderError::invalid_params(
+                "child identity does not match scoped resource",
+            ));
         }
         Ok(())
     }
@@ -86,7 +93,10 @@ impl StorageProvider {
         if let Some(route) = usbfs::route(&resource.path) {
             return usb::authorize(&route, operation, create);
         }
-        resource.scope.authorize(&resource.path).map_err(provider_error)?;
+        resource
+            .scope
+            .authorize(&resource.path)
+            .map_err(provider_error)?;
         if crate::core::volumes::application_policy::protected(&resource.path)
             && !matches!(
                 operation,
@@ -111,7 +121,10 @@ impl StorageProvider {
         if allowed {
             Ok(())
         } else {
-            Err(ProviderError::invalid_params(format!("Unsupported: {}", operation.as_str())))
+            Err(ProviderError::invalid_params(format!(
+                "Unsupported: {}",
+                operation.as_str()
+            )))
         }
     }
 
@@ -119,7 +132,10 @@ impl StorageProvider {
         if let Some(route) = usbfs::route(&resource.path) {
             usbfs::entry(&route).map_err(provider_error)
         } else {
-            resource.scope.authorize(&resource.path).map_err(provider_error)?;
+            resource
+                .scope
+                .authorize(&resource.path)
+                .map_err(provider_error)?;
             let value = fs_access::stat(&resource.scope, &resource.path).map_err(provider_error)?;
             storage::entry(value).map_err(provider_error)
         }
@@ -138,8 +154,6 @@ impl StorageProvider {
             .map(|value| storage::entry(value).map_err(provider_error))
             .collect()
     }
-
-
 }
 
 impl VfsProvider for StorageProvider {
@@ -255,14 +269,18 @@ impl VfsProvider for StorageProvider {
         }
         let value = fs_access::mkdir(&resource.scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
-        Ok(shared_entry(storage::decorated_entry(&resource.path, entry)))
+        Ok(shared_entry(storage::decorated_entry(
+            &resource.path,
+            entry,
+        )))
     }
 
     fn rename(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
         let resource = self.validate_node(request)?;
         let destination = destination_broker(request.ctx())?.clone_binding();
         Self::validate_child_path(&destination, request)?;
-        if super::shared_provider_id(&resource.path) != super::shared_provider_id(&destination.path) {
+        if super::shared_provider_id(&resource.path) != super::shared_provider_id(&destination.path)
+        {
             return Err(ProviderError::invalid_params(
                 "Unsupported: cross-provider rename requires TransferEngine",
             ));
@@ -273,24 +291,37 @@ impl VfsProvider for StorageProvider {
             let other = usbfs::route(&destination.path)
                 .ok_or_else(|| ProviderError::invalid_params("invalid USB destination"))?;
             let (parent, name) = other.rel.rsplit_once('/').unwrap_or(("", &other.rel));
-            let source_parent = route.rel.rsplit_once('/').map(|(path, _)| path).unwrap_or("");
+            let source_parent = route
+                .rel
+                .rsplit_once('/')
+                .map(|(path, _)| path)
+                .unwrap_or("");
             if other.root != route.root || parent != source_parent {
                 return Err(ProviderError::invalid_params(
                     "Unsupported: cross-directory USB rename; use TransferEngine",
                 ));
             }
             if usbfs::entry(&other).is_ok() {
-                return Err(ProviderError::invalid_params("Conflict: destination already exists"));
+                return Err(ProviderError::invalid_params(
+                    "Conflict: destination already exists",
+                ));
             }
             usbfs::rename(&route, name).map_err(provider_error)?;
             let entry = usbfs::entry(&other).map_err(provider_error)?;
-            return Ok(shared_entry(storage::decorated_entry(&destination.path, entry)));
+            return Ok(shared_entry(storage::decorated_entry(
+                &destination.path,
+                entry,
+            )));
         }
         fs_access::rename(&resource.scope, &resource.path, &destination.path)
             .map_err(provider_error)?;
-        let value = fs_access::stat(&destination.scope, &destination.path).map_err(provider_error)?;
+        let value =
+            fs_access::stat(&destination.scope, &destination.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
-        Ok(shared_entry(storage::decorated_entry(&destination.path, entry)))
+        Ok(shared_entry(storage::decorated_entry(
+            &destination.path,
+            entry,
+        )))
     }
 
     fn remove(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
@@ -318,8 +349,8 @@ impl VfsProvider for StorageProvider {
             .filter(|query| !query.is_empty())
             .ok_or_else(|| ProviderError::invalid_params("search query is required"))?;
         let (entries, truncated, _) = if let Some(route) = usbfs::route(&resource.path) {
-            let (entries, truncated) = usbfs::search(&route, query, request.limit(), cancelled)
-                .map_err(provider_error)?;
+            let (entries, truncated) =
+                usbfs::search(&route, query, request.limit(), cancelled).map_err(provider_error)?;
             (entries, truncated, 0)
         } else {
             crate::core::search::search_directory(

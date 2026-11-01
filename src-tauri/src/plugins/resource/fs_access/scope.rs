@@ -116,7 +116,8 @@ impl Scope {
             return Err("PermissionDenied: view does not support writes".into());
         }
         if self.metadata_only
-            && ((method.starts_with("host.fs.") && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
+            && ((method.starts_with("host.fs.")
+                && !matches!(method, "host.fs.stat" | "host.fs.statBatch"))
                 || matches!(method, "host.process.run" | "host.vfs.openView"))
         {
             return Err("discovery scope permits metadata only".into());
@@ -193,12 +194,11 @@ impl Scope {
                     .ok()?
                     .get(&key)
                     .filter(|snapshot| {
-                        crate::core::fs::provider_registry::resource_access(
-                            &snapshot.display,
-                        )
-                        .is_ok_and(|access| {
-                            access == crate::core::fs::provider_registry::ResourceAccess::Provider
-                        })
+                        crate::core::fs::provider_registry::resource_access(&snapshot.display)
+                            .is_ok_and(|access| {
+                                access
+                                    == crate::core::fs::provider_registry::ResourceAccess::Provider
+                            })
                     })
                     .cloned()
             }));

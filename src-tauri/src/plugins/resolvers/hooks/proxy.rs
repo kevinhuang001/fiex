@@ -6,8 +6,8 @@ use crate::plugins::{
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
-    HookProvider, HookResult, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderRequestContext,
+    HookProvider, HookResult, ProviderDescriptor, ProviderError, ProviderInstances,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
 use std::{
     any::Any,
@@ -72,7 +72,9 @@ impl HookProvider for IpcHook {
         let response = crate::plugins::events::invoke_resources(
             &services.plugin,
             ctx.method(),
-            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
             std::slice::from_ref(&services.resource),
             None,
         )

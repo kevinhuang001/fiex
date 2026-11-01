@@ -7,8 +7,8 @@ use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
-    MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ResourceMetadata,
+    MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
+    ProviderMatchRule, ResourceMetadata,
 };
 use serde_json::json;
 use std::sync::{Arc, OnceLock};

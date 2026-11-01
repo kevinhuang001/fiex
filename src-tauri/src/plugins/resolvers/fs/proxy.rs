@@ -284,7 +284,8 @@ pub(super) fn open_read(
 ) -> Result<fiex_provider_contracts::FsRead, String> {
     let provider = provider(&mount.plugin_id)?;
     let invocation = MountInvocation::new(mount.clone(), "vfs.openRead", params);
-    let request = FsRequest::new(&invocation, FsOperation::Read).map_err(|error| error.to_string())?;
+    let request =
+        FsRequest::new(&invocation, FsOperation::Read).map_err(|error| error.to_string())?;
     provider.read(&request).map_err(|error| error.to_string())
 }
 
@@ -294,7 +295,8 @@ pub(super) fn begin_write(
 ) -> Result<fiex_provider_contracts::FsWrite, String> {
     let provider = provider(&mount.plugin_id)?;
     let invocation = MountInvocation::new(mount.clone(), "vfs.beginWrite", params);
-    let request = FsRequest::new(&invocation, FsOperation::Write).map_err(|error| error.to_string())?;
+    let request =
+        FsRequest::new(&invocation, FsOperation::Write).map_err(|error| error.to_string())?;
     provider.write(&request).map_err(|error| error.to_string())
 }
 
@@ -303,17 +305,20 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
     let invocation = MountInvocation::new(mount.clone(), method, params.clone());
     let result = match method {
         "vfs.list" => {
-            let request = FsRequest::new(&invocation, FsOperation::List).map_err(|error| error.to_string())?;
+            let request = FsRequest::new(&invocation, FsOperation::List)
+                .map_err(|error| error.to_string())?;
             serde_json::to_value(provider.list(&request).map_err(|error| error.to_string())?)
                 .map_err(|error| error.to_string())
         }
         "vfs.stat" => {
-            let request = FsRequest::new(&invocation, FsOperation::Stat).map_err(|error| error.to_string())?;
+            let request = FsRequest::new(&invocation, FsOperation::Stat)
+                .map_err(|error| error.to_string())?;
             serde_json::to_value(provider.stat(&request).map_err(|error| error.to_string())?)
                 .map_err(|error| error.to_string())
         }
         "vfs.mkdir" => {
-            let request = FsRequest::new(&invocation, FsOperation::Mkdir).map_err(|error| error.to_string())?;
+            let request = FsRequest::new(&invocation, FsOperation::Mkdir)
+                .map_err(|error| error.to_string())?;
             serde_json::to_value(
                 provider
                     .mkdir(&request)
@@ -322,7 +327,8 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
             .map_err(|error| error.to_string())
         }
         "vfs.rename" => {
-            let request = FsRequest::new(&invocation, FsOperation::Rename).map_err(|error| error.to_string())?;
+            let request = FsRequest::new(&invocation, FsOperation::Rename)
+                .map_err(|error| error.to_string())?;
             serde_json::to_value(
                 provider
                     .rename(&request)
@@ -331,14 +337,16 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
             .map_err(|error| error.to_string())
         }
         "vfs.remove" => {
-            let request = FsRequest::new(&invocation, FsOperation::Remove).map_err(|error| error.to_string())?;
+            let request = FsRequest::new(&invocation, FsOperation::Remove)
+                .map_err(|error| error.to_string())?;
             provider
                 .remove(&request)
                 .map_err(|error| error.to_string())?;
             Ok(Value::Null)
         }
         "vfs.search" => {
-            let request = FsRequest::new(&invocation, FsOperation::Search).map_err(|error| error.to_string())?;
+            let request = FsRequest::new(&invocation, FsOperation::Search)
+                .map_err(|error| error.to_string())?;
             serde_json::to_value(
                 provider
                     .search(&request)

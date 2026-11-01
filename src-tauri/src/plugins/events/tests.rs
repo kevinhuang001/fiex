@@ -4,15 +4,13 @@ use super::*;
 fn preview_skips_invalid_provider_and_stops_after_success() {
     use std::sync::{Arc, Mutex};
 
-    let providers = vec![
-        "invalid", "working", "unused",
-    ]
-    .into_iter()
-    .map(|id| ProviderCandidate {
-        resolver: Resolver::builtin(id, 100),
-        implementation: Arc::new(id.to_owned()),
-    })
-    .collect();
+    let providers = vec!["invalid", "working", "unused"]
+        .into_iter()
+        .map(|id| ProviderCandidate {
+            resolver: Resolver::builtin(id, 100),
+            implementation: Arc::new(id.to_owned()),
+        })
+        .collect();
     let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
         "preview.open",
         json!({}),

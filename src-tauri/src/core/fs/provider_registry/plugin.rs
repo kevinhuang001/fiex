@@ -112,9 +112,7 @@ pub(super) fn stat(resource: &ResourceBroker) -> Result<crate::core::files::Entr
     Ok(project_entry(&mount, &resource.path, entry))
 }
 
-pub(super) fn list(
-    resource: &ResourceBroker,
-) -> Result<Vec<crate::core::files::Entry>, FsError> {
+pub(super) fn list(resource: &ResourceBroker) -> Result<Vec<crate::core::files::Entry>, FsError> {
     let (mount, node) = plugin_node(resource)?;
     let listing = mount.list(&node, true, &[]).map_err(FsError::from)?;
     listing
@@ -204,9 +202,7 @@ pub(super) fn stream_write(
             .ok_or_else(|| fiex_provider_contracts::ProviderError::internal("write stream closed"))?
             .commit()
             .map_err(|error| {
-                fiex_provider_contracts::ProviderError::internal(
-                    FsError::from(error).to_string(),
-                )
+                fiex_provider_contracts::ProviderError::internal(FsError::from(error).to_string())
             })?;
         if let Some(entry) = entry {
             remember_entry(&path, &entry).map_err(|error| {

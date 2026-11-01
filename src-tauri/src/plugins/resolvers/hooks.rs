@@ -4,7 +4,9 @@ use crate::plugins::{
     events::{EventRouter, ProviderCandidate},
     resource::resource_context::ResourceSnapshot,
 };
-use fiex_provider_contracts::{HookProvider, HookResult, ProviderError, ProviderInvocation, ProviderRequest};
+use fiex_provider_contracts::{
+    HookProvider, HookResult, ProviderError, ProviderInvocation, ProviderRequest,
+};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -23,13 +25,16 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
 
 pub fn before_open(path: &str) -> Result<Value, String> {
     let resource = ResourceSnapshot::resolve(path)?;
-    let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
+    let targets =
+        crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
     let providers =
         crate::plugins::provider_registry::candidates("hooks.invoke", &targets, "", Vec::new())
             .into_iter()
             .filter(|provider| {
-                provider.plugin.as_deref().is_some_and(|plugin|
-                    plugin.extensions["hooks"]["event"] == "beforeOpen")
+                provider
+                    .plugin
+                    .as_deref()
+                    .is_some_and(|plugin| plugin.extensions["hooks"]["event"] == "beforeOpen")
             });
     let providers = providers
         .map(|resolver| {
@@ -82,7 +87,6 @@ pub fn before_open(path: &str) -> Result<Value, String> {
     );
     serde_json::to_value(result).map_err(|error| error.to_string())
 }
-
 
 #[cfg(test)]
 mod tests {

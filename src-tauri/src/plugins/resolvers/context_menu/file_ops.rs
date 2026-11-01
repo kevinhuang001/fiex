@@ -31,9 +31,11 @@ use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use crate::plugins::resource::file_capabilities::FileCapabilities;
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{ContextMenuProvider, MatchResource, ProviderError, ProviderInvocation};
 #[cfg(test)]
 use fiex_provider_contracts::ProviderKind;
+use fiex_provider_contracts::{
+    ContextMenuProvider, MatchResource, ProviderError, ProviderInvocation,
+};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -71,7 +73,11 @@ fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
     super::native_registry()
 }
 
-pub(super) fn invocation(context: &Context, method: &str, params: Value) -> NativeProviderInvocation {
+pub(super) fn invocation(
+    context: &Context,
+    method: &str,
+    params: Value,
+) -> NativeProviderInvocation {
     let targets = context
         .entries
         .iter()
@@ -114,9 +120,13 @@ pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolv
 
 #[cfg(test)]
 pub(super) fn resolve(id: &str, context: &Context) -> Result<Value, String> {
-    let provider = registry().get(id).ok_or("unknown native ContextMenuProvider")?;
+    let provider = registry()
+        .get(id)
+        .ok_or("unknown native ContextMenuProvider")?;
     let invocation = invocation(context, "contextMenu.resolve", json!({}));
-    let descriptor = registry().descriptor(id).ok_or("missing native menu descriptor")?;
+    let descriptor = registry()
+        .descriptor(id)
+        .ok_or("missing native menu descriptor")?;
     let targets = matcher_targets(context);
     let directory = crate::plugins::match_rules::directory_match_resource(&context.directory);
     if !fiex_provider_contracts::ProviderMatcher::matches(
@@ -133,18 +143,21 @@ pub(super) fn resolve(id: &str, context: &Context) -> Result<Value, String> {
     Ok(json!({"items": items}))
 }
 
-pub(super) fn invoke(
-    id: &str,
-    invocation: &dyn ProviderInvocation,
-) -> Result<Value, String> {
-    let provider = registry().get(id).ok_or("unknown native ContextMenuProvider")?;
-    let descriptor = registry().descriptor(id).ok_or("missing native menu descriptor")?;
-    let resources = NativeProviderInvocation::resources(invocation)
-        .map_err(|error| error.to_string())?;
+pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Value, String> {
+    let provider = registry()
+        .get(id)
+        .ok_or("unknown native ContextMenuProvider")?;
+    let descriptor = registry()
+        .descriptor(id)
+        .ok_or("missing native menu descriptor")?;
+    let resources =
+        NativeProviderInvocation::resources(invocation).map_err(|error| error.to_string())?;
     let targets = crate::plugins::events::matching::match_resources(resources);
     let directory = NativeProviderInvocation::directory(invocation)
         .ok()
-        .and_then(|resource| crate::plugins::match_rules::directory_match_resource(&resource.display));
+        .and_then(|resource| {
+            crate::plugins::match_rules::directory_match_resource(&resource.display)
+        });
     if !fiex_provider_contracts::ProviderMatcher::matches(
         &descriptor.r#match,
         &targets,
@@ -160,7 +173,10 @@ pub(super) fn invoke(
             .map_err(|error| error.to_string()),
         "contextMenu.execute" => provider
             .execute(invocation)
-            .and_then(|result| serde_json::to_value(result).map_err(|error| ProviderError::internal(error.to_string())))
+            .and_then(|result| {
+                serde_json::to_value(result)
+                    .map_err(|error| ProviderError::internal(error.to_string()))
+            })
             .map_err(|error| error.to_string()),
         method => Err(ProviderError::method_not_found(method).to_string()),
     }
@@ -168,11 +184,7 @@ pub(super) fn invoke(
 
 #[cfg(test)]
 pub(super) fn execute(id: &str, item_id: &str, context: &Context) -> Result<Value, String> {
-    let invocation = invocation(
-        context,
-        "contextMenu.execute",
-        json!({"itemId": item_id}),
-    );
+    let invocation = invocation(context, "contextMenu.execute", json!({"itemId": item_id}));
     invoke(id, &invocation)
 }
 
@@ -208,13 +220,8 @@ mod registry_tests {
         );
         assert!(providers(&ctx).is_empty());
 
-        let ctx = Context::for_test_caps(
-            "/tmp",
-            Vec::new(),
-            Vec::new(),
-            false,
-            FileCapabilities::ALL,
-        );
+        let ctx =
+            Context::for_test_caps("/tmp", Vec::new(), Vec::new(), false, FileCapabilities::ALL);
         assert_eq!(
             providers(&ctx)
                 .into_iter()

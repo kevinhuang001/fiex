@@ -1,11 +1,7 @@
 //! Recently opened files, persisted so the sidebar's Recent location survives
 //! restarts. Store source identities, never downloaded cache paths.
 use crate::core::files::Entry;
-use std::{
-    fs,
-    path::PathBuf,
-    sync::Mutex,
-};
+use std::{fs, path::PathBuf, sync::Mutex};
 
 const LIMIT: usize = 40;
 
@@ -53,8 +49,7 @@ pub fn record(state: &Recent, path: &str) {
     ) {
         return;
     }
-    let Ok(resource) =
-        crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
+    let Ok(resource) = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
     else {
         return;
     };

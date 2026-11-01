@@ -36,9 +36,7 @@ fn system_app_is_launch_only_and_user_entries_are_protected() {
     let value = resolve("core.applications.menu", "applications://", &user).unwrap();
     assert_eq!(value["items"].as_array().unwrap().len(), 3);
     assert_eq!(
-        execute("core.applications.menu", "trash", "applications://", &user)
-            .unwrap()
-            ["command"],
+        execute("core.applications.menu", "trash", "applications://", &user).unwrap()["command"],
         "trashApplications"
     );
 }
@@ -124,9 +122,7 @@ fn blank_trash_canvas_offers_empty_without_selection() {
         assert_eq!(items[0]["id"], "emptyTrash");
         assert_eq!(items[0]["danger"], true);
         assert_eq!(
-            execute("core.trash.menu", "emptyTrash", directory, &blank)
-                .unwrap()
-                ["command"],
+            execute("core.trash.menu", "emptyTrash", directory, &blank).unwrap()["command"],
             "emptyTrash"
         );
         assert!(execute("core.trash.menu", "delete", directory, &blank).is_err());

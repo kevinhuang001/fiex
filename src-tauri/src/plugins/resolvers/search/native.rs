@@ -66,9 +66,7 @@ impl SearchProvider for Walker {
             ignores,
             limit,
             cancelled,
-            &mut |entry| {
-                emit(super::search_entry(entry)).map_err(|error| error.to_string())
-            },
+            &mut |entry| emit(super::search_entry(entry)).map_err(|error| error.to_string()),
         )
         .map_err(ProviderError::internal)?;
         Ok(SearchResults {

@@ -20,8 +20,8 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
             "connection": provider_config(&connection),
         }),
     )?;
-    let target: ConnectionOpenResult =
-        serde_json::from_value(target).map_err(|error| format!("invalid connection navigation: {error}"))?;
+    let target: ConnectionOpenResult = serde_json::from_value(target)
+        .map_err(|error| format!("invalid connection navigation: {error}"))?;
     match target {
         ConnectionOpenResult::Vfs { mount_id, node_ref } => {
             if mount_id != connection.mount_id {

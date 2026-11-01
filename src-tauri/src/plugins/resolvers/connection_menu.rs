@@ -13,14 +13,14 @@ mod proxy;
 mod validation;
 use crate::remote::ConnectionInfo;
 use fiex_provider_contracts::{
-    ConnectionContextMenuProvider, MatchResource, MenuExecuteResult, MenuItem,
-    ProviderError, ProviderInvocation, ProviderRequest, ResourceCapabilities,
-    ResourceLocation, ResourceMetadata, ResourceType,
+    ConnectionContextMenuProvider, MatchResource, MenuExecuteResult, MenuItem, ProviderError,
+    ProviderInvocation, ProviderRequest, ResourceCapabilities, ResourceLocation, ResourceMetadata,
+    ResourceType,
 };
 use native::providers;
 use serde_json::{json, Value};
-use validation::valid_items;
 use std::sync::Arc;
+use validation::valid_items;
 
 #[cfg(test)]
 use native::items as builtin_items;
@@ -62,8 +62,7 @@ impl Context {
     /// view owner, storage owner, mount or effective operations.
     fn matcher_resource(&self) -> MatchResource {
         let owner = format!("plugin:{}:{}", self.info.plugin_id, self.info.kind);
-        let (_, storage) =
-            crate::plugins::match_rules::typed_locations_for(&self.info.mount_path);
+        let (_, storage) = crate::plugins::match_rules::typed_locations_for(&self.info.mount_path);
         MatchResource {
             metadata: Some(ResourceMetadata {
                 kind: "connection".into(),
@@ -129,13 +128,9 @@ pub fn query(connection_id: &str) -> Result<Vec<Value>, String> {
             resolver,
         })
         .collect();
-    let invocation = NativeProviderInvocation::new(
-        request.method.clone(),
-        request.params.clone(),
-        &[],
-        None,
-    )
-    .with_local_data(Arc::new(ctx.clone()));
+    let invocation =
+        NativeProviderInvocation::new(request.method.clone(), request.params.clone(), &[], None)
+            .with_local_data(Arc::new(ctx.clone()));
     Ok(EventRouter::resolve_shared(
         "connectionContextMenu.resolve",
         providers,
@@ -239,18 +234,18 @@ pub async fn execute(
         resolver: owner,
         implementation,
     };
-    let invocation = NativeProviderInvocation::new(
-        request.method.clone(),
-        request.params.clone(),
-        &[],
-        None,
-    )
-    .with_local_data(Arc::new(ctx.clone()));
+    let invocation =
+        NativeProviderInvocation::new(request.method.clone(), request.params.clone(), &[], None)
+            .with_local_data(Arc::new(ctx.clone()));
     let result = EventRouter::resolve_shared(
         "connectionContextMenu.execute",
         vec![candidate],
         &invocation,
-        |_, implementation, invocation| implementation.execute(invocation).map_err(|error| error.to_string()),
+        |_, implementation, invocation| {
+            implementation
+                .execute(invocation)
+                .map_err(|error| error.to_string())
+        },
         |_, result| {
             let wire = serde_json::to_value(&result).map_err(|error| error.to_string())?;
             crate::plugins::events::validate_result("connectionContextMenu.execute", &wire)?;

@@ -9,8 +9,8 @@
 pub mod application_folders;
 pub mod application_policy;
 pub mod applications;
-pub mod native_vfs;
 mod mounts;
+pub mod native_vfs;
 pub mod recycle;
 mod roots;
 mod trash;

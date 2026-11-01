@@ -18,10 +18,7 @@ pub(crate) enum ResourceAccess {
 
 pub(crate) enum ResourceOwner {
     LocalFs,
-    PluginMount {
-        plugin_id: String,
-        mount_id: String,
-    },
+    PluginMount { plugin_id: String, mount_id: String },
     NativeVfs(&'static str),
 }
 
@@ -89,11 +86,7 @@ pub(crate) fn is_plugin_mount(path: &str) -> bool {
 
 /// Validate child ownership at the storage-provider boundary. Resource scopes
 /// carry authorization state; concrete mount semantics stay with their owner.
-pub(crate) fn validate_child(
-    scope: &Scope,
-    parent: &str,
-    child: &str,
-) -> Result<(), String> {
+pub(crate) fn validate_child(scope: &Scope, parent: &str, child: &str) -> Result<(), String> {
     match resolve(parent).map_err(String::from)? {
         Route::Plugin => super::plugin::validate_child(parent, child),
         Route::NativeProvider => match native_vfs::shared_provider_id(parent) {
@@ -201,7 +194,10 @@ mod tests {
     #[test]
     fn registered_virtual_directories_are_native_storage_providers() {
         for path in ["recent://", "applications://"] {
-            assert!(matches!(resolve(path).unwrap(), Route::NativeProvider), "{path}");
+            assert!(
+                matches!(resolve(path).unwrap(), Route::NativeProvider),
+                "{path}"
+            );
         }
     }
 
@@ -214,7 +210,10 @@ mod tests {
             "fiex://mount/nonexistent/resource",
             "",
         ] {
-            assert!(matches!(resolve(path), Ok(Route::Plugin) | Err(_)), "{path}");
+            assert!(
+                matches!(resolve(path), Ok(Route::Plugin) | Err(_)),
+                "{path}"
+            );
         }
     }
 
@@ -229,6 +228,9 @@ mod tests {
     #[test]
     fn real_host_paths_use_the_registered_native_provider() {
         let path = std::env::temp_dir().join("fiex-provider-registry-local");
-        assert!(matches!(resolve(&path.to_string_lossy()), Ok(Route::NativeProvider)));
+        assert!(matches!(
+            resolve(&path.to_string_lossy()),
+            Ok(Route::NativeProvider)
+        ));
     }
 }

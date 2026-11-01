@@ -1,9 +1,12 @@
 //! Trash view implementation of the shared VFS provider contract.
-use super::*;
 use super::shared::*;
+use super::*;
 
 fn trash_operations(path: &str) -> Vec<FsOperation> {
-    match storage::trash_stat(path, &[FsOperation::List, FsOperation::Stat, FsOperation::Search]) {
+    match storage::trash_stat(
+        path,
+        &[FsOperation::List, FsOperation::Stat, FsOperation::Search],
+    ) {
         Ok(entry) if entry.is_dir && !entry.is_symlink => {
             vec![FsOperation::List, FsOperation::Stat, FsOperation::Search]
         }

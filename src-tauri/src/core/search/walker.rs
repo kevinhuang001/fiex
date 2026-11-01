@@ -1,6 +1,9 @@
 //! Bounded local filesystem walker shared by native and builtin search providers.
 use super::{BatchSink, SearchBatch, SearchMode, CONTENT_FILE_LIMIT, RESULT_LIMIT};
-use crate::core::{files::{entry, Entry}, ignores::IgnoreSet};
+use crate::core::{
+    files::{entry, Entry},
+    ignores::IgnoreSet,
+};
 use ignore::WalkBuilder;
 use std::{
     path::Path,
@@ -247,4 +250,3 @@ fn is_bundle(path: &Path) -> bool {
 fn inside_bundle(path: &Path) -> bool {
     path.ancestors().skip(1).any(is_bundle)
 }
-

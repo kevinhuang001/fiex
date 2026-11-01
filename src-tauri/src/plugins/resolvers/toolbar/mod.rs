@@ -11,7 +11,9 @@ use crate::plugins::{
     events::{EventRouter, ProviderCandidate, Resolver},
     resource::resource_context::ResourceSnapshot,
 };
-use fiex_provider_contracts::{ProviderError, ProviderInvocation, ProviderRequest, ToolbarProvider, ToolbarResult};
+use fiex_provider_contracts::{
+    ProviderError, ProviderInvocation, ProviderRequest, ToolbarProvider, ToolbarResult,
+};
 use serde_json::{json, Value};
 use std::sync::Arc;
 

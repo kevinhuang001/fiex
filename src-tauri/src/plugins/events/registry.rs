@@ -65,24 +65,16 @@ mod instance_tests {
         )
         .unwrap();
         assert_eq!(named.provider_id(), Some("media"));
-        let single = bound_plugin_input(
-            "org.example.viewer",
-            "plugin:org.example.viewer",
-            &input,
-        )
-        .unwrap();
+        let single =
+            bound_plugin_input("org.example.viewer", "plugin:org.example.viewer", &input).unwrap();
         assert_eq!(single.provider_id(), None);
-        assert!(bound_plugin_input(
-            "org.example.viewer",
-            "plugin:another.plugin:media",
-            &input,
-        )
-        .is_err());
-        assert!(bound_plugin_input(
-            "org.example.viewer",
-            "plugin:org.example.viewer:",
-            &input,
-        )
-        .is_err());
+        assert!(
+            bound_plugin_input("org.example.viewer", "plugin:another.plugin:media", &input,)
+                .is_err()
+        );
+        assert!(
+            bound_plugin_input("org.example.viewer", "plugin:org.example.viewer:", &input,)
+                .is_err()
+        );
     }
 }

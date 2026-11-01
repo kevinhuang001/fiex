@@ -15,8 +15,8 @@ pub(crate) use binding::{child, parent_path, trusted};
 #[cfg(feature = "desktop")]
 pub(crate) use binding::{create, move_to_trash, remove_path, rename_path};
 pub use error::{FsError, FsErrorKind};
-pub use transfer::transfer;
 pub use export::{export as export_for_external_drag, initialize as initialize_exports};
+pub use transfer::transfer;
 pub(crate) mod provider_registry;
 mod streams;
 use crate::plugins::provider_registry::FsOperation;
@@ -176,9 +176,7 @@ impl ResourceBroker {
             // capability; checking this broker's parent would grant from the
             // grandparent instead.
             child.require(FsOperation::Write, true)?;
-            child
-                .begin_write_handle_sized(true, Some(0))?
-                .commit()?;
+            child.begin_write_handle_sized(true, Some(0))?.commit()?;
             changes::created(&child.path, name, false);
         }
         Ok(child.path)
@@ -255,10 +253,7 @@ impl ResourceBroker {
         provider_registry::begin_write_sized(self, create, size)
     }
 
-    pub(crate) fn begin_write_handle(
-        &self,
-        create: bool,
-    ) -> Result<Box<dyn WriteHandle>, FsError> {
+    pub(crate) fn begin_write_handle(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError> {
         provider_registry::begin_write(self, create)
     }
 }

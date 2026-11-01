@@ -16,7 +16,9 @@ pub(super) fn read(resource: ResourceBroker) -> Result<FsRead, ProviderError> {
     if let Some(route) = usbfs::route(&resource.path) {
         let entry = usbfs::entry(&route).map_err(provider_error)?;
         if entry.is_dir {
-            return Err(ProviderError::invalid_params("Unsupported: expected a file"));
+            return Err(ProviderError::invalid_params(
+                "Unsupported: expected a file",
+            ));
         }
         let device = std::fs::File::open(&route.driver_device).map_err(provider_error)?;
         let generation = usbfs::generation(&route).map_err(provider_error)?;
@@ -54,10 +56,7 @@ pub(super) fn read(resource: ResourceBroker) -> Result<FsRead, ProviderError> {
     ))
 }
 
-pub(super) fn write(
-    resource: ResourceBroker,
-    create: bool,
-) -> Result<FsWrite, ProviderError> {
+pub(super) fn write(resource: ResourceBroker, create: bool) -> Result<FsWrite, ProviderError> {
     if let Some(route) = usbfs::route(&resource.path) {
         let generation = usbfs::generation(&route).map_err(provider_error)?;
         let staged = Arc::new(Mutex::new(Some(UsbWrite {
@@ -76,16 +75,14 @@ pub(super) fn write(
                 .ok_or_else(|| ProviderError::internal("write stream closed"))?;
             write.commit().map_err(provider_error)?;
             let entry = usbfs::entry(&write.route).map_err(provider_error)?;
-            Ok(shared_entry(storage::decorated_entry(&resource.path, entry)))
+            Ok(shared_entry(storage::decorated_entry(
+                &resource.path,
+                entry,
+            )))
         }));
     }
-    let handle = fs_access::begin_write(
-        &resource.owner,
-        &resource.scope,
-        &resource.path,
-        create,
-    )
-    .map_err(provider_error)?;
+    let handle = fs_access::begin_write(&resource.owner, &resource.scope, &resource.path, create)
+        .map_err(provider_error)?;
     let staged = Arc::new(Mutex::new(Some(LocalWrite {
         owner: resource.owner.clone(),
         handle,
@@ -102,7 +99,10 @@ pub(super) fn write(
         write.commit().map_err(provider_error)?;
         let value = fs_access::stat(&resource.scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
-        Ok(shared_entry(storage::decorated_entry(&resource.path, entry)))
+        Ok(shared_entry(storage::decorated_entry(
+            &resource.path,
+            entry,
+        )))
     }))
 }
 
@@ -113,7 +113,13 @@ struct LocalReadState {
 
 impl LocalReadState {
     fn read_at(&self, offset: u64, length: usize) -> Result<(Vec<u8>, bool), String> {
-        let value = fs_access::read_open(&self.owner, &self.handle, offset, length.min(crate::core::fs::CHUNK), None)?;
+        let value = fs_access::read_open(
+            &self.owner,
+            &self.handle,
+            offset,
+            length.min(crate::core::fs::CHUNK),
+            None,
+        )?;
         let bytes = STANDARD
             .decode(value["base64"].as_str().ok_or("missing read data")?)
             .map_err(|error| error.to_string())?;
@@ -137,7 +143,10 @@ impl Read for LocalReader {
         if output.is_empty() {
             return Ok(0);
         }
-        let (data, _) = self.state.read_at(self.offset, output.len()).map_err(io::Error::other)?;
+        let (data, _) = self
+            .state
+            .read_at(self.offset, output.len())
+            .map_err(io::Error::other)?;
         output[..data.len()].copy_from_slice(&data);
         self.offset = self
             .offset
@@ -159,9 +168,12 @@ impl UsbReadState {
         if usbfs::generation(&self.route)? != self.generation {
             return Err("StaleRef: USB device replaced or ejected".into());
         }
-        let mut bytes = vec![0; length.min(crate::core::fs::CHUNK).min(
-            usize::try_from(self.size.saturating_sub(offset)).unwrap_or(usize::MAX),
-        )];
+        let mut bytes = vec![
+            0;
+            length.min(crate::core::fs::CHUNK).min(
+                usize::try_from(self.size.saturating_sub(offset)).unwrap_or(usize::MAX),
+            )
+        ];
         let read = usbfs::read_at(&self.route, offset, &mut bytes)?;
         bytes.truncate(read);
         Ok((bytes, offset.saturating_add(read as u64) >= self.size))
@@ -178,7 +190,10 @@ impl Read for UsbReader {
         if output.is_empty() {
             return Ok(0);
         }
-        let (bytes, _) = self.state.read_at(self.offset, output.len()).map_err(io::Error::other)?;
+        let (bytes, _) = self
+            .state
+            .read_at(self.offset, output.len())
+            .map_err(io::Error::other)?;
         output[..bytes.len()].copy_from_slice(&bytes);
         self.offset = self
             .offset
@@ -255,7 +270,10 @@ struct UsbStage(Arc<Mutex<Option<UsbWrite>>>);
 
 impl Write for UsbStage {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let mut staged = self.0.lock().map_err(|_| io::Error::other("write stream unavailable"))?;
+        let mut staged = self
+            .0
+            .lock()
+            .map_err(|_| io::Error::other("write stream unavailable"))?;
         staged
             .as_mut()
             .ok_or_else(|| io::Error::other("write stream closed"))?
@@ -273,4 +291,3 @@ impl Write for UsbStage {
             .flush()
     }
 }
-

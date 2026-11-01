@@ -4,8 +4,8 @@ use super::invocation::{self, CoreDecorationInvocation};
 use super::types::DecorationEntry;
 use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
-    DecorationContribution, DecorationProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderRequestContext,
+    DecorationContribution, DecorationProvider, ProviderDescriptor, ProviderError,
+    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
 };
 use std::{
     collections::HashMap,
@@ -16,7 +16,10 @@ struct IpcDecoration {
     plugin_id: String,
 }
 impl DecorationProvider for IpcDecoration {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<DecorationContribution>, ProviderError> {
+    fn resolve(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<DecorationContribution>, ProviderError> {
         let services = invocation::services(ctx).map_err(ProviderError::internal)?;
         let plugin = services
             .plugin
@@ -30,7 +33,9 @@ impl DecorationProvider for IpcDecoration {
         let result = crate::plugins::events::invoke_resources(
             plugin,
             ctx.method(),
-            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
             services.resources.as_slice(),
             Some(services.directory.as_str()),
         )
@@ -103,11 +108,13 @@ impl ScopedDecorationProxy {
             resources,
         })
     }
-
 }
 
 impl DecorationProvider for ScopedDecorationProxy {
-    fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<DecorationContribution>, ProviderError> {
+    fn resolve(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<Vec<DecorationContribution>, ProviderError> {
         if ctx.method() != "decorations.resolve" {
             return Err(ProviderError::invalid_params(
                 "DecorationProvider method mismatch",

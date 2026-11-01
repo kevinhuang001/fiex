@@ -111,7 +111,9 @@ impl ContextMenuProvider for ConnectionCache {
             .iter()
             .any(|item| item.id == item_id && !item.disabled)
         {
-            return Err(ProviderError::invalid_params("native menu action was not offered"));
+            return Err(ProviderError::invalid_params(
+                "native menu action was not offered",
+            ));
         }
         Ok(super::builtin::action_result(item_id, context))
     }

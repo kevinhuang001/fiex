@@ -132,7 +132,10 @@ pub fn query_with_plugins(
                     })
                     .collect()
             } else {
-                let plugin = provider.plugin.as_deref().ok_or("missing DecorationProvider plugin")?;
+                let plugin = provider
+                    .plugin
+                    .as_deref()
+                    .ok_or("missing DecorationProvider plugin")?;
                 let (manifest, folder) = manifests.get(&plugin.id).ok_or("provider removed")?;
                 decode(
                     entries.as_ref(),
@@ -202,6 +205,9 @@ mod ref_target_tests {
             "/forged/path",
             ResourceMetadata::default(),
         );
-        assert_eq!(path_for_target(&forged.reference, &entries, &[target]), None);
+        assert_eq!(
+            path_for_target(&forged.reference, &entries, &[target]),
+            None
+        );
     }
 }

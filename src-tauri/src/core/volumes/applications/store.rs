@@ -1,5 +1,7 @@
 //! Persistent user-created items stored under the private Applications directory.
-use super::{application_folders, directory_cache, list, system_entries, system_entry, URI, USER_PREFIX};
+use super::{
+    application_folders, directory_cache, list, system_entries, system_entry, URI, USER_PREFIX,
+};
 use crate::core::files::Entry;
 use std::path::{Path, PathBuf};
 
@@ -321,4 +323,3 @@ fn unique_child(root: &Path, name: &std::ffi::OsStr) -> PathBuf {
         index += 1;
     }
 }
-

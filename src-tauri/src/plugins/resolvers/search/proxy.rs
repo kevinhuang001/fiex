@@ -49,7 +49,9 @@ impl SearchProvider for IpcSearch {
         let response = crate::plugins::events::invoke_resources(
             &invocation.plugin,
             "search.query",
-            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
             &invocation.resources,
             Some(&invocation.directory),
         )

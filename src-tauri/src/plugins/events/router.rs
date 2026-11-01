@@ -51,5 +51,4 @@ impl EventRouter {
         }
         collect(outcomes)
     }
-
 }

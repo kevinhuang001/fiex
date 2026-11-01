@@ -161,8 +161,8 @@ pub fn resource_scope(
         .collect::<Result<Vec<_>, _>>()?;
     let host_directory = (directory_access
         == Some(crate::core::fs::provider_registry::ResourceAccess::HostPath))
-        .then_some(directory)
-        .flatten();
+    .then_some(directory)
+    .flatten();
     for folder in action_folders(method, host_directory, &paths, policy.declared())? {
         if !paths.contains(&folder) {
             paths.push(folder);
@@ -278,9 +278,9 @@ fn read_only_vfs(
     capabilities: Option<crate::plugins::resource::file_capabilities::FileCapabilities>,
 ) -> bool {
     let (view, _) = crate::plugins::match_rules::typed_locations_for(path);
-    if view.is_none_or(|location| {
-        location.resource_type != fiex_provider_contracts::ResourceType::Vfs
-    }) {
+    if view
+        .is_none_or(|location| location.resource_type != fiex_provider_contracts::ResourceType::Vfs)
+    {
         return false;
     }
     capabilities

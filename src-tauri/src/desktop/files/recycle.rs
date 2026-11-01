@@ -103,8 +103,7 @@ pub(crate) async fn delete_permanently(
         let mut removed = 0;
         let mut trash = Vec::new();
         for path in paths {
-            if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:trash")
-            {
+            if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:trash") {
                 trash.push(path);
                 continue;
             }

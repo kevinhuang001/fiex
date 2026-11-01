@@ -27,7 +27,12 @@ pub trait WriteHandle: Send {
 pub struct ProviderReadHandle {
     reader: Box<dyn Read + Send>,
     spool: std::fs::File,
-    read_at: Option<Box<dyn FnMut(u64, usize) -> Result<(Vec<u8>, bool), fiex_provider_contracts::ProviderError> + Send>>,
+    read_at: Option<
+        Box<
+            dyn FnMut(u64, usize) -> Result<(Vec<u8>, bool), fiex_provider_contracts::ProviderError>
+                + Send,
+        >,
+    >,
     size: u64,
     cached: u64,
     eof: bool,
@@ -35,11 +40,15 @@ pub struct ProviderReadHandle {
 
 impl ProviderReadHandle {
     pub fn new(mut read: FsRead) -> Result<Self, FsError> {
-        let mut spool = tempfile::tempfile().map_err(|error| FsError::internal(error.to_string()))?;
+        let mut spool =
+            tempfile::tempfile().map_err(|error| FsError::internal(error.to_string()))?;
         let mut cached = 0u64;
         let mut eof = false;
         if read.read_at.is_some() && read.size.is_none() {
-            return Err(FsError::new(FsErrorKind::Unsupported, "random read requires a known size"));
+            return Err(FsError::new(
+                FsErrorKind::Unsupported,
+                "random read requires a known size",
+            ));
         }
         if read.size.is_none() && read.read_at.is_none() {
             let mut buffer = vec![0; CHUNK];
@@ -78,8 +87,8 @@ impl ReadHandle for ProviderReadHandle {
 
     fn read_at(&mut self, offset: u64, length: usize) -> Result<(Vec<u8>, bool), String> {
         if let Some(read_at) = self.read_at.as_mut() {
-            let (bytes, eof) = read_at(offset, length.min(CHUNK))
-                .map_err(|error| error.to_string())?;
+            let (bytes, eof) =
+                read_at(offset, length.min(CHUNK)).map_err(|error| error.to_string())?;
             if bytes.len() > length.min(CHUNK) {
                 return Err("provider exceeded chunk limit".into());
             }
@@ -113,7 +122,10 @@ impl ReadHandle for ProviderReadHandle {
             .seek(SeekFrom::Start(offset))
             .map_err(|error| error.to_string())?;
         let mut bytes = vec![0; length.min(CHUNK)];
-        let count = self.spool.read(&mut bytes).map_err(|error| error.to_string())?;
+        let count = self
+            .spool
+            .read(&mut bytes)
+            .map_err(|error| error.to_string())?;
         bytes.truncate(count);
         let eof = offset.saturating_add(count as u64) >= self.size
             || (self.eof && self.cached <= offset.saturating_add(count as u64));
@@ -228,7 +240,11 @@ impl WriteHandle for StagedWriteHandle {
             "end" => SeekFrom::End(offset),
             _ => return Err("invalid seek kind".into()),
         };
-        let position = self.file.as_file_mut().seek(from).map_err(|error| error.to_string())?;
+        let position = self
+            .file
+            .as_file_mut()
+            .seek(from)
+            .map_err(|error| error.to_string())?;
         if position > MAX_SPOOL {
             return Err("write spool quota exceeded".into());
         }
@@ -249,16 +265,26 @@ impl WriteHandle for StagedWriteHandle {
         } else if current.is_ok() {
             return Err("Conflict: destination appeared while output was staged".into());
         }
-        let size = self.file.as_file().metadata().map_err(|error| error.to_string())?.len();
+        let size = self
+            .file
+            .as_file()
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .len();
         self.file
             .as_file_mut()
             .seek(SeekFrom::Start(0))
             .map_err(|error| error.to_string())?;
-        let mut provider = super::provider_registry::write_stream(&self.resource, self.create, Some(size))
-            .map_err(String::from)?;
+        let mut provider =
+            super::provider_registry::write_stream(&self.resource, self.create, Some(size))
+                .map_err(String::from)?;
         let mut buffer = vec![0; CHUNK];
         loop {
-            let count = self.file.as_file_mut().read(&mut buffer).map_err(|error| error.to_string())?;
+            let count = self
+                .file
+                .as_file_mut()
+                .read(&mut buffer)
+                .map_err(|error| error.to_string())?;
             if count == 0 {
                 break;
             }

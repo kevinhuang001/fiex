@@ -26,18 +26,16 @@ impl ScopedMenuInvocation {
         request: &ProviderRequestContext,
     ) -> Result<Self, String> {
         let mut request = request.clone();
-        let (root_resolve, existing_session) = match request
-            .input()
-            .map_err(|error| error.to_string())?
-        {
-            fiex_provider_contracts::ProviderInput::ContextMenuResolve(input) => {
-                (input.parent_id.is_none(), input.menu_session_id.clone())
-            }
-            fiex_provider_contracts::ProviderInput::ContextMenuExecute(input) => {
-                (false, input.menu_session_id.clone())
-            }
-            _ => return Err("invalid context menu request".into()),
-        };
+        let (root_resolve, existing_session) =
+            match request.input().map_err(|error| error.to_string())? {
+                fiex_provider_contracts::ProviderInput::ContextMenuResolve(input) => {
+                    (input.parent_id.is_none(), input.menu_session_id.clone())
+                }
+                fiex_provider_contracts::ProviderInput::ContextMenuExecute(input) => {
+                    (false, input.menu_session_id.clone())
+                }
+                _ => return Err("invalid context menu request".into()),
+            };
         let root_session = if root_resolve {
             Some(crate::plugins::mounts::new_id()?)
         } else {
@@ -97,7 +95,9 @@ impl ContextMenuProvider for IpcContextMenu {
         let result = crate::plugins::events::invoke_resources(
             &invocation.plugin,
             "contextMenu.resolve",
-            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
             &invocation.resources,
             Some(&invocation.directory),
         )
@@ -111,7 +111,9 @@ impl ContextMenuProvider for IpcContextMenu {
         let result = crate::plugins::events::invoke_resources(
             &invocation.plugin,
             "contextMenu.execute",
-            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
             &invocation.resources,
             Some(&invocation.directory),
         )

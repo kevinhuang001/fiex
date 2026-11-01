@@ -7,7 +7,10 @@ fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() 
         descriptor.validate().unwrap();
     }
     assert_eq!(provider_id("recent://item"), Some("core:recent"));
-    assert_eq!(provider_id("applications://item"), Some("core:applications"));
+    assert_eq!(
+        provider_id("applications://item"),
+        Some("core:applications")
+    );
     assert_eq!(provider_id(trash_vfs::URI), Some("core:trash"));
     assert!(provider_id("unknown://item").is_none());
     assert!(provider_id("fiex://mount/not-a-native-view").is_none());
@@ -66,8 +69,20 @@ fn native_vfs_operations_reject_invalid_mutations() {
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Mkdir, true).is_err());
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Remove, false).is_err());
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Read, false).is_err());
-    assert!(require("trash://not-a-valid-node", "core:test", FsOperation::Remove, false).is_err());
-    assert!(require("trash://not-a-valid-node", "core:test", FsOperation::Write, true).is_err());
+    assert!(require(
+        "trash://not-a-valid-node",
+        "core:test",
+        FsOperation::Remove,
+        false
+    )
+    .is_err());
+    assert!(require(
+        "trash://not-a-valid-node",
+        "core:test",
+        FsOperation::Write,
+        true
+    )
+    .is_err());
 }
 
 #[test]

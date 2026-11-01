@@ -71,10 +71,7 @@ pub(super) fn root_entry(
     }
 }
 
-pub(super) fn recent_stat(
-    path: &str,
-    operations: &[FsOperation],
-) -> Result<Entry, String> {
+pub(super) fn recent_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
     if path == RECENT_URI {
         Ok(root_entry("core:recent", path, true, operations))
     } else {
@@ -92,10 +89,7 @@ pub(super) fn recent_list(path: &str) -> Result<Vec<Entry>, String> {
     }
 }
 
-pub(super) fn applications_stat(
-    path: &str,
-    operations: &[FsOperation],
-) -> Result<Entry, String> {
+pub(super) fn applications_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
     if path == APPLICATIONS_URI {
         return Ok(root_entry("core:applications", path, false, operations));
     }

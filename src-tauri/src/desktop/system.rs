@@ -139,7 +139,8 @@ pub(crate) async fn open_path(
 ) -> Result<(), String> {
     if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:applications") {
         return crate::core::volumes::applications::open(
-            path.strip_prefix(crate::core::volumes::applications::URI).unwrap_or(&path),
+            path.strip_prefix(crate::core::volumes::applications::URI)
+                .unwrap_or(&path),
         );
     }
     if crate::core::volumes::native_vfs::provider_id(&path) == Some("core:trash") {

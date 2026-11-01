@@ -7,7 +7,6 @@
 use crate::core::files::Entry;
 mod adapter_content;
 mod walker;
-pub(crate) use walker::{run_native_search_stream, search_directory};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -18,6 +17,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+pub(crate) use walker::{run_native_search_stream, search_directory};
 
 pub const RESULT_LIMIT: usize = 500;
 const BATCH_SIZE: usize = 50;
@@ -303,9 +303,8 @@ fn search_root(
     {
         return search_cached_vfs(root, request, cancelled, sink);
     }
-    let local = crate::core::fs::provider_registry::resource_access(root).is_ok_and(|access| {
-        access == crate::core::fs::provider_registry::ResourceAccess::HostPath
-    });
+    let local = crate::core::fs::provider_registry::resource_access(root)
+        .is_ok_and(|access| access == crate::core::fs::provider_registry::ResourceAccess::HostPath);
     if !local {
         return search_adapter(root, request, cancelled, sink);
     }
@@ -552,9 +551,7 @@ pub fn accessible_roots() -> Vec<String> {
         if location.kind != "disk"
             || !location.mounted
             || !crate::core::fs::provider_registry::resource_access(&location.path).is_ok_and(
-                |access| {
-                    access == crate::core::fs::provider_registry::ResourceAccess::HostPath
-                },
+                |access| access == crate::core::fs::provider_registry::ResourceAccess::HostPath,
             )
         {
             continue;

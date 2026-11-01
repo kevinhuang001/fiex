@@ -12,13 +12,13 @@ mod tree;
 mod util;
 mod write;
 
+pub(crate) use capabilities::{is_root, writable};
 pub use mount::{detect, eject, ensure_access, probe};
 pub use tree::{
     copy_file_to, copy_to_local, entry, list, listing, read, read_at, read_path, search,
 };
 pub use util::{route, validate_child, virtual_root, FsKind, Route, UsbEntry};
 pub use write::{commit_staged, create, open_cached, remove, rename, write, write_path};
-pub(crate) use capabilities::{is_root, writable};
 
 #[cfg(test)]
 mod tests {

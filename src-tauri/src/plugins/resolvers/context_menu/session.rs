@@ -1,8 +1,9 @@
 //! Menu session storage and lifecycle.
-use super::{builtin, validation::{root_menu_valid, submenu_depths}};
-use crate::{
-    plugins::{events::Resolver, resource::resource_context::ResourceSnapshot},
+use super::{
+    builtin,
+    validation::{root_menu_valid, submenu_depths},
 };
+use crate::plugins::{events::Resolver, resource::resource_context::ResourceSnapshot};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},

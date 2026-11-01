@@ -61,10 +61,7 @@ fn main() {
                 .as_str()
                 .expect("plugin menu session missing")
                 .to_owned();
-            let mut items = menu["items"]
-                .as_array()
-                .expect("menu has items")
-                .clone();
+            let mut items = menu["items"].as_array().expect("menu has items").clone();
             assert!(
                 !items.is_empty(),
                 "dynamic menu is unexpectedly empty: {id}"
@@ -98,11 +95,9 @@ fn main() {
                 if id == "org.fiex.gpg" && item_id != "gpg.encrypt" {
                     continue;
                 }
-                let result = fiex_lib::plugins::resolvers::context_menu::execute(
-                    &session_id,
-                    item_id,
-                )
-                .expect("menu panel execute failed");
+                let result =
+                    fiex_lib::plugins::resolvers::context_menu::execute(&session_id, item_id)
+                        .expect("menu panel execute failed");
                 if result["kind"] == "panel" {
                     let path = result["assetPath"].as_str().expect("missing panel asset");
                     let html = std::fs::read_to_string(path).unwrap();

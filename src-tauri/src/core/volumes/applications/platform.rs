@@ -420,4 +420,3 @@ pub(super) fn platform_list() -> Result<Vec<Entry>, String> {
 pub(super) fn platform_open(_encoded: &str) -> Result<(), String> {
     Err(crate::i18n::t("无法启动应用").into())
 }
-

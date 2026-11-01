@@ -4,16 +4,16 @@
 use super::application_folders;
 mod platform;
 mod store;
-pub use store::{
-    after_rename, candidate_path, create_stored, is_user, list_at, remove_user, rename_stored,
-    stored_entry, stored_path, stored_uri, validate_child,
-};
-pub(super) use store::{folder_listing, list_user, user_encoded};
 use crate::core::files::Entry;
 use crate::core::fs::directory_cache;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
+pub use store::{
+    after_rename, candidate_path, create_stored, is_user, list_at, remove_user, rename_stored,
+    stored_entry, stored_path, stored_uri, validate_child,
+};
+pub(super) use store::{folder_listing, list_user, user_encoded};
 
 pub const URI: &str = "applications://";
 /// User-created application-store nodes live directly under the view root.

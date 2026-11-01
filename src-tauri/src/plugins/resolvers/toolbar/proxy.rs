@@ -81,7 +81,9 @@ impl ToolbarProvider for IpcToolbar {
         let response = crate::plugins::events::invoke_resources(
             &services.plugin,
             ctx.method(),
-            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
             &services.resources,
             Some(services.directory.as_str()),
         )

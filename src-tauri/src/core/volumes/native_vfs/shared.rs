@@ -2,8 +2,7 @@
 use super::*;
 use crate::core::files::Entry;
 use crate::plugins::{
-    native_invocation::NativeProviderInvocation,
-    resource::resource_context::ResourceSnapshot,
+    native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
     FsEntry, FsKind, FsListing, FsRequest, ProviderError, ProviderInvocation, ResourceMetadata,
@@ -81,27 +80,23 @@ pub(super) fn broker_invocation(
     method: &str,
     params: Value,
 ) -> NativeProviderInvocation {
-    let mut target = ResourceSnapshot::from_metadata(
-        &source.path,
-        ResourceMetadata::default(),
-    );
+    let mut target = ResourceSnapshot::from_metadata(&source.path, ResourceMetadata::default());
     target.reference = source.reference.clone();
     let mut targets = vec![target];
     if let Some(destination) = destination {
-        let mut target = ResourceSnapshot::from_metadata(
-            &destination.path,
-            ResourceMetadata::default(),
-        );
+        let mut target =
+            ResourceSnapshot::from_metadata(&destination.path, ResourceMetadata::default());
         target.reference = destination.reference.clone();
         targets.push(target);
     }
-    NativeProviderInvocation::new(method, params, &targets, None)
-        .with_local_data(Arc::new(VfsTarget {
+    NativeProviderInvocation::new(method, params, &targets, None).with_local_data(Arc::new(
+        VfsTarget {
             path: source.path.clone(),
             owner: source.owner.clone(),
             broker: Some(Arc::new(source.clone_binding())),
             destination: destination.map(|broker| Arc::new(broker.clone_binding())),
-        }))
+        },
+    ))
 }
 
 pub(super) fn shared_entry(entry: Entry) -> FsEntry {
@@ -221,9 +216,7 @@ pub(super) fn search_listing(
             {
                 continue;
             }
-            if entry.is_dir
-                && !entry.is_symlink
-                && entry.allowed_ops.iter().any(|op| op == "list")
+            if entry.is_dir && !entry.is_symlink && entry.allowed_ops.iter().any(|op| op == "list")
             {
                 pending.push((entry.path.clone(), relative_path.clone()));
             }

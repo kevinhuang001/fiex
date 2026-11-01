@@ -4,7 +4,8 @@ use super::Context;
 use crate::plugins::host::PluginInfo;
 use fiex_provider_contracts::{
     ConnectionContextMenuProvider, MenuExecuteResult, MenuItem, ProviderDescriptor, ProviderError,
-    ProviderInput, ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
+    ProviderInput, ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule,
+    ProviderRequestContext,
 };
 use serde_json::{json, Value};
 use std::{
@@ -76,7 +77,10 @@ impl IpcConnectionMenu {
         Ok(services)
     }
 
-    fn params(services: &ConnectionMenuServices, item: Option<&str>) -> Result<Value, ProviderError> {
+    fn params(
+        services: &ConnectionMenuServices,
+        item: Option<&str>,
+    ) -> Result<Value, ProviderError> {
         let mut params = json!({
             "menuSessionId": services.session,
             "interactionId": crate::plugins::mounts::new_id().map_err(ProviderError::internal)?,
@@ -91,7 +95,10 @@ impl IpcConnectionMenu {
         Ok(params)
     }
 
-    fn plugin_items(&self, services: &ConnectionMenuServices) -> Result<Vec<MenuItem>, ProviderError> {
+    fn plugin_items(
+        &self,
+        services: &ConnectionMenuServices,
+    ) -> Result<Vec<MenuItem>, ProviderError> {
         let result = crate::plugins::events::invoke(
             &services.plugin.id,
             "connectionContextMenu.resolve",
@@ -116,7 +123,7 @@ impl ConnectionContextMenuProvider for IpcConnectionMenu {
             ProviderInput::ConnectionMenuExecute(request) => request.item_id.as_deref(),
             _ => None,
         }
-            .ok_or_else(|| ProviderError::invalid_params("missing menu action"))?;
+        .ok_or_else(|| ProviderError::invalid_params("missing menu action"))?;
         let offered = self.plugin_items(services)?;
         if !offered.iter().any(|value| {
             value.kind == fiex_provider_contracts::MenuItemKind::Action
@@ -141,9 +148,8 @@ impl ConnectionContextMenuProvider for IpcConnectionMenu {
 fn registry() -> &'static Mutex<ProviderInstances<dyn ConnectionContextMenuProvider>> {
     static REGISTERED: OnceLock<Mutex<ProviderInstances<dyn ConnectionContextMenuProvider>>> =
         OnceLock::new();
-    REGISTERED.get_or_init(|| {
-        Mutex::new(ProviderInstances::new(ProviderKind::ConnectionContextMenu))
-    })
+    REGISTERED
+        .get_or_init(|| Mutex::new(ProviderInstances::new(ProviderKind::ConnectionContextMenu)))
 }
 
 pub(super) fn forget_plugin(plugin_id: &str) {
@@ -189,7 +195,11 @@ pub(super) struct ScopedConnectionMenuProxy {
 }
 
 impl ScopedConnectionMenuProxy {
-    fn invocation(&self, ctx: &dyn ProviderInvocation, method: &str) -> Result<CoreConnectionMenuInvocation, ProviderError> {
+    fn invocation(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        method: &str,
+    ) -> Result<CoreConnectionMenuInvocation, ProviderError> {
         if ctx.method() != method {
             return Err(ProviderError::invalid_params(
                 "ConnectionContextMenuProvider method mismatch",

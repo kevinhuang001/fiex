@@ -97,12 +97,10 @@ pub fn mime_for(ext: &str) -> String {
         "csv" => "text/csv",
         "tsv" => "text/tab-separated-values",
         "md" | "markdown" => "text/markdown",
-        "txt" | "log" | "rst" | "json5" | "toml" | "yaml" | "yml" | "ini" | "conf"
-        | "cfg" | "env" | "sh" | "bat" | "ps1" | "py" | "rs" | "go" | "java" | "kt"
-        | "c" | "cc" | "cpp" | "h" | "hpp" | "cs" | "php" | "rb" | "swift" | "sql"
-        | "js" | "jsx" | "ts" | "tsx" | "vue" | "svelte" | "dart" | "lua" | "r" | "tex" => {
-            "text/plain"
-        }
+        "txt" | "log" | "rst" | "json5" | "toml" | "yaml" | "yml" | "ini" | "conf" | "cfg"
+        | "env" | "sh" | "bat" | "ps1" | "py" | "rs" | "go" | "java" | "kt" | "c" | "cc"
+        | "cpp" | "h" | "hpp" | "cs" | "php" | "rb" | "swift" | "sql" | "js" | "jsx" | "ts"
+        | "tsx" | "vue" | "svelte" | "dart" | "lua" | "r" | "tex" => "text/plain",
         _ => "application/octet-stream",
     }
     .into()

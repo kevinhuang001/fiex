@@ -104,9 +104,7 @@ impl ResourceSnapshot {
     }
 
     pub fn resolve(display: &str) -> Result<Self, String> {
-        match crate::core::fs::provider_registry::resource_access(display)
-            .map_err(String::from)?
-        {
+        match crate::core::fs::provider_registry::resource_access(display).map_err(String::from)? {
             crate::core::fs::provider_registry::ResourceAccess::HostPath => {
                 Ok(Self::new(display, Path::new(display)))
             }

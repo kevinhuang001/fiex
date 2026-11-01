@@ -239,10 +239,7 @@ mod tests {
     #[test]
     fn static_capability_handshakes_are_rejected_without_discovery() {
         let plugin = "org.example.static-vfs";
-        let provider = register(
-            plugin,
-            &json!({"vfs":{"operations":["list","read"]}}),
-        );
+        let provider = register(plugin, &json!({"vfs":{"operations":["list","read"]}}));
         assert!(!provider.reported);
         assert!(provider.operations.is_empty());
         assert!(authorize_method(plugin, "vfs.list").is_err());

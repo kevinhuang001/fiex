@@ -1,14 +1,13 @@
 //! Native connection menus implement the shared connection-menu contract.
 use super::Context;
 use crate::plugins::{
-    events::Resolver,
-    native_invocation::NativeProviderInvocation,
+    events::Resolver, native_invocation::NativeProviderInvocation,
     provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{
-    ConnectionContextMenuProvider, MatchResource, MenuExecuteResult, MenuItem,
-    MenuItemKind, MenuPlacement, ProviderError, ProviderInput, ProviderInvocation,
-    ProviderKind, ProviderMatchRule,
+    ConnectionContextMenuProvider, MatchResource, MenuExecuteResult, MenuItem, MenuItemKind,
+    MenuPlacement, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
+    ProviderMatchRule,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
@@ -19,13 +18,9 @@ fn context(invocation: &dyn ProviderInvocation) -> Result<&Context, ProviderErro
 
 #[cfg(test)]
 pub(super) fn items(id: &str, ctx: &Context) -> Result<Vec<Value>, String> {
-    let invocation = NativeProviderInvocation::new(
-        "connectionContextMenu.resolve",
-        json!({}),
-        &[],
-        None,
-    )
-    .with_local_data(Arc::new(ctx.clone()));
+    let invocation =
+        NativeProviderInvocation::new("connectionContextMenu.resolve", json!({}), &[], None)
+            .with_local_data(Arc::new(ctx.clone()));
     let provider = registry()
         .get(id)
         .ok_or("unknown native connection menu provider")?;
@@ -50,17 +45,14 @@ fn available_action(
         _ => None,
     }
     .ok_or_else(|| ProviderError::invalid_params("missing menu action"))?;
-    let offered_invocation = NativeProviderInvocation::new(
-        "connectionContextMenu.resolve",
-        json!({}),
-        &[],
-        None,
-    )
-    .with_local_data(Arc::new(context(invocation)?.clone()));
+    let offered_invocation =
+        NativeProviderInvocation::new("connectionContextMenu.resolve", json!({}), &[], None)
+            .with_local_data(Arc::new(context(invocation)?.clone()));
     let offered = provider.resolve(&offered_invocation)?;
-    if !offered.iter().any(|item| {
-        item.id == item_id && !item.disabled && item.kind == MenuItemKind::Action
-    }) {
+    if !offered
+        .iter()
+        .any(|item| item.id == item_id && !item.disabled && item.kind == MenuItemKind::Action)
+    {
         return Err(ProviderError::invalid_params(
             "menu action is no longer available",
         ));
@@ -88,13 +80,18 @@ impl ConnectionContextMenuProvider for Edit {
         )])
     }
 
-    fn execute(&self, invocation: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+    fn execute(
+        &self,
+        invocation: &dyn ProviderInvocation,
+    ) -> Result<MenuExecuteResult, ProviderError> {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let item = available_action(self, invocation)?;
         if item != "connection.edit" {
-            return Err(ProviderError::invalid_params("unknown connection edit action"));
+            return Err(ProviderError::invalid_params(
+                "unknown connection edit action",
+            ));
         }
         Ok(MenuExecuteResult::native_action(item))
     }
@@ -125,12 +122,18 @@ impl ConnectionContextMenuProvider for Session {
         ])
     }
 
-    fn execute(&self, invocation: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+    fn execute(
+        &self,
+        invocation: &dyn ProviderInvocation,
+    ) -> Result<MenuExecuteResult, ProviderError> {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let item = available_action(self, invocation)?;
-        if !matches!(item.as_str(), "connection.saveSession" | "connection.toggleAutostart") {
+        if !matches!(
+            item.as_str(),
+            "connection.saveSession" | "connection.toggleAutostart"
+        ) {
             return Err(ProviderError::invalid_params(
                 "unknown connection session action",
             ));
@@ -156,7 +159,10 @@ impl ConnectionContextMenuProvider for SyncMenu {
         }
     }
 
-    fn execute(&self, invocation: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+    fn execute(
+        &self,
+        invocation: &dyn ProviderInvocation,
+    ) -> Result<MenuExecuteResult, ProviderError> {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
@@ -187,13 +193,18 @@ impl ConnectionContextMenuProvider for Close {
         Ok(vec![close])
     }
 
-    fn execute(&self, invocation: &dyn ProviderInvocation) -> Result<MenuExecuteResult, ProviderError> {
+    fn execute(
+        &self,
+        invocation: &dyn ProviderInvocation,
+    ) -> Result<MenuExecuteResult, ProviderError> {
         if invocation.method() != "connectionContextMenu.execute" {
             return Err(ProviderError::method_not_found(invocation.method()));
         }
         let item = available_action(self, invocation)?;
         if item != "connection.close" {
-            return Err(ProviderError::invalid_params("unknown connection close action"));
+            return Err(ProviderError::invalid_params(
+                "unknown connection close action",
+            ));
         }
         Ok(MenuExecuteResult::native_action(item))
     }
@@ -255,7 +266,10 @@ pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Va
             .map_err(|error| error.to_string()),
         "connectionContextMenu.execute" => provider
             .execute(invocation)
-            .and_then(|result| serde_json::to_value(result).map_err(|error| ProviderError::internal(error.to_string())))
+            .and_then(|result| {
+                serde_json::to_value(result)
+                    .map_err(|error| ProviderError::internal(error.to_string()))
+            })
             .map_err(|error| error.to_string()),
         method => Err(ProviderError::method_not_found(method).to_string()),
     }

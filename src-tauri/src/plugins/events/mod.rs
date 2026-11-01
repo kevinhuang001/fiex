@@ -80,7 +80,10 @@ pub fn menu_allowed(
     .iter()
     .any(|provider| {
         provider.id == provider_id
-            && provider.plugin.as_deref().is_some_and(|plugin| plugin.id == plugin_id)
+            && provider
+                .plugin
+                .as_deref()
+                .is_some_and(|plugin| plugin.id == plugin_id)
     })
 }
 

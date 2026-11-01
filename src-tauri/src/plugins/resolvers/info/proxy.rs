@@ -1,7 +1,5 @@
 //! Persistent InfoProvider IPC identity with invocation-scoped resources.
-use crate::plugins::{
-    host::PluginInfo, resource::resource_context::ResourceSnapshot,
-};
+use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
     InfoProvider, InfoSection, ProviderDescriptor, ProviderError, ProviderInstances,
     ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequestContext,
@@ -28,12 +26,9 @@ impl CoreInfoInvocation {
         resource: ResourceSnapshot,
         registered_id: &str,
     ) -> Result<Self, ProviderError> {
-        let input = crate::plugins::events::bind_provider_input(
-            &plugin.id,
-            registered_id,
-            ctx.input()?,
-        )
-        .map_err(ProviderError::invalid_params)?;
+        let input =
+            crate::plugins::events::bind_provider_input(&plugin.id, registered_id, ctx.input()?)
+                .map_err(ProviderError::invalid_params)?;
         let mut request = ctx.request().clone();
         request.input = input;
         request.input_error = None;
@@ -72,7 +67,9 @@ impl InfoProvider for IpcInfo {
         let response = crate::plugins::events::invoke_resources(
             &services.plugin,
             ctx.method(),
-            ctx.input()?.to_params().map_err(ProviderError::invalid_params)?,
+            ctx.input()?
+                .to_params()
+                .map_err(ProviderError::invalid_params)?,
             std::slice::from_ref(&services.resource),
             None,
         )
@@ -145,7 +142,9 @@ impl ScopedInfoProxy {
 impl InfoProvider for ScopedInfoProxy {
     fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
         if ctx.method() != "info.resolve" {
-            return Err(ProviderError::invalid_params("InfoProvider method mismatch"));
+            return Err(ProviderError::invalid_params(
+                "InfoProvider method mismatch",
+            ));
         }
         let invocation = CoreInfoInvocation::new(
             ctx,

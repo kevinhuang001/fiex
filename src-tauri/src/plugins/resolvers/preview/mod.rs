@@ -34,12 +34,7 @@ fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
     };
     let targets = [target];
     let builtin = native::candidates(&ext, mime, is_dir);
-    crate::plugins::provider_registry::candidates(
-        "preview.open",
-        &targets,
-        "",
-        builtin,
-    )
+    crate::plugins::provider_registry::candidates("preview.open", &targets, "", builtin)
 }
 
 fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {

@@ -2,13 +2,12 @@
 //! Their view-specific rules live in descriptors, using the same matcher as
 //! plugin contributions.
 use crate::{
+    core::files::Entry,
     plugins::{
-        events::Resolver,
-        native_invocation::NativeProviderInvocation,
+        events::Resolver, native_invocation::NativeProviderInvocation,
         provider_registry::native::NativeProviderRegistry,
         resource::resource_context::ResourceSnapshot,
     },
-    core::files::Entry,
 };
 use fiex_provider_contracts::{
     ContextMenuProvider, LocationMatch, MatchResource, ProviderError, ProviderInvocation,
@@ -26,9 +25,7 @@ const PROVIDER_IDS: [&str; 3] = [
     "core.trash.menu",
 ];
 
-pub(super) fn register(
-    values: &mut NativeProviderRegistry<dyn ContextMenuProvider>,
-) {
+pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
     for (id, owner, implementation) in [
         (
             "core.recent.menu",
@@ -68,7 +65,12 @@ fn registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
 }
 
 #[cfg(test)]
-fn context(directory: &str, paths: &[String], method: &str, params: Value) -> NativeProviderInvocation {
+fn context(
+    directory: &str,
+    paths: &[String],
+    method: &str,
+    params: Value,
+) -> NativeProviderInvocation {
     let targets = paths
         .iter()
         .map(|path| {
@@ -88,12 +90,7 @@ fn context(directory: &str, paths: &[String], method: &str, params: Value) -> Na
             ..Default::default()
         },
     );
-    NativeProviderInvocation::new(
-        method,
-        params,
-        &targets,
-        Some(&directory_resource),
-    )
+    NativeProviderInvocation::new(method, params, &targets, Some(&directory_resource))
 }
 
 fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
@@ -154,14 +151,20 @@ pub(super) fn resolve(id: &str, directory: &str, paths: &[String]) -> Result<Val
 }
 
 pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Value, String> {
-    let provider = registry().get(id).ok_or("unknown native ContextMenuProvider")?;
-    let resources = NativeProviderInvocation::resources(invocation)
-        .map_err(|error| error.to_string())?;
+    let provider = registry()
+        .get(id)
+        .ok_or("unknown native ContextMenuProvider")?;
+    let resources =
+        NativeProviderInvocation::resources(invocation).map_err(|error| error.to_string())?;
     let targets = crate::plugins::events::matching::match_resources(resources);
     let directory_context = NativeProviderInvocation::directory(invocation)
         .ok()
-        .and_then(|directory| crate::plugins::match_rules::directory_match_resource(&directory.display));
-    let descriptor = registry().descriptor(id).ok_or("missing native menu descriptor")?;
+        .and_then(|directory| {
+            crate::plugins::match_rules::directory_match_resource(&directory.display)
+        });
+    let descriptor = registry()
+        .descriptor(id)
+        .ok_or("missing native menu descriptor")?;
     if !ProviderMatcher::matches(
         &descriptor.r#match,
         &targets,
@@ -177,7 +180,10 @@ pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Va
             .map_err(|error| error.to_string()),
         "contextMenu.execute" => provider
             .execute(invocation)
-            .and_then(|result| serde_json::to_value(result).map_err(|error| ProviderError::internal(error.to_string())))
+            .and_then(|result| {
+                serde_json::to_value(result)
+                    .map_err(|error| ProviderError::internal(error.to_string()))
+            })
             .map_err(|error| error.to_string()),
         method => Err(ProviderError::method_not_found(method).to_string()),
     }
@@ -192,7 +198,9 @@ pub(super) fn execute(
 ) -> Result<Value, String> {
     let offered = resolve(id, directory, paths)?;
     if !offered["items"].as_array().is_some_and(|items| {
-        items.iter().any(|item| item["id"] == item_id && item["disabled"] != true)
+        items
+            .iter()
+            .any(|item| item["id"] == item_id && item["disabled"] != true)
     }) {
         return Err("native menu action was not offered".into());
     }
@@ -214,8 +222,8 @@ pub(super) fn invocation_from_entries(
     directory: &str,
     directory_entry: Option<&Entry>,
 ) -> NativeProviderInvocation {
-    let resolved_directory = directory_entry
-        .map(|entry| ResourceSnapshot::from_entry(directory, entry));
+    let resolved_directory =
+        directory_entry.map(|entry| ResourceSnapshot::from_entry(directory, entry));
     NativeProviderInvocation::new(method, params, resources, resolved_directory.as_ref())
 }
 

@@ -1,10 +1,10 @@
 //! Native view menus implement the shared ContextMenuProvider contract.
 use super::NativeProviderInvocation;
 use crate::core::files::Entry;
-use crate::core::volumes::{applications, recycle, trash_vfs, native_vfs};
+use crate::core::volumes::{applications, native_vfs, recycle, trash_vfs};
 use fiex_provider_contracts::{
-    ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError,
-    ProviderInput, ProviderInvocation,
+    ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
+    ProviderInvocation,
 };
 use serde_json::{json, Value};
 
@@ -12,8 +12,7 @@ fn selection(ctx: &dyn ProviderInvocation) -> Result<(String, Vec<String>), Prov
     let directory = NativeProviderInvocation::directory(ctx)?.display.clone();
     let paths = (0..ctx.targets().len())
         .map(|index| {
-            NativeProviderInvocation::resource(ctx, index)
-                .map(|resource| resource.display.clone())
+            NativeProviderInvocation::resource(ctx, index).map(|resource| resource.display.clone())
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok((directory, paths))
@@ -26,11 +25,10 @@ fn intersection(paths: &[String], mut items: impl FnMut(&str) -> Vec<MenuItem>) 
     items(first)
         .into_iter()
         .filter(|item| {
-            paths.iter().skip(1).all(|path| {
-                items(path)
-                    .iter()
-                    .any(|other| other.id == item.id)
-            })
+            paths
+                .iter()
+                .skip(1)
+                .all(|path| items(path).iter().any(|other| other.id == item.id))
         })
         .collect()
 }
@@ -44,10 +42,7 @@ fn offered<'a>(
         _ => None,
     }
     .ok_or_else(|| ProviderError::invalid_params("menu execute requires an itemId"))?;
-    if items
-        .iter()
-        .any(|item| item.id == id && !item.disabled)
-    {
+    if items.iter().any(|item| item.id == id && !item.disabled) {
         Ok(id)
     } else {
         Err(ProviderError::invalid_params(

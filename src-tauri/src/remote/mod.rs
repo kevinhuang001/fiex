@@ -43,11 +43,11 @@ pub(crate) use config::{connection_by_mount, ensure_provider_access};
 pub use config::{connection_for_path, is_remote};
 #[cfg(feature = "desktop")]
 pub use files::is_cached;
-pub(crate) use files::{provider_node, remember_provider_entry};
 pub use files::{
     cached_path, download, download_dir, eject, ensure_downloaded, list_listing, provider_list,
     stat, ProgressFn, TransferOptions,
 };
+pub(crate) use files::{provider_node, remember_provider_entry};
 #[cfg(feature = "desktop")]
 pub(crate) use mutate::{remove, rename};
 pub use reconcile::{reconcile, reconcile_connection, resolve};

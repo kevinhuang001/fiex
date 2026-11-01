@@ -40,21 +40,24 @@ impl ResourceBroker {
         if same_mount {
             return Ok(());
         }
-        provider_registry::preflight(self, &TransferPreflight {
-            node_id: self.reference.node_id.clone(),
-            direction,
-            action,
-            name: name.into(),
-            metadata: metadata.clone(),
-            same_mount,
-        })
+        provider_registry::preflight(
+            self,
+            &TransferPreflight {
+                node_id: self.reference.node_id.clone(),
+                direction,
+                action,
+                name: name.into(),
+                metadata: metadata.clone(),
+                same_mount,
+            },
+        )
     }
 }
 fn executable_shortcut(path: &str, target: Option<&str>) -> Option<bool> {
     // Provider paths carry no trusted host-path or executable-target authority.
-    if !crate::core::fs::provider_registry::resource_access(path).is_ok_and(|access| {
-        access == crate::core::fs::provider_registry::ResourceAccess::HostPath
-    }) {
+    if !crate::core::fs::provider_registry::resource_access(path)
+        .is_ok_and(|access| access == crate::core::fs::provider_registry::ResourceAccess::HostPath)
+    {
         return None;
     }
     #[cfg(target_os = "windows")]

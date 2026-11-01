@@ -4,9 +4,8 @@ use std::path::PathBuf;
 /// Undo history only stores real host paths. Virtual adapters have their own
 /// navigation lifetime and must never be replayed as local filesystem actions.
 fn undoable(path: &str) -> bool {
-    crate::core::fs::provider_registry::resource_access(path).is_ok_and(|access| {
-        access == crate::core::fs::provider_registry::ResourceAccess::HostPath
-    })
+    crate::core::fs::provider_registry::resource_access(path)
+        .is_ok_and(|access| access == crate::core::fs::provider_registry::ResourceAccess::HostPath)
 }
 
 #[tauri::command]

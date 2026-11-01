@@ -1,6 +1,6 @@
 //! Recent view implementation of the shared VFS provider contract.
-use super::*;
 use super::shared::*;
+use super::*;
 use std::io::{self, Read};
 
 struct BrokerReader {
@@ -48,7 +48,12 @@ fn recent_operations(path: &str) -> Vec<FsOperation> {
 pub(super) struct RecentView;
 impl VfsProvider for RecentView {
     fn operations(&self) -> &'static [FsOperation] {
-        &[FsOperation::List, FsOperation::Stat, FsOperation::Read, FsOperation::Search]
+        &[
+            FsOperation::List,
+            FsOperation::Stat,
+            FsOperation::Read,
+            FsOperation::Search,
+        ]
     }
 
     fn discover(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<FsOperation>, ProviderError> {
@@ -57,7 +62,8 @@ impl VfsProvider for RecentView {
 
     fn search_capabilities(&self, ctx: &dyn ProviderInvocation) -> SearchCapabilities {
         SearchCapabilities {
-            name: path(ctx).is_ok_and(|path| recent_operations(path).contains(&FsOperation::Search)),
+            name: path(ctx)
+                .is_ok_and(|path| recent_operations(path).contains(&FsOperation::Search)),
             content: false,
         }
     }
@@ -76,11 +82,10 @@ impl VfsProvider for RecentView {
     }
 
     fn read(&self, request: &FsRequest<'_>) -> Result<FsRead, ProviderError> {
-        let alias = request
-            .node_id()
-            .unwrap_or(path(request.ctx())?);
+        let alias = request.node_id().unwrap_or(path(request.ctx())?);
         let source = crate::core::recent::source_for(alias).map_err(provider_error)?;
-        let broker = crate::core::fs::trusted(&source, owner(request.ctx())?).map_err(provider_error)?;
+        let broker =
+            crate::core::fs::trusted(&source, owner(request.ctx())?).map_err(provider_error)?;
         broker
             .require(FsOperation::Read, false)
             .map_err(provider_error)?;
