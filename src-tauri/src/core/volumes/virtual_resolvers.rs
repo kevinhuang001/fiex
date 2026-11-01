@@ -327,6 +327,12 @@ impl NativeVfsProvider for TrashView {
         op: FsOperation,
         _create: bool,
     ) -> Result<(), String> {
+        if matches!(
+            op,
+            FsOperation::Write | FsOperation::Mkdir | FsOperation::Rename | FsOperation::Remove
+        ) {
+            return Err("PermissionDenied: Trash requires a dedicated Core action".into());
+        }
         if !self.operations(path).contains(&op) {
             return Err(format!("Unsupported: {}", op.as_str()));
         }
