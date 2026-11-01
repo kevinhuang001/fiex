@@ -6,9 +6,8 @@ use crate::plugins::{
 };
 use fiex_provider_contracts::{
     ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, ProviderRequest, ProviderRequestContext, ToolbarProvider,
+    ProviderMatchRule, ProviderRequest, ProviderRequestContext, ToolbarProvider, ToolbarResult,
 };
-use serde_json::Value;
 use std::{
     any::Any,
     sync::{Arc, Mutex, OnceLock},
@@ -70,7 +69,7 @@ struct IpcToolbar {
 }
 
 impl ToolbarProvider for IpcToolbar {
-    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<ToolbarResult, ProviderError> {
         let services = ctx
             .local_service_handle()
             .and_then(|value| value.downcast_ref::<ToolbarServices>())
@@ -80,14 +79,16 @@ impl ToolbarProvider for IpcToolbar {
                 "ToolbarProvider identity or method mismatch",
             ));
         }
-        crate::plugins::events::invoke_resources(
+        let response = crate::plugins::events::invoke_resources(
             &services.plugin,
             ctx.method(),
             ctx.params().clone(),
             &services.resources,
             Some(services.directory.as_str()),
         )
-        .map_err(ProviderError::internal)
+        .map_err(ProviderError::internal)?;
+        serde_json::from_value(response)
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 }
 
@@ -134,7 +135,7 @@ pub(super) fn invoke(
     resources: &[ResourceSnapshot],
     directory: &str,
     request: &ProviderRequest,
-) -> Result<Value, String> {
+) -> Result<ToolbarResult, String> {
     let invocation = CoreToolbarInvocation::new(plugin.clone(), resources, directory, request);
     ToolbarProvider::invoke(proxy(&plugin.id)?.as_ref(), &invocation)
         .map_err(|error| error.to_string())

@@ -4,7 +4,7 @@ use crate::plugins::{
     events::{EventRouter, Handler},
     resource::resource_context::ResourceSnapshot,
 };
-use fiex_provider_contracts::ProviderRequest;
+use fiex_provider_contracts::{HookResult, ProviderRequest};
 use serde_json::{json, Value};
 
 mod proxy;
@@ -33,7 +33,7 @@ pub fn before_open(path: &str) -> Result<Value, String> {
         method: "hooks.invoke".into(),
         params: json!({"event":"beforeOpen"}),
     };
-    Ok(EventRouter::resolve_typed(
+    let result = EventRouter::resolve_typed(
         "hooks.invoke",
         providers,
         &call,
@@ -41,27 +41,20 @@ pub fn before_open(path: &str) -> Result<Value, String> {
             Handler::Plugin(plugin) => proxy::invoke(plugin, &resource, request),
             Handler::Builtin(_) => Err("unregistered native HookProvider".into()),
         },
-        |_, value| {
+        |_, result| {
+            let value = serde_json::to_value(result).map_err(|error| error.to_string())?;
             crate::plugins::events::validate_result("hooks.invoke", &value)?;
-            validate_hook_reply(value)
+            Ok(result)
         },
-        |value| value["handled"] == true,
+        |result| result.handled,
         |results| {
             results
                 .into_iter()
-                .find_map(|(_, result)| result.ok().filter(|value| value["handled"] == true))
-                .unwrap_or_else(|| json!({"handled":false}))
+                .find_map(|(_, result)| result.ok().filter(|value| value.handled))
+                .unwrap_or(HookResult { handled: false })
         },
-    ))
-}
-
-/// A hook can stop the FirstSupported chain only with a well-formed reply.
-/// Invalid plugin replies must not silently masquerade as "not handled".
-fn validate_hook_reply(value: Value) -> Result<Value, String> {
-    if value.get("handled").and_then(Value::as_bool).is_none() {
-        return Err("invalid hook reply: handled must be a boolean".into());
-    }
-    Ok(value)
+    );
+    serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -69,21 +62,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_untyped_hook_results() {
-        assert!(validate_hook_reply(json!({})).is_err());
-        assert!(validate_hook_reply(json!({"handled":"true"})).is_err());
-        assert!(validate_hook_reply(json!(null)).is_err());
-    }
-
-    #[test]
-    fn accepts_explicit_handled_states() {
-        assert_eq!(
-            validate_hook_reply(json!({"handled":true})).unwrap()["handled"],
-            true
-        );
-        assert_eq!(
-            validate_hook_reply(json!({"handled":false})).unwrap()["handled"],
-            false
+    fn rejects_legacy_hook_reply_fields() {
+        assert!(
+            serde_json::from_value::<HookResult>(json!({"handled":true,"preview":false})).is_err()
         );
     }
 }

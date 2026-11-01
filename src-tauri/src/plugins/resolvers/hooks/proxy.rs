@@ -6,10 +6,9 @@ use crate::plugins::{
     resource::resource_context::ResourceSnapshot,
 };
 use fiex_provider_contracts::{
-    HookProvider, ProviderDescriptor, ProviderError, ProviderInstances, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, ProviderRequest, ProviderRequestContext,
+    HookProvider, HookResult, ProviderDescriptor, ProviderError, ProviderInstances,
+    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest, ProviderRequestContext,
 };
-use serde_json::Value;
 use std::{
     any::Any,
     sync::{Arc, Mutex, OnceLock},
@@ -57,7 +56,7 @@ struct IpcHook {
 }
 
 impl HookProvider for IpcHook {
-    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<HookResult, ProviderError> {
         let services = ctx
             .local_service_handle()
             .and_then(|value| value.downcast_ref::<HookServices>())
@@ -67,14 +66,16 @@ impl HookProvider for IpcHook {
                 "HookProvider identity or event mismatch",
             ));
         }
-        crate::plugins::events::invoke_resources(
+        let value = crate::plugins::events::invoke_resources(
             &services.plugin,
             ctx.method(),
             ctx.params().clone(),
             std::slice::from_ref(&services.resource),
             None,
         )
-        .map_err(ProviderError::internal)
+        .map_err(ProviderError::internal)?;
+        serde_json::from_value(value)
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 }
 
@@ -120,7 +121,7 @@ pub(super) fn invoke(
     plugin: &PluginInfo,
     resource: &ResourceSnapshot,
     request: &ProviderRequest,
-) -> Result<Value, String> {
+) -> Result<HookResult, String> {
     let invocation = CoreHookInvocation::new(plugin.clone(), resource, request);
     HookProvider::invoke(proxy(&plugin.id)?.as_ref(), &invocation)
         .map_err(|error| error.to_string())

@@ -6,9 +6,9 @@ use crate::plugins::{
     native_invocation::NativeProviderInvocation,
 };
 use fiex_provider_contracts::{
-    ConnectionProvider, MatchResource, ProviderDescriptor, ProviderError, ProviderInstances,
-    ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest, ResourceCapabilities,
-    ResourceLocation, ResourceMetadata, ResourceType,
+    ConnectionProvider, ConnectionValidation, MatchResource, ProviderDescriptor, ProviderError,
+    ProviderInstances, ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,
+    ResourceCapabilities, ResourceLocation, ResourceMetadata, ResourceType,
 };
 use serde_json::Value;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -32,8 +32,12 @@ impl PluginConnection {
     }
 }
 impl ConnectionProvider for PluginConnection {
-    fn validate(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
-        self.invoke_event(ctx, "connection.validate")
+    fn validate(
+        &self,
+        ctx: &dyn ProviderInvocation,
+    ) -> Result<ConnectionValidation, ProviderError> {
+        serde_json::from_value(self.invoke_event(ctx, "connection.validate")?)
+            .map_err(|error| ProviderError::invalid_params(error.to_string()))
     }
 
     fn open(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
@@ -143,7 +147,12 @@ pub fn invoke(
                 let provider = proxy_for(&plugin.id)?;
                 match request.method.as_str() {
                     "connection.validate" => {
-                        ConnectionProvider::validate(provider.as_ref(), &invocation)
+                        ConnectionProvider::validate(provider.as_ref(), &invocation).and_then(
+                            |result| {
+                                serde_json::to_value(result)
+                                    .map_err(|error| ProviderError::internal(error.to_string()))
+                            },
+                        )
                     }
                     "connection.open" => ConnectionProvider::open(provider.as_ref(), &invocation),
                     "connection.create" => {
@@ -173,24 +182,11 @@ pub fn invoke(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     #[test]
     fn lifecycle_requires_registered_method_and_connection_identity() {
-        assert!(invoke(
-            "",
-            "drive",
-            "mount",
-            "connection.open",
-            serde_json::json!({})
-        )
-        .is_err());
-        assert!(invoke(
-            "org.example",
-            "drive",
-            "mount",
-            "vfs.list",
-            serde_json::json!({})
-        )
-        .is_err());
+        assert!(invoke("", "drive", "mount", "connection.open", json!({})).is_err());
+        assert!(invoke("org.example", "drive", "mount", "vfs.list", json!({})).is_err());
     }
 
     #[test]
