@@ -154,9 +154,6 @@ impl PluginHost {
         let mut task_root = task_root;
         let mut params =
             crate::plugins::events::prepare(plugin_id, method, params, &mut task_root, &declared)?;
-        if let Some(object) = params.as_object_mut() {
-            object.insert("networkDomains".into(), json!(state.network_domains));
-        }
         if let Some(scope) = &mut task_root {
             let policy =
                 crate::plugins::security::policy::PermissionPolicy::new(plugin_id, &declared);
