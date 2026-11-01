@@ -137,9 +137,7 @@ pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decor
     let provider = registry()
         .get(id)
         .ok_or("unknown native DecorationProvider")?;
-    let values = provider
-        .resolve(ctx)
-        .map_err(|error| error.to_string())?;
+    let values = provider.resolve(ctx).map_err(|error| error.to_string())?;
     let services = invocation::services(ctx)?;
     values
         .into_iter()
