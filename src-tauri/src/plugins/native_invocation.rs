@@ -31,8 +31,7 @@ impl NativeProviderInvocation {
                 .iter()
                 .map(|resource| resource.project("core", &session_id, true, true))
                 .collect(),
-            directory: directory
-                .map(|resource| resource.project("core", &session_id, true, true)),
+            directory: directory.map(|resource| resource.project("core", &session_id, true, true)),
             session_id,
             selection_count: targets.len(),
             locale: crate::i18n::locale().to_owned(),

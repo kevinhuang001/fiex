@@ -208,3 +208,34 @@ fn shared_endpoint_merges_native_and_proxy_results_and_rejects_method_spoofing()
     );
     assert!(outcomes.iter().all(|(_, result)| result.is_err()));
 }
+
+#[test]
+fn typed_event_router_merges_native_and_ipc_trait_results() {
+    use fiex_provider_contracts::ProviderRequest;
+
+    let outcomes = EventRouter::resolve_typed(
+        "info.resolve",
+        vec![
+            Resolver::builtin("core.metadata", 100),
+            Resolver::builtin("plugin:org.example:metadata", 50),
+        ],
+        &ProviderRequest {
+            method: "info.resolve".into(),
+            params: json!({}),
+        },
+        |provider, _| Ok(provider.id.clone()),
+        |_, result| Ok(result),
+        |_| true,
+        |results| {
+            results
+                .into_iter()
+                .map(|(_, result)| result.unwrap())
+                .collect::<Vec<_>>()
+        },
+    );
+
+    assert_eq!(
+        outcomes,
+        vec!["core.metadata", "plugin:org.example:metadata"]
+    );
+}

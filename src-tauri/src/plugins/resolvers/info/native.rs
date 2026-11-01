@@ -29,9 +29,7 @@ struct MediaInfo;
 impl InfoProvider for MediaInfo {
     fn resolve(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<InfoSection>, ProviderError> {
         let resource = NativeProviderInvocation::resource(ctx, 0)?;
-        let path = resource
-            .export_path()
-            .map_err(ProviderError::internal)?;
+        let path = resource.export_path().map_err(ProviderError::internal)?;
         Ok(media_sections(&path))
     }
 }
@@ -112,11 +110,6 @@ mod tests {
             .iter()
             .any(|provider| provider.id == "core.media"));
         assert!(invoke("unknown", &directory).is_err());
-        assert_eq!(
-            invoke("core.metadata", &directory)
-                .unwrap()
-                .len(),
-            1
-        );
+        assert_eq!(invoke("core.metadata", &directory).unwrap().len(), 1);
     }
 }

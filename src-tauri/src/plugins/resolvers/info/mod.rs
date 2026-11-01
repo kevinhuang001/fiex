@@ -6,7 +6,8 @@
 //! metadata and media probes.
 pub use crate::plugins::contracts::{InfoRow, InfoSection};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::ProviderRequest;
+use serde_json::json;
 use std::sync::Arc;
 
 fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
@@ -17,7 +18,6 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     }
 }
 
-mod endpoint;
 mod media;
 mod metadata;
 mod native;
@@ -36,26 +36,23 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
         method: "info.resolve".into(),
         params: serde_json::json!({}),
     };
-    EventRouter::resolve(
+    EventRouter::resolve_typed(
         "info.resolve",
         providers,
         &request,
-        |resolver| {
-            let endpoint: Box<dyn ProviderEndpoint> = match &resolver.handler {
-                Handler::Builtin(id) => Box::new(endpoint::NativeInfoEndpoint {
-                    id: (*id).into(),
-                    resource: resource.clone(),
-                }),
-                Handler::Plugin(plugin) => Box::new(proxy::ScopedInfoProxy::new(
-                    (**plugin).clone(),
-                    resource.clone(),
-                )?),
-            };
-            Ok(endpoint)
+        |resolver, request| match &resolver.handler {
+            Handler::Builtin(id) => native::invoke(id, &resource)
+                .map_err(|error| error.to_string()),
+            Handler::Plugin(plugin) => proxy::ScopedInfoProxy::new(
+                (**plugin).clone(),
+                resource.clone(),
+            )?
+            .resolve_typed(request)
+            .map_err(|error| error.to_string()),
         },
-        |provider, value| {
-            let mut sections: Vec<InfoSection> =
-                serde_json::from_value(value["sections"].clone()).map_err(|e| e.to_string())?;
+        |provider, mut sections| {
+            let value = json!({"sections": &sections});
+            crate::plugins::events::validate_result("info.resolve", &value)?;
             for section in &mut sections {
                 match &provider.handler {
                     Handler::Plugin(plugin) => {

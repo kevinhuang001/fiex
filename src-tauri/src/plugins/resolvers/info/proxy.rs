@@ -1,8 +1,8 @@
 //! Shared InfoProvider IPC instance registry. A proxy owns only the plugin
 //! identifier: live plugin state, scoped resources and operation grants are
 //! supplied anew on each request and never stored in the registry.
-use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use crate::plugins::native_invocation::NativeProviderInvocation;
+use crate::plugins::{host::PluginInfo, resource::resource_context::ResourceSnapshot};
 use fiex_provider_contracts::{
     InfoProvider, InfoSection, ProviderDescriptor, ProviderError, ProviderInstances,
     ProviderInvocation, ProviderKind, ProviderMatchRule, ProviderRequest,

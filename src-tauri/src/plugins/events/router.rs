@@ -12,7 +12,7 @@ impl EventRouter {
         providers: Vec<Resolver>,
         request: &ProviderRequest,
         mut endpoint: impl FnMut(&Resolver) -> Result<Box<dyn ProviderEndpoint + 'a>, String>,
-        validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
+        mut validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
         supported: impl FnMut(&T) -> bool,
         collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
     ) -> R {
@@ -26,6 +26,38 @@ impl EventRouter {
                 let routed = super::registry::bind_request(provider, request)?;
                 endpoint(provider)?.invoke(&routed)
             },
+            |provider, value| {
+                validate_result(method, &value)?;
+                validate(provider, value)
+            },
+            supported,
+            collect,
+        )
+    }
+
+    /// Dispatch already typed native and IPC provider implementations through
+    /// the same ordering, panic boundary and owner/merge policy. Provider
+    /// families keep their own shared Trait method and response DTO; this
+    /// generic helper only owns event scheduling.
+    pub fn resolve_typed<T, R>(
+        method: &str,
+        providers: Vec<Resolver>,
+        request: &ProviderRequest,
+        mut invoke: impl FnMut(&Resolver, &ProviderRequest) -> Result<T, String>,
+        validate: impl FnMut(&Resolver, T) -> Result<T, String>,
+        supported: impl FnMut(&T) -> bool,
+        collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
+    ) -> R {
+        Self::dispatch_resolvers(
+            method,
+            providers,
+            |provider| {
+                if request.method != method {
+                    return Err("provider request method does not match routed event".into());
+                }
+                let routed = super::registry::bind_request(provider, request)?;
+                invoke(provider, &routed)
+            },
             validate,
             supported,
             collect,
@@ -35,8 +67,8 @@ impl EventRouter {
     fn dispatch_resolvers<T, R>(
         method: &str,
         providers: Vec<Resolver>,
-        mut invoke: impl FnMut(&Resolver) -> Result<Value, String>,
-        mut validate: impl FnMut(&Resolver, Value) -> Result<T, String>,
+        mut invoke: impl FnMut(&Resolver) -> Result<T, String>,
+        mut validate: impl FnMut(&Resolver, T) -> Result<T, String>,
         mut supported: impl FnMut(&T) -> bool,
         collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
     ) -> R {
@@ -48,7 +80,6 @@ impl EventRouter {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 require_event(method)?;
                 let value = invoke(&provider)?;
-                validate_result(method, &value)?;
                 validate(&provider, value)
             }))
             .unwrap_or_else(|_| Err("provider panicked".into()));
