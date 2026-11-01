@@ -12,7 +12,9 @@ mod tests;
 mod validation;
 
 use crate::plugins::events::{EventRouter, Handler, Resolver};
-use crate::plugins::{native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot};
+use crate::plugins::{
+    native_invocation::NativeProviderInvocation, resource::resource_context::ResourceSnapshot,
+};
 use fiex_provider_contracts::{ContextMenuProvider, ProviderRequest};
 use serde_json::{json, Value};
 use std::{
