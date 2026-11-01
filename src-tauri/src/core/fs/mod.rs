@@ -8,6 +8,7 @@ pub(crate) mod directory_cache;
 mod error;
 mod export;
 mod list_service;
+mod mutation_overlay;
 mod preflight;
 pub(crate) mod presentation;
 mod transfer;

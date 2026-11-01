@@ -40,7 +40,18 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 mod providers;
-pub(super) use providers::register;
+pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
+    providers::register(values);
+}
+
+pub(super) fn item(
+    id: &str,
+    title: &'static str,
+    icon: &str,
+    shortcut: &str,
+) -> fiex_provider_contracts::MenuItem {
+    providers::item(id, title, icon, shortcut)
+}
 
 const PROVIDER_IDS: [&str; 10] = [
     "builtin:opening",

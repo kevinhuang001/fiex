@@ -39,10 +39,10 @@ impl DecorationProvider for BuiltinDecoration {
                 Ok(DecorationContribution {
                     target: target.reference.clone(),
                     native_badges: decoration.native_badges,
-                    badges: decoration.badges,
+                    badges: Vec::new(),
                     label: decoration.label,
                     description: decoration.description,
-                    style: decoration.style,
+                    style: Default::default(),
                     fields: decoration.fields,
                     icon: decoration.icon,
                     icon_path: decoration.icon_path,
@@ -50,6 +50,10 @@ impl DecorationProvider for BuiltinDecoration {
             })
             .collect()
     }
+}
+
+pub(super) fn provider(id: &str) -> Option<Arc<dyn DecorationProvider>> {
+    registry().get_arc(id)
 }
 
 fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
@@ -150,11 +154,13 @@ pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decor
             Ok(Decoration {
                 path: target.display.clone(),
                 native_badges: value.native_badges,
-                badges: value.badges,
                 label: value.label,
                 description: value.description,
-                style: value.style,
-                fields: value.fields,
+                fields: super::dynamic::fields_with_name_contribution(
+                    value.fields,
+                    value.badges,
+                    value.style,
+                ),
                 icon: value.icon,
                 icon_path: value.icon_path,
                 providers: Vec::new(),

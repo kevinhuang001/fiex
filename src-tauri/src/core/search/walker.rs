@@ -13,7 +13,7 @@ use std::{
 
 const CONTENT_BYTE_BUDGET: u64 = 64 * 1024 * 1024;
 const CONTENT_FILE_BUDGET: usize = 5000;
-const BINARY_PROBE: usize = 8192;
+pub(super) const BINARY_PROBE: usize = 8192;
 
 fn walk_root(
     root: &Path,

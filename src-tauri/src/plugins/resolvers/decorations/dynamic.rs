@@ -118,6 +118,25 @@ fn safe_fields(fields: HashMap<String, DecorationField>) -> HashMap<String, Deco
         .collect()
 }
 
+pub(super) fn fields_with_name_contribution(
+    mut fields: HashMap<String, DecorationField>,
+    badges: Vec<DecorationBadge>,
+    style: DecorationStyle,
+) -> HashMap<String, DecorationField> {
+    let badges = badges
+        .into_iter()
+        .filter_map(safe_badge)
+        .take(8)
+        .collect::<Vec<_>>();
+    let style = safe_style(style);
+    if !badges.is_empty() || !style_is_empty(&style) {
+        let name = fields.entry("name".into()).or_default();
+        name.badges.extend(badges);
+        merge_style(&mut name.style, &style);
+    }
+    safe_fields(fields)
+}
+
 pub(super) struct Pending {
     priority: i32,
     pub(super) value: Decoration,
@@ -134,15 +153,7 @@ pub(super) fn merge(
     if !entries.contains_key(path) {
         return;
     }
-    let mut fields = value.fields;
-    // Legacy `badge` / `badges` / `style` keep their original meaning: the
-    // file-name cell.
-    if !value.badges.is_empty() || !style_is_empty(&value.style) {
-        let name = fields.entry("name".into()).or_default();
-        name.badges.extend(value.badges);
-        merge_style(&mut name.style, &value.style);
-    }
-    let fields = safe_fields(fields);
+    let fields = safe_fields(value.fields);
     let label = safe_text(value.label.as_deref(), 120);
     let description = safe_text(value.description.as_deref(), 200);
     if fields.is_empty()
@@ -228,14 +239,7 @@ pub(super) fn decode(
         if !entries.contains_key(&path) || result.contains_key(&path) {
             return Err("invalid or duplicate decoration target".into());
         }
-        let badges = item
-            .badges
-            .into_iter()
-            .filter_map(safe_badge)
-            .take(8)
-            .collect();
-        let style = safe_style(item.style);
-        let fields = safe_fields(item.fields);
+        let fields = fields_with_name_contribution(item.fields, item.badges, item.style);
         let (icon, icon_path) = item
             .icon
             .as_deref()
@@ -244,10 +248,8 @@ pub(super) fn decode(
             .unwrap_or((None, None));
         let value = Decoration {
             path: path.clone(),
-            badges,
             label: safe_text(item.label.as_deref(), 120),
             description: safe_text(item.description.as_deref(), 200),
-            style,
             fields,
             icon,
             icon_path,

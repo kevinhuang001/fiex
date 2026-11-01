@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub(super) fn open_stored(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        if super::application_policy::executable_file(&path.to_string_lossy()) {
+        if crate::core::volumes::application_policy::executable_file(&path.to_string_lossy()) {
             return std::process::Command::new(path)
                 .spawn()
                 .map(|_| ())
@@ -19,7 +19,7 @@ pub(super) fn open_stored(path: &Path) -> Result<(), String> {
         if path.extension().and_then(|value| value.to_str()) == Some("desktop") {
             return launch_desktop(path);
         }
-        if super::application_policy::executable_file(&path.to_string_lossy()) {
+        if crate::core::volumes::application_policy::executable_file(&path.to_string_lossy()) {
             return std::process::Command::new(path)
                 .spawn()
                 .map(|_| ())
@@ -183,7 +183,7 @@ fn collect_desktop_files(
 }
 
 #[cfg(target_os = "linux")]
-fn desktop_entry(path: &Path) -> Option<(String, bool, bool)> {
+pub(super) fn desktop_entry(path: &Path) -> Option<(String, bool, bool)> {
     let text = std::fs::read_to_string(path).ok()?;
     let mut section = String::new();
     let mut name = None;

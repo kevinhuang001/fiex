@@ -23,7 +23,10 @@ impl StorageProvider {
         Self { id }
     }
 
-    fn resource(&self, ctx: &dyn ProviderInvocation) -> Result<&ResourceBroker, ProviderError> {
+    fn resource<'a>(
+        &self,
+        ctx: &'a dyn ProviderInvocation,
+    ) -> Result<&'a ResourceBroker, ProviderError> {
         let resource = broker(ctx)?;
         resource.ensure_current_binding().map_err(provider_error)?;
         if super::shared_provider_id(&resource.path) != Some(self.id) {
@@ -364,7 +367,7 @@ impl VfsProvider for StorageProvider {
         };
         let ignore_patterns = request.ignores();
         let filter = crate::core::ignores::IgnoreSet::new(&ignore_patterns);
-        let entries = entries
+        let entries: Vec<Entry> = entries
             .into_iter()
             .filter(|entry| {
                 (request.hidden() || !entry.name.starts_with('.'))

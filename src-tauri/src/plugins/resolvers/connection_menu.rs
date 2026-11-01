@@ -261,7 +261,9 @@ pub async fn execute(
         },
     )?;
     if native_action_authorized(builtin_owner, item_id, &result)? {
-        return native::execute(provider_id, &ctx, item_id).await;
+        return native::execute(provider_id, &ctx, item_id)
+            .await
+            .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string()));
     }
     serde_json::to_value(result).map_err(|error| error.to_string())
 }

@@ -1,11 +1,11 @@
 //! Persistent user-created items stored under the private Applications directory.
 use super::{
-    application_folders, directory_cache, list, system_entries, system_entry, URI, USER_PREFIX,
+    application_folders, decode, directory_cache, encode, list, system_entries, system_entry, URI, USER_PREFIX,
 };
 use crate::core::files::Entry;
 use std::path::{Path, PathBuf};
 
-pub(super) fn user_encoded(uri: &str) -> Option<&str> {
+pub(in crate::core::volumes) fn user_encoded(uri: &str) -> Option<&str> {
     uri.strip_prefix(USER_PREFIX)
 }
 
@@ -156,7 +156,7 @@ pub fn list_at(uri: &str) -> Result<Vec<Entry>, String> {
     Ok(folder_listing(entries, &system_entries()?, &mapped))
 }
 
-pub(super) fn folder_listing(
+pub(in crate::core::volumes) fn folder_listing(
     mut entries: Vec<Entry>,
     system: &[Entry],
     mapped: &[String],
@@ -185,7 +185,7 @@ fn list_stored(dir: &Path) -> Result<Vec<Entry>, String> {
     result.sort_by_key(|item| item.name.to_lowercase());
     Ok(result)
 }
-pub(super) fn list_user() -> Vec<Entry> {
+pub(in crate::core::volumes) fn list_user() -> Vec<Entry> {
     stored_path(URI)
         .ok()
         .and_then(|root| list_stored(&root).ok())

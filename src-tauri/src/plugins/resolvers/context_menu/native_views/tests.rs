@@ -1,4 +1,5 @@
 use super::*;
+use fiex_provider_contracts::ProviderKind;
 use crate::core::volumes::{applications, recycle, trash_vfs};
 
 #[test]
@@ -74,9 +75,12 @@ fn native_view_menus_use_validated_shared_descriptors() {
             ..Default::default()
         };
         assert!(descriptor.r#match.matches_targets(&[matching], 1));
-        let foreign = json!({
-            "view": {"type":"fs","providerId":"core:local-fs","mountId":"local"}
-        });
+        let (view, storage) = crate::plugins::match_rules::typed_locations_for("/tmp");
+        let foreign = MatchResource {
+            view,
+            storage,
+            ..Default::default()
+        };
         assert!(!descriptor.r#match.matches_targets(&[foreign], 1));
     }
 }

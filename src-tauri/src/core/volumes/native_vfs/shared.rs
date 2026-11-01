@@ -30,16 +30,20 @@ pub(super) fn owner(ctx: &dyn ProviderInvocation) -> Result<&str, ProviderError>
 pub(super) fn broker(
     ctx: &dyn ProviderInvocation,
 ) -> Result<&crate::core::fs::ResourceBroker, ProviderError> {
-    NativeProviderInvocation::local_data::<VfsTarget>(ctx)
-        .and_then(|target| target.broker.as_deref())
+    let target = NativeProviderInvocation::local_data::<VfsTarget>(ctx)?;
+    target
+        .broker
+        .as_deref()
         .ok_or_else(|| ProviderError::invalid_params("missing scoped storage broker"))
 }
 
 pub(super) fn destination_broker(
     ctx: &dyn ProviderInvocation,
 ) -> Result<&crate::core::fs::ResourceBroker, ProviderError> {
-    NativeProviderInvocation::local_data::<VfsTarget>(ctx)
-        .and_then(|target| target.destination.as_deref())
+    let target = NativeProviderInvocation::local_data::<VfsTarget>(ctx)?;
+    target
+        .destination
+        .as_deref()
         .ok_or_else(|| ProviderError::invalid_params("missing scoped destination broker"))
 }
 

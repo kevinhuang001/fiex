@@ -97,7 +97,7 @@ fn connection_matches_are_core_owned_and_storage_sensitive() {
         true,
         false,
     );
-    let metadata = connection.matcher_metadata();
+    let metadata = connection.matcher_resource();
     assert_eq!(metadata.metadata.as_ref().unwrap().kind, "connection");
     assert_eq!(
         metadata.view.as_ref().unwrap().provider_id,
@@ -138,30 +138,14 @@ fn flat_plugin_items_are_validated_before_rendering() {
 
 #[test]
 fn plugin_connection_menu_result_cannot_impersonate_a_core_action() {
-    for kind in ["nativeAction", "coreAction"] {
-        assert!(native_action_authorized(
-            false,
-            "connection.close",
-            &json!({"kind":kind,"itemId":"connection.close"}),
-        )
-        .is_err());
-    }
-    assert!(native_action_authorized(
-        true,
-        "connection.close",
-        &json!({"kind":"nativeAction","itemId":"connection.close"}),
-    )
-    .unwrap());
-    assert!(native_action_authorized(
-        true,
-        "connection.close",
-        &json!({"kind":"nativeAction","itemId":"connection.edit"}),
-    )
-    .is_err());
-    assert!(
-        native_action_authorized(true, "connection.close", &json!({"kind":"handled"}),).is_err()
-    );
-    assert!(
-        !native_action_authorized(false, "connection.close", &json!({"kind":"handled"}),).unwrap()
-    );
+    let native_close = MenuExecuteResult::native_action("connection.close");
+    let native_edit = MenuExecuteResult::native_action("connection.edit");
+    let core_action = MenuExecuteResult::core_action("open", Vec::new(), "", "");
+    let handled = MenuExecuteResult::handled();
+    assert!(native_action_authorized(false, "connection.close", &native_close).is_err());
+    assert!(native_action_authorized(false, "connection.close", &core_action).is_err());
+    assert!(native_action_authorized(true, "connection.close", &native_close).unwrap());
+    assert!(native_action_authorized(true, "connection.close", &native_edit).is_err());
+    assert!(native_action_authorized(true, "connection.close", &handled).is_err());
+    assert!(!native_action_authorized(false, "connection.close", &handled).unwrap());
 }

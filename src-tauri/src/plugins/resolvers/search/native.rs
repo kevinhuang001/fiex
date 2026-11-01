@@ -7,8 +7,8 @@ use crate::plugins::{
     provider_registry::native::NativeProviderRegistry,
 };
 use fiex_provider_contracts::{
-    LocationMatch, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, SearchProvider, SearchResults,
+    LocationMatch, MatchResource, ProviderError, ProviderInput, ProviderInvocation, ProviderKind,
+    ProviderMatchRule, ResourceCapabilities, ResourceMetadata, SearchProvider, SearchResults,
 };
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
@@ -139,12 +139,18 @@ mod tests {
     #[test]
     fn walker_is_registered_once_with_exact_search_modes() {
         assert_eq!(registry().len(), 1);
-        let target = serde_json::json!({
-            "kind":"directory",
-            "view":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
-            "storage":{"type":"fs","providerId":"core:local-fs","mountId":"local"},
-            "operations":["list"]
-        });
+        let (view, storage) = crate::plugins::match_rules::typed_locations_for("/tmp");
+        let target = MatchResource {
+            metadata: Some(ResourceMetadata {
+                kind: "directory".into(),
+                ..Default::default()
+            }),
+            view,
+            storage,
+            capabilities: ResourceCapabilities {
+                operations: vec![crate::plugins::provider_registry::FsOperation::List],
+            },
+        };
         assert_eq!(candidates(&[target])[0].id, BUILTIN_SEARCH);
         assert_eq!(
             modes(BUILTIN_SEARCH),

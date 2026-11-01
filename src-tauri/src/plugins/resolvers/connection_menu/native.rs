@@ -331,7 +331,7 @@ fn registry_len() -> usize {
 }
 
 #[cfg(test)]
-fn descriptors() -> impl Iterator<Item = &fiex_provider_contracts::ProviderDescriptor> {
+fn descriptors() -> impl Iterator<Item = &'static fiex_provider_contracts::ProviderDescriptor> {
     registry().descriptors()
 }
 
@@ -351,7 +351,14 @@ mod tests {
             assert_eq!(descriptor.kind, ProviderKind::ConnectionContextMenu);
             descriptor.validate().unwrap();
         }
-        let candidates = providers(&[json!({"kind":"connection"})]);
+        let target = MatchResource {
+            metadata: Some(fiex_provider_contracts::ResourceMetadata {
+                kind: "connection".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let candidates = providers(&[target]);
         assert_eq!(candidates.len(), 4);
         assert_eq!(candidates[0].id, "builtin:connection-edit");
         assert_eq!(candidates[3].id, "builtin:connection-close");

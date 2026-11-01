@@ -148,7 +148,7 @@ impl Read for PluginReader {
         }
         let (bytes, _) = self
             .stream
-            .read_at(self.offset, output.len().min(super::CHUNK))
+            .read_at(self.offset, output.len().min(super::super::CHUNK))
             .map_err(std::io::Error::other)?;
         output[..bytes.len()].copy_from_slice(&bytes);
         self.offset = self

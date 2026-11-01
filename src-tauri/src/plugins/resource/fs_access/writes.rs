@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) struct PendingWrite {
     pub(super) owner: String,
+    pub(super) scope: Scope,
     pub(super) root: Dir,
     pub(super) root_path: PathBuf,
     pub(super) path: PathBuf,
@@ -105,6 +106,7 @@ pub fn begin_write(owner: &str, root: &Scope, input: &str, create: bool) -> Resu
         handle.clone(),
         PendingWrite {
             owner: owner.into(),
+            scope: root.clone(),
             root: dir,
             root_path: root.path().to_path_buf(),
             path,
@@ -276,7 +278,7 @@ pub fn commit(owner: &str, handle: &str) -> Result<Value, String> {
             replace_file(&target_dir, &temp_name, &name.to_string_lossy())
                 .map_err(|e| format!("replace commit target: {e}"))?;
         }
-        entry(dir, &write.path)
+        entry(&write.scope, dir, &write.path)
     })();
     if result.is_err() && temp_exists {
         let _ = target_dir.remove_file(&temp_name);

@@ -9,6 +9,15 @@ pub struct ProviderCandidate<P: ?Sized + Send + Sync> {
     pub implementation: Arc<P>,
 }
 
+impl<P: ?Sized + Send + Sync> Clone for ProviderCandidate<P> {
+    fn clone(&self) -> Self {
+        Self {
+            resolver: self.resolver.clone(),
+            implementation: Arc::clone(&self.implementation),
+        }
+    }
+}
+
 pub struct EventRouter;
 impl EventRouter {
     /// Dispatch shared provider implementations through one scheduling and

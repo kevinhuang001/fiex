@@ -318,15 +318,15 @@ mod tests {
             "[Desktop Entry]\nType=Application\nName=Editor\nNoDisplay=false\n",
         )
         .unwrap();
-        assert_eq!(desktop_entry(&file), Some(("Editor".into(), false, true)));
+        assert_eq!(platform::desktop_entry(&file), Some(("Editor".into(), false, true)));
         std::fs::write(
             &file,
             "[Desktop Entry]\nType=Application\nName=Hidden\nNoDisplay=true\n",
         )
         .unwrap();
-        assert_eq!(desktop_entry(&file), Some(("Hidden".into(), true, true)));
+        assert_eq!(platform::desktop_entry(&file), Some(("Hidden".into(), true, true)));
         std::fs::write(&file, "[Desktop Entry]\nType=Link\nName=Link\n").unwrap();
-        assert_eq!(desktop_entry(&file), Some(("Link".into(), false, false)));
+        assert_eq!(platform::desktop_entry(&file), Some(("Link".into(), false, false)));
     }
 }
 

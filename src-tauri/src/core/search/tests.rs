@@ -1,4 +1,5 @@
 use super::*;
+use std::path::Path;
 
 fn search(root: &Path, query: &str, hidden: bool, ignores: &[String]) -> Vec<Entry> {
     let mut request = SearchRequest::new(root.to_str().unwrap(), query);
