@@ -1,8 +1,10 @@
-//! The same connection-menu endpoint contract is used by native menus and
-//! plugin IPC. The Core owns connection identity and the permission boundary.
+//! Shared ConnectionContextMenuProvider implementations for native and
+//! plugin owners. Core keeps connection identity and rechecks every action.
 use super::{builtin_items, plugin_items, Context};
 use crate::plugins::host::PluginInfo;
-use fiex_provider_contracts::{ProviderEndpoint, ProviderRequest};
+use fiex_provider_contracts::{
+    ConnectionContextMenuProvider, ProviderError, ProviderInvocation,
+};
 use serde_json::{json, Value};
 
 pub(super) struct NativeMenu<'a> {
@@ -10,28 +12,25 @@ pub(super) struct NativeMenu<'a> {
     pub ctx: &'a Context,
 }
 
-impl ProviderEndpoint for NativeMenu<'_> {
-    fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        match request.method.as_str() {
-            "connectionContextMenu.resolve" => {
-                Ok(json!({"items":builtin_items(&self.id, self.ctx)?}))
-            }
-            "connectionContextMenu.execute" => {
-                let item = request.params["itemId"]
-                    .as_str()
-                    .ok_or("missing menu action")?;
-                let items = builtin_items(&self.id, self.ctx)?;
-                if !items.iter().any(|value| {
-                    value["id"] == item && value["disabled"] != true && value["kind"] == "action"
-                }) {
-                    return Err("menu action is no longer available".into());
-                }
-                // Async Core operations run *after* the shared endpoint
-                // router validates this native-only, unexposed action.
-                Ok(json!({"kind":"nativeAction","itemId":item}))
-            }
-            _ => Err("invalid connection-menu event".into()),
+impl ConnectionContextMenuProvider for NativeMenu<'_> {
+    fn resolve(&self, _ctx: &dyn ProviderInvocation) -> Result<Vec<Value>, ProviderError> {
+        builtin_items(&self.id, self.ctx).map_err(ProviderError::internal)
+    }
+
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+        let item = ctx.params()["itemId"]
+            .as_str()
+            .ok_or_else(|| ProviderError::invalid_params("missing menu action"))?;
+        let items = builtin_items(&self.id, self.ctx).map_err(ProviderError::internal)?;
+        if !items.iter().any(|value| {
+            value["id"] == item && value["disabled"] != true && value["kind"] == "action"
+        }) {
+            return Err(ProviderError::invalid_params(
+                "menu action is no longer available",
+            ));
         }
+        // Async Core operations run after this native-only action is validated.
+        Ok(json!({"kind":"nativeAction","itemId":item}))
     }
 }
 
@@ -59,35 +58,43 @@ impl PluginMenu<'_> {
     }
 }
 
-impl ProviderEndpoint for PluginMenu<'_> {
-    fn invoke(&self, request: &ProviderRequest) -> Result<Value, String> {
-        match request.method.as_str() {
-            "connectionContextMenu.resolve" => Ok(
-                json!({"items":plugin_items(&self.plugin, self.ctx, self.session, self.provider_id.as_deref())?}),
-            ),
-            "connectionContextMenu.execute" => {
-                let item = request.params["itemId"]
-                    .as_str()
-                    .ok_or("missing menu action")?;
-                let offered = plugin_items(
-                    &self.plugin,
-                    self.ctx,
-                    self.session,
-                    self.provider_id.as_deref(),
-                )?;
-                if !offered.iter().any(|value| {
-                    value["kind"] == "action" && value["id"] == item && value["disabled"] != true
-                }) {
-                    return Err("menu action is no longer available".into());
-                }
-                crate::plugins::host::global().invoke(
-                    &self.plugin.id,
-                    "connectionContextMenu.execute",
-                    self.params(Some(item))?,
-                )
-            }
-            _ => Err("invalid connection-menu event".into()),
+impl ConnectionContextMenuProvider for PluginMenu<'_> {
+    fn resolve(&self, _ctx: &dyn ProviderInvocation) -> Result<Vec<Value>, ProviderError> {
+        plugin_items(
+            &self.plugin,
+            self.ctx,
+            self.session,
+            self.provider_id.as_deref(),
+        )
+        .map_err(ProviderError::internal)
+    }
+
+    fn execute(&self, ctx: &dyn ProviderInvocation) -> Result<Value, ProviderError> {
+        let item = ctx.params()["itemId"]
+            .as_str()
+            .ok_or_else(|| ProviderError::invalid_params("missing menu action"))?;
+        let offered = plugin_items(
+            &self.plugin,
+            self.ctx,
+            self.session,
+            self.provider_id.as_deref(),
+        )
+        .map_err(ProviderError::internal)?;
+        if !offered.iter().any(|value| {
+            value["kind"] == "action" && value["id"] == item && value["disabled"] != true
+        }) {
+            return Err(ProviderError::invalid_params(
+                "menu action is no longer available",
+            ));
         }
+        crate::plugins::host::global()
+            .invoke(
+                &self.plugin.id,
+                "connectionContextMenu.execute",
+                self.params(Some(item))
+                    .map_err(ProviderError::internal)?,
+            )
+            .map_err(ProviderError::internal)
     }
 }
 
@@ -95,7 +102,7 @@ pub(super) fn from_resolver<'a>(
     resolver: &crate::plugins::events::Resolver,
     ctx: &'a Context,
     session: &'a str,
-) -> Box<dyn ProviderEndpoint + 'a> {
+) -> Box<dyn ConnectionContextMenuProvider + 'a> {
     match &resolver.handler {
         crate::plugins::events::Handler::Builtin(id) => Box::new(NativeMenu {
             id: (*id).into(),
