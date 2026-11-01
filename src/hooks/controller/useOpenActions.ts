@@ -72,10 +72,6 @@ export function useOpenActions({
       remote && !cached ? t('正在缓存…') : t('正在打开…'),
       async () => {
         const outcome = await runBeforeOpenHooks(e)
-        if (outcome.preview) {
-          setPreview(e)
-          return
-        }
         if (outcome.handled) {
           pane.reload()
           return
