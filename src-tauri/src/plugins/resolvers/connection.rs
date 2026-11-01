@@ -175,8 +175,22 @@ mod tests {
     use super::*;
     #[test]
     fn lifecycle_requires_registered_method_and_connection_identity() {
-        assert!(invoke("", "drive", "mount", "connection.open", serde_json::json!({})).is_err());
-        assert!(invoke("org.example", "drive", "mount", "vfs.list", serde_json::json!({})).is_err());
+        assert!(invoke(
+            "",
+            "drive",
+            "mount",
+            "connection.open",
+            serde_json::json!({})
+        )
+        .is_err());
+        assert!(invoke(
+            "org.example",
+            "drive",
+            "mount",
+            "vfs.list",
+            serde_json::json!({})
+        )
+        .is_err());
     }
 
     #[test]
