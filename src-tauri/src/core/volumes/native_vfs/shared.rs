@@ -62,13 +62,16 @@ pub(super) fn target_invocation(
     } else {
         "file"
     };
-    let target = ResourceSnapshot::from_metadata(
+    let mut target = ResourceSnapshot::from_metadata(
         path,
         ResourceMetadata {
             kind: kind.into(),
             ..Default::default()
         },
     );
+    // A provider's own discover/stat invocation must not re-enter its VFS
+    // merely to compute the target capabilities it is currently resolving.
+    target.operations = Some(Default::default());
     NativeProviderInvocation::new(method, params, std::slice::from_ref(&target), None)
         .with_local_data(Arc::new(VfsTarget {
             path: path.into(),
