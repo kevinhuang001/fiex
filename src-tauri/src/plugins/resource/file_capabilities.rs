@@ -125,9 +125,6 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
             .map(|provider| {
                 provider
                     .operations(path)
-                    .into_iter()
-                    .filter_map(FsOperation::parse)
-                    .collect::<Vec<_>>()
             })
             .unwrap_or_default();
         return from_entry(&declared, entry);
