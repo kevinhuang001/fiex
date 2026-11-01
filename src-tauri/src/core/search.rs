@@ -303,11 +303,14 @@ fn search_root(
     // Core-owned virtual roots are not host paths: filter their root listing
     // instead of asking a filesystem SearchProvider about a URI.
     if virtual_search_root(root)
-        || (request.mode == SearchMode::Name && crate::plugins::mounts::handles(root))
+        || (request.mode == SearchMode::Name
+            && crate::core::fs::provider_registry::is_plugin_mount(root))
     {
         return search_cached_vfs(root, request, cancelled, sink);
     }
-    let local = !crate::plugins::mounts::handles(root) && !root.contains("://");
+    let local = crate::core::fs::provider_registry::resource_access(root).is_ok_and(|access| {
+        access == crate::core::fs::provider_registry::ResourceAccess::HostPath
+    });
     if !local {
         return search_adapter(root, request, cancelled, sink);
     }
@@ -408,7 +411,7 @@ fn search_root(
 /// subdirectories). Only cached directories are searched; uncached directories
 /// are never enumerated.
 fn virtual_search_root(root: &str) -> bool {
-    if crate::plugins::mounts::handles(root) {
+    if crate::core::fs::provider_registry::is_plugin_mount(root) {
         return false;
     }
     crate::core::volumes::native_vfs::is_tree_path(root)
@@ -775,8 +778,11 @@ pub fn accessible_roots() -> Vec<String> {
     for location in crate::core::volumes::locations() {
         if location.kind != "disk"
             || !location.mounted
-            || location.usbfs
-            || location.path.contains("://")
+            || !crate::core::fs::provider_registry::resource_access(&location.path).is_ok_and(
+                |access| {
+                    access == crate::core::fs::provider_registry::ResourceAccess::HostPath
+                },
+            )
         {
             continue;
         }

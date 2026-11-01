@@ -298,6 +298,23 @@ pub fn candidate_path(uri: &str) -> Result<PathBuf, String> {
     Ok(resolved)
 }
 
+/// Ensure a generated child belongs directly to the selected Applications
+/// directory. This is used when Core binds a provider-returned ResourceRef.
+pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
+    let parent_path = if parent == URI {
+        stored_path(parent)?
+    } else if is_user(parent) {
+        candidate_path(parent)?
+    } else {
+        return Err("ScopeDenied: invalid application parent".into());
+    };
+    let child_path = candidate_path(child)?;
+    if child_path.parent() != Some(parent_path.as_path()) {
+        return Err("ScopeDenied: child outside selected application directory".into());
+    }
+    Ok(())
+}
+
 pub fn stored_uri(path: &Path) -> Result<String, String> {
     let root = dunce::canonicalize(user_dir()).map_err(|e| e.to_string())?;
     let rel = path

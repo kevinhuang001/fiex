@@ -193,10 +193,12 @@ impl Scope {
                     .ok()?
                     .get(&key)
                     .filter(|snapshot| {
-                        crate::plugins::mounts::handles(&snapshot.display)
-                            || crate::usbfs::route(&snapshot.display).is_some()
-                            || crate::core::volumes::native_vfs::view_for(&snapshot.display)
-                                .is_some()
+                        crate::core::fs::provider_registry::resource_access(
+                            &snapshot.display,
+                        )
+                        .is_ok_and(|access| {
+                            access == crate::core::fs::provider_registry::ResourceAccess::Provider
+                        })
                     })
                     .cloned()
             }));
@@ -255,44 +257,7 @@ impl Scope {
                 .map(|snapshot| snapshot.display)
                 .ok_or_else(|| "parent ref is not authorized".to_string())
         })?;
-        if crate::plugins::mounts::handles(&parent_path) {
-            let root = crate::plugins::mounts::parse(&parent_path)?;
-            let child = crate::plugins::mounts::parse(display)?;
-            if root.mount_id != child.mount_id
-                || !Path::new(&child.relative).starts_with(&root.relative)
-            {
-                return Err("child outside selected resource".into());
-            }
-        } else if parent_path == crate::core::volumes::native_vfs::RECENT_URI {
-            let _ = crate::core::recent::source_for(display)?;
-        } else if parent_path == crate::core::volumes::applications::URI
-            || crate::core::volumes::applications::is_user(&parent_path)
-        {
-            let parent_local = if parent_path == crate::core::volumes::applications::URI {
-                crate::core::volumes::applications::stored_path(&parent_path)?
-            } else {
-                crate::core::volumes::applications::candidate_path(&parent_path)?
-            };
-            let child_local = crate::core::volumes::applications::candidate_path(display)?;
-            if child_local.parent() != Some(parent_local.as_path()) {
-                return Err("ScopeDenied: child outside selected application directory".into());
-            }
-        } else if let Some(root) = crate::usbfs::route(&parent_path) {
-            let child = crate::usbfs::route(display).ok_or("invalid USB child")?;
-            if root.root != child.root
-                || !Path::new(&child.rel).starts_with(&root.rel)
-                || Path::new(&child.rel)
-                    .components()
-                    .any(|p| !matches!(p, Component::Normal(_)))
-            {
-                return Err("child outside selected USB resource".into());
-            }
-        } else {
-            self.authorize(display)?;
-            if !Path::new(display).starts_with(&parent_path) {
-                return Err("child outside selected resource".into());
-            }
-        }
+        crate::core::fs::provider_registry::validate_child(self, &parent_path, display)?;
         let meta =
             metadata
                 .clone()
@@ -309,9 +274,6 @@ impl Scope {
             crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
                 display, meta,
             );
-        if parent["mountId"] == "core:applications" {
-            snapshot.local = crate::core::volumes::applications::candidate_path(display)?;
-        }
         let reference =
             serde_json::to_value(&snapshot.reference).map_err(|error| error.to_string())?;
         self.issued

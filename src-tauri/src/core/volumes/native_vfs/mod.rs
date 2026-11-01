@@ -9,7 +9,10 @@ use fiex_provider_contracts::{
     ProviderMatchRule, SearchCapabilities, TransferDirection, TransferPreflight, VfsProvider,
 };
 use serde_json::{json, Value};
-use std::{path::PathBuf, sync::{Arc, OnceLock}};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, OnceLock},
+};
 
 mod application_provider;
 mod recent_provider;
@@ -117,6 +120,62 @@ pub fn is_tree_path(path: &str) -> bool {
         || path == APPLICATIONS_URI
         || applications::is_user(path)
         || trash_vfs::is_tree(path)
+}
+
+/// Ask the owning native view to validate a child identity. Ordinary host paths
+/// are validated by the enclosing operation scope in Core's VFS router.
+pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
+    if crate::usbfs::route(parent).is_some() {
+        return crate::usbfs::validate_child(parent, child);
+    }
+    match provider_id(parent) {
+        Some("core:recent") if parent == RECENT_URI => {
+            crate::core::recent::source_for(child).map(|_| ())
+        }
+        Some("core:applications") => applications::validate_child(parent, child),
+        Some("core:trash") => trash_vfs::validate_child(parent, child),
+        _ => Err("Unsupported: provider does not support child identities".into()),
+    }
+}
+
+pub fn child_path(parent: &str, name: &str) -> Result<String, String> {
+    match shared_provider_id(parent) {
+        Some("core:local-fs") => Ok(PathBuf::from(parent)
+            .join(name)
+            .to_string_lossy()
+            .into_owned()),
+        Some("core:usb-fs") => {
+            crate::usbfs::route(parent).ok_or("invalid USB parent")?;
+            Ok(format!("{}/{}", parent.trim_end_matches(['/', '\\']), name))
+        }
+        Some("core:applications") => {
+            let backing = if parent == APPLICATIONS_URI {
+                applications::stored_path(parent)?
+            } else {
+                applications::candidate_path(parent)?
+            };
+            applications::stored_uri(&backing.join(name))
+        }
+        _ => Err("Unsupported: provider does not support child creation".into()),
+    }
+}
+
+pub fn parent_path(path: &str) -> Result<String, String> {
+    if applications::is_user(path) {
+        let local = applications::candidate_path(path)?;
+        let parent = local.parent().ok_or("item has no parent")?;
+        if parent == applications::stored_path(applications::URI)? {
+            return Ok(applications::URI.into());
+        }
+        return applications::stored_uri(parent);
+    }
+    if opaque(path) {
+        return Err("view has no writable parent".into());
+    }
+    Path::new(path)
+        .parent()
+        .map(|path| path.to_string_lossy().into_owned())
+        .ok_or_else(|| "item has no parent".into())
 }
 
 pub fn tree_path_key(path: &str) -> Option<String> {

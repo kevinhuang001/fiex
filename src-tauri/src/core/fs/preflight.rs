@@ -52,7 +52,9 @@ impl ResourceBroker {
 }
 fn executable_shortcut(path: &str, target: Option<&str>) -> Option<bool> {
     // Provider paths carry no trusted host-path or executable-target authority.
-    if path.contains("://") {
+    if !crate::core::fs::provider_registry::resource_access(path).is_ok_and(|access| {
+        access == crate::core::fs::provider_registry::ResourceAccess::HostPath
+    }) {
         return None;
     }
     #[cfg(target_os = "windows")]

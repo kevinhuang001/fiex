@@ -86,19 +86,8 @@ impl ResourceSnapshot {
             getrandom::getrandom(&mut key).expect("Core resource identity entropy unavailable");
             key
         });
-        let mount_id = crate::plugins::mounts::parse(display)
-            .map(|uri| uri.mount_id)
-            .unwrap_or_else(|_| {
-                if let Some(route) = crate::usbfs::route(display) {
-                    return format!(
-                        "core:usb:{}",
-                        crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into())
-                    );
-                }
-                crate::core::volumes::native_vfs::provider_id(display)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| "local".into())
-            });
+        let mount_id = crate::core::fs::provider_registry::reference_mount_id(display)
+            .unwrap_or_else(|| "local".into());
         let mut digest = Sha256::new();
         digest.update(key);
         digest.update(mount_id.as_bytes());
@@ -115,40 +104,20 @@ impl ResourceSnapshot {
     }
 
     pub fn resolve(display: &str) -> Result<Self, String> {
-        if crate::core::volumes::native_vfs::opaque(display) {
-            let entry = crate::core::volumes::native_vfs::resource_entry(display)?;
-            return Ok(Self::from_entry(display, &entry));
-        }
-        if let Some(route) = crate::usbfs::route(display) {
-            let entry = crate::usbfs::entry(&route)?;
-            return Ok(Self::from_entry(display, &entry));
-        }
-        if !crate::plugins::mounts::handles(display) {
-            // Share ResourceBroker's trusted owner resolution. Unsupported
-            // schemes may not masquerade as OS-local files during metadata
-            // discovery or provider candidate matching.
-            if !matches!(
-                crate::core::fs::provider_registry::identity(display),
-                Some(("fs", provider, _)) if provider == "core:local-fs"
-            ) {
-                return Err("Unsupported: unregistered filesystem URI".into());
+        match crate::core::fs::provider_registry::resource_access(display)
+            .map_err(String::from)?
+        {
+            crate::core::fs::provider_registry::ResourceAccess::HostPath => {
+                Ok(Self::new(display, Path::new(display)))
             }
-            return Ok(Self::new(display, Path::new(display)));
+            crate::core::fs::provider_registry::ResourceAccess::Provider => {
+                let entry = crate::core::fs::provider_registry::resource_entry(display)?;
+                Ok(Self::from_entry(display, &entry))
+            }
         }
-        let entry = if crate::remote::is_remote(display) {
-            crate::remote::stat(display)?
-        } else {
-            crate::plugins::vfs::stat(display)?
-        };
-        Ok(Self::from_entry(display, &entry))
     }
     pub fn from_entry(display: &str, entry: &crate::core::files::Entry) -> Self {
         let mut resource = Self::from_metadata(display, Self::entry_metadata(entry));
-        if crate::core::volumes::applications::is_user(display) {
-            if let Ok(path) = crate::core::volumes::applications::stored_path(display) {
-                resource.local = path;
-            }
-        }
         resource.read_only = entry.readonly;
         resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(
             display, entry,
@@ -174,9 +143,15 @@ impl ResourceSnapshot {
     }
     pub fn from_metadata(display: &str, metadata: ResourceMetadata) -> Self {
         let reference = Self::reference_for(display);
+        let local = if crate::core::volumes::applications::is_user(display) {
+            crate::core::volumes::applications::candidate_path(display)
+                .unwrap_or_else(|_| PathBuf::from(display))
+        } else {
+            PathBuf::from(display)
+        };
         Self {
             display: display.into(),
-            local: PathBuf::from(display),
+            local,
             reference,
             stat: None,
             is_dir: metadata.kind == "directory",
@@ -317,9 +292,9 @@ pub fn bind_selected(
     bindings: &[ResourceBinding],
 ) -> Result<(), String> {
     for binding in bindings {
-        if crate::plugins::mounts::handles(&binding.path)
-            || crate::usbfs::route(&binding.path).is_some()
-            || crate::core::volumes::native_vfs::opaque(&binding.path)
+        if crate::core::fs::provider_registry::resource_access(&binding.path)
+            .map_err(String::from)?
+            == crate::core::fs::provider_registry::ResourceAccess::Provider
         {
             let snapshot = ResourceSnapshot::resolve(&binding.path)?;
             if snapshot.reference != binding.reference {

@@ -132,6 +132,14 @@ pub fn list(uri: &str) -> Result<Vec<Entry>, String> {
             .collect()
     }
 }
+
+pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
+    if list(parent)?.iter().any(|entry| entry.path == child) {
+        Ok(())
+    } else {
+        Err("ScopeDenied: child is not listed by the selected Trash directory".into())
+    }
+}
 pub fn entry(uri: &str) -> Result<Entry, String> {
     if uri == URI {
         return Ok(Entry {

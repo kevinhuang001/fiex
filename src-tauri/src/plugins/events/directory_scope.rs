@@ -35,9 +35,8 @@ pub(super) fn bind(
     // An explicit destination is independent of source IO. Never add it to
     // targets/selection or give it the source node's mutation permissions.
     let directory = json!(snapshot.project("", "", policy.allowed(Capability::Metadata), false));
-    if crate::plugins::mounts::handles(path)
-        || crate::usbfs::route(path).is_some()
-        || crate::core::volumes::native_vfs::view_for(path).is_some()
+    if crate::core::fs::provider_registry::resource_access(path).map_err(String::from)?
+        == crate::core::fs::provider_registry::ResourceAccess::Provider
     {
         scope.bind_remote(&directory, &snapshot)?;
     } else {
