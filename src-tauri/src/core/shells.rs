@@ -70,7 +70,10 @@ pub(crate) fn order_shells(login: Option<&str>, listed: Vec<String>) -> Vec<Stri
 
 #[cfg(test)]
 mod shell_tests {
-    use super::{order_shells, shell_rank, POSIX_SHELLS, PROFILE_SHELLS};
+    use super::{shell_rank, POSIX_SHELLS, PROFILE_SHELLS};
+
+    #[cfg(unix)]
+    use super::order_shells;
 
     #[test]
     fn profile_shells_outrank_posix_sh() {
