@@ -34,6 +34,7 @@ use crate::plugins::{
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
 };
+use serde::Serialize;
 use serde_json::{json, Value};
 #[cfg(test)]
 use session::session_ids;
@@ -152,37 +153,47 @@ fn execute_provider(
 }
 
 pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
-    query_scope(directory, paths, MenuScope::All)
+    query_scope(directory, paths, MenuScope::All).map(|(menus, _)| menus)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreMenuResolution {
+    pub menus: Vec<Value>,
+    pub has_eligible_plugins: bool,
 }
 
 /// Top-level, Core-owned items. This path must stay free of plugin IPC so the
 /// first visible menu is complete and cannot resize while plugins respond.
-pub fn query_core(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
-    query_scope(directory, paths, MenuScope::Core)
+pub fn query_core(directory: &str, paths: &[String]) -> Result<CoreMenuResolution, String> {
+    query_scope(directory, paths, MenuScope::Core).map(|(menus, has_eligible_plugins)| {
+        CoreMenuResolution {
+            menus,
+            has_eligible_plugins,
+        }
+    })
 }
 
 /// Plugin-owned items, requested by the lazy "插件" submenu.
 pub fn query_plugins(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
-    query_scope(directory, paths, MenuScope::Plugins)
+    query_scope(directory, paths, MenuScope::Plugins).map(|(menus, _)| menus)
 }
 
-fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Vec<Value>, String> {
+fn query_scope(
+    directory: &str,
+    paths: &[String],
+    scope: MenuScope,
+) -> Result<(Vec<Value>, bool), String> {
     // An empty selection is the blank canvas. It uses the same provider
     // pipeline; manifests opt in with `match.selection: "zero"` (or `any`).
     if paths.len() > 256 || directory.is_empty() {
         return Err("invalid menu selection".into());
     }
     let ctx = builtin::Context::load(directory, paths)?;
-    let resources = Arc::new(
-        ctx.entries
-            .iter()
-            .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
-            .collect::<Vec<_>>(),
-    );
-    let match_targets = crate::plugins::events::matching::match_resources(&resources);
+    let resources = Arc::clone(&ctx.resources);
     let mut providers = crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",
-        &match_targets,
+        &ctx.match_targets,
         directory,
         if scope == MenuScope::Plugins {
             Vec::new()
@@ -190,6 +201,8 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
             builtin::providers(&ctx)
         },
     );
+    let has_eligible_plugins = scope != MenuScope::Plugins
+        && providers.iter().any(|provider| provider.plugin.is_some());
     // Never invoke a plugin while resolving the Core-only top-level menu. For a
     // plugin-only request the empty seed above already excludes builtin rows.
     if scope == MenuScope::Core {
@@ -214,7 +227,7 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
         })
         .collect();
     let invocation = file_ops::invocation(&ctx, &request.method, request.params.clone());
-    Ok(EventRouter::resolve_shared(
+    let menus = EventRouter::resolve_shared(
         "contextMenu.resolve",
         providers,
         &invocation,
@@ -252,7 +265,8 @@ fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Ve
                 })
                 .collect()
         },
-    ))
+    );
+    Ok((menus, has_eligible_plugins))
 }
 
 #[cfg(test)]

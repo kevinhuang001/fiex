@@ -14,9 +14,10 @@ use fiex_provider_contracts::{
     DecorationContribution, DecorationProvider, LocationMatch, MatchResource, ProviderError,
     ProviderInvocation, ProviderKind, ProviderMatchRule,
 };
-#[cfg(test)]
-use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 
 struct BuiltinDecoration(NativeKind);
 impl DecorationProvider for BuiltinDecoration {
@@ -25,13 +26,16 @@ impl DecorationProvider for BuiltinDecoration {
         ctx: &dyn ProviderInvocation,
     ) -> Result<Vec<DecorationContribution>, ProviderError> {
         let services = invocation::services(ctx).map_err(ProviderError::internal)?;
+        let resources_by_path = services
+            .resources
+            .iter()
+            .map(|resource| (resource.display.as_str(), resource))
+            .collect::<HashMap<_, _>>();
         builtin::resolve_in(self.0, &services.directory, services.entries.as_ref())
             .into_iter()
             .map(|decoration| {
-                let target = services
-                    .resources
-                    .iter()
-                    .find(|resource| resource.display == decoration.path)
+                let target = resources_by_path
+                    .get(decoration.path.as_str())
                     .ok_or_else(|| {
                         ProviderError::invalid_params(
                             "native decoration target is outside the scoped request",
@@ -143,16 +147,15 @@ pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decor
         .ok_or("unknown native DecorationProvider")?;
     let values = provider.resolve(ctx).map_err(|error| error.to_string())?;
     let services = invocation::services(ctx)?;
+    let resources_by_ref = super::dynamic::resource_path_index(services.resources.as_slice());
     values
         .into_iter()
         .map(|value| {
-            let target = services
-                .resources
-                .iter()
-                .find(|resource| resource.reference == value.target)
+            let path = resources_by_ref
+                .get(&(value.target.mount_id.as_str(), value.target.node_id.as_str()))
                 .ok_or("native decoration target is outside the scoped request")?;
             Ok(Decoration {
-                path: target.display.clone(),
+                path: (*path).to_owned(),
                 native_badges: value.native_badges,
                 label: value.label,
                 description: value.description,

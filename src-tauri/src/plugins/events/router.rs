@@ -1,6 +1,10 @@
 use super::*;
 use fiex_provider_contracts::ProviderInvocation;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 /// A matched provider descriptor paired with its registered shared-contract
 /// implementation. Native handlers and IPC proxies use the same router path.
@@ -20,52 +24,160 @@ impl<P: ?Sized + Send + Sync> Clone for ProviderCandidate<P> {
 
 pub struct EventRouter;
 impl EventRouter {
-    /// Merge providers independently, retaining descriptor order for validation
-    /// and collection. Bound concurrency so a large plugin catalog cannot
-    /// create an unbounded number of threads for a single request.
+    /// Merge providers independently while preserving descriptor order.
+    /// Calls backed by one plugin process share a serial lane; different plugin
+    /// processes and native providers may run concurrently. The bounded worker
+    /// count prevents a large catalog from creating unbounded threads.
     pub fn resolve_merge_parallel<P, T, R>(
         method: &str,
         providers: Vec<ProviderCandidate<P>>,
         invocation: &dyn ProviderInvocation,
         invoke: impl Fn(&Resolver, &P, &dyn ProviderInvocation) -> Result<T, String> + Sync,
-        mut validate: impl FnMut(&Resolver, T) -> Result<T, String>,
+        validate: impl FnMut(&Resolver, T) -> Result<T, String>,
         collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
     ) -> R
     where
         P: ?Sized + Send + Sync,
         T: Send,
     {
-        let mut outcomes = Vec::with_capacity(providers.len());
-        for batch in providers.chunks(8) {
-            let results = std::thread::scope(|scope| {
-                batch
+        Self::resolve_merge_parallel_with_partial(
+            method,
+            providers,
+            invocation,
+            invoke,
+            validate,
+            |_, _| {},
+            collect,
+        )
+    }
+
+    /// Like `resolve_merge_parallel`, but reports each independently validated
+    /// provider result as soon as it finishes. The final collector still sees
+    /// deterministic descriptor order.
+    pub fn resolve_merge_parallel_with_partial<P, T, R>(
+        method: &str,
+        providers: Vec<ProviderCandidate<P>>,
+        invocation: &dyn ProviderInvocation,
+        invoke: impl Fn(&Resolver, &P, &dyn ProviderInvocation) -> Result<T, String> + Sync,
+        mut validate: impl FnMut(&Resolver, T) -> Result<T, String>,
+        mut on_partial: impl FnMut(&Resolver, &Result<T, String>),
+        collect: impl FnOnce(Vec<(Resolver, Result<T, String>)>) -> R,
+    ) -> R
+    where
+        P: ?Sized + Send + Sync,
+        T: Send,
+    {
+        let provider_count = providers.len();
+        let mut groups: Vec<Vec<(usize, ProviderCandidate<P>)>> = Vec::new();
+        let mut plugin_groups = HashMap::new();
+        for (index, candidate) in providers.into_iter().enumerate() {
+            let group = if let Some(plugin) = candidate.resolver.plugin.as_deref() {
+                if let Some(group) = plugin_groups.get(&plugin.id) {
+                    *group
+                } else {
+                    let group = groups.len();
+                    groups.push(Vec::new());
+                    plugin_groups.insert(plugin.id.clone(), group);
+                    group
+                }
+            } else {
+                let group = groups.len();
+                groups.push(Vec::new());
+                group
+            };
+            groups[group].push((index, candidate));
+        }
+
+        let mut indexed: Vec<Option<(Resolver, Result<T, String>, Duration)>> =
+            std::iter::repeat_with(|| None).take(provider_count).collect();
+        let trace = std::env::var_os("FIEX_TRACE_PROVIDER_PERF").is_some();
+        for batch in groups.chunks(8) {
+            std::thread::scope(|scope| {
+                let (sender, receiver) = std::sync::mpsc::channel();
+                let handles = batch
                     .iter()
-                    .map(|candidate| {
+                    .map(|group| {
+                        let sender = sender.clone();
                         let invoke = &invoke;
                         scope.spawn(move || {
-                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                require_event(method)?;
-                                if invocation.method() != method {
-                                    return Err("provider invocation method does not match routed event".into());
+                            for (index, candidate) in group {
+                                let started = Instant::now();
+                                let result = std::panic::catch_unwind(
+                                    std::panic::AssertUnwindSafe(|| {
+                                        require_event(method)?;
+                                        if invocation.method() != method {
+                                            return Err("provider invocation method does not match routed event".into());
+                                        }
+                                        invoke(
+                                            &candidate.resolver,
+                                            candidate.implementation.as_ref(),
+                                            invocation,
+                                        )
+                                    }),
+                                )
+                                .unwrap_or_else(|_| Err("provider panicked".into()));
+                                if sender
+                                    .send((
+                                        *index,
+                                        candidate.resolver.clone(),
+                                        result,
+                                        started.elapsed(),
+                                    ))
+                                    .is_err()
+                                {
+                                    break;
                                 }
-                                invoke(&candidate.resolver, candidate.implementation.as_ref(), invocation)
-                            }))
-                            .unwrap_or_else(|_| Err("provider panicked".into()))
+                            }
                         })
                     })
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .map(|handle| handle.join().unwrap_or_else(|_| Err("provider panicked".into())))
-                    .collect::<Vec<_>>()
+                    .collect::<Vec<_>>();
+                drop(sender);
+
+                for (index, resolver, result, elapsed) in receiver {
+                    if trace {
+                        crate::infrastructure::logging::record_core(
+                            "debug",
+                            "provider.perf",
+                            &format!(
+                                "event={method} provider={} elapsed_ms={} status={}",
+                                resolver.id,
+                                elapsed.as_millis(),
+                                if result.is_ok() { "ok" } else { "error" },
+                            ),
+                        );
+                    }
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        result.and_then(|value| validate(&resolver, value))
+                    }))
+                    .unwrap_or_else(|_| Err("provider validation panicked".into()));
+                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        on_partial(&resolver, &result)
+                    }));
+                    indexed[index] = Some((resolver, result, elapsed));
+                }
+
+                for (handle, group) in handles.into_iter().zip(batch) {
+                    if handle.join().is_err() {
+                        for (index, candidate) in group {
+                            if indexed[*index].is_some() {
+                                continue;
+                            }
+                            let resolver = candidate.resolver.clone();
+                            let result = Err("provider panicked".into());
+                            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                on_partial(&resolver, &result)
+                            }));
+                            indexed[*index] = Some((resolver, result, Duration::ZERO));
+                        }
+                    }
+                }
             });
-            outcomes.extend(batch.iter().zip(results).map(|(candidate, result)| {
-                let resolver = candidate.resolver.clone();
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    result.and_then(|value| validate(&resolver, value))
-                }))
-                .unwrap_or_else(|_| Err("provider panicked".into()));
-                (resolver, result)
-            }));
+        }
+
+        let mut outcomes = Vec::with_capacity(provider_count);
+        for result in indexed.into_iter().flatten() {
+            let (resolver, result, _) = result;
+            outcomes.push((resolver, result));
         }
         collect(outcomes)
     }

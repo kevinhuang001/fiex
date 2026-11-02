@@ -102,6 +102,8 @@ export function FileIcon({ entry: e, size = 28 }: { entry: Entry; size?: number 
           draggable={false}
           onError={() => setNative({ key: iconKey, url: null })}
         />
+      ) : isApplication && e.presentationPending ? (
+        <span className="file-icon-skeleton" aria-hidden="true" />
       ) : isApplication && e.path.includes('://') && !cachedPresentation(e) ? (
         <span aria-hidden="true" />
       ) : (

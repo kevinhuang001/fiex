@@ -90,7 +90,7 @@ fn recent_location_still_offers_open_without_a_filesystem_directory() {
 #[test]
 fn core_and_plugin_scopes_keep_their_owner() {
     let (_temp, directory, paths) = temp_selection();
-    let core = super::query_core(&directory, &paths[..1]).unwrap();
+    let core = super::query_core(&directory, &paths[..1]).unwrap().menus;
     assert!(!core.is_empty());
     assert!(core.iter().all(|menu| menu["kind"] == "builtin"));
     let plugins = super::query_plugins(&directory, &paths[..1]).unwrap();

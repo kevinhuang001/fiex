@@ -29,6 +29,8 @@ export interface Entry {
   /** The current bytes of a connection entry reached the remote. */
   uploaded?: boolean
   sync: 'synced' | 'partial' | 'cloud' | 'pinned' | 'pending' | 'conflict' | null
+  /** Presentation-only hint: a VFS icon is awaiting its first decoration. */
+  presentationPending?: boolean
 }
 export interface Listing {
   /** Operations supported by the current directory, independent of host ACLs. */

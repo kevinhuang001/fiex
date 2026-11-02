@@ -35,6 +35,7 @@ export interface DirectoryViewUpdate {
   listing: Listing
   decorations: EntryDecoration[]
   complete: boolean
+  presentationPending: boolean
 }
 
 /** One logical navigation call. Core owns the cache, live revalidation and
@@ -47,7 +48,7 @@ export function openDirectoryStream(
 ): Promise<void> {
   if (!native) {
     return listDirectory(path, hidden, ignores).then((listing) =>
-      onSnapshot({ listing, decorations: [], complete: true }),
+      onSnapshot({ listing, decorations: [], complete: true, presentationPending: false }),
     )
   }
   const channel = new Channel<DirectoryViewUpdate>()

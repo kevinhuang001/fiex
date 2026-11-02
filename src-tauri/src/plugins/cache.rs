@@ -15,6 +15,7 @@ const MAX_BYTES: usize = 2 * 1024 * 1024;
 struct Entry {
     value: Value,
     inserted: Instant,
+    last_access: u64,
     bytes: usize,
 }
 
@@ -22,6 +23,7 @@ struct Entry {
 struct Cache {
     entries: HashMap<String, Entry>,
     bytes: usize,
+    access_clock: u64,
 }
 
 fn cache() -> &'static Mutex<Cache> {
@@ -45,12 +47,19 @@ pub fn key(kind: &str, path: &Path) -> Option<String> {
 
 pub fn get(key: &str) -> Option<Value> {
     let mut cache = cache().lock().ok()?;
-    let entry = cache.entries.get(key)?;
-    if entry.inserted.elapsed() >= TTL {
+    if cache
+        .entries
+        .get(key)
+        .is_some_and(|entry| entry.inserted.elapsed() >= TTL)
+    {
         let removed = cache.entries.remove(key)?;
         cache.bytes -= removed.bytes;
         return None;
     }
+    cache.access_clock = cache.access_clock.wrapping_add(1);
+    let access = cache.access_clock;
+    let entry = cache.entries.get_mut(key)?;
+    entry.last_access = access;
     Some(entry.value.clone())
 }
 
@@ -71,11 +80,13 @@ pub fn put(key: String, value: Value) {
         .entries
         .retain(|_, entry| entry.inserted.elapsed() < TTL);
     cache.bytes = cache.entries.values().map(|entry| entry.bytes).sum();
+    cache.access_clock = cache.access_clock.wrapping_add(1);
+    let access = cache.access_clock;
     while cache.entries.len() >= MAX_ENTRIES || cache.bytes + bytes > MAX_BYTES {
         let Some(oldest) = cache
             .entries
             .iter()
-            .min_by_key(|(_, entry)| entry.inserted)
+            .min_by_key(|(_, entry)| entry.last_access)
             .map(|(key, _)| key.clone())
         else {
             break;
@@ -90,6 +101,7 @@ pub fn put(key: String, value: Value) {
         Entry {
             value,
             inserted: Instant::now(),
+            last_access: access,
             bytes,
         },
     );

@@ -112,6 +112,8 @@ pub fn run() {
             plugins_list,
             plugin_settings,
             file_info_details,
+            file_info_directory_size,
+            file_info_directory_size_cancel,
             plugin_logs,
             ui_error_report,
             plugin_logs_clear,

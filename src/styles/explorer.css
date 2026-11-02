@@ -869,6 +869,23 @@ body.col-resizing {
   object-fit: contain;
   filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--accent) 4.31%, transparent));
 }
+.file-icon-skeleton {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 20%;
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--text) 6%, transparent) 8%,
+    color-mix(in srgb, var(--text) 13%, transparent) 18%,
+    color-mix(in srgb, var(--text) 6%, transparent) 33%
+  );
+  background-size: 200% 100%;
+  animation: file-icon-skeleton 1.2s ease-in-out infinite;
+}
+@keyframes file-icon-skeleton {
+  to { background-position-x: -200%; }
+}
 /* Material's default folder is grey-blue; lift it to Finder-like blue. */
 .file-icon .symlink {
   position: absolute;

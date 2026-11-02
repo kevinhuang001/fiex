@@ -29,10 +29,9 @@ use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
 #[cfg(test)]
 use crate::plugins::resource::file_capabilities::FileCapabilities;
-use crate::plugins::resource::resource_context::ResourceSnapshot;
 #[cfg(test)]
 use fiex_provider_contracts::ProviderKind;
-use fiex_provider_contracts::{ContextMenuProvider, MatchResource};
+use fiex_provider_contracts::ContextMenuProvider;
 #[cfg(test)]
 use fiex_provider_contracts::{ProviderError, ProviderInvocation};
 use serde_json::{json, Value};
@@ -86,43 +85,24 @@ pub(super) fn invocation(
     method: &str,
     params: Value,
 ) -> NativeProviderInvocation {
-    let targets = context
-        .entries
-        .iter()
-        .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
-        .collect::<Vec<_>>();
-    let directory = context
-        .directory_entry
-        .as_ref()
-        .map(|entry| ResourceSnapshot::from_entry(&context.directory, entry));
-    NativeProviderInvocation::new(method, params, &targets, directory.as_ref())
+    NativeProviderInvocation::new(
+        method,
+        params,
+        context.resources.as_slice(),
+        context.directory_resource.as_ref(),
+    )
         .with_local_data(Arc::new(context.clone()))
 }
 
-fn matcher_targets(context: &Context) -> Vec<MatchResource> {
-    let targets = context
-        .entries
-        .iter()
-        .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
-        .collect::<Vec<_>>();
-    crate::plugins::events::matching::match_resources(&targets)
-}
-
 pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolver> {
-    let targets = matcher_targets(context);
-    let directory = crate::plugins::match_rules::directory_match_resource(&context.directory);
-    let invocation = invocation(context, "contextMenu.resolve", json!({}));
     registry()
-        .matched_candidates(&targets, directory.as_ref(), context.paths.len())
+        .matched_candidates(
+            &context.match_targets,
+            context.directory_target.as_ref(),
+            context.paths.len(),
+        )
         .into_iter()
         .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
-        .filter(|candidate| {
-            registry().get(&candidate.id).is_some_and(|provider| {
-                provider
-                    .resolve(&invocation)
-                    .is_ok_and(|items| !items.is_empty())
-            })
-        })
         .collect()
 }
 
@@ -135,12 +115,10 @@ pub(super) fn resolve(id: &str, context: &Context) -> Result<Value, String> {
     let descriptor = registry()
         .descriptor(id)
         .ok_or("missing native menu descriptor")?;
-    let targets = matcher_targets(context);
-    let directory = crate::plugins::match_rules::directory_match_resource(&context.directory);
     if !fiex_provider_contracts::ProviderMatcher::matches(
         &descriptor.r#match,
-        &targets,
-        directory.as_ref(),
+        &context.match_targets,
+        context.directory_target.as_ref(),
         context.paths.len(),
     ) {
         return Err("native ContextMenuProvider does not match selection".into());
@@ -164,9 +142,7 @@ pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Va
     let targets = crate::plugins::events::matching::match_resources(resources);
     let directory = NativeProviderInvocation::directory(invocation)
         .ok()
-        .and_then(|resource| {
-            crate::plugins::match_rules::directory_match_resource(&resource.display)
-        });
+        .and_then(|resource| crate::plugins::match_rules::directory_match_resource(&resource.display));
     if !fiex_provider_contracts::ProviderMatcher::matches(
         &descriptor.r#match,
         &targets,

@@ -1,6 +1,9 @@
 use super::{row, InfoSection};
 use crate::plugins::contracts::ResourceMetadata;
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::atomic::{AtomicBool, Ordering},
+};
 fn display_name(path: &str) -> String {
     path.trim_end_matches(['/', '\\'])
         .rsplit(['/', '\\'])
@@ -59,35 +62,48 @@ fn size_text(bytes: u64) -> String {
 }
 
 /// Sum file lengths below a local directory for the Info sheet. Symlinks are
-/// skipped so a link cycle cannot trap the walk; unreadable entries count 0.
+/// skipped so a link cycle cannot trap the walk. Read errors are returned.
+#[cfg(test)]
 pub(super) fn directory_size(path: &Path) -> Option<u64> {
-    let metadata = std::fs::metadata(path).ok()?;
-    if !metadata.is_dir() {
-        return None;
+    directory_size_with_cancel(path, &AtomicBool::new(false)).ok()
+}
+
+/// Explicit Info action for local directories. It is cancellable and reports
+/// permission errors instead of silently returning a partial total.
+pub(crate) fn directory_size_with_cancel(
+    path: &Path,
+    cancelled: &AtomicBool,
+) -> Result<u64, String> {
+    let root = std::fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+    if root.file_type().is_symlink() || !root.is_dir() {
+        return Err("folder size is available for local directories only".into());
     }
     let mut total = 0u64;
     let mut stack = vec![path.to_path_buf()];
     while let Some(directory) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let Ok(file_type) = entry.file_type() else {
-                continue;
-            };
+        if cancelled.load(Ordering::Acquire) {
+            return Err("folder size calculation cancelled".into());
+        }
+        let entries = std::fs::read_dir(directory).map_err(|error| error.to_string())?;
+        for entry in entries {
+            if cancelled.load(Ordering::Acquire) {
+                return Err("folder size calculation cancelled".into());
+            }
+            let entry = entry.map_err(|error| error.to_string())?;
+            let metadata = std::fs::symlink_metadata(entry.path())
+                .map_err(|error| error.to_string())?;
+            let file_type = metadata.file_type();
             if file_type.is_symlink() {
                 continue;
             }
             if file_type.is_dir() {
                 stack.push(entry.path());
             } else if file_type.is_file() {
-                if let Ok(metadata) = entry.metadata() {
-                    total = total.saturating_add(metadata.len());
-                }
+                total = total.saturating_add(metadata.len());
             }
         }
     }
-    Some(total)
+    Ok(total)
 }
 
 pub(super) fn metadata_section(
@@ -126,9 +142,7 @@ pub(super) fn metadata_section(
         row(
             crate::i18n::t("大小"),
             if is_dir {
-                directory_size(local)
-                    .map(size_text)
-                    .unwrap_or_else(|| "—".into())
+                "—".into()
             } else {
                 projected
                     .and_then(|value| value.size)

@@ -1,5 +1,5 @@
 import { useEntryDecorations } from './useEntryDecorations'
-import { cachePresentations } from '@/lib/entryPresentation'
+import { cachePresentations, sameDecoration } from '@/lib/entryPresentation'
 import { publishPresentationIcons } from '@/lib/decorationIcons'
 import { t, getLocale } from '@/i18n'
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react'
@@ -28,7 +28,27 @@ function virtualViewPath(value: string, trashRoot: string | null): boolean {
 /** Lightweight identity of a listing: order plus the fields that visibly
  *  change. Used to skip a redundant state replacement after the cache paint. */
 function listingKey(entries: Entry[]): string {
-  return JSON.stringify([...entries].sort((a, b) => a.path.localeCompare(b.path)))
+  return JSON.stringify(
+    entries.map((entry) => [
+      entry.path,
+      entry.name,
+      entry.isDir,
+      entry.isSymlink,
+      entry.size,
+      entry.modified,
+      entry.created,
+      entry.extension,
+      entry.mime,
+      entry.allowedOps,
+      entry.linkTarget,
+      entry.tags,
+      entry.hasCache,
+      entry.pinned,
+      entry.uploaded,
+      entry.sync,
+      entry.presentationPending,
+    ]),
+  )
 }
 
 /** Everything a pane lists: entries, decorations, locations, connections,
@@ -213,17 +233,23 @@ export function useListing(
         navigate(l.path)
         return
       }
-      const nextKey = listingKey(l.entries)
-      if (snapshot.decorations.length) {
-        cachePresentations(l.entries, snapshot.decorations)
-        publishPresentationIcons(l.entries)
-      }
-      const presentation = Object.fromEntries(
-        snapshot.decorations.map((value) => [value.path, value]),
-      )
-      setDirectoryDecorations((previous) =>
-        JSON.stringify(previous) === JSON.stringify(presentation) ? previous : presentation,
-      )
+      const displayedEntries = snapshot.presentationPending
+        ? l.entries.map((entry) => ({ ...entry, presentationPending: true }))
+        : l.entries
+      const nextKey = listingKey(displayedEntries)
+      cachePresentations(l.entries, snapshot.decorations)
+      publishPresentationIcons(l.entries)
+      setDirectoryDecorations((previous) => {
+        if (
+          Object.keys(previous).length === snapshot.decorations.length &&
+          snapshot.decorations.every((value) => {
+            const old = previous[value.path]
+            return old !== undefined && sameDecoration(old, value)
+          })
+        )
+          return previous
+        return Object.fromEntries(snapshot.decorations.map((value) => [value.path, value]))
+      })
       setDirectoryAllowedOps(l.allowedOps || [])
       setVirtualVolume(Boolean(l.virtualVolume))
       setDefaultView(l.defaultView || null)
@@ -235,7 +261,7 @@ export function useListing(
       )
       if (paintedKey !== nextKey) {
         paintedKey = nextKey
-        setEntries(l.entries)
+        setEntries(displayedEntries)
         const paths = new Set(l.entries.map((entry) => entry.path))
         setSelected((selected) => selected.filter((p) => paths.has(p)))
       }

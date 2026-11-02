@@ -12,7 +12,7 @@ mod mutation_overlay;
 mod preflight;
 pub(crate) mod presentation;
 mod transfer;
-pub(crate) use binding::{child, parent_path, trusted};
+pub(crate) use binding::{child, parent_path, trusted, trusted_snapshot};
 #[cfg(feature = "desktop")]
 pub(crate) use binding::{create, move_to_trash, remove_path, rename_path};
 pub use error::{FsError, FsErrorKind};

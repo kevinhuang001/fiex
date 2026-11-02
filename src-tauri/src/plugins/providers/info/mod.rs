@@ -18,6 +18,28 @@ fn row(label: impl Into<String>, value: impl Into<String>) -> InfoRow {
     }
 }
 
+fn provider_error_section(provider: &crate::plugins::events::Resolver, error: &str) -> InfoSection {
+    InfoSection {
+        id: format!(
+            "{}.error",
+            provider.id.strip_prefix("plugin:").unwrap_or(&provider.id)
+        ),
+        title: provider.name.clone(),
+        provider: provider.name.clone(),
+        source: if provider.plugin.is_some() {
+            "plugin"
+        } else {
+            "core"
+        }
+        .into(),
+        plugin_id: provider.plugin.as_deref().map(|plugin| plugin.id.clone()),
+        rows: vec![row(
+            crate::i18n::t("错误"),
+            crate::infrastructure::redact::clean(error, 1500),
+        )],
+    }
+}
+
 mod media;
 mod metadata;
 mod native;
@@ -28,8 +50,29 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }
 
+pub(crate) fn calculate_directory_size(
+    path: &std::path::Path,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<u64, String> {
+    metadata::directory_size_with_cancel(path, cancelled)
+}
+
+pub(crate) fn file_info_snapshot_with_partial(
+    resource: ResourceSnapshot,
+    on_partial: impl FnMut(Vec<InfoSection>),
+) -> Vec<InfoSection> {
+    resolve_info_with_partial(resource, on_partial)
+}
+
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
+    resolve_info_with_partial(resource, |_| {})
+}
+
+fn resolve_info_with_partial(
+    resource: ResourceSnapshot,
+    mut on_partial: impl FnMut(Vec<InfoSection>),
+) -> Vec<InfoSection> {
     use crate::plugins::events::{EventRouter, ProviderCandidate};
     let targets =
         crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
@@ -67,7 +110,7 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
         std::slice::from_ref(resource.as_ref()),
         None,
     );
-    EventRouter::resolve_merge_parallel(
+    EventRouter::resolve_merge_parallel_with_partial(
         "info.resolve",
         providers,
         &invocation,
@@ -91,30 +134,21 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
             }
             Ok(sections)
         },
+        |provider, result| {
+            let sections = match result {
+                Ok(sections) => sections.clone(),
+                Err(error) => vec![provider_error_section(provider, error)],
+            };
+            if !sections.is_empty() {
+                on_partial(sections);
+            }
+        },
         |outcomes| {
             outcomes
                 .into_iter()
                 .flat_map(|(provider, result)| match result {
                     Ok(sections) => sections,
-                    Err(error) => vec![InfoSection {
-                        id: format!(
-                            "{}.error",
-                            provider.id.strip_prefix("plugin:").unwrap_or(&provider.id)
-                        ),
-                        title: provider.name.clone(),
-                        provider: provider.name,
-                        source: if provider.plugin.is_some() {
-                            "plugin"
-                        } else {
-                            "core"
-                        }
-                        .into(),
-                        plugin_id: provider.plugin.as_deref().map(|plugin| plugin.id.clone()),
-                        rows: vec![row(
-                            crate::i18n::t("错误"),
-                            crate::infrastructure::redact::clean(&error, 1500),
-                        )],
-                    }],
+                    Err(error) => vec![provider_error_section(&provider, &error)],
                 })
                 .collect()
         },

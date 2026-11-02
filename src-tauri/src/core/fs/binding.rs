@@ -5,6 +5,16 @@ use std::path::Path;
 
 pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String> {
     let snapshot = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)?;
+    trusted_snapshot(&snapshot, owner)
+}
+
+/// Bind a Core-created snapshot to a fresh operation scope without resolving
+/// provider metadata a second time.
+pub(crate) fn trusted_snapshot(
+    snapshot: &crate::plugins::resource::resource_context::ResourceSnapshot,
+    owner: &str,
+) -> Result<ResourceBroker, String> {
+    let path = snapshot.display.as_str();
     let provider_owned = crate::core::fs::provider_registry::resource_access(path)
         .map_err(String::from)?
         == crate::core::fs::provider_registry::ResourceAccess::Provider;
@@ -14,9 +24,9 @@ pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String>
         let local = Path::new(path);
         Scope::selected(local.parent().unwrap_or(local), &[local.to_path_buf()])?
     };
-    let target = serde_json::json!({"ref":snapshot.reference,"metadata":snapshot.metadata()});
+    let target = serde_json::json!({"ref":&snapshot.reference,"metadata":snapshot.metadata()});
     if provider_owned {
-        scope.bind_remote(&target, &snapshot)?;
+        scope.bind_remote(&target, snapshot)?;
     } else {
         scope.bind_resource(&target, Some(Path::new(path)))?;
     }

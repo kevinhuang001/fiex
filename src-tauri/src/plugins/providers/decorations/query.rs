@@ -104,6 +104,7 @@ pub fn query_with_plugins(
         entries.clone(),
         resources.clone(),
     );
+    let resources_by_ref = super::dynamic::resource_path_index(resources.as_slice());
     let result = EventRouter::resolve_merge_parallel(
         "decorations.resolve",
         providers,
@@ -127,7 +128,7 @@ pub fn query_with_plugins(
                         .and_then(|(manifest, folder)| {
                             decode(
                                 entries.as_ref(),
-                                resources.as_slice(),
+                                &resources_by_ref,
                                 manifest,
                                 folder,
                                 items,
@@ -140,7 +141,7 @@ pub fn query_with_plugins(
                             let path = path_for_target(
                                 &contribution.target,
                                 entries.as_ref(),
-                                resources.as_slice(),
+                                &resources_by_ref,
                             )?
                             .to_owned();
                             Some(Decoration {

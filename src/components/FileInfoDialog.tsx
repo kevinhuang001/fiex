@@ -3,16 +3,18 @@ import { Check, Copy } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Modal } from './ui/Modal'
 import { FileIcon } from './FileIcon'
-import { date, displayAddress, parent, kind, size } from '@/lib/files'
+import { date, displayAddress, isVirtualResource, parent, kind, size } from '@/lib/files'
 import { tagHex } from '@/lib/tags'
-import { call } from '@/lib/api'
+import { call, native } from '@/lib/api'
 import { reportError } from '@/lib/errorCenter'
 import type { Entry } from '@/lib/types'
+import { Channel } from '@tauri-apps/api/core'
 
 interface InfoRow {
   label: string
   value: string
   copyable?: boolean
+  action?: string
 }
 interface InfoSection {
   id: string
@@ -28,6 +30,13 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState('')
   const copiedTimer = useRef<number | null>(null)
+  const [folderSize, setFolderSize] = useState<{
+    path: string
+    value?: number
+    loading: boolean
+  }>()
+  const folderSizeRequest = useRef<{ path: string; id: string } | null>(null)
+  const allowedOpsKey = info?.allowedOps?.join('\0') ?? ''
 
   useEffect(
     () => () => {
@@ -41,13 +50,31 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     let alive = true
     setSections([])
     setLoading(true)
-    const timeout = new Promise<InfoSection[]>((_, reject) =>
-      window.setTimeout(
+    const onPartial = native ? new Channel<InfoSection[]>() : undefined
+    if (onPartial) {
+      onPartial.onmessage = (partial) => {
+        if (!alive || !Array.isArray(partial)) return
+        setSections((previous) => {
+          const sections = new Map(previous.map((section) => [section.id, section]))
+          for (const section of partial) sections.set(section.id, section)
+          return [...sections.values()]
+        })
+      }
+    }
+    let timeoutId: number | undefined
+    const timeout = new Promise<InfoSection[]>((_, reject) => {
+      timeoutId = window.setTimeout(
         () => reject(new Error(t('读取插件信息超时，请检查插件是否正常运行。'))),
         15_000,
-      ),
-    )
-    void Promise.race([call<InfoSection[]>('file_info_details', { path: info.path }), timeout])
+      )
+    })
+    void Promise.race([
+      call<InfoSection[]>('file_info_details', {
+        path: info.path,
+        ...(onPartial ? { onPartial } : {}),
+      }),
+      timeout,
+    ])
       .then((value) => {
         if (alive) setSections(Array.isArray(value) ? value : [])
       })
@@ -55,12 +82,65 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
         if (alive) reportError(cause, 'file-info')
       })
       .finally(() => {
+        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
         if (alive) setLoading(false)
       })
     return () => {
       alive = false
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
     }
-  }, [info])
+  }, [
+    info?.path,
+    info?.name,
+    info?.isDir,
+    info?.isSymlink,
+    info?.size,
+    info?.modified,
+    info?.mime,
+    allowedOpsKey,
+  ])
+
+  useEffect(() => {
+    setFolderSize(undefined)
+    return () => {
+      const request = folderSizeRequest.current
+      if (request?.path === info?.path) {
+        folderSizeRequest.current = null
+        void call('file_info_directory_size_cancel', {
+          path: request.path,
+          requestId: request.id,
+        }).catch(() => {})
+      }
+    }
+  }, [info?.path])
+
+  const calculateFolderSize = async () => {
+    if (
+      !info?.isDir ||
+      info.isSymlink ||
+      isVirtualResource(info.path) ||
+      folderSizeRequest.current
+    )
+      return
+    const request = { path: info.path, id: crypto.randomUUID() }
+    folderSizeRequest.current = request
+    setFolderSize({ path: request.path, loading: true })
+    try {
+      const value = await call<number>('file_info_directory_size', {
+        path: request.path,
+        requestId: request.id,
+      })
+      if (folderSizeRequest.current?.id === request.id)
+        setFolderSize({ path: request.path, value, loading: false })
+    } catch (cause) {
+      if (folderSizeRequest.current?.id === request.id) {
+        setFolderSize({ path: request.path, loading: false })
+        reportError(cause, 'file-info:directory-size')
+      }
+    } finally {
+      if (folderSizeRequest.current?.id === request.id) folderSizeRequest.current = null
+    }
+  }
 
   const copy = async (value: string, key: string) => {
     try {
@@ -73,6 +153,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     }
   }
 
+  const currentFolderSize = info && folderSize?.path === info.path ? folderSize : undefined
   const basicRows: InfoRow[] = info
     ? [
         { label: t('种类'), value: kind(info) },
@@ -90,6 +171,28 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   const groups: Array<{ title: string; from?: string; rows: InfoRow[] }> = info
     ? [
         ...(hasCoreMetadata ? [] : [{ title: t('文件'), rows: basicRows }]),
+        ...(info.isDir && !info.isSymlink && !isVirtualResource(info.path)
+          ? [
+              {
+                title: t('文件夹'),
+                rows: [
+                  {
+                    label: t('文件夹大小'),
+                    value:
+                      currentFolderSize?.value === undefined
+                        ? '—'
+                        : size(currentFolderSize.value),
+                    action:
+                      currentFolderSize?.value === undefined
+                        ? currentFolderSize?.loading
+                          ? t('正在计算…')
+                          : t('计算大小')
+                        : undefined,
+                  },
+                ],
+              },
+            ]
+          : []),
         ...sections
           .filter((section) => section.rows.length > 0)
           .map((section) => ({
@@ -135,6 +238,16 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
                             ) : (
                               <Copy size={12} />
                             )}
+                          </button>
+                        )}
+                        {row.action && (
+                          <button
+                            type="button"
+                            className="file-info-action"
+                            disabled={currentFolderSize?.loading}
+                            onClick={() => void calculateFolderSize()}
+                          >
+                            {row.action}
                           </button>
                         )}
                       </dd>

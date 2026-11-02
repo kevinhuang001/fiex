@@ -79,7 +79,7 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
     providers
 }
 pub fn resource_candidates_json(display: &str) -> Result<Vec<Value>, String> {
-    let resource = ResourceSnapshot::resolve(display)?;
+    let resource = ResourceSnapshot::resolve_from_directory_snapshot(display)?;
     Ok(project_candidates(resource_candidates(&resource)))
 }
 fn project_candidates(providers: Vec<Resolver>) -> Vec<Value> {
@@ -110,7 +110,11 @@ pub fn open_resource(
     preferred: Option<&str>,
     order: Option<&[String]>,
 ) -> Result<Value, String> {
-    resolve_preview(ResourceSnapshot::resolve(display)?, preferred, order)
+    resolve_preview(
+        ResourceSnapshot::resolve_from_directory_snapshot(display)?,
+        preferred,
+        order,
+    )
 }
 fn resolve_preview(
     resource: ResourceSnapshot,
