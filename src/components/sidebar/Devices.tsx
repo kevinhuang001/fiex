@@ -77,11 +77,7 @@ export function Devices({
                       <span className="disk-fs">
                         {location.filesystem.toUpperCase()}
                         {location.usbfs
-                          ? ['APFS', 'HFS', 'HFS+', 'HFSX', 'BTRFS'].includes(
-                              location.filesystem.toUpperCase(),
-                            )
-                            ? t(' · 只读')
-                            : t(' · 内置')
+                          ? t(' · 内置')
                           : !location.mounted
                             ? t(' · 挂载')
                             : ''}
