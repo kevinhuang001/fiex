@@ -32,7 +32,7 @@ fn local_listing_never_builds_directory_snapshots() {
 }
 #[test]
 fn empty_vfs_snapshot_is_complete_and_does_not_create_decorations() {
-    let path = "applications://user/cache-test-empty";
+    let path = "applications://~cache-test-empty";
     store(path, &listing(path, vec![]));
     let cached = read(path, true, &[]).unwrap().unwrap();
     assert!(cached.entries.is_empty());
@@ -41,7 +41,7 @@ fn empty_vfs_snapshot_is_complete_and_does_not_create_decorations() {
 }
 #[test]
 fn cached_tree_respects_parent_edges_hidden_filters_and_cancellation() {
-    let path = "applications://user/cache-test-tree";
+    let path = "applications://~cache-test-tree";
     let child = format!("{path}/.hidden");
     let stale = format!("{path}/deleted");
     store(path, &listing(path, vec![item(&child, ".hidden", true)]));
@@ -85,7 +85,7 @@ fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
     let parent = root.path().join("visited");
     let child = parent.join("child");
     std::fs::create_dir_all(&child).unwrap();
-    let parent = "applications://user/cache-test-delete".to_string();
+    let parent = "applications://~cache-test-delete".to_string();
     let child = format!("{parent}/child");
     store(
         &parent,
@@ -107,7 +107,7 @@ fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
 
 #[test]
 fn invalidation_uses_parent_edges_and_does_not_remove_unrelated_siblings() {
-    let parent = "applications://user/cache-test-siblings".to_string();
+    let parent = "applications://~cache-test-siblings".to_string();
     let first = format!("{parent}/first");
     let second = format!("{parent}/second");
     store(
@@ -127,7 +127,7 @@ fn invalidation_uses_parent_edges_and_does_not_remove_unrelated_siblings() {
 
 #[test]
 fn presentation_snapshot_requires_matching_entry_metadata() {
-    let path = "applications://user/cache-test-presentation";
+    let path = "applications://~cache-test-presentation";
     let value = listing(path, vec![item(&format!("{path}/app"), "app", false)]);
     super::super::decoration_cache::store(path, &value, &[]);
     assert!(super::super::decoration_cache::read(path, &value).is_some());

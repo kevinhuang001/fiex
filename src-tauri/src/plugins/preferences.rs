@@ -260,14 +260,14 @@ pub fn reset(feature: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugins::events::Handler;
+    use crate::plugins::events::Resolver;
 
     fn provider(id: &str, priority: i64) -> Resolver {
         Resolver {
             id: id.into(),
             name: id.into(),
             priority,
-            handler: Handler::Builtin("core.test"),
+            plugin: None,
         }
     }
 

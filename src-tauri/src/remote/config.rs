@@ -103,12 +103,7 @@ fn allowed_network_domains(plugin_id: &str) -> Vec<String> {
 }
 
 pub(crate) fn provider_config(conn: &StoredConnection) -> serde_json::Value {
-    let mut config = serde_json::Map::new();
-    config.insert(
-        "networkDomains".into(),
-        serde_json::json!(allowed_network_domains(&connection_plugin_id(conn))),
-    );
-    config.extend(conn.settings.clone());
+    let mut config = conn.settings.clone();
     let scope = format!("connection-{}", conn.id);
     for field in &conn.secret_keys {
         // A newly entered secret takes precedence over the previously saved value.
@@ -127,6 +122,13 @@ pub(crate) fn provider_config(conn: &StoredConnection) -> serde_json::Value {
             }
         }
     }
+    // This is a Core-owned policy projection, never user-editable connection
+    // data. Apply it last so stale or provider-declared settings cannot widen
+    // the effective network allowlist.
+    config.insert(
+        "networkDomains".into(),
+        serde_json::json!(allowed_network_domains(&connection_plugin_id(conn))),
+    );
     serde_json::Value::Object(config)
 }
 
@@ -151,6 +153,46 @@ pub(crate) fn connection_domain(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fiex_provider_contracts::ProviderInput;
+    use serde_json::json;
+
+    #[test]
+    fn effective_network_allowlist_stays_inside_typed_connection_config() {
+        let connection = StoredConnection {
+            id: "connection-fixture".into(),
+            mount_id: "mount-fixture".into(),
+            cache_revision: "revision-fixture".into(),
+            name: "fixture".into(),
+            kind: "fixture".into(),
+            plugin_id: "missing.fixture".into(),
+            settings: json!({"networkDomains": ["untrusted.example"]})
+                .as_object()
+                .unwrap()
+                .clone(),
+            secret_keys: Vec::new(),
+            saved: true,
+            autostart: false,
+        };
+        let params = json!({
+            "connection": provider_config(&connection),
+            "connectionId": connection.id,
+        });
+
+        let decoded = ProviderInput::decode("connection.validate", &params).unwrap();
+        let ProviderInput::Connection(request) = decoded else {
+            panic!("connection.validate must decode to ConnectionRequest");
+        };
+        let config = request.connection.unwrap().to_value().unwrap();
+        assert_eq!(config["networkDomains"], json!([]));
+        assert!(
+            ProviderInput::decode("connection.validate", &json!({"networkDomains": []})).is_err()
+        );
+    }
 }
 
 pub fn is_remote(path: &str) -> bool {

@@ -33,7 +33,6 @@ export function demoDecorations(entries: Entry[], plugins: EntryDecoration[]): E
       const plugin = byPath.get(entry.path)
       byPath.set(entry.path, {
         path: entry.path,
-        badges: [],
         ...plugin,
         nativeBadges: badges,
         providers: ['Fiex', ...(plugin?.providers || [])],

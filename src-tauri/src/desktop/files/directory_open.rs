@@ -1,5 +1,5 @@
 use crate::core::files::Listing;
-use crate::plugins::resolvers::decorations::Decoration;
+use crate::plugins::providers::decorations::Decoration;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -54,7 +54,7 @@ pub(crate) async fn directory_open(
         });
         crate::infrastructure::logging::record_core(
             "debug",
-            "fs.list",
+            "host.fs.list",
             &format!(
                 "Directory \"{}\" listed {} entries with presentation in {} ms (cache_hit={}, hidden={})",
                 path,

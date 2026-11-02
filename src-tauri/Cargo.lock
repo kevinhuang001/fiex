@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "fiex"
-version = "0.7.10"
+version = "0.7.11"
 dependencies = [
  "apfs",
  "arapuca",
@@ -1853,22 +1853,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "fiex-provider-contracts"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "fiex-plugin-sdk"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "base64 0.22.1",
  "fiex-provider-contracts",
  "serde",
  "serde_json",
  "shared_memory",
+]
+
+[[package]]
+name = "fiex-provider-contracts"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

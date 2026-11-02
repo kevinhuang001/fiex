@@ -1,7 +1,12 @@
 //! Temporary rollback journal for multi-source transfers. Existing file
 //! versions are spooled before the first destination commit, never buffered
-//! into an unbounded Vec. All cleanup stays within the destination adapters.
+//! into an unbounded Vec. All cleanup stays within destination providers.
 use super::*;
+use super::{
+    model::Step,
+    planner::{is_missing, optional_stat, same_version},
+};
+use crate::core::fs::ResourceBroker;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 pub(super) struct UndoLog {
@@ -18,7 +23,7 @@ impl UndoLog {
                 continue;
             }
             step.target.require(FsOperation::Read, false)?;
-            let mut reader = step.target.adapter()?.open_read()?;
+            let mut reader = step.target.open_read_handle()?;
             let mut copy = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
             let mut offset = 0u64;
             loop {
@@ -163,7 +168,7 @@ impl UndoLog {
             .metadata()
             .map_err(|e| e.to_string())?
             .len();
-        let mut writer = target.adapter()?.begin_write_sized(false, Some(size))?;
+        let mut writer = target.begin_write_handle_sized(false, Some(size))?;
         let mut buffer = vec![0u8; CHUNK];
         loop {
             let read = backup.read(&mut buffer).map_err(|e| e.to_string())?;

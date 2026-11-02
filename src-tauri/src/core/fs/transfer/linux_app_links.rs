@@ -1,7 +1,14 @@
 //! Executable symlinks import as ordinary .desktop launchers. The original
 //! executable/link is retained; no escaping symlink enters the private store.
-use super::*;
+use super::{
+    binding,
+    planner::{optional_stat, unique},
+    FsOperation,
+};
+use crate::core::operations::{check_cancelled, OperationResult};
 use crate::core::volumes::applications;
+use fiex_provider_contracts::{TransferAction, TransferDirection};
+use std::sync::atomic::AtomicBool;
 pub(super) fn import(
     paths: &[String],
     destination: &str,
@@ -76,7 +83,7 @@ pub(super) fn import(
     let mut result = OperationResult::default();
     for (target, content) in planned {
         check_cancelled(cancel)?;
-        let mut writer = target.adapter()?.begin_write(true)?;
+        let mut writer = target.begin_write_handle(true)?;
         writer.write(content.as_bytes())?;
         writer.commit()?;
         crate::core::volumes::application_policy::finish_import(&target.path, true)?;

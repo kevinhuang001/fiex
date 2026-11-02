@@ -52,6 +52,9 @@ impl Context<'_> {
 }
 
 pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Value, String> {
+    if method.starts_with("fs.") {
+        return Err("unsupported filesystem method namespace".into());
+    }
     let actor = running.actor(params)?;
     if let Some(scope) = &actor.scope {
         scope.authorize_method(method)?;
@@ -66,7 +69,7 @@ pub(super) fn run(running: &Running, method: &str, params: &Value) -> Result<Val
         params,
         policy: running.policy(),
     };
-    if method.starts_with("fs.") {
+    if method.starts_with("host.fs.") {
         fs::dispatch(&mut ctx)
     } else if method.starts_with("host.net.")
         || method.starts_with("host.aria2.")

@@ -1,4 +1,4 @@
-//! Plugin lifecycle, services, resource security and event resolvers.
+//! Plugin lifecycle, services, resource security and provider event routing.
 pub(crate) mod aria2;
 pub mod cache;
 pub mod contracts;
@@ -15,7 +15,7 @@ pub mod net;
 pub(crate) mod oauth;
 pub mod preferences;
 pub mod provider_registry;
-pub mod resolvers;
+pub mod providers;
 pub mod resource;
 pub mod resources;
 pub mod security;

@@ -1,0 +1,277 @@
+//! Shared EventRouter pipeline for builtin and plugin menus.
+mod actions;
+mod builtin;
+mod commands;
+mod connection_cache;
+mod file_ops;
+mod native_views;
+mod proxy;
+mod session;
+pub use actions::execute_remote;
+pub use commands::{children, execute};
+#[cfg(test)]
+mod tests;
+mod validation;
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+    if let Ok(mut sessions) = sessions().lock() {
+        sessions.retain(|_, session| {
+            session
+                .provider
+                .plugin
+                .as_deref()
+                .is_none_or(|plugin| plugin.id != plugin_id)
+        });
+    }
+}
+
+use crate::plugins::events::{EventRouter, ProviderCandidate, Resolver};
+use crate::plugins::{
+    native_invocation::NativeProviderInvocation, provider_registry::native::NativeProviderRegistry,
+    resource::resource_context::ResourceSnapshot,
+};
+use fiex_provider_contracts::{
+    ContextMenuProvider, MenuExecuteResult, MenuItem, ProviderKind, ProviderRequest,
+};
+use serde_json::{json, Value};
+#[cfg(test)]
+use session::session_ids;
+use session::{allowed, register, sessions, MenuScope};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, OnceLock},
+};
+use validation::validated_submenu;
+
+/// All Core-owned context-menu providers share one typed registry. Their
+/// implementations stay grouped by feature in `file_ops` and `native_views`.
+pub(super) fn native_registry() -> &'static NativeProviderRegistry<dyn ContextMenuProvider> {
+    static REGISTERED: OnceLock<NativeProviderRegistry<dyn ContextMenuProvider>> = OnceLock::new();
+    REGISTERED.get_or_init(|| {
+        let mut providers: NativeProviderRegistry<dyn ContextMenuProvider> =
+            NativeProviderRegistry::new(ProviderKind::ContextMenu);
+        file_ops::register(&mut providers);
+        native_views::register(&mut providers);
+        providers
+    })
+}
+
+type ResolvedProvider = (
+    Arc<dyn ContextMenuProvider>,
+    Option<Arc<Mutex<Option<String>>>>,
+);
+
+fn provider_for(
+    resolver: &Resolver,
+    directory: &str,
+    resources: &Arc<Vec<ResourceSnapshot>>,
+) -> ResolvedProvider {
+    match resolver.plugin.as_deref() {
+        None => (
+            native_registry().get_arc(&resolver.id).unwrap_or_else(|| {
+                Arc::new(FailedMenuProvider(
+                    "registered native ContextMenuProvider disappeared".into(),
+                ))
+            }),
+            None,
+        ),
+        Some(plugin) => {
+            let proxy = proxy::ScopedMenuProxy::new(
+                plugin.clone(),
+                resolver.id.clone(),
+                directory.into(),
+                resources.clone(),
+            );
+            match proxy {
+                Ok(proxy) => {
+                    let remote_session = proxy.remote_session_slot();
+                    (Arc::new(proxy), Some(remote_session))
+                }
+                Err(error) => (Arc::new(FailedMenuProvider(error)), None),
+            }
+        }
+    }
+}
+
+struct FailedMenuProvider(String);
+impl ContextMenuProvider for FailedMenuProvider {
+    fn resolve(
+        &self,
+        _ctx: &dyn fiex_provider_contracts::ProviderInvocation,
+    ) -> Result<Vec<MenuItem>, fiex_provider_contracts::ProviderError> {
+        Err(fiex_provider_contracts::ProviderError::internal(
+            self.0.clone(),
+        ))
+    }
+
+    fn execute(
+        &self,
+        _ctx: &dyn fiex_provider_contracts::ProviderInvocation,
+    ) -> Result<MenuExecuteResult, fiex_provider_contracts::ProviderError> {
+        Err(fiex_provider_contracts::ProviderError::internal(
+            self.0.clone(),
+        ))
+    }
+}
+
+fn validate_plugin_action(
+    plugin: &crate::plugins::host::PluginInfo,
+    result: &mut MenuExecuteResult,
+) -> Result<(), String> {
+    match result {
+        MenuExecuteResult::CoreAction(_)
+        | MenuExecuteResult::ConnectionCoreAction(_)
+        | MenuExecuteResult::RemoteAction(_)
+        | MenuExecuteResult::NativeAction(_) => {
+            Err("plugin returned a reserved action kind".into())
+        }
+        MenuExecuteResult::Panel(panel) => {
+            let entry = panel.entry.as_deref().ok_or("panel result missing entry")?;
+            let asset = crate::plugins::host::plugin_view_asset(&plugin.id, entry)?;
+            panel.entry = None;
+            panel.asset_path = Some(asset);
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn execute_provider(
+    resolver: &Resolver,
+    implementation: &dyn ContextMenuProvider,
+    invocation: &dyn fiex_provider_contracts::ProviderInvocation,
+) -> Result<MenuExecuteResult, String> {
+    let mut result = implementation
+        .execute(invocation)
+        .map_err(|error| error.to_string())?;
+    if let Some(plugin) = resolver.plugin.as_deref() {
+        validate_plugin_action(plugin, &mut result)?;
+    }
+    Ok(result)
+}
+
+pub fn query(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::All)
+}
+
+/// Top-level, Core-owned items. This path must stay free of plugin IPC so the
+/// first visible menu is complete and cannot resize while plugins respond.
+pub fn query_core(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::Core)
+}
+
+/// Plugin-owned items, requested by the lazy "插件" submenu.
+pub fn query_plugins(directory: &str, paths: &[String]) -> Result<Vec<Value>, String> {
+    query_scope(directory, paths, MenuScope::Plugins)
+}
+
+fn query_scope(directory: &str, paths: &[String], scope: MenuScope) -> Result<Vec<Value>, String> {
+    // An empty selection is the blank canvas. It uses the same provider
+    // pipeline; manifests opt in with `match.selection: "zero"` (or `any`).
+    if paths.len() > 256 || directory.is_empty() {
+        return Err("invalid menu selection".into());
+    }
+    let ctx = builtin::Context::load(directory, paths)?;
+    let resources = Arc::new(
+        ctx.entries
+            .iter()
+            .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
+            .collect::<Vec<_>>(),
+    );
+    let match_targets = crate::plugins::events::matching::match_resources(&resources);
+    let mut providers = crate::plugins::provider_registry::candidates(
+        "contextMenu.resolve",
+        &match_targets,
+        directory,
+        if scope == MenuScope::Plugins {
+            Vec::new()
+        } else {
+            builtin::providers(&ctx)
+        },
+    );
+    // Never invoke a plugin while resolving the Core-only top-level menu. For a
+    // plugin-only request the empty seed above already excludes builtin rows.
+    if scope == MenuScope::Core {
+        providers.retain(|provider| provider.plugin.is_none());
+    }
+    let request = ProviderRequest {
+        method: "contextMenu.resolve".into(),
+        params: json!({}),
+    };
+    let mut remote_sessions = HashMap::new();
+    let providers = providers
+        .into_iter()
+        .map(|resolver| {
+            let (implementation, remote_session) = provider_for(&resolver, directory, &resources);
+            if let Some(remote_session) = remote_session {
+                remote_sessions.insert(resolver.id.clone(), remote_session);
+            }
+            ProviderCandidate {
+                resolver,
+                implementation,
+            }
+        })
+        .collect();
+    let invocation = file_ops::invocation(&ctx, &request.method, request.params.clone());
+    Ok(EventRouter::resolve_shared(
+        "contextMenu.resolve",
+        providers,
+        &invocation,
+        |resolver, provider, invocation| {
+            let items = provider
+                .resolve(invocation)
+                .map_err(|error| error.to_string())?;
+            let mut result = json!({"items":items});
+            if resolver.plugin.is_some() {
+                let session = remote_sessions
+                    .get(&resolver.id)
+                    .ok_or("plugin menu session unavailable")?
+                    .lock()
+                    .map_err(|_| "plugin menu session unavailable")?
+                    .clone()
+                    .ok_or("plugin menu session ID is missing")?;
+                result["menuSessionId"] = json!(session);
+            }
+            Ok(result)
+        },
+        |provider, result| {
+            crate::plugins::events::validate_result("contextMenu.resolve", &result)?;
+            register(provider, &ctx, &resources, result)
+        },
+        |_| true,
+        |results| {
+            results
+                .into_iter()
+                .filter_map(|(_, result)| {
+                    result.ok().filter(|value| {
+                        value["items"]
+                            .as_array()
+                            .is_some_and(|items| !items.is_empty())
+                    })
+                })
+                .collect()
+        },
+    ))
+}
+
+#[cfg(test)]
+mod session_identity_tests {
+    use super::*;
+
+    #[test]
+    fn plugin_session_tokens_never_become_core_menu_handles() {
+        let reply = json!({"menuSessionId":"the-same-remote-session"});
+        let (first, remote_first) = session_ids(&reply, true).unwrap();
+        let (second, remote_second) = session_ids(&reply, true).unwrap();
+        assert_ne!(first, second);
+        assert_ne!(first, "the-same-remote-session");
+        assert_eq!(remote_first.as_deref(), Some("the-same-remote-session"));
+        assert_eq!(remote_second.as_deref(), Some("the-same-remote-session"));
+        let (_, native) = session_ids(&reply, false).unwrap();
+        assert!(native.is_none());
+        assert!(session_ids(&json!({}), true).is_err());
+        assert!(session_ids(&json!({"menuSessionId":""}), true).is_err());
+        assert!(session_ids(&json!({"menuSessionId":"x".repeat(129)}), true).is_err());
+    }
+}

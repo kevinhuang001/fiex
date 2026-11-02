@@ -33,11 +33,11 @@ JSON-RPC 的 method 标识事件。唯一资源集合是 `targets`，不再同�
 
 各事件独有参数（查询词、菜单项 ID、连接配置等）与 targets 并列，使用 `ctx.params()` 获取；`ctx.targets()` 提供统一目标集合，`ctx.metadata(ref)` 只访问本次已投影的属性。
 
-读取目标使用 `ctx.files().open_ref(&target.reference)`。名称是展示信息，不是读取能力。`ScopedRead`、`read.resourceId` 和全局读取令牌注册表已删除。Core 与 SDK 共用 ResourceRef、ResourceContext、ResourceMetadata、EventContext 以及 InfoSection/InfoRow、PreviewView 的定义；没有 InfoContext、PreviewContext、InfoSectionView 或 InfoResponse 转换链。
+读取目标使用 `ctx.files().open_read(&target.reference)`。名称是展示信息，不是读取能力。`ScopedRead`、`read.resourceId` 和全局读取令牌注册表已删除。Core 与 SDK 共用 ResourceRef、ResourceContext、ResourceMetadata、EventContext 以及 InfoSection/InfoRow、PreviewView 的定义；没有 InfoContext、PreviewContext、InfoSectionView 或 InfoResponse 转换链。
 
 ## 资源与授权
 
-`plugins/resource_context.rs` 解析本地、Connection、VFS 的元数据。本地属性只取一次，目录装饰复用传入的列表属性；远程 stat 不下载文件。内容 Provider 按需调用 materialize，同一操作内的快照共享一次内容准备结果。缓存位置只存在于 Core。
+`plugins/resource/resource_context.rs` 解析本地、Connection、VFS 的元数据。本地属性只取一次，目录装饰复用传入的列表属性；远程 stat 不下载文件。内容 Provider 按需调用 materialize，同一操作内的快照共享一次内容准备结果。缓存位置只存在于 Core。
 
 `EventRouter::resource_scope` 为每个 Provider 建立独立 Scope；`prepare` 在 Host 边界统一执行元数据裁剪和引用绑定。文件、网络与命令 Broker 在每次反向 IPC 时再次检查许可。其他 Provider/操作知道相同引用也不能获得访问权。
 
@@ -64,7 +64,7 @@ Provider 执行具有异常隔离与 4 MiB 结果上限。PluginHost 继续负�
 ## 代码入口
 
 - `plugins/events/mod.rs`：Registry、EventRouter、公共验证入口、独占调用、Scope/targets 准备。
-- `plugins/resource_context.rs`：资源快照、远程 stat 与按需 materialize。
-- `plugins/resolvers/info/`、`plugins/resolvers/preview/`、`plugins/resolvers/decorations/dynamic.rs`、`plugins/resolvers/search/`：事件处理和结果规则。
+- `plugins/resource/resource_context.rs`：资源快照、远程 stat 与按需 materialize。
+- `plugins/providers/info/`、`plugins/providers/preview/`、`plugins/providers/decorations/`、`plugins/providers/search/`：事件处理和结果规则。
 - `desktop/plugins.rs`：Tauri 适配、菜单会话和 UI 资源处理，不在前端遍历 Provider。
 - `core/search.rs`：已有遍历与取消逻辑，以 Builtin 搜索来源接入统一结果策略。

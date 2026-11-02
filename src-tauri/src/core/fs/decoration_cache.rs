@@ -3,7 +3,7 @@
 use super::directory_cache::{enabled, key};
 use crate::infrastructure::cache::disk;
 #[cfg(any(feature = "desktop", test))]
-use crate::{core::files::Listing, plugins::resolvers::decorations::Decoration};
+use crate::{core::files::Listing, plugins::providers::decorations::Decoration};
 #[cfg(any(feature = "desktop", test))]
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "desktop", test))]
@@ -81,7 +81,7 @@ pub(crate) fn invalidate(list_key: &str) {
 
 #[cfg(feature = "desktop")]
 pub(crate) fn resolve(path: &str, listing: &Listing) -> Vec<Decoration> {
-    use crate::plugins::resolvers::decorations::{query_with_plugins, DecorationEntry};
+    use crate::plugins::providers::decorations::{query_with_plugins, DecorationEntry};
     let original_identity = key(path);
     let previous: Option<Snapshot> = enabled(path).then(|| disk::load(&identity(path))).flatten();
     let previous = previous.filter(|snapshot| snapshot.stamp == stamp());

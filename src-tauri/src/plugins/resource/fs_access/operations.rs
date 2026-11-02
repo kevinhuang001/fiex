@@ -81,10 +81,10 @@ pub(super) fn relative(root: &Scope, input: &str) -> Result<PathBuf, String> {
 pub(super) fn directory(root: &Scope) -> Result<Dir, String> {
     root.dir.try_clone().map_err(|e| e.to_string())
 }
-pub(super) fn entry(dir: &Dir, path: &Path) -> Result<Value, String> {
+pub(super) fn entry(root: &Scope, dir: &Dir, path: &Path) -> Result<Value, String> {
     let metadata = dir.metadata(path).map_err(|e| e.to_string())?;
     Ok(
-        json!({"path": path.to_string_lossy(), "name": path.file_name().unwrap_or_default().to_string_lossy(), "isDir": metadata.is_dir(), "size": metadata.len(), "modified": metadata.modified().ok().and_then(|t| t.into_std().duration_since(std::time::UNIX_EPOCH).ok()).map(|t| t.as_secs()).unwrap_or(0), "extension": path.extension().unwrap_or_default().to_string_lossy(), "mime": if metadata.is_dir() { "inode/directory".into() } else { mime_guess::from_path(path).first_or_octet_stream().to_string() }, "readonly": metadata.permissions().readonly(), "symlink": dir.symlink_metadata(path).map(|m| m.is_symlink()).unwrap_or(false)}),
+        json!({"path": root.path.join(path).to_string_lossy(), "name": path.file_name().unwrap_or_default().to_string_lossy(), "isDir": metadata.is_dir(), "size": metadata.len(), "modified": metadata.modified().ok().and_then(|t| t.into_std().duration_since(std::time::UNIX_EPOCH).ok()).map(|t| t.as_secs()).unwrap_or(0), "extension": path.extension().unwrap_or_default().to_string_lossy(), "mime": if metadata.is_dir() { "inode/directory".into() } else { mime_guess::from_path(path).first_or_octet_stream().to_string() }, "readonly": metadata.permissions().readonly(), "symlink": dir.symlink_metadata(path).map(|m| m.is_symlink()).unwrap_or(false)}),
     )
 }
 pub fn list(root: &Scope, input: &str) -> Result<Value, String> {
@@ -98,7 +98,7 @@ pub fn list(root: &Scope, input: &str) -> Result<Value, String> {
         let item = item.map_err(|e| e.to_string())?;
         // Omit symlinks whose targets cannot be resolved inside the capability.
         let child = path.join(item.file_name());
-        if let Ok(value) = entry(&dir, &child) {
+        if let Ok(value) = entry(root, &dir, &child) {
             values.push(value);
         }
     }
@@ -106,7 +106,7 @@ pub fn list(root: &Scope, input: &str) -> Result<Value, String> {
     Ok(json!(values))
 }
 pub fn stat(root: &Scope, input: &str) -> Result<Value, String> {
-    entry(&directory(root)?, &relative(root, input)?)
+    entry(root, &directory(root)?, &relative(root, input)?)
 }
 pub fn is_directory(root: &Scope, input: &str) -> Result<bool, String> {
     let path = relative(root, input)?;
@@ -135,7 +135,7 @@ pub fn stat_batch(root: &Scope, paths: &[Value]) -> Result<Value, String> {
             if !seen.insert(relative.clone()) {
                 return json!({"error": "duplicate selection"});
             }
-            match entry(&dir, &relative) {
+            match entry(root, &dir, &relative) {
                 Ok(metadata) => json!({"metadata": metadata}),
                 Err(_) => json!({"error": "metadata unavailable"}),
             }
@@ -147,7 +147,7 @@ pub fn mkdir(root: &Scope, input: &str) -> Result<Value, String> {
     let dir = directory(root)?;
     let path = relative(root, input)?;
     dir.create_dir_all(&path).map_err(|e| e.to_string())?;
-    entry(&dir, &path)
+    entry(root, &dir, &path)
 }
 pub fn read_chunk(root: &Scope, input: &str, offset: u64, length: usize) -> Result<Value, String> {
     let mut file = directory(root)?

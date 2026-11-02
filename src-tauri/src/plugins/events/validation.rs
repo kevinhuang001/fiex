@@ -74,6 +74,10 @@ pub fn validate_result(method: &str, value: &Value) -> Result<(), String> {
             serde_json::from_value::<fiex_provider_contracts::ConnectionValidation>(value.clone())
                 .map_err(|error| format!("invalid connection validation response: {error}"))?;
         }
+        "connection.open" | "connection.create" => {
+            serde_json::from_value::<fiex_provider_contracts::ConnectionOpenResult>(value.clone())
+                .map_err(|error| format!("invalid connection navigation result: {error}"))?;
+        }
         _ => {
             if !value.is_object() && !value.is_null() {
                 return Err("invalid event result".into());

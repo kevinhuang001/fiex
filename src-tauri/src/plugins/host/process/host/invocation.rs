@@ -31,15 +31,17 @@ impl PluginHost {
             .iter()
             .filter(|path| {
                 let path = path.to_string_lossy();
-                !crate::plugins::mounts::handles(&path)
-                    && crate::usbfs::route(&path).is_none()
-                    && !crate::core::volumes::virtual_resolvers::opaque(&path)
+                crate::core::fs::provider_registry::resource_access(&path).is_ok_and(|access| {
+                    access == crate::core::fs::provider_registry::ResourceAccess::HostPath
+                })
             })
             .cloned()
             .collect::<Vec<_>>();
         for path in paths.iter().filter(|path| {
             let path = path.to_string_lossy();
-            crate::plugins::mounts::handles(&path) || crate::usbfs::route(&path).is_some()
+            crate::core::fs::provider_registry::resource_access(&path).is_ok_and(|access| {
+                access == crate::core::fs::provider_registry::ResourceAccess::Provider
+            })
         }) {
             let path = path.to_string_lossy();
             if !bindings.iter().any(|binding| binding.path == path) {
@@ -52,13 +54,16 @@ impl PluginHost {
                 &[],
             )?)
         } else if paths.is_empty() {
-            if directory.contains("://") {
-                None
-            } else {
-                Some(crate::plugins::resource::fs_access::Scope::selected(
-                    &PathBuf::from(directory),
-                    paths,
-                )?)
+            match crate::core::fs::provider_registry::resource_access(directory)
+                .map_err(String::from)?
+            {
+                crate::core::fs::provider_registry::ResourceAccess::HostPath => {
+                    Some(crate::plugins::resource::fs_access::Scope::selected(
+                        &PathBuf::from(directory),
+                        paths,
+                    )?)
+                }
+                crate::core::fs::provider_registry::ResourceAccess::Provider => None,
             }
         } else {
             let canonical: Vec<PathBuf> = local_paths
@@ -149,9 +154,6 @@ impl PluginHost {
         let mut task_root = task_root;
         let mut params =
             crate::plugins::events::prepare(plugin_id, method, params, &mut task_root, &declared)?;
-        if let Some(object) = params.as_object_mut() {
-            object.insert("networkDomains".into(), json!(state.network_domains));
-        }
         if let Some(scope) = &mut task_root {
             let policy =
                 crate::plugins::security::policy::PermissionPolicy::new(plugin_id, &declared);

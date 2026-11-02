@@ -9,7 +9,7 @@ pub(super) fn intercept(
     method: &str,
     params: &Value,
 ) -> Result<Option<Value>, String> {
-    if !method.starts_with("fs.") {
+    if !method.starts_with("host.fs.") {
         return Ok(None);
     }
     for key in ["path", "paths", "from", "to"] {
@@ -19,7 +19,7 @@ pub(super) fn intercept(
             );
         }
     }
-    if method == "fs.statBatch" {
+    if method == "host.fs.statBatch" {
         let refs = params["refs"]
             .as_array()
             .filter(|refs| refs.len() <= 256)
@@ -28,14 +28,14 @@ pub(super) fn intercept(
         for reference in refs {
             let mut item = params.clone();
             item["ref"] = reference.clone();
-            results.push(match run(running, "fs.stat", &item) {
+            results.push(match run(running, "host.fs.stat", &item) {
                 Ok(metadata) => json!({"metadata":metadata}),
                 Err(error) => json!({"error":error}),
             });
         }
         return Ok(Some(json!({"results":results})));
     }
-    if method == "fs.child" {
+    if method == "host.fs.child" {
         let scope = actor.scope.as_ref().ok_or("no operation scope")?;
         let reference = params.get("ref").ok_or("missing parent ref")?;
         let name = params["name"]
@@ -54,14 +54,14 @@ pub(super) fn intercept(
         return Ok(Some(json!({"ref":child.reference})));
     }
     const TARGET_METHODS: &[&str] = &[
-        "fs.openRead",
-        "fs.readChunk",
-        "fs.list",
-        "fs.stat",
-        "fs.beginWrite",
-        "fs.mkdir",
-        "fs.remove",
-        "fs.rename",
+        "host.fs.openRead",
+        "host.fs.readChunk",
+        "host.fs.list",
+        "host.fs.stat",
+        "host.fs.beginWrite",
+        "host.fs.mkdir",
+        "host.fs.remove",
+        "host.fs.rename",
     ];
     if TARGET_METHODS.contains(&method) && params.get("ref").is_none() {
         return Err("missing ResourceRef".into());

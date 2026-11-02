@@ -1,7 +1,6 @@
 //! Core-owned file access. Resource identities are resolved only inside an
-//! operation scope; adapters never receive plugin-supplied filesystem paths.
+//! operation scope; Providers never receive plugin-supplied filesystem paths.
 mod binding;
-mod builtin;
 mod cache_identity;
 pub(crate) mod changes;
 pub(crate) mod decoration_cache;
@@ -11,27 +10,24 @@ mod export;
 mod list_service;
 mod mutation_overlay;
 mod preflight;
-mod presentation;
+pub(crate) mod presentation;
 mod transfer;
 pub(crate) use binding::{child, parent_path, trusted};
 #[cfg(feature = "desktop")]
 pub(crate) use binding::{create, move_to_trash, remove_path, rename_path};
 pub use error::{FsError, FsErrorKind};
-pub use transfer::transfer;
-mod local;
 pub use export::{export as export_for_external_drag, initialize as initialize_exports};
-mod plugin;
+pub use transfer::transfer;
 pub(crate) mod provider_registry;
 mod streams;
-mod usb;
 use crate::plugins::provider_registry::FsOperation;
 use crate::plugins::{contracts::ResourceRef, resource::fs_access::Scope};
 use serde_json::Value;
 pub use streams::{cleanup, http_body, stream_call, stream_permission};
 
 pub const CHUNK: usize = 256 * 1024;
-mod adapter;
-pub use adapter::{FsAdapter, ReadHandle, WriteHandle};
+mod handles;
+pub use handles::{ReadHandle, WriteHandle};
 
 /// This value can only be constructed from a ref captured by Core's Scope.
 pub struct ResourceBroker {
@@ -41,11 +37,11 @@ pub struct ResourceBroker {
     pub(crate) owner: String,
 }
 impl ResourceBroker {
-    /// Desktop preview reads only the requested prefix, regardless of which
-    /// storage adapter owns the resource.
+    /// Desktop preview reads only the requested prefix from the resource's
+    /// registered VFS provider.
     pub fn preview_prefix(&self, limit: usize) -> Result<Vec<u8>, FsError> {
         self.require(FsOperation::Read, false)?;
-        let mut handle = self.adapter()?.open_read()?;
+        let mut handle = self.open_read_handle()?;
         let mut result = Vec::with_capacity(limit.min(CHUNK));
         while result.len() < limit {
             let (part, eof) =
@@ -78,45 +74,36 @@ impl ResourceBroker {
             owner: owner.into(),
         })
     }
-    fn adapter(&self) -> Result<Box<dyn FsAdapter + '_>, FsError> {
-        provider_registry::adapter(self)
+    pub(crate) fn open_read_handle(&self) -> Result<Box<dyn ReadHandle>, FsError> {
+        self.require(FsOperation::Read, false)?;
+        provider_registry::open_read(self)
     }
     pub fn require(&self, operation: FsOperation, create: bool) -> Result<(), FsError> {
-        if crate::usbfs::route(&self.path).is_some() {
-            let current =
-                crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-                    &self.path,
-                    Default::default(),
-                );
-            if current.reference != self.reference {
-                return Err("StaleRef: USB mount generation changed".into());
-            }
-        }
-        self.adapter()?.require(operation, create)
+        provider_registry::require(self, operation, create)
     }
     pub fn stat(&self) -> Result<Value, FsError> {
-        self.scope.authorize_method("fs.stat")?;
+        self.scope.authorize_method("host.fs.stat")?;
         self.require(FsOperation::Stat, false)?;
-        let mut value = self.adapter()?.stat()?;
-        // Internal stream/transfer DTOs use one symlink field across adapters.
+        let mut value = provider_registry::stat(self)?;
+        // Internal stream and transfer DTOs use one symlink field.
         if let Some(symlink) = value.get("isSymlink").cloned() {
             value["symlink"] = symlink;
         }
         Ok(value)
     }
     pub fn list(&self) -> Result<Value, FsError> {
-        self.scope.authorize_method("fs.list")?;
+        self.scope.authorize_method("host.fs.list")?;
         self.require(FsOperation::List, false)?;
         if directory_cache::enabled(&self.path) {
             let listing = self.desktop_listing(true, &[])?;
             return serde_json::to_value(listing.entries).map_err(|e| FsError::from(e.to_string()));
         }
-        self.adapter()?.list()
+        provider_registry::list(self)
     }
     pub fn is_dir(&self) -> Result<bool, FsError> {
         Ok(self.stat()?["isDir"] == true)
     }
-    /// Run a bounded filename search in the node's own storage adapter.
+    /// Run a bounded filename search through the node's owning VFS provider.
     pub fn search(
         &self,
         query: &str,
@@ -125,10 +112,9 @@ impl ResourceBroker {
         limit: usize,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(Vec<crate::core::files::Entry>, bool, usize), FsError> {
-        self.scope.authorize_method("fs.search")?;
+        self.scope.authorize_method("host.fs.search")?;
         self.require(FsOperation::Search, false)?;
-        self.adapter()?
-            .search(query, hidden, ignores, limit, cancelled)
+        provider_registry::search(self, query, hidden, ignores, limit, cancelled)
     }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn search_stream(
@@ -140,7 +126,7 @@ impl ResourceBroker {
         cancelled: &dyn Fn() -> bool,
         emit: &mut dyn FnMut(crate::core::files::Entry),
     ) -> Result<(bool, usize), FsError> {
-        self.scope.authorize_method("fs.search")?;
+        self.scope.authorize_method("host.fs.search")?;
         match self.require(FsOperation::Search, false) {
             Ok(()) => {}
             Err(error) if error.kind == FsErrorKind::Unsupported => {
@@ -148,28 +134,27 @@ impl ResourceBroker {
             }
             Err(error) => return Err(error),
         }
-        self.adapter()?
-            .search_stream(query, hidden, ignores, limit, cancelled, emit)
+        provider_registry::search_stream(self, query, hidden, ignores, limit, cancelled, emit)
     }
     pub fn open_read(&self) -> Result<Value, FsError> {
-        self.scope.authorize_method("fs.openRead")?;
+        self.scope.authorize_method("host.fs.openRead")?;
         self.require(FsOperation::Read, false)?;
-        streams::open_read(self, self.adapter()?.open_read()?).map_err(FsError::from)
+        streams::open_read(self, self.open_read_handle()?).map_err(FsError::from)
     }
     pub fn begin_write(&self, create: bool) -> Result<Value, FsError> {
-        self.scope.authorize_method("fs.beginWrite")?;
+        self.scope.authorize_method("host.fs.beginWrite")?;
         self.require(FsOperation::Write, create)?;
-        streams::begin_write(self, self.adapter()?.begin_write(create)?, create)
+        streams::begin_write(self, provider_registry::begin_write(self, create)?, create)
             .map_err(FsError::from)
     }
-    /// Create one child in this directory through its owning adapter. The
+    /// Create one child in this directory through its owning provider. The
     /// parent's child-create capability is checked once, then the child uses
     /// the same scoped stream/mkdir path as any other storage write.
     pub fn create(&self, name: &str, directory: bool) -> Result<String, FsError> {
         self.scope.authorize_method(if directory {
-            "fs.mkdir"
+            "host.fs.mkdir"
         } else {
-            "fs.beginWrite"
+            "host.fs.beginWrite"
         })?;
         let child = binding::child(self, name)?;
         if directory {
@@ -179,37 +164,35 @@ impl ResourceBroker {
             // capability; checking this broker's parent would grant from the
             // grandparent instead.
             child.require(FsOperation::Write, true)?;
-            child.adapter()?.begin_write(true)?.commit()?;
-        }
-        if !directory {
+            child.begin_write_handle_sized(true, Some(0))?.commit()?;
             changes::created(&child.path, name, false);
         }
         Ok(child.path)
     }
-    /// Move this node to the platform Trash when its adapter supports it.
+    /// Move this node to the platform Trash when local storage owns it.
     pub fn move_to_trash(&self) -> Result<(), FsError> {
-        self.scope.authorize_method("fs.remove")?;
+        self.scope.authorize_method("host.fs.remove")?;
         self.require(FsOperation::Remove, false)?;
-        self.adapter()?.move_to_trash()?;
+        provider_registry::move_to_trash(self)?;
         changes::removed(&self.path);
         Ok(())
     }
     pub fn mkdir(&self) -> Result<Value, FsError> {
-        self.scope.authorize_method("fs.mkdir")?;
+        self.scope.authorize_method("host.fs.mkdir")?;
         self.require(FsOperation::Mkdir, true)?;
-        let result = self.adapter()?.mkdir()?;
+        let result = provider_registry::mkdir(self)?;
         changes::committed_result(&self.path, &result);
         Ok(result)
     }
     pub fn remove(&self) -> Result<(), FsError> {
-        self.scope.authorize_method("fs.remove")?;
+        self.scope.authorize_method("host.fs.remove")?;
         self.require(FsOperation::Remove, false)?;
-        self.adapter()?.remove()?;
+        provider_registry::remove(self)?;
         changes::removed(&self.path);
         Ok(())
     }
     pub fn rename(&self, destination: &Self) -> Result<(), FsError> {
-        self.scope.authorize_method("fs.rename")?;
+        self.scope.authorize_method("host.fs.rename")?;
         self.require(FsOperation::Rename, false)?;
         destination.require(FsOperation::Write, true)?;
         if self.reference.mount_id != destination.reference.mount_id {
@@ -237,7 +220,7 @@ impl ResourceBroker {
             &metadata,
             true,
         )?;
-        self.adapter()?.rename(destination)?;
+        provider_registry::rename(self, destination)?;
         changes::renamed(&self.path, &destination.path);
         Ok(())
     }
@@ -249,10 +232,23 @@ impl ResourceBroker {
             owner: self.owner.clone(),
         }
     }
+
+    pub(crate) fn begin_write_handle_sized(
+        &self,
+        create: bool,
+        size: Option<u64>,
+    ) -> Result<Box<dyn WriteHandle>, FsError> {
+        provider_registry::begin_write_sized(self, create, size)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn begin_write_handle(&self, create: bool) -> Result<Box<dyn WriteHandle>, FsError> {
+        provider_registry::begin_write(self, create)
+    }
 }
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(test)]
-mod migration_tests;
+mod provider_tests;

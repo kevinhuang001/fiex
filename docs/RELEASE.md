@@ -1,4 +1,7 @@
-# Fiex 0.7.10
+# Fiex 0.7.11
+
+- Complete the unified typed Provider migration across Core and official plugins, using shared contracts and removing superseded filesystem adapters and virtual-directory special cases.
+- Route native filesystem, search, context-menu, and plugin operations through the shared provider registries and broker.
 
 - `ctx.aria2` now runs the pure-Rust `aria2-core` engine; no external `aria2c` binary is required.
 - aria2 and plugin HTTP downloads use environment/system proxies, and file reads can use long-lived timeouts instead of the old 90–120 second limit.
@@ -50,7 +53,7 @@
 - Separate downloaded connection cache from pinned offline copies, with upload indicators, configurable synchronization intervals and activity records.
 - Route builtin context menus and decorations through the shared event pipeline; keep asynchronous menus inside the viewport.
 - Use plugin protocol 6 for unified ref-based filesystem operations and provider-declared operation support. Plugins must use a matching protocol-6 SDK.
-- Reorganize native Core into domain modules and grouped resolvers; remove compatibility forwarding modules and unused entry points.
+- Reorganize native Core into domain modules and grouped provider modules; remove compatibility forwarding modules and unused entry points.
 - Fix large and partial stream writes, cleanup after failed commits, pagination cursor cycles and malformed node permission restrictions.
 - Prevent disabled lazy submenu actions from executing; fix Windows Clippy and static toolbar panel CI coverage.
 

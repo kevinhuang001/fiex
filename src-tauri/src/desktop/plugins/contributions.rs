@@ -10,7 +10,7 @@ pub(crate) async fn plugin_toolbar_invoke(
         return Err("too many toolbar targets".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::toolbar::invoke(&plugin_id, &directory, &paths)
+        crate::plugins::providers::toolbar::invoke(&plugin_id, &directory, &paths)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -19,7 +19,7 @@ pub(crate) async fn plugin_toolbar_invoke(
 #[tauri::command]
 pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::hooks::before_open(&path)
+        crate::plugins::providers::hooks::before_open(&path)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -28,7 +28,7 @@ pub(crate) async fn plugin_before_open(path: String) -> Result<serde_json::Value
 #[tauri::command]
 pub(crate) async fn preview_candidates(path: String) -> Result<Vec<serde_json::Value>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::preview::resource_candidates_json(&path)
+        crate::plugins::providers::preview::resource_candidates_json(&path)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -70,7 +70,7 @@ pub(crate) async fn preview_open(
     provider_order: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::preview::open_resource(
+        crate::plugins::providers::preview::open_resource(
             &path,
             provider_id.as_deref(),
             provider_order.as_deref(),
@@ -88,9 +88,9 @@ pub(crate) async fn plugin_context_menu_resolve(
 ) -> Result<Vec<serde_json::Value>, String> {
     let source = source.unwrap_or_else(|| "all".into());
     tauri::async_runtime::spawn_blocking(move || match source.as_str() {
-        "core" => crate::plugins::resolvers::context_menu::query_core(&directory, &paths),
-        "plugins" => crate::plugins::resolvers::context_menu::query_plugins(&directory, &paths),
-        "" | "all" => crate::plugins::resolvers::context_menu::query(&directory, &paths),
+        "core" => crate::plugins::providers::context_menu::query_core(&directory, &paths),
+        "plugins" => crate::plugins::providers::context_menu::query_plugins(&directory, &paths),
+        "" | "all" => crate::plugins::providers::context_menu::query(&directory, &paths),
         other => Err(format!("unknown context menu source: {other}")),
     })
     .await
@@ -103,7 +103,7 @@ pub(crate) async fn plugin_context_menu_children(
     parent_id: String,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::context_menu::children(&menu_session_id, &parent_id)
+        crate::plugins::providers::context_menu::children(&menu_session_id, &parent_id)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -117,7 +117,7 @@ pub(crate) async fn plugin_context_menu_execute(
     cancel: tauri::State<'_, crate::core::operations::OperationCancel>,
 ) -> Result<serde_json::Value, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::context_menu::execute(&menu_session_id, &item_id)
+        crate::plugins::providers::context_menu::execute(&menu_session_id, &item_id)
     })
     .await
     .map_err(|error| error.to_string())??;
@@ -130,7 +130,7 @@ pub(crate) async fn plugin_context_menu_execute(
                     as std::sync::Arc<crate::remote::ProgressFn>
             }),
         };
-        crate::plugins::resolvers::context_menu::execute_remote(&result, &options).await?;
+        crate::plugins::providers::context_menu::execute_remote(&result, &options).await?;
         return Ok(serde_json::json!({"handled":true}));
     }
     Ok(result)
@@ -141,7 +141,7 @@ pub(crate) async fn plugin_connection_menu_resolve(
     connection_id: String,
 ) -> Result<Vec<serde_json::Value>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::connection_menu::query(&connection_id)
+        crate::plugins::providers::connection_menu::query(&connection_id)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -154,7 +154,7 @@ pub(crate) async fn plugin_connection_menu_execute(
     item_id: String,
     menu_session_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    crate::plugins::resolvers::connection_menu::execute(
+    crate::plugins::providers::connection_menu::execute(
         &connection_id,
         &provider_id,
         &item_id,

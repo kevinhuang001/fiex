@@ -53,7 +53,6 @@ fn save_fallback(path: &Path, items: &BTreeMap<String, String>) -> Result<(), St
 struct Credentials {
     backend: Option<String>,
     vault: Option<Result<BTreeMap<String, String>, String>>,
-    legacy: BTreeMap<String, Result<Option<String>, String>>,
 }
 fn credentials() -> &'static Mutex<Credentials> {
     static STATE: OnceLock<Mutex<Credentials>> = OnceLock::new();
@@ -188,32 +187,9 @@ pub fn secret_get(plugin: &str, scope: &str, key: &str) -> Result<String, String
         .lock()
         .map_err(|_| "credential store locked")?;
     let id = fallback_key(plugin, scope, key);
-    let mut items = state.load()?;
+    let items = state.load()?;
     if let Some(value) = items.get(&id) {
         return Ok(value.clone());
-    }
-    // Old versions stored one keyring entry per credential. Read each at most
-    // once, and only after the user explicitly selected OS storage. A durable
-    // tombstone prevents deleted legacy credentials from being resurrected.
-    if state.backend()? == "oskeyring" && !items.contains_key(&format!("!deleted:{id}")) {
-        let legacy = state
-            .legacy
-            .entry(id.clone())
-            .or_insert_with(|| {
-                let entry =
-                    keyring::v1::Entry::new("org.fiex.plugin", &id).map_err(|e| e.to_string())?;
-                match entry.get_password() {
-                    Ok(value) => Ok(Some(value)),
-                    Err(keyring::v1::Error::NoEntry) => Ok(None),
-                    Err(e) => Err(format!("credential store access failed: {e}")),
-                }
-            })
-            .clone()?;
-        if let Some(value) = legacy {
-            items.insert(id, value.clone());
-            state.save(items)?;
-            return Ok(value);
-        }
     }
     Err("no matching credential".into())
 }
@@ -225,8 +201,6 @@ pub fn secret_delete(plugin: &str, scope: &str, key: &str) -> Result<(), String>
     let mut items = state.load()?;
     let id = fallback_key(plugin, scope, key);
     items.remove(&id);
-    items.insert(format!("!deleted:{id}"), String::new());
-    state.legacy.remove(&id);
     state.save(items)
 }
 pub fn secret_available() -> bool {

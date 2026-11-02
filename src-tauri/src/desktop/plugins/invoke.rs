@@ -21,7 +21,7 @@ pub(crate) async fn plugin_invoke(
     let bindings = resource_bindings.unwrap_or_default();
     let preview_scope = preview_session_id
         .as_deref()
-        .map(|id| crate::plugins::resolvers::preview::session_scope(id, &plugin_id))
+        .map(|id| crate::plugins::providers::preview::session_scope(id, &plugin_id))
         .transpose()?;
     let id = plugin_id.clone();
     let call = method.clone();

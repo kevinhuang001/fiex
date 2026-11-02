@@ -1,7 +1,7 @@
 //! Cross-repository test for one explicitly selected SearchProvider.
 use fiex_lib::{
     core::search::SearchMode, plugins::host as plugin_host,
-    plugins::resolvers::search::PluginSearchInput,
+    plugins::providers::search::PluginSearchInput,
 };
 
 fn main() {
@@ -38,13 +38,13 @@ fn main() {
         ignores: Vec::new(),
         limit: Some(50),
     };
-    let engine = fiex_lib::plugins::resolvers::search::engines(&request)
+    let engine = fiex_lib::plugins::providers::search::engines(&request)
         .into_iter()
         .find(|engine| engine.resolver.id == "plugin:org.fiex.mock")
         .expect("the activated mock must advertise filename search");
     assert!(engine.supports(SearchMode::Name));
     let (entries, truncated) =
-        fiex_lib::plugins::resolvers::search::run(&engine, &request, || false)
+        fiex_lib::plugins::providers::search::run(&engine, &request, || false)
             .expect("single-provider search query");
     assert!(!truncated);
     assert_eq!(entries.len(), 1, "{entries:?}");

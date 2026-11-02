@@ -5,8 +5,6 @@ mod cache;
 mod config;
 mod credentials;
 mod files;
-#[cfg(feature = "desktop")]
-mod mutate;
 mod reconcile;
 mod store;
 mod sync;
@@ -43,13 +41,11 @@ pub(crate) use config::{connection_by_mount, ensure_provider_access};
 pub use config::{connection_for_path, is_remote};
 #[cfg(feature = "desktop")]
 pub use files::is_cached;
-pub(crate) use files::{adapter_node, remember_adapter_entry};
 pub use files::{
     cached_path, download, download_dir, eject, ensure_downloaded, list_listing, provider_list,
     stat, ProgressFn, TransferOptions,
 };
-#[cfg(feature = "desktop")]
-pub(crate) use mutate::{remove, rename};
+pub(crate) use files::{provider_node, remember_provider_entry};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 pub(crate) use store::load_stored_public;
 pub use store::{

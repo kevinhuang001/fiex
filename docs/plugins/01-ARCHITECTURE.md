@@ -10,10 +10,11 @@ Fiex Desktop / Sidebar / TabHost
     |      Capability + Grant + Scope 的单一判断入口
     +-- Resource Broker
     |      fs_access / plugin_net / process / resources / ipc
-    +-- FsResolver         Core 侧统一 vfs.* 客户端：信封、校验、流
-    +-- ProviderRegistry   插件 initialize 上报的能力集合
-    +-- VFS / mounts       Core 分配 mountId，处理资源身份与视图
-    +-- EventRouter        统一匹配、执行、校验和事件结果策略
+    +-- ResourceBroker     通过共享 VfsProvider 路由可信 ResourceRef
+    +-- ProviderRegistry   保存 Native Provider 与复用 IPC Proxy
+    +-- VFS / mounts       Core 分配 mountId，解析存储 owner 与视图
+    +-- ProviderMatcher    对 Native 与 IPC 候选应用同一声明式规则
+    +-- EventRouter        统一执行、校验和事件结果策略
     +-- ResourceSnapshot   targets 元数据、操作引用与按需内容
     +-- Info / Preview     事件专用业务处理与渲染
     +-- ContentHost        Explorer、VFS 视图、PluginView iframe
@@ -29,16 +30,17 @@ Core 负责 Resolve，SDK 负责 Provide：
 
 | 功能        | Core                                              | SDK                             |
 | ----------- | ------------------------------------------------- | ------------------------------- |
-| Info        | `InfoResolver`（`plugin_info`）                   | `InfoProvider`                  |
-| Preview     | `PreviewResolver`（`plugin_preview`）             | `PreviewProvider`               |
-| 右键菜单    | `ContextMenuResolver`（`plugin_context_menu`）    | `ContextMenuProvider`           |
-| 连接菜单    | `ConnectionMenuResolver`（`connection_menu`）     | `ConnectionContextMenuProvider` |
-| Decorations | `DecorationResolver`（`plugin_decorations`）      | `DecorationProvider`            |
-| Search      | `SearchResolver`（`plugin_search`）               | `SearchProvider`                |
-| Toolbar     | `ToolbarResolver`                                 | `ToolbarProvider`               |
-| 文件系统    | `FsResolver`（`fs_resolver`）+ `ProviderRegistry` | `VfsProvider`                   |
+| Info        | `InfoProvider` registry + `IpcInfo`               | `InfoProvider`                  |
+| Preview     | `PreviewProvider` registry + `IpcPreview`         | `PreviewProvider`               |
+| 右键菜单    | `ContextMenuProvider` registry + `IpcContextMenu` | `ContextMenuProvider`           |
+| 连接菜单    | `ConnectionContextMenuProvider` registry + IPC    | `ConnectionContextMenuProvider` |
+| Decorations | `DecorationProvider` registry + IPC               | `DecorationProvider`            |
+| Search      | `SearchProvider` registry + `IpcSearch`           | `SearchProvider`                |
+| Toolbar     | `ToolbarProvider` registry + `IpcToolbar`         | `ToolbarProvider`               |
+| VFS         | shared `VfsProvider` native registry + `IpcVfs`   | `VfsProvider`                   |
 
-- Resolver 负责匹配、协调、调用、校验和结果聚合；Provider 是插件实现。
+- ProviderMatcher 负责候选匹配；各 feature service 调用同一个共享 Trait，
+  Native 实现直接运行，IPC Proxy 复用 SDK Dispatcher。
 - `ResourceBroker`（`fs_access` / `net` / `process` / `resources`）
   负责资源解析、权限、Operation Scope 和访问路由。
 - `EventRouter` 保留，负责通用事件调度；`ProviderRegistry` 保存

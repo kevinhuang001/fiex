@@ -52,10 +52,7 @@ function fieldOf(
   decoration: EntryDecoration | undefined,
   target: DecorationTarget,
 ): DecorationField | undefined {
-  const field = decoration?.fields?.[target]
-  if (field) return field
-  if (target === 'name' && decoration) return { badges: decoration.badges, style: decoration.style }
-  return undefined
+  return decoration?.fields?.[target]
 }
 
 function decorationVars(style: DecorationStyle): CSSProperties {

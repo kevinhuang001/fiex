@@ -86,19 +86,8 @@ impl ResourceSnapshot {
             getrandom::getrandom(&mut key).expect("Core resource identity entropy unavailable");
             key
         });
-        let mount_id = crate::plugins::mounts::parse(display)
-            .map(|uri| uri.mount_id)
-            .unwrap_or_else(|_| {
-                if let Some(route) = crate::usbfs::route(display) {
-                    return format!(
-                        "core:usb:{}",
-                        crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into())
-                    );
-                }
-                crate::core::volumes::virtual_resolvers::view_for(display)
-                    .map(|provider| provider.id().to_owned())
-                    .unwrap_or_else(|| "local".into())
-            });
+        let mount_id = crate::core::fs::provider_registry::reference_mount_id(display)
+            .unwrap_or_else(|| "local".into());
         let mut digest = Sha256::new();
         digest.update(key);
         digest.update(mount_id.as_bytes());
@@ -115,40 +104,18 @@ impl ResourceSnapshot {
     }
 
     pub fn resolve(display: &str) -> Result<Self, String> {
-        if crate::core::volumes::virtual_resolvers::opaque(display) {
-            let entry = crate::core::volumes::virtual_resolvers::resource_entry(display)?;
-            return Ok(Self::from_entry(display, &entry));
-        }
-        if let Some(route) = crate::usbfs::route(display) {
-            let entry = crate::usbfs::entry(&route)?;
-            return Ok(Self::from_entry(display, &entry));
-        }
-        if !crate::plugins::mounts::handles(display) {
-            // Share ResourceBroker's trusted owner resolution. Unsupported
-            // schemes may not masquerade as OS-local files during metadata
-            // discovery or provider candidate matching.
-            if !matches!(
-                crate::core::fs::provider_registry::identity(display),
-                Some(("fs", provider, _)) if provider == "core:local-fs"
-            ) {
-                return Err("Unsupported: unregistered filesystem URI".into());
+        match crate::core::fs::provider_registry::resource_access(display).map_err(String::from)? {
+            crate::core::fs::provider_registry::ResourceAccess::HostPath => {
+                Ok(Self::new(display, Path::new(display)))
             }
-            return Ok(Self::new(display, Path::new(display)));
+            crate::core::fs::provider_registry::ResourceAccess::Provider => {
+                let entry = crate::core::fs::provider_registry::resource_entry(display)?;
+                Ok(Self::from_entry(display, &entry))
+            }
         }
-        let entry = if crate::remote::is_remote(display) {
-            crate::remote::stat(display)?
-        } else {
-            crate::plugins::vfs::stat(display)?
-        };
-        Ok(Self::from_entry(display, &entry))
     }
     pub fn from_entry(display: &str, entry: &crate::core::files::Entry) -> Self {
         let mut resource = Self::from_metadata(display, Self::entry_metadata(entry));
-        if crate::core::volumes::applications::is_user(display) {
-            if let Ok(path) = crate::core::volumes::applications::stored_path(display) {
-                resource.local = path;
-            }
-        }
         resource.read_only = entry.readonly;
         resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(
             display, entry,
@@ -174,9 +141,11 @@ impl ResourceSnapshot {
     }
     pub fn from_metadata(display: &str, metadata: ResourceMetadata) -> Self {
         let reference = Self::reference_for(display);
+        let local = crate::core::volumes::native_vfs::backing_path(display)
+            .unwrap_or_else(|| PathBuf::from(display));
         Self {
             display: display.into(),
-            local: PathBuf::from(display),
+            local,
             reference,
             stat: None,
             is_dir: metadata.kind == "directory",
@@ -236,119 +205,8 @@ impl ResourceSnapshot {
     }
 }
 
+mod binding;
+pub use binding::{bind_selected, ResourceBinding};
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn unknown_schemes_fail_before_local_metadata_discovery() {
-        for path in ["unknown://not-registered", "unknown:opaque-reference"] {
-            assert!(ResourceSnapshot::resolve(path).is_err(), "{path}");
-        }
-    }
-
-    #[test]
-    fn metadata_projection_does_not_grant_read_and_reuses_identity() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("example.txt");
-        fs::write(&file, b"abc").unwrap();
-        let snapshot = ResourceSnapshot::new(file.to_str().unwrap(), &file);
-        let without_grant = snapshot.context("org.example", false, false);
-        let with_meta = snapshot.context("org.example", true, false);
-        assert_eq!(
-            without_grant.targets[0].reference,
-            with_meta.targets[0].reference
-        );
-        assert!(without_grant.targets[0].metadata.is_none());
-        assert_eq!(
-            with_meta.targets[0].metadata.as_ref().unwrap().size,
-            Some(3)
-        );
-    }
-
-    #[test]
-    fn projected_context_carries_trusted_view_storage_and_effective_operations() {
-        let resource = ResourceSnapshot::from_metadata(
-            crate::core::volumes::applications::URI,
-            ResourceMetadata {
-                name: "Applications".into(),
-                kind: "directory".into(),
-                ..Default::default()
-            },
-        );
-        let projected = resource.project("org.example", "", true, false);
-        assert_eq!(
-            projected
-                .view
-                .as_ref()
-                .map(|location| location.provider_id.as_str()),
-            Some("core:applications")
-        );
-        assert_eq!(
-            projected
-                .storage
-                .as_ref()
-                .map(|location| location.provider_id.as_str()),
-            Some("core:applications")
-        );
-        assert!(projected
-            .capabilities
-            .allows(crate::plugins::provider_registry::FsOperation::Mkdir));
-        let wire = serde_json::to_value(&projected).unwrap();
-        assert!(wire.get("path").is_none());
-
-        let metadata_hidden = resource.project("org.example", "", false, false);
-        assert!(metadata_hidden.metadata.is_none());
-        assert!(metadata_hidden.capabilities.operations.is_empty());
-        assert!(metadata_hidden.view.is_some());
-    }
-}
-
-/// Private Core-UI binding. Plugin iframe SDKs receive only `reference`; the
-/// path travels out of band and must be inside this invocation's selection.
-#[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceBinding {
-    #[serde(rename = "ref")]
-    pub reference: ResourceRef,
-    pub path: String,
-}
-pub fn bind_selected(
-    scope: &mut crate::plugins::resource::fs_access::Scope,
-    bindings: &[ResourceBinding],
-) -> Result<(), String> {
-    for binding in bindings {
-        if crate::plugins::mounts::handles(&binding.path)
-            || crate::usbfs::route(&binding.path).is_some()
-            || crate::core::volumes::virtual_resolvers::opaque(&binding.path)
-        {
-            let snapshot = ResourceSnapshot::resolve(&binding.path)?;
-            if snapshot.reference != binding.reference {
-                return Err("ScopeDenied: resource reference does not match selected node".into());
-            }
-            scope.bind_remote(
-                &serde_json::json!({"ref":binding.reference,"metadata":snapshot.metadata()}),
-                &snapshot,
-            )?;
-            continue;
-        }
-        // An attacker-controlled resource binding is never promoted to a
-        // local path merely because its scheme has no registered mount.
-        if !matches!(
-            crate::core::fs::provider_registry::identity(&binding.path),
-            Some(("fs", provider, _)) if provider == "core:local-fs"
-        ) {
-            return Err("ScopeDenied: unsupported resource owner".into());
-        }
-        let path = std::path::Path::new(&binding.path);
-        scope.authorize(&binding.path)?;
-        let snapshot = ResourceSnapshot::new(&binding.path, path);
-        if snapshot.reference != binding.reference {
-            return Err("ScopeDenied: resource reference does not match selected node".into());
-        }
-        scope.bind_resource(
-            &serde_json::json!({"ref":binding.reference,"metadata":snapshot.metadata()}),
-            Some(path),
-        )?;
-    }
-    Ok(())
-}
+mod tests;

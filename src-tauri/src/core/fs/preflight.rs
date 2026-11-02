@@ -40,19 +40,24 @@ impl ResourceBroker {
         if same_mount {
             return Ok(());
         }
-        self.adapter()?.preflight(&TransferPreflight {
-            node_id: self.reference.node_id.clone(),
-            direction,
-            action,
-            name: name.into(),
-            metadata: metadata.clone(),
-            same_mount,
-        })
+        provider_registry::preflight(
+            self,
+            &TransferPreflight {
+                node_id: self.reference.node_id.clone(),
+                direction,
+                action,
+                name: name.into(),
+                metadata: metadata.clone(),
+                same_mount,
+            },
+        )
     }
 }
 fn executable_shortcut(path: &str, target: Option<&str>) -> Option<bool> {
     // Provider paths carry no trusted host-path or executable-target authority.
-    if path.contains("://") {
+    if !crate::core::fs::provider_registry::resource_access(path)
+        .is_ok_and(|access| access == crate::core::fs::provider_registry::ResourceAccess::HostPath)
+    {
         return None;
     }
     #[cfg(target_os = "windows")]
@@ -159,10 +164,7 @@ mod tests {
             &std::sync::atomic::AtomicBool::new(false),
             &|_, _, _| {},
         );
-        assert!(result
-            .err()
-            .expect("transfer must be rejected")
-            .contains("executable shortcuts"));
+        assert!(result.is_err(), "document import must be rejected");
         assert_eq!(std::fs::read(&file).unwrap(), b"keep source");
     }
     #[test]

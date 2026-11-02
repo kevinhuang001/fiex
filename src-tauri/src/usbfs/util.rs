@@ -152,6 +152,20 @@ pub fn route(path: &str) -> Option<Route> {
     })
 }
 
+pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
+    let root = route(parent).ok_or("invalid USB parent")?;
+    let candidate = route(child).ok_or("invalid USB child")?;
+    if root.root != candidate.root
+        || !Path::new(&candidate.rel).starts_with(&root.rel)
+        || Path::new(&candidate.rel)
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err("child outside selected USB resource".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod routing_security_tests {
     use super::*;

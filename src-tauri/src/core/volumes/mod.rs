@@ -6,16 +6,14 @@
 //! - `mounts`: mounted disks, unmounted removable media and mounting,
 //! - `trash`: browsing, restoring and emptying the Trash.
 
-pub mod application_folders;
 pub mod application_policy;
 pub mod applications;
 mod mounts;
+pub mod native_vfs;
 pub mod recycle;
 mod roots;
 mod trash;
 pub mod trash_vfs;
-pub mod virtual_resolvers;
-pub mod virtual_storage;
 #[cfg(target_os = "windows")]
 mod windows_shell;
 

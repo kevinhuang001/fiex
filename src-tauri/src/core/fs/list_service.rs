@@ -12,7 +12,7 @@ fn flights() -> &'static Mutex<HashMap<String, Flight>> {
 }
 pub(super) fn fresh(broker: &ResourceBroker) -> Result<Listing, FsError> {
     if !directory_cache::enabled(&broker.path) {
-        return broker.adapter()?.desktop_listing(&broker.path, true, &[]);
+        return provider_registry::desktop_listing(broker, true, &[]);
     }
     let revision = super::changes::revision(&broker.path);
     let identity = directory_cache::key(&broker.path);
@@ -33,10 +33,10 @@ pub(super) fn fresh(broker: &ResourceBroker) -> Result<Listing, FsError> {
     };
     if owner {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let listing = broker.adapter()?.desktop_listing(&broker.path, true, &[])?;
-            if identity == directory_cache::key(&broker.path) {
-                // Live listings reconcile with committed local changes. This
-                // also protects a write that completed during the RPC.
+            let listing = provider_registry::desktop_listing(broker, true, &[])?;
+            if revision == super::changes::revision(&broker.path)
+                && identity == directory_cache::key(&broker.path)
+            {
                 directory_cache::store(&broker.path, &listing);
             }
             let mut visible = listing;

@@ -26,7 +26,7 @@
 
 - `id` 是唯一插件身份，也是所有贡献身份。
 - 有 native 后端的插件必须有 `runtime.entrypoints`；纯主题插件可以没有 runtime。
-- `schemaVersion` 当前为 `2`，IPC 协议版本为 `5.0`。
+- `schemaVersion` 当前为 `2`，IPC 协议版本为 `6.0`。
 
 ## 扩展点
 

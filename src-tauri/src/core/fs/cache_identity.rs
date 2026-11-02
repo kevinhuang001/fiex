@@ -2,7 +2,7 @@
 pub(crate) fn enabled(path: &str) -> bool {
     crate::usbfs::route(path).is_none()
         && (crate::plugins::mounts::handles(path)
-            || crate::core::volumes::virtual_resolvers::view_for(path).is_some())
+            || crate::core::volumes::native_vfs::view_for(path).is_some())
 }
 
 pub(crate) fn key(path: &str) -> String {
@@ -37,7 +37,7 @@ pub(crate) fn key(path: &str) -> String {
             }
         }
     }
-    if let Some(virtual_path) = crate::core::volumes::virtual_storage::virtual_path_key(path) {
+    if let Some(virtual_path) = crate::core::volumes::native_vfs::tree_path_key(path) {
         return virtual_path;
     }
     path.into()

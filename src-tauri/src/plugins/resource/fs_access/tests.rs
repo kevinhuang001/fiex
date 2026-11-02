@@ -235,5 +235,5 @@ fn create(root: &Scope, input: &str) -> Result<Value, String> {
         OpenOptions::new().read(true).write(true).create_new(true),
     )
     .map_err(|e| e.to_string())?;
-    entry(&dir, &path)
+    entry(root, &dir, &path)
 }

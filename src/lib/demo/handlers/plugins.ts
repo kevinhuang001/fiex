@@ -228,11 +228,7 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
       // waits for plugin IPC; "all" keeps the one-batch contract for callers
       // that still ask for it.
       const source = String(a.source || 'all')
-      if (
-        source === 'plugins' &&
-        (directory === 'applications://' || directory === 'recyclebin://')
-      )
-        return []
+      const nativeViewMenus: Record<string, unknown>[] = []
       if (directory === 'applications://') {
         const user = paths.some((path) => /^applications:\/\/(?:user\/|~)/.test(path))
         // Mirror Core: installed applications use the explicit launch verb,
@@ -241,48 +237,44 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           paths[0] !== undefined &&
           paths[0] !== 'applications://' &&
           !/^applications:\/\/(?:user\/|~)/.test(paths[0])
-        return [
-          {
-            kind: 'builtin',
-            providerId: 'builtin:core:applications',
-            menuSessionId: `virtual:${JSON.stringify(paths)}`,
-            items: [
-              { id: 'open', kind: 'action', title: launch ? '启动应用' : '打开', icon: 'open' },
-              ...(user
-                ? [
-                    {
-                      id: 'delete',
-                      kind: 'action',
-                      title: '彻底删除',
-                      icon: 'trash',
-                      danger: true,
-                      placement: 'tail',
-                    },
-                  ]
-                : []),
-            ],
-          },
-        ]
+        nativeViewMenus.push({
+          kind: 'builtin',
+          providerId: 'core.applications.menu',
+          menuSessionId: `virtual:${JSON.stringify(paths)}`,
+          items: [
+            { id: 'open', kind: 'action', title: launch ? '启动应用' : '打开', icon: 'open' },
+            ...(user
+              ? [
+                  {
+                    id: 'delete',
+                    kind: 'action',
+                    title: '彻底删除',
+                    icon: 'trash',
+                    danger: true,
+                    placement: 'tail',
+                  },
+                ]
+              : []),
+          ],
+        })
       }
-      if (directory === 'recyclebin://') {
-        return [
-          {
-            kind: 'builtin',
-            providerId: 'builtin:core:trash',
-            menuSessionId: `virtual:${JSON.stringify(paths)}`,
-            items: [
-              { id: 'restore', kind: 'action', title: '放回原处', icon: 'restore' },
-              {
-                id: 'delete',
-                kind: 'action',
-                title: '彻底删除',
-                icon: 'trash',
-                danger: true,
-                placement: 'tail',
-              },
-            ],
-          },
-        ]
+      if (directory === 'recyclebin://' || directory === 'trash://') {
+        nativeViewMenus.push({
+          kind: 'builtin',
+          providerId: 'core.trash.menu',
+          menuSessionId: `virtual:${JSON.stringify(paths)}`,
+          items: [
+            { id: 'restore', kind: 'action', title: '放回原处', icon: 'restore' },
+            {
+              id: 'delete',
+              kind: 'action',
+              title: '彻底删除',
+              icon: 'trash',
+              danger: true,
+              placement: 'tail',
+            },
+          ],
+        })
       }
       const plugins = demoPlugins
         .filter((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
@@ -294,6 +286,8 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
           }
         })
       if (source === 'plugins') return plugins
+      if (nativeViewMenus.length)
+        return source === 'core' ? nativeViewMenus : [...nativeViewMenus, ...plugins]
       const builtins = demoBuiltinMenus(a)
       if (source === 'core') return builtins
       return [...builtins, ...plugins]
@@ -628,7 +622,6 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
                 return [
                   {
                     path: entry.path,
-                    badges: [],
                     fields: {
                       name: {
                         badges: [{ text: 'M', color: 'orange', tooltip: 'Git：已修改' }],
@@ -648,7 +641,11 @@ export async function handlePlugins(command: string, a: Record<string, unknown>)
                 return [
                   {
                     path: entry.path,
-                    badges: [{ text: extension.toUpperCase().slice(0, 3), color: 'neutral' }],
+                    fields: {
+                      name: {
+                        badges: [{ text: extension.toUpperCase().slice(0, 3), color: 'neutral' }],
+                      },
+                    },
                     providers: ['Archive'],
                   },
                 ]

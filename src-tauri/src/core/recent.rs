@@ -1,11 +1,7 @@
 //! Recently opened files, persisted so the sidebar's Recent location survives
 //! restarts. Store source identities, never downloaded cache paths.
-use crate::core::files::{entry, Entry};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    sync::Mutex,
-};
+use crate::core::files::Entry;
+use std::{fs, path::PathBuf, sync::Mutex};
 
 const LIMIT: usize = 40;
 
@@ -39,18 +35,25 @@ fn save(list: &[String]) {
 }
 
 pub fn record(state: &Recent, path: &str) {
-    if crate::core::volumes::virtual_resolvers::opaque(path) {
+    use crate::core::fs::provider_registry::ResourceOwner;
+
+    let Ok(owner) = crate::core::fs::provider_registry::owner(path) else {
+        return;
+    };
+    let is_local = matches!(&owner, ResourceOwner::LocalFs);
+    if !matches!(
+        &owner,
+        ResourceOwner::LocalFs
+            | ResourceOwner::PluginMount { .. }
+            | ResourceOwner::NativeVfs("core:usb-fs")
+    ) {
         return;
     }
-    if crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path).map_or(
-        true,
-        |resource| {
-            resource.is_dir
-                || (!crate::plugins::mounts::handles(path)
-                    && crate::usbfs::route(path).is_none()
-                    && resource.stat.is_none())
-        },
-    ) {
+    let Ok(resource) = crate::plugins::resource::resource_context::ResourceSnapshot::resolve(path)
+    else {
+        return;
+    };
+    if resource.is_dir || (is_local && resource.stat.is_none()) {
         return;
     }
     let mut list = state.0.lock().unwrap();
@@ -81,15 +84,7 @@ pub fn source_for(alias: &str) -> Result<String, String> {
         .ok_or_else(|| "StaleRef: item is no longer in Recent".into())
 }
 fn source_entry(path: &str) -> Result<Entry, String> {
-    if crate::remote::is_remote(path) {
-        crate::remote::stat(path)
-    } else if crate::plugins::vfs::handles(path) {
-        crate::plugins::vfs::stat(path)
-    } else if let Some(route) = crate::usbfs::route(path) {
-        crate::usbfs::entry(&route)
-    } else {
-        entry(Path::new(path))
-    }
+    crate::core::fs::provider_registry::resource_entry(path)
 }
 pub fn entry_for_alias(alias: &str) -> Result<Entry, String> {
     let source = source_for(alias)?;

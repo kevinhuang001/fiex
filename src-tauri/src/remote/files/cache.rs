@@ -143,9 +143,9 @@ pub fn cached_path(path: &str) -> Result<String, String> {
 }
 
 /// Resolve the provider's opaque ID, never a local download-cache path.
-pub(crate) fn adapter_node(
+pub(crate) fn provider_node(
     path: &str,
-) -> Result<(crate::plugins::resolvers::fs::Mount, String), String> {
+) -> Result<(crate::plugins::providers::fs::Mount, String), String> {
     let (conn, relative) = connection_for_path(path).ok_or("StaleRef: connection removed")?;
     let plugin_id = ensure_provider_access(&conn)?;
     let rel = rel_string(&relative);
@@ -163,10 +163,10 @@ pub(crate) fn adapter_node(
             .ok_or("StaleRef: provider node is unknown")?
     };
     Ok((
-        crate::plugins::resolvers::fs::Mount {
+        crate::plugins::providers::fs::Mount {
             mount_id: conn.mount_id.clone(),
             plugin_id,
-            source: crate::plugins::resolvers::fs::Source::Connection(provider_config(&conn)),
+            source: crate::plugins::providers::fs::Source::Connection(provider_config(&conn)),
             scope: None,
         },
         node,
@@ -175,9 +175,9 @@ pub(crate) fn adapter_node(
 
 /// Bind a committed opaque provider ID to the exact scoped destination. This
 /// is also needed for newly created directories before their first listing.
-pub(crate) fn remember_adapter_entry(
+pub(crate) fn remember_provider_entry(
     path: &str,
-    entry: &crate::plugins::resolvers::fs::FsEntry,
+    entry: &crate::plugins::providers::fs::FsEntry,
 ) -> Result<(), String> {
     let (connection, relative) = connection_for_path(path).ok_or("StaleRef: connection removed")?;
     ensure_provider_access(&connection)?;

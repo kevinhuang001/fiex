@@ -1,8 +1,9 @@
 //! Bounded VFS/USBFS content-search fallback when a native content-search
 //! implementation is unavailable. Every read uses ResourceBroker's scoped
 //! storage owner rather than materializing a remote file in a host path.
-use super::*;
-use std::collections::HashSet;
+use super::{walker::BINARY_PROBE, *};
+use crate::core::ignores::IgnoreSet;
+use std::{collections::HashSet, path::Path};
 
 const MAX_DIRECTORIES: usize = 1000;
 const MAX_REMOTE_FILES: usize = 1024;
