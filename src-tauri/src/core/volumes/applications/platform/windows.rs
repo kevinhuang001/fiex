@@ -18,7 +18,7 @@ struct WindowsApp {
 pub(in crate::core::volumes::applications) fn resolve_windows_executable(
     value: &str,
 ) -> Option<String> {
-    if !super::is_executable_target(value) {
+    if !is_executable_target(value) {
         return None;
     }
     let path = if value.starts_with('{') {
