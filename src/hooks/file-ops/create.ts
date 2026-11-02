@@ -1,10 +1,25 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { uniqueName } from '@/lib/files'
+import type { Entry } from '@/lib/types'
 import type { FileOpsContext } from './types'
 
 /** Creating the next entry, then handing it straight to the inline rename. */
 export function createActions({ x, run }: FileOpsContext) {
+  const renameCreatedEntry = async (path: string) => {
+    let entry: Entry
+    try {
+      entry = await call<Entry>('file_info', { path })
+    } catch (cause) {
+      const message = String(cause)
+      if (!reportFilesystemPermissionError(message, `stat\n${path}`)) x.setError(message)
+      x.reload()
+      return
+    }
+    if (entry.allowedOps?.includes('rename')) x.beginRename(path, entry.allowedOps)
+    else x.reload()
+  }
   const create = async () => {
     if (!x.directoryAllowedOps.includes('mkdir')) {
       x.setError(t('此位置不支持新建文件夹'))
@@ -19,7 +34,7 @@ export function createActions({ x, run }: FileOpsContext) {
     )
     if (!path) return
     if (x.query) x.setQuery('')
-    x.beginRename(path)
+    await renameCreatedEntry(path)
   }
   /** An empty file goes through the provider's write stream with a name; the
    * menu only offers it when the directory declares `write`. */
@@ -37,7 +52,7 @@ export function createActions({ x, run }: FileOpsContext) {
     )
     if (!path) return
     if (x.query) x.setQuery('')
-    x.beginRename(path)
+    await renameCreatedEntry(path)
   }
   return { create, createFile }
 }

@@ -396,8 +396,9 @@ export function useListing(
     setTagFilterState(null)
   }, [path])
   const beginRename = useCallback(
-    (target: string) => {
-      if (!entries.find((entry) => entry.path === target)?.allowedOps?.includes('rename')) return
+    (target: string, capabilities?: string[]) => {
+      const allowed = entries.find((entry) => entry.path === target)?.allowedOps ?? capabilities
+      if (!allowed?.includes('rename')) return
       setSelected([target])
       setRenaming(target)
     },
