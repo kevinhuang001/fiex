@@ -201,3 +201,91 @@ pub(crate) fn remember_provider_entry(
         .map(|ops| ops.iter().map(|op| op.as_str().to_owned()).collect());
     save_meta(&connection, &metadata)
 }
+
+
+/// Observe a complete unified VFS listing without treating it as a write.
+/// A previous implementation re-used remember_provider_entry for list results,
+/// which marked every downloaded file as a conflict on each refresh.
+pub(crate) fn observe_connection_listing(
+    directory: &str,
+    entries: &[(String, crate::plugins::providers::fs::FsEntry)],
+) -> Result<(), String> {
+    let (conn, parent) =
+        connection_for_path(directory).ok_or("StaleRef: connection removed")?;
+    ensure_provider_access(&conn)?;
+    let parent = rel_string(&parent);
+    let mut meta = load_meta(&conn);
+    let inherited_pin = meta.files.iter().any(|(key, file)| {
+        file.pinned && file.is_dir && super::super::sync::in_tree(&parent, key)
+    });
+    for (path, entry) in entries {
+        let uri = crate::plugins::mounts::parse(path)?;
+        if uri.mount_id != conn.mount_id {
+            return Err("listing contains a foreign mount".into());
+        }
+        let file = meta.files.entry(uri.relative).or_default();
+        // An existing download owns its revision/baseline until reconciliation.
+        if !file.downloaded {
+            file.size = entry.size.unwrap_or(0);
+            file.modified = entry.modified.unwrap_or(0).max(0) as u64;
+            file.revision = entry.revision.clone().unwrap_or_default();
+        }
+        file.node_id = entry.node_id.clone();
+        file.is_dir = entry.is_dir();
+        file.readonly = entry.readonly.unwrap_or(false);
+        file.allowed_ops = entry
+            .allowed_ops
+            .as_ref()
+            .map(|ops| ops.iter().map(|op| op.as_str().to_owned()).collect());
+        if !file.excluded {
+            file.pinned |= inherited_pin;
+        }
+    }
+    meta.listed.insert(parent);
+    save_meta(&conn, &meta)
+}
+
+/// Core owns cache state; it does not belong to the plugin's VFS entry DTO.
+/// Project this state back onto unified FS/VFS entries for badges and menus.
+/// Plugin-created ephemeral views have no connection cache and are unchanged.
+pub(crate) fn apply_connection_cache_state(entries: &mut [crate::core::files::Entry]) {
+    let Some(first) = entries.first() else { return };
+    let Some((conn, _)) = connection_for_path(&first.path) else {
+        return;
+    };
+    let meta = load_meta(&conn);
+    let cached_dirs = super::super::cache::cached_dirs(&meta);
+    for entry in entries {
+        let Ok(uri) = crate::plugins::mounts::parse(&entry.path) else {
+            continue;
+        };
+        if uri.mount_id != conn.mount_id {
+            continue;
+        }
+        let rel = uri.relative;
+        let state = meta.files.get(&rel);
+        let has_cache = if entry.is_dir {
+            cached_dirs.contains(&rel)
+        } else {
+            state.is_some_and(|file| file.downloaded)
+                && local_for(&conn, &rel).is_file()
+        };
+        let pinned = state.is_some_and(|file| file.pinned);
+        let dirty = state.is_some_and(|file| super::super::sync::dirty(&conn, &rel, file));
+        entry.has_cache = has_cache;
+        entry.pinned = pinned;
+        entry.uploaded = state.is_some_and(|file| file.uploaded && !file.conflict)
+            && !dirty
+            && (has_cache || pinned);
+        entry.sync = Some(
+            match state {
+                Some(file) if file.conflict => "conflict",
+                Some(_) if dirty => "pending",
+                Some(_) if pinned => "pinned",
+                Some(_) if has_cache => "synced",
+                _ => "cloud",
+            }
+            .into(),
+        );
+    }
+}
