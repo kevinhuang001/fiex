@@ -30,7 +30,7 @@ pub use broker::{
     stat_for, write_sized_for,
 };
 pub(crate) use presentation::recent_reveal_source;
-pub use presentation::{default_view, icon_for, opaque, readonly, resource_entry};
+pub use presentation::{default_view, icon_for, opaque, resource_entry};
 use recent_provider::RecentView;
 pub use shared::core_entry;
 use shared::target_invocation;

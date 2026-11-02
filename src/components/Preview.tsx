@@ -15,7 +15,7 @@ import { Modal } from './ui/Modal'
 import { Button } from './ui/button'
 import { FileIcon } from './FileIcon'
 import { call, asset, native } from '@/lib/api'
-import { reportError } from '@/lib/errorCenter'
+import { reportError, reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { date, kind, size } from '@/lib/files'
 import { highlightCode } from '@/lib/highlight'
 import {
@@ -126,7 +126,9 @@ export function Preview({
       .catch((cause) => {
         if (active) {
           setError(String(cause))
-          reportError(cause, 'preview:candidates')
+          if (!reportFilesystemPermissionError(cause, `preview\n${entry.path}`)) {
+            reportError(cause, 'preview:candidates')
+          }
           setReadyToShow(true)
         }
       })
@@ -216,7 +218,9 @@ export function Preview({
       .catch((cause) => {
         if (!active) return
         setError(String(cause))
-        reportError(cause, 'preview:open')
+        if (!reportFilesystemPermissionError(cause, `preview\n${entry.path}`)) {
+          reportError(cause, 'preview:open')
+        }
         setLoadingPage(null)
       })
       .finally(() => {

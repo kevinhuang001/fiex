@@ -13,7 +13,6 @@ function entry(name: string, isDir = false): Entry {
     created: 0,
     extension: isDir ? '' : (name.split('.').pop() || '').toLowerCase(),
     mime: 'application/octet-stream',
-    readonly: false,
     linkTarget: null,
     tags: [],
     sync: null,

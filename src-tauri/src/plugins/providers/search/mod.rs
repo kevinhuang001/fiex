@@ -121,7 +121,6 @@ pub(crate) fn search_entry(entry: Entry) -> SearchEntry {
         created: entry.created,
         extension: entry.extension,
         mime: entry.mime,
-        readonly: entry.readonly,
         link_target: entry.link_target,
         allowed_ops: entry.allowed_ops,
         tags: entry
@@ -150,7 +149,6 @@ fn core_entry(entry: SearchEntry) -> Entry {
         created: entry.created,
         extension: entry.extension,
         mime: entry.mime,
-        readonly: entry.readonly,
         link_target: entry.link_target,
         allowed_ops: entry.allowed_ops,
         tags: entry

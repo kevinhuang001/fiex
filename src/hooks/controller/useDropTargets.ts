@@ -82,6 +82,6 @@ export function useDropTargets({
       active = false
       dispose?.()
     }
-  }, [x.path, conflict, x.directoryReadOnly])
+  }, [x.path, conflict])
   return { dragging }
 }

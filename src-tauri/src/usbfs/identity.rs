@@ -17,8 +17,9 @@ pub(super) fn invalidate(device: &str) {
     }
 }
 pub fn generation(route: &Route) -> Result<String, String> {
-    let metadata =
-        std::fs::metadata(&route.driver_device).map_err(|_| "StaleRef: USB device disconnected")?;
+    let metadata = std::fs::metadata(&route.driver_device)
+        .or_else(|_| std::fs::File::open(&route.driver_device)?.metadata())
+        .map_err(|_| "StaleRef: USB device disconnected")?;
     let mut digest = Sha256::new();
     digest.update(route.root.as_bytes());
     let epoch = epochs()

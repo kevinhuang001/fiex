@@ -145,9 +145,9 @@ export function updateActivity(
 }
 
 /** A progress channel for actions that have no activity row to update. */
-export function quietProgressChannel() {
-  if (!native) return undefined
-  return new Channel<OperationProgress>()
+export function quietProgressChannel(): Channel<OperationProgress> {
+  if (native) return new Channel<OperationProgress>()
+  return { onmessage: undefined } as unknown as Channel<OperationProgress>
 }
 
 export function progressChannel(id: string) {

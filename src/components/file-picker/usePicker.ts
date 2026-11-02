@@ -1,6 +1,7 @@
 import { t, getLocale } from '@/i18n'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { call } from '@/lib/api'
+import { quietProgressChannel } from '@/hooks/useActivity'
 import { reportError } from '@/lib/errorCenter'
 import { openPresentedDirectory } from '@/lib/listing'
 import { useMenuPosition } from '@/lib/menuPosition'
@@ -402,7 +403,7 @@ export function usePicker(request: FilePickerRequest) {
     void perform(() => call<string>('rename_entry', { path: entry.path, name: name.trim() }))
   }
   const trashEntry = (entry: Entry) => {
-    void perform(() => call('recycle', { paths: [entry.path] }))
+    void perform(() => call('recycle', { paths: [entry.path], onProgress: quietProgressChannel() }))
   }
 
   useEffect(() => {

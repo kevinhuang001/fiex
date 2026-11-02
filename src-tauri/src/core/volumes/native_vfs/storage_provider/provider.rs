@@ -98,23 +98,10 @@ impl VfsProvider for StorageProvider {
     fn mkdir(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
         let resource = self.validate_child(request)?;
         self.authorize_storage(&resource, FsOperation::Mkdir, true)?;
-        if let Some(route) = usbfs::route(&resource.path) {
-            let (parent, name) = route.rel.rsplit_once('/').unwrap_or(("", &route.rel));
-            if name.is_empty() {
-                return Err(ProviderError::invalid_params("cannot create USB root"));
-            }
-            usbfs::create(
-                &Route {
-                    rel: parent.into(),
-                    ..route.clone()
-                },
-                name,
-                true,
-            )
-            .map_err(provider_error)?;
-            return usbfs::entry(&route)
-                .map(|entry| shared_entry(storage::decorated_entry(&resource.path, entry)))
-                .map_err(provider_error);
+        if usbfs::route(&resource.path).is_some() {
+            return Err(ProviderError::invalid_params(
+                "Unsupported: USB filesystem fallback is read-only",
+            ));
         }
         let value = fs_access::mkdir(&resource.scope, &resource.path).map_err(provider_error)?;
         let entry = storage::entry(value).map_err(provider_error)?;
@@ -137,31 +124,10 @@ impl VfsProvider for StorageProvider {
         }
         self.authorize_storage(&resource, FsOperation::Rename, false)?;
         self.authorize_storage(&destination, FsOperation::Write, true)?;
-        if let Some(route) = usbfs::route(&resource.path) {
-            let other = usbfs::route(&destination.path)
-                .ok_or_else(|| ProviderError::invalid_params("invalid USB destination"))?;
-            let (parent, name) = other.rel.rsplit_once('/').unwrap_or(("", &other.rel));
-            let source_parent = route
-                .rel
-                .rsplit_once('/')
-                .map(|(path, _)| path)
-                .unwrap_or("");
-            if other.root != route.root || parent != source_parent {
-                return Err(ProviderError::invalid_params(
-                    "Unsupported: cross-directory USB rename; use TransferEngine",
-                ));
-            }
-            if usbfs::entry(&other).is_ok() {
-                return Err(ProviderError::invalid_params(
-                    "Conflict: destination already exists",
-                ));
-            }
-            usbfs::rename(&route, name).map_err(provider_error)?;
-            let entry = usbfs::entry(&other).map_err(provider_error)?;
-            return Ok(shared_entry(storage::decorated_entry(
-                &destination.path,
-                entry,
-            )));
+        if usbfs::route(&resource.path).is_some() {
+            return Err(ProviderError::invalid_params(
+                "Unsupported: USB filesystem fallback is read-only",
+            ));
         }
         fs_access::rename(&resource.scope, &resource.path, &destination.path)
             .map_err(provider_error)?;
@@ -177,8 +143,10 @@ impl VfsProvider for StorageProvider {
     fn remove(&self, request: &FsRequest<'_>) -> Result<(), ProviderError> {
         let resource = self.validate_node(request)?;
         self.authorize_storage(&resource, FsOperation::Remove, false)?;
-        if let Some(route) = usbfs::route(&resource.path) {
-            return usb::remove_tree(&route, 0).map_err(provider_error);
+        if usbfs::route(&resource.path).is_some() {
+            return Err(ProviderError::invalid_params(
+                "Unsupported: USB filesystem fallback is read-only",
+            ));
         }
         fs_access::remove(&resource.scope, &resource.path).map_err(provider_error)
     }

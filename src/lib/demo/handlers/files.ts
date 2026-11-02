@@ -25,14 +25,12 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           .map((entry) => ({
             ...entry,
             path: trashId(entry.name),
-            readonly: true,
             allowedOps: ['stat'],
           }))
         return {
           path: 'trash://',
           entries,
-          readOnly: true,
-          canCreate: false,
+          allowedOps: [],
           virtualVolume: true,
           warnings: [],
         }
@@ -48,7 +46,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
           created: 0,
           extension,
           mime: 'application/x-fiex-application',
-          readonly: false,
+          allowedOps: ['stat'],
           linkTarget: null,
           tags: [],
           hasCache: false,
@@ -58,8 +56,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         })
         return {
           path: 'applications://',
-          readOnly: false,
-          canCreate: false,
+          allowedOps: ['list', 'stat', 'search', 'write', 'mkdir'],
           virtualVolume: true,
           defaultView: 'icons',
           warnings: [],
@@ -80,6 +77,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         ]
         return {
           path: 'recent://',
+          allowedOps: ['list', 'stat', 'search'],
           entries: names
             .map((name) => state.entries.find((entry) => entry.name === name))
             .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
@@ -87,7 +85,12 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         }
       }
       if ((a.path as string).startsWith(demoRemoteRoot)) {
-        return { path: a.path, entries: demoRemoteEntries, warnings: demoRemoteWarnings }
+        return {
+          path: a.path,
+          allowedOps: ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'remove'],
+          entries: demoRemoteEntries,
+          warnings: demoRemoteWarnings,
+        }
       }
 
       if (
@@ -98,6 +101,7 @@ export async function handleFiles(command: string, a: Record<string, unknown>): 
         throw new Error('文件夹不存在')
       return {
         path: a.path as string,
+        allowedOps: ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'remove'],
         entries: state.entries.filter(
           (e) => parent(e.path) === a.path && (Boolean(a.hidden) || !e.name.startsWith('.')),
         ),

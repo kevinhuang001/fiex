@@ -50,11 +50,8 @@ pub fn parse_entry(value: Value) -> Result<FsEntry, String> {
                 .map(|operations| operations.into_iter().flatten().collect())
         })
         .transpose()?;
-    if value
-        .get("readonly")
-        .is_some_and(|value| !value.is_null() && !value.is_boolean())
-    {
-        return Err("invalid readonly flag".into());
+    if value.get("readonly").is_some() {
+        return Err("readonly is removed; declare supported operations with allowedOps".into());
     }
     Ok(FsEntry {
         node_id,
@@ -71,7 +68,6 @@ pub fn parse_entry(value: Value) -> Result<FsEntry, String> {
             .get("revision")
             .and_then(Value::as_str)
             .map(str::to_owned),
-        readonly: value.get("readonly").and_then(Value::as_bool),
         link_target: value
             .get("linkTarget")
             .and_then(Value::as_str)

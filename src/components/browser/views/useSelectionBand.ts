@@ -121,7 +121,6 @@ export function useFileDrag({
   explorer: x,
   selectedPaths,
   dragPaths,
-  readOnly,
   onDrop,
   onBookmark,
   onWorkspace,
@@ -130,7 +129,6 @@ export function useFileDrag({
   explorer: Explorer
   selectedPaths: Set<string>
   dragPaths?: string[]
-  readOnly: boolean
   onDrop: Props['onDrop']
   onBookmark: Props['onBookmark']
   onWorkspace: Props['onWorkspace']
@@ -139,7 +137,7 @@ export function useFileDrag({
   const suppressClick = useRef(false)
   const [ghost, setGhost] = useState<{ paths: string[]; x: number; y: number } | null>(null)
   const beginPointerDrag = (event: ReactPointerEvent, entry: Entry) => {
-    if (event.button !== 0 || x.renaming || readOnly) return
+    if (event.button !== 0 || x.renaming) return
     if ((event.target as Element).closest('input,button,a')) return
     const paths =
       selectedPaths.has(entry.path) && dragPaths?.length

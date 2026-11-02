@@ -58,6 +58,18 @@ pub(crate) fn read_snapshot(
     Ok(Some(data))
 }
 
+/// Find an item in a previously rendered directory snapshot. This is a UI
+/// hint only: callers still reauthorize every operation before execution.
+pub(crate) fn cached_entry(directory: &str, path: &str) -> Result<Option<Entry>, String> {
+    Ok(read_snapshot(directory, true, &[])?.and_then(|snapshot| {
+        snapshot
+            .listing
+            .entries
+            .into_iter()
+            .find(|entry| entry.path == path)
+    }))
+}
+
 const MAX_DIRECTORIES: usize = 10_000;
 const MAX_ENTRIES: usize = 500_000;
 fn cache() -> &'static Mutex<BTreeMap<String, DirectorySnapshot>> {

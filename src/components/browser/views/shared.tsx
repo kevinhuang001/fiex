@@ -30,7 +30,6 @@ export interface Props {
   onWorkspace: (paths: string[]) => void
   onExternalDrag?: (result: 'Dropped' | 'Cancelled') => void
   dragPaths?: string[]
-  readOnly?: boolean
   trashPath?: string | null
 }
 

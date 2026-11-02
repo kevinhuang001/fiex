@@ -57,29 +57,10 @@ pub(super) fn read(resource: ResourceBroker) -> Result<FsRead, ProviderError> {
 }
 
 pub(super) fn write(resource: ResourceBroker, create: bool) -> Result<FsWrite, ProviderError> {
-    if let Some(route) = usbfs::route(&resource.path) {
-        let generation = usbfs::generation(&route).map_err(provider_error)?;
-        let staged = Arc::new(Mutex::new(Some(UsbWrite {
-            route,
-            staged: tempfile::tempfile().map_err(provider_error)?,
-            replace: !create,
-            generation,
-        })));
-        let writer = UsbStage(Arc::clone(&staged));
-        let commit_stage = Arc::clone(&staged);
-        return Ok(FsWrite::with_commit(writer, move || {
-            let mut write = commit_stage
-                .lock()
-                .map_err(|_| ProviderError::internal("write stream unavailable"))?
-                .take()
-                .ok_or_else(|| ProviderError::internal("write stream closed"))?;
-            write.commit().map_err(provider_error)?;
-            let entry = usbfs::entry(&write.route).map_err(provider_error)?;
-            Ok(shared_entry(storage::decorated_entry(
-                &resource.path,
-                entry,
-            )))
-        }));
+    if usbfs::route(&resource.path).is_some() {
+        return Err(ProviderError::invalid_params(
+            "Unsupported: USB filesystem fallback is read-only",
+        ));
     }
     let handle = fs_access::begin_write(&resource.owner, &resource.scope, &resource.path, create)
         .map_err(provider_error)?;
@@ -245,49 +226,5 @@ impl Write for LocalStage {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
-    }
-}
-
-struct UsbWrite {
-    route: Route,
-    staged: std::fs::File,
-    replace: bool,
-    generation: String,
-}
-
-impl UsbWrite {
-    fn commit(&mut self) -> Result<(), String> {
-        if usbfs::generation(&self.route)? != self.generation {
-            return Err("StaleRef: USB device replaced".into());
-        }
-        usbfs::ensure_access(&self.route)?;
-        self.staged.sync_all().map_err(|error| error.to_string())?;
-        usbfs::commit_staged(&self.route, &mut self.staged, self.replace)
-    }
-}
-
-struct UsbStage(Arc<Mutex<Option<UsbWrite>>>);
-
-impl Write for UsbStage {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let mut staged = self
-            .0
-            .lock()
-            .map_err(|_| io::Error::other("write stream unavailable"))?;
-        staged
-            .as_mut()
-            .ok_or_else(|| io::Error::other("write stream closed"))?
-            .staged
-            .write(bytes)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.0
-            .lock()
-            .map_err(|_| io::Error::other("write stream unavailable"))?
-            .as_mut()
-            .ok_or_else(|| io::Error::other("write stream closed"))?
-            .staged
-            .flush()
     }
 }

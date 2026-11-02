@@ -18,7 +18,7 @@ export const marketplace = [
     asset: 'git-linux-x86_64.fiexplugin',
     repository: 'kevinhuang001/fiex-official-plugins',
     extensions: {
-      vfs: [{ id: 'history', title: 'Git 历史', readOnly: true }],
+      vfs: [{ id: 'history', title: 'Git 历史' }],
       toolbar: [
         {
           id: 'git.main',

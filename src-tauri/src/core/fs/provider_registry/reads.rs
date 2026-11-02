@@ -22,7 +22,7 @@ pub(in crate::core::fs) fn stat(resource: &ResourceBroker) -> Result<Value, FsEr
 pub(in crate::core::fs) fn list(resource: &ResourceBroker) -> Result<Value, FsError> {
     let entries = match resolve(&resource.path)? {
         Route::NativeProvider => native_vfs::list_for(resource).map_err(FsError::from)?,
-        Route::Plugin => plugin::list(resource)?,
+        Route::Plugin => plugin::list(resource)?.0,
     };
     to_value(entries).map_err(|error| FsError::internal(error.to_string()))
 }
@@ -52,8 +52,11 @@ pub(in crate::core::fs) fn desktop_listing(
     hidden: bool,
     ignores: &[String],
 ) -> Result<crate::core::files::Listing, FsError> {
-    let entries = match resolve(&resource.path)? {
-        Route::NativeProvider => native_vfs::list_for(resource).map_err(FsError::from)?,
+    let (entries, warnings) = match resolve(&resource.path)? {
+        Route::NativeProvider => (
+            native_vfs::list_for(resource).map_err(FsError::from)?,
+            Vec::new(),
+        ),
         Route::Plugin => plugin::list(resource)?,
     };
     let filter = crate::core::ignores::IgnoreSet::new(ignores);
@@ -65,24 +68,22 @@ pub(in crate::core::fs) fn desktop_listing(
         })
         .collect::<Vec<_>>();
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
-    let mutable = [
-        (FsOperation::Write, false),
-        (FsOperation::Mkdir, true),
-        (FsOperation::Rename, false),
-        (FsOperation::Remove, false),
-    ]
-    .into_iter()
-    .any(|(operation, create)| require(resource, operation, create).is_ok());
-    let read_only = (native_vfs::provider_id(&resource.path).is_some()
-        && native_vfs::readonly(&resource.path))
-        || !mutable;
+    // The directory's declared capabilities drive affordances. Do not probe
+    // host ACLs while listing; the OS reports access failures on mutation.
+    let allowed_ops = match resolve(&resource.path)? {
+        Route::NativeProvider => {
+            native_vfs::stat_for(resource)
+                .map_err(FsError::from)?
+                .allowed_ops
+        }
+        Route::Plugin => plugin::stat(resource)?.allowed_ops,
+    };
     Ok(crate::core::files::Listing {
         path: resource.path.clone(),
         entries,
-        read_only,
-        can_create: require(resource, FsOperation::Mkdir, true).is_ok(),
+        allowed_ops,
         virtual_volume: native_vfs::shared_provider_id(&resource.path) != Some("core:local-fs"),
-        warnings: Vec::new(),
+        warnings,
         default_view: native_vfs::default_view(&resource.path).map(str::to_owned),
     })
 }

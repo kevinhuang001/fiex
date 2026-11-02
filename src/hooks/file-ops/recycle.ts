@@ -2,12 +2,15 @@ import { t } from '@/i18n'
 import { isWindows } from '@/lib/platform'
 import { call } from '@/lib/api'
 import type { OperationResult } from '@/lib/types'
-import { progressChannel } from '@/hooks/useActivity'
+import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
 
 /** Moving entries to the Trash and deleting them for good. */
-export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOpsContext) {
-  const moveToTrash = async (paths: string[], onProgress?: ReturnType<typeof progressChannel>) => {
+export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
+  const moveToTrash = async (
+    paths: string[],
+    onProgress: ReturnType<typeof progressChannel> = quietProgressChannel(),
+  ) => {
     const result = await call<OperationResult>('recycle', { paths, onProgress })
     if (result.errors.length)
       throw new Error(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
@@ -16,7 +19,6 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
   }
   // Moving to the Trash is reversible, so it never asks for confirmation.
   const recycle = (selection = x.selected) => {
-    if (!writable()) return
     if (!selection.length) return
     const paths = [...selection]
     const shown = paths.slice(0, 5)
@@ -46,7 +48,7 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
       )
       return
     }
-    let onProgress: ReturnType<typeof progressChannel> | undefined
+    let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
     void run(
       t(isWindows() ? '正在移到回收站…' : '正在移到废纸篓…'),
       () => moveToTrash(paths, onProgress),
@@ -57,7 +59,7 @@ export function recycleActions({ x, writable, inTrash, setDialog, run }: FileOps
       true,
       'delete',
       (id) => {
-        onProgress = progressChannel(id)
+        onProgress = progressChannel(id) ?? quietProgressChannel()
       },
     )
   }

@@ -22,12 +22,6 @@ pub fn default_view(path: &str) -> Option<&'static str> {
     (provider_id(path) == Some("core:applications")).then_some("icons")
 }
 
-pub fn readonly(path: &str) -> bool {
-    resource_entry(path)
-        .map(|entry| entry.readonly)
-        .unwrap_or(true)
-}
-
 /// A Recent alias can be revealed only when its original resource still exists
 /// on a local filesystem. Remote, USBFS and plugin-mount sources are excluded.
 pub(crate) fn recent_reveal_source(alias: &str) -> Option<String> {

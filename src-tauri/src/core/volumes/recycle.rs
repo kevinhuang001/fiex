@@ -25,7 +25,6 @@ fn entry(name: String, path: String, is_dir: bool, original: &str, deleted: &str
         created: 0,
         extension,
         mime: String::new(),
-        readonly: true,
         link_target: (!original.is_empty()).then(|| original.to_string()),
         // Recycle Bin items expose metadata; shell restore/purge are not
         // generic storage mutations and go through dedicated menu actions.

@@ -35,6 +35,7 @@ pub(crate) fn wait_for_round() {
 }
 
 pub use cache::CacheChange;
+pub(crate) use cache::CacheState;
 #[cfg(feature = "desktop")]
 pub(crate) use config::provider_config;
 pub(crate) use config::{connection_by_mount, ensure_provider_access};
@@ -45,7 +46,9 @@ pub use files::{
     cached_path, download, download_dir, eject, ensure_downloaded, list_listing, provider_list,
     stat, ProgressFn, TransferOptions,
 };
-pub(crate) use files::{provider_node, remember_provider_entry};
+pub(crate) use files::{
+    observe_provider_listing, offline_provider_listing, provider_node, record_provider_mutation,
+};
 pub use reconcile::{reconcile, reconcile_connection, resolve};
 pub(crate) use store::load_stored_public;
 pub use store::{

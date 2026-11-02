@@ -12,7 +12,6 @@ const entry = (name: string, modified = 0): Entry => ({
   extension: name.split('.').pop() || '',
   mime: '',
   isSymlink: false,
-  readonly: false,
   linkTarget: null,
   tags: [],
   sync: null,

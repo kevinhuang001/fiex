@@ -1,4 +1,5 @@
 import { call } from '@/lib/api'
+import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { beginActivity, finishActivity, updateActivity } from '@/hooks/useActivity'
 import type { Explorer } from '@/hooks/useExplorer'
 import { useRef } from 'react'
@@ -65,7 +66,12 @@ export function useRunner({
         // Refresh because a stopped transfer may still have moved some files.
         x.reload()
       } else {
-        x.setError(message)
+        const location = detail?.trim() || (x.selected.length ? x.selected.join('\n') : x.path)
+        if (reportFilesystemPermissionError(message, `${label}\n${location}`)) {
+          x.setError('')
+        } else {
+          x.setError(message)
+        }
       }
       if (activity) finishActivity(activity, message)
       return undefined

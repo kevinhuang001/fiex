@@ -32,7 +32,7 @@ function listingKey(entries: Entry[]): string {
 }
 
 /** Everything a pane lists: entries, decorations, locations, connections,
- *  search results and the read-only/virtual-volume flags. Path, history and tab
+ *  search results and current-directory capabilities. Path, history and tab
  *  state come from useNavigation. */
 export function useListing(
   prefs: Preferences,
@@ -55,13 +55,11 @@ export function useListing(
   const [locations, setLocations] = useState<Location[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [tagFilter, setTagFilterState] = useState<string | null>(null)
-  const [directoryReadOnly, setDirectoryReadOnly] = useState(false)
-  const [directoryCanCreate, setDirectoryCanCreate] = useState(true)
+  const [directoryAllowedOps, setDirectoryAllowedOps] = useState<string[]>([])
   const [virtualVolume, setVirtualVolume] = useState(false)
   const [defaultView, setDefaultView] = useState<'list' | 'icons' | 'gallery' | 'columns' | null>(
     null,
   )
-  const [readOnly, setReadOnly] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
   const [searchStats, setSearchStats] = useState('')
@@ -226,8 +224,7 @@ export function useListing(
       setDirectoryDecorations((previous) =>
         JSON.stringify(previous) === JSON.stringify(presentation) ? previous : presentation,
       )
-      setDirectoryReadOnly(Boolean(l.readOnly))
-      setDirectoryCanCreate(l.canCreate !== false && !l.readOnly)
+      setDirectoryAllowedOps(l.allowedOps || [])
       setVirtualVolume(Boolean(l.virtualVolume))
       setDefaultView(l.defaultView || null)
       setWarnings((previous) =>
@@ -399,18 +396,21 @@ export function useListing(
     setTagFilterState(null)
   }, [path])
   const beginRename = useCallback(
-    (target: string) => {
-      if (readOnly) return
+    (target: string, createdEntry?: Entry) => {
+      const entry = entries.find((item) => item.path === target) ?? createdEntry
+      if (entry?.path !== target || !entry.allowedOps?.includes('rename')) return
+      if (!entries.some((item) => item.path === target))
+        setEntries((previous) => [...previous, entry])
       setSelected([target])
       setRenaming(target)
     },
-    [readOnly, getLocale()],
+    [entries, getLocale()],
   )
   const cancelRename = useCallback(() => setRenaming(null), [getLocale()])
   const renameTo = useCallback(
     async (target: string, name: string) => {
-      if (readOnly) {
-        setError(t('当前是只读分支或版本，不能修改文件'))
+      if (!entries.find((entry) => entry.path === target)?.allowedOps?.includes('rename')) {
+        setError(t('此位置不支持该操作'))
         return false
       }
       setError('')
@@ -425,7 +425,7 @@ export function useListing(
         return false
       }
     },
-    [readOnly, getLocale()],
+    [entries, getLocale()],
   )
   const visibleEntries = tagFilter
     ? entries.filter((entry) => entry.tags.some((tag) => tag.name === tagFilter))
@@ -453,12 +453,9 @@ export function useListing(
     refreshConnections,
     tagFilter,
     setTagFilter,
-    readOnly,
-    directoryReadOnly,
-    directoryCanCreate,
+    directoryAllowedOps,
     virtualVolume,
     defaultView,
-    setReadOnly,
     locations,
     refreshLocations,
     loading,

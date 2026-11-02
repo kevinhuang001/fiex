@@ -258,8 +258,10 @@ pub fn validate_extensions(value: &Value) -> Result<(), String> {
             connections::validate(object)?;
         }
 
-        if object.get("readOnly").is_some_and(|v| !v.is_boolean()) {
-            return Err(format!("extensions.{key}.readOnly must be a boolean"));
+        if object.contains_key("readOnly") {
+            return Err(format!(
+                "extensions.{key}.readOnly is removed; declare VFS operations"
+            ));
         }
     }
     Ok(())

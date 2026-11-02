@@ -18,7 +18,6 @@ export interface Entry {
   created: number
   extension: string
   mime: string
-  readonly: boolean
   /** Explicit storage operations; absence is unknown, an empty set grants none. */
   allowedOps?: string[]
   linkTarget: string | null
@@ -29,12 +28,11 @@ export interface Entry {
   pinned?: boolean
   /** The current bytes of a connection entry reached the remote. */
   uploaded?: boolean
-  sync: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | null
+  sync: 'synced' | 'partial' | 'cloud' | 'pinned' | 'pending' | 'conflict' | null
 }
 export interface Listing {
-  readOnly?: boolean
-  /** The current directory accepts `mkdir` (provider capability ∩ node). */
-  canCreate?: boolean
+  /** Operations supported by the current directory, independent of host ACLs. */
+  allowedOps: string[]
   virtualVolume?: boolean
   path: string
   entries: Entry[]
@@ -101,7 +99,7 @@ export interface ConflictResolution {
 export interface DecorationBadge {
   /** Only Core builtin decoration providers emit these presentation fields. */
   dot?: boolean
-  status?: 'synced' | 'cloud' | 'pinned' | 'pending' | 'conflict' | 'uploaded'
+  status?: 'synced' | 'partial' | 'cloud' | 'pinned' | 'pending' | 'conflict' | 'uploaded'
   icon?: 'cloud-check' | 'cloud-download' | 'cloud-upload' | 'pin'
 
   text: string

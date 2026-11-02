@@ -118,7 +118,6 @@ pub(super) fn shared_entry(entry: Entry) -> FsEntry {
         modified,
         extension,
         mime,
-        readonly,
         link_target,
         allowed_ops,
         ..
@@ -140,7 +139,6 @@ pub(super) fn shared_entry(entry: Entry) -> FsEntry {
         extension: (!extension.is_empty()).then_some(extension),
         mime: (!mime.is_empty()).then_some(mime),
         revision: None,
-        readonly: Some(readonly),
         link_target,
         allowed_ops: Some(
             allowed_ops
@@ -162,7 +160,6 @@ pub fn core_entry(entry: FsEntry) -> Entry {
         modified: entry.modified.unwrap_or_default().max(0) as u64,
         extension: entry.extension.unwrap_or_default(),
         mime: entry.mime.unwrap_or_default(),
-        readonly: entry.readonly.unwrap_or(false),
         link_target: entry.link_target,
         allowed_ops: entry
             .allowed_ops

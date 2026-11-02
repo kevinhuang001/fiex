@@ -3,7 +3,7 @@
 //! One [`FileCapabilities`] snapshot answers every UI-affordance question and
 //! every command guard. It is the intersection of the three layers described by
 //! the unified file-system protocol: the provider's declared operations, the
-//! node's `allowedOps`/`readonly`, and (implicitly) the fact that Core can only
+//! node's `allowedOps`, and (implicitly) the fact that Core can only
 //! act through an installed provider. Local file content permissions and USB driver restrictions are reflected
 //! here; the OS still enforces ACLs and current access on each actual call.
 //!
@@ -37,17 +37,6 @@ impl FileCapabilities {
         remove: true,
     };
 
-    pub const READ_ONLY: Self = Self {
-        list: true,
-        stat: true,
-        search: true,
-        read: true,
-        write: false,
-        create: false,
-        rename: false,
-        remove: false,
-    };
-
     pub fn intersect(self, other: Self) -> Self {
         Self {
             list: self.list && other.list,
@@ -75,8 +64,16 @@ impl FileCapabilities {
         }
     }
 
-    pub fn is_read_only(self) -> bool {
-        !(self.write || self.create || self.rename || self.remove)
+    pub fn has_mutation_capability(self) -> bool {
+        self.write || self.create || self.rename || self.remove
+    }
+
+    pub fn into_allowed_ops(self) -> Vec<String> {
+        FsOperation::ALL
+            .into_iter()
+            .filter(|operation| self.allows(*operation))
+            .map(|operation| operation.as_str().to_owned())
+            .collect()
     }
 }
 
@@ -106,35 +103,21 @@ pub(crate) fn for_entry(path: &str, entry: &Entry) -> FileCapabilities {
 
     match crate::core::fs::provider_registry::owner(path) {
         Ok(ResourceOwner::LocalFs) => {
-            if crate::core::volumes::application_policy::protected(path) {
-                return FileCapabilities::READ_ONLY;
-            }
+            let protected = crate::core::volumes::application_policy::protected(path);
             FileCapabilities {
                 list: entry.is_dir,
                 stat: true,
                 search: entry.is_dir,
                 read: !entry.is_dir,
-                write: !entry.is_dir && !entry.readonly,
-                create: entry.is_dir && !entry.readonly,
-                rename: true,
-                // On Unix deletion is governed by the parent directory, not the
-                // file's read-only metadata. The OS remains the final authority.
-                remove: !cfg!(windows) || !entry.readonly,
+                write: !protected,
+                create: entry.is_dir && !protected,
+                rename: !protected,
+                remove: !protected,
             }
         }
         Ok(ResourceOwner::NativeVfs("core:usb-fs")) => {
-            let writable = crate::usbfs::writable(path).unwrap_or(false);
-            let is_root = crate::usbfs::is_root(path).unwrap_or(true);
-            FileCapabilities {
-                list: entry.is_dir,
-                stat: true,
-                search: entry.is_dir,
-                read: !entry.is_dir,
-                write: writable && !entry.is_dir,
-                create: writable && entry.is_dir,
-                rename: writable && !is_root,
-                remove: writable && !is_root,
-            }
+            let declared = crate::core::volumes::native_vfs::operations(path);
+            from_entry(&declared, entry)
         }
         Ok(ResourceOwner::NativeVfs(_)) => {
             let declared = crate::core::volumes::native_vfs::operations(path);

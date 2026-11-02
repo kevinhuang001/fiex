@@ -5,7 +5,11 @@ fn a_read_only_mount_omits_every_mutating_group() {
     let ctx = mount_selection(
         "fiex://mount/gating-mount/report.txt",
         false,
-        crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
+        crate::plugins::resource::file_capabilities::FileCapabilities {
+            read: true,
+            stat: true,
+            ..Default::default()
+        },
     );
     assert_eq!(
         provider_ids(&ctx),
@@ -120,7 +124,6 @@ fn create_capability_never_adds_a_menu_group() {
         "fiex://mount/gating-mount",
         vec!["fiex://mount/gating-mount/a.txt".into()],
         vec![mount_entry("fiex://mount/gating-mount/a.txt", false)],
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             read: true,
             rename: true,
@@ -138,8 +141,11 @@ fn a_read_only_directory_drops_mutating_items_entirely() {
         "fiex://mount/gating-mount",
         vec!["fiex://mount/gating-mount/a.txt".into()],
         vec![mount_entry("fiex://mount/gating-mount/a.txt", false)],
-        true,
-        crate::plugins::resource::file_capabilities::FileCapabilities::ALL,
+        crate::plugins::resource::file_capabilities::FileCapabilities {
+            read: true,
+            stat: true,
+            ..Default::default()
+        },
     );
     let ids = provider_ids(&ctx);
     for id in ["builtin:rename", "builtin:batch-rename", "builtin:trash"] {
@@ -156,8 +162,7 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         create: true,
         ..Default::default()
     };
-    let ctx =
-        super::builtin::Context::for_test_caps("/tmp/blank", vec![], vec![], false, capabilities);
+    let ctx = super::builtin::Context::for_test_caps("/tmp/blank", vec![], vec![], capabilities);
     assert_eq!(provider_ids(&ctx), ["builtin:create"]);
     let menu = super::builtin::resolve("builtin:create", &ctx).unwrap();
     let items = menu["items"].as_array().unwrap();
@@ -169,7 +174,6 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         "/tmp/blank",
         vec![],
         vec![],
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             read: true,
             write: true,
@@ -185,7 +189,6 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         "/tmp/blank",
         vec![],
         vec![],
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities::default(),
     );
     assert!(!provider_ids(&empty).contains(&"builtin:create".to_string()));
@@ -198,7 +201,6 @@ fn applications_menu_uses_descriptor_and_generic_info_without_duplicate_open() {
         "applications://",
         vec![path.into()],
         vec![mount_entry(path, false)],
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             read: true,
             stat: true,

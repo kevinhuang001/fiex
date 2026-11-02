@@ -1832,7 +1832,6 @@ dependencies = [
  "rfd",
  "rust-fs-btrfs",
  "rust-fs-ext4",
- "rust-fs-ntfs",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -5080,17 +5079,6 @@ dependencies = [
  "js-sys",
  "rust-fs-core",
  "unicode-normalization",
-]
-
-[[package]]
-name = "rust-fs-ntfs"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72173bcbba83fa10ed708cad90813037d79c6286be50b8c3ef8ae82d0ce79bb8"
-dependencies = [
- "libc",
- "log",
- "rust-fs-core",
 ]
 
 [[package]]

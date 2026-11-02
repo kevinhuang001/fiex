@@ -50,7 +50,7 @@ fn expired_sessions_and_disabled_actions_are_rejected() {
         .unwrap()
         .created = std::time::Instant::now() - std::time::Duration::from_secs(91);
     assert!(super::execute(&session_id, "copy").is_err());
-    let ctx = super::builtin::Context::for_test(&directory, paths, vec![], true);
+    let ctx = super::builtin::Context::for_test(&directory, paths, vec![]);
     assert!(super::builtin::execute("builtin:rename", "rename", &ctx).is_err());
 }
 #[test]
@@ -59,7 +59,6 @@ fn generic_trash_menu_only_uses_normal_remove_capability() {
         "/tmp",
         vec!["/tmp/item".into()],
         vec![],
-        false,
         crate::plugins::resource::file_capabilities::FileCapabilities {
             remove: true,
             ..Default::default()

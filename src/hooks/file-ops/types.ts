@@ -38,7 +38,6 @@ export interface FileOpsContext {
   x: Explorer
   notify: (message: string) => void
   setDialog: Dispatch<SetStateAction<DialogState | null>>
-  writable: () => boolean
   inTrash: boolean
   conflict: ConflictState
   setConflict: Dispatch<SetStateAction<ConflictState>>

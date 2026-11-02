@@ -126,11 +126,6 @@ fn project_entry(
     }
     let path = crate::plugins::mounts::uri(&uri.mount_id, relative)?;
     let allowed_ops = allowed_operations(&entry, |operation| mount.supports(operation));
-    // Read-only is an explicit provider flag. Per-operation restrictions live
-    // in `allowed_ops`: a provider that supports only `remove` must still be
-    // able to delete, so the absence of the other mutating operations cannot
-    // make the whole node read-only.
-    let readonly = entry.readonly.unwrap_or(false);
     Ok((
         Entry {
             path,
@@ -142,7 +137,6 @@ fn project_entry(
             created: 0,
             extension: entry.extension.unwrap_or_default(),
             mime: entry.mime.unwrap_or_default(),
-            readonly,
             link_target: entry.link_target,
             tags: Vec::new(),
             has_cache: false,
@@ -184,16 +178,10 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         let relative = child(&uri.relative, &item.name)?;
         entries.push(bound_entry(&mount, &uri, &relative, item)?);
     }
-    // Creating a folder needs the provider's `mkdir` and the directory node's
-    // own `allowedOps`/`readonly`. The toolbar reads this flag to enable its
-    // single new-folder affordance, and `create_entry` re-checks the same rule,
-    // so the button can never offer an operation this view cannot perform.
-    let can_create = crate::plugins::resource::file_capabilities::for_path(path).create;
+    let allowed_ops =
+        crate::plugins::resource::file_capabilities::for_path(path).into_allowed_ops();
     Ok(Listing {
-        // A virtual volume is writable when the provider implements at least
-        // one mutating operation; each entry narrows that through allowedOps.
-        read_only: false,
-        can_create,
+        allowed_ops,
         virtual_volume: true,
         path: crate::plugins::mounts::uri(&uri.mount_id, &uri.relative)?,
         entries,

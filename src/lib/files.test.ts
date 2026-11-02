@@ -23,7 +23,6 @@ const e = (name: string, isDir = false): Entry => ({
   created: 0,
   mime: 'text/plain',
   extension: 'txt',
-  readonly: false,
   linkTarget: null,
   tags: [],
   sync: null,

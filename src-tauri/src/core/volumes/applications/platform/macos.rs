@@ -41,7 +41,6 @@ pub(in crate::core::volumes::applications) fn platform_list() -> Result<Vec<Entr
                 format!("{URI}{}", encode(&path.to_string_lossy())),
                 "app",
                 modified,
-                true,
             );
             item.link_target = Some(path.to_string_lossy().into_owned());
             entries.push(item);

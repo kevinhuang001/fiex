@@ -5,8 +5,6 @@ use std::path::Path;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FsKind {
-    Ntfs,
-    Ext4,
     Apfs,
     Hfs,
     Btrfs,
@@ -19,7 +17,6 @@ pub struct UsbEntry {
     pub is_dir: bool,
     pub size: u64,
     pub modified: u64,
-    pub readonly: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -92,8 +89,6 @@ pub fn virtual_root(device: &str, kind: FsKind) -> String {
         .join(".fiex")
         .join("usbfs");
     let kind = match kind {
-        FsKind::Ntfs => "ntfs",
-        FsKind::Ext4 => "ext4",
         FsKind::Apfs => "apfs",
         FsKind::Hfs => "hfs",
         FsKind::Btrfs => "btrfs",
@@ -131,8 +126,6 @@ pub fn route(path: &str) -> Option<Route> {
     let (encoded, kind) = id.rsplit_once('-')?;
     let device = hex_decode(encoded)?;
     let kind = match kind {
-        "ntfs" => FsKind::Ntfs,
-        "ext4" => FsKind::Ext4,
         "apfs" => FsKind::Apfs,
         "hfs" => FsKind::Hfs,
         "btrfs" => FsKind::Btrfs,
@@ -171,11 +164,24 @@ mod routing_security_tests {
     use super::*;
     #[test]
     fn rejects_virtual_root_prefix_confusion_and_parent_traversal() {
-        let root = virtual_root("/dev/fiex-test-device", FsKind::Ntfs);
+        let root = virtual_root("/dev/fiex-test-device", FsKind::Btrfs);
         assert!(route(&root).is_some());
         assert!(route(&(root.clone() + "/safe.txt")).is_some());
         assert!(route(&(root.clone() + "/../outside")).is_none());
         assert!(route(&(root.clone() + "/nested\\..\\outside")).is_none());
         assert!(route(&(root + "Evil/surprise")).is_none());
+    }
+
+    #[test]
+    fn rejects_system_driver_filesystems_as_raw_provider_routes() {
+        let base = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".fiex")
+            .join("usbfs");
+        let encoded = hex_encode("/dev/fiex-test-device");
+        for filesystem in ["ntfs", "ext4"] {
+            let path = base.join(format!("{encoded}-{filesystem}"));
+            assert!(route(&path.to_string_lossy()).is_none());
+        }
     }
 }

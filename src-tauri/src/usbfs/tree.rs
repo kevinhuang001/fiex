@@ -1,8 +1,7 @@
 //! Read-only listing, lookup, search and copy-out operations.
 
-use super::mount::{btrfs_fs, ensure_access, ext4_mount};
+use super::mount::{btrfs_fs, ensure_access};
 use super::util::{clean_path, join_rel, FsKind, Route, UsbEntry};
-use super::write::remove;
 use std::path::{Path, PathBuf};
 
 mod drivers;
@@ -16,8 +15,6 @@ pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, Str
         return Err(crate::i18n::t("设备不存在").into());
     }
     match kind {
-        FsKind::Ntfs => ntfs_list(device, path),
-        FsKind::Ext4 => ext4_list(device, path),
         FsKind::Apfs => apple_list(device, path, FsKind::Apfs),
         FsKind::Hfs => apple_list(device, path, FsKind::Hfs),
         FsKind::Btrfs => btrfs_list(device, path),
@@ -27,8 +24,6 @@ pub fn list(device: &str, kind: FsKind, path: &str) -> Result<Vec<UsbEntry>, Str
 pub fn read(device: &str, kind: FsKind, path: &str) -> Result<Vec<u8>, String> {
     let _guard = super::access::lock(device)?;
     match kind {
-        FsKind::Ntfs => ntfs_read(device, path),
-        FsKind::Ext4 => ext4_read(device, path),
         FsKind::Apfs => apple_read(device, path, FsKind::Apfs),
         FsKind::Hfs => apple_read(device, path, FsKind::Hfs),
         FsKind::Btrfs => btrfs_read(device, path),
@@ -63,7 +58,7 @@ pub fn listing(route: &Route) -> Result<Vec<crate::core::files::Entry>, String> 
                 size: file.size,
                 modified: file.modified,
                 created: file.modified,
-                readonly: file.readonly,
+                allowed_ops: operations(file.is_dir),
                 link_target: None,
                 tags: vec![],
                 ..Default::default()
@@ -79,7 +74,7 @@ pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
             path: route.root.clone(),
             name: "USB".into(),
             is_dir: true,
-            readonly: matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs),
+            allowed_ops: operations(true),
             ..Default::default()
         });
     }
@@ -96,6 +91,17 @@ pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
         .into_iter()
         .find(|entry| entry.name == name)
         .ok_or_else(|| crate::i18n::t("文件不存在").to_string())
+}
+
+fn operations(is_dir: bool) -> Vec<String> {
+    if is_dir {
+        vec!["list", "stat", "search"]
+    } else {
+        vec!["stat", "read"]
+    }
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
 }
 
 pub fn search(
@@ -194,6 +200,9 @@ pub fn copy_to_local(
     moving: bool,
 ) -> Result<String, String> {
     ensure_access(source)?;
+    if moving {
+        return Err("Unsupported: USB filesystem fallback is read-only".into());
+    }
     let name = source
         .rel
         .rsplit_once('/')
@@ -212,8 +221,5 @@ pub fn copy_to_local(
         target
     };
     copy_route(source, &target)?;
-    if moving {
-        remove(source)?;
-    }
     Ok(target.to_string_lossy().into_owned())
 }

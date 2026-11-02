@@ -3,7 +3,7 @@ import { call } from '@/lib/api'
 import type { FileOpsContext } from './types'
 
 /** Putting Trash contents back and undoing the last file operation. */
-export function restoreActions({ x, notify, writable, run }: FileOpsContext) {
+export function restoreActions({ x, notify, run }: FileOpsContext) {
   const restoreFromTrash = (paths: string[]) => {
     if (!paths.length) return
     void run(
@@ -23,7 +23,6 @@ export function restoreActions({ x, notify, writable, run }: FileOpsContext) {
     )
   }
   const undo = () => {
-    if (!writable()) return
     void run(t('正在撤销…'), async () => {
       await call('undo')
       notify(t('已撤销上一次文件操作'))

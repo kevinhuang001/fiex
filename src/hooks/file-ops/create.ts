@@ -1,15 +1,27 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { uniqueName } from '@/lib/files'
+import type { Entry } from '@/lib/types'
 import type { FileOpsContext } from './types'
 
 /** Creating the next entry, then handing it straight to the inline rename. */
-export function createActions({ x, writable, run }: FileOpsContext) {
+export function createActions({ x, run }: FileOpsContext) {
+  const renameCreatedEntry = async (path: string) => {
+    let entry: Entry
+    try {
+      entry = await call<Entry>('file_info', { path })
+    } catch (cause) {
+      const message = String(cause)
+      if (!reportFilesystemPermissionError(message, `stat\n${path}`)) x.setError(message)
+      x.reload()
+      return
+    }
+    if (entry.allowedOps?.includes('rename')) x.beginRename(path, entry)
+    else x.reload()
+  }
   const create = async () => {
-    if (!writable()) return
-    // The toolbar disables its new-folder button from the same flag; a
-    // keyboard shortcut must not bypass the provider's `mkdir` capability.
-    if (!x.directoryCanCreate) {
+    if (!x.directoryAllowedOps.includes('mkdir')) {
       x.setError(t('此位置不支持新建文件夹'))
       return
     }
@@ -22,12 +34,15 @@ export function createActions({ x, writable, run }: FileOpsContext) {
     )
     if (!path) return
     if (x.query) x.setQuery('')
-    x.beginRename(path)
+    await renameCreatedEntry(path)
   }
   /** An empty file goes through the provider's write stream with a name; the
    * menu only offers it when the directory declares `write`. */
   const createFile = async () => {
-    if (!writable()) return
+    if (!x.directoryAllowedOps.includes('write')) {
+      x.setError(t('此位置不支持新建文件'))
+      return
+    }
     const name = uniqueName(
       x.entries.map((e) => e.name),
       t('未命名文件'),
@@ -37,7 +52,7 @@ export function createActions({ x, writable, run }: FileOpsContext) {
     )
     if (!path) return
     if (x.query) x.setQuery('')
-    x.beginRename(path)
+    await renameCreatedEntry(path)
   }
   return { create, createFile }
 }

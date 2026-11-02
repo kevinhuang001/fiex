@@ -7,20 +7,6 @@ pub fn read_at(route: &Route, offset: u64, output: &mut [u8]) -> Result<usize, S
     ensure_access(route)?;
     let path = clean_path(&route.rel);
     match route.kind {
-        FsKind::Ntfs => {
-            let fs = fs_ntfs::facade::Filesystem::mount(&route.driver_device)
-                .map_err(|e| e.to_string())?;
-            fs.read_file(&path, offset, output)
-                .map_err(|e| e.to_string())
-        }
-        FsKind::Ext4 => {
-            let fs = ext4_mount(&route.driver_device, false)?;
-            let inode = fs
-                .lookup_path_bytes(path.as_bytes())
-                .map_err(|e| e.to_string())?;
-            fs.read_ino(inode, offset, output)
-                .map_err(|e| e.to_string())
-        }
         FsKind::Btrfs => {
             let fs = btrfs_fs(&route.driver_device)?;
             let inode = fs.lookup_path(&path).map_err(|e| e.to_string())?;

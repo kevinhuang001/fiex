@@ -1,4 +1,4 @@
-//! USB-specific authorization and recursive removal policy.
+//! Read-only authorization for volumes opened by the fallback provider.
 use super::provider_error;
 use crate::{
     plugins::provider_registry::FsOperation,
@@ -31,43 +31,7 @@ pub(super) fn authorize(
     ) {
         return Ok(());
     }
-    if matches!(
-        route.kind,
-        usbfs::FsKind::Apfs | usbfs::FsKind::Hfs | usbfs::FsKind::Btrfs
-    ) {
-        return Err(ProviderError::invalid_params(
-            "Unsupported: read-only USB filesystem",
-        ));
-    }
-    std::fs::OpenOptions::new()
-        .write(true)
-        .open(&route.driver_device)
-        .map_err(|_| {
-            ProviderError::invalid_params("PermissionDenied: OS has not granted raw-device writes")
-        })?;
-    if route.rel.is_empty()
-        && matches!(
-            operation,
-            FsOperation::Remove | FsOperation::Rename | FsOperation::Write
-        )
-    {
-        return Err(ProviderError::invalid_params("cannot modify USB root"));
-    }
-    Ok(())
-}
-
-pub(super) fn remove_tree(route: &Route, depth: usize) -> Result<(), String> {
-    if depth > 128 {
-        return Err("USB tree limit exceeded".into());
-    }
-    if usbfs::entry(route)?.is_dir {
-        for child in usbfs::listing(route)? {
-            let next = usbfs::route(&child.path).ok_or("invalid USB child")?;
-            if next.root != route.root {
-                return Err("USB child escaped mount".into());
-            }
-            remove_tree(&next, depth + 1)?;
-        }
-    }
-    usbfs::remove(route)
+    Err(ProviderError::invalid_params(
+        "Unsupported: USB filesystem fallback is read-only",
+    ))
 }

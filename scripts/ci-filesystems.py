@@ -14,21 +14,14 @@ def run(*args):
 with tempfile.TemporaryDirectory(prefix='fiex-images-') as work:
     work = Path(work)
     if platform.system() == 'Linux':
-        for name, megabytes in [('ntfs', 64), ('ext4', 64), ('btrfs', 256)]:
-            source = work/name
-            source.mkdir()
-            (source/'hello.txt').write_text('hello '+name+'\n')
-            image = out/(name+'.img')
-            with image.open('wb') as stream:
-                stream.truncate(megabytes*1024*1024)
-            if name == 'ntfs':
-                run('mkntfs', '-F', '-Q', '-L', 'FIEX', image)
-                run('ntfscp', image, source/'hello.txt', '/hello.txt')
-            elif name == 'ext4':
-                # Disable features not implemented by the embedded driver yet.
-                run('mkfs.ext4', '-F', '-O', '^metadata_csum,^64bit,^orphan_file', '-d', source, image)
-            else:
-                run('mkfs.btrfs', '-f', '--rootdir', source, image)
+        name = 'btrfs'
+        source = work/name
+        source.mkdir()
+        (source/'hello.txt').write_text('hello '+name+'\n')
+        image = out/(name+'.img')
+        with image.open('wb') as stream:
+            stream.truncate(256*1024*1024)
+        run('mkfs.btrfs', '-f', '--rootdir', source, image)
     else:
         for name, fs in [('apfs', 'APFS'), ('hfs', 'HFS+')]:
             image = work/(name+'.dmg')

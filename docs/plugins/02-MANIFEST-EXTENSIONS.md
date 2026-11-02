@@ -40,7 +40,7 @@
 | `info`                   | `{match?, priority?}`                              | `info.resolve`                                                    |
 | `preview`                | `{match?, priority?, maxBytes?, panel?, loading?}` | `preview.open`                                                    |
 | `connections`            | `{title, fields}`                                  | `connection.validate/open/create`                                 |
-| `vfs`                    | `{title, readOnly?}`                               | `vfs.list/stat/read…`                                             |
+| `vfs`                    | `{title}`                                          | `vfs.list/stat/read…`                                             |
 | `search`                 | `{icon?, scope?}`                                  | `search.query`                                                    |
 | `toolbar`                | `{title, icon?, panel?}`                           | `toolbar.invoke`，有 panel 时打开面板                             |
 | `themes`                 | `{path}`                                           | 主题资产加载                                                      |
@@ -122,7 +122,7 @@
 ### VFS
 
 ```json
-"vfs": { "title": "WebDAV", "readOnly": false }
+"vfs": { "title": "WebDAV" }
 ```
 
 连接想返回文件树时必须同时注册 `connections` 和 `vfs`。

@@ -57,6 +57,7 @@ fn application_operations(path: &str) -> Vec<FsOperation> {
             FsOperation::List,
             FsOperation::Stat,
             FsOperation::Search,
+            FsOperation::Write,
             FsOperation::Mkdir,
         ]
     } else if applications::is_user(path) {
@@ -123,21 +124,33 @@ impl VfsProvider for ApplicationView {
                 Err(ProviderError::method_not_found(operation.methods()[0]))
             };
         }
-        if !applications::is_user(uri)
-            || !matches!(operation, FsOperation::Write | FsOperation::Mkdir)
-        {
+        if !matches!(operation, FsOperation::Write | FsOperation::Mkdir) {
             return Err(ProviderError::method_not_found(operation.methods()[0]));
         }
-        let target = applications::candidate_path(uri).map_err(provider_error)?;
-        let parent = target
-            .parent()
-            .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?;
-        if parent.is_dir() && !target.exists() {
+        // Create authorization is requested against the new child URI. That
+        // node does not exist yet, so capability checks must come from its
+        // parent directory rather than `application_operations(uri)`.
+        let parent = if uri == APPLICATIONS_URI {
+            APPLICATIONS_URI.to_owned()
+        } else if applications::is_user(uri) {
+            let target = applications::candidate_path(uri).map_err(provider_error)?;
+            let parent = target
+                .parent()
+                .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?;
+            if parent == applications::stored_path(APPLICATIONS_URI).map_err(provider_error)? {
+                APPLICATIONS_URI.to_owned()
+            } else {
+                applications::stored_uri(parent).map_err(provider_error)?
+            }
+        } else {
+            return Err(ProviderError::method_not_found(operation.methods()[0]));
+        };
+        let parent_is_directory = parent == APPLICATIONS_URI
+            || applications::stored_entry(&parent).is_ok_and(|entry| entry.is_dir);
+        if parent_is_directory && application_operations(&parent).contains(&operation) {
             Ok(())
         } else {
-            Err(ProviderError::invalid_params(
-                "Conflict: application destination is unavailable",
-            ))
+            Err(ProviderError::method_not_found(operation.methods()[0]))
         }
     }
 

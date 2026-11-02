@@ -18,6 +18,7 @@ pub fn stored_entry(uri: &str) -> Result<Entry, String> {
             "stat".into(),
             "list".into(),
             "search".into(),
+            "write".into(),
             "mkdir".into(),
             "rename".into(),
             "remove".into(),

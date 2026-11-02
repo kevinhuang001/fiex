@@ -3,8 +3,7 @@ fn listing(path: &str, entries: Vec<Entry>) -> Listing {
     Listing {
         path: path.into(),
         entries,
-        read_only: false,
-        can_create: true,
+        allowed_ops: vec!["list".into(), "stat".into(), "mkdir".into()],
         virtual_volume: true,
         warnings: vec![],
         default_view: None,
@@ -38,6 +37,24 @@ fn empty_vfs_snapshot_is_complete_and_does_not_create_decorations() {
     assert!(cached.entries.is_empty());
     assert!(super::super::decoration_cache::read(path, &cached).is_none());
     drop_subtree(path);
+}
+
+#[test]
+fn cached_entry_uses_the_authorized_directory_snapshot() {
+    let directory = "applications://~cache-test-entry";
+    let child = format!("{directory}/notes.txt");
+    let mut cached = item(&child, "notes.txt", false);
+    cached.allowed_ops = vec!["stat".into(), "read".into()];
+    store(directory, &listing(directory, vec![cached.clone()]));
+
+    assert_eq!(
+        cached_entry(directory, &child).unwrap().unwrap().path,
+        child
+    );
+    assert!(cached_entry(directory, "applications://other/notes.txt")
+        .unwrap()
+        .is_none());
+    drop_subtree(directory);
 }
 #[test]
 fn cached_tree_respects_parent_edges_hidden_filters_and_cancellation() {
