@@ -109,21 +109,38 @@ fn child_plugin_path(parent: &str, entry: &FsEntry) -> Result<String, FsError> {
 pub(super) fn stat(resource: &ResourceBroker) -> Result<crate::core::files::Entry, FsError> {
     let (mount, node) = plugin_node(resource)?;
     let entry = mount.stat(&node).map_err(FsError::from)?;
-    Ok(project_entry(&mount, &resource.path, entry))
+    let mut projected = project_entry(&mount, &resource.path, entry);
+    crate::remote::apply_connection_cache_state(std::slice::from_mut(&mut projected));
+    Ok(projected)
 }
 
 pub(super) fn list(resource: &ResourceBroker) -> Result<Vec<crate::core::files::Entry>, FsError> {
     let (mount, node) = plugin_node(resource)?;
     let listing = mount.list(&node, true, &[]).map_err(FsError::from)?;
-    listing
+    let records = listing
         .entries
         .into_iter()
         .map(|entry| {
             let path = child_plugin_path(&resource.path, &entry)?;
-            remember_entry(&path, &entry)?;
-            Ok(project_entry(&mount, &path, entry))
+            Ok((path, entry))
         })
-        .collect()
+        .collect::<Result<Vec<_>, FsError>>()?;
+    if crate::remote::is_remote(&resource.path) {
+        // Listing is observation, not a remote write. In particular, do not
+        // turn an already cached file into a sync conflict on every refresh.
+        crate::remote::observe_connection_listing(&resource.path, &records)
+            .map_err(FsError::from)?;
+    } else {
+        for (path, entry) in &records {
+            remember_entry(path, entry)?;
+        }
+    }
+    let mut projected = records
+        .into_iter()
+        .map(|(path, entry)| project_entry(&mount, &path, entry))
+        .collect::<Vec<_>>();
+    crate::remote::apply_connection_cache_state(&mut projected);
+    Ok(projected)
 }
 
 pub(super) fn stream_read(resource: &ResourceBroker) -> Result<FsRead, FsError> {
