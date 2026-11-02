@@ -1,17 +1,36 @@
 //! Registered Core file-operation menu providers.
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, MenuItem, ProviderMatchRule};
+use fiex_provider_contracts::{
+    ContextMenuProvider, FsOperation, LocationMatch, MenuItem, ProviderMatchExclude,
+    ProviderMatchRule,
+};
 use std::sync::Arc;
 
-use self::groups::{BatchRename, Clipboard, CopyPath, Create, Opening, Rename, Tags, Trash};
+use self::groups::{
+    BatchRename, Clipboard, CopyPath, NewFile, NewFolder, Opening, Rename, Tags, Trash,
+};
 use super::super::connection_cache::ConnectionCache;
 
 mod groups;
 
+fn special_view_exclude() -> ProviderMatchExclude {
+    exclude_views(&["core:applications", "core:trash", "core:recent"])
+}
+
+fn exclude_views(provider_ids: &[&str]) -> ProviderMatchExclude {
+    ProviderMatchExclude {
+        view: Some(LocationMatch {
+            provider_ids: Some(provider_ids.iter().map(|id| (*id).into()).collect()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
 /// Every generic Core menu group is registered as the same shared provider
 /// trait used by SDK plugins. Native implementations run directly in Core.
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
-    let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 9] = [
+    let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 10] = [
         (
             "builtin:opening",
             100,
@@ -23,9 +42,14 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
             Arc::new(Tags) as Arc<dyn ContextMenuProvider>,
         ),
         (
-            "builtin:create",
+            "builtin:new-folder",
             98,
-            Arc::new(Create) as Arc<dyn ContextMenuProvider>,
+            Arc::new(NewFolder) as Arc<dyn ContextMenuProvider>,
+        ),
+        (
+            "builtin:new-file",
+            98,
+            Arc::new(NewFile) as Arc<dyn ContextMenuProvider>,
         ),
         (
             "builtin:connection-cache",
@@ -72,6 +96,30 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
                     types: Some(vec!["vfs".into()]),
                     ..Default::default()
                 }),
+                ..Default::default()
+            },
+            "builtin:new-folder" => ProviderMatchRule {
+                selection: Some("zero".into()),
+                required_ops: vec![FsOperation::Mkdir],
+                exclude: Some(exclude_views(&["core:trash", "core:recent"])),
+                ..Default::default()
+            },
+            "builtin:new-file" => ProviderMatchRule {
+                selection: Some("zero".into()),
+                required_ops: vec![FsOperation::Write],
+                exclude: Some(special_view_exclude()),
+                ..Default::default()
+            },
+            "builtin:opening" => ProviderMatchRule {
+                exclude: Some(exclude_views(&["core:applications"])),
+                ..Default::default()
+            },
+            "builtin:rename"
+            | "builtin:batch-rename"
+            | "builtin:clipboard"
+            | "builtin:copy-path"
+            | "builtin:trash" => ProviderMatchRule {
+                exclude: Some(special_view_exclude()),
                 ..Default::default()
             },
             _ => ProviderMatchRule::default(),

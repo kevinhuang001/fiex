@@ -214,6 +214,10 @@ mod tests {
             &match_resources(&[local]),
             "/tmp"
         ));
+        let excluded = json!({"contextMenus":{"match":{
+            "exclude":{"view":{"providerIds":["core:applications"]}}
+        }}});
+        assert!(!matches("contextMenu.resolve", &excluded, &selected, path));
     }
 
     #[test]

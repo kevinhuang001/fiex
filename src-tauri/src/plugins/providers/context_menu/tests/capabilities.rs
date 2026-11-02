@@ -92,8 +92,7 @@ fn remove_adds_trash_and_delete_forever() {
 }
 
 #[test]
-fn create_capability_never_adds_a_menu_group() {
-    // Folder creation is toolbar-only; the menu must not grow an entry for it.
+fn create_capability_only_adds_blank_canvas_actions() {
     let capabilities = crate::plugins::resource::file_capabilities::FileCapabilities {
         read: true,
         stat: true,
@@ -119,7 +118,7 @@ fn create_capability_never_adds_a_menu_group() {
         assert!(items.iter().any(|item| item["id"] == id), "{id}");
     }
     assert_never_disabled(&ctx);
-    // `create` is a toolbar-only capability: the menu is identical without it.
+    // Selected items never receive blank-canvas actions.
     let without_create = super::builtin::Context::for_test_caps(
         "fiex://mount/gating-mount",
         vec!["fiex://mount/gating-mount/a.txt".into()],
@@ -163,11 +162,14 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         ..Default::default()
     };
     let ctx = super::builtin::Context::for_test_caps("/tmp/blank", vec![], vec![], capabilities);
-    assert_eq!(provider_ids(&ctx), ["builtin:create"]);
-    let menu = super::builtin::resolve("builtin:create", &ctx).unwrap();
-    let items = menu["items"].as_array().unwrap();
-    assert_eq!(items[0]["id"], "newFolder");
-    assert_eq!(items[1]["id"], "newFile");
+    assert_eq!(
+        provider_ids(&ctx),
+        ["builtin:new-file", "builtin:new-folder"]
+    );
+    let folder = super::builtin::resolve("builtin:new-folder", &ctx).unwrap();
+    assert_eq!(folder["items"][0]["id"], "newFolder");
+    let file = super::builtin::resolve("builtin:new-file", &ctx).unwrap();
+    assert_eq!(file["items"][0]["id"], "newFile");
     assert_never_disabled(&ctx);
 
     let files_only = super::builtin::Context::for_test_caps(
@@ -180,10 +182,9 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
             ..Default::default()
         },
     );
-    let only = super::builtin::resolve("builtin:create", &files_only).unwrap();
-    let items = only["items"].as_array().unwrap();
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["id"], "newFile");
+    let only = super::builtin::resolve("builtin:new-file", &files_only).unwrap();
+    assert_eq!(only["items"][0]["id"], "newFile");
+    assert!(!provider_ids(&files_only).contains(&"builtin:new-folder".to_string()));
 
     let empty = super::builtin::Context::for_test_caps(
         "/tmp/blank",
@@ -191,11 +192,12 @@ fn blank_selection_offers_only_capability_gated_create_actions() {
         vec![],
         crate::plugins::resource::file_capabilities::FileCapabilities::default(),
     );
-    assert!(!provider_ids(&empty).contains(&"builtin:create".to_string()));
+    assert!(!provider_ids(&empty).contains(&"builtin:new-folder".to_string()));
+    assert!(!provider_ids(&empty).contains(&"builtin:new-file".to_string()));
 }
 
 #[test]
-fn applications_menu_uses_descriptor_and_generic_info_without_duplicate_open() {
+fn applications_menu_excludes_generic_file_actions() {
     let path = "applications://c3lzdGVtLWFwcA";
     let ctx = super::builtin::Context::for_test_caps(
         "applications://",
@@ -209,13 +211,52 @@ fn applications_menu_uses_descriptor_and_generic_info_without_duplicate_open() {
     );
     let ids = provider_ids(&ctx);
     assert!(ids.contains(&"core.applications.menu".to_string()));
-    assert!(ids.contains(&"builtin:opening".to_string()));
+    for id in [
+        "builtin:opening",
+        "builtin:copy-path",
+        "builtin:clipboard",
+        "builtin:rename",
+        "builtin:trash",
+    ] {
+        assert!(!ids.contains(&id.to_string()), "{id}");
+    }
     let native = super::builtin::resolve("core.applications.menu", &ctx).unwrap();
     assert_eq!(native["items"][0]["id"], "open");
-    let generic = super::builtin::resolve("builtin:opening", &ctx).unwrap();
-    let items = generic["items"].as_array().unwrap();
-    assert!(items.iter().any(|item| item["id"] == "info"));
-    assert!(items.iter().any(|item| item["id"] == "preview"));
-    assert!(!items.iter().any(|item| item["id"] == "open"));
+    assert!(super::builtin::resolve("builtin:opening", &ctx).is_err());
     assert!(super::builtin::execute("core.applications.menu", "delete", &ctx).is_err());
+}
+
+#[test]
+fn applications_blank_canvas_uses_exclude_to_keep_only_new_folder() {
+    let ctx = super::builtin::Context::for_test_caps(
+        "applications://",
+        vec![],
+        vec![],
+        crate::plugins::resource::file_capabilities::FileCapabilities::ALL,
+    );
+    let ids = provider_ids(&ctx);
+    assert!(ids.contains(&"builtin:new-folder".to_string()));
+    assert!(!ids.contains(&"builtin:new-file".to_string()));
+    assert_eq!(
+        super::builtin::resolve("builtin:new-folder", &ctx).unwrap()["items"][0]["id"],
+        "newFolder"
+    );
+    assert!(super::builtin::resolve("builtin:new-file", &ctx).is_err());
+}
+
+#[test]
+fn trash_and_recent_blank_canvases_exclude_generic_create_actions() {
+    let capabilities = crate::plugins::resource::file_capabilities::FileCapabilities::ALL;
+    for directory in ["trash://", "recent://"] {
+        let ctx = super::builtin::Context::for_test_caps(directory, vec![], vec![], capabilities);
+        let ids = provider_ids(&ctx);
+        assert!(
+            !ids.contains(&"builtin:new-folder".to_string()),
+            "{directory}"
+        );
+        assert!(
+            !ids.contains(&"builtin:new-file".to_string()),
+            "{directory}"
+        );
+    }
 }

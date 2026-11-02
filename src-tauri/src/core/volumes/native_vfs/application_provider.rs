@@ -310,13 +310,19 @@ impl VfsProvider for ApplicationView {
         request: &TransferPreflight,
     ) -> Result<fiex_provider_contracts::PreflightDecision, ProviderError> {
         let denial = match request.direction {
-            TransferDirection::Export if request.metadata.system && !request.same_mount => {
-                Some("PermissionDenied: system applications cannot leave the Applications view")
+            TransferDirection::Export
+                if !request.same_mount
+                    && (request.metadata.system
+                        || request.metadata.executable_shortcut != Some(true)) =>
+            {
+                Some("PermissionDenied: only user applications can leave the Applications view")
             }
             TransferDirection::Import
-                if !request.same_mount && request.metadata.executable_shortcut != Some(true) =>
+                if !request.same_mount
+                    && (request.metadata.system
+                        || request.metadata.executable_shortcut != Some(true)) =>
             {
-                Some("PermissionDenied: Applications accepts only executable shortcuts")
+                Some("PermissionDenied: Applications accepts only verified applications")
             }
             _ => None,
         };

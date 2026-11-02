@@ -16,8 +16,8 @@ use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
 use store::list_user;
 pub use store::{
-    after_rename, candidate_path, create_stored, is_user, list_at, remove_user, rename_stored,
-    stored_entry, stored_path, stored_uri, validate_child,
+    after_rename, candidate_path, create_stored, is_user, list_at, lstat_path, remove_user,
+    rename_stored, stored_entry, stored_path, stored_uri, validate_child,
 };
 #[cfg(test)]
 pub(super) use store::{folder_listing, user_encoded};
@@ -110,6 +110,19 @@ pub fn is_system_app(path: &str) -> bool {
     path != URI && path.starts_with(URI) && !is_user(path)
 }
 
+/// Whether a stored user node is a platform-verified launch target.
+pub fn is_user_application(path: &str) -> bool {
+    is_user(path)
+        && lstat_path(path)
+            .ok()
+            .is_some_and(|path| platform::is_user_application(&path))
+}
+
+/// Classify a trusted host resource for Applications transfer policy.
+pub(crate) fn classify_host_application(path: &str, target: Option<&str>) -> bool {
+    platform::classify_host_application(std::path::Path::new(path), target)
+}
+
 pub fn is_mapped(path: &str) -> bool {
     folders::is_mapped(path)
 }
@@ -166,7 +179,24 @@ pub fn remove_entries(paths: &[String]) -> Result<(), String> {
     if paths.iter().any(|path| !is_user(path)) {
         return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
     }
-    for path in paths {
+    // Validate every selected subtree before deleting anything. A selected
+    // organization folder containing an app rejects the complete batch.
+    let all_targets = paths
+        .iter()
+        .map(|path| store::validate_user_removal(path).map(|target| (path, target)))
+        .collect::<Result<Vec<_>, _>>()?;
+    let targets = all_targets
+        .iter()
+        .filter(|(uri, target)| {
+            !all_targets.iter().any(|(other_uri, other)| {
+                other_uri.as_str() != uri.as_str()
+                    && other.is_dir()
+                    && other.as_path() != target.as_path()
+                    && target.starts_with(other.as_path())
+            })
+        })
+        .collect::<Vec<_>>();
+    for (path, _) in targets {
         remove_user(path)?;
     }
     Ok(())

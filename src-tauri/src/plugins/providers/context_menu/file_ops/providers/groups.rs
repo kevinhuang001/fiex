@@ -103,23 +103,27 @@ impl Tags {
     }
 }
 
-/// Blank-canvas actions: there is no selection, so only creating entries is
-/// meaningful. Both items are capability-gated: `mkdir` for a folder and the
-/// provider's `write` (parentId + name) for an empty file.
-pub(super) struct Create;
-impl Create {
+/// Blank-canvas directory creation. It has its own match rule so Applications
+/// can keep New Folder while excluding New File.
+pub(super) struct NewFolder;
+impl NewFolder {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        selection.paths.is_empty() && (capabilities.create || capabilities.write)
+        selection.paths.is_empty() && capabilities.create
     }
-    fn items(&self, _selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
-        let mut items = Vec::new();
-        if capabilities.create {
-            items.push(item("newFolder", "新建文件夹…", "folder-plus", "newFolder"));
-        }
-        if capabilities.write {
-            items.push(item("newFile", "新建空文件…", "file-plus", "newFile"));
-        }
-        items
+    fn items(&self, _selection: &Selection<'_>, _capabilities: &FileCapabilities) -> Vec<MenuItem> {
+        vec![item("newFolder", "新建文件夹…", "folder-plus", "newFolder")]
+    }
+}
+
+/// Empty file creation is distinct from the VFS write capability used by
+/// reviewed imports and transfers.
+pub(super) struct NewFile;
+impl NewFile {
+    fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
+        selection.paths.is_empty() && capabilities.write
+    }
+    fn items(&self, _selection: &Selection<'_>, _capabilities: &FileCapabilities) -> Vec<MenuItem> {
+        vec![item("newFile", "新建空文件…", "file-plus", "newFile")]
     }
 }
 
@@ -212,7 +216,8 @@ impl Trash {
 impl_context_menu_provider!(
     Opening,
     Tags,
-    Create,
+    NewFolder,
+    NewFile,
     Rename,
     BatchRename,
     Clipboard,

@@ -33,9 +33,10 @@ fn system_app_is_launch_only_and_user_entries_are_protected() {
         &system
     )
     .is_err());
-    let user = vec![format!("{}dXNlci1hcHA", applications::USER_PREFIX)];
+    let user = vec![format!("{}not-base64!", applications::USER_PREFIX)];
     let value = resolve("core.applications.menu", "applications://", &user).unwrap();
-    assert_eq!(value["items"].as_array().unwrap().len(), 3);
+    assert_eq!(value["items"].as_array().unwrap().len(), 1);
+    assert_eq!(value["items"][0]["id"], "delete");
     assert_eq!(
         execute("core.applications.menu", "delete", "applications://", &user).unwrap()["command"],
         "delete"
@@ -46,11 +47,10 @@ fn system_app_is_launch_only_and_user_entries_are_protected() {
 fn mixed_app_selections_have_only_shared_actions() {
     let selections = vec![
         "applications://c3lzdGVtLWFwcA".into(),
-        format!("{}user/dXNlci1hcHA", applications::URI),
+        format!("{}not-base64!", applications::USER_PREFIX),
     ];
     let value = resolve("core.applications.menu", "applications://", &selections).unwrap();
-    assert_eq!(value["items"].as_array().unwrap().len(), 1);
-    assert_eq!(value["items"][0]["id"], "open");
+    assert!(value["items"].as_array().unwrap().is_empty());
 }
 
 #[test]

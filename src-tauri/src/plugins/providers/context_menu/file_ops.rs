@@ -17,8 +17,10 @@
 //! - `copy-path`: always; it only uses the location Core already knows.
 //! - `connection-cache`: remote selections only, unchanged otherwise.
 //!
-//! Folder creation is not a menu group: the toolbar owns the single
-//! "new folder" affordance from the directory's `allowedOps`.
+//! Blank-canvas creation is split into separate New Folder and New File
+//! providers. Their descriptors match `mkdir` and `write` independently;
+//! New File can therefore exclude a view without hiding New Folder or
+//! disabling VFS writes used by reviewed transfers.
 //!
 //! Presence decides availability: an unsupported operation is absent from the
 //! menu, never emitted as a disabled item. [`crate::plugins::resource::file_capabilities`]
@@ -52,10 +54,11 @@ pub(super) fn item(
     providers::item(id, title, icon, shortcut)
 }
 
-const PROVIDER_IDS: [&str; 9] = [
+const PROVIDER_IDS: [&str; 10] = [
     "builtin:opening",
     "builtin:tags",
-    "builtin:create",
+    "builtin:new-folder",
+    "builtin:new-file",
     "builtin:connection-cache",
     "builtin:rename",
     "builtin:batch-rename",
@@ -149,18 +152,18 @@ fn offered_item_ids(
                 Vec::new()
             }
         }
-        "builtin:create" => {
-            if !selection.paths.is_empty() {
-                Vec::new()
+        "builtin:new-folder" => {
+            if selection.paths.is_empty() && capabilities.create {
+                vec!["newFolder"]
             } else {
-                let mut items = Vec::new();
-                if capabilities.create {
-                    items.push("newFolder");
-                }
-                if capabilities.write {
-                    items.push("newFile");
-                }
-                items
+                Vec::new()
+            }
+        }
+        "builtin:new-file" => {
+            if selection.paths.is_empty() && capabilities.write {
+                vec!["newFile"]
+            } else {
+                Vec::new()
             }
         }
         "builtin:connection-cache" => {
@@ -294,7 +297,7 @@ mod registry_tests {
             .descriptors()
             .filter(|descriptor| descriptor.id.starts_with("builtin:"))
             .collect::<Vec<_>>();
-        assert_eq!(generic.len(), 9);
+        assert_eq!(generic.len(), 10);
         for descriptor in generic {
             assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
             descriptor.validate().unwrap();
@@ -324,7 +327,10 @@ mod registry_tests {
                 .into_iter()
                 .map(|provider| provider.id)
                 .collect::<Vec<_>>(),
-            vec!["builtin:create".to_owned()]
+            vec![
+                "builtin:new-file".to_owned(),
+                "builtin:new-folder".to_owned(),
+            ]
         );
     }
 }

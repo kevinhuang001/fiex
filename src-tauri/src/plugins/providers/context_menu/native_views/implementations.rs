@@ -1,6 +1,5 @@
 //! Native view menus implement the shared ContextMenuProvider contract.
 use super::NativeProviderInvocation;
-use crate::core::files::Entry;
 use crate::core::volumes::{applications, native_vfs, recycle, trash_vfs};
 use fiex_provider_contracts::{
     ContextMenuProvider, MenuExecuteResult, MenuItem, MenuPlacement, ProviderError, ProviderInput,
@@ -123,22 +122,19 @@ pub(super) struct ApplicationsMenu;
 impl ApplicationsMenu {
     fn items(path: &str) -> Vec<MenuItem> {
         let user = applications::is_user(path);
-        let launch = path != applications::URI && (!user || user_application(path));
-        let mut items = vec![item(
-            "open",
-            crate::i18n::t(if launch { "启动应用" } else { "打开" }).into(),
-            "open",
-            false,
-            false,
-        )];
-        if user {
+        let launch =
+            path != applications::URI && (!user || applications::is_user_application(path));
+        let mut items = Vec::new();
+        if launch || (user && applications::stored_entry(path).is_ok_and(|entry| entry.is_dir)) {
             items.push(item(
-                "rename",
-                crate::i18n::t("重命名").into(),
-                "pencil",
+                "open",
+                crate::i18n::t(if launch { "启动应用" } else { "打开" }).into(),
+                "open",
                 false,
                 false,
             ));
+        }
+        if user {
             items.push(item(
                 "delete",
                 crate::i18n::t("彻底删除").into(),
@@ -162,31 +158,19 @@ impl ContextMenuProvider for ApplicationsMenu {
         let id = offered(ctx, &Self::resolve(self, ctx)?)?;
         match id {
             "open" => Ok(core_action("open", paths, &directory)),
-            "rename" | "delete" => {
+            "delete" => {
                 if paths.iter().any(|path| !applications::is_user(path)) {
                     return Err(ProviderError::invalid_params(
                         "only stored application entries can be modified",
                     ));
                 }
-                Ok(core_action(
-                    if id == "rename" { "rename" } else { "delete" },
-                    paths,
-                    &directory,
-                ))
+                Ok(core_action("delete", paths, &directory))
             }
             _ => Err(ProviderError::invalid_params(
                 "unknown Applications menu action",
             )),
         }
     }
-}
-
-fn user_application(path: &str) -> bool {
-    applications::stored_entry(path).is_ok_and(|entry| user_application_entry(&entry))
-}
-
-fn user_application_entry(entry: &Entry) -> bool {
-    !entry.is_dir || entry.extension == "app"
 }
 
 pub(super) struct TrashMenu;

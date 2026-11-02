@@ -45,7 +45,7 @@ fn resource_size(resource: &ResourceSnapshot) -> Option<u64> {
         .or_else(|| resource.metadata().and_then(|metadata| metadata.size))
 }
 
-fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
+fn resource_candidates(resource: &ResourceSnapshot) -> (Vec<Resolver>, bool) {
     let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(resource));
     let readable = targets.first().is_some_and(|target| {
         target
@@ -53,7 +53,8 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
             .operations
             .contains(&fiex_provider_contracts::FsOperation::Read)
     });
-    let builtin = native::candidates(&resource.ext, &resource.mime, resource.is_dir)
+    let fallback_allowed = native::fallback_matches(&targets);
+    let builtin = native::candidates_for(&targets)
         .into_iter()
         .filter(|provider| readable || provider.id == "builtin:fallback")
         .collect();
@@ -76,11 +77,11 @@ fn resource_candidates(resource: &ResourceSnapshot) -> Vec<Resolver> {
             .and_then(Value::as_u64)
             .is_none_or(|limit| size.is_none_or(|size| size <= limit))
     });
-    providers
+    (providers, fallback_allowed)
 }
 pub fn resource_candidates_json(display: &str) -> Result<Vec<Value>, String> {
     let resource = ResourceSnapshot::resolve_from_directory_snapshot(display)?;
-    Ok(project_candidates(resource_candidates(&resource)))
+    Ok(project_candidates(resource_candidates(&resource).0))
 }
 fn project_candidates(providers: Vec<Resolver>) -> Vec<Value> {
     providers
@@ -121,7 +122,7 @@ fn resolve_preview(
     preferred: Option<&str>,
     order: Option<&[String]>,
 ) -> Result<Value, String> {
-    let mut providers = resource_candidates(&resource);
+    let (mut providers, fallback_allowed) = resource_candidates(&resource);
     if let Some(order) = order {
         providers.retain(|p| order.contains(&p.id));
         providers.sort_by_key(|p| {
@@ -142,7 +143,9 @@ fn resolve_preview(
     let preferred_id = preferred.map(str::to_owned);
     // The final fallback is a label-only renderer; it never reads/downloads content.
     providers.retain(|p| p.id != "builtin:fallback");
-    providers.push(Resolver::builtin("builtin:fallback", i64::MIN));
+    if fallback_allowed {
+        providers.push(Resolver::builtin("builtin:fallback", i64::MIN));
+    }
     let resource = Arc::new(resource);
     let request = ProviderRequest {
         method: "preview.open".into(),

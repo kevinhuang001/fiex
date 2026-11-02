@@ -81,6 +81,24 @@ pub fn candidate_path(uri: &str) -> Result<PathBuf, String> {
     Ok(resolved)
 }
 
+/// Return the lexical path of a user entry without resolving the final
+/// component. Classification and recursive safety checks use this form so a
+/// symlink cannot be mistaken for its target or traversed accidentally.
+pub fn lstat_path(uri: &str) -> Result<PathBuf, String> {
+    let root = stored_path(URI)?;
+    let encoded = user_encoded(uri).ok_or("not a user application")?;
+    let relative = decode(encoded)?;
+    if relative.is_empty()
+        || relative.contains(['\\', ':', '\0'])
+        || Path::new(&relative)
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err("invalid application store path".into());
+    }
+    Ok(root.join(relative))
+}
+
 /// Ensure a generated child belongs directly to the selected Applications
 /// directory. This is used when Core binds a provider-returned ResourceRef.
 pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {

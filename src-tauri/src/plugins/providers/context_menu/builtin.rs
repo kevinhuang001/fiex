@@ -182,7 +182,14 @@ impl Context {
         );
         let match_targets = crate::plugins::events::matching::match_resources(resources.as_slice());
         let directory_resource = None;
-        let directory_target = crate::plugins::match_rules::directory_match_resource(directory);
+        let mut directory_target = crate::plugins::match_rules::directory_match_resource(directory);
+        if let Some(target) = directory_target.as_mut() {
+            target.capabilities.operations = capabilities
+                .into_allowed_ops()
+                .iter()
+                .filter_map(|operation| fiex_provider_contracts::FsOperation::parse(operation))
+                .collect();
+        }
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         let (native_view_providers, claimed_actions) =
             super::native_views::resolve_snapshot(directory, &paths);

@@ -1,6 +1,111 @@
 //! Platform-specific Applications enumeration and launch behavior.
 use std::path::Path;
 
+/// Platform-owned classifier shared by Applications imports, exports and
+/// stored user-app launch checks. Unknown or stale entries are never treated
+/// as launchable.
+pub(super) fn classify_host_application(path: &Path, target: Option<&str>) -> bool {
+    #[cfg(not(target_os = "windows"))]
+    let _ = target;
+    let Ok(link) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    if link.file_type().is_symlink() {
+        return false;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("lnk"))
+        {
+            return target.is_some_and(|target| {
+                Path::new(target).is_file() && super::is_executable_target(target)
+            });
+        }
+        if path.is_file() && super::is_executable_target(&path.to_string_lossy()) {
+            return crate::core::volumes::application_policy::executable_file(
+                &path.to_string_lossy(),
+            ) || !path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    if path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("desktop"))
+    {
+        return linux::launchable_desktop(path);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if is_application_bundle(path) {
+            return true;
+        }
+        if is_executable_finder_alias(path) {
+            return true;
+        }
+    }
+
+    crate::core::volumes::application_policy::executable_file(&path.to_string_lossy())
+}
+
+pub(super) fn is_user_application(path: &Path) -> bool {
+    let target = crate::core::files::entry(path)
+        .ok()
+        .and_then(|entry| entry.link_target);
+    classify_host_application(path, target.as_deref())
+}
+
+#[cfg(target_os = "macos")]
+fn is_application_bundle(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("app"))
+        && path.is_dir()
+        && path.join("Contents/Info.plist").is_file()
+}
+
+#[cfg(target_os = "macos")]
+fn is_executable_finder_alias(path: &Path) -> bool {
+    let Ok(kind) = std::process::Command::new("mdls")
+        .args(["-raw", "-name", "kMDItemContentType"])
+        .arg(path)
+        .output()
+    else {
+        return false;
+    };
+    if String::from_utf8_lossy(&kind.stdout)
+        .trim()
+        .trim_matches('"')
+        != "com.apple.alias-file"
+    {
+        return false;
+    }
+    let script = "on run argv\ntell application \"Finder\"\nset originalFile to original item of (POSIX file (item 1 of argv) as alias)\nreturn POSIX path of (originalFile as alias)\nend tell\nend run";
+    let Ok(output) = std::process::Command::new("osascript")
+        .args(["-e", script])
+        .arg(path)
+        .output()
+    else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let Ok(target) = String::from_utf8(output.stdout) else {
+        return false;
+    };
+    let target = Path::new(target.trim());
+    if target.is_dir() {
+        return is_application_bundle(target);
+    }
+    crate::core::volumes::application_policy::executable_file(&target.to_string_lossy())
+}
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]

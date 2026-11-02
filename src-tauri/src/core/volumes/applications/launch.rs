@@ -1,11 +1,15 @@
-use super::{platform, store::is_user, store::stored_path, URI};
+use super::{platform, store::is_user, URI};
 #[cfg(any(target_os = "windows", test))]
 use std::path::Path;
 
 pub fn open(encoded: &str) -> Result<(), String> {
     let uri = format!("{URI}{encoded}");
     if is_user(&uri) {
-        return platform::open_stored(&stored_path(&uri)?);
+        let path = super::store::lstat_path(&uri)?;
+        if !platform::is_user_application(&path) {
+            return Err(crate::i18n::t("无法启动应用").into());
+        }
+        return platform::open_stored(&path);
     }
     platform::platform_open(encoded)
 }

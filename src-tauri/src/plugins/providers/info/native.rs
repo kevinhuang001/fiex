@@ -117,4 +117,30 @@ mod tests {
         assert!(invoke("unknown", &directory).is_err());
         assert_eq!(invoke("core.metadata", &directory).unwrap().len(), 1);
     }
+
+    #[test]
+    fn native_info_providers_remain_available_in_core_special_views() {
+        for view_id in ["core:applications", "core:trash", "core:recent"] {
+            let target = fiex_provider_contracts::MatchResource {
+                metadata: Some(crate::plugins::contracts::ResourceMetadata {
+                    kind: "file".into(),
+                    mime: Some("video/mp4".into()),
+                    ..Default::default()
+                }),
+                view: Some(fiex_provider_contracts::ResourceLocation {
+                    resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                    provider_id: view_id.into(),
+                    mount_id: Some(view_id.into()),
+                }),
+                ..Default::default()
+            };
+            let candidates = registry().matched_candidates(&[target], None, 1);
+            assert!(candidates
+                .iter()
+                .any(|provider| provider.id == "core.metadata"));
+            assert!(candidates
+                .iter()
+                .any(|provider| provider.id == "core.media"));
+        }
+    }
 }

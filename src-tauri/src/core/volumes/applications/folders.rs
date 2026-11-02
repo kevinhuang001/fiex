@@ -174,6 +174,12 @@ fn has_mapped_apps(store: &Store, folder: &str) -> bool {
         .any(|(key, apps)| is_same_or_child(folder, key) && !apps.is_empty())
 }
 
+/// Whether the selected folder or one of its descendants owns mapped system
+/// applications. Deletion checks this immediately before mutating the store.
+pub fn contains_mapped_apps(folder: &str) -> bool {
+    has_mapped_apps(&lock(), &normalized(folder))
+}
+
 fn move_in_store(store: &mut Store, apps: &[String], destination: &str) -> Result<bool, String> {
     if apps.is_empty() {
         return Ok(false);

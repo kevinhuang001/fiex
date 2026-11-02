@@ -8,8 +8,8 @@ use crate::plugins::provider_registry::native::NativeProviderRegistry;
 #[cfg(test)]
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
-    MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
-    ProviderMatchRule, ResourceMetadata,
+    LocationMatch, MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation,
+    ProviderKind, ProviderMatchExclude, ProviderMatchRule, ResourceMetadata,
 };
 #[cfg(test)]
 use serde_json::json;
@@ -27,6 +27,16 @@ impl PreviewProvider for BuiltinPreview {
         let view =
             builtin_view(self.0, &path, &resource.display).map_err(ProviderError::internal)?;
         serde_json::from_value(view).map_err(|error| ProviderError::internal(error.to_string()))
+    }
+}
+
+fn application_view_exclude() -> ProviderMatchExclude {
+    ProviderMatchExclude {
+        view: Some(LocationMatch {
+            provider_ids: Some(vec!["core:applications".into()]),
+            ..Default::default()
+        }),
+        ..Default::default()
     }
 }
 
@@ -51,24 +61,31 @@ fn registry() -> &'static NativeProviderRegistry<dyn PreviewProvider> {
                         "application/javascript".into(),
                     ],
                     kinds: vec!["file".into()],
+                    exclude: Some(application_view_exclude()),
                     ..Default::default()
                 },
                 Builtin::Image => ProviderMatchRule {
                     mime_types: vec!["image/*".into()],
                     kinds: vec!["file".into()],
+                    exclude: Some(application_view_exclude()),
                     ..Default::default()
                 },
                 Builtin::Media => ProviderMatchRule {
                     mime_types: vec!["audio/*".into(), "video/*".into()],
                     kinds: vec!["file".into()],
+                    exclude: Some(application_view_exclude()),
                     ..Default::default()
                 },
                 Builtin::Pdf => ProviderMatchRule {
                     mime_types: vec!["application/pdf".into()],
                     kinds: vec!["file".into()],
+                    exclude: Some(application_view_exclude()),
                     ..Default::default()
                 },
-                Builtin::Fallback => ProviderMatchRule::default(),
+                Builtin::Fallback => ProviderMatchRule {
+                    exclude: Some(application_view_exclude()),
+                    ..Default::default()
+                },
             };
             values
                 .register(
@@ -98,7 +115,11 @@ pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
         }),
         ..Default::default()
     }];
-    let mut candidates = registry().matched_candidates(&targets, None, 1);
+    candidates_for(&targets)
+}
+
+pub(super) fn candidates_for(targets: &[MatchResource]) -> Vec<Resolver> {
+    let mut candidates = registry().matched_candidates(targets, None, targets.len());
     if candidates
         .iter()
         .any(|provider| provider.id != "builtin:fallback")
@@ -106,6 +127,13 @@ pub(super) fn candidates(ext: &str, mime: &str, is_dir: bool) -> Vec<Resolver> {
         candidates.retain(|provider| provider.id != "builtin:fallback");
     }
     candidates
+}
+
+pub(super) fn fallback_matches(targets: &[MatchResource]) -> bool {
+    registry()
+        .matched_candidates(targets, None, targets.len())
+        .iter()
+        .any(|provider| provider.id == "builtin:fallback")
 }
 
 #[cfg(test)]
@@ -148,5 +176,67 @@ mod tests {
             open("builtin:fallback", &resource).unwrap().kind,
             "fallback"
         );
+    }
+
+    #[test]
+    fn native_previews_exclude_applications_but_keep_trash_and_recent() {
+        for view_id in ["core:applications"] {
+            let target = MatchResource {
+                metadata: Some(ResourceMetadata {
+                    kind: "file".into(),
+                    extension: Some("png".into()),
+                    mime: Some("image/png".into()),
+                    ..Default::default()
+                }),
+                view: Some(fiex_provider_contracts::ResourceLocation {
+                    resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                    provider_id: view_id.into(),
+                    mount_id: Some(view_id.into()),
+                }),
+                ..Default::default()
+            };
+            assert!(candidates_for(std::slice::from_ref(&target)).is_empty());
+            assert!(!fallback_matches(std::slice::from_ref(&target)));
+        }
+        let recent = MatchResource {
+            metadata: Some(ResourceMetadata {
+                kind: "file".into(),
+                extension: Some("png".into()),
+                mime: Some("image/png".into()),
+                ..Default::default()
+            }),
+            view: Some(fiex_provider_contracts::ResourceLocation {
+                resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                provider_id: "core:recent".into(),
+                mount_id: Some("core:recent".into()),
+            }),
+            ..Default::default()
+        };
+        assert!(candidates_for(std::slice::from_ref(&recent))
+            .iter()
+            .any(|provider| provider.id == "builtin:image"));
+        assert!(fallback_matches(std::slice::from_ref(&recent)));
+        let trash = MatchResource {
+            view: Some(fiex_provider_contracts::ResourceLocation {
+                resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                provider_id: "core:trash".into(),
+                mount_id: Some("core:trash".into()),
+            }),
+            ..recent.clone()
+        };
+        assert!(candidates_for(std::slice::from_ref(&trash))
+            .iter()
+            .any(|provider| provider.id == "builtin:image"));
+        assert!(fallback_matches(std::slice::from_ref(&trash)));
+        let ordinary = MatchResource {
+            metadata: Some(ResourceMetadata {
+                kind: "file".into(),
+                extension: Some("png".into()),
+                mime: Some("image/png".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert!(fallback_matches(std::slice::from_ref(&ordinary)));
     }
 }

@@ -92,12 +92,19 @@ fn match_predicates_are_scoped_by_extension_point() {
     }))
     .is_ok());
     assert!(validate_extensions(&serde_json::json!({
+        "contextMenus": {"match": {
+            "exclude": {"view": {"providerIds": ["core:applications"]}}
+        }}
+    }))
+    .is_ok());
+    assert!(validate_extensions(&serde_json::json!({
         "info": {"match": {"mimeTypes": ["text/*"]}}
     }))
     .is_ok());
     for invalid in [
         serde_json::json!({"decorations": {"match": {"selection": "single"}}}),
         serde_json::json!({"contextMenus": {"match": {"contains": [".git"]}}}),
+        serde_json::json!({"info": {"match": {"exclude": {}}}}),
         serde_json::json!({"info": {"match": {"contains": [".git"]}}}),
         serde_json::json!({"info": [{"id": "x"}]}),
         serde_json::json!({"info": {"title": "X"}}),

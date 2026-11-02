@@ -54,96 +54,18 @@ impl ResourceBroker {
     }
 }
 fn executable_shortcut(path: &str, target: Option<&str>) -> Option<bool> {
+    if crate::core::volumes::applications::is_user(path) {
+        return Some(crate::core::volumes::applications::is_user_application(
+            path,
+        ));
+    }
     // Provider paths carry no trusted host-path or executable-target authority.
     if !crate::core::fs::provider_registry::resource_access(path)
         .is_ok_and(|access| access == crate::core::fs::provider_registry::ResourceAccess::HostPath)
     {
         return None;
     }
-    #[cfg(target_os = "windows")]
-    if std::path::Path::new(path)
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("lnk"))
-    {
-        return Some(target.is_some_and(|target| {
-            std::path::Path::new(target).is_file()
-                && crate::core::volumes::applications::is_executable_target(target)
-        }));
-    }
-    let _ = target;
-    #[cfg(target_os = "linux")]
-    if path.ends_with(".desktop") {
-        let Ok(metadata) = std::fs::metadata(path) else {
-            return Some(false);
-        };
-        if metadata.len() > 65536 {
-            return Some(false);
-        }
-        let Ok(text) = std::fs::read_to_string(path) else {
-            return Some(false);
-        };
-        let section = text.split("[Desktop Entry]").nth(1)?.split("\n[").next()?;
-        let application = section
-            .lines()
-            .any(|line| line.trim() == "Type=Application");
-        let command = section.lines().find_map(|line| line.strip_prefix("Exec="));
-        return Some(
-            application
-                && command.is_some_and(|command| {
-                    shell_words::split(command)
-                        .ok()
-                        .and_then(|words| words.into_iter().next())
-                        .is_some_and(|first| which::which(first).is_ok())
-                }),
-        );
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let app = std::path::Path::new(path);
-        if app
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("app"))
-        {
-            return Some(
-                app.is_dir()
-                    && app.join("Contents/Info.plist").is_file()
-                    && !std::fs::symlink_metadata(app).is_ok_and(|m| m.file_type().is_symlink()),
-            );
-        }
-        // Finder aliases are regular files; resolving an alias never executes it.
-        let kind = std::process::Command::new("mdls")
-            .args(["-raw", "-name", "kMDItemContentType", path])
-            .output()
-            .ok()?;
-        if String::from_utf8_lossy(&kind.stdout)
-            .trim()
-            .trim_matches('"')
-            == "com.apple.alias-file"
-        {
-            let script = "on run argv\ntell application \"Finder\"\nset originalFile to original item of (POSIX file (item 1 of argv) as alias)\nreturn POSIX path of (originalFile as alias)\nend tell\nend run";
-            let output = std::process::Command::new("osascript")
-                .args(["-e", script, path])
-                .output()
-                .ok()?;
-            if !output.status.success() {
-                return Some(false);
-            }
-            let target = String::from_utf8(output.stdout).ok()?;
-            let target = std::path::Path::new(target.trim());
-            let metadata = std::fs::metadata(target).ok()?;
-            use std::os::unix::fs::PermissionsExt;
-            return Some(
-                (metadata.is_dir()
-                    && target
-                        .extension()
-                        .is_some_and(|extension| extension == "app"))
-                    || (metadata.is_file() && metadata.permissions().mode() & 0o111 != 0),
-            );
-        }
-    }
-    Some(crate::core::volumes::application_policy::executable_file(
-        path,
-    ))
+    Some(crate::core::volumes::applications::classify_host_application(path, target))
 }
 
 #[cfg(test)]

@@ -25,6 +25,39 @@ pub(super) fn launch_desktop(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
+pub(super) fn launchable_desktop(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() > 65_536 {
+        return false;
+    }
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Some(section) = text
+        .split("[Desktop Entry]")
+        .nth(1)
+        .and_then(|section| section.split("\n[").next())
+    else {
+        return false;
+    };
+    let application = section
+        .lines()
+        .any(|line| line.trim() == "Type=Application");
+    let command = section
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Exec="));
+    application
+        && command.is_some_and(|command| {
+            shell_words::split(command)
+                .ok()
+                .and_then(|words| words.into_iter().next())
+                .is_some_and(|first| which::which(first).is_ok())
+        })
+}
+
+#[cfg(target_os = "linux")]
 pub(in crate::core::volumes::applications) fn platform_list() -> Result<Vec<Entry>, String> {
     let mut roots = Vec::new();
     if let Some(data) = dirs::data_dir() {
@@ -68,6 +101,9 @@ fn collect_desktop_files(
             continue;
         }
         if path.extension().and_then(|value| value.to_str()) != Some("desktop") {
+            continue;
+        }
+        if !launchable_desktop(&path) {
             continue;
         }
         let Some((name, hidden, is_app)) = desktop_entry(&path) else {

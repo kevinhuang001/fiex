@@ -170,6 +170,12 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     let mut directories = Vec::new();
     let mut virtual_files = Vec::new();
     let mut inputs = vec![native.to_string_lossy().into_owned()];
+    let export_name = if cfg!(target_os = "windows") {
+        "same.exe"
+    } else {
+        "same.txt"
+    };
+    let mut expected = vec![b"local".to_vec()];
     for index in 0..2 {
         let dir = applications::create_stored(
             applications::URI,
@@ -177,24 +183,34 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
             true,
         )
         .unwrap();
-        let item = applications::create_stored(&dir, "same.txt", false).unwrap();
-        std::fs::write(
-            applications::candidate_path(&item).unwrap(),
-            index.to_string(),
-        )
-        .unwrap();
+        let item = applications::create_stored(&dir, export_name, false).unwrap();
+        let contents = if cfg!(target_os = "windows") {
+            vec![b'M', b'Z', index as u8]
+        } else {
+            index.to_string().into_bytes()
+        };
+        let item_path = applications::candidate_path(&item).unwrap();
+        std::fs::write(&item_path, &contents).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&item_path).unwrap().permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&item_path, permissions).unwrap();
+        }
         inputs.push(item);
         virtual_files.push(inputs.last().unwrap().clone());
         directories.push(dir);
+        expected.push(contents);
     }
     let output = export_for_external_drag(&inputs).unwrap();
     assert_eq!(output.len(), 3);
-    assert_eq!(std::fs::read(&output[0]).unwrap(), b"local");
-    assert_eq!(std::fs::read(&output[1]).unwrap(), b"0");
-    assert_eq!(std::fs::read(&output[2]).unwrap(), b"1");
+    for (path, bytes) in output.iter().zip(expected) {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
     assert_ne!(output[1], output[2]);
     for path in &output {
-        assert_eq!(std::path::Path::new(path).file_name().unwrap(), "same.txt");
+        assert_eq!(std::path::Path::new(path).file_name().unwrap(), export_name);
     }
     for file in virtual_files {
         applications::remove_user(&file).unwrap();
