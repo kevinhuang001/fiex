@@ -90,6 +90,28 @@ pub fn usb_fallback_eject_device(device: &str) -> Option<String> {
 
 fn native_mount_unsupported(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
+    // Linux may report an unsupported filesystem from the unprivileged mount
+    // attempt, then report an authorization failure from pkexec. The latter
+    // must win: permission or user-cancellation errors must never open the raw
+    // fallback provider.
+    if [
+        "permission denied",
+        "operation not permitted",
+        "access denied",
+        "not authorized",
+        "not authorised",
+        "authentication is required",
+        "authentication failed",
+        "authentication canceled",
+        "authentication cancelled",
+        "cancelled by user",
+        "canceled by user",
+    ]
+    .iter()
+    .any(|phrase| error.contains(phrase))
+    {
+        return false;
+    }
     [
         "unknown filesystem",
         "unsupported filesystem",
@@ -700,6 +722,12 @@ mod tests {
         assert!(!super::native_mount_unsupported("Operation not permitted"));
         assert!(!super::native_mount_unsupported(
             "wrong fs type, bad option, bad superblock"
+        ));
+        assert!(!super::native_mount_unsupported(
+            "unknown filesystem type 'btrfs'\nError executing command as another user: Not authorized"
+        ));
+        assert!(!super::native_mount_unsupported(
+            "unknown filesystem type 'btrfs'\nAuthentication is required to mount the device"
         ));
     }
 
