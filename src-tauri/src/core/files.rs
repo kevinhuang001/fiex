@@ -52,11 +52,14 @@ fn shortcut_target(path: &Path) -> Option<String> {
     link.relative_path().clone()
 }
 
+/// The Windows directory Read-only attribute is not an access restriction.
+/// It is commonly set on folders that still allow normal mutations.
+pub fn readonly_from_attributes(is_dir: bool, readonly: bool) -> bool {
+    readonly && !(cfg!(windows) && is_dir)
+}
+
 pub fn metadata_readonly(meta: &fs::Metadata) -> bool {
-    if cfg!(windows) && meta.is_dir() {
-        return false;
-    }
-    meta.permissions().readonly()
+    readonly_from_attributes(meta.is_dir(), meta.permissions().readonly())
 }
 
 pub fn entry(path: &Path) -> Result<Entry, String> {
