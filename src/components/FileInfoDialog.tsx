@@ -115,12 +115,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
   }, [info?.path])
 
   const calculateFolderSize = async () => {
-    if (
-      !info?.isDir ||
-      info.isSymlink ||
-      isVirtualResource(info.path) ||
-      folderSizeRequest.current
-    )
+    if (!info?.isDir || info.isSymlink || isVirtualResource(info.path) || folderSizeRequest.current)
       return
     const request = { path: info.path, id: crypto.randomUUID() }
     folderSizeRequest.current = request
@@ -179,9 +174,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
                   {
                     label: t('文件夹大小'),
                     value:
-                      currentFolderSize?.value === undefined
-                        ? '—'
-                        : size(currentFolderSize.value),
+                      currentFolderSize?.value === undefined ? '—' : size(currentFolderSize.value),
                     action:
                       currentFolderSize?.value === undefined
                         ? currentFolderSize?.loading

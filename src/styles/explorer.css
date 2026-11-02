@@ -884,7 +884,9 @@ body.col-resizing {
   animation: file-icon-skeleton 1.2s ease-in-out infinite;
 }
 @keyframes file-icon-skeleton {
-  to { background-position-x: -200%; }
+  to {
+    background-position-x: -200%;
+  }
 }
 /* Material's default folder is grey-blue; lift it to Finder-like blue. */
 .file-icon .symlink {
