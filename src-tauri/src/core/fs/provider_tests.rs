@@ -209,7 +209,11 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
         assert_eq!(std::fs::read(path).unwrap(), bytes);
     }
     assert_ne!(output[1], output[2]);
-    for path in &output {
+    assert_eq!(
+        std::path::Path::new(&output[0]).file_name().unwrap(),
+        "same.txt"
+    );
+    for path in &output[1..] {
         assert_eq!(std::path::Path::new(path).file_name().unwrap(), export_name);
     }
     for file in virtual_files {
