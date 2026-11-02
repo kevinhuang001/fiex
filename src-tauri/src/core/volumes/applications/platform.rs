@@ -252,14 +252,14 @@ struct WindowsApp {
 }
 
 #[cfg(target_os = "windows")]
-fn resolve_windows_executable(value: &str) -> Option<String> {
+pub(super) fn resolve_windows_executable(value: &str) -> Option<String> {
     if !super::is_executable_target(value) {
         return None;
     }
     let path = if value.starts_with('{') {
         // AppsFolder returns Known Folder IDs for tools such as msinfo32.exe.
         // An unresolved GUID must never be passed to ShellExecute as a path.
-        super::windows_shell::resolve_known_folder_path(value)?
+        crate::core::volumes::windows_shell::resolve_known_folder_path(value)?
     } else {
         PathBuf::from(value)
     };
