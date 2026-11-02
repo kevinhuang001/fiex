@@ -40,7 +40,6 @@ export type ContextMenuProps = Pick<
   | 'run'
   | 'copy'
   | 'duplicate'
-  | 'terminal'
   | 'notify'
   | 'recycle'
   | 'create'

@@ -4,7 +4,7 @@ use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, MenuItem, Prov
 use std::sync::Arc;
 
 use self::groups::{
-    BatchRename, Clipboard, CopyPath, Create, Opening, Rename, Tags, Terminal, Trash,
+    BatchRename, Clipboard, CopyPath, Create, Opening, Rename, Tags, Trash,
 };
 use super::super::connection_cache::ConnectionCache;
 
@@ -13,7 +13,7 @@ mod groups;
 /// Every generic Core menu group is registered as the same shared provider
 /// trait used by SDK plugins. Native implementations run directly in Core.
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
-    let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 10] = [
+    let implementations: [(&str, i64, Arc<dyn ContextMenuProvider>); 9] = [
         (
             "builtin:opening",
             100,
@@ -50,11 +50,6 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
             Arc::new(Clipboard) as Arc<dyn ContextMenuProvider>,
         ),
         (
-            "builtin:terminal",
-            93,
-            Arc::new(Terminal) as Arc<dyn ContextMenuProvider>,
-        ),
-        (
             "builtin:copy-path",
             92,
             Arc::new(CopyPath) as Arc<dyn ContextMenuProvider>,
@@ -67,7 +62,7 @@ pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvid
     ];
     for (id, priority, implementation) in implementations {
         let rule = match id {
-            "builtin:tags" | "builtin:terminal" => ProviderMatchRule {
+            "builtin:tags" => ProviderMatchRule {
                 storage: Some(LocationMatch {
                     provider_ids: Some(vec!["core:local-fs".into()]),
                     ..Default::default()

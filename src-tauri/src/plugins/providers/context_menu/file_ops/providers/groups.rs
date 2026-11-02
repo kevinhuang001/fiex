@@ -171,16 +171,6 @@ impl Clipboard {
     }
 }
 
-pub(super) struct Terminal;
-impl Terminal {
-    fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
-        selection.all_local && !selection.paths.is_empty()
-    }
-    fn items(&self, _: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
-        vec![item("terminal", "Open in Terminal", "terminal", "")]
-    }
-}
-
 pub(super) struct CopyPath;
 impl CopyPath {
     fn available(&self, selection: &Selection<'_>, _: &FileCapabilities) -> bool {
@@ -226,7 +216,6 @@ impl_context_menu_provider!(
     Rename,
     BatchRename,
     Clipboard,
-    Terminal,
     CopyPath,
     Trash,
 );

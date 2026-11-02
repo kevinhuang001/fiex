@@ -6,6 +6,15 @@ const APP_A: &str = "applications://YXBwLWE";
 const APP_B: &str = "applications://YXBwLWI";
 
 #[test]
+fn mapped_apps_make_a_folder_nonempty() {
+    let mut store = Store::default();
+    assert!(!has_mapped_apps(&store, FOLDER_A));
+    move_in_store(&mut store, &[APP_A.to_string()], FOLDER_A).unwrap();
+    assert!(has_mapped_apps(&store, FOLDER_A));
+    assert!(!has_mapped_apps(&store, FOLDER_B));
+}
+
+#[test]
 fn legacy_folder_keys_are_not_accepted_as_canonical_entries() {
     let mut store = Store::default();
     store.folders.insert(

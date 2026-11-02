@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { Button } from '@/components/ui/button'
+import { isVirtualResource } from '@/lib/files'
 import type { AppController } from '@/hooks/useAppController'
 import { ArrowsClockwiseIcon as RefreshCw } from '@phosphor-icons/react/dist/csr/ArrowsClockwise'
 import { CaretLeftIcon as ChevronLeft } from '@phosphor-icons/react/dist/csr/CaretLeft'
@@ -56,6 +57,7 @@ export function ExplorerToolbar({
   | 'setPluginManager'
 > & { split: boolean; onToggleSplit: () => void }) {
   const activity = useActivity()
+  const hostToolsDisabled = isVirtualResource(x.path)
   const [refreshing, setRefreshing] = useState(false)
   const refreshTimer = useRef<number | null>(null)
   useEffect(
@@ -119,6 +121,7 @@ export function ExplorerToolbar({
           size="icon"
           title={t('在 {0} 中打开', ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE')}
           aria-label={t('在 IDE 中打开')}
+          disabled={hostToolsDisabled}
           onClick={() => openIde()}
           onContextMenu={(event) => {
             event.preventDefault()
@@ -140,6 +143,7 @@ export function ExplorerToolbar({
               : terminals.find((t) => t.id === prefs.terminal)?.name || t('终端'),
           )}
           aria-label="Open in Terminal"
+          disabled={hostToolsDisabled}
           onClick={() => terminal()}
           onContextMenu={(event) => {
             event.preventDefault()

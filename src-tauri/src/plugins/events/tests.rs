@@ -1,6 +1,37 @@
 use super::*;
 
 #[test]
+fn merged_providers_run_concurrently_but_collect_in_priority_order() {
+    use std::sync::{Arc, Barrier};
+    let barrier = Arc::new(Barrier::new(2));
+    let providers = vec!["first", "second"]
+        .into_iter()
+        .map(|id| ProviderCandidate {
+            resolver: Resolver::builtin(id, 100),
+            implementation: Arc::new(id.to_owned()),
+        })
+        .collect();
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        "info.resolve",
+        json!({}),
+        &[],
+        None,
+    );
+    let results = EventRouter::resolve_merge_parallel(
+        "info.resolve",
+        providers,
+        &invocation,
+        |_, value, _| {
+            barrier.wait();
+            Ok(value.clone())
+        },
+        |_, value| Ok(value),
+        |outcomes| outcomes.into_iter().map(|(_, value)| value.unwrap()).collect::<Vec<_>>(),
+    );
+    assert_eq!(results, vec!["first", "second"]);
+}
+
+#[test]
 fn preview_skips_invalid_provider_and_stops_after_success() {
     use std::sync::{Arc, Mutex};
 

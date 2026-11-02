@@ -4,6 +4,7 @@ import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
 import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
+import { isVirtualResource } from '@/lib/files'
 import type { Entry, Ide, Preferences, Tag } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
 import type { Notify, Run } from './types'
@@ -125,6 +126,7 @@ export function useOpenActions({
     else x.navigate('applications://')
   }
   const terminal = (id = prefs.terminal) => {
+    if (isVirtualResource(x.path) || (first && isVirtualResource(first.path))) return
     if (id === 'builtin') {
       const cwd = first?.isDir ? first.path : x.path
       window.dispatchEvent(
@@ -139,7 +141,7 @@ export function useOpenActions({
     )
   }
   const openIde = (path = first?.path || x.path) => {
-    if (!path) return
+    if (!path || isVirtualResource(x.path) || isVirtualResource(path)) return
     const ide = ides.find((item) => item.id === prefs.ide) || ides[0]
     if (!ide) {
       x.setError(t('没有检测到可用的 IDE'))

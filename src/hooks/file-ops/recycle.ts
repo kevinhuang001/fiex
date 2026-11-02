@@ -30,22 +30,7 @@ export function recycleActions({ x, inTrash, setDialog, run }: FileOpsContext) {
       return
     }
     if (paths.some((path) => path.startsWith('applications://'))) {
-      // The Applications store lives at a virtual URI; Core resolves it to the
-      // real store path and moves it to the platform Trash.
-      void run(
-        t(isWindows() ? '正在移到回收站…' : '正在移到废纸篓…'),
-        async () => {
-          await call('trash_application_entries', { paths })
-          x.setSelected([])
-          x.reload()
-        },
-        t(
-          isWindows() ? '删除来源：\n{0}\n\n目标：\n回收站' : '删除来源：\n{0}\n\n目标：\n废纸篓',
-          source,
-        ),
-        true,
-        'delete',
-      )
+      deletePermanently(paths)
       return
     }
     let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()

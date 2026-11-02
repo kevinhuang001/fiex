@@ -37,8 +37,8 @@ fn system_app_is_launch_only_and_user_entries_are_protected() {
     let value = resolve("core.applications.menu", "applications://", &user).unwrap();
     assert_eq!(value["items"].as_array().unwrap().len(), 3);
     assert_eq!(
-        execute("core.applications.menu", "trash", "applications://", &user).unwrap()["command"],
-        "trashApplications"
+        execute("core.applications.menu", "delete", "applications://", &user).unwrap()["command"],
+        "delete"
     );
 }
 

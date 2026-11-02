@@ -83,9 +83,6 @@ export function applyCoreAction(effect: CoreAction, props: ContextMenuProps) {
     case 'emptyTrash':
       props.emptyTrash()
       break
-    case 'terminal':
-      props.terminal()
-      break
     case 'copyPath':
       return navigator.clipboard.writeText(effect.path).then(() => props.notify(t('路径已复制')))
     default:

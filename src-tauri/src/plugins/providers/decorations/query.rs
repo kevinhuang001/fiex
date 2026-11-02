@@ -63,10 +63,14 @@ pub fn query_with_plugins(
     } else {
         builtins
     };
-    let manifests = plugin_host::installed_manifests()
-        .into_iter()
-        .map(|(m, f)| (m.id.clone(), (m, f)))
-        .collect::<HashMap<_, _>>();
+    let manifests = if providers.iter().any(|provider| provider.plugin.is_some()) {
+        plugin_host::installed_manifests()
+            .into_iter()
+            .map(|(m, f)| (m.id.clone(), (m, f)))
+            .collect::<HashMap<_, _>>()
+    } else {
+        HashMap::new()
+    };
     let entries = Arc::new(entries);
     let resources = Arc::new(resources);
     let providers = providers
@@ -100,7 +104,7 @@ pub fn query_with_plugins(
         entries.clone(),
         resources.clone(),
     );
-    let result = EventRouter::resolve_shared(
+    let result = EventRouter::resolve_merge_parallel(
         "decorations.resolve",
         providers,
         &invocation,
@@ -110,7 +114,6 @@ pub fn query_with_plugins(
             crate::plugins::events::validate_result("decorations.resolve", &response)?;
             Ok(items)
         },
-        |_| true,
         |outcomes| {
             let mut merged = HashMap::new();
             for (provider, result) in outcomes.into_iter().rev() {

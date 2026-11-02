@@ -17,7 +17,6 @@ import {
   RotateCcw,
   Scissors,
   Tags,
-  TerminalSquare,
   Trash2,
 } from 'lucide-react'
 import { PluginContextActions } from '@/components/plugins/PluginContextActions'
@@ -37,7 +36,6 @@ const icons = {
   tags: Tags,
   copy: Copy,
   scissors: Scissors,
-  terminal: TerminalSquare,
   trash: Trash2,
   restore: RotateCcw,
   'cloud-check': CloudCheck,
@@ -67,7 +65,9 @@ export function FileContextMenu(props: ContextMenuProps) {
   // Core decides eligible providers from trusted view/storage identities.
   // Never suppress IPC providers just because a resource is a Core-owned VFS;
   // plugins can also opt in to blank-canvas selection via match.selection=zero.
-  const pluginEntry = plugins.some((plugin) => plugin.enabled && !!plugin.extensions?.contextMenus)
+  const pluginEntry = plugins.some(
+    (plugin) => plugin.enabled && plugin.approved && plugin.backendAvailable && !!plugin.extensions?.contextMenus,
+  )
   const populated = menus.some((group) => group.items.length > 0) || pluginEntry
   if (!menu) return null
   // Wait for the Core-only snapshot: the menu must appear with its final

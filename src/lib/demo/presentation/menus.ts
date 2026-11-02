@@ -63,7 +63,6 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
           ]),
     ],
   ])
-  if (!remote) groups.push(['terminal', [item('terminal', 'Open in Terminal', 'terminal')]])
   groups.push(['copy-path', [item('copyPath', '复制路径', 'copy')]])
   groups.push(['trash', []])
   if (remote) {

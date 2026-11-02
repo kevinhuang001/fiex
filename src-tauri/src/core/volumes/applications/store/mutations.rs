@@ -1,9 +1,8 @@
-use super::super::{directory_cache, folders, system_entry, URI};
+use super::super::{directory_cache, folders, URI};
 use super::{
     listing::stored_entry,
     path::{is_user, stored_path, stored_uri},
 };
-use std::path::{Path, PathBuf};
 
 pub fn create_stored(parent: &str, name: &str, folder: bool) -> Result<String, String> {
     crate::core::files::validate_name(name)?;
@@ -72,67 +71,23 @@ pub fn remove_user(uri: &str) -> Result<(), String> {
     } else {
         stored_uri(parent)?
     };
-    if target.is_dir() {
-        // Deleting an application folder is non-destructive for applications:
-        // real children return to the root and mapped system apps follow.
-        let mut moved = Vec::new();
-        let children = std::fs::read_dir(&target)
-            .map_err(|error| error.to_string())?
-            .map(|item| item.map(|item| item.path()))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())?;
-        for child in children {
-            let name = child.file_name().ok_or("application child has no name")?;
-            let destination = unique_child(&root, name);
-            std::fs::rename(&child, &destination).map_err(|error| error.to_string())?;
-            if let Ok(entry) = stored_entry(&stored_uri(&destination)?) {
-                moved.push(entry);
-            }
-        }
-        let returned = folders::forget_folder(uri)?;
-        std::fs::remove_dir(&target).map_err(|error| error.to_string())?;
+    let app_bundle = target.is_dir()
+        && target.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("app"));
+    if app_bundle {
+        std::fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
+        directory_cache::remove_entry(&parent_uri, uri);
+        directory_cache::remove_entry(URI, uri);
+        Ok(())
+    } else if target.is_dir() {
+        folders::remove_empty_folder(uri, &target)?;
         directory_cache::drop_subtree(uri);
         directory_cache::remove_entry(&parent_uri, uri);
         directory_cache::remove_entry(URI, uri);
-        for entry in moved {
-            directory_cache::add_entry(URI, entry);
-        }
-        for app in returned {
-            if let Ok(entry) = system_entry(&app) {
-                directory_cache::add_entry(URI, entry);
-            }
-        }
         Ok(())
     } else {
         std::fs::remove_file(target).map_err(|error| error.to_string())?;
         directory_cache::remove_entry(&parent_uri, uri);
         directory_cache::remove_entry(URI, uri);
         Ok(())
-    }
-}
-
-fn unique_child(root: &Path, name: &std::ffi::OsStr) -> PathBuf {
-    let mut target = root.join(name);
-    if !target.exists() {
-        return target;
-    }
-    let name = name.to_string_lossy();
-    let path = Path::new(name.as_ref());
-    let stem = path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or("application");
-    let extension = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(|value| format!(".{value}"))
-        .unwrap_or_default();
-    let mut index = 2;
-    loop {
-        target = root.join(format!("{stem} ({index}){extension}"));
-        if !target.exists() {
-            return target;
-        }
-        index += 1;
     }
 }

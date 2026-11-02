@@ -140,8 +140,8 @@ impl ApplicationsMenu {
                 false,
             ));
             items.push(item(
-                "trash",
-                crate::i18n::t(trash_title()).into(),
+                "delete",
+                crate::i18n::t("彻底删除").into(),
                 "trash",
                 true,
                 true,
@@ -162,7 +162,7 @@ impl ContextMenuProvider for ApplicationsMenu {
         let id = offered(ctx, &Self::resolve(self, ctx)?)?;
         match id {
             "open" => Ok(core_action("open", paths, &directory)),
-            "rename" | "trash" => {
+            "rename" | "delete" => {
                 if paths.iter().any(|path| !applications::is_user(path)) {
                     return Err(ProviderError::invalid_params(
                         "only stored application entries can be modified",
@@ -172,15 +172,12 @@ impl ContextMenuProvider for ApplicationsMenu {
                     if id == "rename" {
                         "rename"
                     } else {
-                        "trashApplications"
+                        "delete"
                     },
                     paths,
                     &directory,
                 ))
             }
-            "delete" => Err(ProviderError::invalid_params(
-                crate::i18n::t("系统应用不能在 Fiex 中删除").to_string(),
-            )),
             _ => Err(ProviderError::invalid_params(
                 "unknown Applications menu action",
             )),
@@ -194,14 +191,6 @@ fn user_application(path: &str) -> bool {
 
 fn user_application_entry(entry: &Entry) -> bool {
     !entry.is_dir || entry.extension == "app"
-}
-
-fn trash_title() -> &'static str {
-    if cfg!(windows) {
-        "移到回收站"
-    } else {
-        "移到废纸篓"
-    }
 }
 
 pub(super) struct TrashMenu;

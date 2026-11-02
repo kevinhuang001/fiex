@@ -67,7 +67,7 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
         std::slice::from_ref(resource.as_ref()),
         None,
     );
-    EventRouter::resolve_shared(
+    EventRouter::resolve_merge_parallel(
         "info.resolve",
         providers,
         &invocation,
@@ -91,7 +91,6 @@ fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
             }
             Ok(sections)
         },
-        |_| true,
         |outcomes| {
             outcomes
                 .into_iter()

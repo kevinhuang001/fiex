@@ -3,6 +3,10 @@ import type { Entry, Group, Sort } from './types'
 export type CorePath = { root: string; parts: string[] }
 export type VirtualRoot = 'recent://' | 'applications://' | 'trash://' | 'recyclebin://'
 export type VirtualAddress = { root: VirtualRoot; payload: string }
+/** VFS identities are not host filesystem paths usable by terminals or IDEs. */
+export function isVirtualResource(path: string): boolean {
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(path)
+}
 const VIRTUAL_LABELS: Record<string, VirtualRoot> = {
   最近使用: 'recent://',
   应用程序: 'applications://',

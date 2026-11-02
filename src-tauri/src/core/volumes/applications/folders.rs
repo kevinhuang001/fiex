@@ -145,10 +145,32 @@ pub fn move_apps(apps: &[String], destination: &str) -> Result<(), String> {
         }
     }
     let mut store = lock();
+    // Recheck under the same lock used by deletion, so a concurrent move
+    // cannot attach an app to a folder which has just been removed.
+    if destination != applications::URI && !applications::stored_path(&destination)?.is_dir() {
+        return Err("application destination is not a folder".into());
+    }
     if move_in_store(&mut store, apps, &destination)? {
         save(&store)?;
     }
     Ok(())
+}
+
+/// Remove an empty backing folder while preventing concurrent system-app moves.
+pub fn remove_empty_folder(folder: &str, path: &std::path::Path) -> Result<(), String> {
+    let folder = normalized(folder);
+    let store = lock();
+    if has_mapped_apps(&store, &folder) {
+        return Err("Directory not empty".into());
+    }
+    std::fs::remove_dir(path).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn has_mapped_apps(store: &Store, folder: &str) -> bool {
+    store.folders.iter().any(|(key, apps)| {
+        is_same_or_child(folder, key) && !apps.is_empty()
+    })
 }
 
 fn move_in_store(store: &mut Store, apps: &[String], destination: &str) -> Result<bool, String> {

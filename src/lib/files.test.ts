@@ -11,6 +11,7 @@ import {
   groupKey,
   uniqueName,
   corePath,
+  isVirtualResource,
 } from './files'
 import type { Entry } from './types'
 const e = (name: string, isDir = false): Entry => ({
@@ -28,6 +29,12 @@ const e = (name: string, isDir = false): Entry => ({
   sync: null,
 })
 describe('file models', () => {
+  it('distinguishes virtual identities from host paths', () => {
+    for (const path of ['applications://', 'recent://id', 'trash://', 'fiex://mount/a/file'])
+      expect(isVirtualResource(path)).toBe(true)
+    for (const path of ['/home/user/file', 'C:\\Users\\file', '\\\\server\\share'])
+      expect(isVirtualResource(path)).toBe(false)
+  })
   it('handles roots and Windows paths', () => {
     expect(parent('/a/b')).toBe('/a')
     expect(parent('/')).toBe('/')

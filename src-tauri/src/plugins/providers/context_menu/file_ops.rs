@@ -13,8 +13,7 @@
 //!   `duplicate` requires `read && write`.
 //! - `trash`: requires `remove`. View-specific
 //!   restore, purge and empty actions belong only to the registered view provider.
-//! - `terminal` / `tags`: local selections only, because Core has no remote
-//!   terminal or tag path.
+//! - `tags`: local selections only.
 //! - `copy-path`: always; it only uses the location Core already knows.
 //! - `connection-cache`: remote selections only, unchanged otherwise.
 //!
@@ -53,7 +52,7 @@ pub(super) fn item(
     providers::item(id, title, icon, shortcut)
 }
 
-const PROVIDER_IDS: [&str; 10] = [
+const PROVIDER_IDS: [&str; 9] = [
     "builtin:opening",
     "builtin:tags",
     "builtin:create",
@@ -61,7 +60,6 @@ const PROVIDER_IDS: [&str; 10] = [
     "builtin:rename",
     "builtin:batch-rename",
     "builtin:clipboard",
-    "builtin:terminal",
     "builtin:copy-path",
     "builtin:trash",
 ];

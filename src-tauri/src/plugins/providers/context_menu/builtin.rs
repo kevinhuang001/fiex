@@ -76,9 +76,19 @@ impl Context {
             })
         }
 
+        // The displayed directory already has a Core-owned VFS snapshot.
+        // Read it once for the whole selection instead of re-statting every
+        // item (and repeatedly cloning the snapshot for plugin VFS entries).
+        let cached = crate::core::fs::directory_cache::read_snapshot(directory, true, &[])?
+            .map(|snapshot| {
+                snapshot.listing.entries.into_iter()
+                    .map(|entry| (entry.path.clone(), entry))
+                    .collect::<std::collections::HashMap<_, _>>()
+            })
+            .unwrap_or_default();
         let entries = paths
             .iter()
-            .map(|path| entry(path))
+            .map(|path| cached.get(path).cloned().map(Ok).unwrap_or_else(|| entry(path)))
             .collect::<Result<Vec<_>, _>>()?;
         let directory_entry = directory_entry(directory)?;
         let capabilities = if paths.is_empty() {
@@ -154,6 +164,12 @@ pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuI
     items
         .into_iter()
         .filter(|item| !ctx.claimed_actions.contains(&item.id))
+        .filter(|item| {
+            !ctx.native_view_providers.iter().any(|provider| {
+                provider.id == "core.applications.menu"
+                    && matches!(item.id.as_str(), "info" | "copyPath")
+            })
+        })
         .collect()
 }
 

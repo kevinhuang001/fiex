@@ -690,6 +690,25 @@ body.col-resizing {
   min-width: 0;
   font-size: var(--label-size, 11px);
 }
+.file-label, .column-label {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.filename-head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.filename-tail {
+  flex: 0 0 auto;
+  max-width: 50%;
+  overflow: hidden;
+  white-space: nowrap;
+  direction: rtl;
+  text-overflow: ellipsis;
+}
 .inline-rename {
   min-width: 0;
   font: inherit;
@@ -907,9 +926,8 @@ body.col-resizing {
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: flex;
+  white-space: nowrap;
   word-break: break-word;
   overflow-wrap: anywhere;
   line-height: 1.4;
