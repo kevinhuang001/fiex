@@ -332,7 +332,7 @@ foreach($item in $folder.Items()){
   $items += [pscustomobject]@{ name=$item.Name; aumid=$aumid; path=$path; icon=$icon }
 }
 ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
-    let output = super::windows_shell::run(script)?;
+    let output = crate::core::volumes::windows_shell::run(script)?;
     let value: serde_json::Value =
         serde_json::from_str(&output).map_err(|error| error.to_string())?;
     let values = match value {
