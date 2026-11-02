@@ -100,3 +100,24 @@ fn core_and_plugin_scopes_keep_their_owner() {
     let all = super::query(&directory, &paths[..1]).unwrap();
     assert!(all.len() >= core.len());
 }
+
+
+#[cfg(windows)]
+#[test]
+fn windows_directory_readonly_attribute_keeps_normal_file_actions() {
+    let (_temp, directory, paths) = temp_selection();
+    let mut permissions = std::fs::metadata(&directory).unwrap().permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&directory, permissions).unwrap();
+
+    let menus = super::query_core(&directory, &paths[..1]).unwrap();
+    for id in ["copy", "cut", "rename", "trash"] {
+        let item = action(&menus, id);
+        assert!(
+            item["items"].as_array().unwrap().iter().any(|row| row["id"] == id),
+            "missing {id} despite a writable Windows directory"
+        );
+    }
+    let parent = crate::core::files::entry(std::path::Path::new(&directory)).unwrap();
+    assert!(!parent.readonly);
+}
