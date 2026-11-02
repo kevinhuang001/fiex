@@ -5,11 +5,13 @@ use super::builtin::{builtin_view, Builtin};
 use crate::plugins::events::Resolver;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
+#[cfg(test)]
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{
     MatchResource, PreviewProvider, PreviewView, ProviderError, ProviderInvocation, ProviderKind,
     ProviderMatchRule, ResourceMetadata,
 };
+#[cfg(test)]
 use serde_json::json;
 use std::sync::{Arc, OnceLock};
 
