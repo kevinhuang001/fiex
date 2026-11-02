@@ -1,5 +1,6 @@
 //! Persistent Core decorations, routed through the same verified Provider
 //! Descriptor and EventRouter as SDK-backed DecorationProviders.
+#[cfg(test)]
 use super::types::Decoration;
 #[cfg(test)]
 use super::types::DecorationEntry;
