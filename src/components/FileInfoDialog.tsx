@@ -104,7 +104,7 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
     setFolderSize(undefined)
     return () => {
       const request = folderSizeRequest.current
-      if (request?.path === info?.path) {
+      if (request && request.path === info?.path) {
         folderSizeRequest.current = null
         void call('file_info_directory_size_cancel', {
           path: request.path,
