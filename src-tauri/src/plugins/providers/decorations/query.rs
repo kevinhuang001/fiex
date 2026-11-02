@@ -126,13 +126,7 @@ pub fn query_with_plugins(
                         .get(&plugin.id)
                         .ok_or_else(|| "provider removed".to_owned())
                         .and_then(|(manifest, folder)| {
-                            decode(
-                                entries.as_ref(),
-                                &resources_by_ref,
-                                manifest,
-                                folder,
-                                items,
-                            )
+                            decode(entries.as_ref(), &resources_by_ref, manifest, folder, items)
                         })
                 } else {
                     Ok(items
@@ -208,8 +202,10 @@ mod ref_target_tests {
             "/authorized/matching-name",
             ResourceMetadata::default(),
         );
+        let resources = [target.clone()];
+        let resources_by_ref = super::super::dynamic::resource_path_index(&resources);
         assert_eq!(
-            path_for_target(&target.reference, &entries, &[target.clone()]),
+            path_for_target(&target.reference, &entries, &resources_by_ref),
             Some("/authorized/matching-name")
         );
         let forged = crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
@@ -217,7 +213,7 @@ mod ref_target_tests {
             ResourceMetadata::default(),
         );
         assert_eq!(
-            path_for_target(&forged.reference, &entries, &[target]),
+            path_for_target(&forged.reference, &entries, &resources_by_ref),
             None
         );
     }

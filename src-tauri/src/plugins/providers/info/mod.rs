@@ -50,6 +50,7 @@ pub(crate) fn forget_plugin(plugin_id: &str) {
     proxy::forget_plugin(plugin_id);
 }
 
+#[cfg(feature = "desktop")]
 pub(crate) fn calculate_directory_size(
     path: &std::path::Path,
     cancelled: &std::sync::atomic::AtomicBool,
@@ -57,6 +58,7 @@ pub(crate) fn calculate_directory_size(
     metadata::directory_size_with_cancel(path, cancelled)
 }
 
+#[cfg(feature = "desktop")]
 pub(crate) fn file_info_snapshot_with_partial(
     resource: ResourceSnapshot,
     on_partial: impl FnMut(Vec<InfoSection>),

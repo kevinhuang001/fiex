@@ -6,6 +6,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+type TimedProviderResult<T> = Option<(Resolver, Result<T, String>, Duration)>;
+
 /// A matched provider descriptor paired with its registered shared-contract
 /// implementation. Native handlers and IPC proxies use the same router path.
 pub struct ProviderCandidate<P: ?Sized + Send + Sync> {
@@ -88,8 +90,9 @@ impl EventRouter {
             groups[group].push((index, candidate));
         }
 
-        let mut indexed: Vec<Option<(Resolver, Result<T, String>, Duration)>> =
-            std::iter::repeat_with(|| None).take(provider_count).collect();
+        let mut indexed: Vec<TimedProviderResult<T>> = std::iter::repeat_with(|| None)
+            .take(provider_count)
+            .collect();
         let trace = std::env::var_os("FIEX_TRACE_PROVIDER_PERF").is_some();
         for batch in groups.chunks(8) {
             std::thread::scope(|scope| {

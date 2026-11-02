@@ -142,7 +142,7 @@ pub(crate) fn cached(path: &str, listing: &Listing) -> (Vec<Decoration>, bool) {
     reuse_from_snapshot(&previous, listing)
 }
 
-#[cfg(any(feature = "desktop", test))]
+#[cfg(test)]
 pub(crate) fn read(path: &str, listing: &Listing) -> Option<Vec<Decoration>> {
     let (decorations, exact) = cached(path, listing);
     exact.then_some(decorations)
@@ -197,11 +197,15 @@ pub(crate) fn resolve(path: &str, listing: &Listing) -> Vec<Decoration> {
                 extension: entry.extension.clone(),
                 mime: entry.mime.clone(),
                 allowed_ops: entry.allowed_ops.clone(),
-                tags: entry.tags.iter().map(|tag| DecorationTag {
-                    name: tag.name.clone(),
-                    color: tag.color,
-                    hex: None,
-                }).collect(),
+                tags: entry
+                    .tags
+                    .iter()
+                    .map(|tag| DecorationTag {
+                        name: tag.name.clone(),
+                        color: tag.color,
+                        hex: None,
+                    })
+                    .collect(),
                 sync: entry.sync.clone(),
                 has_cache: entry.has_cache,
                 pinned: entry.pinned,

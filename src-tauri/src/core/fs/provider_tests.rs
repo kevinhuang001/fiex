@@ -168,6 +168,7 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     std::fs::write(&native, b"local").unwrap();
     let token = crate::plugins::mounts::new_id().unwrap();
     let mut directories = Vec::new();
+    let mut virtual_files = Vec::new();
     let mut inputs = vec![native.to_string_lossy().into_owned()];
     for index in 0..2 {
         let dir = applications::create_stored(
@@ -183,6 +184,7 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
         )
         .unwrap();
         inputs.push(item);
+        virtual_files.push(inputs.last().unwrap().clone());
         directories.push(dir);
     }
     let output = export_for_external_drag(&inputs).unwrap();
@@ -193,6 +195,9 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     assert_ne!(output[1], output[2]);
     for path in &output {
         assert_eq!(std::path::Path::new(path).file_name().unwrap(), "same.txt");
+    }
+    for file in virtual_files {
+        applications::remove_user(&file).unwrap();
     }
     for directory in directories {
         applications::remove_user(&directory).unwrap();

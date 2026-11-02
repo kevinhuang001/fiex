@@ -152,7 +152,10 @@ pub(super) fn invoke(id: &str, ctx: &dyn ProviderInvocation) -> Result<Vec<Decor
         .into_iter()
         .map(|value| {
             let path = resources_by_ref
-                .get(&(value.target.mount_id.as_str(), value.target.node_id.as_str()))
+                .get(&(
+                    value.target.mount_id.as_str(),
+                    value.target.node_id.as_str(),
+                ))
                 .ok_or("native decoration target is outside the scoped request")?;
             Ok(Decoration {
                 path: (*path).to_owned(),

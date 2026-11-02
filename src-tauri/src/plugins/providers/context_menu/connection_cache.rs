@@ -110,6 +110,52 @@ impl ConnectionCache {
     }
 }
 
+pub(super) fn has_items_for_context(
+    selection: &Selection<'_>,
+    capabilities: &FileCapabilities,
+) -> bool {
+    let provider = ConnectionCache;
+    if !provider.available(selection, capabilities) {
+        return false;
+    }
+    let entries = selection.entries;
+    let can_cache = entries.len() == selection.paths.len()
+        && entries.iter().all(|entry| {
+            let required = if entry.is_dir { "list" } else { "read" };
+            entry
+                .allowed_ops
+                .iter()
+                .any(|operation| operation == required)
+        });
+    let pinned = entries.iter().all(|entry| entry.pinned);
+    let has_cache =
+        entries.len() == selection.paths.len() && entries.iter().all(|entry| entry.has_cache);
+    let conflicts = entries
+        .iter()
+        .filter(|entry| entry.sync.as_deref() == Some("conflict"))
+        .collect::<Vec<_>>();
+    pinned
+        || can_cache
+        || (has_cache
+            && !entries.iter().any(|entry| {
+                entry.pinned || matches!(entry.sync.as_deref(), Some("conflict" | "pending"))
+            }))
+        || (!conflicts.is_empty()
+            && conflicts.iter().all(|entry| {
+                entry
+                    .allowed_ops
+                    .iter()
+                    .any(|operation| operation == "write")
+            }))
+        || (!conflicts.is_empty()
+            && conflicts.iter().all(|entry| {
+                entry
+                    .allowed_ops
+                    .iter()
+                    .any(|operation| operation == "read")
+            }))
+}
+
 impl ContextMenuProvider for ConnectionCache {
     fn resolve(&self, invocation: &dyn ProviderInvocation) -> Result<Vec<MenuItem>, ProviderError> {
         if invocation.method() != "contextMenu.resolve" {

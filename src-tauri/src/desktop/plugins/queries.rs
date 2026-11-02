@@ -88,8 +88,7 @@ pub(crate) async fn file_info_directory_size(
     if request_id.is_empty() || request_id.len() > 128 {
         return Err("invalid folder-size request id".into());
     }
-    if crate::core::fs::provider_registry::resource_access(&path)
-        .map_err(String::from)?
+    if crate::core::fs::provider_registry::resource_access(&path).map_err(String::from)?
         != crate::core::fs::provider_registry::ResourceAccess::HostPath
     {
         return Err("folder size calculation is available for local files only".into());

@@ -60,6 +60,7 @@ pub(crate) fn read_snapshot(
 
 /// Find an item in a previously rendered directory snapshot. This is a UI
 /// hint only: callers still reauthorize every operation before execution.
+#[cfg(test)]
 pub(crate) fn cached_entry(directory: &str, path: &str) -> Result<Option<Entry>, String> {
     Ok(read_snapshot(directory, true, &[])?.and_then(|snapshot| {
         snapshot

@@ -26,7 +26,12 @@ fn merged_providers_run_concurrently_but_collect_in_priority_order() {
             Ok(value.clone())
         },
         |_, value| Ok(value),
-        |outcomes| outcomes.into_iter().map(|(_, value)| value.unwrap()).collect::<Vec<_>>(),
+        |outcomes| {
+            outcomes
+                .into_iter()
+                .map(|(_, value)| value.unwrap())
+                .collect::<Vec<_>>()
+        },
     );
     assert_eq!(results, vec!["first", "second"]);
 }

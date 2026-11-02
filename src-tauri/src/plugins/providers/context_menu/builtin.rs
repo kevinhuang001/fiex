@@ -11,7 +11,6 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub(super) struct Context {
     pub directory: String,
-    pub directory_entry: Option<crate::core::files::Entry>,
     pub paths: Vec<String>,
     pub entries: Vec<crate::core::files::Entry>,
     pub resources: Arc<Vec<ResourceSnapshot>>,
@@ -67,19 +66,18 @@ impl Context {
                 cached
                     .get(path.as_str())
                     .map(|entry| (**entry).clone())
-                    .ok_or_else(|| "selected VFS item is not in the current directory snapshot".into())
+                    .ok_or_else(|| {
+                        "selected VFS item is not in the current directory snapshot".into()
+                    })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let directory_entry =
-            if matches!(
-                crate::core::fs::provider_registry::owner(directory),
-                Ok(crate::core::fs::provider_registry::ResourceOwner::LocalFs)
-            ) {
-                local_entry(directory)?
-            } else {
-                let snapshot = snapshot.as_ref().ok_or_else(|| {
-                    "current VFS directory is not in the directory snapshot".to_owned()
-                })?;
+        let directory_entry = if matches!(
+            crate::core::fs::provider_registry::owner(directory),
+            Ok(crate::core::fs::provider_registry::ResourceOwner::LocalFs)
+        ) {
+            Some(local_entry(directory)?)
+        } else {
+            snapshot.as_ref().map(|snapshot| {
                 let uri_name = crate::plugins::mounts::parse(directory)
                     .map(|uri| uri.relative)
                     .unwrap_or_else(|_| {
@@ -101,9 +99,13 @@ impl Context {
                     allowed_ops: snapshot.listing.allowed_ops.clone(),
                     ..Default::default()
                 }
-            };
+            })
+        };
         let capabilities = if paths.is_empty() {
-            crate::plugins::resource::file_capabilities::for_entry(directory, &directory_entry)
+            directory_entry.as_ref().map_or_else(
+                || crate::plugins::resource::file_capabilities::for_path(directory),
+                |entry| crate::plugins::resource::file_capabilities::for_entry(directory, entry),
+            )
         } else {
             crate::plugins::resource::file_capabilities::for_selection(paths, &entries)
         };
@@ -113,19 +115,16 @@ impl Context {
                 .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
                 .collect::<Vec<_>>(),
         );
-        let match_targets =
-            crate::plugins::events::matching::match_resources(resources.as_slice());
+        let match_targets = crate::plugins::events::matching::match_resources(resources.as_slice());
         let directory_resource = directory_entry
             .as_ref()
             .map(|entry| ResourceSnapshot::from_entry(directory, entry));
-        let directory_target =
-            crate::plugins::match_rules::directory_match_resource(directory);
+        let directory_target = crate::plugins::match_rules::directory_match_resource(directory);
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         let (native_view_providers, claimed_actions) =
             super::native_views::resolve_snapshot(directory, paths);
         Ok(Self {
             directory: directory.into(),
-            directory_entry: Some(directory_entry),
             paths: paths.to_vec(),
             entries,
             resources,
@@ -149,6 +148,10 @@ impl Context {
 
     pub(super) fn capabilities(&self) -> FileCapabilities {
         self.capabilities
+    }
+
+    pub(super) fn has_unclaimed_action(&self, id: &str) -> bool {
+        !self.claimed_actions.iter().any(|claimed| claimed == id)
     }
 
     /// Tests build menus without touching the mount registry.
@@ -177,17 +180,14 @@ impl Context {
                 .map(|entry| ResourceSnapshot::from_entry(&entry.path, entry))
                 .collect::<Vec<_>>(),
         );
-        let match_targets =
-            crate::plugins::events::matching::match_resources(resources.as_slice());
+        let match_targets = crate::plugins::events::matching::match_resources(resources.as_slice());
         let directory_resource = None;
-        let directory_target =
-            crate::plugins::match_rules::directory_match_resource(directory);
+        let directory_target = crate::plugins::match_rules::directory_match_resource(directory);
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         let (native_view_providers, claimed_actions) =
             super::native_views::resolve_snapshot(directory, &paths);
         Self {
             directory: directory.into(),
-            directory_entry: None,
             paths,
             entries,
             resources,
@@ -207,12 +207,6 @@ pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuI
     items
         .into_iter()
         .filter(|item| !ctx.claimed_actions.contains(&item.id))
-        .filter(|item| {
-            !ctx.native_view_providers.iter().any(|provider| {
-                provider.id == "core.applications.menu"
-                    && matches!(item.id.as_str(), "info" | "copyPath")
-            })
-        })
         .collect()
 }
 

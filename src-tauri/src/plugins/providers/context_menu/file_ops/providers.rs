@@ -3,9 +3,7 @@ use crate::plugins::provider_registry::native::NativeProviderRegistry;
 use fiex_provider_contracts::{ContextMenuProvider, LocationMatch, MenuItem, ProviderMatchRule};
 use std::sync::Arc;
 
-use self::groups::{
-    BatchRename, Clipboard, CopyPath, Create, Opening, Rename, Tags, Trash,
-};
+use self::groups::{BatchRename, Clipboard, CopyPath, Create, Opening, Rename, Tags, Trash};
 use super::super::connection_cache::ConnectionCache;
 
 mod groups;

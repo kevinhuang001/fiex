@@ -70,6 +70,7 @@ pub(super) fn directory_size(path: &Path) -> Option<u64> {
 
 /// Explicit Info action for local directories. It is cancellable and reports
 /// permission errors instead of silently returning a partial total.
+#[cfg(any(feature = "desktop", test))]
 pub(crate) fn directory_size_with_cancel(
     path: &Path,
     cancelled: &AtomicBool,
@@ -90,8 +91,8 @@ pub(crate) fn directory_size_with_cancel(
                 return Err("folder size calculation cancelled".into());
             }
             let entry = entry.map_err(|error| error.to_string())?;
-            let metadata = std::fs::symlink_metadata(entry.path())
-                .map_err(|error| error.to_string())?;
+            let metadata =
+                std::fs::symlink_metadata(entry.path()).map_err(|error| error.to_string())?;
             let file_type = metadata.file_type();
             if file_type.is_symlink() {
                 continue;

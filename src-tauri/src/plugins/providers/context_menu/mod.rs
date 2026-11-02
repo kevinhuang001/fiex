@@ -201,8 +201,8 @@ fn query_scope(
             builtin::providers(&ctx)
         },
     );
-    let has_eligible_plugins = scope != MenuScope::Plugins
-        && providers.iter().any(|provider| provider.plugin.is_some());
+    let has_eligible_plugins =
+        scope != MenuScope::Plugins && providers.iter().any(|provider| provider.plugin.is_some());
     // Never invoke a plugin while resolving the Core-only top-level menu. For a
     // plugin-only request the empty seed above already excludes builtin rows.
     if scope == MenuScope::Core {

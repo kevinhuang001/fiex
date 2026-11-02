@@ -168,9 +168,10 @@ pub fn remove_empty_folder(folder: &str, path: &std::path::Path) -> Result<(), S
 }
 
 fn has_mapped_apps(store: &Store, folder: &str) -> bool {
-    store.folders.iter().any(|(key, apps)| {
-        is_same_or_child(folder, key) && !apps.is_empty()
-    })
+    store
+        .folders
+        .iter()
+        .any(|(key, apps)| is_same_or_child(folder, key) && !apps.is_empty())
 }
 
 fn move_in_store(store: &mut Store, apps: &[String], destination: &str) -> Result<bool, String> {

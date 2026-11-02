@@ -212,9 +212,7 @@ pub(super) fn path_for_target<'a>(
     entries.contains_key(*path).then_some(*path)
 }
 
-pub(super) fn resource_path_index<'a>(
-    resources: &'a [ResourceSnapshot],
-) -> HashMap<(&'a str, &'a str), &'a str> {
+pub(super) fn resource_path_index(resources: &[ResourceSnapshot]) -> HashMap<(&str, &str), &str> {
     resources
         .iter()
         .map(|resource| {

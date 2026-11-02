@@ -27,14 +27,15 @@ use super::builtin::Context;
 use crate::core::files::Entry;
 use crate::plugins::native_invocation::NativeProviderInvocation;
 use crate::plugins::provider_registry::native::NativeProviderRegistry;
-#[cfg(test)]
 use crate::plugins::resource::file_capabilities::FileCapabilities;
-#[cfg(test)]
-use fiex_provider_contracts::ProviderKind;
 use fiex_provider_contracts::ContextMenuProvider;
 #[cfg(test)]
+use fiex_provider_contracts::ProviderKind;
+#[cfg(test)]
 use fiex_provider_contracts::{ProviderError, ProviderInvocation};
-use serde_json::{json, Value};
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use std::sync::Arc;
 
 mod providers;
@@ -91,10 +92,12 @@ pub(super) fn invocation(
         context.resources.as_slice(),
         context.directory_resource.as_ref(),
     )
-        .with_local_data(Arc::new(context.clone()))
+    .with_local_data(Arc::new(context.clone()))
 }
 
 pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolver> {
+    let selection = context.selection();
+    let capabilities = context.capabilities();
     registry()
         .matched_candidates(
             &context.match_targets,
@@ -103,7 +106,112 @@ pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolv
         )
         .into_iter()
         .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
+        .filter(|candidate| {
+            offered_item_ids(&candidate.id, &selection, capabilities)
+                .is_some_and(|items| items.iter().any(|item| context.has_unclaimed_action(item)))
+        })
         .collect()
+}
+
+/// Return the action IDs a native group can offer without constructing a
+/// provider invocation. This keeps candidate selection cheap while retaining
+/// the old behavior of omitting groups that would resolve to no items.
+fn offered_item_ids(
+    id: &str,
+    selection: &Selection<'_>,
+    capabilities: FileCapabilities,
+) -> Option<Vec<&'static str>> {
+    let items = match id {
+        "builtin:opening" => {
+            let mut items = Vec::new();
+            if selection.paths.is_empty() {
+                return Some(items);
+            }
+            if selection
+                .entries
+                .iter()
+                .all(|entry| entry.is_dir || capabilities.read)
+            {
+                items.push("open");
+            }
+            if !selection.many() {
+                if capabilities.read {
+                    items.push("preview");
+                }
+                items.push("info");
+            }
+            items
+        }
+        "builtin:tags" => {
+            if cfg!(target_os = "macos") && selection.all_local && !selection.paths.is_empty() {
+                vec!["tags"]
+            } else {
+                Vec::new()
+            }
+        }
+        "builtin:create" => {
+            if !selection.paths.is_empty() {
+                Vec::new()
+            } else {
+                let mut items = Vec::new();
+                if capabilities.create {
+                    items.push("newFolder");
+                }
+                if capabilities.write {
+                    items.push("newFile");
+                }
+                items
+            }
+        }
+        "builtin:connection-cache" => {
+            if super::connection_cache::has_items_for_context(selection, &capabilities) {
+                vec!["remote-action"]
+            } else {
+                Vec::new()
+            }
+        }
+        "builtin:rename" => {
+            if capabilities.rename && selection.paths.len() == 1 {
+                vec!["rename"]
+            } else {
+                Vec::new()
+            }
+        }
+        "builtin:batch-rename" => {
+            if capabilities.rename && selection.many() {
+                vec!["batchRename"]
+            } else {
+                Vec::new()
+            }
+        }
+        "builtin:clipboard" => {
+            if !selection.paths.is_empty() && capabilities.read {
+                vec!["copy"]
+            } else {
+                Vec::new()
+            }
+        }
+        "builtin:copy-path" => {
+            if selection.paths.is_empty() {
+                Vec::new()
+            } else {
+                vec!["copyPath"]
+            }
+        }
+        "builtin:trash" => {
+            if capabilities.remove && !selection.paths.is_empty() {
+                vec![if selection.all_local {
+                    "trash"
+                } else {
+                    "delete"
+                }]
+            } else {
+                Vec::new()
+            }
+        }
+        _ => return None,
+    };
+    Some(items)
 }
 
 #[cfg(test)]
@@ -142,7 +250,9 @@ pub(super) fn invoke(id: &str, invocation: &dyn ProviderInvocation) -> Result<Va
     let targets = crate::plugins::events::matching::match_resources(resources);
     let directory = NativeProviderInvocation::directory(invocation)
         .ok()
-        .and_then(|resource| crate::plugins::match_rules::directory_match_resource(&resource.display));
+        .and_then(|resource| {
+            crate::plugins::match_rules::directory_match_resource(&resource.display)
+        });
     if !fiex_provider_contracts::ProviderMatcher::matches(
         &descriptor.r#match,
         &targets,
@@ -184,7 +294,7 @@ mod registry_tests {
             .descriptors()
             .filter(|descriptor| descriptor.id.starts_with("builtin:"))
             .collect::<Vec<_>>();
-        assert_eq!(generic.len(), 10);
+        assert_eq!(generic.len(), 9);
         for descriptor in generic {
             assert_eq!(descriptor.kind, ProviderKind::ContextMenu);
             descriptor.validate().unwrap();

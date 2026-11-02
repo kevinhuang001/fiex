@@ -113,8 +113,7 @@ impl ResourceSnapshot {
     /// Metadata reads may reuse the Core-authorized listing snapshot for VFS
     /// resources. Content reads still go through the broker and reauthorize.
     pub fn resolve_from_directory_snapshot(display: &str) -> Result<Self, String> {
-        if crate::core::fs::provider_registry::resource_access(display)
-            .map_err(String::from)?
+        if crate::core::fs::provider_registry::resource_access(display).map_err(String::from)?
             == crate::core::fs::provider_registry::ResourceAccess::Provider
         {
             if let Ok(parent) = crate::core::fs::provider_registry::parent_path(display) {

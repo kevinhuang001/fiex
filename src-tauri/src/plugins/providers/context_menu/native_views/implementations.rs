@@ -169,11 +169,7 @@ impl ContextMenuProvider for ApplicationsMenu {
                     ));
                 }
                 Ok(core_action(
-                    if id == "rename" {
-                        "rename"
-                    } else {
-                        "delete"
-                    },
+                    if id == "rename" { "rename" } else { "delete" },
                     paths,
                     &directory,
                 ))

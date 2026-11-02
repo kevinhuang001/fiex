@@ -72,7 +72,9 @@ pub fn remove_user(uri: &str) -> Result<(), String> {
         stored_uri(parent)?
     };
     let app_bundle = target.is_dir()
-        && target.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("app"));
+        && target
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("app"));
     if app_bundle {
         std::fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
         directory_cache::remove_entry(&parent_uri, uri);
