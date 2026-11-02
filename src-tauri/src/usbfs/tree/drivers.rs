@@ -21,7 +21,6 @@ pub(super) fn ntfs_list(device: &str, path: &str) -> Result<Vec<UsbEntry>, Strin
             is_dir,
             size: if is_dir { 0 } else { attrs.size },
             modified: attrs.mtime_sec.max(0) as u64,
-            readonly: false,
         });
     }
     Ok(out)
@@ -64,7 +63,6 @@ pub(super) fn ext4_list(device: &str, path: &str) -> Result<Vec<UsbEntry>, Strin
             is_dir: attrs.mode & 0o170000 == 0o040000,
             size: attrs.size,
             modified: attrs.mtime.max(0) as u64,
-            readonly: false,
         });
     }
     Ok(out)
@@ -106,7 +104,6 @@ pub(super) fn btrfs_list(device: &str, path: &str) -> Result<Vec<UsbEntry>, Stri
             is_dir: child.mode & 0o170000 == 0o040000,
             size: child.size,
             modified: 0,
-            readonly: true,
         });
     }
     Ok(out)
@@ -135,7 +132,6 @@ pub(super) fn apple_list(device: &str, path: &str, kind: FsKind) -> Result<Vec<U
                     is_dir: matches!(entry.kind, apfs::EntryKind::Directory),
                     size: entry.size,
                     modified: entry.modify_time.max(0) as u64,
-                    readonly: true,
                 })
                 .collect())
         }
@@ -150,7 +146,6 @@ pub(super) fn apple_list(device: &str, path: &str, kind: FsKind) -> Result<Vec<U
                     is_dir: matches!(entry.kind, hfsplus::EntryKind::Directory),
                     size: entry.size,
                     modified: (entry.modify_date as i64 - 2_082_844_800).max(0) as u64,
-                    readonly: true,
                 })
                 .collect())
         }

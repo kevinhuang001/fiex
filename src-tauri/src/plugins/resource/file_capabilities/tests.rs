@@ -1,10 +1,9 @@
 use super::*;
 
-fn entry(path: &str, allowed: &[&str], readonly: bool) -> Entry {
+fn entry(path: &str, allowed: &[&str]) -> Entry {
     Entry {
         path: path.into(),
         allowed_ops: allowed.iter().map(|value| value.to_string()).collect(),
-        readonly,
         ..Entry::default()
     }
 }
@@ -15,14 +14,15 @@ fn absent_paths_fail_closed() {
         for_path("/fiex-absent-capability-test/example"),
         FileCapabilities::default()
     );
-    let local = entry("/tmp/example", &[], true);
+    let local = entry("/tmp/example", &[]);
     assert_eq!(
         for_selection(&["/tmp/example".into()], &[local]),
         FileCapabilities {
             stat: true,
             read: true,
+            write: true,
             rename: true,
-            remove: !cfg!(windows),
+            remove: true,
             ..FileCapabilities::default()
         }
     );
@@ -30,16 +30,16 @@ fn absent_paths_fail_closed() {
 
 #[test]
 fn local_node_capabilities_respect_file_vs_directory_kind() {
-    let file = entry("/tmp/document.txt", &[], false);
+    let file = entry("/tmp/document.txt", &[]);
     let file_caps = for_entry(&file.path, &file);
     assert!(file_caps.read && file_caps.write && file_caps.rename);
     assert!(!file_caps.list && !file_caps.search && !file_caps.create);
 
-    let mut folder = entry("/tmp/folder", &[], false);
+    let mut folder = entry("/tmp/folder", &[]);
     folder.is_dir = true;
     let folder_caps = for_entry(&folder.path, &folder);
     assert!(folder_caps.list && folder_caps.search && folder_caps.create);
-    assert!(!folder_caps.read && !folder_caps.write);
+    assert!(!folder_caps.read && folder_caps.write && folder_caps.rename && folder_caps.remove);
 }
 
 #[test]
@@ -54,11 +54,7 @@ fn native_virtual_search_is_advertised_only_for_listable_directories() {
     assert!(applications.list && applications.search && applications.create);
     assert!(!applications.remove);
 
-    let mut folder = entry(
-        "trash://Zm9sZGVy",
-        &["list", "stat", "search", "remove"],
-        false,
-    );
+    let mut folder = entry("trash://Zm9sZGVy", &["list", "stat", "search", "remove"]);
     folder.is_dir = true;
     let capabilities = from_entry(
         &[FsOperation::List, FsOperation::Stat, FsOperation::Search],
@@ -66,7 +62,7 @@ fn native_virtual_search_is_advertised_only_for_listable_directories() {
     );
     assert!(capabilities.list && capabilities.search && capabilities.stat);
     assert!(!capabilities.remove && !capabilities.write);
-    let file = entry("trash://ZmlsZQ", &["stat", "search", "remove"], false);
+    let file = entry("trash://ZmlsZQ", &["stat", "search", "remove"]);
     let capabilities = from_entry(&[FsOperation::Stat, FsOperation::Search], &file);
     assert!(capabilities.stat && !capabilities.search && !capabilities.remove);
 }
@@ -74,7 +70,7 @@ fn native_virtual_search_is_advertised_only_for_listable_directories() {
 #[test]
 fn unsupported_uri_never_inherits_local_capabilities() {
     for path in ["unknown://forged.txt", "unknown:opaque-file"] {
-        let forged = entry(path, &["read", "write", "remove"], false);
+        let forged = entry(path, &["read", "write", "remove"]);
         assert_eq!(for_entry(path, &forged), FileCapabilities::default());
         assert_eq!(for_path(path), FileCapabilities::default());
     }
@@ -91,23 +87,22 @@ fn unknown_mounts_offer_no_operation() {
 #[test]
 fn declared_operations_are_narrowed_by_the_node() {
     let declared = [FsOperation::Read, FsOperation::Rename, FsOperation::Remove];
-    let narrowed = from_entry(&declared, &entry("/m/a", &["read"], false));
+    let narrowed = from_entry(&declared, &entry("/m/a", &["read"]));
     assert!(narrowed.read);
     assert!(!narrowed.stat && !narrowed.list && !narrowed.search);
-    let removable = from_entry(&declared, &entry("/m/a", &["read", "remove"], false));
+    let removable = from_entry(&declared, &entry("/m/a", &["read", "remove"]));
     assert!(removable.read && removable.remove);
     assert!(!removable.rename && !removable.create);
     // Empty explicitly means no operations, even when the provider is broad.
-    let empty = from_entry(&declared, &entry("/m/a", &[], false));
+    let empty = from_entry(&declared, &entry("/m/a", &[]));
     assert_eq!(empty, FileCapabilities::default());
-    // READONLY does not replace per-operation parent/server permissions.
-    let readonly = from_entry(&declared, &entry("/m/a", &["remove"], true));
-    assert!(readonly.remove && !readonly.read);
+    let removable_only = from_entry(&declared, &entry("/m/a", &["remove"]));
+    assert!(removable_only.remove && !removable_only.read);
 }
 
 #[test]
 fn trash_does_not_grant_generic_delete() {
-    let trashed = entry("trash://an-item", &["stat", "remove"], false);
+    let trashed = entry("trash://an-item", &["stat", "remove"]);
     let capabilities = from_entry(&[FsOperation::Stat], &trashed);
     assert!(capabilities.stat);
     assert!(!capabilities.list && !capabilities.read && !capabilities.remove);
@@ -116,7 +111,7 @@ fn trash_does_not_grant_generic_delete() {
     assert!(!for_path("trash://an-item").remove);
     assert!(!for_path("trash://an-item").stat);
     assert!(for_path("trash://").list);
-    let mut nested = entry("trash://opaque-folder", &["stat", "list", "remove"], false);
+    let mut nested = entry("trash://opaque-folder", &["stat", "list", "remove"]);
     nested.is_dir = true;
     let capabilities = from_entry(&[FsOperation::Stat, FsOperation::List], &nested);
     assert!(capabilities.stat && capabilities.list);
@@ -127,20 +122,18 @@ fn trash_does_not_grant_generic_delete() {
 fn selections_intersect() {
     let empty = FileCapabilities::default();
     assert_eq!(FileCapabilities::ALL.intersect(empty), empty);
-    assert_eq!(
-        FileCapabilities::ALL.intersect(FileCapabilities::READ_ONLY),
-        FileCapabilities::READ_ONLY
-    );
+    let read_limited = FileCapabilities {
+        list: true,
+        stat: true,
+        read: true,
+        ..Default::default()
+    };
     let first = FileCapabilities {
         remove: true,
-        ..FileCapabilities::READ_ONLY
+        ..read_limited
     };
-    assert!(first
-        .intersect(FileCapabilities::READ_ONLY)
-        .allows(FsOperation::Read));
-    assert!(!first
-        .intersect(FileCapabilities::READ_ONLY)
-        .allows(FsOperation::Remove));
+    assert!(first.intersect(read_limited).allows(FsOperation::Read));
+    assert!(!first.intersect(read_limited).allows(FsOperation::Remove));
     // Local paths keep the selection unrestricted when entries are empty.
     assert_eq!(
         for_selection(&["/fiex-absent-capability-test/a".into()], &[]),

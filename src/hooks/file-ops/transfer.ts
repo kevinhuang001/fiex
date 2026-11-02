@@ -1,18 +1,12 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import type { ConflictResolution, OperationResult } from '@/lib/types'
-import { progressChannel, updateActivity } from '@/hooks/useActivity'
+import { progressChannel, quietProgressChannel, updateActivity } from '@/hooks/useActivity'
 import type { FileOpsContext } from './types'
 
 /** Copying, moving and duplicating entries, including conflict resolution. */
-export function transferActions({
-  x,
-  writable,
-  conflict,
-  setConflict,
-  setClipboard,
-  run,
-}: FileOpsContext) {
+export function transferActions({ x, conflict, setConflict, setClipboard, run }: FileOpsContext) {
   const executeTransfer = async (
     paths: string[],
     destination: string,
@@ -25,7 +19,7 @@ export function transferActions({
     const source = `${shown.join('\n')}${
       paths.length > shown.length ? t('\n… 另有 {0} 项', paths.length - shown.length) : ''
     }`
-    let onProgress: ReturnType<typeof progressChannel> | undefined
+    let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
     let activityId = resume
     // A conflict dialog keeps this row running; `hold` stops `run` from
     // finishing it and the resolution reuses the same id instead of adding a
@@ -52,7 +46,7 @@ export function transferActions({
       'transfer',
       (id) => {
         activityId = id
-        onProgress = progressChannel(id)
+        onProgress = progressChannel(id) ?? quietProgressChannel()
       },
       false,
       hold,
@@ -70,11 +64,14 @@ export function transferActions({
     // Virtual destinations (Applications) have no filesystem watcher; reload
     // the current pane so imported shortcuts appear immediately.
     if (destination === x.path) x.reload()
-    if (result.errors.length)
-      x.setError(t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n')))
+    if (result.errors.length) {
+      const message = t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n'))
+      const context = t('{0}来源：\n{1}\n\n目标：\n{2}', moving ? t('移动') : t('复制'), source, destination)
+      if (!reportFilesystemPermissionError(message, context)) x.setError(message)
+    }
   }
   const transfer = (paths: string[], destination: string, moving: boolean) => {
-    if (!writable() || !paths.length || conflict) return
+    if (!paths.length || conflict) return
     void executeTransfer(paths, destination, moving)
   }
   const resolveConflict = async (resolutions: ConflictResolution[]) => {
@@ -88,12 +85,14 @@ export function transferActions({
       )
   }
   const copy = (moving: boolean, paths = x.selected) => {
-    if (moving && !writable()) return
     if (paths.length) setClipboard({ paths: [...paths], moving })
   }
   const duplicate = (paths = x.selected) => {
-    if (!writable()) return
-    let onProgress: ReturnType<typeof progressChannel> | undefined
+    if (!x.directoryAllowedOps.includes('write')) {
+      x.setError(t('此位置不支持该操作'))
+      return
+    }
+    let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
     void run(
       t('正在创建副本…'),
       async () => {
@@ -112,7 +111,7 @@ export function transferActions({
       true,
       'transfer',
       (id) => {
-        onProgress = progressChannel(id)
+        onProgress = progressChannel(id) ?? quietProgressChannel()
       },
     )
   }

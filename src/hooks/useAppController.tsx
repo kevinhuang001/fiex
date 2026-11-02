@@ -200,15 +200,6 @@ export function useAppController() {
     }
   }
 
-  useEffect(() => {
-    x.setReadOnly(x.directoryReadOnly)
-  }, [x.directoryReadOnly, x.setReadOnly])
-  const writable = () => {
-    if (!x.directoryReadOnly) return true
-    x.setError(t('此文件系统只读'))
-    return false
-  }
-
   const {
     busy,
     conflict,
@@ -228,7 +219,7 @@ export function useAppController() {
     copy,
     duplicate,
     undo,
-  } = useFileOperations({ x, writable, notify, setDialog, trashPath })
+  } = useFileOperations({ x, notify, setDialog, trashPath })
 
   // Closing the conflict dialog without a choice must not leave the held
   // status-centre row running forever.
@@ -254,7 +245,6 @@ export function useAppController() {
     prefs,
     run,
     notify,
-    writable,
     first,
     ides,
     isRemotePath,

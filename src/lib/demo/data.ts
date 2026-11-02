@@ -20,7 +20,9 @@ export function item(
     created: now - 86400,
     extension: isDir ? '' : path.split('.').pop()!,
     mime,
-    readonly: false,
+    allowedOps: isDir
+      ? ['list', 'stat', 'search', 'write', 'mkdir', 'rename', 'remove']
+      : ['stat', 'read', 'write', 'rename', 'remove'],
     linkTarget: null,
     tags: [],
     sync: null,

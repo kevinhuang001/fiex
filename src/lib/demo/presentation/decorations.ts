@@ -9,10 +9,10 @@ export function demoDecorations(entries: Entry[], plugins: EntryDecoration[]): E
     const badges: DecorationBadge[] = entry.tags
       .slice(0, 5)
       .map((tag) => ({ text: tag.name, tooltip: tag.name, color: tagHex(tag), dot: true }))
-    if (entry.readonly) badges.push({ text: t('只读'), tooltip: t('只读'), color: 'gray' })
     if (entry.sync) {
       const states = {
         synced: { text: t('已缓存'), icon: 'cloud-check', color: 'green' },
+        partial: { text: t('部分缓存'), icon: 'cloud-download', color: 'orange' },
         cloud: { text: t('未缓存'), icon: 'cloud-download', color: 'gray' },
         pinned: { text: t('始终保留在本地'), icon: 'pin', color: 'purple' },
         pending: { text: t('等待上传'), icon: 'cloud-check', color: 'orange' },

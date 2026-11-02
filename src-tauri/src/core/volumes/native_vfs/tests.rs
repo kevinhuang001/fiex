@@ -57,7 +57,8 @@ fn native_vfs_operation_discovery_is_typed_and_does_not_overclaim() {
             );
         }
     }
-    assert!(!operations(APPLICATIONS_URI).contains(&FsOperation::Write));
+    assert!(operations(APPLICATIONS_URI).contains(&FsOperation::Write));
+    assert!(operations(APPLICATIONS_URI).contains(&FsOperation::Mkdir));
 }
 
 #[test]
@@ -66,7 +67,8 @@ fn native_vfs_operations_reject_invalid_mutations() {
     assert!(require(RECENT_URI, "core:test", FsOperation::Search, false).is_ok());
     assert!(require(RECENT_URI, "core:test", FsOperation::Write, true).is_err());
     assert!(require("recent://missing", "core:test", FsOperation::Read, false).is_err());
-    assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Mkdir, true).is_err());
+    assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Mkdir, true).is_ok());
+    assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Write, true).is_ok());
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Remove, false).is_err());
     assert!(require(APPLICATIONS_URI, "core:test", FsOperation::Read, false).is_err());
     assert!(require(

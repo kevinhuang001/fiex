@@ -39,9 +39,8 @@ fn uploaded_requires_cached_or_pinned_copy_and_unknown_status_is_ignored() {
     .is_empty());
 }
 #[test]
-fn tags_readonly_and_conflict_survive_collection_without_badge_truncation() {
+fn tags_and_conflict_survive_collection_without_badge_truncation() {
     let mut value = entry("");
-    value.readonly = true;
     value.tags = (0..7)
         .map(|index| DecorationTag {
             name: format!("tag{index}"),
@@ -51,9 +50,8 @@ fn tags_readonly_and_conflict_survive_collection_without_badge_truncation() {
         .collect();
     let result = query_with_plugins("/no-io", vec![value], false);
     let badges = &result[0].native_badges;
-    assert_eq!(badges.len(), 6);
-    assert!(badges[..5].iter().all(|badge| badge.dot));
-    assert_eq!(badges[5].text, crate::i18n::t("只读"));
+    assert_eq!(badges.len(), 5);
+    assert!(badges.iter().all(|badge| badge.dot));
 
     let conflict = entry_at("applications://conflict", "conflict");
     let result = query_with_plugins("applications://", vec![conflict], false);

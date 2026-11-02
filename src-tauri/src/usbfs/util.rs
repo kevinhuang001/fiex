@@ -19,7 +19,6 @@ pub struct UsbEntry {
     pub is_dir: bool,
     pub size: u64,
     pub modified: u64,
-    pub readonly: bool,
 }
 
 #[derive(Clone, Debug)]

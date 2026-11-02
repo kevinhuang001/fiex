@@ -4,10 +4,55 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf};
 
 use super::{
-    config::{connection_for_path, local_for, rel_string},
+    config::{connection_for_path, ensure_provider_access, local_for, rel_string},
     files::{download_dir_inner, download_inner, TransferOptions},
     store::{fiex_dir, StoredConnection},
 };
+
+type SelectedConnection = (StoredConnection, Vec<(String, String)>);
+
+fn selected_connection(paths: &[String]) -> Result<Option<SelectedConnection>, String> {
+    let Some(first_path) = paths.first() else {
+        return Ok(None);
+    };
+    let (connection, relative) =
+        connection_for_path(first_path).ok_or("MountNotFound: connection removed")?;
+    ensure_provider_access(&connection)?;
+    let identity = (
+        connection.id.clone(),
+        connection.mount_id.clone(),
+        connection.cache_revision.clone(),
+    );
+    let mut roots = vec![(first_path.clone(), rel_string(&relative))];
+    for path in &paths[1..] {
+        let (candidate, relative) =
+            connection_for_path(path).ok_or("MountNotFound: connection removed")?;
+        ensure_provider_access(&candidate)?;
+        if (
+            candidate.id.clone(),
+            candidate.mount_id.clone(),
+            candidate.cache_revision.clone(),
+        ) != identity
+        {
+            return Err("Unsupported: cache actions require one current Connection".into());
+        }
+        let root = rel_string(&relative);
+        if !roots.iter().any(|(_, existing)| existing == &root) {
+            roots.push((path.clone(), root));
+        }
+    }
+    Ok(Some((connection, roots)))
+}
+
+fn validate_roots(meta: &RemoteMeta, roots: &[(String, String)]) -> Result<(), String> {
+    if roots
+        .iter()
+        .any(|(_, root)| !root.is_empty() && !meta.files.contains_key(root))
+    {
+        return Err(crate::i18n::t("请先刷新远程目录").into());
+    }
+    Ok(())
+}
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,9 +68,6 @@ pub(crate) struct RemoteMetaFile {
     /// Provider `allowedOps` for this node; `None` means unrestricted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) allowed_ops: Option<Vec<String>>,
-    /// The provider marked the node read-only.
-    #[serde(default)]
-    pub(crate) readonly: bool,
     #[serde(default)]
     pub(crate) baseline: String,
     #[serde(default)]
@@ -46,6 +88,10 @@ pub(crate) struct RemoteMeta {
     pub(crate) files: HashMap<String, RemoteMetaFile>,
     #[serde(default)]
     pub(crate) listed: std::collections::HashSet<String>,
+    /// Direct child paths from the last complete listing of each directory.
+    /// This keeps offline snapshots from reviving entries removed remotely.
+    #[serde(default)]
+    pub(crate) listed_children: HashMap<String, Vec<String>>,
     #[serde(default)]
     pub(crate) errors: HashMap<String, String>,
 }
@@ -137,51 +183,72 @@ pub(crate) fn dirty(conn: &StoredConnection, rel: &str, file: &RemoteMetaFile) -
 }
 
 pub async fn sync_one(path: &str, options: &TransferOptions) -> Result<(), String> {
-    let Some((conn, rel)) = connection_for_path(path) else {
+    let Some((conn, roots)) = selected_connection(&[path.to_owned()])? else {
         return Ok(());
     };
     let _guard = lock(&conn).await;
-    let rel = rel_string(&rel);
+    let (path, rel) = &roots[0];
     let mut meta = load_meta(&conn);
-    let file = meta
-        .files
-        .get_mut(&rel)
-        .ok_or(crate::i18n::t("请先刷新远程目录"))?;
+    validate_roots(&meta, &roots)?;
+    sync_one_locked(path, rel, options, &conn, &mut meta)
+}
+
+fn sync_one_locked(
+    path: &str,
+    rel: &str,
+    options: &TransferOptions,
+    conn: &StoredConnection,
+    meta: &mut RemoteMeta,
+) -> Result<(), String> {
+    let file = meta.files.entry(rel.to_owned()).or_default();
+    if rel.is_empty() {
+        file.is_dir = true;
+    }
     file.pinned = true;
     file.excluded = false;
     let is_dir = file.is_dir;
     if is_dir {
         for (key, child) in &mut meta.files {
-            if in_tree(key, &rel) {
+            if in_tree(key, rel) {
                 child.pinned = true;
                 child.excluded = false;
             }
         }
     }
     // Persist intent before starting I/O, so interrupted pins resume at startup.
-    save_meta(&conn, &meta)?;
-    if is_dir {
+    save_meta(conn, meta)?;
+    let result = if is_dir {
         download_dir_inner(path, options)
     } else {
         download_inner(path, options).map(|_| ())
-    }
+    };
+    // Downloads persist their byte baseline independently; preserve that
+    // committed metadata before the next item in a multi-selection starts.
+    *meta = load_meta(conn);
+    result
 }
 
 pub async fn sync(paths: &[String], options: &TransferOptions) -> Result<(), String> {
-    for path in paths {
-        sync_one(path, options).await?;
+    let Some((conn, roots)) = selected_connection(paths)? else {
+        return Ok(());
+    };
+    let _guard = lock(&conn).await;
+    let mut meta = load_meta(&conn);
+    validate_roots(&meta, &roots)?;
+    for (path, rel) in roots {
+        sync_one_locked(&path, &rel, options, &conn, &mut meta)?;
     }
     Ok(())
 }
 
 pub async fn unpin(paths: &[String]) -> Result<(), String> {
-    for path in paths {
-        let Some((conn, rel)) = connection_for_path(path) else {
-            continue;
-        };
-        let _guard = lock(&conn).await;
-        let rel = rel_string(&rel);
-        let mut meta = load_meta(&conn);
+    let Some((conn, roots)) = selected_connection(paths)? else {
+        return Ok(());
+    };
+    let _guard = lock(&conn).await;
+    let mut meta = load_meta(&conn);
+    validate_roots(&meta, &roots)?;
+    for (_, rel) in roots {
         for (key, file) in meta.files.iter_mut() {
             if in_tree(key, &rel) && file.pinned {
                 // Keep the bytes as a plain cache; the exclusion stops a pinned
@@ -190,52 +257,48 @@ pub async fn unpin(paths: &[String]) -> Result<(), String> {
                 file.excluded = true;
             }
         }
-        save_meta(&conn, &meta)?;
     }
-    Ok(())
+    save_meta(&conn, &meta)
 }
 
 pub async fn uncache(paths: &[String]) -> Result<(), String> {
-    for path in paths {
-        let Some((conn, rel)) = connection_for_path(path) else {
-            continue;
-        };
-        let _guard = lock(&conn).await;
-        let rel = rel_string(&rel);
-        let mut meta = load_meta(&conn);
-        // Pins own their bytes; uncache only drops unpinned cache entries.
-        let keys: Vec<_> = meta
-            .files
-            .iter()
-            .filter(|(key, file)| in_tree(key, &rel) && !file.pinned)
-            .map(|(key, _)| key.clone())
-            .collect();
-        // Validate the whole selection before removing any bytes.
-        for key in &keys {
-            let file = &meta.files[key];
-            if file.conflict
-                || (file.downloaded
-                    && !file.is_dir
-                    && local_for(&conn, key).is_file()
-                    && dirty(&conn, key, file))
-            {
-                return Err(crate::i18n::t("存在未同步的修改或冲突，不能取消缓存").into());
-            }
+    let Some((conn, roots)) = selected_connection(paths)? else {
+        return Ok(());
+    };
+    let _guard = lock(&conn).await;
+    let mut meta = load_meta(&conn);
+    validate_roots(&meta, &roots)?;
+    // Pins own their bytes; uncache only drops unpinned cache entries. Build
+    // and validate the union before deleting any byte from a multi-selection.
+    let keys: Vec<_> = meta
+        .files
+        .iter()
+        .filter(|(key, file)| roots.iter().any(|(_, root)| in_tree(key, root)) && !file.pinned)
+        .map(|(key, _)| key.clone())
+        .collect();
+    for key in &keys {
+        let file = &meta.files[key];
+        if file.conflict
+            || (file.downloaded
+                && !file.is_dir
+                && local_for(&conn, key).is_file()
+                && dirty(&conn, key, file))
+        {
+            return Err(crate::i18n::t("存在未同步的修改或冲突，不能取消缓存").into());
         }
-        for key in keys {
-            let file = meta.files.get_mut(&key).unwrap();
-            if !file.is_dir && local_for(&conn, &key).is_file() {
-                fs::remove_file(local_for(&conn, &key)).map_err(|e| e.to_string())?;
-            }
-            file.downloaded = false;
-            file.uploaded = false;
-            file.baseline.clear();
-            file.local_stamp.clear();
-            file.excluded = true;
-        }
-        save_meta(&conn, &meta)?;
     }
-    Ok(())
+    for key in keys {
+        let file = meta.files.get_mut(&key).unwrap();
+        if !file.is_dir && local_for(&conn, &key).is_file() {
+            fs::remove_file(local_for(&conn, &key)).map_err(|e| e.to_string())?;
+        }
+        file.downloaded = false;
+        file.uploaded = false;
+        file.baseline.clear();
+        file.local_stamp.clear();
+        file.excluded = true;
+    }
+    save_meta(&conn, &meta)
 }
 
 pub(crate) fn in_tree(key: &str, root: &str) -> bool {

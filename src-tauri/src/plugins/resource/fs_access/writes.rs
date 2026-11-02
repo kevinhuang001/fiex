@@ -29,7 +29,6 @@ pub fn writer_permission(owner: &str, handle: &str) -> Result<&'static str, Stri
 pub(super) struct Fingerprint {
     pub(super) len: u64,
     pub(super) modified: Option<cap_std::time::SystemTime>,
-    pub(super) readonly: bool,
     /// Device and inode (or volume/file index) catch replacement by a file
     /// that happens to keep the same size and timestamp.
     pub(super) identity: Option<(u64, u64)>,
@@ -61,7 +60,7 @@ pub(super) fn identity(_dir: &Dir, _path: &Path) -> Option<(u64, u64)> {
     None
 }
 
-/// Conflict detection covers size, modification time, readonly state and file
+/// Conflict detection covers size, modification time and file
 /// identity. It intentionally does not read the whole file on every commit, so
 /// a same-size edit that also preserves all of those metadata fields is not
 /// detected; the atomic rename still prevents partial files.
@@ -70,7 +69,6 @@ pub(super) fn fingerprint(dir: &Dir, path: &Path) -> Result<Option<Fingerprint>,
         Ok(metadata) => Ok(Some(Fingerprint {
             len: metadata.len(),
             modified: metadata.modified().ok(),
-            readonly: metadata.permissions().readonly(),
             identity: identity(dir, path),
         })),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),

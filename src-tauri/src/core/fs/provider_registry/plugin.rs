@@ -72,7 +72,7 @@ pub(super) fn parent(
 
 pub(super) fn remember_entry(path: &str, entry: &FsEntry) -> Result<(), FsError> {
     if crate::remote::is_remote(path) {
-        crate::remote::remember_provider_entry(path, entry).map_err(FsError::from)
+        crate::remote::record_provider_mutation(path, entry).map_err(FsError::from)
     } else {
         let uri = mounts::parse(path)?;
         mounts::bind_node(&uri.mount_id, &uri.relative, &entry.node_id).map_err(FsError::from)
@@ -91,8 +91,29 @@ pub(super) fn project_entry(
         .filter(|operation| mount.supports(*operation) && entry.allows(*operation))
         .map(|operation| operation.as_str().to_owned())
         .collect();
-    core.readonly = entry.readonly.unwrap_or(false);
     core
+}
+
+fn project_cache_state(entry: &mut crate::core::files::Entry, state: &crate::remote::CacheState) {
+    entry.has_cache = state.has_cache;
+    entry.pinned = state.pinned;
+    entry.uploaded = state.uploaded;
+    entry.sync = Some(
+        if state.conflict {
+            "conflict"
+        } else if state.dirty {
+            "pending"
+        } else if state.pinned {
+            "pinned"
+        } else if state.cached {
+            "synced"
+        } else if state.partial {
+            "partial"
+        } else {
+            "cloud"
+        }
+        .into(),
+    );
 }
 
 fn child_plugin_path(parent: &str, entry: &FsEntry) -> Result<String, FsError> {
@@ -107,23 +128,56 @@ fn child_plugin_path(parent: &str, entry: &FsEntry) -> Result<String, FsError> {
 }
 
 pub(super) fn stat(resource: &ResourceBroker) -> Result<crate::core::files::Entry, FsError> {
+    if crate::remote::is_remote(&resource.path) {
+        return crate::remote::stat(&resource.path).map_err(FsError::from);
+    }
     let (mount, node) = plugin_node(resource)?;
     let entry = mount.stat(&node).map_err(FsError::from)?;
     Ok(project_entry(&mount, &resource.path, entry))
 }
 
-pub(super) fn list(resource: &ResourceBroker) -> Result<Vec<crate::core::files::Entry>, FsError> {
+pub(super) fn list(
+    resource: &ResourceBroker,
+) -> Result<(Vec<crate::core::files::Entry>, Vec<String>), FsError> {
     let (mount, node) = plugin_node(resource)?;
-    let listing = mount.list(&node, true, &[]).map_err(FsError::from)?;
-    listing
-        .entries
-        .into_iter()
-        .map(|entry| {
-            let path = child_plugin_path(&resource.path, &entry)?;
+    let remote_parent = crate::remote::is_remote(&resource.path);
+    let listing = match mount.list(&node, true, &[]) {
+        Ok(listing) => listing,
+        Err(error) if remote_parent => {
+            if let Some((entries, warnings)) =
+                crate::remote::offline_provider_listing(&resource.path, &error)
+                    .map_err(FsError::from)?
+            {
+                return Ok((entries, warnings));
+            }
+            return Err(FsError::from(error));
+        }
+        Err(error) => return Err(FsError::from(error)),
+    };
+    let complete = !listing.truncated;
+    let mut entries = Vec::with_capacity(listing.entries.len());
+    let mut remote_entries = Vec::new();
+    for entry in listing.entries {
+        let path = child_plugin_path(&resource.path, &entry)?;
+        if remote_parent {
+            remote_entries.push((path.clone(), entry.clone()));
+        } else {
             remember_entry(&path, &entry)?;
-            Ok(project_entry(&mount, &path, entry))
-        })
-        .collect()
+        }
+        entries.push(project_entry(&mount, &path, entry));
+    }
+    let cache_states = if remote_parent {
+        crate::remote::observe_provider_listing(&resource.path, &remote_entries, complete)
+            .map_err(FsError::from)?
+    } else {
+        std::collections::HashMap::new()
+    };
+    for entry in &mut entries {
+        if let Some(state) = cache_states.get(&entry.path) {
+            project_cache_state(entry, state);
+        }
+    }
+    Ok((entries, Vec::new()))
 }
 
 pub(super) fn stream_read(resource: &ResourceBroker) -> Result<FsRead, FsError> {
@@ -267,7 +321,7 @@ pub(super) fn walk_search(
             crate::plugins::provider_registry::FsOperation::List,
             false,
         )?;
-        let entries = list(&directory)?;
+        let (entries, _) = list(&directory)?;
         for entry in entries {
             if cancelled() {
                 break;

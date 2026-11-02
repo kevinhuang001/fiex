@@ -56,7 +56,6 @@ fn mount_selection(
         path.rsplit_once('/').map_or(path, |(parent, _)| parent),
         vec![path.into()],
         vec![mount_entry(path, is_dir)],
-        false,
         capabilities,
     )
 }

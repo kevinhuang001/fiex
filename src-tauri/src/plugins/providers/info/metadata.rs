@@ -154,16 +154,6 @@ pub(super) fn metadata_section(
     }) {
         rows.push(row(crate::i18n::t("修改时间"), timestamp_text(modified)));
     }
-    if let Some(permissions) = metadata.as_ref().map(|value| value.permissions()) {
-        rows.push(row(
-            crate::i18n::t("权限"),
-            if permissions.readonly() {
-                crate::i18n::t("只读")
-            } else {
-                crate::i18n::t("可读写")
-            },
-        ));
-    }
     if let Some(link) = metadata
         .as_ref()
         .filter(|value| value.file_type().is_symlink())

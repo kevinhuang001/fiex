@@ -84,7 +84,7 @@ fn collect_desktop_files(
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
         let encoded = encode(&path.to_string_lossy());
-        let mut item = entry(name, format!("{URI}{encoded}"), "desktop", modified, true);
+        let mut item = entry(name, format!("{URI}{encoded}"), "desktop", modified);
         item.link_target = Some(path.to_string_lossy().into_owned());
         entries.push(item);
     }

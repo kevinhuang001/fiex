@@ -28,7 +28,7 @@ pub const URI: &str = "applications://";
 /// which are base64-encoded host paths.
 pub const USER_PREFIX: &str = "applications://~";
 
-fn entry(name: String, path: String, extension: &str, modified: u64, readonly: bool) -> Entry {
+fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
     Entry {
         path,
         name,
@@ -39,13 +39,8 @@ fn entry(name: String, path: String, extension: &str, modified: u64, readonly: b
         created: modified,
         extension: extension.into(),
         mime: "application/x-fiex-application".into(),
-        readonly,
         link_target: None,
-        allowed_ops: if readonly {
-            vec!["stat".into()]
-        } else {
-            vec!["stat".into(), "remove".into()]
-        },
+        allowed_ops: vec!["stat".into()],
         tags: vec![],
         has_cache: false,
         pinned: false,

@@ -80,7 +80,6 @@ export function FileInfoDialog({ info, onClose }: { info: Entry | null; onClose:
         { label: t('位置'), value: displayAddress(parent(info.path)) },
         { label: t('创建时间'), value: date(info.created) },
         { label: t('修改时间'), value: date(info.modified) },
-        { label: t('权限'), value: info.readonly ? t('只读') : t('可读写') },
         { label: t('符号链接'), value: info.isSymlink ? t('是') : t('否') },
         ...(info.linkTarget ? [{ label: t('链接到'), value: info.linkTarget }] : []),
       ]

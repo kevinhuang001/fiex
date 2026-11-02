@@ -4,12 +4,9 @@ import { uniqueName } from '@/lib/files'
 import type { FileOpsContext } from './types'
 
 /** Creating the next entry, then handing it straight to the inline rename. */
-export function createActions({ x, writable, run }: FileOpsContext) {
+export function createActions({ x, run }: FileOpsContext) {
   const create = async () => {
-    if (!writable()) return
-    // The toolbar disables its new-folder button from the same flag; a
-    // keyboard shortcut must not bypass the provider's `mkdir` capability.
-    if (!x.directoryCanCreate) {
+    if (!x.directoryAllowedOps.includes('mkdir')) {
       x.setError(t('此位置不支持新建文件夹'))
       return
     }
@@ -27,7 +24,10 @@ export function createActions({ x, writable, run }: FileOpsContext) {
   /** An empty file goes through the provider's write stream with a name; the
    * menu only offers it when the directory declares `write`. */
   const createFile = async () => {
-    if (!writable()) return
+    if (!x.directoryAllowedOps.includes('write')) {
+      x.setError(t('此位置不支持新建文件'))
+      return
+    }
     const name = uniqueName(
       x.entries.map((e) => e.name),
       t('未命名文件'),

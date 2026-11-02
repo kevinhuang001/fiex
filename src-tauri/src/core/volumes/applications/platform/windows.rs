@@ -142,7 +142,7 @@ ConvertTo-Json -Compress -Depth 2 -InputObject @($items)"#;
             continue;
         };
 
-        let mut item = entry(app.name, format!("{URI}{}", encode(&id)), "app", 0, true);
+        let mut item = entry(app.name, format!("{URI}{}", encode(&id)), "app", 0);
         // Icon lookup must use the *resolved* launch target, not the original
         // {GUID}\foo.exe token that the Shell image factory cannot parse.
         if !app.icon.is_empty() && Path::new(&app.icon).is_file() {

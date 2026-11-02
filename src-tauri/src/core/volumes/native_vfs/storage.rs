@@ -25,17 +25,11 @@ pub(super) fn decorated_entry(path: &str, mut entry: Entry) -> Entry {
     entry
 }
 
-pub(super) fn root_entry(
-    id: &str,
-    path: &str,
-    readonly: bool,
-    operations: &[FsOperation],
-) -> Entry {
+pub(super) fn root_entry(id: &str, path: &str, operations: &[FsOperation]) -> Entry {
     Entry {
         path: path.into(),
         name: id.into(),
         is_dir: true,
-        readonly,
         allowed_ops: operations
             .iter()
             .map(|operation| operation.as_str().to_owned())
@@ -46,7 +40,7 @@ pub(super) fn root_entry(
 
 pub(super) fn recent_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
     if path == RECENT_URI {
-        Ok(root_entry("core:recent", path, true, operations))
+        Ok(root_entry("core:recent", path, operations))
     } else {
         crate::core::recent::entry_for_alias(path)
     }
@@ -64,7 +58,7 @@ pub(super) fn recent_list(path: &str) -> Result<Vec<Entry>, String> {
 
 pub(super) fn applications_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
     if path == APPLICATIONS_URI {
-        return Ok(root_entry("core:applications", path, false, operations));
+        return Ok(root_entry("core:applications", path, operations));
     }
     if applications::is_user(path) {
         return applications::stored_entry(path);
@@ -90,7 +84,7 @@ pub(super) fn trash_stat(path: &str, operations: &[FsOperation]) -> Result<Entry
         return trash_vfs::entry(path);
     }
     if path == recycle::URI {
-        return Ok(root_entry("core:trash", path, true, operations));
+        return Ok(root_entry("core:trash", path, operations));
     }
     if recycle::is_virtual(path) {
         return recycle::list()?

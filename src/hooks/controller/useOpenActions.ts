@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 import type { Explorer } from '@/hooks/useExplorer'
-import { progressChannel } from '@/hooks/useActivity'
+import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import type { Entry, Ide, Preferences, Tag } from '@/lib/types'
@@ -15,7 +15,6 @@ export function useOpenActions({
   prefs,
   run,
   notify,
-  writable,
   first,
   ides,
   isRemotePath,
@@ -30,7 +29,6 @@ export function useOpenActions({
   prefs: Preferences
   run: Run
   notify: Notify
-  writable: () => boolean
   first: Entry | undefined
   ides: Ide[]
   isRemotePath: (path: string) => boolean
@@ -65,7 +63,7 @@ export function useOpenActions({
     const cached = remote
       ? await call<boolean>('remote_cached', { path: e.path }).catch(() => Boolean(e.hasCache))
       : false
-    let onProgress: ReturnType<typeof progressChannel> | undefined
+    let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
     void run(
       // Cached files open directly; only a real cache miss gets a transfer
       // activity in the status centre.
@@ -84,7 +82,7 @@ export function useOpenActions({
       remote && !cached ? 'transfer' : undefined,
       remote && !cached
         ? (id) => {
-            onProgress = progressChannel(id)
+            onProgress = progressChannel(id) ?? quietProgressChannel()
           }
         : undefined,
     )
@@ -98,11 +96,21 @@ export function useOpenActions({
       setPreview(entry)
       return
     }
-    void run(t('正在缓存…'), async () => {
-      await call('remote_download', { path: entry.path })
-      setPreview(entry)
-      pane.reload()
-    })
+    let onProgress: ReturnType<typeof progressChannel> = quietProgressChannel()
+    void run(
+      t('正在缓存…'),
+      async () => {
+        await call('remote_download', { path: entry.path, onProgress })
+        setPreview(entry)
+        pane.reload()
+      },
+      entry.name,
+      true,
+      'transfer',
+      (id) => {
+        onProgress = progressChannel(id) ?? quietProgressChannel()
+      },
+    )
   }
   const openTrash = () => {
     const destination = 'trash://'
@@ -125,13 +133,11 @@ export function useOpenActions({
       )
       return
     }
-    if (!writable()) return
     void run(t('正在打开终端…'), () =>
       call('open_terminal', { path: first?.isDir ? first.path : x.path, id }),
     )
   }
   const openIde = (path = first?.path || x.path) => {
-    if (!writable()) return
     if (!path) return
     const ide = ides.find((item) => item.id === prefs.ide) || ides[0]
     if (!ide) {
@@ -141,7 +147,6 @@ export function useOpenActions({
     void run(t('正在用 {0} 打开…', ide.name), () => call('open_in_ide', { path, id: ide.id }))
   }
   const openTags = (paths: string[]) => {
-    if (!writable()) return
     const wanted = new Set(paths)
     const initial = new Map<string, Tag>()
     for (const entry of x.entries) {
@@ -153,7 +158,6 @@ export function useOpenActions({
     setTagOpen(true)
   }
   const applyTags = async (tags: Tag[]) => {
-    if (!writable()) return
     try {
       await call('set_tags', { paths: tagPaths, tags })
       setTagOpen(false)

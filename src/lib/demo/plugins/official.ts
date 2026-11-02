@@ -41,7 +41,7 @@ export const officialPlugins: DemoPlugin[] = officialMode
         allowedNetworkDomains: ['github.com'],
         author: { name: 'Fiex Contributors' },
         extensions: {
-          vfs: { title: 'Git 历史', readOnly: true },
+          vfs: { title: 'Git 历史' },
           toolbar: {
             title: '源代码管理',
             icon: 'git-branch',

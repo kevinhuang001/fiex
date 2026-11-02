@@ -92,9 +92,13 @@ pub(crate) fn eject_device(path: String) -> Result<(), String> {
 }
 #[tauri::command]
 pub(crate) async fn eject_usb(device: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || crate::usbfs::eject(&device))
+    let eject_device =
+        volumes::usb_fallback_eject_device(&device).unwrap_or_else(|| device.clone());
+    tauri::async_runtime::spawn_blocking(move || crate::usbfs::eject(&eject_device))
         .await
-        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())??;
+    volumes::clear_usb_fallback(&device);
+    Ok(())
 }
 #[tauri::command]
 pub(crate) async fn mount_device(device: String) -> Result<String, String> {

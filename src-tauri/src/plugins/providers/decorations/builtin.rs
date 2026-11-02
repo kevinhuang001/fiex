@@ -5,7 +5,6 @@ use std::collections::HashMap;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum NativeKind {
     Tags,
-    Readonly,
     ConnectionStatus,
     ApplicationIcon,
 }
@@ -75,8 +74,6 @@ pub(super) fn resolve_in(
         }
         let native_badges = match kind {
             NativeKind::ConnectionStatus => connection(entry),
-            NativeKind::Readonly if entry.readonly => vec![badge("只读", "gray", None, None)],
-            NativeKind::Readonly => vec![],
             NativeKind::Tags => entry
                 .tags
                 .iter()

@@ -112,34 +112,34 @@ fn matched(directory: &str, paths: &[String]) -> Vec<Resolver> {
         .collect()
 }
 
-pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
+pub(super) fn resolve_snapshot(directory: &str, paths: &[String]) -> (Vec<Resolver>, Vec<String>) {
     let invocation = context(directory, paths, "contextMenu.resolve", json!({}));
-    matched(directory, paths)
-        .into_iter()
-        .filter(|candidate| {
-            registry().get(&candidate.id).is_some_and(|provider| {
-                provider
-                    .resolve(&invocation)
-                    .is_ok_and(|items| !items.is_empty())
-            })
-        })
-        .collect()
+    let mut providers = Vec::new();
+    let mut claimed = Vec::new();
+    for candidate in matched(directory, paths) {
+        let Some(provider) = registry().get(&candidate.id) else {
+            continue;
+        };
+        let Ok(items) = provider.resolve(&invocation) else {
+            continue;
+        };
+        if items.is_empty() {
+            continue;
+        }
+        claimed.extend(items.into_iter().map(|item| item.id));
+        providers.push(candidate);
+    }
+    (providers, claimed)
+}
+
+#[cfg(test)]
+pub(super) fn providers(directory: &str, paths: &[String]) -> Vec<Resolver> {
+    resolve_snapshot(directory, paths).0
 }
 
 #[cfg(test)]
 pub(super) fn owns(id: &str) -> bool {
     PROVIDER_IDS.contains(&id)
-}
-
-pub(super) fn claimed_actions(directory: &str, paths: &[String]) -> Vec<String> {
-    let invocation = context(directory, paths, "contextMenu.resolve", json!({}));
-    providers(directory, paths)
-        .into_iter()
-        .filter_map(|candidate| registry().get(&candidate.id))
-        .filter_map(|provider| provider.resolve(&invocation).ok())
-        .flatten()
-        .map(|item| item.id)
-        .collect()
 }
 
 #[cfg(test)]

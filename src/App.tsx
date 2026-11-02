@@ -144,7 +144,6 @@ export default function App() {
               }
             >
               <FileViews
-                readOnly={app.left.directoryReadOnly}
                 trashPath={app.trashPath}
                 explorer={app.left}
                 prefs={app.prefs}

@@ -12,9 +12,10 @@ pub(super) struct Context {
     pub directory_entry: Option<crate::core::files::Entry>,
     pub paths: Vec<String>,
     pub entries: Vec<crate::core::files::Entry>,
-    pub read_only: bool,
     all_local: bool,
     capabilities: FileCapabilities,
+    native_view_providers: Vec<Resolver>,
+    claimed_actions: Vec<String>,
 }
 
 /// Host-only actions require a direct local FS resource. A location type
@@ -29,42 +30,74 @@ fn plain_local(path: &str) -> bool {
 
 impl Context {
     pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
-        // All storage kinds resolve through ResourceBroker's trusted scope,
-        // rather than a second URI-sensitive routing table in ContextMenu.
+        // Provider-backed UI hints come from the current authorized directory
+        // snapshot, so the first Core menu never performs remote stat IPC.
+        // Every actual action still reauthorizes through ResourceBroker.
         fn entry(path: &str) -> Result<crate::core::files::Entry, String> {
+            if crate::core::fs::provider_registry::is_plugin_mount(path) {
+                let parent = crate::core::fs::provider_registry::parent_path(path)?;
+                return crate::core::fs::directory_cache::cached_entry(&parent, path)?.ok_or_else(
+                    || "selected VFS item is not in the current directory snapshot".into(),
+                );
+            }
             crate::core::fs::trusted(path, "core:context-menu")?
                 .desktop_entry()
                 .map_err(String::from)
         }
+
+        fn directory_entry(path: &str) -> Result<crate::core::files::Entry, String> {
+            if !crate::core::fs::provider_registry::is_plugin_mount(path) {
+                return entry(path);
+            }
+            if let Ok(parent) = crate::core::fs::provider_registry::parent_path(path) {
+                if let Some(entry) = crate::core::fs::directory_cache::cached_entry(&parent, path)?
+                {
+                    return Ok(entry);
+                }
+            }
+            let snapshot = crate::core::fs::directory_cache::read_snapshot(path, true, &[])?
+                .ok_or_else(|| {
+                    "current VFS directory is not in the directory snapshot".to_owned()
+                })?;
+            let uri = crate::plugins::mounts::parse(path)?;
+            let name = uri
+                .relative
+                .rsplit('/')
+                .next()
+                .filter(|name| !name.is_empty())
+                .unwrap_or("Connection")
+                .to_owned();
+            Ok(crate::core::files::Entry {
+                path: path.into(),
+                name,
+                is_dir: true,
+                allowed_ops: snapshot.listing.allowed_ops,
+                ..Default::default()
+            })
+        }
+
         let entries = paths
             .iter()
             .map(|path| entry(path))
             .collect::<Result<Vec<_>, _>>()?;
-        // Read-only status comes from the selected storage provider's entry,
-        // including Core-native views. The menu does not special-case a view.
-        let directory_entry = entry(directory)?;
-        let read_only = directory_entry.readonly;
-        // A blank-canvas menu has no selection: capabilities come from the
-        // directory itself so "new folder/file" follows the same grant.
-        let mut capabilities = if paths.is_empty() {
+        let directory_entry = directory_entry(directory)?;
+        let capabilities = if paths.is_empty() {
             crate::plugins::resource::file_capabilities::for_path(directory)
         } else {
             crate::plugins::resource::file_capabilities::for_selection(paths, &entries)
         };
-        if read_only {
-            capabilities = capabilities.intersect(
-                crate::plugins::resource::file_capabilities::FileCapabilities::READ_ONLY,
-            );
-        }
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
+        let (native_view_providers, claimed_actions) =
+            super::native_views::resolve_snapshot(directory, paths);
         Ok(Self {
             directory: directory.into(),
             directory_entry: Some(directory_entry),
             paths: paths.to_vec(),
             entries,
-            read_only,
             all_local,
             capabilities,
+            native_view_providers,
+            claimed_actions,
         })
     }
 
@@ -72,7 +105,6 @@ impl Context {
         Selection {
             paths: &self.paths,
             entries: &self.entries,
-            read_only: self.read_only,
             all_local: self.all_local,
         }
     }
@@ -87,11 +119,10 @@ impl Context {
         directory: &str,
         paths: Vec<String>,
         entries: Vec<crate::core::files::Entry>,
-        read_only: bool,
     ) -> Self {
         let capabilities =
             crate::plugins::resource::file_capabilities::for_selection(&paths, &entries);
-        Self::for_test_caps(directory, paths, entries, read_only, capabilities)
+        Self::for_test_caps(directory, paths, entries, capabilities)
     }
 
     /// Tests pin the capability snapshot to exercise menu gating directly.
@@ -100,28 +131,29 @@ impl Context {
         directory: &str,
         paths: Vec<String>,
         entries: Vec<crate::core::files::Entry>,
-        read_only: bool,
         capabilities: FileCapabilities,
     ) -> Self {
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
+        let (native_view_providers, claimed_actions) =
+            super::native_views::resolve_snapshot(directory, &paths);
         Self {
             directory: directory.into(),
             directory_entry: None,
             paths,
             entries,
-            read_only,
             all_local,
             capabilities,
+            native_view_providers,
+            claimed_actions,
         }
     }
 }
 
 /// Only groups this selection can actually use become menu providers.
 pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuItem> {
-    let claimed = super::native_views::claimed_actions(&ctx.directory, &ctx.paths);
     items
         .into_iter()
-        .filter(|item| !claimed.contains(&item.id))
+        .filter(|item| !ctx.claimed_actions.contains(&item.id))
         .collect()
 }
 
@@ -129,7 +161,7 @@ pub(super) fn retain_unclaimed(ctx: &Context, items: Vec<MenuItem>) -> Vec<MenuI
 /// A native view claims only its OS-specific action identifiers, not the
 /// entire menu. Generic providers still contribute independent actions.
 pub(super) fn providers(ctx: &Context) -> Vec<Resolver> {
-    let mut candidates = super::native_views::providers(&ctx.directory, &ctx.paths);
+    let mut candidates = ctx.native_view_providers.clone();
     candidates.extend(file_ops::providers(ctx));
     candidates
 }

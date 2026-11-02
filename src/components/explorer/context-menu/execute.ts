@@ -1,5 +1,6 @@
 import { t } from '@/i18n'
 import { call } from '@/lib/api'
+import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import type { ContextMenuProps } from './types'
 import type { CoreMenu, CoreMenuItem } from './useContextMenu'
@@ -111,12 +112,15 @@ export async function executeCoreMenu(menu: CoreMenu, item: CoreMenuItem, props:
         true,
         item.activity.kind,
         (id) => {
-          onProgress = progressChannel(id)
+          onProgress = progressChannel(id) ?? quietProgressChannel()
         },
         item.activity.quiet,
       )
     else await execute()
   } catch (error) {
-    props.x.setError(String(error))
+    const location = props.x.selected.length ? props.x.selected.join('\n') : props.x.path
+    if (!reportFilesystemPermissionError(error, `${item.title}\n${location}`)) {
+      props.x.setError(String(error))
+    }
   }
 }

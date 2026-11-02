@@ -106,7 +106,7 @@ export function ExplorerToolbar({
           size="icon"
           title={t('新建文件夹 {0}', hint('newFolder'))}
           aria-label={t('新建文件夹')}
-          disabled={x.directoryReadOnly || !x.directoryCanCreate}
+          disabled={!x.directoryAllowedOps.includes('mkdir')}
           onClick={() => create()}
         >
           <FolderPlus weight="regular" size={20} />
@@ -119,7 +119,6 @@ export function ExplorerToolbar({
           size="icon"
           title={t('在 {0} 中打开', ides.find((ide) => ide.id === prefs.ide)?.name || 'IDE')}
           aria-label={t('在 IDE 中打开')}
-          disabled={x.directoryReadOnly}
           onClick={() => openIde()}
           onContextMenu={(event) => {
             event.preventDefault()
@@ -141,7 +140,6 @@ export function ExplorerToolbar({
               : terminals.find((t) => t.id === prefs.terminal)?.name || t('终端'),
           )}
           aria-label="Open in Terminal"
-          disabled={x.directoryReadOnly}
           onClick={() => terminal()}
           onContextMenu={(event) => {
             event.preventDefault()

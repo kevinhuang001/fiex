@@ -27,7 +27,7 @@ pub(crate) fn download_inner(path: &str, options: &TransferOptions) -> Result<St
     if !meta.files.contains_key(&rel) {
         let parent = rel.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
         let listing = list_remote(&conn, parent)?;
-        remember_listing(parent, &listing, &mut meta);
+        remember_listing(parent, &listing.files, &mut meta, listing.complete);
     }
     if meta.files.get(&rel).is_some_and(|f| f.revision.is_empty()) {
         let file = &meta.files[&rel];
@@ -94,11 +94,14 @@ pub(crate) fn download_dir_inner(path: &str, options: &TransferOptions) -> Resul
             return Err(crate::core::operations::CANCELLED.into());
         }
         let mut meta = load_meta(&conn);
-        let files = list_remote(&conn, &current)?;
-        remember_listing(&current, &files, &mut meta);
+        let listing = list_remote(&conn, &current)?;
+        if !listing.complete {
+            return Err(crate::i18n::t("目录列表不完整，不能离线缓存整个文件夹").into());
+        }
+        remember_listing(&current, &listing.files, &mut meta, true);
         fs::create_dir_all(local_for(&conn, &current)).map_err(|e| e.to_string())?;
         save_meta(&conn, &meta)?;
-        for file in files {
+        for file in listing.files {
             let child = child_path(&current, &file.name);
             if meta.files.get(&child).is_some_and(|f| f.excluded) {
                 continue;
@@ -106,7 +109,8 @@ pub(crate) fn download_dir_inner(path: &str, options: &TransferOptions) -> Resul
             if file.is_dir {
                 pending.push(child);
             } else {
-                download_inner(&local_for(&conn, &child).to_string_lossy(), options)?;
+                let remote_child = super::super::config::navigation_path(&conn, &child)?;
+                download_inner(&remote_child, options)?;
             }
         }
     }
@@ -125,8 +129,18 @@ pub(crate) fn remember_listing(
     parent: &str,
     files: &[RemoteFile],
     meta: &mut super::super::sync::RemoteMeta,
+    complete: bool,
 ) {
-    meta.listed.insert(parent.into());
+    if complete {
+        meta.listed.insert(parent.into());
+        meta.listed_children.insert(
+            parent.into(),
+            files
+                .iter()
+                .map(|file| child_path(parent, &file.name))
+                .collect(),
+        );
+    }
     let inherited = meta
         .files
         .iter()
@@ -143,7 +157,6 @@ pub(crate) fn remember_listing(
         }
         old.node_id = file.node_id.clone();
         old.allowed_ops = file.allowed_ops.clone();
-        old.readonly = file.readonly;
         old.is_dir = file.is_dir;
         if !old.excluded {
             old.pinned |= inherited;
@@ -155,6 +168,24 @@ pub(super) fn cached_listing(
     parent: &str,
     meta: &super::super::sync::RemoteMeta,
 ) -> Vec<RemoteFile> {
+    if let Some(children) = meta.listed_children.get(parent) {
+        return children
+            .iter()
+            .filter_map(|key| {
+                let entry = meta.files.get(key)?;
+                let name = key.rsplit_once('/').map(|(_, name)| name).unwrap_or(key);
+                Some(RemoteFile {
+                    name: name.into(),
+                    is_dir: entry.is_dir,
+                    size: entry.size,
+                    modified: entry.modified,
+                    node_id: entry.node_id.clone(),
+                    revision: entry.revision.clone(),
+                    allowed_ops: entry.allowed_ops.clone(),
+                })
+            })
+            .collect();
+    }
     meta.files
         .iter()
         .filter_map(|(key, m)| {
@@ -167,7 +198,6 @@ pub(super) fn cached_listing(
                 node_id: m.node_id.clone(),
                 revision: m.revision.clone(),
                 allowed_ops: m.allowed_ops.clone(),
-                readonly: m.readonly,
             })
         })
         .collect()

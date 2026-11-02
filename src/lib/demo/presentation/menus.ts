@@ -16,7 +16,9 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
   const allEntries = [...state.entries, ...demoRemoteEntries]
   const entries = paths.map((path) => allEntries.find((entry) => entry.path === path))
   const remote = paths.every((path) => path.startsWith(demoRemoteRoot))
-  const ro = remote || allEntries.find((entry) => entry.path === directory)?.readonly || false
+  const selectedOps = entries.map((entry) => entry?.allowedOps || [])
+  const permits = (operation: string) =>
+    selectedOps.length > 0 && selectedOps.every((ops) => ops.includes(operation))
   const platform = new URLSearchParams(location.search).get('platform') || ''
   // Mirrors Core: an unavailable operation is skipped, never emitted disabled.
   const item = (
@@ -40,10 +42,10 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     ],
   ]
   // Tags and the terminal are local-only in Core, and both need a writable item.
-  if (!remote && !ro && !['windows', 'linux'].includes(platform))
+  if (!remote && permits('write') && !['windows', 'linux'].includes(platform))
     groups.push(['tags', [item('tags', '标签…', 'tags')]])
   groups.push(['connection-cache', []])
-  if (!ro) {
+  if (permits('rename')) {
     if (paths.length === 1)
       groups.push(['rename', [item('rename', '重新命名', 'pencil', 'rename')]])
     if (paths.length > 1)
@@ -53,7 +55,7 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     'clipboard',
     [
       item('copy', '复制', 'copy', 'copy'),
-      ...(ro
+      ...(!permits('remove') && !permits('write')
         ? []
         : [
             item('cut', '剪切', 'scissors', 'cut'),
@@ -61,7 +63,7 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
           ]),
     ],
   ])
-  if (!remote && !ro) groups.push(['terminal', [item('terminal', 'Open in Terminal', 'terminal')]])
+  if (!remote) groups.push(['terminal', [item('terminal', 'Open in Terminal', 'terminal')]])
   groups.push(['copy-path', [item('copyPath', '复制路径', 'copy')]])
   groups.push(['trash', []])
   if (remote) {
@@ -94,17 +96,19 @@ export function demoBuiltinMenus(a: Record<string, unknown>): CoreMenu[] {
     if (cacheGroup) cacheGroup[1] = remoteItems
   }
   const trashGroup = groups.find(([id]) => id === 'trash')
-  if (trashGroup)
+  if (trashGroup) {
+    const canRemove = permits('remove')
     trashGroup[1] = (
       directory.startsWith(root + '/.Trash')
         ? [
             item('restore', '放回原处', 'restore'),
-            ...(ro ? [] : [item('delete', '彻底删除', 'trash')]),
+            ...(canRemove ? [item('delete', '彻底删除', 'trash')] : []),
           ]
-        : ro
-          ? []
-          : [item('trash', '移到废纸篓', 'trash', 'trash')]
+        : canRemove
+          ? [item('trash', '移到废纸篓', 'trash', 'trash')]
+          : []
     ).map((item) => ({ ...item, placement: 'tail', danger: item.id !== 'restore' }))
+  }
   for (const [id, session] of sessions)
     if (Date.now() - session.created >= 90000) sessions.delete(id)
   return groups

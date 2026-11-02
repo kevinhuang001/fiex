@@ -168,18 +168,6 @@ pub fn resource_scope(
             paths.push(folder);
         }
     }
-    if policy.allowed(crate::plugins::security::policy::Capability::Metadata) {
-        for (target, resource) in params["targets"]
-            .as_array_mut()
-            .unwrap()
-            .iter_mut()
-            .zip(resources)
-        {
-            if target["metadata"].is_object() {
-                target["metadata"]["readonly"] = json!(resource.read_only);
-            }
-        }
-    }
     for (resource, target) in resources
         .iter()
         .zip(params["targets"].as_array_mut().unwrap())
@@ -283,7 +271,7 @@ fn read_only_vfs(
     {
         return false;
     }
-    capabilities
+    !capabilities
         .unwrap_or_else(|| crate::plugins::resource::file_capabilities::for_path(path))
-        .is_read_only()
+        .has_mutation_capability()
 }

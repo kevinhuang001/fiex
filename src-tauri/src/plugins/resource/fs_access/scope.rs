@@ -162,7 +162,6 @@ impl Scope {
                 ("modified", json!(0)),
                 ("extension", json!("")),
                 ("mime", json!("")),
-                ("readonly", json!(false)),
                 ("symlink", json!(false)),
             ] {
                 if metadata.get(key).is_none_or(Value::is_null) {

@@ -245,6 +245,22 @@ fn applications_root_creation_uses_the_same_broker_contract() {
     let item =
         super::binding::create(applications::URI, &name, false, "core:test-app-create").unwrap();
     assert!(applications::is_user(&item));
+    let folder_name = format!(
+        "fiex-broker-dir-{}",
+        crate::plugins::mounts::new_id().unwrap()
+    );
+    let folder = super::binding::create(
+        applications::URI,
+        &folder_name,
+        true,
+        "core:test-app-create",
+    )
+    .unwrap();
+    let child =
+        super::binding::create(&folder, "nested.txt", false, "core:test-app-create").unwrap();
+    assert!(applications::stored_entry(&child).is_ok());
+    super::binding::remove_path(&child, "core:test-app-delete").unwrap();
+    super::binding::remove_path(&folder, "core:test-app-delete").unwrap();
     let renamed =
         super::binding::rename_path(&item, &format!("{name}.moved"), "core:test-app-rename")
             .unwrap();

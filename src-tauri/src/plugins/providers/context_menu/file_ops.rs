@@ -8,10 +8,10 @@
 //! - `opening`: always; `open` is omitted for a file entry without `read`
 //!   (a directory opens by navigation and needs no read), `preview` requires
 //!   `read`, `info` only reads Core metadata.
-//! - `rename` / `batch-rename`: require `rename` in a writable directory.
-//! - `clipboard`: `copy` requires `read`, `cut` requires `rename` in a writable
-//!   directory, `duplicate` requires `read && write` in a writable directory.
-//! - `trash`: requires `remove` in a writable directory. View-specific
+//! - `rename` / `batch-rename`: require `rename` for the selected nodes.
+//! - `clipboard`: `copy` requires `read`, `cut` requires `rename`, and
+//!   `duplicate` requires `read && write`.
+//! - `trash`: requires `remove`. View-specific
 //!   restore, purge and empty actions belong only to the registered view provider.
 //! - `terminal` / `tags`: local selections only, because Core has no remote
 //!   terminal or tag path.
@@ -19,8 +19,7 @@
 //! - `connection-cache`: remote selections only, unchanged otherwise.
 //!
 //! Folder creation is not a menu group: the toolbar owns the single
-//! "new folder" affordance and disables it from the listing's `canCreate`
-//! (provider `mkdir` ∩ the directory node's own restrictions).
+//! "new folder" affordance from the directory's `allowedOps`.
 //!
 //! Presence decides availability: an unsupported operation is absent from the
 //! menu, never emitted as a disabled item. [`crate::plugins::resource::file_capabilities`]
@@ -71,7 +70,6 @@ const PROVIDER_IDS: [&str; 10] = [
 pub(super) struct Selection<'a> {
     pub(super) paths: &'a [String],
     pub(super) entries: &'a [Entry],
-    pub(super) read_only: bool,
     pub(super) all_local: bool,
 }
 
@@ -232,17 +230,11 @@ mod registry_tests {
 
     #[test]
     fn capabilities_are_checked_by_each_registered_native_menu() {
-        let ctx = Context::for_test_caps(
-            "/tmp",
-            Vec::new(),
-            Vec::new(),
-            false,
-            FileCapabilities::default(),
-        );
+        let ctx =
+            Context::for_test_caps("/tmp", Vec::new(), Vec::new(), FileCapabilities::default());
         assert!(providers(&ctx).is_empty());
 
-        let ctx =
-            Context::for_test_caps("/tmp", Vec::new(), Vec::new(), false, FileCapabilities::ALL);
+        let ctx = Context::for_test_caps("/tmp", Vec::new(), Vec::new(), FileCapabilities::ALL);
         assert_eq!(
             providers(&ctx)
                 .into_iter()

@@ -12,13 +12,11 @@ import type { Clipboard, ConflictState } from './types'
 
 export function useFileOperations({
   x,
-  writable,
   notify,
   setDialog,
   trashPath,
 }: {
   x: Explorer
-  writable: () => boolean
   notify: (message: string) => void
   setDialog: Dispatch<SetStateAction<DialogState | null>>
   trashPath: string | null
@@ -35,7 +33,6 @@ export function useFileOperations({
     x,
     notify,
     setDialog,
-    writable,
     inTrash,
     conflict,
     setConflict,

@@ -60,7 +60,6 @@ Core 与所有文件系统插件之间只有一套 `vfs.*` 协议。连接（SMB
   "extension": "pdf",
   "mime": "application/pdf",
   "revision": "etag-or-version",
-  "readonly": false,
   "linkTarget": null,
   "allowedOps": ["read", "rename", "remove"]
 }
@@ -91,7 +90,7 @@ Core 保存该集合；未声明的操作用 `method_not_found` 拒绝，不会�
 三层能力求交：
 
 1. Provider 能力（初始化声明）；
-2. Mount/Node 能力（`allowedOps`、`readonly`）；
+2. Mount/Node 能力（`allowedOps`）；
 3. Core 授权（PermissionPolicy 的 Grant 与 Operation Scope）。
 
 ## 4. 流
@@ -134,4 +133,4 @@ Core 与 SDK 均检查此集合。当前协议要求每个声明 VFS 操作的�
 
 ## Core builtin VFS and presentation policy
 
-Recent is a nonwritable projection; Applications writes resolve into `~/.fiex/applications`; Trash exposes restore/delete rather than generic uploads. The operation matrix, readonly/provenance semantics, additive presentation event fields and native-provider inventory and resource policy are defined in [Unified Provider Architecture](../architecture/unified-provider-architecture.md).
+Recent is a nonwritable projection; Applications writes resolve into `~/.fiex/applications`; Trash exposes restore/delete rather than generic uploads. The operation matrix, provenance semantics, additive presentation event fields and native-provider inventory and resource policy are defined in [Unified Provider Architecture](../architecture/unified-provider-architecture.md).

@@ -15,7 +15,6 @@ pub struct Entry {
     pub created: u64,
     pub extension: String,
     pub mime: String,
-    pub readonly: bool,
     pub link_target: Option<String>,
     /// Provider operations this entry allows. Empty grants no provider operations.
     #[serde(default)]
@@ -52,11 +51,22 @@ fn shortcut_target(path: &Path) -> Option<String> {
     link.relative_path().clone()
 }
 
-pub fn metadata_readonly(meta: &fs::Metadata) -> bool {
-    if cfg!(windows) && meta.is_dir() {
-        return false;
+/// Operations supported by the local filesystem provider for a node shape.
+/// Host permissions are checked by the operation itself, so this list does not
+/// probe ACLs or file attributes while painting a directory.
+fn local_operations(path: &str, is_dir: bool) -> Vec<String> {
+    let mut operations: Vec<&str> = if is_dir {
+        vec![
+            "list", "stat", "search", "write", "mkdir", "rename", "remove",
+        ]
+    } else {
+        vec!["stat", "read", "write", "rename", "remove"]
+    };
+    if crate::core::volumes::application_policy::protected(path) {
+        operations
+            .retain(|operation| !matches!(*operation, "write" | "mkdir" | "rename" | "remove"));
     }
-    meta.permissions().readonly()
+    operations.into_iter().map(str::to_owned).collect()
 }
 
 pub fn entry(path: &Path) -> Result<Entry, String> {
@@ -116,9 +126,8 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
         mime: mime_guess::from_path(path)
             .first_or_octet_stream()
             .to_string(),
-        readonly: metadata_readonly(&meta),
         link_target,
-        allowed_ops: Vec::new(),
+        allowed_ops: local_operations(&path.to_string_lossy(), meta.is_dir()),
         tags: read_tags(path),
         has_cache: false,
         pinned: false,
@@ -129,10 +138,10 @@ pub fn entry(path: &Path) -> Result<Entry, String> {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
-    pub read_only: bool,
-    /// The directory itself accepts `mkdir` (provider/node capability).
+    /// Operations supported by the directory itself, independent of current
+    /// host ACLs. Mutations still report the operating system's real error.
     #[serde(default)]
-    pub can_create: bool,
+    pub allowed_ops: Vec<String>,
     pub virtual_volume: bool,
     pub path: String,
     pub entries: Vec<Entry>,
@@ -177,12 +186,8 @@ pub fn list(path: &str, hidden: bool, ignores: &[String]) -> Result<Listing, Str
         }
     }
     entries.sort_by_cached_key(|entry| (!entry.is_dir, entry.name.to_lowercase()));
-    // Local creation follows the directory's own permission; the OS still
-    // rejects a call on a read-only volume.
-    let can_create = fs::metadata(&path).is_ok_and(|meta| !metadata_readonly(&meta));
     Ok(Listing {
-        read_only: false,
-        can_create,
+        allowed_ops: local_operations(&path.to_string_lossy(), true),
         virtual_volume: false,
         path: path.to_string_lossy().into_owned(),
         entries,

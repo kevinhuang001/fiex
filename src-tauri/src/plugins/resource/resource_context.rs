@@ -15,7 +15,6 @@ pub struct ResourceSnapshot {
     pub reference: ResourceRef,
     pub stat: Option<fs::Metadata>,
     pub is_dir: bool,
-    pub read_only: bool,
     pub ext: String,
     pub mime: String,
     pub name: String,
@@ -27,9 +26,6 @@ impl ResourceSnapshot {
     pub fn new(display: &str, local: &Path) -> Self {
         let stat = fs::symlink_metadata(local).ok();
         let is_dir = stat.as_ref().is_some_and(fs::Metadata::is_dir);
-        let read_only = stat
-            .as_ref()
-            .is_some_and(crate::core::files::metadata_readonly);
         let name = local
             .file_name()
             .map(|value| value.to_string_lossy().into_owned())
@@ -66,7 +62,6 @@ impl ResourceSnapshot {
             reference,
             stat,
             is_dir,
-            read_only,
             ext,
             mime,
             name,
@@ -116,7 +111,6 @@ impl ResourceSnapshot {
     }
     pub fn from_entry(display: &str, entry: &crate::core::files::Entry) -> Self {
         let mut resource = Self::from_metadata(display, Self::entry_metadata(entry));
-        resource.read_only = entry.readonly;
         resource.operations = Some(crate::plugins::resource::file_capabilities::for_entry(
             display, entry,
         ));
@@ -149,7 +143,6 @@ impl ResourceSnapshot {
             reference,
             stat: None,
             is_dir: metadata.kind == "directory",
-            read_only: false,
             ext: metadata.extension.clone().unwrap_or_default(),
             mime: metadata.mime.clone().unwrap_or_default(),
             name: metadata.name.clone(),

@@ -4,7 +4,6 @@
 //! and no FUSE are involved. APFS, HFS+ and btrfs remain read-only elsewhere.
 
 mod access;
-mod capabilities;
 mod identity;
 mod mount;
 pub use identity::generation;
@@ -12,7 +11,6 @@ mod tree;
 mod util;
 mod write;
 
-pub(crate) use capabilities::{is_root, writable};
 pub use mount::{detect, eject, ensure_access, probe};
 pub use tree::{
     copy_file_to, copy_to_local, entry, list, listing, read, read_at, read_path, search,
@@ -55,6 +53,10 @@ mod tests {
             rel: String::new(),
             root: virtual_root(&device, FsKind::Btrfs),
         };
+        let root = entry(&route).unwrap();
+        for operation in ["write", "mkdir", "rename", "remove"] {
+            assert!(!root.allowed_ops.iter().any(|allowed| allowed == operation));
+        }
         assert!(listing(&route).is_ok());
     }
 
@@ -84,13 +86,41 @@ mod tests {
         let root = virtual_root(&device, FsKind::Ntfs);
         let root_route = route(&root).expect("virtual root route");
         assert_eq!(root_route.device, device);
+        let root_entry = entry(&root_route).unwrap();
+        assert!(root_entry
+            .allowed_ops
+            .iter()
+            .any(|operation| operation == "write"));
+        assert!(root_entry
+            .allowed_ops
+            .iter()
+            .any(|operation| operation == "mkdir"));
+        assert!(!root_entry
+            .allowed_ops
+            .iter()
+            .any(|operation| operation == "remove"));
         create(&root_route, "notes.txt", false).unwrap();
         let file_path = format!("{root}/notes.txt");
         let file_route = route(&file_path).expect("file route");
         write_path(&file_route, b"virtual usb").unwrap();
         assert_eq!(read_path(&file_route).unwrap(), b"virtual usb");
         let entries = listing(&root_route).unwrap();
-        assert!(entries.iter().any(|entry| entry.path == file_path));
+        let note = entries
+            .iter()
+            .find(|entry| entry.path == file_path)
+            .unwrap();
+        assert!(note
+            .allowed_ops
+            .iter()
+            .any(|operation| operation == "write"));
+        assert!(note
+            .allowed_ops
+            .iter()
+            .any(|operation| operation == "rename"));
+        assert!(note
+            .allowed_ops
+            .iter()
+            .any(|operation| operation == "remove"));
         assert!(search(&root_route, "notes", 10, &|| false)
             .unwrap()
             .0

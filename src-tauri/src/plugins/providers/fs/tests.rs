@@ -23,18 +23,17 @@ fn entries_require_a_stable_node_id_and_a_safe_name() {
 
 #[test]
 fn node_capabilities_narrow_the_provider() {
-    let read_only = entry(json!({
+    let read_limited = entry(json!({
         "nodeId":"n1","name":"a.txt","kind":"file","allowedOps":["read","stat"]
     }))
     .unwrap();
-    assert!(read_only.allows(FsOperation::Read));
-    assert!(!read_only.allows(FsOperation::Rename));
-    assert!(read_only.is_readonly());
+    assert!(read_limited.allows(FsOperation::Read));
+    assert!(!read_limited.allows(FsOperation::Rename));
     let writable = entry(json!({
         "nodeId":"n2","name":"b.txt","kind":"file","allowedOps":["read","write","rename","remove"]
     }))
     .unwrap();
-    assert!(!writable.is_readonly());
+    assert!(writable.allows(FsOperation::Write));
 }
 
 #[test]
@@ -63,9 +62,9 @@ fn malformed_node_restrictions_cannot_become_unrestricted() {
     for restrictions in [json!("read"), json!([42])] {
         assert!(entry(json!({"nodeId":"n","name":"a","allowedOps":restrictions})).is_err());
     }
-    assert!(entry(json!({"nodeId":"n","name":"a","readonly":"true"})).is_err());
+    assert!(entry(json!({"nodeId":"n","name":"a","readonly":true})).is_err());
     let unknown = entry(json!({"nodeId":"n","name":"a","allowedOps":["future"]})).unwrap();
-    assert!(unknown.is_readonly());
+    assert!(unknown.allowed_ops.as_ref().unwrap().is_empty());
 }
 
 #[test]

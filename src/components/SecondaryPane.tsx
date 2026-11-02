@@ -134,7 +134,6 @@ export function SecondaryPane({
           onBookmark={() => {}}
           onWorkspace={() => {}}
           dragPaths={dragPaths}
-          readOnly={x.directoryReadOnly}
         />
       </aside>
     </>

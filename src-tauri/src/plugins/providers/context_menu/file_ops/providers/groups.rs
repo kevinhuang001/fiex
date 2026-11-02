@@ -126,7 +126,7 @@ impl Create {
 pub(super) struct Rename;
 impl Rename {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.rename && !selection.read_only && !selection.paths.is_empty()
+        capabilities.rename && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         if selection.many() {
@@ -140,7 +140,7 @@ impl Rename {
 pub(super) struct BatchRename;
 impl BatchRename {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.rename && !selection.read_only && !selection.paths.is_empty()
+        capabilities.rename && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         if selection.many() {
@@ -154,19 +154,17 @@ impl BatchRename {
 pub(super) struct Clipboard;
 impl Clipboard {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        !selection.paths.is_empty()
-            && (capabilities.read
-                || (capabilities.read && capabilities.remove && !selection.read_only))
+        !selection.paths.is_empty() && capabilities.read
     }
-    fn items(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
+    fn items(&self, _selection: &Selection<'_>, capabilities: &FileCapabilities) -> Vec<MenuItem> {
         let mut items = Vec::new();
         if capabilities.read {
             items.push(item("copy", "复制", "copy", "copy"));
         }
-        if capabilities.read && capabilities.remove && !selection.read_only {
+        if capabilities.read && capabilities.remove {
             items.push(item("cut", "剪切", "scissors", "cut"));
         }
-        if capabilities.read && capabilities.write && !selection.read_only {
+        if capabilities.read && capabilities.write {
             items.push(item("duplicate", "创建副本", "copy", "duplicate"));
         }
         items
@@ -196,7 +194,7 @@ impl CopyPath {
 pub(super) struct Trash;
 impl Trash {
     fn available(&self, selection: &Selection<'_>, capabilities: &FileCapabilities) -> bool {
-        capabilities.remove && !selection.read_only && !selection.paths.is_empty()
+        capabilities.remove && !selection.paths.is_empty()
     }
     fn items(&self, selection: &Selection<'_>, _: &FileCapabilities) -> Vec<MenuItem> {
         let mut items = if selection.all_local {

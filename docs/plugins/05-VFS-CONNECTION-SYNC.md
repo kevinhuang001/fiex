@@ -44,7 +44,7 @@
 ## VFS
 
 ```json
-"vfs": { "title": "WebDAV", "readOnly": false }
+"vfs": { "title": "WebDAV" }
 ```
 
 Core 分配 `mountId`，插件只使用 Core 传入的节点/资源身份，不自己构造 URI。

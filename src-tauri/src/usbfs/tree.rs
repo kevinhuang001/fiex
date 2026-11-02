@@ -63,7 +63,7 @@ pub fn listing(route: &Route) -> Result<Vec<crate::core::files::Entry>, String> 
                 size: file.size,
                 modified: file.modified,
                 created: file.modified,
-                readonly: file.readonly,
+                allowed_ops: operations(route.kind, file.is_dir, false),
                 link_target: None,
                 tags: vec![],
                 ..Default::default()
@@ -79,7 +79,7 @@ pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
             path: route.root.clone(),
             name: "USB".into(),
             is_dir: true,
-            readonly: matches!(route.kind, FsKind::Apfs | FsKind::Hfs | FsKind::Btrfs),
+            allowed_ops: operations(route.kind, true, true),
             ..Default::default()
         });
     }
@@ -96,6 +96,24 @@ pub fn entry(route: &Route) -> Result<crate::core::files::Entry, String> {
         .into_iter()
         .find(|entry| entry.name == name)
         .ok_or_else(|| crate::i18n::t("文件不存在").to_string())
+}
+
+fn operations(kind: FsKind, is_dir: bool, root: bool) -> Vec<String> {
+    let mut operations = if is_dir {
+        vec!["list", "stat", "search"]
+    } else {
+        vec!["stat", "read"]
+    };
+    if matches!(kind, FsKind::Ntfs | FsKind::Ext4) {
+        operations.push("write");
+        if is_dir {
+            operations.push("mkdir");
+        }
+        if !root {
+            operations.extend(["rename", "remove"]);
+        }
+    }
+    operations.into_iter().map(str::to_owned).collect()
 }
 
 pub fn search(

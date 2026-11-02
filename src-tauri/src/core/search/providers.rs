@@ -160,50 +160,58 @@ fn search_cached_vfs(
     }
     // The live pass emits additions/metadata updates as they arrive; old hits
     // stay visible until the final authoritative set can remove stale hits.
-    let live: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
-    let upstream = &mut *sink.emit;
-    let mut emit = |mut batch: SearchBatch| {
-        {
-            let mut live = live.lock().unwrap_or_else(|e| e.into_inner());
-            for entry in &batch.entries {
-                if let Some(previous) = live.iter_mut().find(|previous| previous.path == entry.path)
-                {
-                    *previous = entry.clone();
-                } else {
-                    live.push(entry.clone());
+    let (result, entries, same, truncated, skipped, scanned) = {
+        let live: Mutex<Vec<Entry>> = Mutex::new(Vec::new());
+        let upstream = &mut *sink.emit;
+        let mut emit = |mut batch: SearchBatch| {
+            {
+                let mut live = live.lock().unwrap_or_else(|e| e.into_inner());
+                for entry in &batch.entries {
+                    if let Some(previous) =
+                        live.iter_mut().find(|previous| previous.path == entry.path)
+                    {
+                        *previous = entry.clone();
+                    } else {
+                        live.push(entry.clone());
+                    }
                 }
             }
-        }
-        batch
-            .entries
-            .retain(|entry| !cached.iter().any(|old| same_entry(old, entry)));
-        batch.done = false;
-        batch.replace = false;
-        if !batch.entries.is_empty() {
-            (upstream)(batch);
-        }
+            batch
+                .entries
+                .retain(|entry| !cached.iter().any(|old| same_entry(old, entry)));
+            batch.done = false;
+            batch.replace = false;
+            if !batch.entries.is_empty() {
+                (upstream)(batch);
+            }
+        };
+        let mut fresh = BatchSink::new(&mut emit, sink.started, sink.limit);
+        let result = search_adapter(root, request, cancelled, &mut fresh);
+        fresh.flush(false);
+        let entries = if result.is_ok() {
+            live.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        } else {
+            Vec::new()
+        };
+        let same = result.is_ok() && same_entry_snapshot(&cached, &entries);
+        (
+            result,
+            entries,
+            same,
+            fresh.truncated,
+            fresh.skipped,
+            fresh.scanned,
+        )
     };
-    let mut fresh = BatchSink::new(&mut emit, sink.started, sink.limit);
-    let result = search_adapter(root, request, cancelled, &mut fresh);
-    fresh.flush(false);
     if cancelled() {
         return Ok(());
     }
     if let Err(error) = result {
-        drop(fresh);
-        drop(emit);
         sink.warning = Some(error);
         sink.incomplete = true;
         sink.emit_snapshot(Vec::new(), true, false, false, 0, 0);
         return Ok(());
     }
-    let entries = live.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let same = same_entry_snapshot(&cached, &entries);
-    let truncated = fresh.truncated;
-    let skipped = fresh.skipped;
-    let scanned = fresh.scanned;
-    drop(fresh);
-    drop(emit);
     sink.emit_snapshot(
         if same { Vec::new() } else { entries },
         true,

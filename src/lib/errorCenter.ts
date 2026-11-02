@@ -21,6 +21,22 @@ export const subscribeErrors = (listener: () => void) => {
   }
 }
 export const activeError = () => queue[0] ?? null
+/** Identify permission failures returned by the OS without rewriting the
+ * original message. Provider capability failures remain normal unsupported
+ * errors; local and USB filesystem permissions are reported after execution. */
+export function isFilesystemPermissionError(cause: unknown) {
+  const message = String(cause ?? '').toLowerCase()
+  return (
+    /permission denied|permissiondenied:|operation not permitted|read-only file system|read only file system|access is denied|access denied/.test(
+      message,
+    ) || /\bos error (1|5|13|30|1314)\b/.test(message)
+  )
+}
+export function reportFilesystemPermissionError(cause: unknown, context: string) {
+  if (!isFilesystemPermissionError(cause)) return false
+  reportError(`${context}\n${String(cause ?? '')}`, 'filesystem')
+  return true
+}
 export function reportError(cause: unknown, source = 'core', diagnosticId?: string) {
   const message = redactDiagnostic(String(cause ?? ''), 2000)
   if (!message) return

@@ -55,32 +55,27 @@ pub fn stat(path: &str) -> Result<crate::core::files::Entry, String> {
     let mut meta = load_meta(&conn);
     if !rel.is_empty() && !meta.files.contains_key(&rel) {
         let parent = rel.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
-        remember_listing(parent, &list_remote(&conn, parent)?, &mut meta);
+        let listing = list_remote(&conn, parent)?;
+        remember_listing(parent, &listing.files, &mut meta, listing.complete);
         save_meta(&conn, &meta)?;
     }
     let file = meta.files.get(&rel);
     if !rel.is_empty() && file.is_none() {
         return Err("remote node not found".into());
     }
-    let pinned = file.is_some_and(|entry| entry.pinned);
-    let dirty = file.is_some_and(|entry| super::super::sync::dirty(&conn, &rel, entry));
-    let has_cache = file.is_some_and(|entry| {
-        if entry.is_dir {
-            super::super::cache::subtree_has_cache(&meta, &rel)
-        } else {
-            entry.downloaded && local_for(&conn, &rel).is_file()
-        }
-    });
-    let uploaded = file.is_some_and(|entry| entry.uploaded && !entry.conflict)
-        && !dirty
-        && (has_cache || pinned);
+    let state =
+        super::super::cache::state(&conn, &meta, &rel, file.is_none_or(|entry| entry.is_dir));
+    let pinned = state.pinned;
+    let dirty = state.dirty;
+    let has_cache = state.has_cache;
+    let uploaded = state.uploaded;
     let name = relative
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| conn.name.clone());
-    let (readonly, allowed_ops) = file
-        .map(|entry| entry_capabilities(&plugin_id, entry.allowed_ops.as_deref(), entry.readonly))
-        .unwrap_or_else(|| entry_capabilities(&plugin_id, None, false));
+    let allowed_ops = file
+        .map(|entry| entry_capabilities(&plugin_id, entry.allowed_ops.as_deref()))
+        .unwrap_or_else(|| entry_capabilities(&plugin_id, None));
     Ok(crate::core::files::Entry {
         path: super::super::config::navigation_path(&conn, &rel)?,
         name,
@@ -97,7 +92,6 @@ pub fn stat(path: &str) -> Result<crate::core::files::Entry, String> {
         mime: mime_guess::from_path(&relative)
             .first_or_octet_stream()
             .to_string(),
-        readonly,
         link_target: None,
         allowed_ops,
         tags: vec![],
@@ -105,14 +99,16 @@ pub fn stat(path: &str) -> Result<crate::core::files::Entry, String> {
         pinned,
         uploaded,
         sync: Some(
-            if file.is_some_and(|entry| entry.conflict) {
+            if state.conflict {
                 "conflict"
             } else if dirty {
                 "pending"
             } else if pinned {
                 "pinned"
-            } else if has_cache {
+            } else if state.cached {
                 "synced"
+            } else if state.partial {
+                "partial"
             } else {
                 "cloud"
             }
@@ -175,7 +171,7 @@ pub(crate) fn provider_node(
 
 /// Bind a committed opaque provider ID to the exact scoped destination. This
 /// is also needed for newly created directories before their first listing.
-pub(crate) fn remember_provider_entry(
+pub(crate) fn record_provider_mutation(
     path: &str,
     entry: &crate::plugins::providers::fs::FsEntry,
 ) -> Result<(), String> {
@@ -194,10 +190,73 @@ pub(crate) fn remember_provider_entry(
     }
     file.node_id = entry.node_id.clone();
     file.is_dir = entry.is_dir();
-    file.readonly = entry.readonly.unwrap_or(false);
     file.allowed_ops = entry
         .allowed_ops
         .as_ref()
         .map(|ops| ops.iter().map(|op| op.as_str().to_owned()).collect());
     save_meta(&connection, &metadata)
+}
+
+/// Record one completed provider listing in one metadata transaction. Listing
+/// and stat refreshes update remote metadata only for uncached files; downloaded
+/// bytes keep their revision baseline until reconciliation decides whether the
+/// remote changed.
+pub(crate) fn observe_provider_listing(
+    directory: &str,
+    entries: &[(String, crate::plugins::providers::fs::FsEntry)],
+    complete: bool,
+) -> Result<std::collections::HashMap<String, super::super::cache::CacheState>, String> {
+    let (connection, directory_rel) =
+        connection_for_path(directory).ok_or("StaleRef: connection removed")?;
+    ensure_provider_access(&connection)?;
+    let mut metadata = load_meta(&connection);
+    let directory_relative = rel_string(&directory_rel);
+    let inherited_pin = metadata.files.iter().any(|(key, file)| {
+        file.pinned && file.is_dir && super::super::sync::in_tree(&directory_relative, key)
+    });
+    let mut projected_paths = Vec::with_capacity(entries.len());
+    for (path, entry) in entries {
+        let (candidate, relative) =
+            connection_for_path(path).ok_or("StaleRef: connection removed")?;
+        if candidate.id != connection.id {
+            return Err("ScopeDenied: a listing cannot span connections".into());
+        }
+        let file = metadata.files.entry(rel_string(&relative)).or_default();
+        if !file.downloaded {
+            file.size = entry.size.unwrap_or(0);
+            file.modified = entry.modified.unwrap_or(0).max(0) as u64;
+            file.revision = entry.revision.clone().unwrap_or_default();
+        }
+        file.node_id = entry.node_id.clone();
+        file.is_dir = entry.is_dir();
+        file.allowed_ops = entry.allowed_ops.as_ref().map(|ops| {
+            ops.iter()
+                .map(|operation| operation.as_str().to_owned())
+                .collect()
+        });
+        if inherited_pin && !file.excluded {
+            file.pinned = true;
+        }
+        projected_paths.push((path.clone(), rel_string(&relative), entry.is_dir()));
+    }
+    if complete {
+        metadata.listed.insert(directory_relative.clone());
+        metadata.listed_children.insert(
+            directory_relative,
+            projected_paths
+                .iter()
+                .map(|(_, relative, _)| relative.clone())
+                .collect(),
+        );
+    }
+    save_meta(&connection, &metadata)?;
+    let nodes = projected_paths
+        .iter()
+        .map(|(_, relative, is_dir)| (relative.as_str(), *is_dir))
+        .collect::<Vec<_>>();
+    let states = super::super::cache::states_for(&connection, &metadata, &nodes);
+    Ok(projected_paths
+        .into_iter()
+        .filter_map(|(path, relative, _)| states.get(&relative).cloned().map(|state| (path, state)))
+        .collect())
 }

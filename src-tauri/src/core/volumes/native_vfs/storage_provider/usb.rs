@@ -39,18 +39,10 @@ pub(super) fn authorize(
             "Unsupported: read-only USB filesystem",
         ));
     }
-    std::fs::OpenOptions::new()
-        .write(true)
-        .open(&route.driver_device)
-        .map_err(|_| {
-            ProviderError::invalid_params("PermissionDenied: OS has not granted raw-device writes")
-        })?;
-    if route.rel.is_empty()
-        && matches!(
-            operation,
-            FsOperation::Remove | FsOperation::Rename | FsOperation::Write
-        )
-    {
+    // Advertised capabilities describe what the in-process filesystem driver
+    // implements. The actual device open is the authority and returns its OS
+    // error when a write is attempted.
+    if route.rel.is_empty() && matches!(operation, FsOperation::Remove | FsOperation::Rename) {
         return Err(ProviderError::invalid_params("cannot modify USB root"));
     }
     Ok(())

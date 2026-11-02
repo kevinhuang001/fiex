@@ -90,7 +90,7 @@ export const fixturePlugins: DemoPlugin[] = [
     allowedCommands: ['git'],
     author: { name: 'Fiex Contributors' },
     extensions: {
-      vfs: { title: 'Git 历史', readOnly: true },
+      vfs: { title: 'Git 历史' },
       toolbar: {
         title: '源代码管理',
         icon: 'git-branch',

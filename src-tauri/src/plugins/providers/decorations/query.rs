@@ -45,7 +45,6 @@ pub fn query_with_plugins(
                     is_dir: e.is_dir,
                     extension: e.extension.clone(),
                     mime: e.mime.clone(),
-                    readonly: e.readonly,
                     allowed_ops: e.allowed_ops.clone(),
                     ..Default::default()
                 },

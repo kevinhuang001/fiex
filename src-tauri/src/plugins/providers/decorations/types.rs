@@ -17,8 +17,6 @@ pub struct DecorationEntry {
     #[serde(default)]
     pub mime: String,
     #[serde(default)]
-    pub readonly: bool,
-    #[serde(default)]
     pub allowed_ops: Vec<String>,
     #[serde(default)]
     pub tags: Vec<DecorationTag>,

@@ -29,6 +29,13 @@ fn gates() -> &'static Mutex<HashMap<PathBuf, Weak<Gate>>> {
     GATES.get_or_init(Default::default)
 }
 pub(super) fn lock(device: &str) -> Result<DeviceGuard, String> {
+    #[cfg(windows)]
+    let path = if device.starts_with(r"\\.\") {
+        PathBuf::from(device)
+    } else {
+        dunce::canonicalize(device).map_err(|_| "StaleRef: device unavailable")?
+    };
+    #[cfg(not(windows))]
     let path = dunce::canonicalize(device).map_err(|_| "StaleRef: device unavailable")?;
     let gate = {
         let mut gates = gates().lock().map_err(|_| "device registry unavailable")?;

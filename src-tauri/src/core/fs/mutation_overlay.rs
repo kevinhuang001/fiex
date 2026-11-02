@@ -147,8 +147,13 @@ mod tests {
         Listing {
             path: path.into(),
             entries,
-            read_only: false,
-            can_create: true,
+            allowed_ops: vec![
+                "list".into(),
+                "stat".into(),
+                "search".into(),
+                "write".into(),
+                "mkdir".into(),
+            ],
             virtual_volume: true,
             warnings: vec![],
             default_view: None,

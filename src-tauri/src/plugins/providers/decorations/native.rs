@@ -64,7 +64,6 @@ fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
             NativeProviderRegistry::new(ProviderKind::Decoration);
         for (id, priority, kind) in [
             ("builtin:tags", -12, NativeKind::Tags),
-            ("builtin:readonly", -11, NativeKind::Readonly),
             (
                 "builtin:connection-status",
                 -10,
@@ -94,7 +93,6 @@ fn registry() -> &'static NativeProviderRegistry<dyn DecorationProvider> {
                     }),
                     ..Default::default()
                 },
-                NativeKind::Readonly => ProviderMatchRule::default(),
             };
             values
                 .register(id, priority, rule, Arc::new(BuiltinDecoration(kind)))
@@ -179,15 +177,14 @@ mod tests {
     #[test]
     fn all_native_decorations_are_typed_and_priority_sorted() {
         let descriptors = registry().descriptors().collect::<Vec<_>>();
-        assert_eq!(descriptors.len(), 4);
+        assert_eq!(descriptors.len(), 3);
         for descriptor in descriptors {
             assert_eq!(descriptor.kind, ProviderKind::Decoration);
             descriptor.validate().unwrap();
         }
         let local = providers(&[], "/tmp");
-        assert_eq!(local.len(), 2);
-        assert_eq!(local[0].id, "builtin:readonly");
-        assert_eq!(local[1].id, "builtin:tags");
+        assert_eq!(local.len(), 1);
+        assert_eq!(local[0].id, "builtin:tags");
         let applications = providers(&[], crate::core::volumes::applications::URI);
         assert!(applications
             .iter()
@@ -203,11 +200,10 @@ mod tests {
     }
 
     #[test]
-    fn each_registered_native_kind_keeps_its_operation() {
+    fn connection_status_and_tags_keep_their_native_badges() {
         let path = "/no-io/entry".to_string();
-        let mut entry = DecorationEntry {
+        let entry = DecorationEntry {
             path: path.clone(),
-            readonly: true,
             tags: vec![DecorationTag {
                 name: "project".into(),
                 color: 2,
@@ -218,10 +214,6 @@ mod tests {
         };
         let mut entries = HashMap::new();
         entries.insert(path.clone(), entry.clone());
-        assert_eq!(
-            resolve("builtin:readonly", "/", &entries).unwrap()[0].native_badges[0].text,
-            crate::i18n::t("只读")
-        );
         assert!(resolve("builtin:tags", "/", &entries).unwrap()[0]
             .native_badges
             .iter()
@@ -232,10 +224,6 @@ mod tests {
                 .as_deref(),
             Some("cloud")
         );
-        entry.readonly = false;
         entries.insert(path, entry);
-        assert!(resolve("builtin:readonly", "/", &entries)
-            .unwrap()
-            .is_empty());
     }
 }

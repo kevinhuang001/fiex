@@ -29,7 +29,6 @@ export function FileViews(props: Props) {
     dragPaths,
   } = props
   const [columns, updateColumns] = useDirectoryColumns(x.path, prefs.listColumns)
-  const readOnly = Boolean(props.readOnly)
   const inTrash = Boolean(props.trashPath && x.path === props.trashPath)
   const entries = useMemo(
     () => sortEntries(x.entries, prefs.sort, prefs.descending),
@@ -50,7 +49,6 @@ export function FileViews(props: Props) {
     explorer: x,
     selectedPaths,
     dragPaths,
-    readOnly,
     onDrop,
     onBookmark,
     onWorkspace,
