@@ -1,8 +1,18 @@
 //! Native macOS application bundles import as executable units, never a
 //! destructive move of an installed application. ditto preserves bundle links.
-use super::*;
+use super::{
+    binding,
+    planner::{collision, optional_stat, same_version, unique},
+    FsOperation,
+};
 use crate::core::volumes::applications;
+use crate::core::{
+    operations::{check_cancelled, OperationResult},
+    transfers::{Action, Resolution},
+};
+use fiex_provider_contracts::{TransferAction, TransferDirection};
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 #[allow(clippy::too_many_arguments)]
 pub(super) fn import(
     paths: &[String],

@@ -38,7 +38,7 @@ fn version(path: &str, stat: &serde_json::Value) -> FileVersion {
     }
 }
 
-fn collision(
+pub(super) fn collision(
     source: &ResourceBroker,
     target: &ResourceBroker,
     src: &serde_json::Value,
