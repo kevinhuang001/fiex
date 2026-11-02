@@ -134,4 +134,4 @@ Core 与 SDK 均检查此集合。当前协议要求每个声明 VFS 操作的�
 
 ## Core builtin VFS and presentation policy
 
-Recent is a nonwritable projection; Applications writes resolve into `~/.fiex/applications`; Trash exposes restore/delete rather than generic uploads. The operation matrix, readonly/provenance semantics, additive presentation event fields and builtin resolver inventory are defined in [VFS presentation contract](../architecture/vfs-presentation-contract.md).
+Recent is a nonwritable projection; Applications writes resolve into `~/.fiex/applications`; Trash exposes restore/delete rather than generic uploads. The operation matrix, readonly/provenance semantics, additive presentation event fields and native-provider inventory and resource policy are defined in [Unified Provider Architecture](../architecture/unified-provider-architecture.md).

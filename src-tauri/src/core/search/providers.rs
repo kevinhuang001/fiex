@@ -22,7 +22,7 @@ pub(super) fn search_root(
     if !local {
         return search_adapter(root, request, cancelled, sink);
     }
-    let input = crate::plugins::resolvers::search::PluginSearchInput {
+    let input = crate::plugins::providers::search::PluginSearchInput {
         query: request.query.clone(),
         root: root.to_string(),
         hidden: request.hidden,
@@ -30,7 +30,7 @@ pub(super) fn search_root(
         ignores: request.ignores.clone(),
         limit: Some(sink.limit),
     };
-    let engines = crate::plugins::resolvers::search::engines(&input);
+    let engines = crate::plugins::providers::search::engines(&input);
     let builtin = engines
         .iter()
         .find(|engine| engine.is_builtin() && engine.supports(request.mode))
@@ -59,7 +59,7 @@ pub(super) fn search_root(
     if let Some(engine) = selected {
         sink.engine = Some(engine.resolver.name.clone());
         let mut emitted = false;
-        let result = crate::plugins::resolvers::search::run_stream(
+        let result = crate::plugins::providers::search::run_stream(
             &engine,
             &input,
             cancelled,
@@ -94,7 +94,7 @@ pub(super) fn search_root(
     if let Some(engine) = builtin {
         sink.engine = Some("builtin".into());
         let mut emitted = false;
-        match crate::plugins::resolvers::search::run_stream(
+        match crate::plugins::providers::search::run_stream(
             &engine,
             &input,
             cancelled,

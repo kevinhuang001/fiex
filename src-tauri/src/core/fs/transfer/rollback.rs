@@ -2,6 +2,11 @@
 //! versions are spooled before the first destination commit, never buffered
 //! into an unbounded Vec. All cleanup stays within destination providers.
 use super::*;
+use super::{
+    model::Step,
+    planner::{is_missing, optional_stat, same_version},
+};
+use crate::core::fs::ResourceBroker;
 use std::io::{Read, Seek, SeekFrom, Write};
 
 pub(super) struct UndoLog {

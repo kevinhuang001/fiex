@@ -44,7 +44,7 @@ pub(super) fn parent_path(path: &str) -> Result<String, String> {
 
 pub(super) fn plugin_node(
     resource: &ResourceBroker,
-) -> Result<(crate::plugins::resolvers::fs::Mount, String), FsError> {
+) -> Result<(crate::plugins::providers::fs::Mount, String), FsError> {
     if crate::remote::is_remote(&resource.path) {
         crate::remote::provider_node(&resource.path).map_err(FsError::from)
     } else {
@@ -54,7 +54,7 @@ pub(super) fn plugin_node(
 
 pub(super) fn parent(
     resource: &ResourceBroker,
-) -> Result<(crate::plugins::resolvers::fs::Mount, String, String), FsError> {
+) -> Result<(crate::plugins::providers::fs::Mount, String, String), FsError> {
     let path = super::parent_path(&resource.path)?;
     let reference = resource.scope.reference_for_path(&path)?;
     let parent = ResourceBroker::resolve(&resource.scope, &resource.owner, &reference)?;
@@ -80,7 +80,7 @@ pub(super) fn remember_entry(path: &str, entry: &FsEntry) -> Result<(), FsError>
 }
 
 pub(super) fn project_entry(
-    mount: &crate::plugins::resolvers::fs::Mount,
+    mount: &crate::plugins::providers::fs::Mount,
     path: &str,
     entry: FsEntry,
 ) -> crate::core::files::Entry {
@@ -137,7 +137,7 @@ pub(super) fn stream_read(resource: &ResourceBroker) -> Result<FsRead, FsError> 
 }
 
 struct PluginReader {
-    stream: crate::plugins::resolvers::fs::FsStream,
+    stream: crate::plugins::providers::fs::FsStream,
     offset: u64,
 }
 
@@ -167,7 +167,7 @@ pub(super) fn stream_write(
     let stream = if create {
         let (mount, parent, name) = parent(resource)?;
         mount
-            .begin_write(crate::plugins::resolvers::fs::WriteRequest {
+            .begin_write(crate::plugins::providers::fs::WriteRequest {
                 node_id: None,
                 parent_id: Some(&parent),
                 name: Some(&name),
@@ -179,7 +179,7 @@ pub(super) fn stream_write(
         let (mount, node) = plugin_node(resource)?;
         let entry = mount.stat(&node).map_err(FsError::from)?;
         mount
-            .begin_write(crate::plugins::resolvers::fs::WriteRequest {
+            .begin_write(crate::plugins::providers::fs::WriteRequest {
                 node_id: Some(&node),
                 parent_id: None,
                 name: None,
@@ -215,7 +215,7 @@ pub(super) fn stream_write(
     }))
 }
 
-struct PluginWriter(Arc<Mutex<Option<crate::plugins::resolvers::fs::FsWriteStream>>>);
+struct PluginWriter(Arc<Mutex<Option<crate::plugins::providers::fs::FsWriteStream>>>);
 
 impl std::io::Write for PluginWriter {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {

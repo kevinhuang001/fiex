@@ -74,19 +74,6 @@ impl ResourceBroker {
             owner: owner.into(),
         })
     }
-    pub(crate) fn ensure_current_binding(&self) -> Result<(), FsError> {
-        if crate::usbfs::route(&self.path).is_some() {
-            let current =
-                crate::plugins::resource::resource_context::ResourceSnapshot::from_metadata(
-                    &self.path,
-                    Default::default(),
-                );
-            if current.reference != self.reference {
-                return Err("StaleRef: USB mount generation changed".into());
-            }
-        }
-        Ok(())
-    }
     pub(crate) fn open_read_handle(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         self.require(FsOperation::Read, false)?;
         provider_registry::open_read(self)
@@ -264,4 +251,4 @@ impl ResourceBroker {
 mod tests;
 
 #[cfg(test)]
-mod migration_tests;
+mod provider_tests;

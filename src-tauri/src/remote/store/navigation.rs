@@ -8,7 +8,7 @@ pub fn open_navigation(id: &str) -> Result<serde_json::Value, String> {
         .find(|connection| connection.id == id)
         .ok_or("connection not found")?;
     let plugin_id = ensure_provider_access(&connection)?;
-    let target = crate::plugins::resolvers::connection::invoke(
+    let target = crate::plugins::providers::connection::invoke(
         &plugin_id,
         &connection.kind,
         &connection.mount_id,

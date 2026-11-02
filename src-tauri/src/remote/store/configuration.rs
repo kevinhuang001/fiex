@@ -114,7 +114,7 @@ pub fn save_connection(input: ConnectionInput) -> Result<ConnectionInfo, String>
         if let Some(domain) = connection_domain(&record.settings) {
             crate::plugins::host::set_network_domain(&plugin_id, &domain, true)?;
         }
-        let validation = crate::plugins::resolvers::connection::invoke(
+        let validation = crate::plugins::providers::connection::invoke(
             &plugin_id,
             &record.kind,
             &record.mount_id,

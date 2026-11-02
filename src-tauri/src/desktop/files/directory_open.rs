@@ -1,5 +1,5 @@
 use crate::core::files::Listing;
-use crate::plugins::resolvers::decorations::Decoration;
+use crate::plugins::providers::decorations::Decoration;
 use serde::Serialize;
 
 #[derive(Serialize)]

@@ -49,9 +49,6 @@ pub fn require_for(
     operation: FsOperation,
     create: bool,
 ) -> Result<(), String> {
-    if create && provider_id(&broker.path) == Some("core:applications") {
-        return require(&broker.path, &broker.owner, operation, true);
-    }
     let provider =
         shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
     let invocation = shared::broker_invocation(

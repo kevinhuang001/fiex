@@ -77,6 +77,16 @@ fn application_operations(path: &str) -> Vec<FsOperation> {
 }
 
 pub(super) struct ApplicationView;
+
+/// Resolve a user-store node to its backing path inside the Applications
+/// provider. System-app identities are virtual and have no writable backing
+/// path exposed through this helper.
+pub(super) fn backing_path(uri: &str) -> Option<PathBuf> {
+    applications::is_user(uri)
+        .then(|| applications::candidate_path(uri).ok())
+        .flatten()
+}
+
 impl VfsProvider for ApplicationView {
     fn supports_preflight(&self) -> bool {
         true
@@ -97,6 +107,38 @@ impl VfsProvider for ApplicationView {
 
     fn discover(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<FsOperation>, ProviderError> {
         Ok(application_operations(path(ctx)?))
+    }
+
+    fn authorize(
+        &self,
+        ctx: &dyn ProviderInvocation,
+        operation: FsOperation,
+        create: bool,
+    ) -> Result<(), ProviderError> {
+        let uri = path(ctx)?;
+        if !create {
+            return if application_operations(uri).contains(&operation) {
+                Ok(())
+            } else {
+                Err(ProviderError::method_not_found(operation.methods()[0]))
+            };
+        }
+        if !applications::is_user(uri)
+            || !matches!(operation, FsOperation::Write | FsOperation::Mkdir)
+        {
+            return Err(ProviderError::method_not_found(operation.methods()[0]));
+        }
+        let target = applications::candidate_path(uri).map_err(provider_error)?;
+        let parent = target
+            .parent()
+            .ok_or_else(|| ProviderError::invalid_params("application parent is missing"))?;
+        if parent.is_dir() && !target.exists() {
+            Ok(())
+        } else {
+            Err(ProviderError::invalid_params(
+                "Conflict: application destination is unavailable",
+            ))
+        }
     }
 
     fn search_capabilities(&self, ctx: &dyn ProviderInvocation) -> SearchCapabilities {

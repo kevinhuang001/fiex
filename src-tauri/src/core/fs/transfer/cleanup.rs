@@ -1,5 +1,6 @@
 //! A move commits all copies before it considers deleting any source.
 use super::*;
+use super::{model::Step, planner::same_version};
 use std::{collections::BTreeSet, path::Path};
 
 pub(super) fn validate(steps: &[Step], cancel: &AtomicBool) -> Result<(), String> {

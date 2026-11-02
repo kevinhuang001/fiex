@@ -1,4 +1,9 @@
+use super::rollback::UndoLog;
 use super::*;
+use super::{
+    model::Step,
+    planner::{optional_stat, same_version},
+};
 
 pub(super) fn execute(
     steps: &[Step],

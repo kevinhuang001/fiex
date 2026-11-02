@@ -49,7 +49,7 @@ fn main() {
 
         if manifest.extensions["contextMenus"].as_bool() == Some(true) {
             let directory_path = directory.path().to_string_lossy().into_owned();
-            let menu = fiex_lib::plugins::resolvers::context_menu::query_plugins(
+            let menu = fiex_lib::plugins::providers::context_menu::query_plugins(
                 &directory_path,
                 &[file.to_string_lossy().into_owned()],
             )
@@ -68,7 +68,7 @@ fn main() {
             );
             for item in items.clone() {
                 if item["kind"] == "submenu" {
-                    let children = fiex_lib::plugins::resolvers::context_menu::children(
+                    let children = fiex_lib::plugins::providers::context_menu::children(
                         &session_id,
                         item["id"].as_str().expect("submenu ID missing"),
                     )
@@ -96,7 +96,7 @@ fn main() {
                     continue;
                 }
                 let result =
-                    fiex_lib::plugins::resolvers::context_menu::execute(&session_id, item_id)
+                    fiex_lib::plugins::providers::context_menu::execute(&session_id, item_id)
                         .expect("menu panel execute failed");
                 if result["kind"] == "panel" {
                     let path = result["assetPath"].as_str().expect("missing panel asset");

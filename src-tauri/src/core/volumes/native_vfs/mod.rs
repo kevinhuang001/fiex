@@ -109,6 +109,35 @@ pub fn shared_provider_id(path: &str) -> Option<&'static str> {
     Some("core:local-fs")
 }
 
+/// Return a Core-local backing path only when the owning native provider
+/// deliberately exposes one. Plugin mounts and projected virtual identities
+/// never become host paths through this resolver.
+pub fn backing_path(path: &str) -> Option<PathBuf> {
+    match shared_provider_id(path)? {
+        "core:local-fs" => Some(PathBuf::from(path)),
+        "core:applications" => application_provider::backing_path(path),
+        _ => None,
+    }
+}
+
+/// USB references are scoped to a mount generation. Keep that liveness check
+/// at the native storage boundary so generic ResourceBroker code stays free
+/// of USB-specific policy.
+pub(crate) fn ensure_current_binding(
+    path: &str,
+    reference: &crate::plugins::contracts::ResourceRef,
+) -> Result<(), String> {
+    if shared_provider_id(path) != Some("core:usb-fs") {
+        return Ok(());
+    }
+    let current_mount = crate::core::fs::provider_registry::reference_mount_id(path)
+        .ok_or("StaleRef: USB mount is no longer available")?;
+    if reference.mount_id != current_mount {
+        return Err("StaleRef: USB mount generation changed".into());
+    }
+    Ok(())
+}
+
 fn unregistered_scheme(path: &str) -> bool {
     let Some(index) = path.find(':') else {
         return false;
@@ -230,20 +259,6 @@ pub fn require(
     create: bool,
 ) -> Result<(), String> {
     let provider = view_for(path).ok_or("Unsupported: unregistered native VFS provider")?;
-    if create {
-        if provider_id(path) != Some("core:applications")
-            || !applications::is_user(path)
-            || !matches!(operation, FsOperation::Write | FsOperation::Mkdir)
-        {
-            return Err(format!("Unsupported: {}", operation.as_str()));
-        }
-        let backing = applications::candidate_path(path)?;
-        let parent = backing.parent().ok_or("missing application parent")?;
-        if parent.is_dir() && !backing.exists() {
-            return Ok(());
-        }
-        return Err("Conflict: application destination is unavailable".into());
-    }
     let invocation = target_invocation(path, owner, "vfs.discover", json!({}));
     provider
         .authorize(&invocation, operation, create)

@@ -3,9 +3,9 @@ use super::*;
 #[tauri::command]
 pub(crate) async fn file_info_details(
     path: String,
-) -> Result<Vec<crate::plugins::resolvers::info::InfoSection>, String> {
+) -> Result<Vec<crate::plugins::providers::info::InfoSection>, String> {
     use crate::infrastructure::cache::memory::MemoryCache;
-    use crate::plugins::resolvers::info::InfoSection;
+    use crate::plugins::providers::info::InfoSection;
     use std::sync::OnceLock;
     use std::time::Duration;
     static INFO: OnceLock<MemoryCache<Vec<InfoSection>>> = OnceLock::new();
@@ -35,7 +35,7 @@ pub(crate) async fn file_info_details(
         if let Some(value) = key.as_ref().and_then(|key| cache.get(key)) {
             return Ok::<_, String>(value);
         }
-        let result = crate::plugins::resolvers::info::file_info_resource(&path)?;
+        let result = crate::plugins::providers::info::file_info_resource(&path)?;
         if let Some(key) = key {
             cache.insert(key, result.clone());
         }
@@ -75,14 +75,14 @@ pub(crate) fn plugin_status() -> Vec<(String, bool)> {
 #[tauri::command]
 pub(crate) async fn plugin_decorations(
     directory: String,
-    entries: Vec<crate::plugins::resolvers::decorations::DecorationEntry>,
+    entries: Vec<crate::plugins::providers::decorations::DecorationEntry>,
     include_plugins: Option<bool>,
-) -> Result<Vec<crate::plugins::resolvers::decorations::Decoration>, String> {
+) -> Result<Vec<crate::plugins::providers::decorations::Decoration>, String> {
     if !directory.starts_with('/') && !directory.contains(":\\") && !directory.contains("://") {
         return Err("invalid decoration directory".into());
     }
     tauri::async_runtime::spawn_blocking(move || {
-        crate::plugins::resolvers::decorations::query_with_plugins(
+        crate::plugins::providers::decorations::query_with_plugins(
             &directory,
             entries.clone(),
             include_plugins.unwrap_or(true),

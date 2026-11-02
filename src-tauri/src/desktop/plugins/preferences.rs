@@ -33,7 +33,7 @@ pub(crate) fn reset_provider_preference(feature: String) -> Result<serde_json::V
 /// local provider, matching the routing rules in Core.
 #[tauri::command]
 pub(crate) fn search_providers(root: String, mode: Option<String>) -> Vec<serde_json::Value> {
-    let request = crate::plugins::resolvers::search::PluginSearchInput {
+    let request = crate::plugins::providers::search::PluginSearchInput {
         query: String::new(),
         root,
         hidden: false,
@@ -44,7 +44,7 @@ pub(crate) fn search_providers(root: String, mode: Option<String>) -> Vec<serde_
         ignores: Vec::new(),
         limit: None,
     };
-    crate::plugins::resolvers::search::engines(&request)
+    crate::plugins::providers::search::engines(&request)
         .into_iter()
         .map(|engine| engine.json())
         .collect()
