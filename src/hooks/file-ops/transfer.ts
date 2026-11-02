@@ -66,7 +66,12 @@ export function transferActions({ x, conflict, setConflict, setClipboard, run }:
     if (destination === x.path) x.reload()
     if (result.errors.length) {
       const message = t('{0} 项已完成。{1}', result.paths.length, result.errors.join('\n'))
-      const context = t('{0}来源：\n{1}\n\n目标：\n{2}', moving ? t('移动') : t('复制'), source, destination)
+      const context = t(
+        '{0}来源：\n{1}\n\n目标：\n{2}',
+        moving ? t('移动') : t('复制'),
+        source,
+        destination,
+      )
       if (!reportFilesystemPermissionError(message, context)) x.setError(message)
     }
   }
