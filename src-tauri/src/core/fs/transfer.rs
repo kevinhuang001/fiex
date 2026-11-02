@@ -18,7 +18,7 @@ mod model;
 mod planner;
 mod rollback;
 
-use planner::{optional_stat, plan, unique};
+use planner::plan;
 
 #[allow(clippy::too_many_arguments)]
 pub fn transfer(
