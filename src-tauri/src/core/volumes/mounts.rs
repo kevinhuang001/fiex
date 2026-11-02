@@ -88,6 +88,7 @@ pub fn usb_fallback_eject_device(device: &str) -> Option<String> {
     None
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn native_mount_unsupported(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
     // Linux may report an unsupported filesystem from the unprivileged mount
@@ -133,6 +134,7 @@ fn windows_native_mount_unsupported(error: &std::io::Error) -> bool {
     matches!(error.raw_os_error(), Some(1 | 50 | 1005 | 1112))
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn fallback_after_native_failure(
     device_key: &str,
     provider_device: &str,
@@ -713,6 +715,7 @@ pub fn mount_device(_device: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn only_native_driver_absence_enables_usb_provider_fallback() {
         assert!(super::native_mount_unsupported(
