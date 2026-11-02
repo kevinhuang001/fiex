@@ -66,7 +66,11 @@ export function FileContextMenu(props: ContextMenuProps) {
   // Never suppress IPC providers just because a resource is a Core-owned VFS;
   // plugins can also opt in to blank-canvas selection via match.selection=zero.
   const pluginEntry = plugins.some(
-    (plugin) => plugin.enabled && plugin.approved && plugin.backendAvailable && !!plugin.extensions?.contextMenus,
+    (plugin) =>
+      plugin.enabled &&
+      plugin.approved &&
+      plugin.backendAvailable &&
+      !!plugin.extensions?.contextMenus,
   )
   const populated = menus.some((group) => group.items.length > 0) || pluginEntry
   if (!menu) return null

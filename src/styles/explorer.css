@@ -690,7 +690,8 @@ body.col-resizing {
   min-width: 0;
   font-size: var(--label-size, 11px);
 }
-.file-label, .column-label {
+.file-label,
+.column-label {
   display: flex;
   min-width: 0;
   max-width: 100%;
