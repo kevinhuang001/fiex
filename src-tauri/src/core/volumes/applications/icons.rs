@@ -35,7 +35,7 @@ pub fn cached_icon(source: &str) -> Option<String> {
         }
     }
     #[cfg(target_os = "windows")]
-    if super::windows_shell::extract_icon(source, &target).is_ok() {
+    if crate::core::volumes::windows_shell::extract_icon(source, &target).is_ok() {
         return Some(target.to_string_lossy().into_owned());
     }
     let icon = file_icon_provider::get_file_icon(source, 128).ok()?;
