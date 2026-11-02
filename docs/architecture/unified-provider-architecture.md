@@ -4,18 +4,18 @@ Core, the Rust SDK, and official plugins use one typed contract for provider reg
 
 ## Module ownership
 
-| Module | Owns |
-| --- | --- |
-| `sdk/rust/contracts/` | Shared provider traits, descriptors, DTOs, and validation rules. |
-| `src-tauri/src/plugins/provider_registry.rs` and `src-tauri/src/plugins/provider_registry/` | Registered descriptors and instance lookup for plugin and native providers. |
-| `src-tauri/src/plugins/events/` | Event routing, candidate selection, scoped invocation setup, and event result policy. |
-| `src-tauri/src/plugins/providers/` | Feature providers and their native implementations or reusable plugin IPC proxies. |
-| `src-tauri/src/core/fs/provider_registry/` | Resource ownership, provider routing, operation dispatch, and the plugin mount adapter. |
-| `src-tauri/src/core/volumes/native_vfs/` | Core `VfsProvider` implementations for local storage, USB, Recent, Applications, and Trash. |
-| `src-tauri/src/plugins/vfs/` | Core-owned plugin view identity, navigation, and projection into the shared VFS contract. |
-| `src-tauri/src/core/fs/` | `ResourceBroker`, scoped file operations, caching, exports, and transfer orchestration. |
-| `src-tauri/src/plugins/resource/` | Resource snapshots, ref binding, capability projection, authorization scopes, and lifecycle cleanup. |
-| `src-tauri/src/core/volumes/applications/` | Application catalog, platform enumeration, private user store, folder mappings, and launch/icon adapters. |
+| Module                                                                                      | Owns                                                                                                      |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `sdk/rust/contracts/`                                                                       | Shared provider traits, descriptors, DTOs, and validation rules.                                          |
+| `src-tauri/src/plugins/provider_registry.rs` and `src-tauri/src/plugins/provider_registry/` | Registered descriptors and instance lookup for plugin and native providers.                               |
+| `src-tauri/src/plugins/events/`                                                             | Event routing, candidate selection, scoped invocation setup, and event result policy.                     |
+| `src-tauri/src/plugins/providers/`                                                          | Feature providers and their native implementations or reusable plugin IPC proxies.                        |
+| `src-tauri/src/core/fs/provider_registry/`                                                  | Resource ownership, provider routing, operation dispatch, and the plugin mount adapter.                   |
+| `src-tauri/src/core/volumes/native_vfs/`                                                    | Core `VfsProvider` implementations for local storage, USB, Recent, Applications, and Trash.               |
+| `src-tauri/src/plugins/vfs/`                                                                | Core-owned plugin view identity, navigation, and projection into the shared VFS contract.                 |
+| `src-tauri/src/core/fs/`                                                                    | `ResourceBroker`, scoped file operations, caching, exports, and transfer orchestration.                   |
+| `src-tauri/src/plugins/resource/`                                                           | Resource snapshots, ref binding, capability projection, authorization scopes, and lifecycle cleanup.      |
+| `src-tauri/src/core/volumes/applications/`                                                  | Application catalog, platform enumeration, private user store, folder mappings, and launch/icon adapters. |
 
 ## Source layout
 
