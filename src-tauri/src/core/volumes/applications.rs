@@ -343,7 +343,7 @@ mod tests {
 
 #[cfg(all(test, target_os = "windows"))]
 mod windows_target_tests {
-    use super::resolve_windows_executable;
+    use super::platform::resolve_windows_executable;
 
     #[test]
     fn valid_system_known_folder_target_is_launchable() {
