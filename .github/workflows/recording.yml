@@ -20,7 +20,7 @@ jobs:
         run: git submodule update --init sdk
       - name: Install image formatters
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ntfs-3g e2fsprogs btrfs-progs
+        run: sudo apt-get update && sudo apt-get install -y btrfs-progs
       - run: python3 scripts/ci-filesystems.py
       - uses: actions/upload-artifact@v4
         with:

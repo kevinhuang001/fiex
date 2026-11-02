@@ -580,9 +580,9 @@ try:
     assert (source/'remote.txt').read_text() == 'remote pull verified\n'
     passed('git_push_pull')
     click('[aria-label="关闭源代码管理"]')
-    begin('Disk images: list, read, copy out and verify read-only behavior')
+    begin('Unsupported filesystems: read-only fallback providers')
     images = request(action='images')
-    expected = {p.stem for p in Path(os.environ['FIEX_CI_IMAGES']).glob('*.img')}
+    expected = {p.stem for p in Path(os.environ['FIEX_CI_IMAGES']).glob('*.img') if p.stem in ('btrfs', 'apfs', 'hfs')}
     assert {i['name'] for i in images} == expected, images
     for image in sorted(images, key=lambda i: i['name']):
         name, path = image['name'], image['path']
@@ -615,36 +615,8 @@ try:
         wait(lambda: (export/'hello.txt').is_file())
         assert (export/'hello.txt').read_text().strip() == 'hello '+name
         navigate(path)
-        if name in ('ntfs', 'ext4'):
-            click('[aria-label="新建文件夹"]')
-            wait(lambda: js('return !!document.querySelector(".inline-rename")'))
-            mouse.write('CI-folder', interval=.05); mouse.press('enter')
-            wait(lambda: js(f'return !!document.querySelector({json.dumps(row("CI-folder"))})'))
-            navigate(export)
-            click(row('hello.txt')); mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'c')
-            navigate(path)
-            mouse.click(*point('[role=grid]'))
-            mouse.hotkey('command' if SYSTEM == 'Darwin' else 'ctrl', 'v')
-            button('逐个比较文件')
-            choose('全部保留两者', lambda: js(f'return !!document.querySelector({json.dumps(row("hello (2).txt"))})'), timeout=20)
-            mouse.click(*point(row('hello (2).txt')), button='right')
-            button('重新命名')
-            wait(lambda: js('return !!document.querySelector(".inline-rename")'))
-            fill('.inline-rename', 'written.txt'); mouse.press('enter')
-            wait(lambda: js(f'return !!document.querySelector({json.dumps(row("written.txt"))})'))
-            click(row('written.txt'))
-            open_preview()
-            wait(lambda: js(f'return document.querySelector(".modal pre")?.textContent.includes({json.dumps("hello "+name)})'))
-            screenshot(name+'-written.png')
-            close_preview()
-            mouse.click(*point(row('written.txt')), button='right')
-            button('移到废纸篓')
-            wait(lambda: dialog_open())
-            choose('移到废纸篓', lambda: not js(f'return !!document.querySelector({json.dumps(row("written.txt"))})'), timeout=20, scope='document.querySelector("[role=dialog]")')
-
-        else:
-            assert js('return document.querySelector("[aria-label=新建文件夹]").disabled')
-        passed(name+'_image_read_export_'+('write' if name in ('ntfs','ext4') else 'readonly'))
+        assert js('return document.querySelector("[aria-label=新建文件夹]").disabled')
+        passed(name+'_fallback_read_export_readonly')
     begin('All native integrations verified')
     screenshot('completed.png')
     passed('all_integrations')

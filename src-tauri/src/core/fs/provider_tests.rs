@@ -41,7 +41,7 @@ fn usb_replacement_revokes_existing_broker_before_driver_access() {
     let dir = tempfile::tempdir().unwrap();
     let image = dir.path().join("device.img");
     std::fs::write(&image, b"first device").unwrap();
-    let root = crate::usbfs::virtual_root(&image.to_string_lossy(), crate::usbfs::FsKind::Ntfs);
+    let root = crate::usbfs::virtual_root(&image.to_string_lossy(), crate::usbfs::FsKind::Btrfs);
     let snapshot = ResourceSnapshot::from_metadata(&root, Default::default());
     let target = json!({"ref":snapshot.reference});
     let mut scope = Scope::selected(dir.path(), &[]).unwrap();

@@ -30,7 +30,7 @@ desktop = [
     "dep:rfd",
 ]
 ci-driver = ["desktop", "usbfs"]
-usbfs = ["dep:rust-fs-ntfs", "dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]
+usbfs = ["dep:rust-fs-ext4", "dep:rust-fs-btrfs", "dep:apfs", "dep:hfsplus"]
 tauri-plugin-single-instance = ["dep:tauri-plugin-single-instance"]
 
 [build-dependencies]
@@ -42,7 +42,6 @@ fiex-plugin-sdk = { path = "../sdk/rust" }
 fiex-provider-contracts = { path = "../sdk/rust/contracts" }
 tauri = { version = "2", features = ["protocol-asset", "macos-private-api", "tray-icon"], optional = true }
 tauri-plugin-drag = { version = "2.1.1", optional = true }
-rust-fs-ntfs = { version = "0.10", optional = true }
 rust-fs-ext4 = { version = "0.8", optional = true }
 rust-fs-btrfs = { version = "0.10", optional = true }
 apfs = { version = "0.4", optional = true }
@@ -121,8 +120,8 @@ opt-level = 2
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [package.metadata.cargo-machete]
-# Imported under their facade names (`fs_ntfs`, `fs_ext4`, `fs_btrfs`).
-ignored = ["rust-fs-btrfs", "rust-fs-ext4", "rust-fs-ntfs"]
+# Imported under their facade names (`fs_ext4`, `fs_btrfs`).
+ignored = ["rust-fs-btrfs", "rust-fs-ext4"]
 
 # Fiex vendors arapuca to drop the Win32k-syscall mitigation that makes every
 # COM-importing plugin fail at DLL initialization (0xC0000142) on Windows.

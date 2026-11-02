@@ -80,8 +80,9 @@ fn handle(app: &tauri::AppHandle, req: Value) -> Result<Value, String> {
                 continue;
             }
             let path = path.to_string_lossy();
-            let kind = crate::usbfs::probe(&path)
-                .ok_or_else(|| format!("unrecognized filesystem: {path}"))?;
+            let Some(kind) = crate::usbfs::probe(&path) else {
+                continue;
+            };
             images.push(json!({"name": std::path::Path::new(path.as_ref()).file_stem().unwrap_or_default().to_string_lossy(), "path": crate::usbfs::virtual_root(&path, kind)}));
         }
         return Ok(json!(images));

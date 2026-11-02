@@ -26,7 +26,7 @@ Fiex has one React frontend and one Rust library. Tauri commands form the bounda
 | `plugins/security/`                                             | Permission decisions, prompts, grants, and platform sandboxing.                               |
 | `plugins/vfs/`                                                  | Navigation and projection for plugin-owned virtual views.                                     |
 | `remote/`                                                       | Connection configuration, remote cache, reconciliation, and synchronization.                  |
-| `usbfs/`                                                        | Raw-device filesystem drivers and their scoped access gates.                                  |
+| `usbfs/`                                                        | Read-only Btrfs/APFS/HFS+ fallback adapters used only when no native OS driver is available.  |
 | `sdk/`                                                          | Pinned SDK source and shared contract definitions used by Core CI.                            |
 
 The typed contracts in `sdk/rust/contracts/` are the single provider interface. `plugins/provider_registry/` owns registrations; `plugins/events/` applies event policy; `plugins/providers/` owns provider behavior. Native providers execute directly in Core. Plugin providers use the reusable IPC proxies. Filesystem access always goes through a scoped `ResourceBroker` and the same `VfsProvider` request/result types.

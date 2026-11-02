@@ -96,10 +96,8 @@ fn native_mount_unsupported(error: &str) -> bool {
         "filesystem not supported",
         "not supported by this system",
         "no mountable file systems",
-        "wrong fs type",
         "unknown file system",
         "file system not recognized",
-        "does not recognize",
     ]
     .iter()
     .any(|phrase| error.contains(phrase))
@@ -700,6 +698,9 @@ mod tests {
         ));
         assert!(!super::native_mount_unsupported("Permission denied"));
         assert!(!super::native_mount_unsupported("Operation not permitted"));
+        assert!(!super::native_mount_unsupported(
+            "wrong fs type, bad option, bad superblock"
+        ));
     }
 
     #[cfg(windows)]

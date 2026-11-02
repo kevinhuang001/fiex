@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import type { Explorer } from '@/hooks/useExplorer'
 import { progressChannel, quietProgressChannel } from '@/hooks/useActivity'
 import { call } from '@/lib/api'
+import { reportFilesystemPermissionError } from '@/lib/errorCenter'
 import { runBeforeOpenHooks } from '@/lib/pluginHooks'
 import type { Entry, Ide, Preferences, Tag } from '@/lib/types'
 import type { Dispatch, SetStateAction } from 'react'
@@ -164,7 +165,10 @@ export function useOpenActions({
       x.reload()
       notify(t('标签已更新'))
     } catch (error) {
-      x.setError(String(error))
+      const message = String(error)
+      if (!reportFilesystemPermissionError(message, `tags\n${tagPaths.join('\n')}`)) {
+        x.setError(message)
+      }
     }
   }
   return {

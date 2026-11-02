@@ -6,7 +6,7 @@ use crate::{
     core::{files::Entry, fs::ResourceBroker},
     plugins::provider_registry::FsOperation,
     plugins::resource::fs_access,
-    usbfs::{self, Route},
+    usbfs,
 };
 use fiex_provider_contracts::{FsRequest, ProviderError, ProviderInvocation};
 use std::path::Path;
