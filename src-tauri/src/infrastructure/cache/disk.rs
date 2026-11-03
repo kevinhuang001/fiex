@@ -2,13 +2,14 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicUsize, Ordering},
         mpsc::{self, SyncSender},
-        Arc, OnceLock,
+        Arc, OnceLock, RwLock,
     },
 };
 
@@ -17,7 +18,12 @@ const MAX_SNAPSHOT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_DISK_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_FILES: usize = 2_000;
 static WRITES: AtomicUsize = AtomicUsize::new(0);
+static PENDING_REMOVALS: OnceLock<RwLock<HashMap<String, usize>>> = OnceLock::new();
 type DiskJob = Box<dyn FnOnce() + Send + 'static>;
+
+fn pending_removals() -> &'static RwLock<HashMap<String, usize>> {
+    PENDING_REMOVALS.get_or_init(Default::default)
+}
 
 fn writer() -> &'static SyncSender<DiskJob> {
     static WRITER: OnceLock<SyncSender<DiskJob>> = OnceLock::new();
@@ -62,6 +68,12 @@ fn ensure_private(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 pub fn load<T: DeserializeOwned>(key: &str) -> Option<T> {
+    let pending = pending_removals()
+        .read()
+        .unwrap_or_else(|error| error.into_inner());
+    if pending.contains_key(key) {
+        return None;
+    }
     let path = file(key)?;
     if fs::metadata(&path).ok()?.len() > MAX_SNAPSHOT_BYTES as u64 {
         return None;
@@ -142,9 +154,28 @@ pub(crate) fn remove_many_async(keys: Vec<String>) {
     if keys.is_empty() {
         return;
     }
+    {
+        let mut pending = pending_removals()
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        for key in &keys {
+            let count = pending.entry(key.clone()).or_default();
+            *count = count.saturating_add(1);
+        }
+    }
     let job: DiskJob = Box::new(move || {
         for key in keys {
             remove(&key);
+            let mut pending = pending_removals()
+                .write()
+                .unwrap_or_else(|error| error.into_inner());
+            if let Some(count) = pending.get_mut(&key) {
+                if *count <= 1 {
+                    let _ = pending.remove(&key);
+                } else {
+                    *count -= 1;
+                }
+            }
         }
     });
     // Mutations must be ordered after any accepted store jobs so an old
