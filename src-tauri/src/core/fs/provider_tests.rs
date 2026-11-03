@@ -207,7 +207,7 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
     }
     let output = export_for_external_drag(
         &inputs,
-        crate::core::fs::mapped_access::UserActionContext::from_desktop_command(),
+        crate::core::fs::mapped_access::UserActionContext::for_test(),
     )
     .unwrap();
     assert_eq!(output.len(), 3);

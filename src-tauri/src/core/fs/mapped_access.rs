@@ -9,8 +9,13 @@ pub struct UserActionContext {
 }
 
 impl UserActionContext {
-    #[cfg(any(feature = "desktop", test))]
+    #[cfg(feature = "desktop")]
     pub(crate) fn from_desktop_command() -> Self {
+        Self { _private: () }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test() -> Self {
         Self { _private: () }
     }
 }

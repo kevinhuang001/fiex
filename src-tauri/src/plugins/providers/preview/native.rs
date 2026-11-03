@@ -150,9 +150,7 @@ pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView,
         std::slice::from_ref(resource),
         None,
     )
-    .with_user_action_context(
-        crate::core::fs::mapped_access::UserActionContext::from_desktop_command(),
-    );
+    .with_user_action_context(crate::core::fs::mapped_access::UserActionContext::for_test());
     provider.open(&invocation)
 }
 
