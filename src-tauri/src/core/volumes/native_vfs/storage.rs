@@ -49,9 +49,7 @@ pub(super) fn recent_stat(path: &str, operations: &[FsOperation]) -> Result<Entr
 
 pub(super) fn recent_list(path: &str) -> Result<Vec<Entry>, String> {
     if path == RECENT_URI {
-        Ok(crate::core::recent::entries(
-            &crate::core::recent::Recent::default(),
-        ))
+        Ok(crate::core::recent::entries())
     } else {
         Err("Unsupported: builtin node has no children".into())
     }
@@ -61,11 +59,11 @@ pub(super) fn applications_stat(path: &str, operations: &[FsOperation]) -> Resul
     if path == APPLICATIONS_URI {
         return Ok(root_entry("core:applications", path, operations));
     }
-    if applications::is_user(path) {
-        return applications::stored_entry(path);
-    }
     if applications::is_system_app(path) {
         return applications::system_entry(path);
+    }
+    if applications::is_folder(path) || applications::is_user(path) {
+        return applications::entry_for_uri(path);
     }
     Err("Unsupported: unknown builtin node".into())
 }
@@ -73,7 +71,7 @@ pub(super) fn applications_stat(path: &str, operations: &[FsOperation]) -> Resul
 pub(super) fn applications_list(path: &str) -> Result<Vec<Entry>, String> {
     if path == APPLICATIONS_URI {
         applications::list()
-    } else if applications::is_user(path) {
+    } else if applications::is_folder(path) {
         applications::list_at(path)
     } else {
         Err("Unsupported: builtin node has no children".into())

@@ -56,9 +56,13 @@ pub(crate) fn rename_path(path: &str, name: &str, owner: &str) -> Result<String,
     }
     let source = trusted(path, owner)?;
     let parent = parent_path(path)?;
-    let destination = child(&trusted(&parent, owner)?, name)?;
-    source.rename(&destination)?;
-    Ok(destination.path)
+    let kind = if source.is_dir()? {
+        crate::core::fs::provider_registry::ChildKind::Folder
+    } else {
+        crate::core::fs::provider_registry::ChildKind::File
+    };
+    let destination = child(&trusted(&parent, owner)?, name, kind)?;
+    source.rename(&destination).map_err(String::from)
 }
 
 /// A local rename needs one directory capability that authorizes both the
@@ -97,8 +101,7 @@ fn local_rename(path: &str, name: &str, owner: &str) -> Result<String, String> {
     });
     scope.bind_resource(&destination_target, Some(&destination_path))?;
     let destination = ResourceBroker::resolve(&scope, owner, &destination_target["ref"])?;
-    source.rename(&destination)?;
-    Ok(destination.path)
+    source.rename(&destination).map_err(String::from)
 }
 
 #[cfg(feature = "desktop")]
@@ -121,8 +124,12 @@ pub(crate) fn destination(path: &str, owner: &str) -> Result<ResourceBroker, Str
     Ok(directory)
 }
 
-pub(crate) fn child(parent: &ResourceBroker, name: &str) -> Result<ResourceBroker, String> {
-    let path = crate::core::fs::provider_registry::child_path(&parent.path, name)?;
+pub(crate) fn child(
+    parent: &ResourceBroker,
+    name: &str,
+    kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<ResourceBroker, String> {
+    let path = crate::core::fs::provider_registry::child_path(&parent.path, name, kind)?;
     let parent_ref = serde_json::to_value(&parent.reference).map_err(|e| e.to_string())?;
     let issued = parent.scope.issue_child(&parent_ref, &path, None)?;
     ResourceBroker::resolve(&parent.scope, &parent.owner, &issued["ref"]).map_err(String::from)

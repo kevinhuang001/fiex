@@ -50,7 +50,11 @@ pub(super) fn intercept(
         if !resource.is_dir()? {
             return Err("parent ref must be a directory".into());
         }
-        let child = crate::core::fs::child(&resource, name)?;
+        let child = crate::core::fs::child(
+            &resource,
+            name,
+            crate::core::fs::provider_registry::ChildKind::File,
+        )?;
         return Ok(Some(json!({"ref":child.reference})));
     }
     const TARGET_METHODS: &[&str] = &[

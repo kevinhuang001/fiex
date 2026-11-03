@@ -1,5 +1,5 @@
-//! Optional before-open hooks share the same provider registry and the
-//! EventRouter's FirstSupported policy as other feature types.
+//! Before-open hooks use first-supported dispatch; after-open hooks broadcast
+//! only after Core confirms an open was accepted.
 use crate::plugins::{
     events::{EventRouter, ProviderCandidate},
     resource::resource_context::ResourceSnapshot,
@@ -19,24 +19,48 @@ impl HookProvider for FailedHookProvider {
     }
 }
 
-pub(crate) fn forget_plugin(plugin_id: &str) {
-    proxy::forget_plugin(plugin_id);
+struct RecentHook;
+
+impl HookProvider for RecentHook {
+    fn invoke(&self, ctx: &dyn ProviderInvocation) -> Result<HookResult, ProviderError> {
+        let request = ctx
+            .input()?
+            .hook_request()
+            .ok_or_else(|| ProviderError::invalid_params("expected HookRequest"))?;
+        if request.event != "afterOpen" {
+            return Err(ProviderError::invalid_params(
+                "unexpected Recent hook event",
+            ));
+        }
+        let resource =
+            crate::plugins::native_invocation::NativeProviderInvocation::resource(ctx, 0)?;
+        crate::core::recent::record_opened(resource).map_err(ProviderError::internal)?;
+        Ok(HookResult { handled: false })
+    }
 }
 
-pub fn before_open(path: &str) -> Result<Value, String> {
-    let resource = ResourceSnapshot::resolve(path)?;
-    let targets =
-        crate::plugins::events::matching::match_resources(std::slice::from_ref(&resource));
-    let providers =
-        crate::plugins::provider_registry::candidates("hooks.invoke", &targets, "", Vec::new())
-            .into_iter()
-            .filter(|provider| {
-                provider
-                    .plugin
-                    .as_deref()
-                    .is_some_and(|plugin| plugin.extensions["hooks"]["event"] == "beforeOpen")
-            });
-    let providers = providers
+fn candidates(
+    resource: &ResourceSnapshot,
+    event: &str,
+) -> Vec<ProviderCandidate<dyn HookProvider>> {
+    let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(resource));
+    let native = if event == "afterOpen" {
+        vec![crate::plugins::events::Resolver::builtin(
+            "core:recent.hook",
+            100,
+        )]
+    } else {
+        Vec::new()
+    };
+    crate::plugins::provider_registry::candidates("hooks.invoke", &targets, "", native)
+        .into_iter()
+        .filter(|provider| {
+            if let Some(plugin) = provider.plugin.as_deref() {
+                plugin.extensions["hooks"]["event"] == event
+            } else {
+                event == "afterOpen" && provider.id == "core:recent.hook"
+            }
+        })
         .map(|resolver| {
             let implementation: Arc<dyn HookProvider> = match resolver.plugin.as_deref() {
                 Some(plugin) => match proxy::ScopedHookProxy::new(
@@ -47,6 +71,7 @@ pub fn before_open(path: &str) -> Result<Value, String> {
                     Ok(proxy) => Arc::new(proxy),
                     Err(error) => Arc::new(FailedHookProvider(error)),
                 },
+                None if event == "afterOpen" => Arc::new(RecentHook),
                 None => Arc::new(FailedHookProvider(
                     "unregistered native HookProvider".into(),
                 )),
@@ -56,7 +81,16 @@ pub fn before_open(path: &str) -> Result<Value, String> {
                 implementation,
             }
         })
-        .collect();
+        .collect()
+}
+
+pub(crate) fn forget_plugin(plugin_id: &str) {
+    proxy::forget_plugin(plugin_id);
+}
+
+pub fn before_open(path: &str) -> Result<Value, String> {
+    let resource = ResourceSnapshot::resolve(path)?;
+    let providers = candidates(&resource, "beforeOpen");
     let call = ProviderRequest {
         method: "hooks.invoke".into(),
         params: json!({"event":"beforeOpen"}),
@@ -86,6 +120,35 @@ pub fn before_open(path: &str) -> Result<Value, String> {
         },
     );
     serde_json::to_value(result).map_err(|error| error.to_string())
+}
+
+pub fn after_open(resource: &ResourceSnapshot) {
+    let providers = candidates(resource, "afterOpen");
+    if providers.is_empty() {
+        return;
+    }
+    let call = ProviderRequest {
+        method: "hooks.invoke".into(),
+        params: json!({"event":"afterOpen"}),
+    };
+    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+        call.method.clone(),
+        call.params.clone(),
+        std::slice::from_ref(resource),
+        None,
+    );
+    EventRouter::resolve_merge_parallel(
+        "hooks.invoke",
+        providers,
+        &invocation,
+        |_, provider, context| provider.invoke(context).map_err(|error| error.to_string()),
+        |_, result| {
+            let wire = serde_json::to_value(result).map_err(|error| error.to_string())?;
+            crate::plugins::events::validate_result("hooks.invoke", &wire)?;
+            Ok(result)
+        },
+        |_| (),
+    );
 }
 
 #[cfg(test)]

@@ -109,7 +109,7 @@ fn connection_matches_are_core_owned_and_storage_sensitive() {
     assert!(matching::matches(
         "connectionContextMenu.resolve",
         &matched,
-        &[metadata.clone()],
+        std::slice::from_ref(&metadata),
         &connection.info.mount_path
     ));
     let denied = json!({"connectionContextMenus":{"match":{

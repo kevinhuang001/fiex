@@ -70,6 +70,12 @@ pub(crate) fn removed(path: &str) {
         directory_cache::remove_entry(&parent, path);
     }
 }
+pub(crate) fn removed_from(path: &str, parent: &str) {
+    super::preflight::clear_availability_cache();
+    if directory_cache::enabled(path) {
+        directory_cache::remove_entry(parent, path);
+    }
+}
 pub(crate) fn renamed(old: &str, new: &str) {
     super::preflight::clear_availability_cache();
     if !directory_cache::enabled(old) && !directory_cache::enabled(new) {

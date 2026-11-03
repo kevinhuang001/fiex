@@ -168,7 +168,7 @@ mod tests {
     }
     #[test]
     fn stale_live_listing_does_not_erase_committed_create() {
-        let dir = "applications://user/overlay-test-create";
+        let dir = "applications://app/overlay-test-create";
         let node = format!("{dir}/new");
         upsert(dir, entry(&node));
         let mut old = listing(dir, vec![]);
@@ -181,7 +181,7 @@ mod tests {
     }
     #[test]
     fn removed_entry_stays_hidden_until_confirmed() {
-        let dir = "applications://user/overlay-test-remove";
+        let dir = "applications://app/overlay-test-remove";
         let node = format!("{dir}/old");
         remove(dir, &node);
         let mut old = listing(dir, vec![entry(&node)]);
@@ -191,8 +191,8 @@ mod tests {
     }
     #[test]
     fn mutations_are_directory_scoped() {
-        let first = "applications://user/overlay-test-a";
-        let second = "applications://user/overlay-test-b";
+        let first = "applications://app/overlay-test-a";
+        let second = "applications://app/overlay-test-b";
         let before = generation(second);
         upsert(first, entry(&format!("{first}/new")));
         assert_eq!(generation(second), before);

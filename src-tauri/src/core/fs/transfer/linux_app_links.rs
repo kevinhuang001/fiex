@@ -16,7 +16,8 @@ pub(super) fn import(
     keep_both: bool,
     cancel: &AtomicBool,
 ) -> Result<Option<OperationResult>, String> {
-    if paths.is_empty() || !(destination == applications::URI || applications::is_user(destination))
+    if paths.is_empty()
+        || !(destination == applications::URI || applications::is_folder(destination))
     {
         return Ok(None);
     }
@@ -53,7 +54,11 @@ pub(super) fn import(
             .replace('$', r"\\$")
             .replace('%', "%%");
         let name = format!("{}.desktop", metadata.name);
-        let mut target = binding::child(&parent, &name)?;
+        let mut target = binding::child(
+            &parent,
+            &name,
+            crate::core::fs::provider_registry::ChildKind::File,
+        )?;
         if optional_stat(&target)?.is_some() {
             if !keep_both {
                 return Err(crate::i18n::t("应用已存在，请重命名或选择保留两者").into());

@@ -1,17 +1,21 @@
-use super::{platform, store::is_user, URI};
+use super::{platform, state::ApplicationSource};
 #[cfg(any(target_os = "windows", test))]
 use std::path::Path;
 
-pub fn open(encoded: &str) -> Result<(), String> {
-    let uri = format!("{URI}{encoded}");
-    if is_user(&uri) {
-        let path = super::store::lstat_path(&uri)?;
-        if !platform::is_user_application(&path) {
-            return Err(crate::i18n::t("无法启动应用").into());
+pub fn open(uri: &str) -> Result<(), String> {
+    let app = super::state::source(uri)?;
+    match app.source {
+        ApplicationSource::Imported { .. } => {
+            let path = super::state::asset_path(uri)?;
+            if !platform::is_user_application(&path) {
+                return Err(crate::i18n::t("无法启动应用").into());
+            }
+            platform::open_stored(&path)
         }
-        return platform::open_stored(&path);
+        ApplicationSource::System { stable_locator } => {
+            platform::platform_open(&super::encode(&stable_locator))
+        }
     }
-    platform::platform_open(encoded)
 }
 
 /// Executable file types that the Applications view is allowed to launch.

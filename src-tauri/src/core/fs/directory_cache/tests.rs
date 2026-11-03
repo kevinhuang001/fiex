@@ -31,7 +31,7 @@ fn local_listing_never_builds_directory_snapshots() {
 }
 #[test]
 fn empty_vfs_snapshot_is_complete_and_does_not_create_decorations() {
-    let path = "applications://~cache-test-empty";
+    let path = "applications://folder/cache-test-empty";
     store(path, &listing(path, vec![]));
     let cached = read(path, true, &[]).unwrap().unwrap();
     assert!(cached.entries.is_empty());
@@ -41,8 +41,8 @@ fn empty_vfs_snapshot_is_complete_and_does_not_create_decorations() {
 
 #[test]
 fn cached_entry_uses_the_authorized_directory_snapshot() {
-    let directory = "applications://~cache-test-entry";
-    let child = format!("{directory}/notes.txt");
+    let directory = "applications://folder/cache-test-entry";
+    let child = "applications://app/cache-test-entry-note".to_string();
     let mut cached = item(&child, "notes.txt", false);
     cached.allowed_ops = vec!["stat".into(), "read".into()];
     store(directory, &listing(directory, vec![cached.clone()]));
@@ -51,29 +51,37 @@ fn cached_entry_uses_the_authorized_directory_snapshot() {
         cached_entry(directory, &child).unwrap().unwrap().path,
         child
     );
-    assert!(cached_entry(directory, "applications://other/notes.txt")
+    assert!(cached_entry(directory, "applications://app/other-note")
         .unwrap()
         .is_none());
     drop_subtree(directory);
 }
 #[test]
 fn cached_tree_respects_parent_edges_hidden_filters_and_cancellation() {
-    let path = "applications://~cache-test-tree";
-    let child = format!("{path}/.hidden");
-    let stale = format!("{path}/deleted");
+    let path = "applications://folder/cache-test-tree";
+    let child = "applications://folder/cache-test-tree-child".to_string();
+    let stale = "applications://folder/cache-test-tree-deleted".to_string();
     store(path, &listing(path, vec![item(&child, ".hidden", true)]));
     store(
         &child,
         &listing(
             &child,
-            vec![item(&format!("{child}/Needle"), "Needle", false)],
+            vec![item(
+                "applications://app/cache-test-tree-needle",
+                "Needle",
+                false,
+            )],
         ),
     );
     store(
         &stale,
         &listing(
             &stale,
-            vec![item(&format!("{stale}/needle"), "needle", false)],
+            vec![item(
+                "applications://app/cache-test-tree-stale-needle",
+                "needle",
+                false,
+            )],
         ),
     );
     let mut found = Vec::new();
@@ -98,12 +106,8 @@ fn cached_tree_respects_parent_edges_hidden_filters_and_cancellation() {
 
 #[test]
 fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
-    let root = tempfile::tempdir().unwrap();
-    let parent = root.path().join("visited");
-    let child = parent.join("child");
-    std::fs::create_dir_all(&child).unwrap();
-    let parent = "applications://~cache-test-delete".to_string();
-    let child = format!("{parent}/child");
+    let parent = "applications://folder/cache-test-delete".to_string();
+    let child = "applications://folder/cache-test-delete-child".to_string();
     store(
         &parent,
         &listing(&parent, vec![item(&child, "child", true)]),
@@ -112,7 +116,11 @@ fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
         &child,
         &listing(
             &child,
-            vec![item(&format!("{child}/needle"), "needle", false)],
+            vec![item(
+                "applications://app/cache-test-delete-needle",
+                "needle",
+                false,
+            )],
         ),
     );
     drop_subtree(&child);
@@ -124,9 +132,9 @@ fn deleted_child_and_descendants_do_not_leave_stale_directory_snapshots() {
 
 #[test]
 fn invalidation_uses_parent_edges_and_does_not_remove_unrelated_siblings() {
-    let parent = "applications://~cache-test-siblings".to_string();
-    let first = format!("{parent}/first");
-    let second = format!("{parent}/second");
+    let parent = "applications://folder/cache-test-siblings".to_string();
+    let first = "applications://folder/cache-test-sibling-first".to_string();
+    let second = "applications://folder/cache-test-sibling-second".to_string();
     store(
         &parent,
         &listing(
@@ -144,8 +152,15 @@ fn invalidation_uses_parent_edges_and_does_not_remove_unrelated_siblings() {
 
 #[test]
 fn presentation_snapshot_requires_matching_entry_metadata() {
-    let path = "applications://~cache-test-presentation";
-    let value = listing(path, vec![item(&format!("{path}/app"), "app", false)]);
+    let path = "applications://folder/cache-test-presentation";
+    let value = listing(
+        path,
+        vec![item(
+            "applications://app/cache-test-presentation-app",
+            "app",
+            false,
+        )],
+    );
     super::super::decoration_cache::store(path, &value, &[]);
     assert!(super::super::decoration_cache::read(path, &value).is_some());
     let mut changed = value.clone();

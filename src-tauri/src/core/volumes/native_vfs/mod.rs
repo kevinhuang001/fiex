@@ -119,6 +119,40 @@ pub fn backing_path(path: &str) -> Option<PathBuf> {
     }
 }
 
+/// Let a registered native provider handle resources whose platform open
+/// target is not a byte stream. Other resources continue through the ordinary
+/// export/open path; Open is not an FsOperation capability.
+#[cfg(feature = "desktop")]
+pub(crate) fn open(path: &str) -> Result<bool, String> {
+    match provider_id(path) {
+        Some("core:applications") => applications::open(path).map(|()| true),
+        _ => Ok(false),
+    }
+}
+
+/// Give native providers first chance to handle an intra-mount move as a
+/// metadata operation. `None` keeps the normal TransferEngine stream path.
+pub(crate) fn move_within_mount(
+    sources: &[crate::core::fs::ResourceBroker],
+    destination: &crate::core::fs::ResourceBroker,
+) -> Result<Option<Vec<String>>, String> {
+    let Some(provider) = shared_provider_id(&destination.path) else {
+        return Ok(None);
+    };
+    if sources.iter().any(|source| {
+        shared_provider_id(&source.path) != Some(provider)
+            || source.reference.mount_id != destination.reference.mount_id
+    }) {
+        return Ok(None);
+    }
+    match provider {
+        "core:applications" => {
+            application_provider::move_within_mount(sources, destination).map(Some)
+        }
+        _ => Ok(None),
+    }
+}
+
 /// USB references are scoped to a mount generation. Keep that liveness check
 /// at the native storage boundary so generic ResourceBroker code stays free
 /// of USB-specific policy.
@@ -155,6 +189,8 @@ fn unregistered_scheme(path: &str) -> bool {
 pub fn is_tree_path(path: &str) -> bool {
     path == RECENT_URI
         || path == APPLICATIONS_URI
+        || applications::is_folder(path)
+        || applications::is_app(path)
         || applications::is_user(path)
         || trash_vfs::is_tree(path)
 }
@@ -175,7 +211,11 @@ pub fn validate_child(parent: &str, child: &str) -> Result<(), String> {
     }
 }
 
-pub fn child_path(parent: &str, name: &str) -> Result<String, String> {
+pub(crate) fn child_path(
+    parent: &str,
+    name: &str,
+    kind: crate::core::fs::provider_registry::ChildKind,
+) -> Result<String, String> {
     match shared_provider_id(parent) {
         Some("core:local-fs") => Ok(PathBuf::from(parent)
             .join(name)
@@ -186,25 +226,20 @@ pub fn child_path(parent: &str, name: &str) -> Result<String, String> {
             Ok(format!("{}/{}", parent.trim_end_matches(['/', '\\']), name))
         }
         Some("core:applications") => {
-            let backing = if parent == APPLICATIONS_URI {
-                applications::stored_path(parent)?
-            } else {
-                applications::candidate_path(parent)?
+            let is_directory = match kind {
+                crate::core::fs::provider_registry::ChildKind::Folder => true,
+                crate::core::fs::provider_registry::ChildKind::File
+                | crate::core::fs::provider_registry::ChildKind::Application => false,
             };
-            applications::stored_uri(&backing.join(name))
+            applications::reserve_child(parent, name, is_directory)
         }
         _ => Err("Unsupported: provider does not support child creation".into()),
     }
 }
 
 pub fn parent_path(path: &str) -> Result<String, String> {
-    if applications::is_user(path) {
-        let local = applications::candidate_path(path)?;
-        let parent = local.parent().ok_or("item has no parent")?;
-        if parent == applications::stored_path(applications::URI)? {
-            return Ok(applications::URI.into());
-        }
-        return applications::stored_uri(parent);
+    if applications::is_app(path) || applications::is_folder(path) {
+        return applications::parent_uri(path);
     }
     if opaque(path) {
         return Err("view has no writable parent".into());

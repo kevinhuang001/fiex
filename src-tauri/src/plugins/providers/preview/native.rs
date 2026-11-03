@@ -180,24 +180,22 @@ mod tests {
 
     #[test]
     fn native_previews_exclude_applications_but_keep_trash_and_recent() {
-        for view_id in ["core:applications"] {
-            let target = MatchResource {
-                metadata: Some(ResourceMetadata {
-                    kind: "file".into(),
-                    extension: Some("png".into()),
-                    mime: Some("image/png".into()),
-                    ..Default::default()
-                }),
-                view: Some(fiex_provider_contracts::ResourceLocation {
-                    resource_type: fiex_provider_contracts::ResourceType::Vfs,
-                    provider_id: view_id.into(),
-                    mount_id: Some(view_id.into()),
-                }),
+        let target = MatchResource {
+            metadata: Some(ResourceMetadata {
+                kind: "file".into(),
+                extension: Some("png".into()),
+                mime: Some("image/png".into()),
                 ..Default::default()
-            };
-            assert!(candidates_for(std::slice::from_ref(&target)).is_empty());
-            assert!(!fallback_matches(std::slice::from_ref(&target)));
-        }
+            }),
+            view: Some(fiex_provider_contracts::ResourceLocation {
+                resource_type: fiex_provider_contracts::ResourceType::Vfs,
+                provider_id: "core:applications".into(),
+                mount_id: Some("core:applications".into()),
+            }),
+            ..Default::default()
+        };
+        assert!(candidates_for(std::slice::from_ref(&target)).is_empty());
+        assert!(!fallback_matches(std::slice::from_ref(&target)));
         let recent = MatchResource {
             metadata: Some(ResourceMetadata {
                 kind: "file".into(),

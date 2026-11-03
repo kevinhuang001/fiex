@@ -22,6 +22,14 @@ pub(crate) enum ResourceOwner {
     NativeVfs(&'static str),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ChildKind {
+    File,
+    Folder,
+    #[allow(dead_code)] // Used by platform application-bundle importers.
+    Application,
+}
+
 fn unregistered_scheme(path: &str) -> bool {
     let Some(index) = path.find(':') else {
         return false;
@@ -103,11 +111,11 @@ pub(crate) fn validate_child(scope: &Scope, parent: &str, child: &str) -> Result
     }
 }
 
-pub(crate) fn child_path(parent: &str, name: &str) -> Result<String, String> {
+pub(crate) fn child_path(parent: &str, name: &str, kind: ChildKind) -> Result<String, String> {
     crate::plugins::mounts::segment(name)?;
     match resolve(parent).map_err(String::from)? {
         Route::Plugin => super::plugin::child_path(parent, name),
-        Route::NativeProvider => native_vfs::child_path(parent, name),
+        Route::NativeProvider => native_vfs::child_path(parent, name, kind),
     }
 }
 

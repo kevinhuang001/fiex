@@ -77,7 +77,7 @@ pub(in crate::core::fs) fn remove(resource: &ResourceBroker) -> Result<(), FsErr
 pub(in crate::core::fs) fn rename(
     source: &ResourceBroker,
     destination: &ResourceBroker,
-) -> Result<(), FsError> {
+) -> Result<String, FsError> {
     require(source, FsOperation::Rename, false)?;
     require(destination, FsOperation::Write, true)?;
     if source.reference.mount_id != destination.reference.mount_id {
@@ -104,7 +104,7 @@ pub(in crate::core::fs) fn rename(
     }
     match resolve(&source.path)? {
         Route::NativeProvider => native_vfs::rename_for(source, destination)
-            .map(|_| ())
+            .map(|entry| entry.node_id)
             .map_err(FsError::from),
         Route::Plugin => {
             let (mount, node) = plugin::plugin_node(source)?;
@@ -115,7 +115,8 @@ pub(in crate::core::fs) fn rename(
             let entry = mount
                 .rename(&node, &name, Some(&parent))
                 .map_err(FsError::from)?;
-            plugin::remember_entry(&destination.path, &entry)
+            plugin::remember_entry(&destination.path, &entry)?;
+            Ok(destination.path.clone())
         }
     }
 }

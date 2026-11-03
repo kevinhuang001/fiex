@@ -84,11 +84,12 @@ impl VfsProvider for RecentView {
     fn read(&self, request: &FsRequest<'_>) -> Result<FsRead, ProviderError> {
         let alias = request.node_id().unwrap_or(path(request.ctx())?);
         let source = crate::core::recent::source_for(alias).map_err(provider_error)?;
-        let broker =
-            crate::core::fs::trusted(&source, owner(request.ctx())?).map_err(provider_error)?;
-        broker
-            .require(FsOperation::Read, false)
-            .map_err(provider_error)?;
+        let broker = crate::core::fs::mapped_access::authorize_source(
+            &source,
+            owner(request.ctx())?,
+            FsOperation::Read,
+        )
+        .map_err(provider_error)?;
         let size = broker
             .stat()
             .map_err(provider_error)?

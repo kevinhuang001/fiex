@@ -1,7 +1,9 @@
 import { t } from '@/i18n'
-import { displayAddress, normalizeAddress, pathCrumbs } from '@/lib/files'
+import { call } from '@/lib/api'
+import { basename, displayAddress, normalizeAddress, pathCrumbs } from '@/lib/files'
 import { useEffect, useRef, useState } from 'react'
 import type { Explorer } from './useExplorer'
+import type { Entry } from '@/lib/types'
 
 export function usePathEditor({
   x,
@@ -12,6 +14,9 @@ export function usePathEditor({
 }) {
   const [editingPath, setEditingPath] = useState(false)
   const [pathDraft, setPathDraft] = useState('')
+  const [applicationCrumbs, setApplicationCrumbs] = useState<ReturnType<typeof pathCrumbs> | null>(
+    null,
+  )
   const pathInput = useRef<HTMLInputElement>(null)
   const startPathEdit = () => {
     setPathDraft(displayAddress(x.path))
@@ -23,6 +28,38 @@ export function usePathEditor({
     input?.focus()
     input?.select()
   }, [editingPath])
+  useEffect(() => {
+    const root = 'applications://'
+    if (!x.path.startsWith(root) || x.path === root) {
+      setApplicationCrumbs(null)
+      return
+    }
+    setApplicationCrumbs(null)
+    let cancelled = false
+    const resolveAncestors = async () => {
+      let current = x.path
+      const seen = new Set<string>()
+      const descendants: ReturnType<typeof pathCrumbs> = []
+      while (current !== root && descendants.length < 128 && !seen.has(current)) {
+        seen.add(current)
+        const [entry, parent] = await Promise.all([
+          call<Entry>('file_info', { path: current }),
+          call<string>('file_parent', { path: current }),
+        ])
+        descendants.unshift({ name: entry.name, path: current })
+        current = parent
+      }
+      if (!cancelled && current === root) {
+        setApplicationCrumbs([{ name: basename(root), path: root }, ...descendants])
+      }
+    }
+    void resolveAncestors().catch(() => {
+      if (!cancelled) setApplicationCrumbs(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [x.path])
   const submitPath = (event: React.FormEvent) => {
     event.preventDefault()
     const target = normalizeAddress(pathDraft)
@@ -34,7 +71,7 @@ export function usePathEditor({
   }
   let crumbs: ReturnType<typeof pathCrumbs>
   try {
-    crumbs = pathCrumbs(x.path, displayName)
+    crumbs = applicationCrumbs ?? pathCrumbs(x.path, displayName)
   } catch {
     crumbs = [{ name: t('无效地址'), path: x.path }]
   }

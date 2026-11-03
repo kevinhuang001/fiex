@@ -2,6 +2,7 @@
 pub mod cache;
 pub mod errors;
 pub mod logging;
+pub(crate) mod provider_storage;
 pub mod state;
 
 pub mod redact;

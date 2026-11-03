@@ -5,9 +5,7 @@ pub(crate) async fn list_directory(
     path: String,
     hidden: bool,
     ignores: Vec<String>,
-    recent: tauri::State<'_, recent::Recent>,
 ) -> Result<files::Listing, String> {
-    let _ = recent; // Recent storage is read by its in-process adapter.
     tauri::async_runtime::spawn_blocking(move || {
         crate::core::fs::trusted(&path, "core:list")?
             .desktop_listing(hidden, &ignores)
@@ -19,6 +17,13 @@ pub(crate) async fn list_directory(
 #[tauri::command]
 pub(crate) async fn file_info(path: String) -> Result<files::Entry, String> {
     tauri::async_runtime::spawn_blocking(move || file_info_blocking(&path))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn file_parent(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::core::fs::parent_path(&path))
         .await
         .map_err(|error| error.to_string())?
 }

@@ -73,9 +73,14 @@ mod tests {
             &params["directory"]["ref"],
         )
         .unwrap();
-        let child = crate::core::fs::child(&parent, "new-child.txt").unwrap();
+        let child = crate::core::fs::child(
+            &parent,
+            "new-child.txt",
+            crate::core::fs::provider_registry::ChildKind::Application,
+        )
+        .unwrap();
         assert_eq!(child.reference.mount_id, "core:applications");
-        assert!(child.path.starts_with("applications://~"));
+        assert!(child.path.starts_with("applications://app/"));
         assert!(scope
             .authorize(&std::env::temp_dir().to_string_lossy())
             .is_err());

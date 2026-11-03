@@ -8,6 +8,7 @@ pub(crate) mod directory_cache;
 mod error;
 mod export;
 mod list_service;
+pub(crate) mod mapped_access;
 mod mutation_overlay;
 mod preflight;
 pub(crate) mod presentation;
@@ -163,7 +164,15 @@ impl ResourceBroker {
         } else {
             "host.fs.beginWrite"
         })?;
-        let child = binding::child(self, name)?;
+        let child = binding::child(
+            self,
+            name,
+            if directory {
+                provider_registry::ChildKind::Folder
+            } else {
+                provider_registry::ChildKind::File
+            },
+        )?;
         if directory {
             child.mkdir()?;
         } else {
@@ -194,20 +203,25 @@ impl ResourceBroker {
     pub fn remove(&self) -> Result<(), FsError> {
         self.scope.authorize_method("host.fs.remove")?;
         self.require(FsOperation::Remove, false)?;
+        let parent = parent_path(&self.path).ok();
         provider_registry::remove(self)?;
-        changes::removed(&self.path);
+        if let Some(parent) = parent {
+            changes::removed_from(&self.path, &parent);
+        } else {
+            changes::removed(&self.path);
+        }
         Ok(())
     }
-    pub fn rename(&self, destination: &Self) -> Result<(), FsError> {
+    pub fn rename(&self, destination: &Self) -> Result<String, FsError> {
         self.scope.authorize_method("host.fs.rename")?;
         self.require(FsOperation::Rename, false)?;
         destination.require(FsOperation::Write, true)?;
         if self.reference.mount_id != destination.reference.mount_id {
             return Err("Unsupported: cross-mount rename requires TransferEngine".into());
         }
-        provider_registry::rename(self, destination)?;
-        changes::renamed(&self.path, &destination.path);
-        Ok(())
+        let path = provider_registry::rename(self, destination)?;
+        changes::renamed(&self.path, &path);
+        Ok(path)
     }
     pub(crate) fn clone_binding(&self) -> Self {
         Self {
