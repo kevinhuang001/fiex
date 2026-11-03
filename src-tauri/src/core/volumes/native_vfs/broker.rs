@@ -65,20 +65,32 @@ pub fn require_for(
 
 pub fn preflight_for(
     broker: &crate::core::fs::ResourceBroker,
-    request: &TransferPreflight,
+    destination: Option<&crate::core::fs::ResourceBroker>,
+    request: &fiex_provider_contracts::PreflightRequest,
 ) -> Result<(), String> {
     let provider =
         shared_view_for(&broker.path).ok_or("Unsupported: unregistered native VFS provider")?;
-    let invocation = shared::broker_invocation(broker, None, "vfs.preflight", json!({}));
-    let result = provider
-        .preflight(&invocation, request)
-        .map_err(provider_error_text)?;
-    if result.allowed {
+    let params = serde_json::to_value(request).map_err(|error| error.to_string())?;
+    let invocation = shared::broker_invocation(broker, destination, "vfs.preflight", params);
+    let handlers = provider.preflight_handlers().map_err(provider_error_text)?;
+    if !handlers.supports(request.op()) {
         Ok(())
     } else {
-        Err(result
-            .reason
-            .unwrap_or_else(|| "PermissionDenied: transfer denied by provider".into()))
+        let decision = handlers
+            .dispatch(&invocation, request)
+            .map_err(provider_error_text)?;
+        if decision.allowed {
+            Ok(())
+        } else {
+            Err(format!(
+                "{}: {}",
+                decision.code.as_deref().unwrap_or("PermissionDenied"),
+                decision
+                    .reason
+                    .as_deref()
+                    .unwrap_or("denied by provider policy")
+            ))
+        }
     }
 }
 

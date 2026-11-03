@@ -35,10 +35,11 @@ use fiex_provider_contracts::ContextMenuProvider;
 use fiex_provider_contracts::ProviderKind;
 #[cfg(test)]
 use fiex_provider_contracts::{ProviderError, ProviderInvocation};
+use rayon::prelude::*;
 #[cfg(test)]
 use serde_json::json;
 use serde_json::Value;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 mod providers;
 pub(super) fn register(values: &mut NativeProviderRegistry<dyn ContextMenuProvider>) {
@@ -72,6 +73,7 @@ pub(super) struct Selection<'a> {
     pub(super) paths: &'a [String],
     pub(super) entries: &'a [Entry],
     pub(super) all_local: bool,
+    pub(super) preflight: super::builtin::MenuPreflightAvailability,
 }
 
 impl Selection<'_> {
@@ -116,6 +118,77 @@ pub(super) fn providers(context: &Context) -> Vec<crate::plugins::events::Resolv
         .collect()
 }
 
+/// Resolve dynamic eligibility only for menu providers that passed their
+/// static match and basic capability filters. The menu waits for these results
+/// so its first-level contents are stable when displayed.
+pub(super) fn preflight_availability(
+    context: &Context,
+) -> super::builtin::MenuPreflightAvailability {
+    use crate::plugin_sdk::filesystem::RemoveMode;
+
+    let matched = registry()
+        .matched_candidates(
+            &context.match_targets,
+            context.directory_target.as_ref(),
+            context.paths.len(),
+        )
+        .into_iter()
+        .filter(|candidate| PROVIDER_IDS.contains(&candidate.id.as_str()))
+        .map(|candidate| candidate.id)
+        .collect::<std::collections::HashSet<_>>();
+    let capabilities = context.capabilities();
+    let selection = context.selection();
+    let mut result = super::builtin::MenuPreflightAvailability::default();
+
+    if context.paths.is_empty() && capabilities.write && matched.contains("builtin:new-file") {
+        result.new_file = crate::core::fs::trusted(&context.directory, "core:context-menu")
+            .is_ok_and(|parent| parent.review_create_available(false));
+    }
+    if context.paths.is_empty() && capabilities.create && matched.contains("builtin:new-folder") {
+        result.new_folder = crate::core::fs::trusted(&context.directory, "core:context-menu")
+            .is_ok_and(|parent| parent.review_create_available(true));
+    }
+    if context.paths.len() == 1 && capabilities.rename && matched.contains("builtin:rename") {
+        result.rename = all_preflight_allowed(&context.paths, |path| {
+            crate::core::fs::trusted(path, "core:context-menu")
+                .is_ok_and(|resource| resource.review_rename_available())
+        });
+    }
+    if context.paths.len() > 1 && capabilities.rename && matched.contains("builtin:batch-rename") {
+        result.batch_rename = all_preflight_allowed(&context.paths, |path| {
+            crate::core::fs::trusted(path, "core:context-menu")
+                .is_ok_and(|resource| resource.review_rename_available())
+        });
+    }
+    if !context.paths.is_empty() && capabilities.remove && matched.contains("builtin:trash") {
+        let mode = if selection.all_local {
+            RemoveMode::Trash
+        } else {
+            RemoveMode::Permanent
+        };
+        result.remove = all_preflight_allowed(&context.paths, |path| {
+            crate::core::fs::trusted(path, "core:context-menu")
+                .is_ok_and(|resource| resource.review_remove_available(mode))
+        });
+    }
+    result
+}
+
+/// Keep synchronous menu resolution stable while limiting concurrent provider
+/// checks to eight. Duplicate selections are checked once and share the cache.
+fn all_preflight_allowed(paths: &[String], check: impl Fn(&str) -> bool + Sync) -> bool {
+    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+    let pool = POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .thread_name(|index| format!("menu-preflight-{index}"))
+            .build()
+            .expect("menu preflight pool configuration is valid")
+    });
+    let unique = paths.iter().collect::<std::collections::HashSet<_>>();
+    pool.install(|| unique.par_iter().all(|path| check(path)))
+}
+
 /// Return the action IDs a native group can offer without constructing a
 /// provider invocation. This keeps candidate selection cheap while retaining
 /// the old behavior of omitting groups that would resolve to no items.
@@ -153,14 +226,14 @@ fn offered_item_ids(
             }
         }
         "builtin:new-folder" => {
-            if selection.paths.is_empty() && capabilities.create {
+            if selection.paths.is_empty() && capabilities.create && selection.preflight.new_folder {
                 vec!["newFolder"]
             } else {
                 Vec::new()
             }
         }
         "builtin:new-file" => {
-            if selection.paths.is_empty() && capabilities.write {
+            if selection.paths.is_empty() && capabilities.write && selection.preflight.new_file {
                 vec!["newFile"]
             } else {
                 Vec::new()
@@ -174,14 +247,14 @@ fn offered_item_ids(
             }
         }
         "builtin:rename" => {
-            if capabilities.rename && selection.paths.len() == 1 {
+            if capabilities.rename && selection.paths.len() == 1 && selection.preflight.rename {
                 vec!["rename"]
             } else {
                 Vec::new()
             }
         }
         "builtin:batch-rename" => {
-            if capabilities.rename && selection.many() {
+            if capabilities.rename && selection.many() && selection.preflight.batch_rename {
                 vec!["batchRename"]
             } else {
                 Vec::new()
@@ -202,7 +275,7 @@ fn offered_item_ids(
             }
         }
         "builtin:trash" => {
-            if capabilities.remove && !selection.paths.is_empty() {
+            if capabilities.remove && !selection.paths.is_empty() && selection.preflight.remove {
                 vec![if selection.all_local {
                     "trash"
                 } else {

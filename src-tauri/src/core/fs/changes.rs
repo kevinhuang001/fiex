@@ -8,6 +8,7 @@ pub(crate) fn revision(path: &str) -> u64 {
 /// Commit a created or modified entry. If its authoritative stat fails, fall
 /// back to invalidation rather than inventing attributes or caching a failure.
 pub(crate) fn committed(path: &str) {
+    super::preflight::clear_availability_cache();
     if !directory_cache::enabled(path) {
         return;
     }
@@ -25,6 +26,7 @@ pub(crate) fn committed(path: &str) {
 /// not caught up yet. Keep a minimal, non-privileged entry until list confirms
 /// the final metadata and capabilities.
 pub(crate) fn created(path: &str, name: &str, directory: bool) {
+    super::preflight::clear_availability_cache();
     if !directory_cache::enabled(path) {
         return;
     }
@@ -44,6 +46,7 @@ pub(crate) fn created(path: &str, name: &str, directory: bool) {
 /// Use the entry returned by mkdir itself: a second remote stat is unnecessary
 /// and may temporarily fail on eventually consistent providers.
 pub(crate) fn committed_result(path: &str, value: &serde_json::Value) {
+    super::preflight::clear_availability_cache();
     if !directory_cache::enabled(path) {
         return;
     }
@@ -59,6 +62,7 @@ pub(crate) fn committed_result(path: &str, value: &serde_json::Value) {
     }
 }
 pub(crate) fn removed(path: &str) {
+    super::preflight::clear_availability_cache();
     if !directory_cache::enabled(path) {
         return;
     }
@@ -67,6 +71,7 @@ pub(crate) fn removed(path: &str) {
     }
 }
 pub(crate) fn renamed(old: &str, new: &str) {
+    super::preflight::clear_availability_cache();
     if !directory_cache::enabled(old) && !directory_cache::enabled(new) {
         return;
     }

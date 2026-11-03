@@ -189,7 +189,7 @@ fn query_scope(
     if paths.len() > 256 || directory.is_empty() {
         return Err("invalid menu selection".into());
     }
-    let ctx = builtin::Context::load(directory, paths)?;
+    let ctx = builtin::Context::load_for_menu(directory, paths, scope != MenuScope::Plugins)?;
     let resources = Arc::clone(&ctx.resources);
     let mut providers = crate::plugins::provider_registry::candidates(
         "contextMenu.resolve",

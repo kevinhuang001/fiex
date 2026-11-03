@@ -10,7 +10,8 @@ use crate::core::{
     operations::{check_cancelled, OperationResult},
     transfers::{Action, Resolution},
 };
-use fiex_provider_contracts::{TransferAction, TransferDirection};
+use crate::plugin_sdk::filesystem::PreflightPhase;
+use fiex_provider_contracts::TransferKind;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 #[allow(clippy::too_many_arguments)]
@@ -54,21 +55,7 @@ pub(super) fn import(
             .or_else(|_| source.require(FsOperation::List, false))?;
         let metadata = source.transfer_metadata()?;
         let name = metadata.name.clone();
-        let same_mount = source.reference.mount_id == parent.reference.mount_id;
-        source.review_transfer(
-            TransferDirection::Export,
-            TransferAction::Copy,
-            &name,
-            &metadata,
-            same_mount,
-        )?;
-        parent.review_transfer(
-            TransferDirection::Import,
-            TransferAction::Copy,
-            &name,
-            &metadata,
-            same_mount,
-        )?;
+        source.review_export(TransferKind::Copy, PreflightPhase::Execute)?;
         let mut target = binding::child(&parent, &name)?;
         let source_version = source.stat()?;
         if let Some(existing) = optional_stat(&target)? {
@@ -93,6 +80,14 @@ pub(super) fn import(
             }
         }
         target.require(FsOperation::Mkdir, true)?;
+        parent.require(FsOperation::Mkdir, true)?;
+        let final_name = target.path.rsplit(['/', '\\']).next().unwrap_or(&name);
+        parent.review_import(
+            TransferKind::Copy,
+            final_name,
+            &metadata,
+            PreflightPhase::Execute,
+        )?;
         planned.push((source, target, metadata, source_version));
     }
     if !result.conflicts.is_empty() {
@@ -131,12 +126,16 @@ pub(super) fn import(
         if !same_version(&source.stat()?, version) {
             return Err("Conflict: application changed during import".into());
         }
-        parent.review_transfer(
-            TransferDirection::Import,
-            TransferAction::Copy,
-            &metadata.name,
+        let final_name = target
+            .path
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(&metadata.name);
+        parent.review_import(
+            TransferKind::Copy,
+            final_name,
             metadata,
-            source.reference.mount_id == parent.reference.mount_id,
+            PreflightPhase::Execute,
         )?;
         target.require(FsOperation::Mkdir, true)?;
         // Reserve an empty destination atomically. rename only replaces this

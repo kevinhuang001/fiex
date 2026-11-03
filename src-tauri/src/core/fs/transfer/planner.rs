@@ -4,7 +4,8 @@ use crate::core::{
     operations::{check_cancelled, OperationResult},
     transfers::{Action, Conflict, FileVersion, Resolution},
 };
-use fiex_provider_contracts::{TransferAction, TransferDirection};
+use crate::plugin_sdk::filesystem::PreflightPhase;
+use fiex_provider_contracts::TransferKind;
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn same_version(a: &serde_json::Value, b: &serde_json::Value) -> bool {
@@ -97,6 +98,20 @@ pub(super) fn unique(
     Err("no free destination name".into())
 }
 
+pub(super) fn relative_target_name(
+    policy_parent: &ResourceBroker,
+    target: &ResourceBroker,
+    fallback: &str,
+) -> String {
+    let prefix = format!("{}/", policy_parent.path.trim_end_matches(['/', '\\']));
+    target
+        .path
+        .strip_prefix(&prefix)
+        .filter(|relative| !relative.is_empty())
+        .unwrap_or(fallback)
+        .to_owned()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn plan(
     source: ResourceBroker,
@@ -109,7 +124,7 @@ pub(super) fn plan(
     result: &mut OperationResult,
     steps: &mut Vec<Step>,
     depth: usize,
-    action: TransferAction,
+    action: TransferKind,
     policy_parent: &ResourceBroker,
 ) -> Result<(), String> {
     check_cancelled(cancel)?;
@@ -174,21 +189,28 @@ pub(super) fn plan(
     }
     let metadata = source.transfer_metadata()?;
     let same_mount = source.reference.mount_id == parent.reference.mount_id;
-    source.review_transfer(
-        TransferDirection::Export,
-        action,
-        name,
-        &metadata,
-        same_mount,
-    )?;
     let final_name = target.path.rsplit(['/', '\\']).next().unwrap_or(name);
-    policy_parent.review_transfer(
-        TransferDirection::Import,
-        action,
-        final_name,
-        &metadata,
-        same_mount,
-    )?;
+    let relative_name = relative_target_name(policy_parent, &target, final_name);
+    if action == TransferKind::Move {
+        source.review_remove(
+            crate::plugin_sdk::filesystem::RemoveMode::Permanent,
+            PreflightPhase::Execute,
+        )?;
+    }
+    if same_mount && action == TransferKind::Move {
+        source.review_move(policy_parent, Some(&relative_name), PreflightPhase::Execute)?;
+    } else {
+        source.review_export(action, PreflightPhase::Execute)?;
+        policy_parent.require(
+            if directory {
+                FsOperation::Mkdir
+            } else {
+                FsOperation::Write
+            },
+            true,
+        )?;
+        policy_parent.review_import(action, &relative_name, &metadata, PreflightPhase::Execute)?;
+    }
     let had_target = existing.is_some();
     let directory_source = source.clone_binding();
     steps.push(Step {

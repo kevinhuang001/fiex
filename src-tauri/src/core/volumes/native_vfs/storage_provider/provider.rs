@@ -1,15 +1,11 @@
 //! Shared VfsProvider implementation for local and USB storage.
 use super::*;
 use fiex_provider_contracts::{
-    FsEntry, FsListing, FsRead, FsRequest, FsWrite, PreflightDecision, ProviderError,
-    ProviderInvocation, SearchCapabilities, TransferPreflight, VfsProvider,
+    FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
+    SearchCapabilities, VfsProvider,
 };
 
 impl VfsProvider for StorageProvider {
-    fn supports_preflight(&self) -> bool {
-        true
-    }
-
     fn operations(&self) -> &'static [FsOperation] {
         &[
             FsOperation::List,
@@ -197,18 +193,6 @@ impl VfsProvider for StorageProvider {
             entries: entries.into_iter().map(shared_entry).collect(),
             truncated,
             ..Default::default()
-        })
-    }
-
-    fn preflight(
-        &self,
-        ctx: &dyn ProviderInvocation,
-        _request: &TransferPreflight,
-    ) -> Result<PreflightDecision, ProviderError> {
-        self.resource(ctx)?;
-        Ok(PreflightDecision {
-            allowed: true,
-            reason: None,
         })
     }
 }

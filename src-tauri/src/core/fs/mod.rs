@@ -38,6 +38,11 @@ pub struct ResourceBroker {
     pub(crate) scope: Scope,
     pub(crate) owner: String,
 }
+
+pub(crate) fn clear_preflight_availability_cache() {
+    preflight::clear_availability_cache();
+}
+
 impl ResourceBroker {
     /// Desktop preview reads only the requested prefix from the resource's
     /// registered VFS provider.
@@ -175,6 +180,10 @@ impl ResourceBroker {
     pub fn move_to_trash(&self) -> Result<(), FsError> {
         self.scope.authorize_method("host.fs.remove")?;
         self.require(FsOperation::Remove, false)?;
+        self.review_remove(
+            crate::plugin_sdk::filesystem::RemoveMode::Trash,
+            crate::plugin_sdk::filesystem::PreflightPhase::Execute,
+        )?;
         provider_registry::move_to_trash(self)?;
         changes::removed(&self.path);
         Ok(())
@@ -200,28 +209,6 @@ impl ResourceBroker {
         if self.reference.mount_id != destination.reference.mount_id {
             return Err("Unsupported: cross-mount rename requires TransferEngine".into());
         }
-        let metadata = self.transfer_metadata()?;
-        let parent = binding::trusted(&binding::parent_path(&destination.path)?, &self.owner)?;
-        use crate::plugin_sdk::filesystem::{TransferAction, TransferDirection};
-        let name = destination
-            .path
-            .rsplit(['/', '\\'])
-            .next()
-            .ok_or("missing destination name")?;
-        self.review_transfer(
-            TransferDirection::Export,
-            TransferAction::Move,
-            name,
-            &metadata,
-            true,
-        )?;
-        parent.review_transfer(
-            TransferDirection::Import,
-            TransferAction::Move,
-            name,
-            &metadata,
-            true,
-        )?;
         provider_registry::rename(self, destination)?;
         changes::renamed(&self.path, &destination.path);
         Ok(())

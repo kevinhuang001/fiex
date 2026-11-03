@@ -98,28 +98,8 @@ impl VfsProvider for RecentView {
         Ok(FsRead::new(BrokerReader { handle, offset: 0 }, size))
     }
 
-    fn supports_preflight(&self) -> bool {
-        true
-    }
-
     fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
         let root = path(request.ctx())?;
         search_listing(root, request, storage::recent_list)
-    }
-
-    fn preflight(
-        &self,
-        _ctx: &dyn ProviderInvocation,
-        request: &TransferPreflight,
-    ) -> Result<fiex_provider_contracts::PreflightDecision, ProviderError> {
-        if matches!(request.direction, TransferDirection::Import) {
-            return Err(ProviderError::invalid_params(
-                "PermissionDenied: Recent does not accept imports",
-            ));
-        }
-        Ok(fiex_provider_contracts::PreflightDecision {
-            allowed: true,
-            reason: None,
-        })
     }
 }

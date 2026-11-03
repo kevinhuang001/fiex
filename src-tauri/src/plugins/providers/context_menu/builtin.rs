@@ -19,8 +19,18 @@ pub(super) struct Context {
     pub directory_target: Option<fiex_provider_contracts::MatchResource>,
     all_local: bool,
     capabilities: FileCapabilities,
+    pub(super) preflight: MenuPreflightAvailability,
     native_view_providers: Vec<Resolver>,
     claimed_actions: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct MenuPreflightAvailability {
+    pub new_file: bool,
+    pub new_folder: bool,
+    pub rename: bool,
+    pub batch_rename: bool,
+    pub remove: bool,
 }
 
 /// Host-only actions require a direct local FS resource. A location type
@@ -35,6 +45,22 @@ fn plain_local(path: &str) -> bool {
 
 impl Context {
     pub fn load(directory: &str, paths: &[String]) -> Result<Self, String> {
+        Self::load_internal(directory, paths, false)
+    }
+
+    pub fn load_for_menu(
+        directory: &str,
+        paths: &[String],
+        resolve_preflight: bool,
+    ) -> Result<Self, String> {
+        Self::load_internal(directory, paths, resolve_preflight)
+    }
+
+    fn load_internal(
+        directory: &str,
+        paths: &[String],
+        resolve_preflight: bool,
+    ) -> Result<Self, String> {
         // Capture the displayed directory once. This is a presentation hint;
         // execution still reauthorizes every selected resource.
         let snapshot = crate::core::fs::directory_cache::read_snapshot(directory, true, &[])?;
@@ -123,7 +149,7 @@ impl Context {
         let all_local = plain_local(directory) && paths.iter().all(|path| plain_local(path));
         let (native_view_providers, claimed_actions) =
             super::native_views::resolve_snapshot(directory, paths);
-        Ok(Self {
+        let mut context = Self {
             directory: directory.into(),
             paths: paths.to_vec(),
             entries,
@@ -133,9 +159,14 @@ impl Context {
             directory_target,
             all_local,
             capabilities,
+            preflight: MenuPreflightAvailability::default(),
             native_view_providers,
             claimed_actions,
-        })
+        };
+        if resolve_preflight {
+            context.preflight = file_ops::preflight_availability(&context);
+        }
+        Ok(context)
     }
 
     pub(super) fn selection(&self) -> Selection<'_> {
@@ -143,6 +174,7 @@ impl Context {
             paths: &self.paths,
             entries: &self.entries,
             all_local: self.all_local,
+            preflight: self.preflight,
         }
     }
 
@@ -203,6 +235,13 @@ impl Context {
             directory_target,
             all_local,
             capabilities,
+            preflight: MenuPreflightAvailability {
+                new_file: true,
+                new_folder: true,
+                rename: true,
+                batch_rename: true,
+                remove: true,
+            },
             native_view_providers,
             claimed_actions,
         }

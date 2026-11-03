@@ -42,30 +42,40 @@ when cancelled; an in-flight provider RPC follows its existing timeout behavior.
 The metadata cache does not provide content-search results. Existing content
 search behavior and capability checks remain in force.
 
-## Transfer policy
+## Operation preflight
 
-The SDK exposes `TransferPreflight`, `TransferMetadata`, `PreflightDecision`,
-`TransferDirection` and `TransferAction`. Providers opt in with
-`supports_preflight()` and implement `preflight(ctx, request)`. Handshake declares
-`vfs.preflight`; Core invokes it only on opted-in owners. Provider requests contain
-its own node ID and portable metadata, never another provider's credentials or
-host paths. Unknown size and executable-shortcut classification stay optional.
-A malformed reply or a hook failure rejects the transfer.
+The SDK exposes seven typed operations: `CreateFile`, `CreateFolder`, `Rename`,
+`Remove`, `Import`, `Export` and `Move`. Providers register only dynamic policy
+handlers through `PreflightHandlers`; the SDK derives `preflightOps` from that
+registry and dispatches every operation through the single `vfs.preflight` RPC.
+Requests distinguish read-only `Availability` checks from `Execute` checks with
+the final operation inputs. Rename carries no destination. Owner-scoped node IDs
+stay with the receiving provider; transfers across providers use portable source
+metadata only. Unknown size, system status and shortcut classification remain
+optional rather than being treated as trusted facts.
 
-Capabilities and scope remain mandatory. Preflight can further deny a permitted
-operation but cannot grant a missing operation. Copy/move planning reviews source
-export and destination import before writes, then repeats review before execution
-and move cleanup. Rename and external drag export also run review. Descendants
-whose destination parents do not exist yet are reviewed by the nearest existing
-destination ancestor; they cannot invent provider node IDs.
+Capabilities and scope remain mandatory. Preflight can further deny an operation
+but cannot grant a missing capability. Copy/cut clipboard recording performs no
+preflight. Transfer planning reviews source export, destination import or a
+same-mount move before writes, repeats review immediately before execution, and
+checks source removal again before move cleanup. Descendants whose destination
+parents do not exist yet are reviewed against the nearest existing destination
+ancestor and their relative target names; Core never invents provider node IDs.
+Malformed replies and handler failures fail closed.
 
-Applications denies system-application export outside its view and accepts
-external imports only when Core can identify an executable shortcut. Local Windows
-`.lnk`, Linux application `.desktop` entries and macOS Finder aliases have platform
-classification. Unknown remote shortcut targets are denied by this Applications
-policy. Internal system-application organization remains a mapping operation.
+Applications denies system-application export outside its view, rejects file
+creation, allows folder creation only through its normal capabilities, and
+accepts imports only when Core can identify a valid user application or shortcut.
+Local Windows `.lnk`, Linux application `.desktop` entries and macOS Finder aliases
+have platform classification. Unknown remote shortcut targets are denied by this
+Applications policy. Internal organization remains constrained to Applications.
 Recent continues to deny create/write through its capabilities, with no
 Recent-specific preflight rule. Trash retains its dedicated restore/delete actions.
+
+Availability checks used by the first-level menu wait for a stable decision and
+use a short-lived per-resource cache. Checks across a selection run with bounded
+parallelism. Successful mutations and VFS registration changes clear cached
+availability results; Execute checks are never cached.
 
 The final revision was submitted without further testing or CI waits at the
 user's request. Earlier checks do not establish validation of the final revision.

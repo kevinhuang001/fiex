@@ -5,7 +5,7 @@ use super::{
 };
 use crate::core::fs::handles::StagedWriteHandle;
 use crate::{core::volumes::native_vfs, plugins::provider_registry::FsOperation};
-use fiex_provider_contracts::{FsWrite, TransferPreflight};
+use fiex_provider_contracts::{FsWrite, PreflightOperation, PreflightPhase, PreflightRequest};
 use serde_json::{to_value, Value};
 
 pub(in crate::core::fs) fn write_stream(
@@ -14,6 +14,9 @@ pub(in crate::core::fs) fn write_stream(
     size: Option<u64>,
 ) -> Result<FsWrite, FsError> {
     require(resource, FsOperation::Write, create)?;
+    if create {
+        resource.review_create_child(false, PreflightPhase::Execute)?;
+    }
     match resolve(&resource.path)? {
         Route::NativeProvider => {
             native_vfs::write_sized_for(resource, create, size).map_err(FsError::from)
@@ -27,6 +30,9 @@ pub(in crate::core::fs) fn begin_write(
     create: bool,
 ) -> Result<Box<dyn WriteHandle>, FsError> {
     require(resource, FsOperation::Write, create)?;
+    if create {
+        resource.review_create_child(false, PreflightPhase::Execute)?;
+    }
     Ok(Box::new(StagedWriteHandle::new(resource, create)?))
 }
 
@@ -41,6 +47,7 @@ pub(in crate::core::fs) fn begin_write_sized(
 
 pub(in crate::core::fs) fn mkdir(resource: &ResourceBroker) -> Result<Value, FsError> {
     require(resource, FsOperation::Mkdir, true)?;
+    resource.review_create_child(true, PreflightPhase::Execute)?;
     let entry = match resolve(&resource.path)? {
         Route::NativeProvider => native_vfs::mkdir_for(resource)
             .map(native_vfs::core_entry)
@@ -57,6 +64,10 @@ pub(in crate::core::fs) fn mkdir(resource: &ResourceBroker) -> Result<Value, FsE
 
 pub(in crate::core::fs) fn remove(resource: &ResourceBroker) -> Result<(), FsError> {
     require(resource, FsOperation::Remove, false)?;
+    resource.review_remove(
+        crate::plugin_sdk::filesystem::RemoveMode::Permanent,
+        PreflightPhase::Execute,
+    )?;
     match resolve(&resource.path)? {
         Route::NativeProvider => native_vfs::remove_for(resource).map_err(FsError::from),
         Route::Plugin => {
@@ -74,6 +85,25 @@ pub(in crate::core::fs) fn rename(
     require(destination, FsOperation::Write, true)?;
     if source.reference.mount_id != destination.reference.mount_id {
         return Err("Unsupported: cross-mount rename requires TransferEngine".into());
+    }
+    let target_name = destination
+        .path
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| {
+            FsError::new(
+                crate::core::fs::FsErrorKind::InvalidVfsUri,
+                "missing target name",
+            )
+        })?;
+    let source_parent = crate::core::fs::parent_path(&source.path)?;
+    let destination_parent = crate::core::fs::parent_path(&destination.path)?;
+    if source_parent == destination_parent {
+        source.review_rename(Some(target_name), PreflightPhase::Execute)?;
+    } else {
+        let target_parent = destination.parent_broker()?;
+        source.review_move(&target_parent, Some(target_name), PreflightPhase::Execute)?;
     }
     match resolve(&source.path)? {
         Route::NativeProvider => native_vfs::rename_for(source, destination)
@@ -95,16 +125,41 @@ pub(in crate::core::fs) fn rename(
 
 pub(in crate::core::fs) fn preflight(
     resource: &ResourceBroker,
-    request: &TransferPreflight,
+    destination: Option<&ResourceBroker>,
+    request: &PreflightRequest,
 ) -> Result<(), FsError> {
     match resolve(&resource.path)? {
         Route::NativeProvider => {
-            native_vfs::preflight_for(resource, request).map_err(FsError::from)
+            native_vfs::preflight_for(resource, destination, request).map_err(FsError::from)
         }
         Route::Plugin => {
             let (mount, node) = plugin::plugin_node(resource)?;
             let mut request = request.clone();
-            request.node_id = node;
+            match &mut request.operation {
+                PreflightOperation::CreateFile(args) => args.parent_id = node,
+                PreflightOperation::CreateFolder(args) => args.parent_id = node,
+                PreflightOperation::Import(args) => args.parent_id = node,
+                PreflightOperation::Rename(args) => args.node_id = node,
+                PreflightOperation::Export(args) => args.node_id = node,
+                PreflightOperation::Remove(args) => args.node_ids = vec![node],
+                PreflightOperation::Move(args) => {
+                    let destination = destination.ok_or_else(|| {
+                        FsError::new(
+                            crate::core::fs::FsErrorKind::InvalidVfsUri,
+                            "move preflight requires a target parent",
+                        )
+                    })?;
+                    let (target_mount, target_parent) = plugin::plugin_node(destination)?;
+                    if target_mount.mount_id != mount.mount_id {
+                        return Err(FsError::new(
+                            crate::core::fs::FsErrorKind::InvalidVfsUri,
+                            "move preflight target must belong to the same mount",
+                        ));
+                    }
+                    args.node_id = node;
+                    args.target_parent_id = target_parent;
+                }
+            }
             mount.preflight(&request).map_err(FsError::from)
         }
     }

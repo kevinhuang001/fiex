@@ -17,10 +17,6 @@ fn trash_operations(path: &str) -> Vec<FsOperation> {
 
 pub(super) struct TrashView;
 impl VfsProvider for TrashView {
-    fn supports_preflight(&self) -> bool {
-        true
-    }
-
     fn operations(&self) -> &'static [FsOperation] {
         &[FsOperation::List, FsOperation::Stat, FsOperation::Search]
     }
@@ -72,15 +68,5 @@ impl VfsProvider for TrashView {
 
     fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
         search_listing(path(request.ctx())?, request, storage::trash_list)
-    }
-
-    fn preflight(
-        &self,
-        _ctx: &dyn ProviderInvocation,
-        _request: &TransferPreflight,
-    ) -> Result<fiex_provider_contracts::PreflightDecision, ProviderError> {
-        Err(ProviderError::invalid_params(
-            "PermissionDenied: Trash requires dedicated restore/delete actions",
-        ))
     }
 }

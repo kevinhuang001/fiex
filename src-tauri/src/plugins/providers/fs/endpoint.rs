@@ -4,7 +4,7 @@ use super::Mount;
 
 /// Operation identity is bound to this Core-owned mount, not just the plugin
 /// package's union of VFS capabilities. Unknown methods fail closed.
-pub(super) fn method_allowed(mount: &Mount, method: &str) -> bool {
+pub(super) fn method_allowed(mount: &Mount, method: &str, params: &serde_json::Value) -> bool {
     if let Some(operation) = fiex_provider_contracts::FsOperation::from_method(method) {
         return crate::plugins::provider_registry::supports_mount(
             &mount.plugin_id,
@@ -14,10 +14,15 @@ pub(super) fn method_allowed(mount: &Mount, method: &str) -> bool {
     }
     method == "vfs.discover"
         || (method == "vfs.preflight"
-            && crate::plugins::provider_registry::preflight_mount(
-                &mount.plugin_id,
-                &mount.mount_id,
-            ))
+            && serde_json::from_value::<fiex_provider_contracts::PreflightRequest>(params.clone())
+                .is_ok_and(|request| {
+                    request.validate().is_ok()
+                        && crate::plugins::provider_registry::preflight_mount(
+                            &mount.plugin_id,
+                            &mount.mount_id,
+                            request.op(),
+                        )
+                }))
 }
 
 #[cfg(test)]
@@ -37,9 +42,9 @@ mod tests {
             },
             scope: None,
         };
-        assert!(!method_allowed(&mount, "contextMenu.execute"));
+        assert!(!method_allowed(&mount, "contextMenu.execute", &json!({})));
         for method in ["vfs.notImplemented", "vfs.list", "vfs.preflight"] {
-            assert!(!method_allowed(&mount, method));
+            assert!(!method_allowed(&mount, method, &json!({})));
         }
     }
 }

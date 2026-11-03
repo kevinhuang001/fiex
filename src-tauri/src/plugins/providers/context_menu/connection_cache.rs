@@ -237,6 +237,7 @@ mod tests {
             paths: &paths,
             entries: std::slice::from_ref(&file),
             all_local: false,
+            preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
         let items = ConnectionCache.items(&selection, &FileCapabilities::default());
         let ids = item_ids(&items);
@@ -248,6 +249,7 @@ mod tests {
             paths: &paths,
             entries: std::slice::from_ref(&file),
             all_local: false,
+            preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
         let items = ConnectionCache.items(&selection, &FileCapabilities::default());
         let ids = item_ids(&items);
@@ -265,6 +267,7 @@ mod tests {
             paths: &paths,
             entries: std::slice::from_ref(&folder),
             all_local: false,
+            preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
 
         let items = ConnectionCache.items(&selection, &FileCapabilities::default());
@@ -283,6 +286,7 @@ mod tests {
                 paths: &paths,
                 entries: std::slice::from_ref(&file),
                 all_local: false,
+                preflight: super::super::builtin::MenuPreflightAvailability::default(),
             };
 
             let items = ConnectionCache.items(&selection, &FileCapabilities::default());
@@ -301,6 +305,7 @@ mod tests {
             paths: &paths,
             entries: std::slice::from_ref(&file),
             all_local: false,
+            preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
         let items = ConnectionCache.items(&selection, &FileCapabilities::default());
         let ids = item_ids(&items);
@@ -312,6 +317,7 @@ mod tests {
             paths: &paths,
             entries: std::slice::from_ref(&file),
             all_local: false,
+            preflight: super::super::builtin::MenuPreflightAvailability::default(),
         };
         let items = ConnectionCache.items(&selection, &FileCapabilities::default());
         let ids = item_ids(&items);

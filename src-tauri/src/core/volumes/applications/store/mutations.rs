@@ -93,9 +93,7 @@ pub fn remove_user(uri: &str) -> Result<(), String> {
 /// Validate a user deletion against the current real tree and persisted
 /// system-app mappings. Symlink ancestors are rejected and recursive scans do
 /// not follow symlinks.
-pub(in crate::core::volumes::applications) fn validate_user_removal(
-    uri: &str,
-) -> Result<PathBuf, String> {
+pub(crate) fn validate_user_removal(uri: &str) -> Result<PathBuf, String> {
     if !is_user(uri) {
         return Err(crate::i18n::t("系统应用不能在 Fiex 中删除").into());
     }

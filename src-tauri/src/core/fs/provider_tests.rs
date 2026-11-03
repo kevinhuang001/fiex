@@ -263,13 +263,13 @@ fn desktop_create_rename_and_delete_use_the_owning_provider() {
 #[test]
 fn applications_root_creation_uses_the_same_broker_contract() {
     use crate::core::volumes::applications;
-    let name = format!(
-        "fiex-broker-{}.txt",
-        crate::plugins::mounts::new_id().unwrap()
+    let file = super::binding::create(
+        applications::URI,
+        "unsupported.txt",
+        false,
+        "core:test-app-create",
     );
-    let item =
-        super::binding::create(applications::URI, &name, false, "core:test-app-create").unwrap();
-    assert!(applications::is_user(&item));
+    assert!(file.is_err());
     let folder_name = format!(
         "fiex-broker-dir-{}",
         crate::plugins::mounts::new_id().unwrap()
@@ -281,14 +281,14 @@ fn applications_root_creation_uses_the_same_broker_contract() {
         "core:test-app-create",
     )
     .unwrap();
-    let child =
-        super::binding::create(&folder, "nested.txt", false, "core:test-app-create").unwrap();
-    assert!(applications::stored_entry(&child).is_ok());
-    super::binding::remove_path(&child, "core:test-app-delete").unwrap();
-    super::binding::remove_path(&folder, "core:test-app-delete").unwrap();
-    let renamed =
-        super::binding::rename_path(&item, &format!("{name}.moved"), "core:test-app-rename")
-            .unwrap();
+    let child = super::binding::create(&folder, "nested.txt", false, "core:test-app-create");
+    assert!(child.is_err());
+    let renamed = super::binding::rename_path(
+        &folder,
+        &format!("{folder_name}.moved"),
+        "core:test-app-rename",
+    )
+    .unwrap();
     assert!(applications::is_user(&renamed));
     super::binding::remove_path(&renamed, "core:test-app-delete").unwrap();
     assert!(applications::stored_entry(&renamed).is_err());

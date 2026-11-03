@@ -97,8 +97,7 @@ fn resource_identity_is_stable_across_fresh_snapshots() {
 }
 
 #[test]
-fn application_user_children_use_builtin_broker_and_streamed_writes() {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+fn application_user_children_cannot_create_files() {
     let root = crate::core::volumes::applications::URI;
     let parent = super::binding::trusted(root, "core:test-app").unwrap();
     let name = format!(
@@ -107,12 +106,7 @@ fn application_user_children_use_builtin_broker_and_streamed_writes() {
     );
     let child = super::binding::child(&parent, &name).unwrap();
     assert!(child.stat().is_err());
-    let handle = child.begin_write(true).unwrap();
-    let request = json!({"handle":handle,"base64":STANDARD.encode(b"broker")});
-    stream_call("core:test-app", "host.fs.writeChunk", &request).unwrap();
-    stream_call("core:test-app", "host.fs.commit", &request).unwrap();
-    assert_eq!(child.preview_prefix(32).unwrap(), b"broker");
-    child.remove().unwrap();
+    assert!(child.begin_write(true).is_err());
     assert!(child.stat().is_err());
 }
 

@@ -5,7 +5,8 @@ use crate::core::{
     operations::{check_cancelled, OperationResult},
     transfers::Resolution,
 };
-use fiex_provider_contracts::{TransferAction, TransferDirection};
+use crate::plugin_sdk::filesystem::PreflightPhase;
+use fiex_provider_contracts::TransferKind;
 use std::sync::atomic::AtomicBool;
 
 mod cleanup;
@@ -86,20 +87,7 @@ pub fn transfer(
             for path in &system {
                 let source = binding::trusted(path, "core:transfer")?;
                 let metadata = source.transfer_metadata()?;
-                source.review_transfer(
-                    TransferDirection::Export,
-                    TransferAction::Move,
-                    &metadata.name,
-                    &metadata,
-                    true,
-                )?;
-                parent.review_transfer(
-                    TransferDirection::Import,
-                    TransferAction::Move,
-                    &metadata.name,
-                    &metadata,
-                    true,
-                )?;
+                source.review_move(&parent, Some(&metadata.name), PreflightPhase::Execute)?;
             }
             crate::core::volumes::applications::move_system_apps(&system, destination)?;
             let mut result = OperationResult {
@@ -152,9 +140,9 @@ pub fn transfer(
             &mut steps,
             0,
             if moving {
-                TransferAction::Move
+                TransferKind::Move
             } else {
-                TransferAction::Copy
+                TransferKind::Copy
             },
             &parent,
         )?;

@@ -6,8 +6,7 @@ use crate::{
 };
 use fiex_provider_contracts::{
     FsEntry, FsListing, FsRead, FsRequest, FsWrite, ProviderError, ProviderInvocation,
-    ProviderKind, ProviderMatchRule, SearchCapabilities, TransferDirection, TransferPreflight,
-    VfsProvider,
+    ProviderKind, ProviderMatchRule, SearchCapabilities, VfsProvider,
 };
 use serde_json::{json, Value};
 use std::{

@@ -15,6 +15,7 @@ pub use launch::open;
 use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
 use store::list_user;
+pub(crate) use store::validate_user_removal;
 pub use store::{
     after_rename, candidate_path, create_stored, is_user, list_at, lstat_path, remove_user,
     rename_stored, stored_entry, stored_path, stored_uri, validate_child,

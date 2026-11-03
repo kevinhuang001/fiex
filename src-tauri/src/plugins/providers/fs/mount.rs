@@ -11,7 +11,7 @@ impl Mount {
     }
 
     pub(super) fn invoke_remote(&self, method: &str, mut params: Value) -> Result<Value, String> {
-        if !endpoint::method_allowed(self, method) {
+        if !endpoint::method_allowed(self, method, &params) {
             return Err("unsupported or unregistered VFS operation for this mount".into());
         }
         let object = params
@@ -101,12 +101,17 @@ impl Mount {
 
     pub fn preflight(
         &self,
-        request: &crate::plugin_sdk::filesystem::TransferPreflight,
+        request: &crate::plugin_sdk::filesystem::PreflightRequest,
     ) -> Result<(), String> {
-        if !crate::plugins::provider_registry::preflight_mount(&self.plugin_id, &self.mount_id) {
+        if !crate::plugins::provider_registry::preflight_mount(
+            &self.plugin_id,
+            &self.mount_id,
+            request.op(),
+        ) {
             return Ok(());
         }
-        let reply = self.invoke(
+        request.validate().map_err(str::to_owned)?;
+        let reply = self.invoke_remote(
             "vfs.preflight",
             serde_json::to_value(request).map_err(|e| e.to_string())?,
         )?;
@@ -117,10 +122,12 @@ impl Mount {
             Ok(())
         } else {
             Err(format!(
-                "PermissionDenied: {}",
+                "{}: {}",
+                decision.code.as_deref().unwrap_or("PermissionDenied"),
                 decision
                     .reason
-                    .unwrap_or_else(|| "transfer denied by provider".into())
+                    .as_deref()
+                    .unwrap_or("denied by provider policy")
             ))
         }
     }

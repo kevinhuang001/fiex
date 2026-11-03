@@ -7,8 +7,8 @@ mod streams;
 
 use super::Mount;
 use fiex_provider_contracts::{
-    FsOperation, FsRequest, ProviderError, ProviderInvocation, SearchCapabilities,
-    TransferPreflight, VfsPage, VfsProvider,
+    FsOperation, FsRequest, ProviderError, ProviderInvocation, SearchCapabilities, VfsPage,
+    VfsProvider,
 };
 use invocation::MountInvocation;
 pub(super) use registry::forget_plugin;
@@ -47,25 +47,6 @@ impl IpcVfsProvider {
 }
 
 impl VfsProvider for IpcVfsProvider {
-    fn supports_preflight(&self) -> bool {
-        true
-    }
-
-    fn preflight(
-        &self,
-        ctx: &dyn ProviderInvocation,
-        request: &TransferPreflight,
-    ) -> Result<fiex_provider_contracts::PreflightDecision, ProviderError> {
-        let result = self.invoke(
-            ctx,
-            "vfs.preflight",
-            serde_json::to_value(request)
-                .map_err(|error| ProviderError::invalid_params(error.to_string()))?,
-        )?;
-        serde_json::from_value(result)
-            .map_err(|error| ProviderError::invalid_params(error.to_string()))
-    }
-
     fn operations(&self) -> &'static [FsOperation] {
         &FsOperation::ALL
     }
@@ -253,16 +234,6 @@ pub(super) fn invoke(mount: &Mount, method: &str, params: Value) -> Result<Value
             serde_json::to_value(
                 provider
                     .search(&request)
-                    .map_err(|error| error.to_string())?,
-            )
-            .map_err(|error| error.to_string())
-        }
-        "vfs.preflight" => {
-            let request: TransferPreflight = serde_json::from_value(params)
-                .map_err(|error| format!("invalid preflight request: {error}"))?;
-            serde_json::to_value(
-                provider
-                    .preflight(&invocation, &request)
                     .map_err(|error| error.to_string())?,
             )
             .map_err(|error| error.to_string())

@@ -1,10 +1,15 @@
 //! Applications view implementation of the shared VFS provider contract.
 use super::shared::*;
 use super::*;
+use fiex_provider_contracts::{
+    ExportPreflight, ImportPreflight, MovePreflight, PreflightDecision, PreflightHandlers,
+    PreflightPhase, ProviderError, ProviderInvocation, RemoveMode, RemovePreflight,
+    RenamePreflight, VfsProvider,
+};
 use std::{
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
 
 fn application_child(parent: &str, name: &str) -> Result<(String, PathBuf), ProviderError> {
@@ -88,9 +93,152 @@ pub(super) fn backing_path(uri: &str) -> Option<PathBuf> {
         .flatten()
 }
 
+fn application_preflight_handlers() -> PreflightHandlers {
+    static HANDLERS: LazyLock<PreflightHandlers> = LazyLock::new(|| {
+        let mut handlers = PreflightHandlers::new();
+        handlers
+            .on_create_file(|_, _, _| {
+                Ok(PreflightDecision::deny(
+                    "Applications does not support creating files",
+                ))
+            })
+            .expect("create-file handler is unique");
+        handlers
+            .on_rename(check_application_rename)
+            .expect("rename handler is unique");
+        handlers
+            .on_remove(check_application_remove)
+            .expect("remove handler is unique");
+        handlers
+            .on_import(check_application_import)
+            .expect("import handler is unique");
+        handlers
+            .on_export(check_application_export)
+            .expect("export handler is unique");
+        handlers
+            .on_move(check_application_move)
+            .expect("move handler is unique");
+        handlers
+    });
+    HANDLERS.clone()
+}
+
+fn check_application_import(
+    _ctx: &dyn ProviderInvocation,
+    _phase: PreflightPhase,
+    request: &ImportPreflight,
+) -> Result<PreflightDecision, ProviderError> {
+    if request.source.system == Some(true) || request.source.executable_shortcut != Some(true) {
+        Ok(PreflightDecision::deny(
+            "Applications accepts only verified applications or shortcuts",
+        ))
+    } else {
+        Ok(PreflightDecision::allow())
+    }
+}
+
+fn check_application_export(
+    ctx: &dyn ProviderInvocation,
+    _phase: PreflightPhase,
+    request: &ExportPreflight,
+) -> Result<PreflightDecision, ProviderError> {
+    let source = broker(ctx)?;
+    if request.node_id != source.path {
+        return Err(ProviderError::invalid_params(
+            "export node does not match the scoped resource",
+        ));
+    }
+    let metadata = source.transfer_metadata().map_err(provider_error)?;
+    if metadata.system != Some(true)
+        && metadata.executable_shortcut == Some(true)
+        && applications::is_user(&source.path)
+    {
+        Ok(PreflightDecision::allow())
+    } else {
+        Ok(PreflightDecision::deny(
+            "Only user applications can leave the Applications view",
+        ))
+    }
+}
+
+fn check_application_rename(
+    ctx: &dyn ProviderInvocation,
+    _phase: PreflightPhase,
+    request: &RenamePreflight,
+) -> Result<PreflightDecision, ProviderError> {
+    let source = broker(ctx)?;
+    if request.node_id != source.path {
+        return Err(ProviderError::invalid_params(
+            "rename node does not match the scoped resource",
+        ));
+    }
+    if !applications::is_user(&source.path) {
+        return Ok(PreflightDecision::deny(
+            "System applications cannot be renamed in Fiex",
+        ));
+    }
+    if let Some(name) = request.new_name.as_deref() {
+        crate::plugins::mounts::segment(name).map_err(ProviderError::invalid_params)?;
+        crate::core::files::validate_name(name).map_err(ProviderError::invalid_params)?;
+    }
+    Ok(PreflightDecision::allow())
+}
+
+fn check_application_remove(
+    ctx: &dyn ProviderInvocation,
+    _phase: PreflightPhase,
+    request: &RemovePreflight,
+) -> Result<PreflightDecision, ProviderError> {
+    let source = broker(ctx)?;
+    if request.node_ids.len() != 1 || request.node_ids[0] != source.path {
+        return Err(ProviderError::invalid_params(
+            "remove IDs do not match the scoped resource",
+        ));
+    }
+    if request.mode != RemoveMode::Permanent {
+        return Ok(PreflightDecision::deny(
+            "Applications items must be permanently deleted",
+        ));
+    }
+    if !applications::is_user(&source.path) {
+        return Ok(PreflightDecision::deny(
+            "System applications cannot be deleted in Fiex",
+        ));
+    }
+    if let Err(reason) = applications::validate_user_removal(&source.path) {
+        return Ok(PreflightDecision::deny(reason));
+    }
+    Ok(PreflightDecision::allow())
+}
+
+fn check_application_move(
+    ctx: &dyn ProviderInvocation,
+    _phase: PreflightPhase,
+    request: &MovePreflight,
+) -> Result<PreflightDecision, ProviderError> {
+    let source = broker(ctx)?;
+    let target_parent = destination_broker(ctx)?;
+    if request.node_id != source.path || request.target_parent_id != target_parent.path {
+        return Err(ProviderError::invalid_params(
+            "move IDs do not match the scoped resources",
+        ));
+    }
+    if !applications::is_user(&source.path) && !applications::is_system_app(&source.path) {
+        return Ok(PreflightDecision::deny(
+            "Only Applications entries can be moved inside Applications",
+        ));
+    }
+    if target_parent.path != APPLICATIONS_URI && !applications::is_user(&target_parent.path) {
+        return Ok(PreflightDecision::deny(
+            "Applications entries can only be moved within Applications",
+        ));
+    }
+    Ok(PreflightDecision::allow())
+}
+
 impl VfsProvider for ApplicationView {
-    fn supports_preflight(&self) -> bool {
-        true
+    fn preflight_handlers(&self) -> Result<PreflightHandlers, ProviderError> {
+        Ok(application_preflight_handlers())
     }
 
     fn operations(&self) -> &'static [FsOperation] {
@@ -302,36 +450,5 @@ impl VfsProvider for ApplicationView {
 
     fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
         search_listing(path(request.ctx())?, request, storage::applications_list)
-    }
-
-    fn preflight(
-        &self,
-        _ctx: &dyn ProviderInvocation,
-        request: &TransferPreflight,
-    ) -> Result<fiex_provider_contracts::PreflightDecision, ProviderError> {
-        let denial = match request.direction {
-            TransferDirection::Export
-                if !request.same_mount
-                    && (request.metadata.system
-                        || request.metadata.executable_shortcut != Some(true)) =>
-            {
-                Some("PermissionDenied: only user applications can leave the Applications view")
-            }
-            TransferDirection::Import
-                if !request.same_mount
-                    && (request.metadata.system
-                        || request.metadata.executable_shortcut != Some(true)) =>
-            {
-                Some("PermissionDenied: Applications accepts only verified applications")
-            }
-            _ => None,
-        };
-        if let Some(reason) = denial {
-            return Err(ProviderError::invalid_params(reason));
-        }
-        Ok(fiex_provider_contracts::PreflightDecision {
-            allowed: true,
-            reason: None,
-        })
     }
 }

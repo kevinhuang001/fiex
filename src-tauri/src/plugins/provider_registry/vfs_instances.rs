@@ -2,19 +2,20 @@
 //! plugin.initialize handshake. Neither UI payloads nor plugin replies may
 //! select another account's mount or borrow an unrelated provider's grants.
 use super::FsOperation;
+use fiex_provider_contracts::PreflightOp;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VfsInstance {
     pub operations: BTreeSet<FsOperation>,
-    pub preflight: bool,
+    pub preflight_ops: BTreeSet<PreflightOp>,
 }
 
 pub(super) fn read(
     reply: &Value,
     declared: &BTreeSet<FsOperation>,
-    preflight: bool,
+    preflight_ops: &BTreeSet<PreflightOp>,
 ) -> Result<BTreeMap<String, VfsInstance>, String> {
     let Some(value) = reply.pointer("/vfs/providers") else {
         return Ok(BTreeMap::new());
@@ -50,17 +51,25 @@ pub(super) fn read(
             }
             selected.insert(operation);
         }
-        let enabled = item["preflight"]
-            .as_bool()
-            .ok_or("vfs preflight must be boolean")?;
-        if enabled && !preflight {
-            return Err("VFS instance preflight exceeds negotiated ceiling".into());
+        let declared_preflight = item["preflightOps"]
+            .as_array()
+            .ok_or("VFS instance preflightOps missing")?;
+        let mut selected_preflight = BTreeSet::new();
+        for value in declared_preflight {
+            let operation = value
+                .as_str()
+                .and_then(PreflightOp::parse)
+                .ok_or("unknown VFS preflight operation")?;
+            if !preflight_ops.contains(&operation) {
+                return Err("VFS instance exceeds negotiated preflight operation ceiling".into());
+            }
+            selected_preflight.insert(operation);
         }
         instances.insert(
             id.into(),
             VfsInstance {
                 operations: selected,
-                preflight: enabled,
+                preflight_ops: selected_preflight,
             },
         );
     }
@@ -154,7 +163,7 @@ pub fn supports(plugin_id: &str, mount_id: &str, operation: FsOperation) -> bool
         .is_some_and(|instance| instance.operations.contains(&operation))
 }
 
-pub fn preflight(plugin_id: &str, mount_id: &str) -> bool {
+pub fn preflight(plugin_id: &str, mount_id: &str, operation: PreflightOp) -> bool {
     let Some(state) = super::get(plugin_id) else {
         return false;
     };
@@ -162,14 +171,14 @@ pub fn preflight(plugin_id: &str, mount_id: &str) -> bool {
         return false;
     }
     if state.instances.is_empty() {
-        return state.preflight;
+        return state.preflight_ops.contains(&operation);
     }
     if state.instances.len() == 1 {
         return state
             .instances
             .values()
             .next()
-            .is_some_and(|instance| instance.preflight);
+            .is_some_and(|instance| instance.preflight_ops.contains(&operation));
     }
     let Ok(selected) = mount_owner(plugin_id, mount_id) else {
         return false;
@@ -177,7 +186,7 @@ pub fn preflight(plugin_id: &str, mount_id: &str) -> bool {
     state
         .instances
         .get(&selected)
-        .is_some_and(|instance| instance.preflight)
+        .is_some_and(|instance| instance.preflight_ops.contains(&operation))
 }
 
 #[cfg(test)]
@@ -187,13 +196,14 @@ mod tests {
     #[test]
     fn rejects_forged_or_overprivileged_handshake_instances() {
         let ceiling = BTreeSet::from([FsOperation::Read]);
+        let preflight_ceiling = BTreeSet::new();
         for value in [
-            json!({"vfs":{"providers":[{"id":"core:local-fs","operations":["read"],"preflight":false}]}}),
-            json!({"vfs":{"providers":[{"id":"drive","operations":["write"],"preflight":false}]}}),
-            json!({"vfs":{"providers":[{"id":"drive","operations":["read"],"preflight":false},{"id":"drive","operations":["read"],"preflight":false}]}}),
-            json!({"vfs":{"providers":[{"id":"drive","operations":["read"],"preflight":true}]}}),
+            json!({"vfs":{"providers":[{"id":"core:local-fs","operations":["read"],"preflightOps":[]}]}}),
+            json!({"vfs":{"providers":[{"id":"drive","operations":["write"],"preflightOps":[]}]}}),
+            json!({"vfs":{"providers":[{"id":"drive","operations":["read"],"preflightOps":[]},{"id":"drive","operations":["read"],"preflightOps":[]}]}}),
+            json!({"vfs":{"providers":[{"id":"drive","operations":["read"],"preflightOps":["rename"]}]}}),
         ] {
-            assert!(read(&value, &ceiling, false).is_err());
+            assert!(read(&value, &ceiling, &preflight_ceiling).is_err());
         }
     }
 
@@ -203,8 +213,8 @@ mod tests {
         super::super::register(
             plugin_id,
             &json!({"vfs":{
-                "operations":["read","write"],"preflight":true,
-                "providers":[{"id":"only","operations":["read"],"preflight":false}]
+                "operations":["read","write"],"preflightOps":["rename"],
+                "providers":[{"id":"only","operations":["read"],"preflightOps":[]}]
             }}),
         );
         assert!(operations(plugin_id, "unregistered").is_none());
@@ -213,7 +223,7 @@ mod tests {
         assert!(forged.get("providerId").is_none());
         assert!(!supports(plugin_id, "unregistered", FsOperation::Read));
         assert!(!supports(plugin_id, "unregistered", FsOperation::Write));
-        assert!(!preflight(plugin_id, "unregistered"));
+        assert!(!preflight(plugin_id, "unregistered", PreflightOp::Rename));
         super::super::forget(plugin_id);
     }
 
@@ -223,17 +233,17 @@ mod tests {
         super::super::register(
             plugin_id,
             &json!({"vfs":{
-                "operations":["read","stat"],"preflight":false,
+                "operations":["read","stat"],"preflightOps":[],
                 "providers":[
-                    {"id":"drive","operations":["read"],"preflight":false},
-                    {"id":"git","operations":["stat"],"preflight":false}
+                    {"id":"drive","operations":["read"],"preflightOps":[]},
+                    {"id":"git","operations":["stat"],"preflightOps":[]}
                 ]
             }}),
         );
         let mut params = json!({"mountId":"unregistered","providerId":"drive"});
         assert!(bind(plugin_id, &mut params).is_err());
         assert!(params.get("providerId").is_none());
-        assert!(!preflight(plugin_id, "unregistered"));
+        assert!(!preflight(plugin_id, "unregistered", PreflightOp::Rename));
 
         super::super::forget(plugin_id);
     }
