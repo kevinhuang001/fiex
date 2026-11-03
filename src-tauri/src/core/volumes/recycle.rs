@@ -32,6 +32,7 @@ fn entry(name: String, path: String, is_dir: bool, original: &str, deleted: &str
         tags: vec![],
         has_cache: false,
         pinned: false,
+        storage_projection: Default::default(),
         uploaded: false,
         sync: (!deleted.is_empty()).then(|| deleted.to_string()),
     }
