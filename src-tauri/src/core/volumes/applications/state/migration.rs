@@ -618,7 +618,7 @@ fn fingerprint(path: &Path) -> Result<String, String> {
             .to_string_lossy();
         digest.update(rel.as_bytes());
         if metadata.file_type().is_symlink() {
-            digest.update([b'l']);
+            digest.update(*b"l");
             digest.update(
                 std::fs::read_link(current)
                     .map_err(|error| error.to_string())?
@@ -626,7 +626,7 @@ fn fingerprint(path: &Path) -> Result<String, String> {
                     .as_bytes(),
             );
         } else if metadata.is_dir() {
-            digest.update([b'd']);
+            digest.update(*b"d");
             let mut children = std::fs::read_dir(current)
                 .map_err(|error| error.to_string())?
                 .map(|entry| entry.map_err(|error| error.to_string()))
@@ -636,7 +636,7 @@ fn fingerprint(path: &Path) -> Result<String, String> {
                 walk(root, &child.path(), digest)?;
             }
         } else if metadata.is_file() {
-            digest.update([b'f']);
+            digest.update(*b"f");
             digest.update(metadata.len().to_le_bytes());
             let mut file = std::fs::File::open(current).map_err(|error| error.to_string())?;
             let mut buffer = [0_u8; 64 * 1024];
