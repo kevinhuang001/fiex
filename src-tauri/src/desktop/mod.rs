@@ -46,7 +46,6 @@ pub(crate) use volumes::*;
 use crate::{
     core::drag_session::DragSessions,
     core::operations::{OperationCancel, Operations},
-    core::recent,
     core::search::SearchState,
 };
 use std::sync::atomic::Ordering;
