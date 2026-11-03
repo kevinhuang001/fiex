@@ -39,17 +39,24 @@ pub(super) fn root_entry(id: &str, path: &str, operations: &[FsOperation]) -> En
     }
 }
 
-pub(super) fn recent_stat(path: &str, operations: &[FsOperation]) -> Result<Entry, String> {
+pub(super) fn recent_stat(
+    path: &str,
+    operations: &[FsOperation],
+    storage: &crate::core::recent::RecentStorage,
+) -> Result<Entry, String> {
     if path == RECENT_URI {
         Ok(root_entry("core:recent", path, operations))
     } else {
-        crate::core::recent::entry_for_alias(path)
+        crate::core::recent::entry_for_alias_with_storage(path, storage)
     }
 }
 
-pub(super) fn recent_list(path: &str) -> Result<Vec<Entry>, String> {
+pub(super) fn recent_list(
+    path: &str,
+    storage: &crate::core::recent::RecentStorage,
+) -> Result<Vec<Entry>, String> {
     if path == RECENT_URI {
-        Ok(crate::core::recent::entries())
+        Ok(crate::core::recent::entries_with_storage(storage))
     } else {
         Err("Unsupported: builtin node has no children".into())
     }

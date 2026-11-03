@@ -61,18 +61,20 @@ pub(crate) fn calculate_directory_size(
 #[cfg(feature = "desktop")]
 pub(crate) fn file_info_snapshot_with_partial(
     resource: ResourceSnapshot,
+    user_action: crate::core::fs::mapped_access::UserActionContext,
     on_partial: impl FnMut(Vec<InfoSection>),
 ) -> Vec<InfoSection> {
-    resolve_info_with_partial(resource, on_partial)
+    resolve_info_with_partial(resource, Some(user_action), on_partial)
 }
 
 /// Builtin and native handlers share ordering, validation and the Info merge policy.
 fn resolve_info(resource: ResourceSnapshot) -> Vec<InfoSection> {
-    resolve_info_with_partial(resource, |_| {})
+    resolve_info_with_partial(resource, None, |_| {})
 }
 
 fn resolve_info_with_partial(
     resource: ResourceSnapshot,
+    user_action: Option<crate::core::fs::mapped_access::UserActionContext>,
     mut on_partial: impl FnMut(Vec<InfoSection>),
 ) -> Vec<InfoSection> {
     use crate::plugins::events::{EventRouter, ProviderCandidate};
@@ -112,6 +114,10 @@ fn resolve_info_with_partial(
         std::slice::from_ref(resource.as_ref()),
         None,
     );
+    let invocation = match user_action {
+        Some(user_action) => invocation.with_user_action_context(user_action),
+        None => invocation,
+    };
     EventRouter::resolve_merge_parallel_with_partial(
         "info.resolve",
         providers,

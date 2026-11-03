@@ -2,6 +2,7 @@
 use super::{applications, recycle, trash_vfs};
 use crate::{
     core::files::Entry,
+    infrastructure::provider_storage::CoreOwnerKey,
     plugins::provider_registry::{native::NativeProviderRegistry, FsOperation},
 };
 use fiex_provider_contracts::{
@@ -10,6 +11,7 @@ use fiex_provider_contracts::{
 };
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -39,39 +41,81 @@ use trash_provider::TrashView;
 pub const RECENT_URI: &str = "recent://";
 pub const APPLICATIONS_URI: &str = applications::URI;
 
-/// A projected alias carries a view identity and resolves its storage owner separately.
-pub enum NativeStorageProjection {
-    Owned,
-    Projected(Option<String>),
+#[cfg(feature = "desktop")]
+type OpenHandler = fn(&str) -> Result<(), String>;
+type SameMountMoveHandler = fn(
+    &[crate::core::fs::ResourceBroker],
+    &crate::core::fs::ResourceBroker,
+) -> Result<Vec<String>, String>;
+
+#[derive(Clone, Copy, Default)]
+struct NativeVfsExtensions {
+    #[cfg(feature = "desktop")]
+    open: Option<OpenHandler>,
+    same_mount_move: Option<SameMountMoveHandler>,
 }
 
-fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
-    static REGISTERED: OnceLock<NativeProviderRegistry<dyn VfsProvider>> = OnceLock::new();
+struct RegisteredNativeVfs {
+    providers: NativeProviderRegistry<dyn VfsProvider>,
+    extensions: HashMap<&'static str, NativeVfsExtensions>,
+}
+
+fn registration() -> &'static RegisteredNativeVfs {
+    static REGISTERED: OnceLock<RegisteredNativeVfs> = OnceLock::new();
     REGISTERED.get_or_init(|| {
         let mut registry: NativeProviderRegistry<dyn VfsProvider> =
             NativeProviderRegistry::new(ProviderKind::Vfs);
-        for (id, provider) in [
-            ("core:recent", Arc::new(RecentView) as Arc<dyn VfsProvider>),
+        let mut extensions = HashMap::new();
+        for (id, owner, provider, provider_extensions) in [
+            (
+                "core:recent",
+                CoreOwnerKey::new("recent"),
+                Arc::new(RecentView) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions::default(),
+            ),
             (
                 "core:applications",
+                CoreOwnerKey::new("applications"),
                 Arc::new(ApplicationView) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions {
+                    #[cfg(feature = "desktop")]
+                    open: Some(applications::open),
+                    same_mount_move: Some(application_provider::move_within_mount),
+                },
             ),
-            ("core:trash", Arc::new(TrashView) as Arc<dyn VfsProvider>),
+            (
+                "core:trash",
+                CoreOwnerKey::new("core"),
+                Arc::new(TrashView) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions::default(),
+            ),
             (
                 "core:local-fs",
+                CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:local-fs")) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions::default(),
             ),
             (
                 "core:usb-fs",
+                CoreOwnerKey::new("core"),
                 Arc::new(StorageProvider::new("core:usb-fs")) as Arc<dyn VfsProvider>,
+                NativeVfsExtensions::default(),
             ),
         ] {
             registry
-                .register(id, 100, ProviderMatchRule::default(), provider)
+                .register_owned(id, owner, 100, ProviderMatchRule::default(), provider)
                 .expect("invalid native VFS registration");
+            extensions.insert(id, provider_extensions);
         }
-        registry
+        RegisteredNativeVfs {
+            providers: registry,
+            extensions,
+        }
     })
+}
+
+fn registry() -> &'static NativeProviderRegistry<dyn VfsProvider> {
+    &registration().providers
 }
 
 /// Resolve the native VFS identity at the URI boundary. General services use
@@ -124,9 +168,16 @@ pub fn backing_path(path: &str) -> Option<PathBuf> {
 /// export/open path; Open is not an FsOperation capability.
 #[cfg(feature = "desktop")]
 pub(crate) fn open(path: &str) -> Result<bool, String> {
-    match provider_id(path) {
-        Some("core:applications") => applications::open(path).map(|()| true),
-        _ => Ok(false),
+    let Some(provider) = shared_provider_id(path) else {
+        return Ok(false);
+    };
+    match registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.open)
+    {
+        Some(open) => open(path).map(|()| true),
+        None => Ok(false),
     }
 }
 
@@ -145,12 +196,14 @@ pub(crate) fn move_within_mount(
     }) {
         return Ok(None);
     }
-    match provider {
-        "core:applications" => {
-            application_provider::move_within_mount(sources, destination).map(Some)
-        }
-        _ => Ok(None),
-    }
+    let Some(move_within_mount) = registration()
+        .extensions
+        .get(provider)
+        .and_then(|extensions| extensions.same_mount_move)
+    else {
+        return Ok(None);
+    };
+    move_within_mount(sources, destination).map(Some)
 }
 
 /// USB references are scoped to a mount generation. Keep that liveness check
@@ -262,12 +315,18 @@ fn shared_view_for(path: &str) -> Option<&'static dyn VfsProvider> {
     registry().get(shared_provider_id(path)?)
 }
 
-pub fn storage_projection(path: &str) -> NativeStorageProjection {
-    if provider_id(path) == Some("core:recent") {
-        NativeStorageProjection::Projected(crate::core::recent::source_for(path).ok())
-    } else {
-        NativeStorageProjection::Owned
-    }
+/// Resolve Core private storage through the same registration that owns the
+/// provider identity. Callers select a provider capability, never an owner.
+pub(crate) fn storage_for_provider(
+    provider_id: &str,
+    scope: &str,
+) -> Result<crate::infrastructure::provider_storage::native::NativeScopedStorage, String> {
+    registry().storage_for(provider_id, scope)
+}
+
+#[cfg(test)]
+pub(crate) fn owner_for_provider(provider_id: &str) -> Option<CoreOwnerKey> {
+    registry().owner(provider_id)
 }
 
 pub fn operations(path: &str) -> Vec<FsOperation> {

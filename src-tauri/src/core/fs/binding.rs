@@ -8,6 +8,14 @@ pub(crate) fn trusted(path: &str, owner: &str) -> Result<ResourceBroker, String>
     trusted_snapshot(&snapshot, owner)
 }
 
+pub(crate) fn trusted_with_user_action(
+    path: &str,
+    owner: &str,
+    user_action: super::mapped_access::UserActionContext,
+) -> Result<ResourceBroker, String> {
+    Ok(trusted(path, owner)?.with_user_action_context(user_action))
+}
+
 /// Bind a Core-created snapshot to a fresh operation scope without resolving
 /// provider metadata a second time.
 pub(crate) fn trusted_snapshot(

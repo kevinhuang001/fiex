@@ -12,11 +12,15 @@ const MAX_ITEMS: usize = 100_000;
 mod lease;
 use lease::{leases, prune_leases, root_dir, staging_lock, Lease};
 
+#[cfg(feature = "desktop")]
 pub fn initialize() {
     prune_leases();
 }
 
-pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
+pub(crate) fn export(
+    paths: &[String],
+    user_action: super::mapped_access::UserActionContext,
+) -> Result<Vec<String>, String> {
     if paths.is_empty() {
         return Err("empty export".into());
     }
@@ -26,7 +30,7 @@ pub fn export(paths: &[String]) -> Result<Vec<String>, String> {
     let mut result = vec![String::new(); paths.len()];
     let mut fresh = Vec::new();
     for (index, path) in paths.iter().enumerate() {
-        let resource = super::trusted(path, "core:export")?;
+        let resource = super::trusted_with_user_action(path, "core:export", user_action)?;
         let info = resource.stat()?;
         if info["symlink"] == true {
             return Err("Unsupported: exporting symlinks requires an explicit policy".into());

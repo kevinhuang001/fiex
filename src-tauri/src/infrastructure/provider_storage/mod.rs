@@ -5,7 +5,7 @@ mod engine;
 pub(crate) mod native;
 mod owner;
 
-pub(crate) use owner::CoreModule;
+pub(crate) use owner::CoreOwnerKey;
 
 pub(crate) fn plugin_validate(plugin_id: &str, scope: &str, key: &str) -> Result<(), String> {
     engine::validate(&owner::OwnerId::plugin(plugin_id), scope, key)
@@ -56,17 +56,17 @@ pub(crate) fn plugin_compare_and_set(
 mod tests {
     use super::{
         engine,
-        native::NativeStorage,
-        owner::{CoreModule, OwnerId},
+        native::OwnerBoundStorage,
+        owner::{CoreOwnerKey, OwnerId},
     };
     use serde_json::json;
 
     #[test]
     fn core_modules_and_plugins_have_separate_storage_owners() {
-        let applications = NativeStorage::new(CoreModule::Applications)
+        let applications = OwnerBoundStorage::from_registry(CoreOwnerKey::new("applications"))
             .scoped("owner-test")
             .unwrap();
-        let recent = NativeStorage::new(CoreModule::Recent)
+        let recent = OwnerBoundStorage::from_registry(CoreOwnerKey::new("recent"))
             .scoped("owner-test")
             .unwrap();
         let plugin = OwnerId::plugin("org.example.module");

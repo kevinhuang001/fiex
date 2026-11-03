@@ -205,7 +205,11 @@ fn mixed_native_and_virtual_exports_preserve_order_and_duplicate_names() {
         directories.push(dir);
         expected.push(contents);
     }
-    let output = export_for_external_drag(&inputs).unwrap();
+    let output = export_for_external_drag(
+        &inputs,
+        crate::core::fs::mapped_access::UserActionContext::from_desktop_command(),
+    )
+    .unwrap();
     assert_eq!(output.len(), 3);
     for (path, bytes) in output.iter().zip(expected) {
         assert_eq!(std::fs::read(path).unwrap(), bytes);

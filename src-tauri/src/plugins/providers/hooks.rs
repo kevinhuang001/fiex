@@ -10,6 +10,7 @@ use fiex_provider_contracts::{
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+mod native;
 mod proxy;
 
 struct FailedHookProvider(String);
@@ -34,7 +35,12 @@ impl HookProvider for RecentHook {
         }
         let resource =
             crate::plugins::native_invocation::NativeProviderInvocation::resource(ctx, 0)?;
-        crate::core::recent::record_opened(resource).map_err(ProviderError::internal)?;
+        let storage = crate::plugins::native_invocation::NativeProviderInvocation::storage(
+            ctx,
+            "core:recent.hook",
+            "history",
+        )?;
+        crate::core::recent::record_opened(resource, &storage).map_err(ProviderError::internal)?;
         Ok(HookResult { handled: false })
     }
 }
@@ -44,21 +50,14 @@ fn candidates(
     event: &str,
 ) -> Vec<ProviderCandidate<dyn HookProvider>> {
     let targets = crate::plugins::events::matching::match_resources(std::slice::from_ref(resource));
-    let native = if event == "afterOpen" {
-        vec![crate::plugins::events::Resolver::builtin(
-            "core:recent.hook",
-            100,
-        )]
-    } else {
-        Vec::new()
-    };
+    let native = native::candidates(resource, event);
     crate::plugins::provider_registry::candidates("hooks.invoke", &targets, "", native)
         .into_iter()
         .filter(|provider| {
             if let Some(plugin) = provider.plugin.as_deref() {
                 plugin.extensions["hooks"]["event"] == event
             } else {
-                event == "afterOpen" && provider.id == "core:recent.hook"
+                native::provider(&provider.id).is_some()
             }
         })
         .map(|resolver| {
@@ -71,10 +70,11 @@ fn candidates(
                     Ok(proxy) => Arc::new(proxy),
                     Err(error) => Arc::new(FailedHookProvider(error)),
                 },
-                None if event == "afterOpen" => Arc::new(RecentHook),
-                None => Arc::new(FailedHookProvider(
-                    "unregistered native HookProvider".into(),
-                )),
+                None => native::provider(&resolver.id).unwrap_or_else(|| {
+                    Arc::new(FailedHookProvider(
+                        "unregistered native HookProvider".into(),
+                    ))
+                }),
             };
             ProviderCandidate {
                 resolver,
@@ -131,12 +131,12 @@ pub fn after_open(resource: &ResourceSnapshot) {
         method: "hooks.invoke".into(),
         params: json!({"event":"afterOpen"}),
     };
-    let invocation = crate::plugins::native_invocation::NativeProviderInvocation::new(
+    let invocation = native::invocation(
         call.method.clone(),
         call.params.clone(),
         std::slice::from_ref(resource),
-        None,
-    );
+    )
+    .expect("afterOpen Hook registration has an owner binding");
     EventRouter::resolve_merge_parallel(
         "hooks.invoke",
         providers,

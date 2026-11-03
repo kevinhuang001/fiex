@@ -22,7 +22,10 @@ impl PreviewProvider for BuiltinPreview {
         let path = if self.0 == Builtin::Fallback {
             resource.local.clone()
         } else {
-            resource.export_path().map_err(ProviderError::internal)?
+            let user_action = NativeProviderInvocation::user_action(ctx)?;
+            resource
+                .export_path(user_action)
+                .map_err(ProviderError::internal)?
         };
         let view =
             builtin_view(self.0, &path, &resource.display).map_err(ProviderError::internal)?;
@@ -146,6 +149,9 @@ pub(super) fn open(id: &str, resource: &ResourceSnapshot) -> Result<PreviewView,
         json!({}),
         std::slice::from_ref(resource),
         None,
+    )
+    .with_user_action_context(
+        crate::core::fs::mapped_access::UserActionContext::from_desktop_command(),
     );
     provider.open(&invocation)
 }

@@ -1,10 +1,6 @@
 //! Recent aliases persist stable source locators in the shared Core ProviderStorage owner.
 //! Opening a mapped resource does not reuse the authorization from an earlier action.
-use crate::{
-    core::files::Entry,
-    infrastructure::provider_storage::{native::NativeStorage, CoreModule},
-    plugins::resource::resource_context::ResourceSnapshot,
-};
+use crate::{core::files::Entry, plugins::resource::resource_context::ResourceSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -26,9 +22,8 @@ struct RecentRecord {
 }
 
 fn storage() -> crate::infrastructure::provider_storage::native::NativeScopedStorage {
-    NativeStorage::new(CoreModule::Recent)
-        .scoped(SCOPE)
-        .expect("static Recent storage scope is valid")
+    crate::core::volumes::native_vfs::storage_for_provider("core:recent", SCOPE)
+        .expect("Recent provider registration binds its storage owner")
 }
 
 fn now() -> i64 {
@@ -54,10 +49,13 @@ fn opaque_id() -> Result<String, String> {
     ))
 }
 
-fn locator_for(snapshot: &ResourceSnapshot) -> Result<String, String> {
+pub(crate) type RecentStorage =
+    crate::infrastructure::provider_storage::native::NativeScopedStorage;
+
+fn locator_for(snapshot: &ResourceSnapshot, store: &RecentStorage) -> Result<String, String> {
     use crate::core::fs::provider_registry::ResourceOwner;
     if snapshot.display.starts_with("recent://") {
-        return source_for(&snapshot.display);
+        return source_for_with_storage(&snapshot.display, store);
     }
     let owner =
         crate::core::fs::provider_registry::owner(&snapshot.display).map_err(String::from)?;
@@ -95,8 +93,7 @@ fn snapshot_record(locator: String, snapshot: &ResourceSnapshot) -> Result<Recen
     })
 }
 
-fn migrate_legacy_json() -> Result<(), String> {
-    let store = storage();
+fn migrate_legacy_json(store: &RecentStorage) -> Result<(), String> {
     if store.get(LEGACY_MIGRATION_KEY)?.is_some() {
         return Ok(());
     }
@@ -147,9 +144,9 @@ fn migrate_legacy_json() -> Result<(), String> {
     store.set(LEGACY_MIGRATION_KEY, serde_json::Value::Bool(true))
 }
 
-fn records() -> Result<Vec<RecentRecord>, String> {
-    migrate_legacy_json()?;
-    storage()
+fn records_with_storage(store: &RecentStorage) -> Result<Vec<RecentRecord>, String> {
+    migrate_legacy_json(store)?;
+    store
         .get(RECORDS_KEY)?
         .map(serde_json::from_value)
         .transpose()
@@ -159,13 +156,15 @@ fn records() -> Result<Vec<RecentRecord>, String> {
 
 /// Called by Core's successful-open hook. The snapshot has already been
 /// validated by Core; only its stable locator and display metadata are saved.
-pub fn record_opened(snapshot: &ResourceSnapshot) -> Result<(), String> {
-    let locator = locator_for(snapshot)?;
+pub(crate) fn record_opened(
+    snapshot: &ResourceSnapshot,
+    store: &crate::infrastructure::provider_storage::native::NativeScopedStorage,
+) -> Result<(), String> {
+    let locator = locator_for(snapshot, store)?;
     if locator.starts_with("applications://") {
         return Ok(());
     }
     let mut updated = snapshot_record(locator.clone(), snapshot)?;
-    let store = storage();
     store.update(RECORDS_KEY, |current: Option<Vec<RecentRecord>>| {
         let mut items = current.unwrap_or_default();
         if let Some(existing) = items.iter_mut().find(|item| item.locator == locator) {
@@ -181,26 +180,36 @@ pub fn record_opened(snapshot: &ResourceSnapshot) -> Result<(), String> {
     Ok(())
 }
 
-/// Compatibility entry point for successful desktop opens. The `Recent`
-/// handle carries no private cache; Hook and VFS always consult ProviderStorage.
+/// Resolve a Recent alias through the same ProviderStorage owner used by the
+/// Hook and native VFS registry.
 pub fn source_for(alias: &str) -> Result<String, String> {
+    source_for_with_storage(alias, &storage())
+}
+
+pub(crate) fn source_for_with_storage(
+    alias: &str,
+    store: &RecentStorage,
+) -> Result<String, String> {
     let id = alias
         .strip_prefix("recent://")
         .filter(|id| !id.is_empty() && !id.contains('/'))
         .ok_or("not a recent item")?;
-    records()?
+    records_with_storage(store)?
         .into_iter()
         .find(|record| record.id == id)
         .map(|record| record.locator)
         .ok_or_else(|| "StaleRef: item is no longer in Recent".into())
 }
 
-fn record_for_alias(alias: &str) -> Result<RecentRecord, String> {
+fn record_for_alias_with_storage(
+    alias: &str,
+    store: &RecentStorage,
+) -> Result<RecentRecord, String> {
     let id = alias
         .strip_prefix("recent://")
         .filter(|id| !id.is_empty() && !id.contains('/'))
         .ok_or("not a recent item")?;
-    records()?
+    records_with_storage(store)?
         .into_iter()
         .find(|record| record.id == id)
         .ok_or_else(|| "StaleRef: item is no longer in Recent".into())
@@ -217,16 +226,32 @@ fn entry_for_record(record: &RecentRecord) -> Entry {
         modified: record.modified.unwrap_or_default().max(0) as u64,
         created: record.accessed_at.max(0) as u64,
         allowed_ops: vec!["stat".into(), "read".into()],
+        storage_projection: crate::core::files::StorageProjection::Projected(
+            crate::plugins::match_rules::projected_storage_for_source(&record.locator),
+        ),
         ..Default::default()
     }
 }
 
 pub fn entry_for_alias(alias: &str) -> Result<Entry, String> {
-    Ok(entry_for_record(&record_for_alias(alias)?))
+    entry_for_alias_with_storage(alias, &storage())
+}
+
+pub(crate) fn entry_for_alias_with_storage(
+    alias: &str,
+    store: &RecentStorage,
+) -> Result<Entry, String> {
+    Ok(entry_for_record(&record_for_alias_with_storage(
+        alias, store,
+    )?))
 }
 
 pub fn entries() -> Vec<Entry> {
-    records()
+    entries_with_storage(&storage())
+}
+
+pub(crate) fn entries_with_storage(store: &RecentStorage) -> Vec<Entry> {
+    records_with_storage(store)
         .unwrap_or_default()
         .iter()
         .map(entry_for_record)

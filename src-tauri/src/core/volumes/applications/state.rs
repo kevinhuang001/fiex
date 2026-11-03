@@ -2,10 +2,7 @@
 //! identities; physical paths exist only for imported assets.
 mod migration;
 mod removal;
-use crate::{
-    core::files::Entry,
-    infrastructure::provider_storage::{native::NativeStorage, CoreModule},
-};
+use crate::core::files::Entry;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -91,9 +88,8 @@ fn pending_reservations() -> &'static Mutex<HashMap<String, PendingReservation>>
 }
 
 fn storage() -> crate::infrastructure::provider_storage::native::NativeScopedStorage {
-    NativeStorage::new(CoreModule::Applications)
-        .scoped(SCOPE)
-        .expect("static Applications storage scope is valid")
+    super::super::native_vfs::storage_for_provider("core:applications", SCOPE)
+        .expect("Applications provider registration binds its storage owner")
 }
 
 pub fn snapshot() -> Result<ApplicationsState, String> {
@@ -485,6 +481,7 @@ fn application_entry(name: String, path: String, is_dir: bool, operations: &[&st
         has_cache: false,
         pinned: false,
         uploaded: false,
+        storage_projection: Default::default(),
         sync: None,
     }
 }

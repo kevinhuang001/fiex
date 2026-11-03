@@ -42,7 +42,11 @@ pub(crate) async fn read_preview(path: String) -> Result<String, String> {
         use std::{sync::OnceLock, time::Duration};
         static TEXT: OnceLock<MemoryCache<String>> = OnceLock::new();
         let cache = TEXT.get_or_init(|| MemoryCache::new(32, Duration::from_secs(60)));
-        let resource = crate::core::fs::trusted(&path, "core:preview")?;
+        let resource = crate::core::fs::trusted_with_user_action(
+            &path,
+            "core:preview",
+            crate::core::fs::mapped_access::UserActionContext::from_desktop_command(),
+        )?;
         // A cached preview never replaces the provider's live read authorization.
         resource.require(crate::plugins::provider_registry::FsOperation::Read, false)?;
         // Remote mount paths can be rebound to a different account while

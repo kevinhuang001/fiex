@@ -29,11 +29,11 @@ impl Read for BrokerReader {
     }
 }
 
-fn recent_operations(path: &str) -> Vec<FsOperation> {
+fn recent_operations(path: &str, store: &crate::core::recent::RecentStorage) -> Vec<FsOperation> {
     if path == RECENT_URI {
         vec![FsOperation::List, FsOperation::Stat, FsOperation::Search]
     } else {
-        storage::recent_stat(path, &[FsOperation::Stat, FsOperation::Read])
+        storage::recent_stat(path, &[FsOperation::Stat, FsOperation::Read], store)
             .map(|entry| {
                 entry
                     .allowed_ops
@@ -57,50 +57,85 @@ impl VfsProvider for RecentView {
     }
 
     fn discover(&self, ctx: &dyn ProviderInvocation) -> Result<Vec<FsOperation>, ProviderError> {
-        Ok(recent_operations(path(ctx)?))
+        let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
+            ctx,
+            "core:recent",
+            "history",
+        )?;
+        Ok(recent_operations(path(ctx)?, &store))
     }
 
     fn search_capabilities(&self, ctx: &dyn ProviderInvocation) -> SearchCapabilities {
+        let Ok(store) = crate::plugins::native_invocation::NativeProviderInvocation::storage(
+            ctx,
+            "core:recent",
+            "history",
+        ) else {
+            return SearchCapabilities::default();
+        };
         SearchCapabilities {
             name: path(ctx)
-                .is_ok_and(|path| recent_operations(path).contains(&FsOperation::Search)),
+                .is_ok_and(|path| recent_operations(path, &store).contains(&FsOperation::Search)),
             content: false,
         }
     }
 
     fn stat(&self, request: &FsRequest<'_>) -> Result<FsEntry, ProviderError> {
         let path = path(request.ctx())?;
-        storage::recent_stat(path, &recent_operations(path))
+        let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
+            request.ctx(),
+            "core:recent",
+            "history",
+        )?;
+        storage::recent_stat(path, &recent_operations(path, &store), &store)
             .map(shared_entry)
             .map_err(provider_error)
     }
 
     fn list(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
-        storage::recent_list(path(request.ctx())?)
+        let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
+            request.ctx(),
+            "core:recent",
+            "history",
+        )?;
+        storage::recent_list(path(request.ctx())?, &store)
             .map(list_result)
             .map_err(provider_error)
     }
 
     fn read(&self, request: &FsRequest<'_>) -> Result<FsRead, ProviderError> {
         let alias = request.node_id().unwrap_or(path(request.ctx())?);
-        let source = crate::core::recent::source_for(alias).map_err(provider_error)?;
-        let broker = crate::core::fs::mapped_access::authorize_source(
+        let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
+            request.ctx(),
+            "core:recent",
+            "history",
+        )?;
+        let source =
+            crate::core::recent::source_for_with_storage(alias, &store).map_err(provider_error)?;
+        let operation_scope =
+            crate::core::fs::mapped_access::OperationScope::new(broker(request.ctx())?);
+        let source = crate::core::fs::mapped_access::authorize_source(
             &source,
-            owner(request.ctx())?,
+            &operation_scope,
             FsOperation::Read,
         )
         .map_err(provider_error)?;
-        let size = broker
+        let size = source
             .stat()
             .map_err(provider_error)?
             .get("size")
             .and_then(Value::as_u64);
-        let handle = broker.open_read_handle().map_err(provider_error)?;
+        let handle = source.open_read_handle().map_err(provider_error)?;
         Ok(FsRead::new(BrokerReader { handle, offset: 0 }, size))
     }
 
     fn search(&self, request: &FsRequest<'_>) -> Result<FsListing, ProviderError> {
         let root = path(request.ctx())?;
-        search_listing(root, request, storage::recent_list)
+        let store = crate::plugins::native_invocation::NativeProviderInvocation::storage(
+            request.ctx(),
+            "core:recent",
+            "history",
+        )?;
+        search_listing(root, request, |path| storage::recent_list(path, &store))
     }
 }

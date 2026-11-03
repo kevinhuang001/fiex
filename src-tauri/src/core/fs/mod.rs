@@ -15,11 +15,13 @@ pub(crate) mod presentation;
 mod transfer;
 #[cfg(feature = "desktop")]
 pub(crate) use binding::trusted_snapshot;
-pub(crate) use binding::{child, parent_path, trusted};
+pub(crate) use binding::{child, parent_path, trusted, trusted_with_user_action};
 #[cfg(feature = "desktop")]
 pub(crate) use binding::{create, move_to_trash, remove_path, rename_path};
 pub use error::{FsError, FsErrorKind};
-pub use export::{export as export_for_external_drag, initialize as initialize_exports};
+pub(crate) use export::export as export_for_external_drag;
+#[cfg(feature = "desktop")]
+pub(crate) use export::initialize as initialize_exports;
 pub use transfer::transfer;
 pub(crate) mod provider_registry;
 mod streams;
@@ -38,6 +40,7 @@ pub struct ResourceBroker {
     pub(crate) path: String,
     pub(crate) scope: Scope,
     pub(crate) owner: String,
+    user_action: Option<mapped_access::UserActionContext>,
 }
 
 pub(crate) fn clear_preflight_availability_cache() {
@@ -80,7 +83,20 @@ impl ResourceBroker {
             path,
             scope: scope.clone(),
             owner: owner.into(),
+            user_action: None,
         })
+    }
+
+    pub(crate) fn with_user_action_context(
+        mut self,
+        user_action: mapped_access::UserActionContext,
+    ) -> Self {
+        self.user_action = Some(user_action);
+        self
+    }
+
+    pub(crate) fn user_action_context(&self) -> Option<&mapped_access::UserActionContext> {
+        self.user_action.as_ref()
     }
     pub(crate) fn open_read_handle(&self) -> Result<Box<dyn ReadHandle>, FsError> {
         self.require(FsOperation::Read, false)?;
@@ -229,6 +245,7 @@ impl ResourceBroker {
             path: self.path.clone(),
             scope: self.scope.clone(),
             owner: self.owner.clone(),
+            user_action: self.user_action,
         }
     }
 

@@ -35,22 +35,34 @@ fn projected_storage_location(source: &str) -> Option<ResourceLocation> {
     descriptor(kind, &provider, &mount)
 }
 
+pub(crate) fn projected_storage_for_source(source: &str) -> Option<ResourceLocation> {
+    projected_storage_location(source)
+}
+
 /// The view determines presentation contributions; storage controls actual IO.
 /// Recent aliases retain their view identity but resolve storage only while
 /// their source remains available and authorized.
 pub fn typed_locations_for(path: &str) -> (Option<ResourceLocation>, Option<ResourceLocation>) {
     if let Some(provider_id) = crate::core::volumes::native_vfs::provider_id(path) {
         let current = descriptor("vfs", provider_id, provider_id);
-        let storage = match crate::core::volumes::native_vfs::storage_projection(path) {
-            crate::core::volumes::native_vfs::NativeStorageProjection::Owned => current.clone(),
-            crate::core::volumes::native_vfs::NativeStorageProjection::Projected(source) => {
-                source.as_deref().and_then(projected_storage_location)
-            }
-        };
+        let storage = (provider_id != "core:recent")
+            .then(|| current.clone())
+            .flatten();
         return (current, storage);
     }
     let storage = storage_location(path);
     (storage.clone(), storage)
+}
+
+pub(crate) fn typed_locations_for_snapshot(
+    resource: &crate::plugins::resource::resource_context::ResourceSnapshot,
+) -> (Option<ResourceLocation>, Option<ResourceLocation>) {
+    let (view, own_storage) = typed_locations_for(&resource.display);
+    let storage = match &resource.storage_projection {
+        crate::core::files::StorageProjection::Owned => own_storage,
+        crate::core::files::StorageProjection::Projected(source) => source.clone(),
+    };
+    (view, storage)
 }
 
 /// Typed Core snapshot for blank-canvas matching. No host path or plugin
@@ -118,6 +130,26 @@ mod tests {
         assert_eq!(live.resource_type, ResourceType::Fs);
         assert_eq!(live.provider_id, "core:local-fs");
         assert!(projected_storage_location("unregistered://file").is_none());
+    }
+
+    #[test]
+    fn recent_matching_uses_core_projection_captured_with_the_entry() {
+        let projected = descriptor("fs", "core:local-fs", "local").unwrap();
+        let entry = crate::core::files::Entry {
+            path: "recent://entry".into(),
+            storage_projection: crate::core::files::StorageProjection::Projected(Some(
+                projected.clone(),
+            )),
+            ..Default::default()
+        };
+        let resource = crate::plugins::resource::resource_context::ResourceSnapshot::from_entry(
+            &entry.path,
+            &entry,
+        );
+        let (view, storage) = typed_locations_for_snapshot(&resource);
+        assert_eq!(view.unwrap().provider_id, "core:recent");
+        assert_eq!(storage, Some(projected));
+        assert!(typed_locations_for("recent://entry").1.is_none());
     }
 
     #[test]

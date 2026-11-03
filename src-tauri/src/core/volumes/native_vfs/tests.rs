@@ -21,19 +21,34 @@ fn native_vfs_uses_the_shared_provider_trait_and_claims_only_registered_paths() 
 }
 
 #[test]
-fn native_view_storage_projection_is_preserved() {
-    assert!(matches!(
-        storage_projection(RECENT_URI),
-        NativeStorageProjection::Projected(None)
-    ));
-    assert!(matches!(
-        storage_projection(APPLICATIONS_URI),
-        NativeStorageProjection::Owned
-    ));
-    assert!(matches!(
-        storage_projection(trash_vfs::URI),
-        NativeStorageProjection::Owned
-    ));
+fn path_only_recent_matching_does_not_resolve_persisted_sources() {
+    let (view, storage) = crate::plugins::match_rules::typed_locations_for(RECENT_URI);
+    assert_eq!(view.unwrap().provider_id, "core:recent");
+    assert!(storage.is_none());
+    let (_, applications_storage) =
+        crate::plugins::match_rules::typed_locations_for(APPLICATIONS_URI);
+    assert_eq!(
+        applications_storage.unwrap().provider_id,
+        "core:applications"
+    );
+    let (_, trash_storage) = crate::plugins::match_rules::typed_locations_for(trash_vfs::URI);
+    assert_eq!(trash_storage.unwrap().provider_id, "core:trash");
+}
+
+#[test]
+fn native_vfs_registry_binds_domain_owners_without_a_core_module_enum() {
+    assert_eq!(
+        owner_for_provider("core:recent"),
+        Some(CoreOwnerKey::new("recent"))
+    );
+    assert_eq!(
+        owner_for_provider("core:applications"),
+        Some(CoreOwnerKey::new("applications"))
+    );
+    assert_eq!(
+        owner_for_provider("core:trash"),
+        Some(CoreOwnerKey::new("core"))
+    );
 }
 
 #[test]

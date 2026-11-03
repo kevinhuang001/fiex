@@ -2,20 +2,20 @@
 //! into the same storage Engine used by the Plugin IPC adapter.
 use super::{
     engine,
-    owner::{CoreModule, OwnerId},
+    owner::{CoreOwnerKey, OwnerId},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 
 #[derive(Clone)]
-pub(crate) struct NativeStorage {
+pub(crate) struct OwnerBoundStorage {
     owner: OwnerId,
 }
 
-impl NativeStorage {
-    pub(crate) const fn new(module: CoreModule) -> Self {
+impl OwnerBoundStorage {
+    pub(crate) const fn from_registry(key: CoreOwnerKey) -> Self {
         Self {
-            owner: OwnerId::core(module),
+            owner: OwnerId::core(key),
         }
     }
 

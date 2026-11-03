@@ -1,6 +1,6 @@
 //! Single persistent engine shared by Native Core Modules and authenticated
 //! Plugin Modules. Callers supply a trusted OwnerId, never a wire value.
-use super::owner::{CoreModule, OwnerId};
+use super::owner::{CoreOwnerKey, OwnerId};
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -13,8 +13,7 @@ const MAX_VALUE_BYTES: usize = 1024 * 1024;
 const MAX_SCOPE_BYTES: usize = 16 * 1024 * 1024;
 
 fn max_value_bytes(owner: &OwnerId, scope: &str, key: &str) -> usize {
-    if matches!(owner, OwnerId::Core(CoreModule::Applications)) && scope == "tree" && key == "state"
-    {
+    if owner.is_core(CoreOwnerKey::new("applications")) && scope == "tree" && key == "state" {
         MAX_SCOPE_BYTES - 1024
     } else {
         MAX_VALUE_BYTES
@@ -48,7 +47,7 @@ fn file(owner: &OwnerId, scope: &str) -> Result<PathBuf, String> {
     }
     let directory = match owner {
         OwnerId::Plugin(plugin) => base()?.join(plugin),
-        OwnerId::Core(module) => base()?.join("core").join(module.as_str()),
+        OwnerId::Core(key) => base()?.join("core").join(key.as_str()),
     };
     Ok(directory.join(format!("{scope}.json")))
 }
@@ -186,7 +185,7 @@ mod tests {
 
     #[test]
     fn applications_tree_can_use_atomic_scope_quota_without_raising_plugin_limit() {
-        let applications = OwnerId::core(CoreModule::Applications);
+        let applications = OwnerId::core(CoreOwnerKey::new("applications"));
         let plugin = OwnerId::plugin("valid.plugin");
         assert_eq!(
             max_value_bytes(&applications, "tree", "state"),

@@ -196,6 +196,7 @@ pub async fn list_listing(
             has_cache,
             pinned,
             uploaded,
+            storage_projection: Default::default(),
             sync: Some(
                 if cache_state.conflict {
                     "conflict"
@@ -302,6 +303,7 @@ pub(crate) fn offline_provider_listing(
             has_cache: state.has_cache,
             pinned: state.pinned,
             uploaded: state.uploaded,
+            storage_projection: Default::default(),
             sync: Some(
                 if state.conflict {
                     "conflict"

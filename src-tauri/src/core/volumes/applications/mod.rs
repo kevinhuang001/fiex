@@ -32,6 +32,7 @@ fn entry(name: String, path: String, extension: &str, modified: u64) -> Entry {
         has_cache: false,
         pinned: false,
         uploaded: false,
+        storage_projection: Default::default(),
         sync: None,
     }
 }

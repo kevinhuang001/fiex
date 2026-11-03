@@ -1,6 +1,11 @@
 //! Process-local invocation context for Core's implementations of the shared
 //! provider traits. The serializable request contains only trusted, projected
 //! resource metadata; native services remain behind this process-local handle.
+use crate::core::fs::mapped_access::UserActionContext;
+use crate::infrastructure::provider_storage::{
+    native::{NativeScopedStorage, OwnerBoundStorage},
+    CoreOwnerKey,
+};
 use crate::plugins::resource::resource_context::ResourceSnapshot;
 use fiex_provider_contracts::{ProviderError, ProviderInvocation, ProviderRequestContext};
 use serde_json::Value;
@@ -11,6 +16,13 @@ pub(crate) struct NativeProviderInvocation {
     targets: Vec<ResourceSnapshot>,
     directory: Option<ResourceSnapshot>,
     local_data: Option<Arc<dyn Any + Send + Sync>>,
+    registration: Option<NativeProviderServices>,
+    user_action: Option<UserActionContext>,
+}
+
+struct NativeProviderServices {
+    provider_id: String,
+    storage: OwnerBoundStorage,
 }
 
 impl NativeProviderInvocation {
@@ -43,6 +55,8 @@ impl NativeProviderInvocation {
             targets: targets.to_vec(),
             directory: directory.cloned(),
             local_data: None,
+            registration: None,
+            user_action: None,
         }
     }
 
@@ -64,6 +78,49 @@ impl NativeProviderInvocation {
     pub(crate) fn with_local_data<T: Any + Send + Sync>(mut self, data: Arc<T>) -> Self {
         self.local_data = Some(data);
         self
+    }
+
+    pub(crate) fn with_user_action_context(mut self, user_action: UserActionContext) -> Self {
+        self.user_action = Some(user_action);
+        self
+    }
+
+    pub(crate) fn with_registry_binding(mut self, provider_id: &str, owner: CoreOwnerKey) -> Self {
+        self.registration = Some(NativeProviderServices {
+            provider_id: provider_id.to_owned(),
+            storage: OwnerBoundStorage::from_registry(owner),
+        });
+        self
+    }
+
+    /// Return the scoped storage handle only for the provider identity bound
+    /// by its typed native registry. The binding is local process data and is
+    /// never part of ProviderRequestContext serialization.
+    pub(crate) fn storage(
+        invocation: &dyn ProviderInvocation,
+        provider_id: &str,
+        scope: &str,
+    ) -> Result<NativeScopedStorage, ProviderError> {
+        let services = invocation
+            .local_service_handle()
+            .and_then(|value| value.downcast_ref::<Self>())
+            .and_then(|native| native.registration.as_ref())
+            .filter(|services| services.provider_id == provider_id)
+            .ok_or_else(|| ProviderError::invalid_params("missing registered owner services"))?;
+        services
+            .storage
+            .scoped(scope)
+            .map_err(ProviderError::internal)
+    }
+
+    pub(crate) fn user_action(
+        invocation: &dyn ProviderInvocation,
+    ) -> Result<UserActionContext, ProviderError> {
+        invocation
+            .local_service_handle()
+            .and_then(|value| value.downcast_ref::<Self>())
+            .and_then(|native| native.user_action)
+            .ok_or_else(|| ProviderError::invalid_params("missing user action context"))
     }
 
     pub(crate) fn resource(

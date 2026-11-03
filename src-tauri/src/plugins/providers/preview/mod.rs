@@ -110,17 +110,20 @@ pub fn open_resource(
     display: &str,
     preferred: Option<&str>,
     order: Option<&[String]>,
+    user_action: crate::core::fs::mapped_access::UserActionContext,
 ) -> Result<Value, String> {
     resolve_preview(
         ResourceSnapshot::resolve_from_directory_snapshot(display)?,
         preferred,
         order,
+        user_action,
     )
 }
 fn resolve_preview(
     resource: ResourceSnapshot,
     preferred: Option<&str>,
     order: Option<&[String]>,
+    user_action: crate::core::fs::mapped_access::UserActionContext,
 ) -> Result<Value, String> {
     let (mut providers, fallback_allowed) = resource_candidates(&resource);
     if let Some(order) = order {
@@ -176,7 +179,8 @@ fn resolve_preview(
         request.params.clone(),
         std::slice::from_ref(resource.as_ref()),
         None,
-    );
+    )
+    .with_user_action_context(user_action);
     EventRouter::resolve_shared(
         "preview.open",
         providers,

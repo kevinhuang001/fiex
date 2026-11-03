@@ -153,10 +153,7 @@ pub(crate) fn identity(path: &str) -> Option<(&'static str, String, String)> {
                     crate::usbfs::generation(&route).unwrap_or_else(|_| "offline".into());
                 return Some(("fs", provider.into(), format!("core:usb:{generation}")));
             }
-            if !matches!(
-                native_vfs::storage_projection(path),
-                native_vfs::NativeStorageProjection::Owned
-            ) {
+            if provider == "core:recent" {
                 return None;
             }
             Some(("vfs", provider.into(), provider.into()))
